@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dockObsClient } from "./dockObsClient";
+import { dockObsClient, getMcePresentationVisibilityKeepSet } from "./dockObsClient";
 import routingSource from "./dockSceneRouting.ts?raw";
 import routingControlSource from "./components/DockSceneRoutingControl.tsx?raw";
 import bibleTabSource from "./tabs/DockBibleTab.tsx?raw";
@@ -43,11 +43,12 @@ describe("dock scene routing", () => {
 
   it("keeps route packets isolated from the shared MCE Presentation overlays", () => {
     expect(obsClientSource).toContain("...(targetSource ? { targetSource } : {})");
+    expect(obsClientSource).toContain('event_name: "mce-overlay-packet"');
+    expect(obsClientSource).toContain("event_data: {\n              tab: tabType,");
     for (const overlaySource of [bibleOverlaySource, worshipOverlaySource, notesOverlaySource]) {
       expect(overlaySource).toContain("const _routeSource");
       expect(overlaySource).toContain("const _routeSuffix = _routeSource");
-      expect(overlaySource).toContain("targetSource !== _routeSource");
-      expect(overlaySource).toContain("targetSource !== _routeSource : Boolean(targetSource)");
+      expect(overlaySource).toContain("if (_routeSource && targetSource !== _routeSource) return false;");
     }
     expect(lowerThirdOverlaySource).toContain("const routeSource");
     expect(lowerThirdOverlaySource).toContain("const lowerThirdChannel");
@@ -59,10 +60,46 @@ describe("dock scene routing", () => {
     const methodEnd = obsClientSource.indexOf("\n  private invalidateActiveMceOverlayState", methodStart);
     const methodSource = obsClientSource.slice(methodStart, methodEnd);
 
-    expect(methodSource).toContain('item.sourceName.startsWith("MCE ")');
-    expect(methodSource).toContain('sceneItemEnabled: false');
+    expect(methodSource).toContain("isMcePresentationManagedSource(item.sourceName)");
+    expect(methodSource).toContain('addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, false)');
     expect(methodSource).toContain("presentationSourceVisibility");
     expect(methodSource).toContain("lowerThirdSourceVisibility");
+    expect(methodSource).toContain("PRESENTATION_SCENE_NAME");
+    expect(methodSource).toContain("MCE Presentation only");
+  });
+
+  it("keeps the active MCE content family and structural program reference only", () => {
+    const keepSet = getMcePresentationVisibilityKeepSet("MCE Browser - Bible", [
+      { sourceName: "MCE Program Scene Reference", sceneItemIndex: 0 },
+      { sourceName: "MCE Browser - Bible", sceneItemIndex: 1 },
+      { sourceName: "MCE BG - Bible", sceneItemIndex: 2 },
+      { sourceName: "MCE Browser - Worship", sceneItemIndex: 3 },
+      { sourceName: "MCE Ticker", sceneItemIndex: 4 },
+      { sourceName: "User Camera", sceneItemIndex: 5 },
+    ]);
+
+    expect(keepSet.has("MCE Browser - Bible")).toBe(true);
+    expect(keepSet.has("MCE BG - Bible")).toBe(true);
+    expect(keepSet.has("MCE Program Scene Reference")).toBe(true);
+    expect(keepSet.has("MCE Browser - Worship")).toBe(false);
+    expect(keepSet.has("MCE Ticker")).toBe(false);
+    expect(keepSet.has("User Camera")).toBe(false);
+  });
+
+  it("keeps the first MCE layer only when the lower-third preference asks for it", () => {
+    const items = [
+      { sourceName: "MCE Browser - Bible", sceneItemIndex: 0 },
+      { sourceName: "MCE Lower Third", sceneItemIndex: 1 },
+      { sourceName: "MCE Ticker", sceneItemIndex: 2 },
+    ];
+
+    const keepFirst = getMcePresentationVisibilityKeepSet("MCE Lower Third", items, "keep-first");
+    const activeOnly = getMcePresentationVisibilityKeepSet("MCE Lower Third", items, "active-only");
+
+    expect(keepFirst.has("MCE Browser - Bible")).toBe(true);
+    expect(activeOnly.has("MCE Browser - Bible")).toBe(false);
+    expect(keepFirst.has("MCE Ticker")).toBe(false);
+    expect(activeOnly.has("MCE Ticker")).toBe(false);
   });
 
   it("exposes the same scene picker in every requested output area", () => {

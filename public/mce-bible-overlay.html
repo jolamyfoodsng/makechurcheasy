@@ -720,6 +720,44 @@
       pointer-events: auto;
     }
 
+    /* Keep a freshly loaded source quiet until its saved Bible packet arrives.
+       This prevents a lower-third source from painting the fullscreen layer
+       for one frame during its first OBS load. */
+    #overlay-loading {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: rgba(255, 255, 255, 0.88);
+      font: 500 24px/1.2 'CMG Sans', 'Noto Sans', Arial, sans-serif;
+      letter-spacing: 0.01em;
+      background: transparent;
+      opacity: 1;
+      transition: opacity 140ms ease;
+      pointer-events: none;
+    }
+
+    #overlay-loading.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    #overlay-loading__spinner {
+      width: 22px;
+      height: 22px;
+      border: 2px solid rgba(255, 255, 255, 0.28);
+      border-top-color: rgba(255, 255, 255, 0.92);
+      border-radius: 50%;
+      animation: mce-overlay-loading-spin 720ms linear infinite;
+    }
+
+    @keyframes mce-overlay-loading-spin {
+      to { transform: rotate(360deg); }
+    }
+
     /* Verse changes fade the text out completely before the new verse enters.
        The background remains visible throughout the handoff. */
     @keyframes mce-preview-text-exit {
@@ -961,6 +999,11 @@
        ══════════════════════════════════════ -->
   <div id="overlay-stage">
 
+    <div id="overlay-loading" role="status" aria-live="polite">
+      <span id="overlay-loading__spinner" aria-hidden="true"></span>
+      <span>Loading Bible…</span>
+    </div>
+
     <!-- ─── Fullscreen Layer ─── -->
     <div id="fullscreen-layer" class="mode-layer">
       <div id="background"></div>
@@ -1094,6 +1137,7 @@
       const overlayStage = document.getElementById('overlay-stage');
       const fullscreenLayer = document.getElementById('fullscreen-layer');
       const lowerThirdLayer = document.getElementById('lower-third-layer');
+      const overlayLoading = document.getElementById('overlay-loading');
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
       const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
@@ -1660,10 +1704,13 @@
 
       function resolveAutoFontFloor(baseSize, fallback) {
         const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
-        // Keep auto-scale readable instead of allowing long verses to land
-        // at the old 12px floor.
-        const fixedFloor = Math.max(fallback, 16);
-        return Math.min(base, fixedFloor);
+        // Auto-scale must preserve the selected LG/XL/XXL preset. A fixed
+        // floor made a long verse collapse to a visually tiny 16-24px label
+        // even though the operator had chosen a large readable size. Keep a
+        // proportional floor so the verse can fit without losing its chosen
+        // scale entirely.
+        const proportionalFloor = Math.round(base * 0.64);
+        return Math.min(base, Math.max(fallback, proportionalFloor));
       }
 
       function resolveCompareAutoFontFloor(baseSize) {
@@ -1808,8 +1855,16 @@
         lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
         activeMode = mode;
         body.dataset.mode = mode;
+        // The same __FROM_CSS__ token can carry a new image or pattern after
+        // a mode switch. Reapply that mode's theme instead of trusting the
+        // previous renderer cache.
+        lastAppliedThemeKeyByMode[mode] = '';
         requestAutoScaleActiveContent();
         console.log('[Mode] ' + mode);
+      }
+
+      function setOverlayLoading(isLoading) {
+        if (overlayLoading) overlayLoading.classList.toggle('is-hidden', !isLoading);
       }
 
       /* ═══ FULLSCREEN: Fixed-size rendering ═══ */
@@ -2434,7 +2489,22 @@
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
-        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        const currentBarBgV = barBackgroundVideoEl.getAttribute('src') || '';
+        if (barBgV && targetMode === 'lower-third') {
+          barBackgroundVideoEl.classList.add('visible');
+          if (currentBarBgV !== barBgV) {
+            barBackgroundVideoEl.src = barBgV;
+            barBackgroundVideoEl.load();
+          }
+          barBackgroundVideoEl.play().catch(() => { });
+        } else {
+          barBackgroundVideoEl.classList.remove('visible');
+          if (currentBarBgV) {
+            barBackgroundVideoEl.pause();
+            barBackgroundVideoEl.removeAttribute('src');
+            barBackgroundVideoEl.load();
+          }
+        }
         if (!barBgV && targetMode === 'lower-third') {
           const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
           const bgPattern = String(s.backgroundPattern || '').trim();
@@ -2609,6 +2679,7 @@
         currentOverlayData = packet;
         hasReceivedLiveOverlayUpdate = true;
         persistOverlayPacket(packet);
+        setOverlayLoading(false);
 
         if (mode === 'fullscreen' || mode === 'lower-third') {
           setActiveLayer(mode);
@@ -2663,6 +2734,7 @@
           // Show overlay immediately so cached background is visible on reload
           overlay.classList.remove('hidden');
           ltBar.classList.remove('hidden');
+          setOverlayLoading(false);
           autoScaleActiveContent();
           writeRenderAck(packet);
           return;
@@ -2798,6 +2870,13 @@
       function readFromLocalStorage() {
         if (hasReceivedLiveOverlayUpdate) return false;
         try {
+          const requestedMode = new URLSearchParams(window.location.search).get('mode');
+          if (requestedMode === 'fullscreen' || requestedMode === 'lower-third') {
+            // OBS bootstrap CSS is the authoritative packet for this load.
+            // Skipping localStorage here prevents an older same-mode pattern
+            // from painting before the current packet arrives.
+            return false;
+          }
           const raw = localStorage.getItem(_storageKey);
           if (raw) {
             const parsed = JSON.parse(raw);
@@ -2867,7 +2946,11 @@
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
           const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          // Older OBS sources may not have the mceSource query parameter yet.
+          // Keep accepting targeted packets for those sources so they can
+          // receive one update and migrate to the routed URL without being
+          // stuck on their last verse.
+          if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
@@ -2880,7 +2963,7 @@
         try {
           if (!packet || typeof packet !== 'object') return false;
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
@@ -3009,6 +3092,11 @@
       (function initialReveal(attempts) {
         if (!currentBibleState && !currentOverlayData && attempts > 0) {
           setTimeout(function () { initialReveal(attempts - 1); }, 50);
+          return;
+        }
+
+        if (!currentBibleState && !currentOverlayData) {
+          setOverlayLoading(true);
           return;
         }
 

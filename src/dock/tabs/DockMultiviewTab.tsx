@@ -9,13 +9,14 @@
  *   - No detail pages, no back buttons, everything on one screen
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { useDockObsReady } from "../useDockObsReady";
 import Icon from "../DockIcon";
-import { requireEntitlement } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { checkEntitlementSync } from "../../services/entitlementClient";
 import { readUserScopedStorage } from "../../services/userScopedStorage";
 import { loadDockPreferenceList, saveDockPreferenceList } from "../../services/dockPreferenceStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
@@ -37,6 +38,7 @@ import {
   registerDockMediaItem,
   uploadFileToDock,
 } from "../dockUploadService";
+import { isInternalDockMediaItem } from "../internalMediaAssets";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +52,9 @@ const DEFAULT_SLOT_FRAMING = { displayMode: "fit" as const, zoom: 1, focalX: 0.5
 const BACKGROUND_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
 const BACKGROUND_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]);
 const MV_IMAGE_LIBRARY_UPDATED_EVENT = "dock-mv-image-library-updated";
+const MV_OBS_SCAN_MS = 20_000;
+const MV_THUMBNAIL_REFRESH_MS = 60_000;
+const MV_THUMBNAIL_CONCURRENCY = 2;
 
 const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color: string }> = {
   camera: { labelKey: "multiview.camera", icon: "videocam", color: "#0078d4" },
@@ -430,42 +435,13 @@ async function saveFramePngToDisk(bytes: Uint8Array): Promise<string | null> {
   }
 }
 
-async function saveBackgroundDataUrlToDisk(dataUrl: string, safeName: string): Promise<string | null> {
-  if (!dataUrl.startsWith("data:")) return dataUrl;
-  const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex < 0) return null;
-
-  const header = dataUrl.slice(0, commaIndex);
-  const payload = dataUrl.slice(commaIndex + 1);
-  const bytes = /;base64/i.test(header)
-    ? Uint8Array.from(atob(payload), (char) => char.charCodeAt(0))
-    : new TextEncoder().encode(decodeURIComponent(payload));
-
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<string>("save_upload_file", {
-      fileName: safeName,
-      fileData: Array.from(bytes),
-    });
-  } catch {
-    try {
-      const response = await fetch("/api/save-media", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: safeName,
-          dataUrl: dataUrl.startsWith("data:image/svg+xml")
-            ? `data:image/svg+xml;base64,${btoa(String.fromCharCode(...bytes))}`
-            : dataUrl,
-        }),
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return data.path || null;
-    } catch {
-      return null;
-    }
-  }
+function buildMultiviewPatternBrowserUrl(patternSrc: string): string {
+  const trimmed = patternSrc.trim();
+  const imageSrc = /^(data:|https?:\/\/|file:\/\/|\/)/i.test(trimmed)
+    ? trimmed
+    : `file://${trimmed}`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;width:100vw;height:100vh;overflow:hidden;background:#0F172A"><img src="${imageSrc.replace(/"/g, "&quot;")}" style="display:block;width:100%;height:100%;object-fit:cover" /></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 function genId(): string {
@@ -677,7 +653,9 @@ async function loadBackgroundMediaLibrary(): Promise<MediaItem[]> {
   }
 
   sources.push(loadLocalLibrary());
-  return dedupeBackgroundMediaItems(dedupeMediaItems(sources.flat()));
+  return dedupeBackgroundMediaItems(
+    dedupeMediaItems(sources.flat()).filter((item) => !isInternalDockMediaItem(item)),
+  );
 }
 
 async function getUploadsDirectory(): Promise<string> {
@@ -729,6 +707,28 @@ async function captureMvSourceThumbnail(sourceName: string): Promise<string | nu
   }
 }
 
+/**
+ * Capture previews in a small queue instead of starting one OBS screenshot
+ * request per slot at the same time. The Dock is often hosted inside OBS, so
+ * a burst of screenshot requests competes with the live compositor on the
+ * same low-end machine.
+ */
+async function captureMvSourceThumbnails(sourceNames: string[]): Promise<Map<string, string | null>> {
+  const captures = new Map<string, string | null>();
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < sourceNames.length) {
+      const sourceName = sourceNames[nextIndex++];
+      captures.set(sourceName, await captureMvSourceThumbnail(sourceName));
+    }
+  };
+
+  const workerCount = Math.min(MV_THUMBNAIL_CONCURRENCY, sourceNames.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return captures;
+}
+
 function resolveLayout(layoutId: string): GalleryLayout | undefined {
   return GALLERY_LAYOUTS.find(l => l.id === layoutId);
 }
@@ -775,7 +775,7 @@ function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"]
   );
 }
 
-function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
+const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
   layout: GalleryLayout;
   thumbnails?: Record<string, string>;
   slotFraming?: SavedMultiView["slotFraming"];
@@ -870,7 +870,7 @@ function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrame
       </svg>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Content Picker Modal
@@ -1447,9 +1447,9 @@ function ImageSlotControl({
   }, [t]);
 
   useEffect(() => {
-    if (!open && !value) return;
+    if (!open) return;
     void refreshImages();
-  }, [open, refreshImages, value]);
+  }, [open, refreshImages]);
 
   useEffect(() => {
     if (!open) return;
@@ -2410,7 +2410,7 @@ function FramePicker({
 // MV Card — one independent card per saved Multi-View
 // ---------------------------------------------------------------------------
 
-function MVCard({
+const MVCard = memo(function MVCard({
   mv,
   index,
   isActive,
@@ -2703,14 +2703,15 @@ function MVCard({
       </div>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
-export default function DockMultiviewTab() {
+function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
   const { t } = useTranslation();
+  const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
   const [savedList, setSavedList] = useState<SavedMultiView[]>([]);
   const [obsScenes, setObsScenes] = useState<string[]>([]);
   const [obsSources, setObsSources] = useState<string[]>([]);
@@ -2727,7 +2728,15 @@ export default function DockMultiviewTab() {
   const obsSceneSignatureRef = useRef("");
   const thumbnailRefreshSignatureRef = useRef("");
   const thumbnailRefreshAtRef = useRef(0);
+  const thumbnailRefreshBusyRef = useRef(false);
   const savedListRef = useRef<SavedMultiView[]>([]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    setDockPlan(getDockPlan());
+    const interval = window.setInterval(() => setDockPlan(getDockPlan()), 30_000);
+    return () => window.clearInterval(interval);
+  }, [isActive]);
 
   // Show layouts that are added via gallery OR in use by saved cards
   const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
@@ -2742,6 +2751,7 @@ export default function DockMultiviewTab() {
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
     let cancelled = false;
 
     const mergeLocalIds = () => {
@@ -2785,13 +2795,19 @@ export default function DockMultiviewTab() {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
     };
-  }, [mergeIntoAddedLayoutIds]);
+  }, [isActive, mergeIntoAddedLayoutIds]);
+
+  const usedLayoutIds = useMemo(() => (
+    [...new Set(savedList.map(m => m.layoutId).filter(Boolean))].sort().join("|")
+  ), [savedList]);
 
   const addedLayouts = useMemo(() => {
-    const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
-    const visibleIds = new Set([...addedLayoutIds, ...usedIds]);
+    const visibleIds = new Set([
+      ...addedLayoutIds,
+      ...usedLayoutIds.split("|").filter(Boolean),
+    ]);
     return GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
-  }, [addedLayoutIds, savedList]);
+  }, [addedLayoutIds, usedLayoutIds]);
 
   // ── Load saved list without overwriting it during a remount ──
   useEffect(() => {
@@ -2887,6 +2903,7 @@ export default function DockMultiviewTab() {
       if (snapshot.canPersist && (changed || snapshot.shouldMigrate)) {
         saveSaved(cards);
       }
+      savedListRef.current = cards;
       setSavedList(cards);
     };
 
@@ -2906,11 +2923,18 @@ export default function DockMultiviewTab() {
     obsContentLoadedRef.current = obsContentLoaded;
   }, [obsContentLoaded]);
 
+  const commitSavedList = useCallback((next: SavedMultiView[]) => {
+    savedListRef.current = next;
+    setSavedList(next);
+    saveSaved(next);
+  }, []);
+
   const refreshAssignedThumbnails = useCallback(async (
     availableSceneNames: string[],
     options?: { force?: boolean },
   ) => {
     if (!dockObsClient.isConnected) return;
+    if (thumbnailRefreshBusyRef.current) return;
     const available = new Set(availableSceneNames);
     const snapshot = savedListRef.current;
     const targetKeys = new Set<string>();
@@ -2933,51 +2957,56 @@ export default function DockMultiviewTab() {
     const captureSourceNames = [...captureSources].sort();
     const signature = `${[...targetKeys].sort().join("|")}::${captureSourceNames.join("|")}`;
     const now = Date.now();
-    if (!options?.force && signature === thumbnailRefreshSignatureRef.current && now - thumbnailRefreshAtRef.current < 60000) {
+    if (!options?.force && signature === thumbnailRefreshSignatureRef.current && now - thumbnailRefreshAtRef.current < MV_THUMBNAIL_REFRESH_MS) {
       return;
     }
     thumbnailRefreshSignatureRef.current = signature;
     thumbnailRefreshAtRef.current = now;
+    thumbnailRefreshBusyRef.current = true;
 
-    const captures = new Map<string, string | null>();
-    await Promise.all(captureSourceNames.map(async (sourceName) => {
-      captures.set(sourceName, await captureMvSourceThumbnail(sourceName));
-    }));
+    try {
+      const captures = await captureMvSourceThumbnails(captureSourceNames);
 
-    if (!mountedRef.current) return;
+      if (!mountedRef.current) return;
 
-    setSavedList((current) => {
-      let changed = false;
-      const next = current.map((mv) => {
-        const currentThumbs = mv.slotThumbnails ?? {};
-        let nextThumbs = currentThumbs;
+      setSavedList((current) => {
+        let changed = false;
+        const next = current.map((mv) => {
+          const currentThumbs = mv.slotThumbnails ?? {};
+          let nextThumbs = currentThumbs;
 
-        for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
-          const key = `${mv.id}:${slotId}:${sourceName}`;
-          if (!targetKeys.has(key)) continue;
-          const mode = mv.slotModes?.[slotId] ?? "scene";
-          if (mode !== "scene") continue;
+          for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
+            const key = `${mv.id}:${slotId}:${sourceName}`;
+            if (!targetKeys.has(key)) continue;
+            const mode = mv.slotModes?.[slotId] ?? "scene";
+            if (mode !== "scene") continue;
 
-          const nextUrl = available.has(sourceName) ? captures.get(sourceName) ?? null : null;
-          if (nextUrl) {
-            if (nextThumbs[slotId] !== nextUrl) {
+            const nextUrl = available.has(sourceName) ? captures.get(sourceName) ?? null : null;
+            if (nextUrl) {
+              if (nextThumbs[slotId] !== nextUrl) {
+                if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
+                nextThumbs[slotId] = nextUrl;
+                changed = true;
+              }
+            } else if (nextThumbs[slotId]) {
               if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
-              nextThumbs[slotId] = nextUrl;
+              delete nextThumbs[slotId];
               changed = true;
             }
-          } else if (nextThumbs[slotId]) {
-            if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
-            delete nextThumbs[slotId];
-            changed = true;
           }
+
+          return nextThumbs === currentThumbs ? mv : { ...mv, slotThumbnails: nextThumbs };
+        });
+
+        if (changed) {
+          savedListRef.current = next;
+          saveSaved(next);
         }
-
-        return nextThumbs === currentThumbs ? mv : { ...mv, slotThumbnails: nextThumbs };
+        return changed ? next : current;
       });
-
-      if (changed) saveSaved(next);
-      return changed ? next : current;
-    });
+    } finally {
+      thumbnailRefreshBusyRef.current = false;
+    }
   }, []);
 
   // ── Single GetSceneList + GetInputList call ──
@@ -3019,15 +3048,15 @@ export default function DockMultiviewTab() {
   }, [refreshAssignedThumbnails]);
 
   useEffect(() => {
-    if (!obsReady) return;
+    if (!isActive || !obsReady) return;
     mountedRef.current = true;
     refreshObsScenes({ forceThumbnails: true });
     const interval = setInterval(() => {
       if (document.visibilityState === "hidden") return;
       refreshObsScenes();
-    }, getRecommendedPollingInterval(15000));
+    }, getRecommendedPollingInterval(MV_OBS_SCAN_MS));
     return () => { mountedRef.current = false; clearInterval(interval); };
-  }, [obsReady, refreshObsScenes]);
+  }, [isActive, obsReady, refreshObsScenes]);
 
   // ── Show feedback briefly ──
   const showFeedback = useCallback((type: "success" | "error", text: string) => {
@@ -3041,14 +3070,13 @@ export default function DockMultiviewTab() {
   // ════════════════════════════════════════════════════════════════════════
 
   const handleUpdateName = useCallback((id: string, name: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateLayout = useCallback((id: string, layoutId: string) => {
     const selectedLayout = resolveLayout(layoutId);
-    const next = savedList.map(m => m.id === id ? {
+    const next = savedListRef.current.map(m => m.id === id ? {
       ...m,
       layoutId,
       assignments: {},
@@ -3059,13 +3087,12 @@ export default function DockMultiviewTab() {
       slotFrames: { ...(selectedLayout?.defaultSlotFrames ?? {}) },
       updatedAt: new Date().toISOString(),
     } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleAssign = useCallback((id: string, slotId: string, val: string, mode: "scene" | "source") => {
     const now = new Date().toISOString();
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
       const slotThumbnails = { ...(m.slotThumbnails ?? {}) };
       delete slotThumbnails[slotId];
@@ -3078,34 +3105,40 @@ export default function DockMultiviewTab() {
         updatedAt: now,
       };
     });
-    setSavedList(next);
-    saveSaved(next);
-    if (dockObsClient.isConnected && val) {
-      captureMvSourceThumbnail(val).then((url) => {
+    commitSavedList(next);
+    if (dockObsClient.isConnected && val && mode === "scene" && !thumbnailRefreshBusyRef.current) {
+      thumbnailRefreshBusyRef.current = true;
+      captureMvSourceThumbnails([val]).then((captures) => {
+        const url = captures.get(val);
         if (!url) return;
         setSavedList(prev => {
+          let changed = false;
           const updated = prev.map(m => {
             if (m.id !== id || m.assignments?.[slotId] !== val) return m;
+            changed = true;
             return { ...m, slotThumbnails: { ...(m.slotThumbnails ?? {}), [slotId]: url } };
           });
+          if (!changed) return prev;
+          savedListRef.current = updated;
           saveSaved(updated);
           return updated;
         });
-      }).catch(() => { });
+      }).catch(() => { }).finally(() => {
+        thumbnailRefreshBusyRef.current = false;
+      });
     }
-  }, [savedList]);
+  }, [commitSavedList]);
 
   const handleAssignSlotFraming = useCallback((id: string, slotId: string, framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }) => {
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
       return { ...m, slotFraming: { ...m.slotFraming, [slotId]: framing }, updatedAt: new Date().toISOString() };
     });
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleRemoveSlot = useCallback((id: string, slotId: string) => {
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
       const assigns = { ...m.assignments };
       delete assigns[slotId];
@@ -3117,71 +3150,73 @@ export default function DockMultiviewTab() {
       delete slotThumbnails[slotId];
       return { ...m, assignments: assigns, slotModes: modes, slotFraming: framing, slotThumbnails, updatedAt: new Date().toISOString() };
     });
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateBackground = useCallback((id: string, bg: MVBackground) => {
-    const next = savedList.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrame = useCallback((id: string, frameId: string | null) => {
-    const next = savedList.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameThickness = useCallback((id: string, thickness: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameThickness: thickness, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameThickness: thickness, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameCornerRadius = useCallback((id: string, radius: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameCornerRadius: radius, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameCornerRadius: radius, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameOpacity = useCallback((id: string, opacity: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameOpacity: opacity, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameOpacity: opacity, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameColor = useCallback((id: string, color: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameColor: color, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameColor: color, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
+
+  const handleUpdateSlotFrame = useCallback((id: string, slotId: string, frameMode: string) => {
+    const next = savedListRef.current.map(m => m.id === id ? {
+      ...m,
+      slotFrames: { ...(m.slotFrames ?? {}), [slotId]: frameMode },
+      updatedAt: new Date().toISOString(),
+    } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleDuplicate = useCallback((id: string) => {
-    const src = savedList.find(m => m.id === id);
+    const current = savedListRef.current;
+    const src = current.find(m => m.id === id);
     if (!src) return;
     const now = new Date().toISOString();
     const dupe: SavedMultiView = {
       ...src,
       id: genId(),
       name: `${src.name} (${t('multiview.copy')})`,
-      obsSceneName: nextObsSceneName(savedList),
+      obsSceneName: nextObsSceneName(current),
       assignments: { ...src.assignments },
       background: { ...(src.background ?? DEFAULT_MV_BG) },
       createdAt: now,
       updatedAt: now,
     };
-    const next = [dupe, ...savedList];
-    setSavedList(next);
-    saveSaved(next);
+    const next = [dupe, ...current];
+    commitSavedList(next);
     showFeedback("success", `"${dupe.name}" created`);
-  }, [savedList, showFeedback, t]);
+  }, [commitSavedList, showFeedback, t]);
 
   const handleDeleteConfirmed = useCallback((id: string, deleteObsScene: boolean) => {
-    const mv = savedList.find(m => m.id === id);
-    const next = savedList.filter(m => m.id !== id);
-    setSavedList(next);
-    saveSaved(next);
+    const current = savedListRef.current;
+    const mv = current.find(m => m.id === id);
+    const next = current.filter(m => m.id !== id);
+    commitSavedList(next);
     setDeleteTargetId(null);
 
     if (deleteObsScene && mv && dockObsClient.isConnected) {
@@ -3189,7 +3224,11 @@ export default function DockMultiviewTab() {
     }
 
     showFeedback("success", t('common.delete'));
-  }, [savedList, showFeedback, t]);
+  }, [commitSavedList, showFeedback, t]);
+
+  const handleDelete = useCallback((id: string) => {
+    setDeleteTargetId(id);
+  }, []);
 
   // ════════════════════════════════════════════════════════════════════════
   // OBS Operations
@@ -3239,6 +3278,23 @@ export default function DockMultiviewTab() {
 
       // Helper: create or update a managed input and return its sceneItemId
       const createManagedItem = async (inputName: string, inputKind: string, inputSettings: Record<string, unknown>): Promise<number> => {
+        // A managed source can change type when the user switches a card from
+        // color/image/video to a pattern (or back). OBS does not allow
+        // SetInputSettings to change the input kind, so remove only this
+        // uniquely-named MCE input before recreating it with the new kind.
+        try {
+          const inputList = await dockObsClient.call("GetInputList") as {
+            inputs?: Array<{ inputName: string; inputKind?: string }>;
+          };
+          const existingInput = inputList.inputs?.find((input) => input.inputName === inputName);
+          if (existingInput?.inputKind && existingInput.inputKind !== inputKind) {
+            await dockObsClient.call("RemoveInput", { inputName });
+          }
+        } catch {
+          // CreateInput's existing-source fallback below still handles older
+          // OBS bridges that do not expose input metadata.
+        }
+
         try {
           const resp = await dockObsClient.call("CreateInput", {
             sceneName, inputName, inputKind, inputSettings, sceneItemEnabled: true,
@@ -3284,21 +3340,21 @@ export default function DockMultiviewTab() {
             inputSettings = { file: bg.filePath, width: CANVAS_W, height: CANVAS_H };
           } else if (bg.type === "video" && bg.filePath) {
             inputKind = "ffmpeg_source";
-            inputSettings = { local_file: bg.filePath, is_local_file: true, looping: true, restart_on_activate: true, close_when_inactive: false };
+            inputSettings = { local_file: bg.filePath, is_local_file: true, looping: true, restart_on_activate: true, close_when_inactive: true };
           } else if (bg.type === "pattern" && bg.patternSrc) {
-            const patternPath = await saveBackgroundDataUrlToDisk(bg.patternSrc, `mv-pattern-${Date.now()}.svg`);
-            if (patternPath) {
-              inputKind = "image_source";
-              inputSettings = { file: patternPath, width: CANVAS_W, height: CANVAS_H };
-            } else {
-              inputKind = "browser_source";
-              inputSettings = {
-                url: `data:text/html;charset=utf-8,${encodeURIComponent(`<html><body style="margin:0;background:#000;overflow:hidden"><img src="${bg.patternSrc}" style="width:100vw;height:100vh;object-fit:cover" /></body></html>`)}`,
-                width: CANVAS_W,
-                height: CANVAS_H,
-                shutdown: true,
-              };
-            }
+            // SVG is not consistently rendered by OBS's native image source.
+            // Keep the pattern in memory and let Browser Source render it so
+            // the selected pattern is visible without creating user media.
+            inputKind = "browser_source";
+            inputSettings = {
+              url: buildMultiviewPatternBrowserUrl(bg.patternSrc),
+              width: CANVAS_W,
+              height: CANVAS_H,
+              css: "",
+              bgcolor: "#00000000",
+              shutdown: false,
+              restart_when_active: false,
+            };
           }
           bgItemId = await createManagedItem(bgSourceName, inputKind, inputSettings);
         }
@@ -3477,6 +3533,31 @@ export default function DockMultiviewTab() {
   // ════════════════════════════════════════════════════════════════════════
 
   const deleteTarget = deleteTargetId ? savedList.find(m => m.id === deleteTargetId) : null;
+  const multiviewEntitlement = checkEntitlementSync("multiview", dockPlan);
+
+  if (!multiviewEntitlement.allowed) {
+    return (
+      <div className="dock-mv-tab" role="status">
+        <div style={{ padding: "32px 20px", textAlign: "center" }}>
+          <Icon name="lock" size={36} />
+          <div style={{ fontSize: 14, fontWeight: 700, margin: "14px 0 8px" }}>
+            {t("upgrade.multiviewRequired", "Multi-View requires Basic plan or higher")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", lineHeight: 1.5, marginBottom: 18 }}>
+            {t("upgrade.multiviewDescription", "Build broadcast layouts with multiple camera, scripture, and media views.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal(t("upgrade.multiviewRequiredMessage", "Upgrade to Basic or higher to enable Multi-View."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dock-mv-tab">
@@ -3518,16 +3599,9 @@ export default function DockMultiviewTab() {
             onUpdateFrameCornerRadius={handleUpdateFrameCornerRadius}
             onUpdateFrameOpacity={handleUpdateFrameOpacity}
             onUpdateFrameColor={handleUpdateFrameColor}
-            onUpdateSlotFrame={(id: string, slotId: string, frameMode: string) => {
-              const next = savedList.map(m => {
-                if (m.id !== id) return m;
-                return { ...m, slotFrames: { ...m.slotFrames, [slotId]: frameMode }, updatedAt: new Date().toISOString() };
-              });
-              setSavedList(next);
-              saveSaved(next);
-            }}
+            onUpdateSlotFrame={handleUpdateSlotFrame}
             onDuplicate={handleDuplicate}
-            onDelete={(id) => setDeleteTargetId(id)}
+            onDelete={handleDelete}
           />
         ))}
       </div>
@@ -3543,3 +3617,5 @@ export default function DockMultiviewTab() {
     </div>
   );
 }
+
+export default memo(DockMultiviewTab);

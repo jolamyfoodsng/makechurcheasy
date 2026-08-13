@@ -38,17 +38,17 @@ dockClient.onState((msg) => {
   }
 });
 
-async function bootstrapDock() {
+function bootstrapDock() {
   // The dock runs outside the main app bootstrap, so seed the shared
   // config/overlay caches here before DockPage starts auto-connecting.
-  try {
-    await Promise.all([
-      getDesktopConfig(),
-      initOverlayUrl(),
-    ]);
-  } catch {
+  // Do this in the background so a slow/unreachable API cannot leave the
+  // OBS dock blank while it waits for remote configuration.
+  void Promise.all([
+    getDesktopConfig(),
+    initOverlayUrl(),
+  ]).catch(() => {
     // Fall back to defaults; DockPage will still render and retry.
-  }
+  });
 
   const el = document.getElementById("dock-root");
   if (!el) return;
@@ -62,4 +62,4 @@ async function bootstrapDock() {
   );
 }
 
-void bootstrapDock();
+bootstrapDock();

@@ -16,6 +16,7 @@
  */
 
 import { OT_BOOKS, NT_BOOKS, BOOK_CHAPTERS } from "./dockTypes";
+import { normalizeRomanNumberedBookPrefix } from "../bible/bookAliasGenerator";
 
 const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -235,7 +236,7 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
   if (!raw) return [];
 
   // Normalize: lowercase, collapse whitespace
-  const q = raw.toLowerCase().replace(/\s+/g, " ");
+  const q = normalizeRomanNumberedBookPrefix(raw.toLowerCase().replace(/\s+/g, " "));
 
   // ── Strategy 1: Split into book-part and numbers ──
   // Try to extract a leading book identifier and trailing numbers

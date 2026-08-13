@@ -52,6 +52,7 @@ interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
   onQuickSettingsSave?: (settings: DockFullscreenQuickThemeSettings) => void;
+  onSaveFeedback?: (message: string) => void;
   selectedThemeId: string | null;
   onThemeSelect: (theme: BibleTheme) => void;
   templateType?: BibleTheme["templateType"];
@@ -272,6 +273,7 @@ export default function BackgroundPickerCard({
   initialTab,
   storageScope = "global",
   hideBackgroundOnCompare = false,
+  onSaveFeedback,
 }: Props) {
   const { t } = useTranslation();
   const localStylesSelectId = useId();
@@ -500,9 +502,10 @@ export default function BackgroundPickerCard({
     };
     persistSavedStyles([style, ...savedStyles].slice(0, LOCAL_STYLE_LIMIT));
     setSelectedLocalStyleId(style.id);
-    setLocalStyleStatus(`Saved as ${style.name}`);
+    setLocalStyleStatus("");
+    onSaveFeedback?.(t("dock.feedback.backgroundStyleSaved", "Background style saved."));
     setStyleMenuOpen(false);
-  }, [bgType, overlayMode, persistSavedStyles, quickSettings, savedStyles, storageScope]);
+  }, [bgType, onSaveFeedback, overlayMode, persistSavedStyles, quickSettings, savedStyles, storageScope, t]);
 
   const handleApplyLocalStyle = useCallback((styleId: string) => {
     setSelectedLocalStyleId(styleId);

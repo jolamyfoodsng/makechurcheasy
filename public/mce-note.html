@@ -188,6 +188,7 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -313,6 +314,7 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -531,6 +533,7 @@
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       transform-origin: center;
     }
 
@@ -1773,7 +1776,7 @@
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
           const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
@@ -1786,7 +1789,7 @@
         try {
           if (!packet || typeof packet !== 'object') return false;
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {

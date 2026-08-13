@@ -417,6 +417,54 @@
   gap: 2px;
 }
 
+.dock-btm-overflow__children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-btm-overflow__menu-item,
+.dock-scene-routing-control__trigger--labelled {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dock-btm-overflow__menu-item:hover,
+.dock-btm-overflow__menu-item:focus-visible,
+.dock-scene-routing-control__trigger--labelled:hover,
+.dock-scene-routing-control__trigger--labelled:focus-visible {
+  border-color: var(--dock-accent-soft-border, rgba(37, 99, 235, 0.45));
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
+  outline: none;
+}
+
+.dock-btm-overflow__menu .dock-bible-reference-trigger__btn {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+
 /* ── Make children inside overflow menu full-width icon buttons ── */
 .dock-btm-overflow__menu .dock-btm-toolbar__icon-btn,
 .dock-btm-overflow__menu .dock-line-popover {

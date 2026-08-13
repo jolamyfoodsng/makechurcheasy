@@ -31,4 +31,22 @@ describe("app appearance", () => {
     expect(tokens["--primary"]).not.toBe("#FFFFFF");
     expect(tokens["--primary-hover"]).not.toBe("#FFFFFF");
   });
+
+  it("normalizes optional Dock visual toggles without breaking older preferences", () => {
+    const preferences = normalizeAppAppearance({
+      palette: "classic-blue",
+      dockVisuals: {
+        glassSurface: true,
+        radialGlow: false,
+        softShadow: "yes",
+      },
+    });
+
+    expect(preferences.dockVisuals).toEqual({
+      glassSurface: true,
+      radialGlow: false,
+      softShadow: DEFAULT_APP_APPEARANCE.dockVisuals.softShadow,
+      motion: DEFAULT_APP_APPEARANCE.dockVisuals.motion,
+    });
+  });
 });

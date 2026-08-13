@@ -710,7 +710,9 @@ describe("dockObsClient background reflection stress", () => {
     expect(urlWrites).toHaveLength(0);
     expect(callLog.some((entry) => entry.method === "GetInputSettings" && entry.payload.inputName === sourceName)).toBe(true);
     expect(browserEvent).toBeDefined();
-    expect((browserEvent?.payload.requestData as { event_data?: { targetSource?: string } }).event_data?.targetSource).toBe(sourceName);
+    expect((browserEvent?.payload.requestData as {
+      event_data?: { event_data?: { targetSource?: string } };
+    }).event_data?.event_data?.targetSource).toBe(sourceName);
     expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
   });
 

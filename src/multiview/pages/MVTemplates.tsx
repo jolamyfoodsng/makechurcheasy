@@ -11,6 +11,10 @@ import * as db from "../mvStore";
 import { TEMPLATE_LIBRARY, createLayoutFromTemplate } from "../templates";
 import type { TemplateCategory, TemplateDefinition } from "../types";
 import Icon from "../../components/Icon";
+import UpgradeModal from "../../components/UpgradeModal";
+import { getCurrentUser } from "../../services/authService";
+import { getEffectivePlan } from "../../services/licenseService";
+import { checkEntitlementSync } from "../../services/entitlementClient";
 
 const CATEGORY_LABELS: Record<TemplateCategory | "all", string> = {
   all: "All Templates",
@@ -55,6 +59,11 @@ export function MVTemplates() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TemplateCategory | "all">("all");
   const [creating, setCreating] = useState<string | null>(null);
+  const [upgradePrompt, setUpgradePrompt] = useState<{
+    message: string;
+    requiredPlan: string;
+    currentPlan: string;
+  } | null>(null);
 
   const filtered =
     filter === "all"
@@ -78,6 +87,18 @@ export function MVTemplates() {
   const handleUseTemplate = async (tpl: TemplateDefinition) => {
     setCreating(tpl.id);
     try {
+      const currentPlan = getEffectivePlan(getCurrentUser());
+      const existingLayouts = await db.getUserLayouts();
+      const access = checkEntitlementSync("multiviewTemplates", currentPlan, existingLayouts.length);
+      if (!access.allowed) {
+        setUpgradePrompt({
+          message: access.reason || "You have reached the five-template Basic plan limit. Upgrade to Growth for more.",
+          requiredPlan: access.requiredPlan || "growth",
+          currentPlan,
+        });
+        setCreating(null);
+        return;
+      }
       const layout = createLayoutFromTemplate(tpl);
       await db.saveLayout(layout);
       navigate(`/edit/${layout.id}`);
@@ -197,6 +218,17 @@ export function MVTemplates() {
           <Icon name="search_off" size={48} style={{ opacity: 0.3 }} />
           <p>No templates in this category yet.</p>
         </div>
+      )}
+
+      {upgradePrompt && (
+        <UpgradeModal
+          open
+          onClose={() => setUpgradePrompt(null)}
+          feature="multiviewTemplates"
+          requiredPlan={upgradePrompt.requiredPlan}
+          currentPlan={upgradePrompt.currentPlan}
+          message={upgradePrompt.message}
+        />
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { dockClient } from "../services/dockBridge";
 import { isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { isInternalDockMediaItem } from "./internalMediaAssets";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -169,7 +170,9 @@ export function loadLocalLibrary(): MediaItem[] {
   try {
     const raw = localStorage.getItem(getUserScopedKey(LOCAL_LIBRARY_KEY));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed as MediaItem[] : [];
+    return Array.isArray(parsed)
+      ? (parsed as MediaItem[]).filter((item) => !isInternalDockMediaItem(item))
+      : [];
   } catch {
     return [];
   }

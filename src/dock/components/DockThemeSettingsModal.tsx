@@ -24,6 +24,7 @@ interface Props {
     settings: DockFullscreenQuickThemeSettings,
     context?: DockThemeSettingsSaveContext,
   ) => void | Promise<void>;
+  onSaveFeedback?: (message: string) => void;
   resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
@@ -94,6 +95,7 @@ export default function DockThemeSettingsModal({
   quickSettings,
   defaultQuickSettings,
   onQuickSettingsSave,
+  onSaveFeedback,
   resolveThemeQuickSettings,
   title,
   subtitle,
@@ -211,6 +213,9 @@ export default function DockThemeSettingsModal({
         backgroundPreset: nextPreset,
         selectedTheme: nextTheme,
       }))
+        .then(() => {
+          onSaveFeedback?.(t("dock.feedback.bibleSettingsSaved", "Bible theme settings saved."));
+        })
         .catch((error) => console.warn("[DockThemeSettingsModal] quick settings save failed:", error))
         .finally(() => setSaving(false));
     };
@@ -219,7 +224,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSelect]);
+  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSaveFeedback, onSelect, t]);
 
   const handleReset = useCallback(() => {
     const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
@@ -277,6 +282,7 @@ export default function DockThemeSettingsModal({
                   quickSettings={draftSettings}
                   onQuickSettingsChange={(updater) => updateDraft(updater)}
                   onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
+                  onSaveFeedback={onSaveFeedback}
                   selectedThemeId={draftSelectedThemeId}
                   onThemeSelect={handleThemeSelect}
                   allowedCategories={allowedCategories}

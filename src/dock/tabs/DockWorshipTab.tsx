@@ -73,6 +73,7 @@ import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import DockNotesTab from "./DockNotesTab";
 import { getOrderedTranslationParts, normalizeDockTranslationOrder } from "../dockTranslation";
+import { normalizeDockMultilineText } from "../textLineBreaks";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -130,7 +131,10 @@ const DOCK_WORSHIP_CACHED_SONGS_KEY = "ocs-dock-worship-cached-songs-v1";
 const DOCK_WORSHIP_RECENT_SEARCHES_KEY = "ocs-dock-worship-recent-searches-v1";
 const MIN_LINES_PER_SLIDE = 1;
 const MAX_LINES_PER_SLIDE = 12;
-const DEFAULT_LINES_PER_SLIDE = 2;
+// A new line entered in the song editor is a new verse/slide by default.
+// Operators can still choose a larger Auto Split layout when they explicitly
+// want multiple lyric lines on one slide.
+const DEFAULT_LINES_PER_SLIDE = 1;
 const DOCK_WORSHIP_SAVE_TIMEOUT_MS = 15000;
 const DOCK_WORSHIP_SAVE_FALLBACK_DELAY_MS = 750;
 const DOCK_WORSHIP_SAVE_RESULT_POLL_MS = 500;
@@ -339,7 +343,7 @@ function mapAppSongToDockSong(song: {
 const DOCK_SONG_CARD_PREVIEW_LINES = 2;
 
 function getSongCardLyricsPreview(lyrics: string): { lines: string[]; hasMore: boolean } {
-  const body = extractStructuredTextTitle(lyrics).body.replace(/\r\n?/g, "\n");
+  const body = extractStructuredTextTitle(normalizeDockMultilineText(lyrics)).body;
   const lines = body
     .split("\n")
     .map((line) => line.trim())
@@ -423,7 +427,7 @@ function parseLyricSections(
 
   const effectiveLPS = Math.max(1, linesPerSlide || 2);
 
-  return generateSlides(lyrics, effectiveLPS, splitByLineCount, { continuousLineCount }).map((slide) => ({
+  return generateSlides(normalizeDockMultilineText(lyrics), effectiveLPS, splitByLineCount, { continuousLineCount }).map((slide) => ({
     id: slide.id,
     label: slide.isContinuation ? "" : slide.label,
     text: slide.content,
@@ -437,7 +441,7 @@ function serializeLyricSections(
   const content = sections
     .map((section) => {
       const label = section.label.trim();
-      return [label ? `${label}:` : "", section.text.trim()].filter(Boolean).join("\n");
+      return [label ? `${label}:` : "", normalizeDockMultilineText(section.text).trim()].filter(Boolean).join("\n");
     })
     .filter(Boolean)
     .join("\n\n");
@@ -1130,7 +1134,7 @@ function getWorshipSectionTranslation(
   sectionId: string,
   translation: DockTranslationValue | null,
 ): string {
-  return translation?.translatedSections[sectionId]?.trim() ?? "";
+  return normalizeDockMultilineText(translation?.translatedSections[sectionId] ?? "").trim();
 }
 
 function fuzzyMatch(query: string, target: string): boolean {
@@ -1303,6 +1307,7 @@ export default function DockWorshipTab({
   const prefsLoadIdRef = useRef(0);
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
+  const liveSectionPushTailRef = useRef<Promise<void>>(Promise.resolve());
   const pendingQuickSettingsRefreshRef = useRef(false);
   const worshipTranslationChangeRef = useRef(false);
 
@@ -1335,7 +1340,7 @@ export default function DockWorshipTab({
   }, [linesPerSlideOverride, selectedSong?.id, selectedSong?.linesPerSlide]);
 
   const structuredSongText = useMemo(
-    () => extractStructuredTextTitle(effectiveLyrics),
+    () => extractStructuredTextTitle(normalizeDockMultilineText(effectiveLyrics)),
     [effectiveLyrics],
   );
   const selectedSongTitleMarker = structuredSongText.title;
@@ -1827,7 +1832,7 @@ export default function DockWorshipTab({
       ...extractQuickThemeSettings(effectiveSelectedFSTheme.settings),
       backgroundType: fullscreenQuickThemeSettings?.backgroundType ?? "theme",
     }),
-    [effectiveSelectedFSTheme.settings, fullscreenQuickThemeSettings?.backgroundType],
+    [effectiveSelectedFSTheme.settings, fullscreenQuickThemeSettings],
   );
   const defaultFullscreenQuickThemeSettings = useMemo(
     () => ({
@@ -1842,7 +1847,7 @@ export default function DockWorshipTab({
       backgroundType: effectiveLowerThirdQuickThemeSettings.backgroundType ?? "theme",
     }),
     [
-      effectiveLowerThirdQuickThemeSettings.backgroundType,
+      effectiveLowerThirdQuickThemeSettings,
       effectiveSelectedLTTheme.settings,
     ],
   );
@@ -1919,6 +1924,11 @@ export default function DockWorshipTab({
 
     setOverlayMode(nextMode);
     saveDockWorshipOverlayMode(nextMode);
+    // Mode changes must republish the currently live slide. Otherwise the
+    // OBS browser source keeps the previous mode/background until another
+    // action happens to refresh it.
+    pendingQuickSettingsRefreshRef.current = true;
+    setQuickSettingsRefreshNonce((current) => current + 1);
   }, [
     activeFullscreenQuickThemeSettings,
     activeLowerThirdQuickThemeSettings,
@@ -1960,14 +1970,18 @@ export default function DockWorshipTab({
       const section = selectedSongSections[idx];
       if (!section) return null;
 
-      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : (readDockWorshipOverlayMode() ?? overlayMode);
+      // Use the current rendered mode immediately. The persisted preference is
+      // written asynchronously, so rereading it here can send the previous
+      // mode during a Fullscreen -> Lower Third click.
+      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
       const displayLabel = cleanWorshipSectionLabel(section.label);
       const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
       const backgroundOnly = options?.backgroundOnly ?? showWorshipBackgroundOnly;
       const presentationMeta = options?.showPresentationMeta ?? showPresentationMeta;
+      const sectionTextSource = normalizeDockMultilineText(section.text);
       const translatedSectionText = getWorshipSectionTranslation(section.id, worshipTranslation);
       const showBoth = Boolean(worshipTranslation?.showBoth && translatedSectionText);
-      const sectionText = showBoth ? section.text : (translatedSectionText || section.text);
+      const sectionText = showBoth ? sectionTextSource : (translatedSectionText || sectionTextSource);
       const translationText = showBoth ? translatedSectionText : "";
       const translationOrder = normalizeDockTranslationOrder(worshipTranslation?.translationOrder);
 
@@ -2060,10 +2074,18 @@ export default function DockWorshipTab({
 
       const pushLive = () => hasSceneRoute
         ? pushWorshipToConfiguredOutput(payload.obsData)
-        : payload.obsData.overlayMode === "lower-third"
-          ? dockObsClient.pushWorshipOverlayFast(payload.obsData)
-          : pushWorshipToConfiguredOutput(payload.obsData);
-      pushLive()
+        : pushWorshipToConfiguredOutput(payload.obsData);
+      // Fullscreen and lower-third use different OBS paths. Queue them at the
+      // dock boundary so a slower fullscreen mutation cannot finish after the
+      // lower-third mutation and overwrite the active mode in OBS.
+      const queuedPush = liveSectionPushTailRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (requestId !== liveSectionRequestIdRef.current) return;
+          await pushLive();
+        });
+      liveSectionPushTailRef.current = queuedPush.catch(() => undefined);
+      queuedPush
         .then(() => {
           if (requestId !== liveSectionRequestIdRef.current) return;
           setWorshipOverlayVisible(true);
@@ -2213,8 +2235,8 @@ export default function DockWorshipTab({
       title: song.title,
       artist: song.artist,
       lyrics: song.lyrics,
-      autoSplit: song.autoSplit,
-      linesPerSlide: song.linesPerSlide,
+      autoSplit: true,
+      linesPerSlide: DEFAULT_LINES_PER_SLIDE,
     });
     setActionError("");
   }, []);
@@ -2248,8 +2270,8 @@ export default function DockWorshipTab({
       title: fallback.title,
       artist: fallback.artist,
       lyrics: fallback.lyrics,
-      autoSplit: fallback.autoSplit,
-      linesPerSlide: fallback.linesPerSlide,
+      autoSplit: true,
+      linesPerSlide: DEFAULT_LINES_PER_SLIDE,
     };
     setSongDraft(nextDraft);
     showToast(t('worship.defaultRestored'));
@@ -3212,7 +3234,7 @@ export default function DockWorshipTab({
                               </div>
                             </div>
                             {getOrderedTranslationParts(
-                              section.text,
+                              normalizeDockMultilineText(section.text),
                               getWorshipSectionTranslation(section.id, worshipTranslation),
                               worshipTranslation?.showBoth ?? false,
                               worshipTranslation?.translationOrder,
@@ -3223,7 +3245,7 @@ export default function DockWorshipTab({
                                   ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
                                   : "dock-worship-slide-card__text"}
                               >
-                                {part.text}
+                                {normalizeDockMultilineText(part.text)}
                               </div>
                             ))}
                           </button>

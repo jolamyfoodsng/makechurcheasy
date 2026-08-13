@@ -19,4 +19,24 @@ describe("Bible reference search parser", () => {
 
     expect(labels).toContain("John 3:16");
   });
+
+  it.each([
+    ["1 Kings", "1 Kings"],
+    ["1kings", "1 Kings"],
+    ["I Kings", "1 Kings"],
+    ["ikings", "1 Kings"],
+    ["II Kings", "2 Kings"],
+    ["I-I Kings", "2 Kings"],
+    ["iikings", "2 Kings"],
+  ])("recognizes numbered book form %s", (query, expectedBook) => {
+    expect(parseBibleSearch(query)[0]?.label).toBe(expectedBook);
+  });
+
+  it.each([
+    ["kings", ["1 Kings", "2 Kings"]],
+    ["chronicles", ["1 Chronicles", "2 Chronicles"]],
+    ["corinthians", ["1 Corinthians", "2 Corinthians"]],
+  ])("suggests both numbered books for %s", (query, expectedBooks) => {
+    expect(parseBibleSearch(query).map((result) => result.label)).toEqual(expectedBooks);
+  });
 });

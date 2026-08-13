@@ -206,6 +206,85 @@ const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
 
+/**
+ * Sources that MakeChurchEasy may place inside MCE Presentation. We use the
+ * known MCE naming families instead of touching every source whose name merely
+ * happens to contain "MCE". User-owned OBS sources are never included here.
+ */
+const MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES = [
+  "MCE Browser -",
+  "MCE BG -",
+  "MCE Bible",
+  "MCE Worship",
+  "MCE Notes",
+  "MCE Media",
+  "MCE Lower Third",
+  "MCE Ticker",
+  "MCE Countdown",
+  "MCE Pre-Service",
+  "MCE_PreService",
+  "MCE Live",
+  "MCE Animated Lower Thirds",
+  "MCE Lower Thirds",
+  "MCE LT:",
+  "MCE MV:",
+  "MCE Fullscreen",
+  "MCE -",
+] as const;
+
+function isMcePresentationManagedSource(sourceName: string): boolean {
+  const normalized = sourceName.trim();
+  if (!normalized || normalized === PRESENTATION_SCENE_NAME || normalized === PROGRAM_SCENE_SOURCE_NAME) {
+    return false;
+  }
+  return MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function getMcePresentationSourceFamily(sourceName: string): string | null {
+  const normalized = sourceName.trim().toLocaleLowerCase();
+  if (normalized.includes("bible")) return "bible";
+  if (normalized.includes("worship")) return "worship";
+  if (normalized.includes("notes")) return "notes";
+  if (normalized.includes("media")) return "media";
+  if (normalized.includes("lower third") || normalized.includes("lower-third") || normalized.startsWith("mce lt:")) return "lower-third";
+  if (normalized.includes("ticker")) return "ticker";
+  if (normalized.includes("countdown") || normalized.includes("pre-service") || normalized.includes("preservice")) return "countdown";
+  if (normalized.includes("live")) return "live-tools";
+  return null;
+}
+
+/**
+ * Build the MCE-owned sources that should remain visible for an active push.
+ * The program-scene reference is structural, so it is intentionally preserved
+ * but is not treated as a content source.
+ */
+export function getMcePresentationVisibilityKeepSet(
+  primarySourceName: string,
+  items: ReadonlyArray<{ sourceName: string; sceneItemIndex?: number }>,
+  lowerThirdSourceVisibility: "keep-first" | "active-only" = "active-only",
+): Set<string> {
+  const primary = primarySourceName.trim();
+  const keepSet = new Set<string>([primary, PROGRAM_SCENE_SOURCE_NAME]);
+  const primaryFamily = getMcePresentationSourceFamily(primary);
+
+  if (primaryFamily) {
+    for (const item of items) {
+      if (getMcePresentationSourceFamily(item.sourceName) === primaryFamily) {
+        keepSet.add(item.sourceName);
+      }
+    }
+  }
+
+  if (lowerThirdSourceVisibility === "keep-first") {
+    const firstMceSource = [...items]
+      .filter((item) => isMcePresentationManagedSource(item.sourceName))
+      .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
+    if (firstMceSource) keepSet.add(firstMceSource.sourceName);
+  }
+
+  return keepSet;
+}
+
 type DockOverlayMode = "fullscreen" | "lower-third";
 
 type PrimeBibleOverlayData = {
@@ -556,6 +635,8 @@ class DockObsClient {
   private _activeFullscreenBgSignature: Record<string, string> = {};
   /** Track which MCE overlay source is live per scene so module switches do one cleanup pass */
   private _activeMceOverlayStateByScene: Record<string, string> = {};
+  /** MCE-owned presentation sources hidden by the active-only preference. */
+  private _mcePresentationSourcesDisabledByVisibility = new Set<string>();
   /** Remember the LT base Y so ticker clearance can be added/removed safely. */
   private _ltBasePosYBySceneItem: Map<string, number> = new Map();
 
@@ -965,10 +1046,10 @@ class DockObsClient {
       await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
 
       const bibleSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-      const bibleBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", bibleSourceName);
+      const bibleBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", bibleSourceName, bibleMode);
       const bibleCss = this.buildCssOverlayDataCss({ ...bibleBlankPacket }, "");
 
-      await this._ensureFullscreenScene("bible").catch(() => { });
+      await this._ensureFullscreenScene("bible", bibleMode).catch(() => { });
       await this.ensureOverlaySource(DOCK_PRESENTATION_SCENE, bibleSourceName, undefined, undefined, true).catch(() => { });
       await this.setBrowserSourceUrl(bibleSourceName, bibleBaseUrl, false, bibleCss).catch(() => { });
       this._lastCssOverlayPacketBySource[bibleSourceName] = { ...bibleBlankPacket };
@@ -1817,92 +1898,129 @@ class DockObsClient {
     sceneName: string,
     primarySourceName: string,
     keepSources: string[] = [],
-    resources: DockResourceNames = DOCK_RESOURCES,
+    _resources: DockResourceNames = DOCK_RESOURCES,
   ): Promise<void> {
     const primary = primarySourceName.trim();
-    if (!sceneName || !primary) return;
-    const keepSet = new Set<string>([
-      ...keepSources.filter(Boolean),
-      primary,
-      resources.tickerSource,
-      DOCK_TICKER_SOURCE,
-      PRESENTATION_SCENE_NAME,
-      PROGRAM_SCENE_SOURCE_NAME,
-    ]);
+    const targetScene = sceneName.trim();
+    if (!targetScene || !primary) return;
     const projectionSettings = loadProjectionSettings();
     const isLowerThirdSource = primary === DOCK_LT_SOURCE
       || primary === SOURCE_NAMES.LOWER_THIRD
-      || primary.startsWith("MCE Lower Third");
+      || primary.startsWith("MCE Lower Third")
+      || primary.startsWith("MCE Animated Lower Third")
+      || primary.startsWith("MCE LT:");
+    // Lower thirds always isolate MCE Presentation. Their separate setting
+    // only controls whether the first MCE content layer is added to the keep
+    // set; regular Bible/Worship/Notes/Media visibility can be opt-out.
     const shouldIsolateSources = isLowerThirdSource
-      ? projectionSettings.lowerThirdSourceVisibility === "active-only"
-        || projectionSettings.presentationSourceVisibility === "active-only"
+      ? true
       : projectionSettings.presentationSourceVisibility === "active-only";
     const stateSignature = JSON.stringify({
       primary,
-      keep: Array.from(keepSet).sort(),
+      targetScene,
+      keep: keepSources.filter(Boolean).sort(),
       shouldIsolateSources,
+      presentationSourceVisibility: projectionSettings.presentationSourceVisibility,
       lowerThirdSourceVisibility: projectionSettings.lowerThirdSourceVisibility,
     });
 
     // Always ensure ticker is positioned correctly, even if overlay state
     // hasn't changed (e.g., another tab reordered scene items).
-    await this.ensureTickerAboveSource(sceneName, primary).catch(() => { });
+    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
 
-    if (this._activeMceOverlayStateByScene[sceneName] === stateSignature) return;
+    if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
 
-    let changedVisibility = false;
+    const targetItems = await this.getSceneItemListCached(targetScene);
+    const presentationItems = targetScene === PRESENTATION_SCENE_NAME
+      ? targetItems
+      : await this.getSceneItemListCached(PRESENTATION_SCENE_NAME);
     const requests: Array<{ requestType: string; requestData: Record<string, unknown> }> = [];
-    const items = await this.getSceneItemListCached(sceneName);
+    const requestedRequestKeys = new Set<string>();
+    const addVisibilityRequest = (
+      requestScene: string,
+      sceneItemId: number,
+      sceneItemEnabled: boolean,
+    ) => {
+      const requestKey = `${requestScene}:${sceneItemId}:${sceneItemEnabled}`;
+      if (requestedRequestKeys.has(requestKey)) return;
+      requestedRequestKeys.add(requestKey);
+      requests.push({
+        requestType: "SetSceneItemEnabled",
+        requestData: {
+          sceneName: requestScene,
+          sceneItemId,
+          sceneItemEnabled,
+        },
+      });
+    };
 
-    if (shouldIsolateSources && isLowerThirdSource && projectionSettings.lowerThirdSourceVisibility === "keep-first") {
-      const firstMceSource = [...items]
-        .filter((item) => item.sourceName.startsWith("MCE ") && item.sourceName !== PROGRAM_SCENE_SOURCE_NAME)
-        .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
-      if (firstMceSource) keepSet.add(firstMceSource.sourceName);
+    // The selected active source must be enabled wherever the current push
+    // uses it, including a routed target scene outside MCE Presentation.
+    for (const item of targetItems) {
+      if (item.sourceName === primary && item.sceneItemEnabled === false) {
+        addVisibilityRequest(targetScene, item.sceneItemId, true);
+      }
     }
 
-    for (const item of items) {
+    // Visibility is deliberately reconciled in MCE Presentation only. A
+    // routed user scene may contain an MCE source for that route, but it must
+    // not become the place where this global presentation preference hides
+    // unrelated content.
+    const keepSet = getMcePresentationVisibilityKeepSet(
+      primary,
+      presentationItems,
+      isLowerThirdSource ? projectionSettings.lowerThirdSourceVisibility : "active-only",
+    );
+    for (const item of presentationItems) {
+      if (!isMcePresentationManagedSource(item.sourceName)) continue;
+
       const shouldKeep = keepSet.has(item.sourceName);
-      const isMceManagedSource = item.sourceName.startsWith("MCE ");
-      if (shouldIsolateSources && isMceManagedSource && !shouldKeep && item.sceneItemEnabled !== false) {
-        requests.push({
-          requestType: "SetSceneItemEnabled",
-          requestData: {
-            sceneName,
-            sceneItemId: item.sceneItemId,
-            sceneItemEnabled: false,
-          },
-        });
-        changedVisibility = true;
-        continue;
-      }
-      if (shouldKeep && item.sourceName === primary && item.sceneItemEnabled === false) {
-        requests.push({
-          requestType: "SetSceneItemEnabled",
-          requestData: {
-            sceneName,
-            sceneItemId: item.sceneItemId,
-            sceneItemEnabled: true,
-          },
-        });
-        changedVisibility = true;
+      if (shouldIsolateSources && !shouldKeep && item.sceneItemEnabled !== false) {
+        addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, false);
+        this._mcePresentationSourcesDisabledByVisibility.add(item.sourceName);
         continue;
       }
 
+      // When the operator changes back to "keep visible", restore only the
+      // sources that this preference itself hid; do not override a manual OBS
+      // disable. The active source is always re-enabled for the new push.
+      const shouldRestore = item.sourceName === primary
+        || this._mcePresentationSourcesDisabledByVisibility.has(item.sourceName);
+      if ((!shouldIsolateSources || shouldKeep) && item.sceneItemEnabled === false && shouldRestore) {
+        addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, true);
+        this._mcePresentationSourcesDisabledByVisibility.delete(item.sourceName);
+      }
     }
 
     if (requests.length > 0) {
       await this.callBatch(requests, 2).catch(() => { });
     }
-    if (changedVisibility) this.invalidateSceneItemListCache(sceneName);
+    if (requests.length > 0) {
+      this.invalidateSceneItemListCache(targetScene);
+      if (targetScene !== PRESENTATION_SCENE_NAME) {
+        this.invalidateSceneItemListCache(PRESENTATION_SCENE_NAME);
+      }
+    }
 
     // Visibility and scene-source mutations from neighboring dock actions can
     // leave the active source lower in the stack than expected. Re-apply the
     // source ordering after the batch so the live dock source stays at the top
     // of the dock-managed stack, just beneath the ticker when it exists.
-    await this.ensureTickerAboveSource(sceneName, primary).catch(() => { });
+    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
 
-    this._activeMceOverlayStateByScene[sceneName] = stateSignature;
+    this._activeMceOverlayStateByScene[targetScene] = stateSignature;
+  }
+
+  /** Apply the operator's MCE-only visibility preference to MCE Presentation. */
+  async applyMcePresentationSourceVisibility(primarySourceName: string): Promise<void> {
+    const primary = primarySourceName.trim();
+    if (!isMcePresentationManagedSource(primary)) return;
+    await this.ensureActiveMceOverlaySource(
+      PRESENTATION_SCENE_NAME,
+      primary,
+      [primary],
+      DOCK_RESOURCES,
+    );
   }
 
   private invalidateActiveMceOverlayState(sceneName?: string): void {
@@ -4075,14 +4193,25 @@ class DockObsClient {
     const trimmed = String(url || "").trim();
     if (!trimmed || trimmed === "about:blank") return "";
     const hashIndex = trimmed.indexOf("#");
-    return hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+    const documentUrl = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+    try {
+      const parsed = new URL(documentUrl);
+      // The initial Bible bootstrap mode is a startup hint only. The running
+      // page changes mode through the overlay packet, so a later stable URL
+      // without this hint must still be treated as the same document.
+      parsed.searchParams.delete("mode");
+      return parsed.toString();
+    } catch {
+      return documentUrl;
+    }
   }
 
   private browserSourceUrlMatchesLoadedDocument(currentUrl: string | undefined, nextUrl: string): boolean {
     if (!currentUrl || !nextUrl) return false;
     if (currentUrl === nextUrl) return true;
     if (nextUrl.includes("#")) return false;
-    return this.normalizeBrowserSourceDocumentUrl(currentUrl) === nextUrl;
+    return this.normalizeBrowserSourceDocumentUrl(currentUrl)
+      === this.normalizeBrowserSourceDocumentUrl(nextUrl);
   }
 
   private async readBrowserSourceUrl(inputName: string): Promise<string> {
@@ -4173,11 +4302,18 @@ class DockObsClient {
         requestData: {
           event_name: "mce-overlay-packet",
           event_data: {
-            tab: tabType,
-            packet,
-            css: overlayCss,
-            version: OVERLAY_HTML_VERSION,
-            ...(targetSource ? { targetSource } : {}),
+            // obs-browser dispatches requestData.event_data as the custom
+            // event detail. Keep the payload one level deeper so OBS does
+            // not consume targetSource as a vendor-level routing field before
+            // the overlay can validate it.
+            event_name: "mce-overlay-packet",
+            event_data: {
+              tab: tabType,
+              packet,
+              css: overlayCss,
+              version: OVERLAY_HTML_VERSION,
+              ...(targetSource ? { targetSource } : {}),
+            },
           },
         },
       });
@@ -4240,7 +4376,17 @@ class DockObsClient {
     // yet, so an event-only packet can be lost and leave the source blank.
     // This is a one-time/bootstrap path; normal verse changes stay in-place.
     if (urlChanged || sourceWasNotTracked) {
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+      const bootstrapMode = packet.mode === "fullscreen" || packet.mode === "lower-third"
+        ? packet.mode
+        : undefined;
+      const bootstrapUrl = tabType === "bible" && bootstrapMode
+        ? this.buildCssOverlayHtmlUrlForTab("bible", inputName, bootstrapMode)
+        : baseUrl;
+      // A newly loaded Bible page must know its mode before its first paint.
+      // The URL hint prevents a lower-third source from briefly showing the
+      // fullscreen layer while the CSS packet is arriving. It is ignored by
+      // URL comparison after bootstrap, so later verse updates stay in place.
+      await this.setBrowserSourceUrl(inputName, bootstrapUrl, sourceWasNotTracked, overlayCss);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
       return;
     }
@@ -4696,11 +4842,16 @@ class DockObsClient {
   private buildCssOverlayHtmlUrlForTab(
     tab: "bible" | "worship" | "announcements" | "notes",
     sourceName?: string,
+    mode?: "fullscreen" | "lower-third",
   ): string {
     const route = sourceName ? { mceSource: sourceName } : {};
     if (tab === "worship") return this.buildOverlayHtmlUrl("mce-worship-overlay.html", route);
     if (tab === "notes") return this.buildOverlayHtmlUrl("mce-note.html", route);
-    return this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab, ...route });
+    return this.buildOverlayHtmlUrl("mce-bible-overlay.html", {
+      tab,
+      ...route,
+      ...(mode ? { mode } : {}),
+    });
   }
 
   private extractCssCustomPropertyValue(cssText: string | undefined, name: string): string {
@@ -5724,6 +5875,16 @@ class DockObsClient {
       // reset cached signatures so fullscreen/lower-third can morph without
       // the hard preview/program tear-down that causes visible flashing.
       const mode = data.overlayMode ?? "fullscreen";
+      const bibleBrowserSourceName = this._fullscreenSceneDefs["bible"]?.browserSourceName;
+      const isFirstLowerThirdBootstrap = mode === "lower-third"
+        && (
+          !this._bibleLtInitialized
+          || !bibleBrowserSourceName
+          || !Object.prototype.hasOwnProperty.call(
+            this._lastBrowserSourceUrlBySource,
+            bibleBrowserSourceName,
+          )
+        );
       const prevMode = this._lastBibleMode;
       const modeChanged = prevMode !== "" && prevMode !== mode;
       if (modeChanged) {
@@ -5780,7 +5941,7 @@ class DockObsClient {
             // was deleted in OBS so the cached theme/background state can be
             // applied to a fresh browser source.
             this._lastFullscreenSceneItemSignature[browserSrc] = "";
-            await this._ensureFullscreenScene("bible").catch(() => { });
+            await this._ensureFullscreenScene("bible", mode).catch(() => { });
             await this.ensureActiveMceOverlaySource(
               PRESENTATION_SCENE_NAME,
               browserSrc,
@@ -5788,7 +5949,7 @@ class DockObsClient {
               resources,
             ).catch(() => { });
           } else {
-            await this._ensureFullscreenScene("bible").catch(() => { });
+            await this._ensureFullscreenScene("bible", mode).catch(() => { });
             await this.ensureOverlaySource(sourceScene, browserSrc, undefined, undefined, true).catch(() => { });
           }
           const cachedPacket = this._lastCssOverlayPacketBySource[browserSrc];
@@ -5844,7 +6005,7 @@ class DockObsClient {
 
         // Ensure the unified source exists.
         if (modeChanged || !this._bibleLtInitialized || !this._lastFullscreenSceneItemSignature[browserSourceName]) {
-          await this._ensureFullscreenScene("bible");
+          await this._ensureFullscreenScene("bible", mode);
         }
 
         const compareSlide = compareColumns.length === 2
@@ -6073,7 +6234,7 @@ class DockObsClient {
         // Ensure the unified source exists in MCE Presentation. Follow with
         // ensureOverlaySource so a stale cache or manual OBS source deletion
         // cannot leave the presentation scene with no visible Bible item.
-        await this._ensureFullscreenScene("bible");
+        await this._ensureFullscreenScene("bible", mode);
         await this.ensureOverlaySource(sceneName, def.browserSourceName, undefined, undefined, true);
 
         // Hide the source in user's scene if it was there from lower-third mode
@@ -6223,6 +6384,7 @@ class DockObsClient {
           "bible",
           Number(cssOverlayPacket.timestamp) || Date.now(),
           mode,
+          isFirstLowerThirdBootstrap ? 3500 : 500,
         ).catch(() => { });
       }
 
@@ -6344,46 +6506,51 @@ class DockObsClient {
       return;
     }
 
-    this._lastBibleMode = mode;
-    const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
-    const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
-    const themeCss = css;
+    // Keep fast lower-third updates on the same latest-update queue as the
+    // full Bible path. Otherwise a quick verse/background change can finish
+    // out of order and briefly repaint an older pattern after the new one.
+    await this.runSerializedBibleMutation(async () => {
+      this._lastBibleMode = mode;
+      const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+      const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
+      const themeCss = css;
 
-    const slide = this.buildBibleSlide(
-      data.verseText ?? "",
-      data.referenceText ?? "",
-      data.verseRange ?? "",
-    );
+      const slide = this.buildBibleSlide(
+        data.verseText ?? "",
+        data.referenceText ?? "",
+        data.verseRange ?? "",
+      );
 
-    const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
+      const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
 
-    const cssOverlayPacket: Record<string, unknown> = {
-      slide,
-      theme: ltClean ?? null,
-      live: true,
-      blanked: false,
-      timestamp: Date.now(),
-      mode,
-    };
+      const cssOverlayPacket: Record<string, unknown> = {
+        slide,
+        theme: ltClean ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Date.now(),
+        mode,
+      };
 
-    const packetWithMode: Record<string, unknown> = { ...cssOverlayPacket, mode };
+      const packetWithMode: Record<string, unknown> = { ...cssOverlayPacket, mode };
 
-    this.publishFullscreenOverlayPacket({
-      slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
-      theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
-      live: true,
-      blanked: false,
-      timestamp: Number(packetWithMode.timestamp) || Date.now(),
-      mode,
-    }, "bible", themeCss);
+      this.publishFullscreenOverlayPacket({
+        slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
+        theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+      }, "bible", themeCss);
 
-    await this.deliverCssOverlayPacket(
-      browserSourceName,
-      "bible",
-      packetWithMode,
-      cssOverlayBaseUrl,
-      themeCss,
-    );
+      await this.deliverCssOverlayPacket(
+        browserSourceName,
+        "bible",
+        packetWithMode,
+        cssOverlayBaseUrl,
+        themeCss,
+      );
+    });
   }
 
   async pushWorshipOverlayFast(data: {
@@ -6693,7 +6860,7 @@ class DockObsClient {
     const sceneName = DOCK_PRESENTATION_SCENE;
     const existing = await this.getSceneItemBySource(sceneName, sourceName).catch(() => null);
     if (!existing) {
-      await this._ensureFullscreenScene("bible");
+      await this._ensureFullscreenScene("bible", data.mode);
     }
 
     // Build theme: merge with live overrides, apply mode-specific wrapping
@@ -7360,6 +7527,7 @@ class DockObsClient {
       if (
         (isWorship || isNotes)
         && mode === "fullscreen"
+        && !modeChanged
         && getInitialized()
         && this._lastBrowserSourceUrlBySource[sourceName]
       ) {
@@ -7970,6 +8138,7 @@ class DockObsClient {
     await this.clearAllOverlays(resources.tickerSource, sceneName, resources);
 
     await this.ensureOverlaySource(sceneName, resources.tickerSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(resources.tickerSource).catch(() => { });
     const resolvedLTTheme = this.resolveLTTheme(data.ltTheme, "ticker");
 
     const url = this.buildTickerUrl(
@@ -8708,6 +8877,7 @@ class DockObsClient {
         canvas.height,
         true,
       );
+      await this.applyMcePresentationSourceVisibility(remoteMediaSource).catch(() => { });
       const packet = {
         url: mediaUrl,
         title: fileName,
@@ -8833,6 +9003,8 @@ class DockObsClient {
     try {
       await this.ensureTickerAboveSource(sceneName, mediaSource);
     } catch { /* ignore */ }
+
+    await this.applyMcePresentationSourceVisibility(mediaSource).catch(() => { });
 
   }
 
@@ -9123,6 +9295,7 @@ class DockObsClient {
 
     // Ensure pattern browser source exists directly in target scene
     await this.ensureOverlaySource(sceneName, mediaPatternSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(mediaPatternSource).catch(() => { });
 
     // Ensure ticker is on top after source exists
     try {
@@ -9186,6 +9359,7 @@ class DockObsClient {
     if (!sceneName) throw new Error("No active scene found in OBS");
 
     await this.ensureOverlaySource(sceneName, mediaTextSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(mediaTextSource).catch(() => { });
     await this.setBrowserSourceUrl(
       mediaTextSource,
       this.buildMediaTextOverlayUrl({
@@ -9452,15 +9626,26 @@ class DockObsClient {
    * Ensure a fullscreen source exists in MCE Presentation.
    * No longer creates separate scenes — everything lives in MCE Presentation.
    */
-  private async _ensureFullscreenScene(key: string): Promise<{ sceneName: string; browserItemId: number }> {
+  private async _ensureFullscreenScene(
+    key: string,
+    initialMode?: "fullscreen" | "lower-third",
+  ): Promise<{ sceneName: string; browserItemId: number }> {
     const def = this._fullscreenSceneDefs[key];
     if (!def) throw new Error(`Unknown fullscreen scene key: ${key}`);
 
     const canvas = await this.getCanvasSize();
-    const overlayUrl = this.buildOverlayHtmlUrl(
-      def.overlayFile,
-      key === "countdown" ? undefined : { tab: key },
-    );
+    const shouldBootstrapBibleMode = key === "bible"
+      && Boolean(initialMode)
+      && !Object.prototype.hasOwnProperty.call(
+        this._lastBrowserSourceUrlBySource,
+        def.browserSourceName,
+      );
+    const overlayUrl = key === "bible" && shouldBootstrapBibleMode
+      ? this.buildCssOverlayHtmlUrlForTab("bible", def.browserSourceName, initialMode)
+      : this.buildOverlayHtmlUrl(
+        def.overlayFile,
+        key === "countdown" ? undefined : { tab: key },
+      );
     const sourceSignature = `${overlayUrl}|${canvas.width}x${canvas.height}`;
 
     // Ensure MCE Presentation exists

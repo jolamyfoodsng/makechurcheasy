@@ -37,6 +37,8 @@ interface QuickActionDragState {
   startY: number;
   startTop: number;
   startLeft: number;
+  currentTop: number;
+  currentLeft: number;
   moved: boolean;
 }
 
@@ -51,24 +53,58 @@ function getParentBounds(element: HTMLDivElement | null): { width: number; heigh
   return { width: rect.width, height: rect.height };
 }
 
+function getElementLeft(element: HTMLDivElement | null, fallback: number): number {
+  const parent = element?.parentElement;
+  const parentRect = parent?.getBoundingClientRect();
+  const elementRect = element?.getBoundingClientRect();
+  if (!parentRect || !elementRect) return fallback;
+  return elementRect.left - parentRect.left;
+}
+
+function getRightEdgeLeft(element: HTMLDivElement | null): number {
+  const width = getParentBounds(element)?.width ?? QUICK_ACTIONS_HANDLE_WIDTH;
+  return Math.max(0, width - QUICK_ACTIONS_HANDLE_WIDTH);
+}
+
+export function snapDockQuickActionsLeft(
+  requestedLeft: number,
+  containerWidth: number,
+  handleWidth = QUICK_ACTIONS_HANDLE_WIDTH,
+): number | null {
+  const maxLeft = Math.max(0, containerWidth - handleWidth);
+  if (maxLeft === 0) return 0;
+
+  const clampedLeft = clamp(requestedLeft, 0, maxLeft);
+  return clampedLeft <= maxLeft / 2 ? 0 : null;
+}
+
+/** Quick actions may move vertically, but they snap to an edge only when dragging ends. */
+function snapLeftToDockEdge(element: HTMLDivElement | null, requestedLeft: number): number | null {
+  const bounds = getParentBounds(element);
+  if (!bounds) return requestedLeft <= 0 ? 0 : null;
+  return snapDockQuickActionsLeft(requestedLeft, bounds.width);
+}
+
 function clampPosition(
   element: HTMLDivElement | null,
   top: number,
   left: number,
-): { top: number; left: number } {
+): { top: number; left: number | null } {
   const bounds = getParentBounds(element);
   if (!bounds) {
-    return { top: Math.max(QUICK_ACTIONS_MIN_TOP, top), left: Math.max(0, left) };
+    return {
+      top: Math.max(QUICK_ACTIONS_MIN_TOP, top),
+      left: Math.max(0, left),
+    };
   }
 
   const maxTop = Math.max(
     QUICK_ACTIONS_MIN_TOP,
     bounds.height - QUICK_ACTIONS_HANDLE_HEIGHT - QUICK_ACTIONS_BOTTOM_GAP,
   );
-  const maxLeft = Math.max(0, bounds.width - QUICK_ACTIONS_HANDLE_WIDTH);
   return {
     top: Math.round(clamp(top, QUICK_ACTIONS_MIN_TOP, maxTop)),
-    left: Math.round(clamp(left, 0, maxLeft)),
+    left: Math.round(clamp(left, 0, bounds.width - QUICK_ACTIONS_HANDLE_WIDTH)),
   };
 }
 
@@ -92,6 +128,7 @@ export default function DockOutputQuickActions({
   const [draftSettings, setDraftSettings] = useState<Partial<DockOutputQuickTextSettings> | null>(null);
   const [draftLineCount, setDraftLineCount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragPosition, setDragPosition] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<QuickActionDragState | null>(null);
   const suppressClickRef = useRef(false);
@@ -106,14 +143,17 @@ export default function DockOutputQuickActions({
     : minFontSize;
   const areManualFontSizesDisabled = displayedSettings.autoFontScale === true;
   const hasPendingChanges = draftSettings !== null || draftLineCount !== null;
-  const menuOnRight = left !== null && left < 210;
+  const renderedTop = dragPosition?.top ?? top;
+  const renderedLeft = dragPosition?.left ?? left;
+  const menuOnRight = renderedLeft !== null && renderedLeft < 210;
 
   const normalizePosition = useCallback(() => {
-    const actualLeft = left ?? Math.max(0, (getParentBounds(rootRef.current)?.width ?? QUICK_ACTIONS_HANDLE_WIDTH) - QUICK_ACTIONS_HANDLE_WIDTH);
+    if (dragRef.current) return;
+    const actualLeft = left ?? getRightEdgeLeft(rootRef.current);
     const next = clampPosition(rootRef.current, top, actualLeft);
-    const isRightAnchored = left === null && next.left === Math.max(0, (getParentBounds(rootRef.current)?.width ?? QUICK_ACTIONS_HANDLE_WIDTH) - QUICK_ACTIONS_HANDLE_WIDTH);
-    if (next.top !== top || (!isRightAnchored && left !== next.left) || (isRightAnchored && left !== null)) {
-      onPositionChange(next.top, isRightAnchored ? null : next.left);
+    const normalizedLeft = left === null ? null : snapLeftToDockEdge(rootRef.current, next.left as number);
+    if (next.top !== top || normalizedLeft !== left) {
+      onPositionChange(next.top, normalizedLeft);
     }
   }, [left, onPositionChange, top]);
 
@@ -172,14 +212,22 @@ export default function DockOutputQuickActions({
   }, [draftLineCount, draftSettings, hasPendingChanges, onCommit, onUpdateImmediatelyChange]);
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
     const bounds = getParentBounds(rootRef.current);
-    const currentLeft = left ?? Math.max(0, (bounds?.width ?? QUICK_ACTIONS_HANDLE_WIDTH) - QUICK_ACTIONS_HANDLE_WIDTH);
+    const fallbackLeft = left ?? Math.max(0, (bounds?.width ?? QUICK_ACTIONS_HANDLE_WIDTH) - QUICK_ACTIONS_HANDLE_WIDTH);
+    const currentLeft = clampPosition(
+      rootRef.current,
+      top,
+      getElementLeft(rootRef.current, fallbackLeft),
+    ).left as number;
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       startTop: top,
       startLeft: currentLeft,
+      currentTop: top,
+      currentLeft,
       moved: false,
     };
     setIsDragging(true);
@@ -194,8 +242,10 @@ export default function DockOutputQuickActions({
     if (!drag.moved && Math.hypot(deltaX, deltaY) < 3) return;
     drag.moved = true;
     const next = clampPosition(rootRef.current, drag.startTop + deltaY, drag.startLeft + deltaX);
-    onPositionChange(next.top, next.left);
-  }, [onPositionChange]);
+    drag.currentTop = next.top;
+    drag.currentLeft = next.left as number;
+    setDragPosition({ top: drag.currentTop, left: drag.currentLeft });
+  }, []);
 
   const finishPointerDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -203,8 +253,19 @@ export default function DockOutputQuickActions({
     suppressClickRef.current = drag.moved;
     dragRef.current = null;
     setIsDragging(false);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  }, []);
+    setDragPosition(null);
+    if (drag.moved) {
+      const nextLeft = snapLeftToDockEdge(rootRef.current, drag.currentLeft);
+      onPositionChange(drag.currentTop, nextLeft);
+    }
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Some embedded browsers may not support pointer capture.
+    }
+  }, [onPositionChange]);
 
   const handleClick = useCallback(() => {
     if (suppressClickRef.current) {
@@ -219,8 +280,8 @@ export default function DockOutputQuickActions({
       ref={rootRef}
       className={`dock-bible-reader__quick-actions${menuOnRight ? " dock-bible-reader__quick-actions--menu-right" : ""}`}
       style={{
-        top: `${top}px`,
-        ...(left !== null ? { left: `${left}px`, right: "auto" } : {}),
+        top: `${renderedTop}px`,
+        ...(renderedLeft !== null ? { left: `${renderedLeft}px`, right: "auto" } : {}),
       }}
     >
       <button

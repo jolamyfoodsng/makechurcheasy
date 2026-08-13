@@ -101,7 +101,7 @@ describe("dock projection settings", () => {
     expect(dockPageSource).toContain("updateProjectionSettings({ restoreOriginalScene: e.target.checked })");
     expect(dockPageSource).toContain("presentationSourceVisibility");
     expect(dockPageSource).toContain("lowerThirdSourceVisibility");
-    expect(dockPageSource).toContain("Only sources created by MakeChurchEasy are changed");
+    expect(dockPageSource).toContain("Your own OBS sources are untouched");
     expect(dockPageSource).not.toContain("setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))");
     expect(routingPanel).not.toContain("dock-sidebar__radio");
     expect(routingPanel).not.toContain("aria-pressed");

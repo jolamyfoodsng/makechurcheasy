@@ -451,3 +451,37 @@ html.mv-theme-light #dock-root,
     padding-inline: 6px;
   }
 }
+
+/* Keep Dock-wide glass styling active in light mode, where a few legacy
+   surfaces still use fixed white backgrounds instead of shared tokens. */
+.dock-root.dock-root--glass :is(
+  .dock-inline-header,
+  .dock-shell-header,
+  .dock-status-bar,
+  .dock-tabs,
+  .dock-worship-subtab-bar,
+  .dock-bottom-nav,
+  .dock-vertical-nav,
+  .dock-sidebar,
+  .dock-settings-menu,
+  .dock-search-dropdown,
+  .dock-console-panel,
+  .dock-presentation-bible-lm-pane,
+  .dock-btm-toolbar,
+  .dock-btm-overflow__menu,
+  .dock-btm-display-mode-menu,
+  .dock-dialog,
+  .dock-modal,
+  .dtb-modal,
+  .dtb-studio__modal,
+  .dtb-studio-card,
+  .dock-theme-quick__modal,
+  .dock-mv-content-picker,
+  .dock-mv-framing-editor
+) {
+  background: var(--dock-surface);
+}
+
+.dock-root.dock-root--glass .dock-console-panel--deck {
+  background: var(--dock-surface-overlay);
+}

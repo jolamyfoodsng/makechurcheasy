@@ -86,9 +86,9 @@ export default function DockBottomToolbar({
   useEffect(() => {
     if (!showOverflow) return;
     const handlePointerDown = (e: PointerEvent) => {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
-        setShowOverflow(false);
-      }
+      const target = e.target as Element | null;
+      if (target?.closest("[data-dock-keep-overflow-open='true']")) return;
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) setShowOverflow(false);
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
@@ -173,7 +173,7 @@ export default function DockBottomToolbar({
           <div
             className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
             role="group"
-            aria-label={t("dock.bottomToolbar.overlayModeLabel")}
+            aria-label={`${t("dock.bottomToolbar.overlayModeLabel")}: ${overlayMode === "fullscreen" ? t("dock.bottomToolbar.fullLabel") : t("dock.bottomToolbar.ltLabel")}`}
           >
             <div className="dock-btm-display-mode-anchor" ref={displayModeMenuRef}>
               <button
@@ -184,6 +184,7 @@ export default function DockBottomToolbar({
                 }}
                 disabled={morphing}
                 aria-busy={morphing}
+                aria-pressed={overlayMode === "fullscreen"}
                 title={t("dock.bottomToolbar.fullscreenTooltip")}
               >
                 {t("dock.bottomToolbar.fullLabel")}
@@ -212,6 +213,7 @@ export default function DockBottomToolbar({
               }}
               disabled={morphing}
               aria-busy={morphing}
+              aria-pressed={overlayMode === "lower-third"}
               title={t("dock.bottomToolbar.lowerThirdTooltip")}
             >
               {t("dock.bottomToolbar.ltLabel")}
@@ -247,7 +249,7 @@ export default function DockBottomToolbar({
                 aria-label={t("dock.bottomToolbar.moreActions")}
                 title={t("dock.bottomToolbar.moreActions")}
               >
-                <Icon name="more_horiz" size={16} />
+                <Icon name="more_vert" size={16} />
               </button>
               {showOverflow && (
                 <div className="dock-btm-overflow__menu" role="menu">
@@ -257,7 +259,19 @@ export default function DockBottomToolbar({
                       {narrowOverflowActions}
                     </div>
                   )}
-                  {children}
+                  {children && (
+                    <div
+                      className="dock-btm-overflow__children"
+                      onClick={(event) => {
+                        const target = event.target as Element | null;
+                        if (target?.closest("[data-dock-close-overflow='true']")) {
+                          setShowOverflow(false);
+                        }
+                      }}
+                    >
+                      {children}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

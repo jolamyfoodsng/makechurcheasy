@@ -35,6 +35,22 @@ const NUMBER_FORMS: Record<string, string[]> = {
   "3": ["3", "3rd", "third", "three", "tree", "free"],
 };
 
+/**
+ * Convert written Roman-number forms used in Bible references to a digit
+ * prefix. This also handles speech-to-text output such as "I-I Kings".
+ */
+export function normalizeRomanNumberedBookPrefix(value: string): string {
+  const match = value.match(
+    /^((?:i{1,3})(?:(?:\s*[-–—]\s*|\s+)i{1,3}){0,2})(?=\s|$)/i,
+  );
+  if (!match) return value;
+
+  const roman = match[1].replace(/[^i]/gi, "").toLowerCase();
+  if (!/^i{1,3}$/.test(roman)) return value;
+
+  return `${roman.length}${value.slice(match[1].length)}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Numbered book definitions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +85,26 @@ const NUMBERED_BOOKS: NumberedBookDef[] = [
   { num: "2", base: "John",      singular: "John",      abbreviations: ["jn", "jo", "joh", "johh"] },
   { num: "3", base: "John",      singular: "John",      abbreviations: ["jn", "jo", "joh", "johh"] },
 ];
+
+const COMPACT_NUMBERED_BOOK_SUFFIXES = new Set(
+  NUMBERED_BOOKS.flatMap((def) => [
+    def.base.toLowerCase(),
+    def.singular.toLowerCase(),
+    ...def.abbreviations.map((abbr) => abbr.toLowerCase()),
+  ]),
+);
+
+/** Convert compact forms such as "ikings" and "iikings" to book prefixes. */
+export function normalizeCompactNumberedBookPrefix(value: string): string {
+  const match = value.match(/^([123]|i{1,3})([a-z]+)(?=\s|$)/i);
+  if (!match) return value;
+
+  const suffix = match[2].toLowerCase();
+  if (!COMPACT_NUMBERED_BOOK_SUFFIXES.has(suffix)) return value;
+
+  const number = /^\d$/.test(match[1]) ? match[1] : String(match[1].length);
+  return `${number} ${value.slice(match[1].length)}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Non-numbered book definitions with speech-to-text variants

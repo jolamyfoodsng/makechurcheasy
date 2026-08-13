@@ -11,6 +11,7 @@ import {
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
 import { resetLicenseGuard } from "@/services/licenseGuard";
+import { refreshAppAppearance } from "@/services/appAppearance";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthenticated(isAuthenticated());
     setIsAdmin(stored?.role === "admin");
     setLoading(false);
+    refreshAppAppearance();
     // Re-sync session to overlay server so the OBS dock can see it
     if (stored) syncSessionToOverlay(getSession());
   }, []);
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // user stranded on LoginPage after successful pairing.
     setAuthenticated(true);
     setIsAdmin(u.role === "admin");
+    refreshAppAppearance();
   }
 
   function logout() {
@@ -69,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authLogout();
     resetFavoriteThemeCaches();
     clearAllUserScopedStorage();
+    refreshAppAppearance();
     setUserState(null);
     setAuthenticated(false);
   }

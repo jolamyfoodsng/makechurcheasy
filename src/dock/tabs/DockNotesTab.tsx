@@ -51,6 +51,8 @@ import {
   formatNoteText,
   type NoteTextToolAction,
 } from "../noteTextTools";
+import { splitNoteBodyIntoSections } from "../noteSlideParser";
+import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 
@@ -77,7 +79,7 @@ function readQuickActionsLeft(value: unknown): number | null {
 }
 
 function getNoteDisplayTitle(note: DockNote): string {
-  return extractStructuredTextTitle(note.content).title || note.title;
+  return extractStructuredTextTitle(normalizeDockMultilineText(note.content)).title || note.title;
 }
 
 interface DockNoteEditorDialogProps {
@@ -143,7 +145,7 @@ function DockNoteEditorDialog({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              placeholder="Note content. Use blank lines to separate slides."
+              placeholder="Blank lines separate slides; single lines stay together."
               rows={8}
             />
           </label>
@@ -166,13 +168,13 @@ function DockNoteEditorDialog({
 
 function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_PER_SLIDE): { id: string; label: string; text: string }[] {
   const slides: { id: string; label: string; text: string }[] = [];
-  const structuredText = extractStructuredTextTitle(note.content);
+  const structuredText = extractStructuredTextTitle(normalizeDockMultilineText(note.content));
   const displayTitle = structuredText.title || note.title;
-  const sections = structuredText.body.split(/\n\n+/).map((section) => section.trim()).filter(Boolean);
+  const sections = splitNoteBodyIntoSections(structuredText.body);
   if (sections.length === 0 && displayTitle) {
     slides.push({ id: `note-${note.id}-0-0`, label: "", text: displayTitle });
   } else {
-    const groupedSections: Array<{ headingLabel: string; explicit: boolean; lines: string[] }> = [];
+    const groupedSections: Array<{ headingLabel: string; lines: string[] }> = [];
 
     sections.forEach((text) => {
       const lines = text.split("\n");
@@ -184,15 +186,11 @@ function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_P
       if (sectionLines.length === 0) return;
 
       if (heading) {
-        groupedSections.push({ headingLabel: heading.label, explicit: true, lines: sectionLines });
+        groupedSections.push({ headingLabel: heading.label, lines: sectionLines });
         return;
       }
 
-      const previous = groupedSections[groupedSections.length - 1];
-      if (!previous || previous.explicit) {
-        groupedSections.push({ headingLabel: "", explicit: false, lines: [] });
-      }
-      groupedSections[groupedSections.length - 1].lines.push(...sectionLines);
+      groupedSections.push({ headingLabel: "", lines: sectionLines });
     });
 
     groupedSections.forEach((section, sectionIndex) => {
@@ -212,7 +210,7 @@ function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_P
 }
 
 function serializeNoteSlides(note: DockNote, slides: Array<{ label: string; text: string }>): string {
-  const structuredText = extractStructuredTextTitle(note.content);
+  const structuredText = extractStructuredTextTitle(normalizeDockMultilineText(note.content));
   const titleMarker = structuredText.title ? `[${structuredText.title}]\n\n` : "";
   const body = slides
     .map((slide) => {
@@ -516,7 +514,7 @@ export default function DockNotesTab({
     if (!title || !content) return;
     const now = Date.now();
     if (editingNote) {
-      const updated: DockNote = { ...editingNote, title, content, updatedAt: now };
+      const updated: DockNote = { ...editingNote, title, content, splitOnLineBreaks: false, updatedAt: now };
       const next = notes.map((n) => (n.id === updated.id ? updated : n));
       setNotes(next);
       saveDockNotes(next);
@@ -526,6 +524,7 @@ export default function DockNotesTab({
         id: crypto.randomUUID?.() ?? `note-${now}-${Math.random().toString(36).slice(2, 8)}`,
         title,
         content,
+        splitOnLineBreaks: false,
         updatedAt: now,
       };
       const next = [newNote, ...notes];
@@ -552,6 +551,7 @@ export default function DockNotesTab({
     const updated: DockNote = {
       ...selectedNote,
       content: serializeNoteSlides(selectedNote, nextSlides),
+      splitOnLineBreaks: false,
       updatedAt: Date.now(),
     };
     const nextNotes = notes.map((note) => note.id === updated.id ? updated : note);
@@ -589,9 +589,10 @@ export default function DockNotesTab({
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
       const themeSettings = quickSettings ?? theme.settings;
-      const translatedText = notesTranslation?.translatedSections[slide.id]?.trim() ?? "";
+      const slideText = normalizeDockMultilineText(slide.text);
+      const translatedText = normalizeDockMultilineText(notesTranslation?.translatedSections[slide.id] ?? "").trim();
       const showBoth = Boolean(notesTranslation?.showBoth && translatedText);
-      const sectionText = showBoth ? slide.text : (translatedText || slide.text);
+      const sectionText = showBoth ? slideText : (translatedText || slideText);
       const translationText = showBoth ? translatedText : "";
       return {
         stageItem: {
@@ -871,7 +872,7 @@ export default function DockNotesTab({
                     >
                       <span className="dock-card__title">{getNoteDisplayTitle(note)}</span>
                       <span className="dock-card__subtitle">
-                        {extractStructuredTextTitle(note.content).body.split("\n")[0]?.substring(0, 80) || "No content"}
+                        {extractStructuredTextTitle(normalizeDockMultilineText(note.content)).body.split("\n")[0]?.substring(0, 80) || "No content"}
                       </span>
                     </button>
                     <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label="Edit" title="Edit">
@@ -982,7 +983,7 @@ export default function DockNotesTab({
                         </div>
                         {getOrderedTranslationParts(
                           slide.text,
-                          notesTranslation?.translatedSections[slide.id],
+                          normalizeDockMultilineText(notesTranslation?.translatedSections[slide.id] ?? ""),
                           notesTranslation?.showBoth ?? false,
                           notesTranslation?.translationOrder,
                         ).map((part, partIndex) => (
@@ -992,7 +993,7 @@ export default function DockNotesTab({
                               ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
                               : "dock-worship-slide-card__text"}
                           >
-                            {part.text}
+                            {normalizeDockMultilineText(part.text)}
                           </div>
                         ))}
                       </button>

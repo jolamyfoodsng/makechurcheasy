@@ -9,6 +9,19 @@ export interface VerseAliasEntry {
 
 export const VERSE_ALIASES: VerseAliasEntry[] = [
   // Tier 1: Universally quoted
+  {
+    phrases: [
+      "jacob have i loved but esau have i hated",
+      "jacob i loved but esau i hated",
+      "jacob i love but esau i hate",
+      "i love jacob",
+      "jacob loved",
+      "esau hated",
+      "jacob loved esau hated",
+      "jacob i loved esau i hated",
+    ],
+    reference: "Romans 9:13",
+  },
   { phrases: ["for god so loved the world", "god so loved the world", "for god so loved"], reference: "John 3:16" },
   { phrases: ["the lord is my shepherd", "lord is my shepherd", "the lord is my shepherd i shall not want"], reference: "Psalm 23:1" },
   { phrases: ["faith is the substance of things hoped for", "faith is the substance of things hoped for the evidence of things not seen", "now faith is the substance of things hoped for"], reference: "Hebrews 11:1" },

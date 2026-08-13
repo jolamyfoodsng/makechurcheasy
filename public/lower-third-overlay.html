@@ -2070,7 +2070,7 @@
         if (!data || typeof data !== "object") return false;
         if (data.tab && data.tab !== "lower-third") return false;
         const targetSource = typeof data.targetSource === "string" ? data.targetSource : "";
-        if (routeSource ? targetSource !== routeSource : Boolean(targetSource)) return false;
+        if (routeSource && targetSource !== routeSource) return false;
         const packet = data.packet || data.overlayData || data.data;
         if (!packet || typeof packet !== "object") return false;
         if (packet.action === "animate-out") {

@@ -69,6 +69,16 @@ for (const [tier, config] of Object.entries(DEFAULT_PLAN_CONFIG.plans)) {
 
 // Minimum plan tier required for each feature — derived at runtime, NOT hardcoded.
 const FEATURE_REQUIRED_PLAN: Record<string, string> = deriveFeatureRequiredPlan(DEFAULT_PLAN_CONFIG);
+const PURCHASED_PLAN_HIERARCHY = ["free", "basic", "growth"] as const;
+
+function findRequiredPlan(feature: string, currentCount: number = 0): string {
+  for (const tier of PURCHASED_PLAN_HIERARCHY) {
+    const value = DEFAULT_ENTITLEMENTS[tier]?.[feature];
+    if (typeof value === "boolean" && value) return tier;
+    if (typeof value === "number" && (value === -1 || currentCount < value)) return tier;
+  }
+  return FEATURE_REQUIRED_PLAN[feature] || "growth";
+}
 
 function readStoredOverlaySession(): unknown | null {
   if (!existsSync(SESSION_FILE)) {
@@ -336,7 +346,7 @@ function entitlementServerPlugin(): Plugin {
             const entitlements = DEFAULT_ENTITLEMENTS[planKey] || DEFAULT_ENTITLEMENTS.free;
             const limit = entitlements[feature as keyof typeof entitlements];
             const label = FEATURE_LABELS[feature] || feature;
-            const requiredPlan = FEATURE_REQUIRED_PLAN[feature] || "basic";
+            const requiredPlan = findRequiredPlan(feature, currentCount);
 
             // Boolean features (multiview, tickers, massImport, etc.)
             if (typeof limit === "boolean") {

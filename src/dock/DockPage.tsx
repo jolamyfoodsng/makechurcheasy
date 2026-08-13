@@ -15,7 +15,9 @@ import { isPresentationLinkTarget } from "./dockPresentationTarget";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   APP_APPEARANCE_PALETTES,
+  DEFAULT_DOCK_VISUALS,
   getDockAppearanceCssVariables,
+  type DockVisualPreferences,
 } from "../services/appAppearance";
 import {
   type DockProductionSettingsPayload,
@@ -306,6 +308,25 @@ export default function DockPage({
 
   // ── Force update check (dock runs in OBS CEF, no Tauri updater) ──
   const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; currentVersion?: string; latestVersion?: string }>({ daysOld: 0, forceUpdate: false });
+  const [dockSaveFeedback, setDockSaveFeedback] = useState<{ id: number; message: string } | null>(null);
+  const dockSaveFeedbackTimerRef = useRef<number | null>(null);
+
+  const showDockSaveFeedback = useCallback((message: string) => {
+    setDockSaveFeedback({ id: Date.now(), message });
+    if (dockSaveFeedbackTimerRef.current !== null) {
+      window.clearTimeout(dockSaveFeedbackTimerRef.current);
+    }
+    dockSaveFeedbackTimerRef.current = window.setTimeout(() => {
+      setDockSaveFeedback(null);
+      dockSaveFeedbackTimerRef.current = null;
+    }, 2200);
+  }, []);
+
+  useEffect(() => () => {
+    if (dockSaveFeedbackTimerRef.current !== null) {
+      window.clearTimeout(dockSaveFeedbackTimerRef.current);
+    }
+  }, []);
 
   // ── Global drag-and-drop ──
   const { isDragging, onDrop: registerDropHandler } = useDockDragDrop();
@@ -666,15 +687,61 @@ export default function DockPage({
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
-  const dockStyle = useMemo<CSSProperties>(() => ({
-    ...getDockAppearanceCssVariables(appearance, effective),
-    "--dock-font-body": buildDockFontFamilyStack(dockFontFamily),
-    "--dock-font-heading": buildDockFontFamilyStack(dockFontFamily),
-    "--dock-font-scale": String(dockFontScale),
-  } as CSSProperties), [appearance, effective, dockFontFamily, dockFontScale]);
+  const dockStyle = useMemo<CSSProperties>(() => {
+    const dockVariables = getDockAppearanceCssVariables(appearance, effective);
+
+    // Keep the effect opt-in, but make the glass preference flow through every
+    // Dock component that consumes the shared surface tokens. This means cards,
+    // panels, menus, and dialogs receive the same translucent treatment without
+    // overriding their active, warning, or destructive state colors.
+    if (appearance.dockVisuals.glassSurface) {
+      const makeTranslucent = (key: string, opacity: number) => {
+        const base = dockVariables[key];
+        if (base) dockVariables[key] = `color-mix(in srgb, ${base} ${opacity}%, transparent)`;
+      };
+
+      makeTranslucent("--dock-bg-secondary", 94);
+      makeTranslucent("--dock-surface", 86);
+      makeTranslucent("--dock-surface-alt", 82);
+      makeTranslucent("--dock-surface-hover", 78);
+      makeTranslucent("--dock-surface-overlay", 80);
+      makeTranslucent("--dock-input-bg", 90);
+      dockVariables["--dock-card"] = dockVariables["--dock-surface-alt"];
+      dockVariables["--dock-card-hover"] = dockVariables["--dock-surface-hover"];
+    }
+
+    return {
+      ...dockVariables,
+      "--dock-font-body": buildDockFontFamilyStack(dockFontFamily),
+      "--dock-font-heading": buildDockFontFamilyStack(dockFontFamily),
+      "--dock-font-scale": String(dockFontScale),
+    } as CSSProperties;
+  }, [appearance, effective, dockFontFamily, dockFontScale]);
+
+  const updateDockVisual = useCallback((key: keyof DockVisualPreferences, enabled: boolean) => {
+    setAppearance({
+      dockVisuals: {
+        ...appearance.dockVisuals,
+        [key]: enabled,
+      },
+    });
+  }, [appearance.dockVisuals, setAppearance]);
+
+  const resetDockVisuals = useCallback(() => {
+    setAppearance({ dockVisuals: { ...DEFAULT_DOCK_VISUALS } });
+  }, [setAppearance]);
+
+  const dockRootClassName = [
+    "dock-root",
+    verticalTabs ? "dock-root--vertical-tabs" : "",
+    appearance.dockVisuals.glassSurface ? "dock-root--glass" : "",
+    appearance.dockVisuals.radialGlow ? "dock-root--radial-glow" : "",
+    appearance.dockVisuals.softShadow ? "dock-root--soft-shadow" : "",
+    appearance.dockVisuals.motion ? "dock-root--motion" : "dock-root--motion-off",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`dock-root${verticalTabs ? " dock-root--vertical-tabs" : ""}`} ref={dockRootRef} style={dockStyle}>
+    <div className={dockRootClassName} ref={dockRootRef} style={dockStyle}>
       <a className="mce-skip-link" href="#dock-main-content">
         {t('mvShell.skipToContent', 'Skip to main content')}
       </a>
@@ -730,6 +797,7 @@ export default function DockPage({
         {/* ── Page Header (hamburger L, refresh R) ── */}
         {!hideShellHeader && (
         <div
+          className="dock-inline-header"
           style={{
             display: "flex",
             alignItems: "center",
@@ -921,6 +989,49 @@ export default function DockPage({
                     <div className="dock-sidebar__hint">
                       {t('page.appearanceScope', 'Applies to the app and Dock controls. OBS Bible, Worship, and graphics styles stay independent.')}
                     </div>
+
+                    <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
+                      {t('page.dockStyle', 'Dock style')}
+                    </div>
+                    <div className="dock-appearance-effects">
+                      <div className="dock-appearance-effects__intro">
+                        {t('page.dockStyleDesc', 'Personalize the entire Dock without changing your live graphics.')}
+                      </div>
+                      {([
+                        ["glassSurface", "layers", t('page.dockGlass', 'Glass surface'), t('page.dockGlassDesc', 'Adds soft translucent depth across Dock surfaces, cards, and dialogs.')],
+                        ["radialGlow", "gradient", t('page.dockGlow', 'Accent glow'), t('page.dockGlowDesc', 'Adds a gentle glow from your selected accent color across the Dock.')],
+                        ["softShadow", "shadow", t('page.dockShadow', 'Soft shadows'), t('page.dockShadowDesc', 'Adds light elevation to Dock surfaces and controls.')],
+                        ["motion", "animation", t('page.dockMotion', 'Smooth motion'), t('page.dockMotionDesc', 'Keeps hover, panel, and tab transitions feeling alive across the Dock.')],
+                      ] as const).map(([key, icon, label, description]) => (
+                        <label key={key} className="dock-appearance-toggle">
+                          <span className="dock-appearance-toggle__copy">
+                            <span className="dock-appearance-toggle__title">
+                              <Icon name={icon} size={13} />
+                              <span>{label}</span>
+                            </span>
+                            <span className="dock-appearance-toggle__desc">{description}</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={appearance.dockVisuals[key]}
+                            onChange={(event) => updateDockVisual(key, event.target.checked)}
+                            aria-label={label}
+                          />
+                          <span className="dock-appearance-toggle__track" aria-hidden="true">
+                            <span className="dock-appearance-toggle__thumb" />
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="dock-sidebar__reset"
+                      onClick={resetDockVisuals}
+                      disabled={Object.entries(DEFAULT_DOCK_VISUALS).every(([key, value]) => appearance.dockVisuals[key as keyof DockVisualPreferences] === value)}
+                    >
+                      <Icon name="restart_alt" size={13} />
+                      <span>{t('page.resetDockStyle', 'Reset Dock style')}</span>
+                    </button>
                   </div>
                 )}
 
@@ -1118,12 +1229,12 @@ export default function DockPage({
                         </label>
 
                         <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
-                          {t('page.sourceVisibility', 'MCE source visibility')}
+                          {t('page.sourceVisibility', 'MCE Presentation source visibility')}
                         </div>
                         <label className="dock-sidebar__select-field">
                           <span className="dock-sidebar__select-label">
                             <Icon name={projectionSettings.presentationSourceVisibility === "active-only" ? "visibility_off" : "visibility"} size={14} />
-                            <span>{t('page.presentationSourceVisibility', 'Bible, Worship, and Notes')}</span>
+                            <span>{t('page.presentationSourceVisibility', 'MCE Presentation content')}</span>
                           </span>
                           <select
                             className="dock-sidebar__select"
@@ -1131,14 +1242,14 @@ export default function DockPage({
                             onChange={(event) => updateProjectionSettings({
                               presentationSourceVisibility: event.target.value as ProjectionSettings["presentationSourceVisibility"],
                             })}
-                            aria-label={t('page.presentationSourceVisibility', 'Bible, Worship, and Notes')}
+                            aria-label={t('page.presentationSourceVisibility', 'MCE Presentation content')}
                           >
-                            <option value="active-only">{t('page.showActiveOnly', 'Show only the active MCE source')}</option>
-                            <option value="keep-visible">{t('page.keepOtherSourcesVisible', 'Keep other MCE sources visible')}</option>
+                            <option value="active-only">{t('page.showActiveOnly', 'Show only active MCE content')}</option>
+                            <option value="keep-visible">{t('page.keepOtherSourcesVisible', 'Keep all MCE content visible')}</option>
                           </select>
                         </label>
                         <div className="dock-sidebar__hint">
-                          {t('page.sourceVisibilityDesc', 'Only sources created by MakeChurchEasy are changed. Your own OBS sources are left untouched.')}
+                          {t('page.sourceVisibilityDesc', 'When Bible, Worship, Notes, Media, Ticker, or Countdown is pushed, hide every other MCE-created content source in MCE Presentation. Your own OBS sources are untouched.')}
                         </div>
 
                         <label className="dock-sidebar__select-field">
@@ -1154,10 +1265,13 @@ export default function DockPage({
                             })}
                             aria-label={t('page.lowerThirdSourceVisibility', 'Lower third behavior')}
                           >
-                            <option value="keep-first">{t('page.lowerThirdKeepFirst', 'Keep the first MCE source')}</option>
-                            <option value="active-only">{t('page.lowerThirdActiveOnly', 'Show the lower third only')}</option>
+                            <option value="keep-first">{t('page.lowerThirdKeepFirst', 'Keep the first MCE layer visible')}</option>
+                            <option value="active-only">{t('page.lowerThirdActiveOnly', 'Show only the active lower third')}</option>
                           </select>
                         </label>
+                        <div className="dock-sidebar__hint">
+                          {t('page.lowerThirdSourceVisibilityDesc', 'This applies inside MCE Presentation. OBS sources you created yourself are never changed.')}
+                        </div>
                       </div>
                     )}
                   </>
@@ -1368,6 +1482,7 @@ export default function DockPage({
                           productionDefaults={productionSettings.bible}
                           appConnected={appConnected}
                           presentationOutputTarget={presentationOutputTarget}
+                          onSaveFeedback={showDockSaveFeedback}
                           showHistory={showHistory}
                           onHistoryClose={() => setShowHistory(false)}
                         />
@@ -1387,6 +1502,7 @@ export default function DockPage({
                       productionDefaults={productionSettings.bible}
                       appConnected={appConnected}
                       presentationOutputTarget={presentationOutputTarget}
+                      onSaveFeedback={showDockSaveFeedback}
                       fullscreenOnly={hideLowerThirdControls}
                       showHistory={showHistory}
                       onHistoryClose={() => setShowHistory(false)}
@@ -1416,7 +1532,7 @@ export default function DockPage({
               )}
               {mountedDockTabs.has("multiview") && (
                 <div className="dock-tab-panel" hidden={activeTab !== "multiview"}>
-                  <DockMultiviewTab />
+                  <DockMultiviewTab isActive={activeTab === "multiview"} />
                 </div>
               )}
               {mountedDockTabs.has("ministry") && (
@@ -1560,6 +1676,15 @@ export default function DockPage({
         progress={uploadProgress}
         onDismiss={dismissToast}
       />
+
+      {dockSaveFeedback && (
+        <div className="dock-feedback-toast-stack" aria-live="polite" aria-atomic="true">
+          <div key={dockSaveFeedback.id} className="dock-feedback-toast" role="status">
+            <Icon name="check_circle" size={13} />
+            <span>{dockSaveFeedback.message}</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Entitlement upgrade modal ── */}
       <DockUpgradeModal

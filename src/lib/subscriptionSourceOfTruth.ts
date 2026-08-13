@@ -11,6 +11,7 @@ export interface CanonicalPlanEntitlements {
   maxBibleVersions: number;
   maxTeams: number;
   maxDevices: number;
+  maxMultiviewTemplates: number;
   tickers: boolean;
   multiview: boolean;
   remoteControl: boolean;
@@ -21,6 +22,17 @@ export interface CanonicalPlanEntitlements {
   propresenterImport: boolean;
   cloudSync: boolean;
   lowerThirds: boolean;
+  translation?: boolean;
+  speechToScripture?: boolean;
+  sermonExport?: boolean;
+  aiFeatures?: boolean;
+  advancedAnalytics?: boolean;
+  customReports?: boolean;
+  apiAccess?: boolean;
+  teamManagement?: boolean;
+  campusManagement?: boolean;
+  slideshow?: boolean;
+  countdowns?: boolean;
   prioritySupport?: boolean;
   priorityFeatureRequests?: boolean;
   earlyAccessFeatures?: boolean;
@@ -220,6 +232,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     maxBibleVersions: 3,
     maxTeams: 3,
     maxDevices: 1,
+    maxMultiviewTemplates: 0,
     tickers: false,
     multiview: false,
     remoteControl: false,
@@ -230,16 +243,28 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     propresenterImport: false,
     cloudSync: false,
     lowerThirds: false,
+    translation: false,
+    speechToScripture: false,
+    sermonExport: false,
+    aiFeatures: false,
+    advancedAnalytics: false,
+    customReports: false,
+    apiAccess: false,
+    teamManagement: false,
+    campusManagement: false,
+    slideshow: false,
+    countdowns: false,
   },
   basic: {
-    credits: 300,
-    maxSongs: 50,
-    maxImages: 50,
-    maxVideos: 50,
-    maxBibleVersions: 10,
+    credits: 100,
+    maxSongs: 100,
+    maxImages: 100,
+    maxVideos: 100,
+    maxBibleVersions: -1,
     maxTeams: 5,
     maxDevices: 3,
-    tickers: true,
+    maxMultiviewTemplates: 5,
+    tickers: false,
     multiview: true,
     remoteControl: false,
     mobileSupport: false,
@@ -248,16 +273,28 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     easyWorshipImport: false,
     propresenterImport: false,
     cloudSync: false,
-    lowerThirds: true,
+    lowerThirds: false,
+    translation: false,
+    speechToScripture: true,
+    sermonExport: false,
+    aiFeatures: false,
+    advancedAnalytics: false,
+    customReports: false,
+    apiAccess: false,
+    teamManagement: false,
+    campusManagement: false,
+    slideshow: true,
+    countdowns: false,
   },
   growth: {
-    credits: 1000,
+    credits: 2000,
     maxSongs: -1,
     maxImages: -1,
     maxVideos: -1,
     maxBibleVersions: -1,
     maxTeams: 20,
     maxDevices: 10,
+    maxMultiviewTemplates: -1,
     tickers: true,
     multiview: true,
     remoteControl: true,
@@ -271,6 +308,17 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     prioritySupport: true,
     priorityFeatureRequests: true,
     earlyAccessFeatures: true,
+    translation: true,
+    speechToScripture: true,
+    sermonExport: true,
+    aiFeatures: true,
+    advancedAnalytics: true,
+    customReports: true,
+    apiAccess: true,
+    teamManagement: true,
+    campusManagement: true,
+    slideshow: true,
+    countdowns: true,
   },
 
 };
@@ -456,7 +504,7 @@ export function toLegacyCompatibleEntitlements(
     lowerThirds: entitlements.lowerThirds ? -1 : 0,
     devices: entitlements.maxDevices,
     bibleVersions: entitlements.maxBibleVersions,
-    multiviewTemplates: entitlements.multiview ? -1 : 0,
+    multiviewTemplates: entitlements.maxMultiviewTemplates,
     tickerThemes: entitlements.tickers ? -1 : 0,
     themePresets: entitlements.lowerThirds ? -1 : 0,
     cloudStorageGB: entitlements.cloudSync ? 200 : 0,
@@ -465,20 +513,20 @@ export function toLegacyCompatibleEntitlements(
     massImport: entitlements.bulkImport,
     easyWorshipImport: entitlements.easyWorshipImport,
     proPresenterImport: entitlements.propresenterImport,
-    translation: isPaid,
-    speechToScripture: isPaid,
-    sermonExport: isPaid,
-    aiFeatures: isPaid,
+    translation: entitlements.translation ?? (planId === "growth"),
+    speechToScripture: entitlements.speechToScripture ?? isPaid,
+    sermonExport: entitlements.sermonExport ?? (planId === "growth"),
+    aiFeatures: entitlements.aiFeatures ?? (planId === "growth"),
     cloudSync: entitlements.cloudSync,
-    advancedAnalytics: isPaid,
-    customReports: isPaid,
+    advancedAnalytics: entitlements.advancedAnalytics ?? (planId === "growth"),
+    customReports: entitlements.customReports ?? (planId === "growth"),
     mobileControl: entitlements.mobileSupport || entitlements.remoteControl,
     presentationMode: entitlements.presentationMode,
-    apiAccess: isPaid,
-    teamManagement: entitlements.maxTeams > 0,
-    campusManagement: isPaid,
-    slideshow: true,
-    countdowns: planId !== "free",
+    apiAccess: entitlements.apiAccess ?? (planId === "growth"),
+    teamManagement: entitlements.teamManagement ?? (entitlements.maxTeams > 0),
+    campusManagement: entitlements.campusManagement ?? (planId === "growth"),
+    slideshow: entitlements.slideshow ?? (planId !== "free"),
+    countdowns: entitlements.countdowns ?? (planId !== "free"),
   };
 }
 
@@ -504,10 +552,11 @@ export function getLegacyFeatureValue(
 
 export function findRequiredPlanForLegacyFeature(
   feature: LegacyCompatibleFeatureKey,
+  currentCount: number = 0,
 ): CanonicalPlanId {
   for (const planId of CANONICAL_PLAN_IDS) {
     const value = getLegacyFeatureValue(planId, feature);
-    if (typeof value === "boolean" ? value : value !== 0) {
+    if (typeof value === "boolean" ? value : value === -1 || currentCount < value) {
       return planId;
     }
   }
@@ -655,11 +704,11 @@ export function buildLegacyCompatiblePlanConfig(options?: {
           },
         },
         features: [
-          { text: "50 songs, 50 images, and 50 videos" },
-          { text: "10 Bible versions and 3 devices" },
-          { text: "Up to 5 team members" },
-          { text: "Tickers, Lower Thirds, and Multiview" },
-          { text: "300 credits every month" },
+          { text: "100 songs, 100 images, and 100 videos" },
+          { text: "Unlimited Bible versions and 3 devices" },
+          { text: "Bible, Worship, Media, and up to 5 multiview templates" },
+          { text: "Verse AI with 100 monthly credits" },
+          { text: "Countdowns, tickers, lower thirds, and transcript translation require Growth" },
         ],
         buttonText: "Get Basic",
         paystackPlanCode: "mce_basic_monthly",
@@ -696,7 +745,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
           { text: "10 devices and 20 team members" },
           { text: "Mobile Controller and Remote OBS Control" },
           { text: "Bulk import, EasyWorship, and ProPresenter" },
-          { text: "Cloud Sync and 1,000 monthly credits" },
+          { text: "Cloud Sync and 2,000 monthly credits" },
         ],
         buttonText: "Get Growth",
         paystackPlanCode: "mce_growth_monthly",

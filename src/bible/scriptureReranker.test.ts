@@ -73,6 +73,12 @@ describe("Kings", () => {
     it("1st Kings 19:11", () => {
       expect(normalizeScriptureReference("1st Kings 19:11")).toBe("1 Kings 19:11");
     });
+    it("I Kings 19:11", () => {
+      expect(normalizeScriptureReference("I Kings 19:11")).toBe("1 Kings 19:11");
+    });
+    it("ikings 19:11", () => {
+      expect(normalizeScriptureReference("ikings 19:11")).toBe("1 Kings 19:11");
+    });
   });
 
   describe("2 Kings", () => {
@@ -84,6 +90,12 @@ describe("Kings", () => {
     });
     it("2nd Kings 6:17", () => {
       expect(normalizeScriptureReference("2nd Kings 6:17")).toBe("2 Kings 6:17");
+    });
+    it("I-I Kings 6:17", () => {
+      expect(normalizeScriptureReference("I-I Kings 6:17")).toBe("2 Kings 6:17");
+    });
+    it("iikings 6:17", () => {
+      expect(normalizeScriptureReference("iikings 6:17")).toBe("2 Kings 6:17");
     });
   });
 });

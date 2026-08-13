@@ -21,18 +21,33 @@ export interface AppAppearancePalette {
   swatches: readonly [string, string, string];
 }
 
+export interface DockVisualPreferences {
+  glassSurface: boolean;
+  radialGlow: boolean;
+  softShadow: boolean;
+  motion: boolean;
+}
+
 export interface AppAppearancePreferences {
   palette: AppAppearancePaletteId;
   customAccent: string;
+  dockVisuals: DockVisualPreferences;
   updatedAt: number;
 }
 
 export type AppAppearanceMode = "dark" | "light";
 
 export const APP_APPEARANCE_STORAGE_KEY = "ocs-app-appearance";
+export const DEFAULT_DOCK_VISUALS: DockVisualPreferences = {
+  glassSurface: false,
+  radialGlow: true,
+  softShadow: true,
+  motion: true,
+};
 export const DEFAULT_APP_APPEARANCE: AppAppearancePreferences = {
   palette: "classic-blue",
   customAccent: "#1D4ED8",
+  dockVisuals: { ...DEFAULT_DOCK_VISUALS },
   updatedAt: 0,
 };
 
@@ -150,18 +165,31 @@ function isPaletteId(value: unknown): value is AppAppearancePaletteId {
   return value === "custom" || APP_APPEARANCE_PALETTES.some((palette) => palette.id === value);
 }
 
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 export function normalizeAppAppearance(value: unknown): AppAppearancePreferences {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ...DEFAULT_APP_APPEARANCE };
   }
   const candidate = value as Partial<AppAppearancePreferences>;
   const palette = isPaletteId(candidate.palette) ? candidate.palette : DEFAULT_APP_APPEARANCE.palette;
+  const dockVisualsCandidate = candidate.dockVisuals && typeof candidate.dockVisuals === "object" && !Array.isArray(candidate.dockVisuals)
+    ? candidate.dockVisuals as Partial<DockVisualPreferences>
+    : {};
   const updatedAt = typeof candidate.updatedAt === "number" && Number.isFinite(candidate.updatedAt)
     ? candidate.updatedAt
     : 0;
   return {
     palette,
     customAccent: normalizeHex(candidate.customAccent, DEFAULT_APP_APPEARANCE.customAccent),
+    dockVisuals: {
+      glassSurface: normalizeBoolean(dockVisualsCandidate.glassSurface, DEFAULT_DOCK_VISUALS.glassSurface),
+      radialGlow: normalizeBoolean(dockVisualsCandidate.radialGlow, DEFAULT_DOCK_VISUALS.radialGlow),
+      softShadow: normalizeBoolean(dockVisualsCandidate.softShadow, DEFAULT_DOCK_VISUALS.softShadow),
+      motion: normalizeBoolean(dockVisualsCandidate.motion, DEFAULT_DOCK_VISUALS.motion),
+    },
     updatedAt,
   };
 }

@@ -193,6 +193,8 @@ export interface CountdownOverlayPayload {
   timestamp: number;
   /** App-side sync state: pause/resume + exact remaining time */
   sync?: OverlaySyncState;
+  /** Reveal text after the background has had time to appear on a new push. */
+  reveal?: boolean;
 }
 
 // ── Snapshot for sync ──────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { BIBLE_BOOKS, BOOK_ABBREVS } from "./types";
 import { getTranslationData } from "./bibleDb";
+import { getConceptVerses, matchVerseAlias } from "./scriptureReranker";
 
 // ---------------------------------------------------------------------------
 // Cache
@@ -312,6 +313,42 @@ export interface BibleSearchScope {
   chapter?: number;
 }
 
+interface BibleSearchSignals {
+  aliasReference: string | null;
+  conceptReferences: Set<string>;
+}
+
+function parseSearchReference(reference: string): {
+  book: string;
+  chapter: number;
+  verse: number;
+} | null {
+  const match = reference.match(/^(.+?)\s+(\d+):(\d+)$/);
+  if (!match) return null;
+
+  return {
+    book: normalizeSearchScopeBook(match[1]),
+    chapter: Number(match[2]),
+    verse: Number(match[3]),
+  };
+}
+
+function buildBibleSearchSignals(query: string): BibleSearchSignals {
+  const aliasQueryVariants = [
+    query,
+    query
+      .replace(/\b(me|my|mine)\b/gi, "you")
+      .replace(/\b(thee|thou|thy|thine|ye)\b/gi, "you"),
+  ];
+
+  return {
+    aliasReference: aliasQueryVariants
+      .map((variant) => matchVerseAlias(variant))
+      .find((reference): reference is string => Boolean(reference)) ?? null,
+    conceptReferences: new Set(getConceptVerses(query)),
+  };
+}
+
 function normalizeSearchScopeBook(book: string): string {
   const normalized = book.toLowerCase().replace(/\s+/g, " ").trim();
   return normalized === "psalm" ? "psalms" : normalized;
@@ -398,6 +435,26 @@ const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["wherefore", "why"],
   ["whosoever", "whoever"],
   ["whatsoever", "whatever"],
+  // Modern query wording should match common KJV inflections.
+  ["loved", "love"],
+  ["loves", "love"],
+  ["loving", "love"],
+  ["loveth", "love"],
+  ["lovest", "love"],
+  ["hated", "hate"],
+  ["hates", "hate"],
+  ["hating", "hate"],
+  ["hateth", "hate"],
+  ["hatest", "hate"],
+  ["cometh", "come"],
+  ["goeth", "go"],
+  ["giveth", "give"],
+  ["maketh", "make"],
+  ["seeketh", "seek"],
+  ["asketh", "ask"],
+  ["speaketh", "speak"],
+  ["worketh", "work"],
+  ["leaveth", "leave"],
 ]);
 
 function normalizeSearchText(value: string): string {
@@ -430,11 +487,11 @@ function normalizeSearchToken(token: string): string {
 
   if (token.endsWith("eth") && token.length > 5) {
     const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
+    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized);
   }
   if (token.endsWith("est") && token.length > 5) {
     const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
+    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized);
   }
   if (token.endsWith("ing") && token.length > 6) {
     return token.slice(0, -3);
@@ -453,6 +510,14 @@ function normalizeSearchToken(token: string): string {
   }
 
   return token;
+}
+
+/**
+ * KJV often drops the final silent e before an inflectional suffix
+ * (loveth → lov, giveth → giv). Restore it so modern queries match too.
+ */
+function restoreSilentE(token: string): string {
+  return token.endsWith("v") ? `${token}e` : token;
 }
 
 function buildNormalizedSearchVocabulary(
@@ -807,9 +872,19 @@ async function searchBibleInTranslation(
   limit: number,
   scope?: BibleSearchScope,
   minScore = 0.42,
+  signals: BibleSearchSignals = {
+    aliasReference: null,
+    conceptReferences: new Set<string>(),
+  },
 ): Promise<RankedSearchResult[]> {
   const data = await loadTranslation(translation);
   const corpus = await getBibleCorpus(translation, 3);
+  const aliasTarget = signals.aliasReference
+    ? parseSearchReference(signals.aliasReference)
+    : null;
+  const conceptTargets = Array.from(signals.conceptReferences)
+    .map(parseSearchReference)
+    .filter((target): target is NonNullable<typeof target> => Boolean(target));
   const results: RankedSearchResult[] = [];
   const repairedQuery = repairSearchQuery(query, translation, data);
   const normalizedVocabulary = buildNormalizedSearchVocabulary(translation, data);
@@ -856,8 +931,27 @@ async function searchBibleInTranslation(
     }
 
     const windowSize = Math.max(1, entry.endVerse - entry.verse + 1);
-    const score = Math.max(0, bestScore - (windowSize - 1) * 0.02);
-    if (score < minScore) continue;
+    const aliasMatch = Boolean(
+      aliasTarget &&
+      normalizeSearchScopeBook(entry.book) === aliasTarget.book &&
+      entry.chapter === aliasTarget.chapter &&
+      entry.verse === aliasTarget.verse,
+    );
+    const conceptMatch = conceptTargets.some(
+      (target) =>
+        normalizeSearchScopeBook(entry.book) === target.book &&
+        entry.chapter === target.chapter &&
+        entry.verse === target.verse,
+    );
+
+    // Quote aliases and curated Bible concepts are stronger than a generic
+    // word overlap. Keep the boost modest so ordinary keyword searches still
+    // return every relevant passage, while a known phrase reaches the top.
+    const bibleSignalBoost = (aliasMatch ? 0.70 : 0) + (conceptMatch ? 0.10 : 0);
+    const score = aliasMatch
+      ? Math.max(0, bestScore - (windowSize - 1) * 0.02 + bibleSignalBoost)
+      : Math.min(1, Math.max(0, bestScore - (windowSize - 1) * 0.02 + bibleSignalBoost));
+    if (score < minScore && !aliasMatch) continue;
 
     results.push({
       book: entry.book,
@@ -888,13 +982,21 @@ export async function searchBibleRanked(
   if (!query.trim()) return [];
 
   const selectedTranslation = translation.toUpperCase() as BibleTranslation;
-  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit, scope, minScore);
+  const signals = buildBibleSearchSignals(query);
+  const primaryResults = await searchBibleInTranslation(
+    query,
+    selectedTranslation,
+    limit,
+    scope,
+    minScore,
+    signals,
+  );
   const shouldSearchKjv =
     selectedTranslation !== "KJV" &&
     (primaryResults.length === 0 || primaryResults[0].score < 0.78);
 
   const fallbackResults = shouldSearchKjv
-    ? await searchBibleInTranslation(query, "KJV", limit, scope, minScore)
+    ? await searchBibleInTranslation(query, "KJV", limit, scope, minScore, signals)
     : [];
 
   const merged = [...primaryResults, ...fallbackResults]

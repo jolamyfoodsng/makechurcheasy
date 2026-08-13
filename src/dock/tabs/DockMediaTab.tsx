@@ -27,6 +27,7 @@ import {
   type TemplateVideoAsset,
 } from "../../services/templateVideos";
 import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
+import { isInternalDockMediaItem, isInternalDockUploadFile } from "../internalMediaAssets";
 import { requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { isSupportedMediaFile } from "../../services/mediaValidation";
 import {
@@ -182,6 +183,28 @@ const TEXT_OVERLAY_SUBLINE_MIN_SIZE = 14;
 const TEXT_OVERLAY_MAX_FONT_SIZE = 250;
 const TEXT_OVERLAY_PADDING_MIN = 0;
 const TEXT_OVERLAY_PADDING_MAX = 250;
+type DockTextSizePresetId = "small" | "large" | "larger" | "extra-large";
+
+interface DockTextSizePreset {
+  id: DockTextSizePresetId;
+  value: number;
+  labelKey: string;
+}
+
+const HEADLINE_SIZE_PRESETS: DockTextSizePreset[] = [
+  { id: "small", value: 48, labelKey: "media.sizeSmall" },
+  { id: "large", value: 72, labelKey: "media.sizeLarge" },
+  { id: "larger", value: 96, labelKey: "media.sizeLarger" },
+  { id: "extra-large", value: 128, labelKey: "media.sizeExtraLarge" },
+];
+
+const SUBLINE_SIZE_PRESETS: DockTextSizePreset[] = [
+  { id: "small", value: 16, labelKey: "media.sizeSmall" },
+  { id: "large", value: 28, labelKey: "media.sizeLarge" },
+  { id: "larger", value: 40, labelKey: "media.sizeLarger" },
+  { id: "extra-large", value: 56, labelKey: "media.sizeExtraLarge" },
+];
+
 const DEFAULT_DOCUMENT_DISPLAY: DockDocumentDisplayState = {
   fitMode: "contain",
   showBackground: true,
@@ -224,7 +247,7 @@ function isMediaFile(name: string): boolean {
 }
 
 function isInternalUploadFile(name: string): boolean {
-  return INTERNAL_UPLOAD_PREFIXES.some((prefix) => name.startsWith(prefix));
+  return isInternalDockUploadFile(name) || INTERNAL_UPLOAD_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
 /** Extract createdAt ISO string from "media_<timestamp>_<safeName>" filename. */
@@ -259,7 +282,9 @@ function loadLocalMediaLibrary(): MediaItem[] {
   try {
     const raw = localStorage.getItem(getUserScopedKey(MEDIA_LOCAL_LIBRARY_STORAGE_KEY));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed as MediaItem[] : [];
+    return Array.isArray(parsed)
+      ? (parsed as MediaItem[]).filter((item) => !isInternalDockMediaItem(item))
+      : [];
   } catch {
     return [];
   }
@@ -432,6 +457,12 @@ function formatFitMode(value: DockMediaFitMode, t: (key: string) => string): str
     default:
       return t('media.fitModeFill');
   }
+}
+
+function getClosestTextSizePreset(value: number, presets: readonly DockTextSizePreset[]): DockTextSizePreset {
+  return presets.reduce((closest, preset) => {
+    return Math.abs(preset.value - value) < Math.abs(closest.value - value) ? preset : closest;
+  }, presets[0]);
 }
 
 function buildSceneMediaSourceName(entry: DockMediaEntry): string {
@@ -746,7 +777,7 @@ export default function DockMediaTab({
         const all = await getAllMedia();
         console.log("[UPLOAD] loadLibraryMedia: IndexedDB returned", all.length, "items");
         if (all.length > 0) {
-          setLibraryMedia(all);
+          setLibraryMedia(all.filter((item) => !isInternalDockMediaItem(item)));
           console.log("[UPLOAD] loadLibraryMedia: set libraryMedia from IndexedDB (overwrites current state)");
           return;
         }
@@ -774,7 +805,7 @@ export default function DockMediaTab({
         const all = await res.json();
         console.log("[UPLOAD] loadLibraryMedia: JSON fetch returned", Array.isArray(all) ? all.length : 0, "items");
         if (Array.isArray(all) && all.length > 0) {
-          setLibraryMedia(all);
+          setLibraryMedia((all as MediaItem[]).filter((item) => !isInternalDockMediaItem(item)));
           console.log("[UPLOAD] loadLibraryMedia: set libraryMedia from JSON");
           return;
         }
@@ -826,7 +857,7 @@ export default function DockMediaTab({
   useEffect(() => {
     const unsub = dockClient.onState((msg) => {
       if (msg.type === "state:media-data" && Array.isArray(msg.payload)) {
-        setLibraryMedia(msg.payload as MediaItem[]);
+        setLibraryMedia((msg.payload as MediaItem[]).filter((item) => !isInternalDockMediaItem(item)));
         return;
       }
       if (msg.type === "state:library-updated") {
@@ -1264,7 +1295,7 @@ export default function DockMediaTab({
   }, [fetchUploads, loadLibraryMedia]);
 
   const mergedLibraryItems = useMemo(
-    () => dedupeMediaItems([...libraryMedia, ...localLibrary]),
+    () => dedupeMediaItems([...libraryMedia, ...localLibrary].filter((item) => !isInternalDockMediaItem(item))),
     [libraryMedia, localLibrary],
   );
 
@@ -2601,49 +2632,43 @@ export default function DockMediaTab({
     setTextOverlay((current) => ({ ...current, [key]: clamped }));
   };
 
-  const renderOverlayFontSizeControl = (
+  const renderOverlayTextSizeControl = (
     key: "headlineSize" | "sublineSize",
     value: number,
     min: number,
     max: number,
-    step: number,
-    ariaLabel: string,
-  ) => (
-    <div className="dock-overlay-size-control">
-      <div className="dock-overlay-size-control__header">
-        <span>{t('media.fontSize')}</span>
-        <strong>{value}<small>px</small></strong>
+    presets: readonly DockTextSizePreset[],
+    label: string,
+  ) => {
+    const selectedPreset = getClosestTextSizePreset(value, presets);
+
+    return (
+      <div className="dock-overlay-size-control">
+        <div className="dock-overlay-size-control__header">
+          <span>{label}</span>
+        </div>
+        <div className="dock-overlay-size-control__presets" role="group" aria-label={label}>
+          {presets.map((preset, index) => {
+            const presetLabel = t(preset.labelKey);
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={`dock-overlay-size-control__preset${selectedPreset.id === preset.id ? " dock-overlay-size-control__preset--active" : ""}`}
+                onClick={() => updateOverlayFontSize(key, preset.value, min, max)}
+                aria-label={`${label}: ${presetLabel}`}
+                aria-pressed={selectedPreset.id === preset.id}
+                title={`${label}: ${presetLabel}`}
+              >
+                <span className={`dock-overlay-size-control__sample dock-overlay-size-control__sample--${index + 1}`} aria-hidden="true">A</span>
+                <span className="dock-overlay-size-control__preset-label">{presetLabel}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
-      <div className="dock-overlay-size-control__row">
-        <button
-          type="button"
-          className="dock-overlay-size-control__step"
-          onClick={() => updateOverlayFontSize(key, value - step, min, max)}
-          aria-label={`${t('common.remove')} ${ariaLabel}`}
-          title={t('common.remove')}>
-          <Icon name="remove" size={12} />
-        </button>
-        <input
-          type="range"
-          className="dock-overlay-size-control__range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => updateOverlayFontSize(key, Number(e.target.value), min, max)}
-          aria-label={ariaLabel}
-        />
-        <button
-          type="button"
-          className="dock-overlay-size-control__step"
-          onClick={() => updateOverlayFontSize(key, value + step, min, max)}
-          aria-label={`${t('common.add')} ${ariaLabel}`}
-          title={t('common.add')}>
-          <Icon name="add" size={12} />
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderOverlayPreview = () => (
     <div className="dock-overlay-canvas">
@@ -3535,9 +3560,9 @@ export default function DockMediaTab({
                 aria-selected={textTab === "content"}
                 className={`dock-overlay-tabs__btn${textTab === "content" ? " dock-overlay-tabs__btn--active" : ""}`}
                 onClick={() => setTextTab("content")}
-                title={t('media.textOverlayTitle')}>
+                title={t('media.tabText')}>
                 <Icon name="title" size={12} />
-                {t('media.textOverlayTitle')}
+                {t('media.tabText')}
               </button>
               <button
                 type="button"
@@ -3545,9 +3570,9 @@ export default function DockMediaTab({
                 aria-selected={textTab === "background"}
                 className={`dock-overlay-tabs__btn${textTab === "background" ? " dock-overlay-tabs__btn--active" : ""}`}
                 onClick={() => setTextTab("background")}
-                title={t('media.backgroundType')}>
+                title={t('media.background')}>
                 <Icon name="palette" size={12} />
-                {t('media.backgroundType')}
+                {t('media.background')}
               </button>
             </div>
 
@@ -3592,36 +3617,50 @@ export default function DockMediaTab({
                 {/* ── Text Controls ── */}
                 <div className="dock-overlay-text-controls">
                   <div className="dock-overlay-text-controls__field">
-                    <label className="dock-overlay-text-controls__label" htmlFor="dock-media-overlay-headline">{t('media.headline')}</label>
+                    <label className="dock-overlay-text-controls__label" htmlFor="dock-media-overlay-headline">{t('media.mainText', 'Main text')}</label>
                     <textarea
                       id="dock-media-overlay-headline"
                       className="dock-overlay-text-controls__textarea dock-overlay-text-controls__textarea--headline"
                       value={textOverlay.headline}
                       onChange={(e) => setTextOverlay((c) => ({ ...c, headline: e.target.value }))}
-                      placeholder={t('media.mainOverlayText')}
+                      placeholder={t('media.mainTextPlaceholder', 'Type the main text…')}
                       rows={2}
                     />
-                    {renderOverlayFontSizeControl("headlineSize", textOverlay.headlineSize, TEXT_OVERLAY_HEADLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, 2, `${t('media.headline')} ${t('media.fontSize')}`)}
+                    {renderOverlayTextSizeControl(
+                      "headlineSize",
+                      textOverlay.headlineSize,
+                      TEXT_OVERLAY_HEADLINE_MIN_SIZE,
+                      TEXT_OVERLAY_MAX_FONT_SIZE,
+                      HEADLINE_SIZE_PRESETS,
+                      t('media.mainTextSize', 'Main text size'),
+                    )}
                   </div>
                   <div className="dock-overlay-text-controls__field">
                     <label className="dock-overlay-text-controls__label" htmlFor="dock-media-overlay-subline">
-                      {t('media.subline')} <span className="dock-overlay-text-controls__optional">{t('common.optional')}</span>
+                      {t('media.supportingText', 'Supporting text')} <span className="dock-overlay-text-controls__optional">{t('common.optional')}</span>
                     </label>
                     <textarea
                       id="dock-media-overlay-subline"
                       className="dock-overlay-text-controls__textarea dock-overlay-text-controls__textarea--subline"
                       value={textOverlay.subline}
                       onChange={(e) => setTextOverlay((c) => ({ ...c, subline: e.target.value }))}
-                      placeholder={t('media.sublinePlaceholder')}
+                      placeholder={t('media.supportingTextPlaceholder', 'Add supporting text…')}
                       rows={1}
                     />
-                    {renderOverlayFontSizeControl("sublineSize", textOverlay.sublineSize, TEXT_OVERLAY_SUBLINE_MIN_SIZE, TEXT_OVERLAY_MAX_FONT_SIZE, 2, `${t('media.subline')} ${t('media.fontSize')}`)}
+                    {renderOverlayTextSizeControl(
+                      "sublineSize",
+                      textOverlay.sublineSize,
+                      TEXT_OVERLAY_SUBLINE_MIN_SIZE,
+                      TEXT_OVERLAY_MAX_FONT_SIZE,
+                      SUBLINE_SIZE_PRESETS,
+                      t('media.supportingTextSize', 'Supporting text size'),
+                    )}
                   </div>
                 </div>
 
                 {/* ── Alignment & Position ── */}
                 <div className="dock-overlay-align-section">
-                  <div className="dock-overlay-align-section__label">{t('media.alignmentAndPosition')}</div>
+                  <div className="dock-overlay-align-section__label">{t('media.whereTextAppears', 'Where the text appears')}</div>
                   <div className="dock-overlay-align-section__row">
                     <button type="button" className={`dock-overlay-align-section__btn ${textOverlay.verticalPos === "top" ? "dock-overlay-align-section__btn--active" : ""}`} onClick={() => setTextOverlay((c) => ({ ...c, verticalPos: "top" }))} title={t('common.up')}>
                       <Icon name="arrow_upward" size={14} />
@@ -3654,7 +3693,7 @@ export default function DockMediaTab({
 
                 {/* ── Animation Selection ── */}
                 <div className="dock-overlay-anim-section">
-                  <div className="dock-overlay-anim-section__label">{t('media.animateIn')}</div>
+                  <div className="dock-overlay-anim-section__label">{t('media.howTextAppears', 'How the text appears')}</div>
                   <div className="dock-overlay-anim-section__options">
                     {([
                       { key: "none", label: t('media.animNone'), icon: "block" },

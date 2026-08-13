@@ -75,4 +75,38 @@ describe("Bible keyword search", () => {
       verse: 7,
     });
   });
+
+  it("finds Romans 9:13 from the modern wording of the KJV quote", async () => {
+    const results = await searchBibleRanked("JACOB I LOVE, ESAU I HATE", "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "Romans",
+      chapter: 9,
+      verse: 13,
+    });
+  });
+
+  it.each([
+    ["I love Jacob", 13],
+    ["Jacob loved", 13],
+    ["Esau hated", 13],
+  ])("finds Romans 9:%s from a short natural-language fragment", async (query, verse) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "Romans",
+      chapter: 9,
+      verse,
+    });
+  });
+
+  it.each([
+    ["by his stripes I am healed", "Isaiah", 53, 5],
+    ["greater is he that is in me", "1 John", 4, 4],
+    ["God will never leave you", "Hebrews", 13, 5],
+    ["the race is not to the swift", "Ecclesiastes", 9, 11],
+  ])("finds natural-language Bible wording: %s", async (query, book, chapter, verse) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+    expect(results[0]).toMatchObject({ book, chapter, verse });
+  });
 });

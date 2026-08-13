@@ -26,7 +26,12 @@ import { POPULARITY_DB } from "./data/popularityDb";
 import { CONCEPT_INDEX } from "./data/conceptIndex";
 import { STORY_ENGINE } from "./data/storyEngine";
 import { VERSE_ALIASES } from "./data/verseAliases";
-import { generateBookAliases, type BookAliasEntry } from "./bookAliasGenerator";
+import {
+  generateBookAliases,
+  normalizeCompactNumberedBookPrefix,
+  normalizeRomanNumberedBookPrefix,
+  type BookAliasEntry,
+} from "./bookAliasGenerator";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -161,15 +166,45 @@ for (const story of STORY_ENGINE) {
 /**
  * VERSE_ALIASES lookup maps — O(1) exact and compressed phrase matching.
  */
+const ALIAS_STOP_WORDS = new Set([
+  "a", "an", "and", "as", "at", "be", "but", "by", "for", "from",
+  "he", "her", "him", "his", "i", "in", "is", "it", "its", "me",
+  "my", "of", "on", "or", "our", "she", "that", "the", "their", "them",
+  "there", "they", "this", "to", "us", "was", "we", "were", "with", "you",
+  "your", "ye", "thee", "thou", "thy", "thine",
+]);
+
+const ALIAS_WORD_NORMALIZATIONS = new Map<string, string>([
+  ["hath", "has"],
+  ["hast", "has"],
+  ["saith", "say"],
+  ["loveth", "love"],
+  ["lovest", "love"],
+  ["loved", "love"],
+  ["loves", "love"],
+  ["hateth", "hate"],
+  ["hatest", "hate"],
+  ["hated", "hate"],
+  ["hates", "hate"],
+]);
+
 const ALIAS_EXACT = new Map<string, string>();
 const ALIAS_COMPRESSED = new Map<string, string>();
+const ALIAS_WORD_FREQUENCY = new Map<string, number>();
 
 for (const entry of VERSE_ALIASES) {
+  const entryWords = new Set<string>();
   for (const phrase of entry.phrases) {
     const normalized = normalizeText(phrase);
     ALIAS_EXACT.set(normalized, entry.reference);
     const compressed = normalized.replace(/\s+/g, "");
     ALIAS_COMPRESSED.set(compressed, entry.reference);
+
+    for (const word of getAliasContentWords(phrase)) entryWords.add(word);
+  }
+
+  for (const word of entryWords) {
+    ALIAS_WORD_FREQUENCY.set(word, (ALIAS_WORD_FREQUENCY.get(word) ?? 0) + 1);
   }
 }
 
@@ -255,6 +290,8 @@ function findBook(query: string): { reference: string; chapter: number | null; v
   // Strip "chapter" and "verse" keywords
   s = s.replace(/\bchapter\b/g, " ");
   s = s.replace(/\bverse\b/g, " ");
+  s = normalizeRomanNumberedBookPrefix(s).replace(/\s+/g, " ").trim();
+  s = normalizeCompactNumberedBookPrefix(s).replace(/\s+/g, " ").trim();
 
   // Convert ordinal words to digits
   for (const [word, digit] of Object.entries(ORDINAL_TO_DIGIT)) {
@@ -311,7 +348,12 @@ function findBook(query: string): { reference: string; chapter: number | null; v
   // results whose reference also starts with that digit. This prevents
   // fuzzy matching from returning "2 Corinthians" for "1 corintians".
   const queryPrefix = bookQuery.match(/^(\d)/)?.[1];
-  let bestMatch = fuseResults[0];
+  const exactReference = BOOK_INDEX.find(
+    (entry) => normalizeText(entry.reference) === normalizeText(bookQuery),
+  );
+  let bestMatch = exactReference
+    ? { item: exactReference }
+    : fuseResults[0];
   if (queryPrefix) {
     const preferred = fuseResults.find(
       (r) => r.item.reference.startsWith(queryPrefix + " ")
@@ -364,6 +406,39 @@ function normalizeText(text: string): string {
     .trim();
 }
 
+function normalizeAliasToken(token: string): string {
+  const direct = ALIAS_WORD_NORMALIZATIONS.get(token);
+  if (direct) return direct;
+
+  if (token.endsWith("eth") && token.length > 5) {
+    const stem = token.slice(0, -3);
+    return stem.endsWith("v") ? `${stem}e` : stem;
+  }
+  if (token.endsWith("est") && token.length > 5) {
+    const stem = token.slice(0, -3);
+    return stem.endsWith("v") ? `${stem}e` : stem;
+  }
+  if (token.endsWith("ing") && token.length > 6) {
+    const stem = token.slice(0, -3);
+    return stem.endsWith("v") ? `${stem}e` : stem;
+  }
+  if (token.endsWith("ed") && token.length > 5) {
+    const stem = token.slice(0, -2);
+    return stem.endsWith("v") ? `${stem}e` : stem;
+  }
+  if (token.endsWith("es") && token.length > 5) return token.slice(0, -2);
+  if (token.endsWith("s") && token.length > 4) return token.slice(0, -1);
+
+  return token;
+}
+
+function getAliasContentWords(text: string): string[] {
+  return normalizeText(text)
+    .split(" ")
+    .filter((word) => word.length >= 2 && !ALIAS_STOP_WORDS.has(word))
+    .map(normalizeAliasToken);
+}
+
 const STOP_WORDS = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
   "of", "with", "by", "from", "is", "it", "that", "this", "was", "are",
@@ -384,10 +459,17 @@ function extractKeywords(text: string): Set<string> {
 }
 
 function stem(word: string): string {
-  return word
+  const normalized = word.toLowerCase();
+  const direct = ALIAS_WORD_NORMALIZATIONS.get(normalized);
+  if (direct) return direct;
+
+  let stemmed = normalized
     .replace(/(ing|tion|sion|ment|ness|able|ible|ful|less|ous|ive|ly|ed|er|es|s)$/, "")
     .replace(/i$/, "y")
     .replace(/ck$/, "c");
+
+  if (stemmed.endsWith("v")) stemmed += "e";
+  return stemmed;
 }
 
 function keywordMatches(queryKeyword: string, conceptKeyword: string): boolean {
@@ -589,6 +671,51 @@ export function matchVerseAlias(query: string): string | null {
     }
   }
 
+  // Bible-aware partial phrase matching. A pastor often remembers only the
+  // distinctive part of a familiar verse (for example, "I love Jacob").
+  // Match the complete query against an alias's content words when it has a
+  // rare anchor, while avoiding broad two-word searches such as "the lord".
+  const queryContentWords = new Set(getAliasContentWords(query));
+  if (queryContentWords.size < 2) return null;
+  const queryContentWordList = Array.from(queryContentWords);
+
+  let bestPartial: { reference: string; score: number } | null = null;
+
+  for (const entry of VERSE_ALIASES) {
+    for (const phrase of entry.phrases) {
+      const phraseContentWordList = getAliasContentWords(phrase);
+      const phraseWords = new Set(phraseContentWordList);
+      if (phraseWords.size === 0) continue;
+
+      // Ordered fragments are already handled by the normal corpus matcher;
+      // only use the alias shortcut for a genuinely rearranged memory phrase.
+      let phraseIndex = 0;
+      const isOrderedSubsequence = queryContentWordList.every((word) => {
+        const foundIndex = phraseContentWordList.indexOf(word, phraseIndex);
+        if (foundIndex < 0) return false;
+        phraseIndex = foundIndex + 1;
+        return true;
+      });
+      if (isOrderedSubsequence) continue;
+
+      const matchedWords = queryContentWordList.filter((word) => phraseWords.has(word));
+      if (matchedWords.length !== queryContentWords.size) continue;
+
+      const hasRareAnchor = matchedWords.some(
+        (word) => word.length >= 5 && (ALIAS_WORD_FREQUENCY.get(word) ?? 0) <= 2,
+      );
+      if (!hasRareAnchor && queryContentWords.size < 3) continue;
+
+      const phraseCoverage = matchedWords.length / phraseWords.size;
+      const score = phraseCoverage + (hasRareAnchor ? 0.25 : 0);
+      if (!bestPartial || score > bestPartial.score) {
+        bestPartial = { reference: entry.reference, score };
+      }
+    }
+  }
+
+  if (bestPartial) return bestPartial.reference;
+
   return null;
 }
 
@@ -677,11 +804,14 @@ export function getConceptVerses(query: string): string[] {
   const verses = new Set<string>();
 
   for (const qk of queryKeywords) {
-    const concepts = CONCEPT_LOOKUP.get(qk);
-    if (!concepts) continue;
-    for (const concept of concepts) {
-      for (const verse of concept.verseSet) {
-        verses.add(verse);
+    // Use the same lightweight word-form matching as the reranker so
+    // "loved", "loving", and "love" reach the same concept references.
+    for (const [conceptKeyword, concepts] of CONCEPT_LOOKUP) {
+      if (!keywordMatches(qk, conceptKeyword)) continue;
+      for (const concept of concepts) {
+        for (const verse of concept.verseSet) {
+          verses.add(verse);
+        }
       }
     }
   }

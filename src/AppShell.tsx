@@ -16,6 +16,8 @@ import { obsService } from "./services/obsService";
 import { serviceStore } from "./services/serviceStore";
 import {
   SHORTCUTS,
+  SHORTCUT_MAP,
+  matchesShortcut,
   shortcutLabel,
   type ShortcutCategory,
 } from "./multiview/shortcuts";
@@ -29,6 +31,7 @@ import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
+import { safeTauriListen } from "./services/tauriSafe";
 import type { ConnectionStatus } from "./services/obsService";
 
 
@@ -72,6 +75,44 @@ export function AppShell() {
     { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["quickmerge", "worship"] },
   ];
   const [shortcutsTab, setShortcutsTab] = useState<ShortcutsTab>("dashboard");
+
+  // Open Settings from the conventional app shortcut on both platforms:
+  // Cmd+, on macOS and Ctrl+, on Windows/Linux. This lives in the shared
+  // shell so it works from every normal app page, not only the editor.
+  useEffect(() => {
+    const shortcut = SHORTCUT_MAP.get("open-settings")?.keys;
+    if (!shortcut) return;
+
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      if (!matchesShortcut(event, shortcut)) return;
+      event.preventDefault();
+      navigate("/settings");
+    };
+
+    window.addEventListener("keydown", handleSettingsShortcut);
+    return () => window.removeEventListener("keydown", handleSettingsShortcut);
+  }, [navigate]);
+
+  // The native tray menu uses the same navigation path as the keyboard
+  // shortcut. This listener is a no-op in browser/dock contexts.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void safeTauriListen("open-settings", () => {
+      if (!cancelled) navigate("/settings");
+    }).then((cleanup) => {
+      if (cancelled) cleanup();
+      else unlisten = cleanup;
+    }).catch(() => {
+      // Tauri events are unavailable when running the web app directly.
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [navigate]);
 
   // ── Command Palette handlers ──
   const handleCommandPaletteSelectBibleVerse = useCallback((book: string, chapter: number, verse: number) => {

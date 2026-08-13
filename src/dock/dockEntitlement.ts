@@ -84,7 +84,7 @@ function checkWithServerLimits(
     if (limit !== undefined) {
       // Boolean feature
       if (typeof limit === "boolean") {
-        const requiredPlan = getRequiredPlan(feature);
+        const requiredPlan = getRequiredPlan(feature, currentCount);
         const result: EntitlementResult = {
           allowed: limit,
           limit: limit ? -1 : 0,
@@ -99,7 +99,7 @@ function checkWithServerLimits(
         const isUnlimited = limit === -1 || limit === Infinity;
         const allowed = isUnlimited || currentCount < limit;
         const remaining = isUnlimited ? -1 : Math.max(0, limit - currentCount);
-        const requiredPlan = getRequiredPlan(feature);
+        const requiredPlan = getRequiredPlan(feature, currentCount);
         const result: EntitlementResult = {
           allowed,
           limit,
@@ -125,13 +125,19 @@ function checkWithServerLimits(
 
 // Derive feature→tier mapping from the default config (runtime, not hardcoded).
 const _featureRequiredPlan = deriveFeatureRequiredPlan(DEFAULT_PLAN_CONFIG);
+const PURCHASED_PLAN_HIERARCHY = ["free", "basic", "growth"] as const;
 
 function getFeatureLabel(feature: string): string {
   return FEATURE_LABELS[feature] || feature;
 }
 
-function getRequiredPlan(feature: string): string {
-  return _featureRequiredPlan[feature] || "basic";
+function getRequiredPlan(feature: string, currentCount: number = 0): string {
+  for (const tier of PURCHASED_PLAN_HIERARCHY) {
+    const value = DEFAULT_PLAN_CONFIG.plans[tier]?.entitlements?.[feature as FeatureKey];
+    if (typeof value === "boolean" && value) return tier;
+    if (typeof value === "number" && (value === -1 || currentCount < value)) return tier;
+  }
+  return _featureRequiredPlan[feature] || "growth";
 }
 
 function capitalize(s: string): string {

@@ -34,6 +34,7 @@ import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { checkEntitlementSync } from "../../services/entitlementClient";
 import { getUserScopedKey, readUserScopedStorage, writeUserScopedStorage } from "../../services/userScopedStorage";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
@@ -358,7 +359,12 @@ export default function DockMinistryTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
-  const showCountdownsTab = dockPlan !== "free";
+  const tickerEntitlement = checkEntitlementSync("tickers", dockPlan);
+  const lowerThirdEntitlement = checkEntitlementSync("lowerThirds", dockPlan);
+  const countdownEntitlement = checkEntitlementSync("countdowns", dockPlan);
+  // Keep locked tabs visible so Free and Basic users can see what is available
+  // after upgrading. The content and actions remain guarded below.
+  const showCountdownsTab = true;
   const [tickerSceneRoute, updateTickerSceneRoute] = useDockSceneRoute("ticker");
   const [lowerThirdSceneRoute, updateLowerThirdSceneRoute] = useDockSceneRoute("lower-third");
   const hasTickerSceneRoute = tickerSceneRoute.enabled && Boolean(tickerSceneRoute.sceneName);
@@ -1041,7 +1047,7 @@ export default function DockMinistryTab({
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => setSubTab("ticker")}
+            onClick={() => tickerEntitlement.allowed ? setSubTab("ticker") : showUpgradeModal(tickerEntitlement.reason || "Upgrade to Growth to enable Ticker.")}
             aria-label={t("ministry.ticker")}
             title={t("ministry.ticker")}>
             <Icon name="campaign" size={12} />
@@ -1052,7 +1058,7 @@ export default function DockMinistryTab({
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => setSubTab("lower-thirds")}
+            onClick={() => lowerThirdEntitlement.allowed ? setSubTab("lower-thirds") : showUpgradeModal(lowerThirdEntitlement.reason || "Upgrade to Growth to enable Lower Thirds.")}
             aria-label={t("ministry.lowerThirds")}
             title={t("ministry.lowerThirds")}>
             <Icon name="subtitles" size={12} />
@@ -1063,14 +1069,14 @@ export default function DockMinistryTab({
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => setSubTab("countdowns")}
+            onClick={() => countdownEntitlement.allowed ? setSubTab("countdowns") : showUpgradeModal(countdownEntitlement.reason || "Upgrade to Growth to enable Countdowns.")}
             aria-label={t("ministry.countdowns")}
             title={t("ministry.countdowns")}>
             <Icon name="timer" size={12} />
             <span>{t("ministry.countdownsShort", "Count")}</span>
           </button>
         )}
-        {subTab === "ticker" && (
+        {subTab === "ticker" && tickerEntitlement.allowed && (
           <span style={{ marginLeft: "auto", display: "inline-flex" }}>
             <DockSceneRoutingControl
               module="ticker"
@@ -1081,7 +1087,7 @@ export default function DockMinistryTab({
             />
           </span>
         )}
-        {subTab === "lower-thirds" && (
+        {subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
           <span style={{ marginLeft: "auto", display: "inline-flex" }}>
             <DockSceneRoutingControl
               module="lower-third"
@@ -1095,11 +1101,11 @@ export default function DockMinistryTab({
       </div>
 
       {/* ── Ticker Tab ── */}
-      {showTickerTab && subTab === "ticker" && dockPlan === "free" && (
+      {showTickerTab && subTab === "ticker" && !tickerEntitlement.allowed && (
         <div style={{ padding: "24px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <Icon name="lock" size={32} />
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-            {t("upgrade.tickerRequired", "Ticker requires Basic plan or higher")}
+            {t("upgrade.tickerRequired", "Ticker requires Growth plan")}
           </div>
           <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
             {t("upgrade.tickerDescription", "Live-updating scripture, prayer points, and announcements for your congregation.")}
@@ -1107,14 +1113,14 @@ export default function DockMinistryTab({
           <button
             type="button"
             className="dock-btn dock-btn--primary dock-btn--sm"
-            onClick={() => showUpgradeModal(t("upgrade.tickerRequiredMessage", "Upgrade to Basic or higher to enable the Ticker feature."))}
+            onClick={() => showUpgradeModal(t("upgrade.tickerRequiredMessage", "Upgrade to Growth to enable the Ticker feature."))}
           >
             <Icon name="upgrade" size={14} />
             <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
           </button>
         </div>
       )}
-      {showTickerTab && subTab === "ticker" && dockPlan !== "free" && (
+      {showTickerTab && subTab === "ticker" && tickerEntitlement.allowed && (
         <>
           {/* Feedback */}
           {error && (
@@ -1549,7 +1555,26 @@ export default function DockMinistryTab({
       )}
 
       {/* ── Lower Thirds Tab ── */}
-      {showLowerThirdTab && subTab === "lower-thirds" && (
+      {showLowerThirdTab && subTab === "lower-thirds" && !lowerThirdEntitlement.allowed && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <Icon name="lock" size={32} />
+          <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>
+            {t("upgrade.lowerThirdRequired", "Lower Thirds require Growth plan")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.lowerThirdDescription", "Show speaker names, scripture, and announcements over your broadcast.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal(t("upgrade.lowerThirdRequiredMessage", "Upgrade to Growth to enable Lower Thirds."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {showLowerThirdTab && subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
         <>
           {/* LT Feedback */}
           {ltFeedback && (
@@ -2052,7 +2077,26 @@ export default function DockMinistryTab({
       )}
 
       {/* ── Countdowns Tab ── */}
-      {showCountdownsTab && subTab === "countdowns" && (
+      {showCountdownsTab && subTab === "countdowns" && !countdownEntitlement.allowed && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <Icon name="lock" size={32} />
+          <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>
+            {t("upgrade.countdownRequired", "Countdowns require Growth plan")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.countdownDescription", "Keep your services on time with broadcast countdown timers.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm"
+            onClick={() => showUpgradeModal(t("upgrade.countdownRequiredMessage", "Upgrade to Growth to enable Countdowns."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {showCountdownsTab && subTab === "countdowns" && countdownEntitlement.allowed && (
         <DockCountdownsTab presentationOutputTarget={presentationOutputTarget} />
       )}
 

@@ -53,7 +53,10 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   // Determine correct upgrade target — never suggest a plan the user
   // already has or a lower tier.
   const currentPlan = effectivePlan;
-  const nextPlanKey = NEXT_PLAN[currentPlan] || "growth";
+  const nextPlanKey =
+    info.requiredPlan && info.requiredPlan !== currentPlan
+      ? info.requiredPlan
+      : NEXT_PLAN[currentPlan] || "growth";
   const upgradeLabel =
     PLAN_LABELS[nextPlanKey] ||
     nextPlanKey.charAt(0).toUpperCase() + nextPlanKey.slice(1);

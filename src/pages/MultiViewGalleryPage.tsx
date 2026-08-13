@@ -23,7 +23,11 @@ import {
 } from "../multiview/addedLayoutStorage";
 import { obsService } from "../services/obsService";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { getCurrentUser } from "../services/authService";
+import { getEffectivePlan } from "../services/licenseService";
+import { checkEntitlementSync } from "../services/entitlementClient";
 import Icon from "../components/Icon";
+import UpgradeModal from "../components/UpgradeModal";
 import "./MultiViewGalleryPage.css";
 
 // ── Color conversion helper (CSS hex → OBS 32-bit integer for color_source_v3) ──
@@ -332,6 +336,11 @@ export default function MultiViewGalleryPage() {
   const [showDisconnected, setShowDisconnected] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [upgradePrompt, setUpgradePrompt] = useState<{
+    message: string;
+    requiredPlan: string;
+    currentPlan: string;
+  } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
   const [, setRenderTick] = useState(0);
   const autoConnectingRef = useRef(false);
@@ -461,6 +470,21 @@ export default function MultiViewGalleryPage() {
   // ── Install layout to OBS ──
   const handleAddToOBS = useCallback(
     async (layout: GalleryLayout) => {
+      // Re-adding an existing layout is idempotent. A new layout consumes one
+      // of the Basic plan's five multiview template slots.
+      if (!addedIds.has(layout.id)) {
+        const currentPlan = getEffectivePlan(getCurrentUser());
+        const access = checkEntitlementSync("multiviewTemplates", currentPlan, addedIds.size);
+        if (!access.allowed) {
+          setUpgradePrompt({
+            message: access.reason || "You have reached the five-template Basic plan limit. Upgrade to Growth for more.",
+            requiredPlan: access.requiredPlan || "growth",
+            currentPlan,
+          });
+          return;
+        }
+      }
+
       if (!obsConnected) {
         const connected = await tryAutoConnect();
         if (!connected) {
@@ -514,7 +538,7 @@ export default function MultiViewGalleryPage() {
         setInstalling(false);
       }
     },
-    [obsConnected, tryAutoConnect, ensureLayoutSlotSource, showToast, markAdded, t]
+    [addedIds, obsConnected, tryAutoConnect, ensureLayoutSlotSource, showToast, markAdded, t]
   );
 
   // ── Handle preview → install ──
@@ -659,6 +683,17 @@ export default function MultiViewGalleryPage() {
         {/* OBS Disconnected Modal */}
         {showDisconnected && (
           <OBSDisconnectedModal onClose={() => setShowDisconnected(false)} />
+        )}
+
+        {upgradePrompt && (
+          <UpgradeModal
+            open
+            onClose={() => setUpgradePrompt(null)}
+            feature="multiviewTemplates"
+            requiredPlan={upgradePrompt.requiredPlan}
+            currentPlan={upgradePrompt.currentPlan}
+            message={upgradePrompt.message}
+          />
         )}
 
         {/* Toast */}

@@ -225,6 +225,7 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -374,6 +375,7 @@
       text-shadow: var(--text-shadow);
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -607,6 +609,7 @@
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       transform-origin: center;
     }
 
@@ -884,7 +887,10 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
-      let lastAppliedThemeKey = '';
+      const lastAppliedThemeKeyByMode = {
+        fullscreen: '',
+        'lower-third': '',
+      };
       let fitRafId = 0;
       let lastBgFingerprint = '';
       let lastBgType = 'none';
@@ -1123,6 +1129,16 @@
         return PATTERN_CSS[value] || '';
       }
 
+      function resolveBackgroundImageCss(image) {
+        let value = String(image || '').trim();
+        if (!value || value === '__BG_SOURCE__') return '';
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-image') || '';
+        if (value === '__FROM_LOCALSTORAGE__') value = localStorage.getItem('bible-overlay-bg-image') || '';
+        if (!value || value === 'none') return '';
+        if (/^url\(/i.test(value)) return value;
+        return `url("${value.replace(/"/g, '\\"')}")`;
+      }
+
       function clearVideoElement(videoEl) {
         if (!videoEl) return;
         try { videoEl.pause(); } catch { }
@@ -1346,6 +1362,11 @@
         lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
         activeMode = mode;
         body.dataset.mode = mode;
+        // A data URI may remain represented by the same __FROM_CSS__ token
+        // while its injected CSS changes. Reapply the mode theme on every
+        // transition so a reused OBS browser document cannot show a blank
+        // background until a manual cache refresh.
+        lastAppliedThemeKeyByMode[mode] = '';
         console.log('[Mode] ' + mode);
       }
 
@@ -1722,7 +1743,33 @@
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
         if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
+        if (!barBgV && targetMode === 'lower-third') {
+          const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+          const bgPattern = String(s.backgroundPattern || '').trim();
+          if (bgImageCss) {
+            ltBarBg.style.background = bgImageCss;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else if (bgPattern) {
+            const pc = resolvePatternCss(bgPattern);
+            ltBarBg.style.background = pc || 'transparent';
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else {
+            const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent';
+            ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          }
+        } else {
+          ltBarBg.style.display = 'none';
+        }
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -1740,9 +1787,9 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKey) return;
+        if (!force && themeKey === lastAppliedThemeKeyByMode[targetMode]) return;
         applyTheme(safeTheme, targetMode);
-        lastAppliedThemeKey = themeKey;
+        lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */
@@ -1929,7 +1976,7 @@
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
           const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
@@ -1942,7 +1989,7 @@
         try {
           if (!packet || typeof packet !== 'object') return false;
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
-          if (_routeSource ? targetSource !== _routeSource : Boolean(targetSource)) return false;
+          if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {

@@ -14,6 +14,8 @@ export interface DockNote {
   content: string;
   updatedAt: number;
   sourceId?: string;
+  /** Legacy compatibility flag; blank lines now determine slide boundaries. */
+  splitOnLineBreaks?: boolean;
 }
 
 export interface DockNotesPreferences {

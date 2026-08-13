@@ -66,6 +66,14 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("patch.compareReferenceFontSizeRight = nextCompareRefSize");
   });
 
+  it("carries the selected quick settings into every verse navigation path", () => {
+    expect(dockBibleTabSource).toContain("const liveFullscreenThemeSettings = liveFullscreenThemeSettingsRef.current");
+    expect(dockBibleTabSource).toContain("const liveLowerThirdThemeSettings = liveLowerThirdThemeSettingsRef.current");
+    expect(dockBibleTabSource).toContain("bibleThemeSettings: liveThemeSettings as unknown as Record<string, unknown>");
+    expect(dockBibleTabSource).toContain("liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings");
+    expect(dockBibleTabSource).toContain("liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings");
+  });
+
   it("uses the Bible toolbar arrows for previous and next chapter navigation", () => {
     expect(dockBibleTabSource).toContain("const handleChapterJump = useCallback");
     expect(dockBibleTabSource).toContain("selectedChapterRef.current = nextChapter");
@@ -99,12 +107,13 @@ describe("DockBibleTab reference display", () => {
 
   it("persists the draggable Quick handle position", () => {
     expect(dockBibleTabSource).toContain("quickActionsTop?: number");
-    expect(dockBibleTabSource).toContain("quickActionsLeft?: number");
+    expect(dockBibleTabSource).toContain("quickActionsLeft?: number | null");
     expect(dockBibleTabSource).toContain("browserQuickUpdateImmediately?: boolean");
     expect(dockBibleTabSource).toContain("readDockPreference<DockBibleUiPreferences>(DOCK_BIBLE_UI_PREFS_KEY)");
     expect(dockBibleTabSource).toContain("void saveDockPreference(DOCK_BIBLE_UI_PREFS_KEY, next)");
     expect(dockBibleTabSource).toContain("clampQuickActionsTop");
     expect(dockBibleTabSource).toContain("clampQuickActionsLeft");
+    expect(dockBibleTabSource).toContain("snapQuickActionsLeft");
     expect(dockBibleTabSource).toContain("getDefaultQuickActionsTop");
     expect(dockBibleTabSource).toContain("quickActionsNeedsInitialCenterRef");
     expect(dockBibleTabSource).toContain("quickActionsContainerRef");

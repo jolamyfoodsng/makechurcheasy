@@ -1416,7 +1416,7 @@ function App() {
                             <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
                             <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                             <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
-                            <Route path="countdowns" element={<CountdownsPage />} />
+                            <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />
                             <Route path="credits" element={<CreditsPage />} />
                             <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                             <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
@@ -1434,8 +1434,8 @@ function App() {
                             <Route path="worship" element={<Navigate to="/resources" replace />} />
                             <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
                             <Route path="scenes" element={<Navigate to="/settings" replace />} />
-                            <Route path="multiview" element={<MVShell />} />
-                            <Route path="multiview/*" element={<MVShell />} />
+                            <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
+                            <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
                             <Route path="new" element={<Navigate to="/" replace />} />
 
                             {/* Developer Tools */}

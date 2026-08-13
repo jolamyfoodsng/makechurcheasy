@@ -21,6 +21,14 @@ import bibleDbSource from "../../bible/bibleDb.ts?raw";
 
 const dockCssSource = readFileSync(fileURLToPath(new URL("../dock.css", import.meta.url)), "utf8");
 
+describe("Bible save feedback", () => {
+  it("wires the explicit Bible save actions to the shared feedback toast", () => {
+    expect(dockBibleTabSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleDisplaySaved\"");
+    expect(dockThemeSettingsModalSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleSettingsSaved\"");
+    expect(backgroundPickerSource).toContain("onSaveFeedback?.(t(\"dock.feedback.backgroundStyleSaved\"");
+  });
+});
+
 /* ── Helpers — mirrors the updater pattern each Text tab control uses ── */
 
 type Updater = (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings;
@@ -202,6 +210,8 @@ describe("Bible stable auto-fit", () => {
     expect(overlayHtml).toContain("stableLowerThirdTextSize");
     expect(overlayHtml).toContain("Math.min(baseTextSize, stableFullscreenTextSize)");
     expect(overlayHtml).toContain("Math.min(baseTextSize, stableLowerThirdTextSize)");
+    expect(overlayHtml).toContain("const proportionalFloor = Math.round(base * 0.64)");
+    expect(overlayHtml).toContain("Math.max(fallback, proportionalFloor)");
     expect(overlayHtml).toContain("if (themeChanged) resetStableAutoFitSizes();");
   });
 });
