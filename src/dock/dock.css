@@ -36,14 +36,24 @@
   --dock-surface-alt: #1F2937;
   --dock-surface-hover: #334155;
   --dock-surface-overlay: #1E2937;
+  /* Shared aliases used by newer Dock controls. Keep these derived from the
+     canonical tokens so light mode changes propagate automatically. */
+  --dock-surface-0: var(--dock-bg);
+  --dock-surface-1: var(--dock-surface);
+  --dock-surface-2: var(--dock-surface-alt);
+  --dock-surface-3: var(--dock-surface-hover);
   --dock-border: #334155;
   --dock-border-soft: #334155;
   --dock-border-active: #2563EB;
+  --dock-border-hover: var(--dock-border-active);
   --dock-text: #F8FAFC;
   --dock-text-secondary: #CBD5E1;
   --dock-text-dim: #94A3B8;
   --dock-text-muted: #94A3B8;
   --dock-text-disabled: #94A3B8;
+  --dock-text-primary: var(--dock-text);
+  --dock-text-tertiary: var(--dock-text-dim);
+  --dock-text-quaternary: var(--dock-text-muted);
   --text-primary: #FFFFFF;
   --text-secondary: #CBD5E1;
   --text-muted: #94A3B8;
@@ -90,6 +100,23 @@
 
 .dock-root :where(input, textarea, select, button, [contenteditable="true"]) {
   font-family: var(--dock-font-body);
+}
+
+/*
+ * The OBS Dock is a separate entry point and does not load App.css. Give
+ * every native select an explicit theme so Chromium/WebView2 on Windows
+ * cannot fall back to its white system control.
+ */
+.dock-root :where(select) {
+  color-scheme: inherit;
+  background-color: var(--dock-input-bg);
+  border: 1px solid var(--dock-input-border);
+  color: var(--dock-text);
+}
+
+.dock-root :where(select option, select optgroup) {
+  background-color: var(--dock-input-bg);
+  color: var(--dock-text);
 }
 
 .dock-root :where(h1, h2, h3, h4, h5, h6),
