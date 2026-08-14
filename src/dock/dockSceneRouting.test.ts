@@ -7,6 +7,7 @@ import worshipTabSource from "./tabs/DockWorshipTab.tsx?raw";
 import notesTabSource from "./tabs/DockNotesTab.tsx?raw";
 import ministryTabSource from "./tabs/DockMinistryTab.tsx?raw";
 import countdownTabSource from "./tabs/DockCountdownsTab.tsx?raw";
+import dockPageSource from "./DockPage.tsx?raw";
 import obsClientSource from "./dockObsClient.ts?raw";
 import bibleOverlaySource from "../../public/mce-bible-overlay.html?raw";
 import presentationOverlaySource from "../../public/presentation.html?raw";
@@ -133,6 +134,15 @@ describe("dock scene routing", () => {
     expect(presentationOverlaySource).toContain("const columnCount = Math.max(2, Math.min(3, columns.length));");
     expect(presentationOverlaySource).toContain("compareColumns.length >= 2");
     expect(bibleOverlaySource).toContain("applyFullscreenCompareLayoutMode(currentCompareLayout);");
+  });
+
+  it("keeps Dock and OBS typography controls distinct", () => {
+    expect(dockPageSource).toContain("page.dockFontFamily");
+    expect(dockPageSource).toContain("page.dockFontSize");
+    expect(dockPageSource).toContain("page.obsFontFamily");
+    expect(dockPageSource).not.toContain("OBS output size");
+    expect(obsClientSource).toContain("loadDockOutputFontFamily");
+    expect(presentationBridgeSource).toContain("loadDockOutputFontFamily");
   });
 
   it("publishes linked compare navigation to the active OBS or presentation route", () => {

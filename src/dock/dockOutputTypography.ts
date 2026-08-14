@@ -5,15 +5,23 @@ import {
   writeDockPreference,
 } from "../services/dockPreferenceStorage";
 import { writeUserScopedStorage } from "../services/userScopedStorage";
+import {
+  DEFAULT_DOCK_FONT_FAMILY,
+  loadDockFontFamily,
+  normalizeDockFontFamily,
+} from "./dockFontFamily";
 
 const DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY = "ocs-dock-output-typography";
 
 export interface DockOutputTypographyPreferences {
   [key: string]: unknown;
+  /** Optional OBS source override. Empty means use each source/theme default. */
+  fontFamily: string;
   fontScale: number;
   updatedAt?: string;
 }
 
+export const DEFAULT_DOCK_OUTPUT_FONT_FAMILY = DEFAULT_DOCK_FONT_FAMILY;
 export const DEFAULT_DOCK_OUTPUT_FONT_SCALE = 1;
 export const DOCK_OUTPUT_FONT_SCALE_OPTIONS = [
   { id: "smaller", label: "Smaller (80%)", value: 0.8 },
@@ -22,6 +30,19 @@ export const DOCK_OUTPUT_FONT_SCALE_OPTIONS = [
   { id: "large", label: "Large (110%)", value: 1.1 },
   { id: "extra-large", label: "Extra large (125%)", value: 1.25 },
 ] as const;
+
+function getMigratedOutputFontFamily(): string {
+  // Older builds used the Dock family for OBS output. Keep that choice on the
+  // first bootstrap so an existing service does not change appearance when
+  // the settings become separate.
+  return normalizeDockFontFamily(loadDockFontFamily()) || DEFAULT_DOCK_OUTPUT_FONT_FAMILY;
+}
+
+function normalizeDockOutputFontFamily(value: unknown, fallback = getMigratedOutputFontFamily()): string {
+  // An explicit empty value is the user's "Use source default" choice.
+  if (value === "") return "";
+  return normalizeDockFontFamily(value) || fallback;
+}
 
 export function normalizeDockOutputFontScale(value: unknown): number {
   if (value === null || value === undefined || value === "") return DEFAULT_DOCK_OUTPUT_FONT_SCALE;
@@ -34,7 +55,11 @@ export function normalizeDockOutputFontScale(value: unknown): number {
 }
 
 function normalizePreferences(value?: Partial<DockOutputTypographyPreferences> | null): DockOutputTypographyPreferences {
+  const hasFontFamily = Boolean(value && Object.prototype.hasOwnProperty.call(value, "fontFamily"));
   return {
+    fontFamily: hasFontFamily
+      ? normalizeDockOutputFontFamily(value?.fontFamily)
+      : getMigratedOutputFontFamily(),
     fontScale: normalizeDockOutputFontScale(value?.fontScale),
     ...(value?.updatedAt ? { updatedAt: value.updatedAt } : {}),
   };
@@ -62,6 +87,14 @@ function persistPreferences(value: Partial<DockOutputTypographyPreferences>): vo
 
 export function loadDockOutputFontScale(): number {
   return readLocalPreferences().fontScale;
+}
+
+export function loadDockOutputFontFamily(): string {
+  return readLocalPreferences().fontFamily;
+}
+
+export function saveDockOutputFontFamily(value: unknown): void {
+  persistPreferences({ fontFamily: normalizeDockOutputFontFamily(value) });
 }
 
 export function saveDockOutputFontScale(value: unknown): void {

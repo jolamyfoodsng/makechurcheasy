@@ -31,6 +31,14 @@ describe("Dock session transfer", () => {
                 linesPerSlide: 2,
               },
             },
+            "ocs-dock-output-typography": {
+              scope: "user",
+              encoding: "json",
+              value: {
+                fontFamily: '"Oswald", "Arial Narrow", sans-serif',
+                fontScale: 1,
+              },
+            },
             "not-a-dock-key": {
               scope: "global",
               encoding: "text",
@@ -56,6 +64,9 @@ describe("Dock session transfer", () => {
     });
     expect(parsed.sections).toHaveLength(1);
     expect(parsed.sections[0].storage["ocs-dock-worship-preferences"]?.scope).toBe("user");
+    expect(parsed.sections[0].storage["ocs-dock-output-typography"]?.value).toMatchObject({
+      fontFamily: '"Oswald", "Arial Narrow", sans-serif',
+    });
     expect(parsed.sections[0].storage["not-a-dock-key"]).toBeUndefined();
   });
 

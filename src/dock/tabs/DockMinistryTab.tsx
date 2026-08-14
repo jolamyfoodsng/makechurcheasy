@@ -40,7 +40,7 @@ import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
-import { loadDockFontFamily } from "../dockFontFamily";
+import { loadDockOutputFontFamily } from "../dockOutputTypography";
 import {
   clearPresentationScreen,
   publishTickerToPresentation,
@@ -645,7 +645,7 @@ export default function DockMinistryTab({
     ? tickerBranding.logoUrl
     : "";
   const tickerBrandName = tickerBranding.brandName || "MakeChurchEasy";
-  const dockFontFamily = loadDockFontFamily();
+  const obsFontFamily = loadDockOutputFontFamily();
 
   const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
   const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: fallbackLtTheme, label: fallbackLtTheme?.name ?? "Speaker" };
@@ -782,7 +782,7 @@ export default function DockMinistryTab({
           speed: settings.speed,
           textColor: tickerColors?.barText,
           backgroundColor: tickerColors?.barBg,
-          fontFamily: dockFontFamily,
+          fontFamily: obsFontFamily,
           paused: false,
         });
         setRunning(true);
@@ -801,7 +801,7 @@ export default function DockMinistryTab({
         loop: settings.loop,
         paused: false,
         colors: tickerColors,
-        fontFamily: dockFontFamily,
+        fontFamily: obsFontFamily,
         brandLogoUrl: tickerBrandLogoUrl,
         brandName: tickerBrandName,
         divider: settings.divider,
@@ -911,7 +911,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [activeMessages, dockFontFamily, hasTickerSceneRoute, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
+  }, [activeMessages, hasTickerSceneRoute, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
@@ -933,7 +933,7 @@ export default function DockMinistryTab({
           speed: settings.speed,
           textColor: tickerColors?.barText,
           backgroundColor: tickerColors?.barBg,
-          fontFamily: dockFontFamily,
+          fontFamily: obsFontFamily,
           paused: !isPaused,
         });
         setIsPaused((p) => !p);
@@ -950,7 +950,7 @@ export default function DockMinistryTab({
         loop: settings.loop,
         paused: !isPaused,
         colors: tickerColors,
-        fontFamily: dockFontFamily,
+        fontFamily: obsFontFamily,
         brandLogoUrl: tickerBrandLogoUrl,
         brandName: tickerBrandName,
         divider: settings.divider,
@@ -977,7 +977,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [activeMessages, dockFontFamily, hasTickerSceneRoute, isPaused, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
+  }, [activeMessages, hasTickerSceneRoute, isPaused, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
 
   // ── Clear ticker (hide in OBS) ──
   const handleClear = useCallback(async () => {

@@ -6,6 +6,7 @@ import type {
 } from "../presentation/types";
 import { toStoredOverlayAssetUrl } from "./overlayUrl";
 import { withScriptureFontFallback } from "../bible/scriptureFont";
+import { loadDockOutputFontFamily } from "../dock/dockOutputTypography";
 import {
   clearPresentationScreen,
   publishBibleToPresentation,
@@ -94,11 +95,12 @@ function buildPresentationStyle(data: Record<string, unknown>): PresentationStyl
   const themeSettings = asRecord(data.bibleThemeSettings);
   const liveOverrides = asRecord(data.liveOverrides);
   const merged = { ...themeSettings, ...liveOverrides };
-  if (!Object.keys(merged).length) return undefined;
+  const outputFontFamily = loadDockOutputFontFamily();
+  if (!Object.keys(merged).length && !outputFontFamily) return undefined;
 
   return {
     themeId: asString(data.theme) || undefined,
-    fontFamily: withScriptureFontFallback(asString(merged.fontFamily)),
+    fontFamily: withScriptureFontFallback(outputFontFamily || asString(merged.fontFamily)),
     fontSize: asNumber(merged.fontSize, 64),
     fontWeight: asString(merged.fontWeight) || 700,
     lineHeight: asNumber(merged.lineHeight, 1.2),

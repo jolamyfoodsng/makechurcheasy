@@ -48,8 +48,12 @@ import type { LiveToolOverlayPayload, LiveToolTemplate } from "../live-tools/typ
 import { loadProjectionSettings } from "./dockProjectionSettings";
 import { getUserScopedKey, readUserScopedStorage } from "../services/userScopedStorage";
 import { overlayBridge } from "./dockOverlayBridge";
-import { buildDockFontFamilyCss, loadDockFontFamily } from "./dockFontFamily";
-import { applyDockOutputFontScale, loadDockOutputFontScale } from "./dockOutputTypography";
+import { buildDockFontFamilyCss } from "./dockFontFamily";
+import {
+  applyDockOutputFontScale,
+  loadDockOutputFontFamily,
+  loadDockOutputFontScale,
+} from "./dockOutputTypography";
 import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
 
@@ -3922,7 +3926,7 @@ class DockObsClient {
       ...(themeSettings ?? {}),
       ...(liveOverrides ?? {}),
     };
-    const outputFontFamily = loadDockFontFamily();
+    const outputFontFamily = loadDockOutputFontFamily();
     if (outputFontFamily) merged.fontFamily = outputFontFamily;
     return applyDockOutputFontScale(merged, loadDockOutputFontScale());
   }
@@ -4333,7 +4337,7 @@ class DockObsClient {
       ? ` --display-mode: "${String(packet.mode)}";`
       : "";
     const overlayCss = `:root { --overlay-data: "${encodedPacket}";${displayMode} }`;
-    const fontCss = buildDockFontFamilyCss(loadDockFontFamily());
+    const fontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
     return [overlayCss, themeCss, fontCss].filter(Boolean).join("\n");
   }
 
@@ -5229,7 +5233,7 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: [stripCompatModeCSS(t.css), buildDockFontFamilyCss(loadDockFontFamily())]
+      css: [stripCompatModeCSS(t.css), buildDockFontFamilyCss(loadDockOutputFontFamily())]
         .filter(Boolean)
         .join("\n"),
       values,
@@ -5361,7 +5365,7 @@ class DockObsClient {
     const bg = payload.background;
     const bgEnabled = Boolean(bg?.enabled);
     const bgMode = bg?.mode || "text-only";
-    const dockFontCss = buildDockFontFamilyCss(loadDockFontFamily());
+    const dockFontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
 
     const alignValue = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
     let justifyValue = verticalPos === "top" ? "flex-start" : verticalPos === "center" ? "center" : "flex-end";

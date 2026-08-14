@@ -55,11 +55,11 @@ import {
   saveDockFontScale,
 } from "./dockFontFamily";
 import {
+  DEFAULT_DOCK_OUTPUT_FONT_FAMILY,
   DEFAULT_DOCK_OUTPUT_FONT_SCALE,
-  DOCK_OUTPUT_FONT_SCALE_OPTIONS,
   hydrateDockOutputTypographyPreferences,
-  loadDockOutputFontScale,
-  normalizeDockOutputFontScale,
+  loadDockOutputFontFamily,
+  saveDockOutputFontFamily,
   saveDockOutputFontScale,
 } from "./dockOutputTypography";
 import {
@@ -234,7 +234,7 @@ export default function DockPage({
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
   const [dockFontFamily, setDockFontFamily] = useState<string>(() => loadDockFontFamily());
   const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
-  const [dockOutputFontScale, setDockOutputFontScale] = useState<number>(() => loadDockOutputFontScale());
+  const [dockOutputFontFamily, setDockOutputFontFamily] = useState<string>(() => loadDockOutputFontFamily());
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const hiddenTabsKey = hiddenTabs.join("|");
@@ -256,7 +256,7 @@ export default function DockPage({
       if (cancelled || typographyHydrationGenerationRef.current !== generation) return;
       setDockFontFamily(preferences.fontFamily);
       setDockFontScale(preferences.fontScale);
-      setDockOutputFontScale(outputPreferences.fontScale);
+      setDockOutputFontFamily(outputPreferences.fontFamily);
     });
 
     return () => {
@@ -295,11 +295,10 @@ export default function DockPage({
     saveDockFontScale(next);
   }, []);
 
-  const updateDockOutputFontScale = useCallback((value: string) => {
+  const updateDockOutputFontFamily = useCallback((value: string) => {
     typographyHydrationGenerationRef.current += 1;
-    const next = normalizeDockOutputFontScale(value);
-    setDockOutputFontScale(next);
-    saveDockOutputFontScale(next);
+    setDockOutputFontFamily(value);
+    saveDockOutputFontFamily(value);
   }, []);
 
   const resetDockTypography = useCallback(() => {
@@ -308,7 +307,8 @@ export default function DockPage({
     saveDockFontFamily(DEFAULT_DOCK_FONT_FAMILY);
     setDockFontScale(DEFAULT_DOCK_FONT_SCALE);
     saveDockFontScale(DEFAULT_DOCK_FONT_SCALE);
-    setDockOutputFontScale(DEFAULT_DOCK_OUTPUT_FONT_SCALE);
+    setDockOutputFontFamily(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
+    saveDockOutputFontFamily(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
     saveDockOutputFontScale(DEFAULT_DOCK_OUTPUT_FONT_SCALE);
   }, []);
 
@@ -1152,18 +1152,21 @@ export default function DockPage({
                 </div>
 
                 <div className="dock-sidebar__subpanel">
+                  <div className="dock-sidebar__section-label">
+                    {t('page.dockTypography', 'Dock interface')}
+                  </div>
                   <label className="dock-sidebar__select-field">
                     <span className="dock-sidebar__select-label">
                       <Icon name="font_download" size={14} />
-                      <span>{t('page.fontFamily', 'Font family')}</span>
+                      <span>{t('page.dockFontFamily', 'Dock font family')}</span>
                     </span>
                     <select
                       className="dock-sidebar__select"
                       value={dockFontFamily}
                       onChange={(event) => updateDockFontFamily(event.target.value)}
-                      aria-label={t('page.fontFamily', 'Font family')}
+                      aria-label={t('page.dockFontFamily', 'Dock font family')}
                     >
-                      <option value="">{t('page.fontFamilySourceDefault', 'Use source default')}</option>
+                      <option value="">{t('page.dockFontFamilySourceDefault', 'Use app default')}</option>
                       {DOCK_FONT_FAMILY_GROUPS.map((group) => (
                         <optgroup key={group} label={group}>
                           {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
@@ -1178,7 +1181,7 @@ export default function DockPage({
                   <label className="dock-sidebar__select-field">
                     <span className="dock-sidebar__select-label">
                       <Icon name="text_fields" size={14} />
-                      <span>{t('page.fontSize', 'Dock font size')}</span>
+                      <span>{t('page.dockFontSize', 'Dock font size')}</span>
                       <output className="dock-sidebar__value" htmlFor="dock-font-scale">
                         {Math.round(dockFontScale * 100)}%
                       </output>
@@ -1188,7 +1191,7 @@ export default function DockPage({
                       className="dock-sidebar__select"
                       value={String(dockFontScale)}
                       onChange={(event) => updateDockFontScale(event.target.value)}
-                      aria-label={t('page.fontSize', 'Dock font size')}
+                      aria-label={t('page.dockFontSize', 'Dock font size')}
                     >
                       {DOCK_FONT_SCALE_OPTIONS.map((option) => (
                         <option key={option.id} value={String(option.value)}>
@@ -1197,39 +1200,45 @@ export default function DockPage({
                       ))}
                     </select>
                   </label>
+                  <div className="dock-sidebar__hint">
+                    {t('page.dockTypographyDesc', 'Changes the Dock interface only. OBS text uses the separate OBS font family below.')}
+                  </div>
+
+                  <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
+                    {t('page.obsTypography', 'OBS sources')}
+                  </div>
                   <label className="dock-sidebar__select-field">
                     <span className="dock-sidebar__select-label">
                       <Icon name="live_tv" size={14} />
-                      <span>{t('page.obsOutputFontSize', 'OBS output size')}</span>
-                      <output className="dock-sidebar__value" htmlFor="dock-output-font-scale">
-                        {Math.round(dockOutputFontScale * 100)}%
-                      </output>
+                      <span>{t('page.obsFontFamily', 'OBS font family')}</span>
                     </span>
                     <select
-                      id="dock-output-font-scale"
+                      id="dock-output-font-family"
                       className="dock-sidebar__select"
-                      value={String(dockOutputFontScale)}
-                      onChange={(event) => updateDockOutputFontScale(event.target.value)}
-                      aria-label={t('page.obsOutputFontSize', 'OBS output size')}
+                      value={dockOutputFontFamily}
+                      onChange={(event) => updateDockOutputFontFamily(event.target.value)}
+                      aria-label={t('page.obsFontFamily', 'OBS font family')}
                     >
-                      {DOCK_OUTPUT_FONT_SCALE_OPTIONS.map((option) => (
-                        <option key={option.id} value={String(option.value)}>
-                          {t(`page.obsOutputFontSize.${option.id}`, option.label)}
-                        </option>
+                      <option value="">{t('page.obsFontFamilySourceDefault', 'Use source default')}</option>
+                      {DOCK_FONT_FAMILY_GROUPS.map((group) => (
+                        <optgroup key={group} label={group}>
+                          {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
+                            <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>
                   <div className="dock-sidebar__hint">
-                    {t('page.fontFamilyDesc', 'Applies to the dock and keeps Unicode symbols, emoji, and African-language characters readable.')}
-                  </div>
-                  <div className="dock-sidebar__hint">
-                    {t('page.obsOutputFontSizeDesc', 'Scales Bible, Notes, and Worship text sent to OBS.')}
+                    {t('page.obsFontFamilyDesc', 'Controls the font used by Bible, Notes, Worship, lower-thirds, and other text sent to OBS. Saved in Dock Session JSON exports/imports.')}
                   </div>
                   <button
                     type="button"
                     className="dock-sidebar__reset"
                     onClick={resetDockTypography}
-                    disabled={dockFontFamily === DEFAULT_DOCK_FONT_FAMILY && dockFontScale === DEFAULT_DOCK_FONT_SCALE && dockOutputFontScale === DEFAULT_DOCK_OUTPUT_FONT_SCALE}
+                    disabled={dockFontFamily === DEFAULT_DOCK_FONT_FAMILY && dockFontScale === DEFAULT_DOCK_FONT_SCALE && dockOutputFontFamily === DEFAULT_DOCK_OUTPUT_FONT_FAMILY}
                   >
                     <Icon name="restart_alt" size={13} />
                     <span>{t('page.resetTypography', 'Reset typography')}</span>
