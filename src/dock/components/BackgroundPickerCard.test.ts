@@ -224,6 +224,16 @@ describe("Bible picker reference tabs", () => {
     expect(dockBibleTabSource).toContain("onReferenceFormatChange={handleReferenceFormatChange}");
     expect(dockBibleTabSource).toContain("onReferenceVersionVisibleChange={handleReferenceVersionVisibleChange}");
   });
+
+  it("keeps reference display changes in the modal draft until Save is pressed", () => {
+    expect(dockThemeSettingsModalSource).toContain("draftReferenceFormat");
+    expect(dockThemeSettingsModalSource).toContain("draftReferenceVersionVisible");
+    expect(dockThemeSettingsModalSource).toContain("referenceFormat={draftReferenceFormat}");
+    expect(dockThemeSettingsModalSource).toContain("onReferenceFormatChange={updateDraftReferenceFormat}");
+    expect(dockThemeSettingsModalSource).toContain("onReferenceSettingsSave(nextReferenceFormat, nextReferenceVersionVisible)");
+    expect(dockThemeSettingsModalSource).toContain("referenceFormat: nextReferenceFormat");
+    expect(dockBibleTabSource).toContain("onReferenceSettingsSave={handleReferenceSettingsSave}");
+  });
 });
 
 describe("Bible stable auto-fit", () => {

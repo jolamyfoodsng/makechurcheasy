@@ -10,6 +10,8 @@ import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuic
 export interface DockThemeSettingsSaveContext {
   backgroundPreset?: DockBackgroundPreset | null;
   selectedTheme?: BibleTheme | null;
+  referenceFormat?: BibleReferenceFormat;
+  referenceVersionVisible?: boolean;
 }
 
 interface Props {
@@ -42,6 +44,7 @@ interface Props {
   referenceTranslation?: string;
   onReferenceFormatChange?: (format: BibleReferenceFormat) => void;
   onReferenceVersionVisibleChange?: (visible: boolean) => void;
+  onReferenceSettingsSave?: (format: BibleReferenceFormat, versionVisible: boolean) => void;
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
   initialTab?: "text" | "layout" | "background" | "compare";
@@ -109,6 +112,7 @@ export default function DockThemeSettingsModal({
   referenceTranslation = "KJV",
   onReferenceFormatChange,
   onReferenceVersionVisibleChange,
+  onReferenceSettingsSave,
   displayMode = "single",
   initialTab = "text",
   storageScope = "global",
@@ -127,9 +131,13 @@ export default function DockThemeSettingsModal({
     setInternalView(v);
   }, [externalIsOpen, externalOnClose]);
   const [draftSettings, setDraftSettings] = useState(quickSettings);
+  const [draftReferenceFormat, setDraftReferenceFormat] = useState<BibleReferenceFormat | undefined>(referenceFormat);
+  const [draftReferenceVersionVisible, setDraftReferenceVersionVisible] = useState(referenceVersionVisible);
   const [draftSelectedThemeId, setDraftSelectedThemeId] = useState<string | null>(selectedThemeId);
   const [draftSelectedTheme, setDraftSelectedTheme] = useState<BibleTheme | null>(null);
   const draftSettingsRef = useRef(quickSettings);
+  const draftReferenceFormatRef = useRef<BibleReferenceFormat | undefined>(referenceFormat);
+  const draftReferenceVersionVisibleRef = useRef(referenceVersionVisible);
   const draftSelectedThemeRef = useRef<BibleTheme | null>(null);
   const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
@@ -145,12 +153,16 @@ export default function DockThemeSettingsModal({
       originalSettingsRef.current = quickSettings;
       draftSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
+      draftReferenceFormatRef.current = referenceFormat;
+      setDraftReferenceFormat(referenceFormat);
+      draftReferenceVersionVisibleRef.current = referenceVersionVisible;
+      setDraftReferenceVersionVisible(referenceVersionVisible);
       setDraftSelectedThemeId(selectedThemeId);
       draftSelectedThemeRef.current = null;
       setDraftSelectedTheme(null);
       pendingBackgroundPresetRef.current = null;
     }
-  }, [view, quickSettings, selectedThemeId]);
+  }, [referenceFormat, referenceVersionVisible, view, quickSettings, selectedThemeId]);
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
@@ -160,6 +172,16 @@ export default function DockThemeSettingsModal({
     },
     [],
   );
+
+  const updateDraftReferenceFormat = useCallback((format: BibleReferenceFormat) => {
+    draftReferenceFormatRef.current = format;
+    setDraftReferenceFormat(format);
+  }, []);
+
+  const updateDraftReferenceVersionVisible = useCallback((visible: boolean) => {
+    draftReferenceVersionVisibleRef.current = visible;
+    setDraftReferenceVersionVisible(visible);
+  }, []);
 
   useEffect(() => {
     if (view === "closed") return undefined;
@@ -173,12 +195,16 @@ export default function DockThemeSettingsModal({
   const openSettings = useCallback(() => {
     draftSettingsRef.current = quickSettings;
     setDraftSettings(quickSettings);
+    draftReferenceFormatRef.current = referenceFormat;
+    setDraftReferenceFormat(referenceFormat);
+    draftReferenceVersionVisibleRef.current = referenceVersionVisible;
+    setDraftReferenceVersionVisible(referenceVersionVisible);
     setDraftSelectedThemeId(selectedThemeId);
     draftSelectedThemeRef.current = null;
     setDraftSelectedTheme(null);
     pendingBackgroundPresetRef.current = null;
     setView("settings");
-  }, [quickSettings, selectedThemeId]);
+  }, [quickSettings, referenceFormat, referenceVersionVisible, selectedThemeId]);
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
     draftSelectedThemeRef.current = theme;
@@ -193,6 +219,8 @@ export default function DockThemeSettingsModal({
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettingsRef.current };
+    const nextReferenceFormat = draftReferenceFormatRef.current;
+    const nextReferenceVersionVisible = draftReferenceVersionVisibleRef.current;
     const nextTheme = draftSelectedThemeRef.current;
     const nextPreset = pendingBackgroundPresetRef.current;
     setSaving(true);
@@ -205,6 +233,21 @@ export default function DockThemeSettingsModal({
         if (nextPreset) {
           onBackgroundPresetChange?.(nextPreset);
         }
+        if (nextReferenceFormat && (
+          nextReferenceFormat !== referenceFormat
+          || nextReferenceVersionVisible !== referenceVersionVisible
+        )) {
+          if (onReferenceSettingsSave) {
+            onReferenceSettingsSave(nextReferenceFormat, nextReferenceVersionVisible);
+          } else {
+            if (nextReferenceFormat !== referenceFormat) {
+              onReferenceFormatChange?.(nextReferenceFormat);
+            }
+            if (nextReferenceVersionVisible !== referenceVersionVisible) {
+              onReferenceVersionVisibleChange?.(nextReferenceVersionVisible);
+            }
+          }
+        }
       } catch (error) {
         console.warn("[DockThemeSettingsModal] pre-save apply failed:", error);
       }
@@ -212,6 +255,8 @@ export default function DockThemeSettingsModal({
       void Promise.resolve(onQuickSettingsSave(nextSettings, {
         backgroundPreset: nextPreset,
         selectedTheme: nextTheme,
+        referenceFormat: nextReferenceFormat,
+        referenceVersionVisible: nextReferenceFormat ? nextReferenceVersionVisible : undefined,
       }))
         .then(() => {
           onSaveFeedback?.(t("dock.feedback.bibleSettingsSaved", "Bible theme settings saved."));
@@ -224,7 +269,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSaveFeedback, onSelect, t]);
+  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onReferenceFormatChange, onReferenceSettingsSave, onReferenceVersionVisibleChange, onSaveFeedback, onSelect, referenceFormat, referenceVersionVisible, t]);
 
   const handleReset = useCallback(() => {
     const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
@@ -292,11 +337,11 @@ export default function DockThemeSettingsModal({
                     pendingBackgroundPresetRef.current = preset;
                   }}
                   showReferences={showReferences}
-                  referenceFormat={referenceFormat}
-                  referenceVersionVisible={referenceVersionVisible}
+                  referenceFormat={draftReferenceFormat}
+                  referenceVersionVisible={draftReferenceVersionVisible}
                   referenceTranslation={referenceTranslation}
-                  onReferenceFormatChange={onReferenceFormatChange}
-                  onReferenceVersionVisibleChange={onReferenceVersionVisibleChange}
+                  onReferenceFormatChange={updateDraftReferenceFormat}
+                  onReferenceVersionVisibleChange={updateDraftReferenceVersionVisible}
                   overlayMode={overlayMode}
                   displayMode={displayMode}
                   initialTab={initialTab}

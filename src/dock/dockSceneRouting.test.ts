@@ -71,6 +71,14 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("MCE Presentation only");
   });
 
+  it("removes legacy single-Bible content before compare output is shown", () => {
+    expect(obsClientSource).toContain("hideLegacyBibleContentSources");
+    expect(obsClientSource).toContain('getMcePresentationSourceFamily(item.sourceName) !== "bible"');
+    expect(obsClientSource).toContain("if (compareEnabled)");
+    expect(obsClientSource).toContain("PRESENTATION_SCENE_NAME, sceneName");
+    expect(bibleOverlaySource).toContain("visibility: hidden;");
+  });
+
   it("verifies the live OBS browser source painted the new font", () => {
     const methodStart = obsClientSource.indexOf("async refreshOutputTypography(): Promise<void>");
     const methodEnd = obsClientSource.indexOf("\n  private extractOverlayPacketFromCss", methodStart);
@@ -151,12 +159,12 @@ describe("dock scene routing", () => {
     expect(bibleOverlaySource).toContain("applyFullscreenCompareLayoutMode(currentCompareLayout);");
   });
 
-  it("keeps Dock and OBS typography controls distinct", () => {
+  it("keeps the Dock typography control separate from the CMG Sans OBS default", () => {
     expect(dockPageSource).toContain("page.dockFontFamily");
     expect(dockPageSource).toContain("page.dockFontSize");
-    expect(dockPageSource).toContain("page.obsFontFamily");
+    expect(dockPageSource).not.toContain("page.obsFontFamily");
+    expect(dockPageSource).not.toContain("dock-output-font-family");
     expect(dockPageSource).not.toContain("OBS output size");
-    expect(dockPageSource).toContain("refreshOutputTypography");
     expect(obsClientSource).toContain("loadDockOutputFontFamily");
     expect(obsClientSource).toContain("async refreshOutputTypography");
     expect(bibleOverlaySource).toContain("--mce-output-font-family");

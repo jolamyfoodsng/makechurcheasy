@@ -4529,9 +4529,8 @@ class DockObsClient {
   }
 
   /**
-   * Reapply the selected OBS font family to browser sources that are already
-   * live. Changing the Dock setting must not wait for the next verse/song
-   * push; the active OBS document needs the same packet refresh as a theme
+   * Reapply the configured OBS font family to browser sources that are already
+   * live. The active OBS document needs the same packet refresh as a theme
    * change.
    */
   async refreshOutputTypography(): Promise<void> {
@@ -4715,6 +4714,45 @@ class DockObsClient {
         });
       }
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Hide content sources left by the pre-unified Bible output. The current
+   * Bible browser source renders both single and compare layouts, so an old
+   * MCE Bible scene/browser item must not remain visible underneath it.
+   * Background items are intentionally left alone; they do not contain a
+   * second verse and may still be used by an older presentation setup.
+   */
+  private async hideLegacyBibleContentSources(
+    sceneName: string,
+    activeSourceName: string,
+  ): Promise<void> {
+    const target = sceneName.trim();
+    const active = activeSourceName.trim();
+    if (!target || !active) return;
+
+    try {
+      this.invalidateSceneItemListCache(target);
+      const items = await this.getSceneItemListCached(target);
+      const legacyItems = items.filter((item) => {
+        if (item.sourceName === active || item.sceneItemEnabled === false) return false;
+        if (!isMcePresentationManagedSource(item.sourceName)) return false;
+        if (getMcePresentationSourceFamily(item.sourceName) !== "bible") return false;
+        const normalized = item.sourceName.trim().toLocaleLowerCase();
+        return !normalized.includes("background") && !normalized.includes(" bg") && !normalized.endsWith("bg");
+      });
+
+      if (legacyItems.length === 0) return;
+      await Promise.all(legacyItems.map((item) => this.call("SetSceneItemEnabled", {
+        sceneName: target,
+        sceneItemId: item.sceneItemId,
+        sceneItemEnabled: false,
+      }).catch(() => { })));
+      this.invalidateSceneItemListCache(target);
+    } catch {
+      // Legacy cleanup must never prevent the current Bible output from being
+      // pushed when an old scene no longer exists.
+    }
   }
 
   /**
@@ -6006,6 +6044,7 @@ class DockObsClient {
       const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
         ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
         : [];
+
       const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
         this.mergeThemeSettingsWithLiveOverrides(
           data.bibleThemeSettings,
@@ -6055,6 +6094,9 @@ class DockObsClient {
       };
       const baseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
       const sourceName = this.getSceneRouteSourceName(sourceModule, sceneName);
+      if (compareEnabled) {
+        await this.hideLegacyBibleContentSources(sceneName, sourceName);
+      }
       await this.pushSceneRouteBrowserSource({
         module: sourceModule,
         sceneName,
@@ -6306,6 +6348,17 @@ class DockObsClient {
       const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
         ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
         : [];
+
+      // Compare passages replaces the single-verse output. Clean up any
+      // legacy Bible content layers in both the shared presentation and the
+      // current target scene before the unified browser source is updated.
+      if (compareEnabled) {
+        const activeBibleSourceName = bibleBrowserSourceName ?? FULLSCREEN_SOURCE_NAMES.BIBLE;
+        const cleanupScenes = [...new Set([PRESENTATION_SCENE_NAME, sceneName])];
+        await Promise.all(cleanupScenes.map((target) => (
+          this.hideLegacyBibleContentSources(target, activeBibleSourceName)
+        )));
+      }
       const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
         this.mergeThemeSettingsWithLiveOverrides(
           data.bibleThemeSettings,

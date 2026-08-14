@@ -7,7 +7,6 @@ import {
 import { writeUserScopedStorage } from "../services/userScopedStorage";
 import {
   DEFAULT_DOCK_FONT_FAMILY,
-  loadDockFontFamily,
   normalizeDockFontFamily,
 } from "./dockFontFamily";
 
@@ -15,13 +14,13 @@ const DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY = "ocs-dock-output-typography";
 
 export interface DockOutputTypographyPreferences {
   [key: string]: unknown;
-  /** Optional OBS source override. Empty means use each source/theme default. */
+  /** OBS output family. Kept for session compatibility and legacy imports. */
   fontFamily: string;
   fontScale: number;
   updatedAt?: string;
 }
 
-export const DEFAULT_DOCK_OUTPUT_FONT_FAMILY = DEFAULT_DOCK_FONT_FAMILY;
+export const DEFAULT_DOCK_OUTPUT_FONT_FAMILY = '"CMG Sans", "Noto Sans", sans-serif';
 export const DEFAULT_DOCK_OUTPUT_FONT_SCALE = 1;
 export const DOCK_OUTPUT_FONT_SCALE_OPTIONS = [
   { id: "smaller", label: "Smaller (80%)", value: 0.8 },
@@ -32,16 +31,22 @@ export const DOCK_OUTPUT_FONT_SCALE_OPTIONS = [
 ] as const;
 
 function getMigratedOutputFontFamily(): string {
-  // Older builds used the Dock family for OBS output. Keep that choice on the
-  // first bootstrap so an existing service does not change appearance when
-  // the settings become separate.
-  return normalizeDockFontFamily(loadDockFontFamily()) || DEFAULT_DOCK_OUTPUT_FONT_FAMILY;
+  return DEFAULT_DOCK_OUTPUT_FONT_FAMILY;
 }
 
 function normalizeDockOutputFontFamily(value: unknown, fallback = getMigratedOutputFontFamily()): string {
-  // An explicit empty value is the user's "Use source default" choice.
-  if (value === "") return "";
-  return normalizeDockFontFamily(value) || fallback;
+  // The OBS family selector is intentionally no longer exposed. Empty values
+  // and the old built-in defaults should converge on CMG Sans, while a custom
+  // family in an imported session remains backwards-compatible.
+  const normalized = normalizeDockFontFamily(value);
+  if (!normalized) return fallback;
+  if (
+    normalized === DEFAULT_DOCK_FONT_FAMILY
+    || normalized === '"Noto Sans", "Segoe UI", sans-serif'
+  ) {
+    return fallback;
+  }
+  return normalized;
 }
 
 export function normalizeDockOutputFontScale(value: unknown): number {
@@ -102,9 +107,10 @@ export function saveDockOutputFontScale(value: unknown): void {
 }
 
 export async function hydrateDockOutputTypographyPreferences(): Promise<DockOutputTypographyPreferences> {
+  const local = readDockPreference<DockOutputTypographyPreferences>(DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY);
   const durable = await loadDockPreference<DockOutputTypographyPreferences>(DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY).catch(() => null);
-  const next = normalizePreferences(durable ?? readLocalPreferences());
-  if (durable || next.fontScale !== DEFAULT_DOCK_OUTPUT_FONT_SCALE) persistPreferences(next);
+  const next = normalizePreferences(durable ?? local);
+  if (durable || local || next.fontScale !== DEFAULT_DOCK_OUTPUT_FONT_SCALE) persistPreferences(next);
   return next;
 }
 

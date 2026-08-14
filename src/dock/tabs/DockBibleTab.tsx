@@ -3485,6 +3485,8 @@ export default function DockBibleTab({
     const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
     if (liveOverlayMode !== saveMode) return;
     const effectiveLineCount = clampVerseLineCount(context?.lineCount ?? verseLineCount);
+    const effectiveReferenceFormat = context?.referenceFormat ?? referenceFormat;
+    const effectiveReferenceVersionVisible = context?.referenceVersionVisible ?? referenceVersionVisible;
 
     const selectedTheme = context?.selectedTheme ?? null;
     const baseTheme = resolveThemeForOverlayMode(
@@ -3501,8 +3503,8 @@ export default function DockBibleTab({
       columnIndex: activeColumnIndex,
       reveal: false,
       lineCount: effectiveLineCount,
-      referenceFormat,
-      referenceVersionVisible,
+      referenceFormat: effectiveReferenceFormat,
+      referenceVersionVisible: effectiveReferenceVersionVisible,
       recordHistory: false,
       preserveComparePassages: true,
       themeOverride: {
@@ -5628,6 +5630,16 @@ export default function DockBibleTab({
     refreshCurrentReferenceDisplay(referenceFormat, visible);
   }, [persistDockBiblePreferencesNow, referenceFormat, refreshCurrentReferenceDisplay]);
 
+  const handleReferenceSettingsSave = useCallback((format: BibleReferenceFormat, versionVisible: boolean) => {
+    setReferenceFormat(format);
+    setReferenceVersionVisible(versionVisible);
+    persistDockBiblePreferencesNow({
+      referenceFormat: format,
+      referenceVersionVisible: versionVisible,
+    });
+    refreshCurrentReferenceDisplay(format, versionVisible);
+  }, [persistDockBiblePreferencesNow, refreshCurrentReferenceDisplay]);
+
   const referenceSettingsPopover = (
     <div className="dock-bible-reference-popover" role="dialog" aria-label={t("bible.referenceSettings", "Reference display settings")}>
       <div className="dock-bible-reference-popover__header">
@@ -6780,6 +6792,7 @@ export default function DockBibleTab({
         referenceTranslation={activeTranslation}
         onReferenceFormatChange={handleReferenceFormatChange}
         onReferenceVersionVisibleChange={handleReferenceVersionVisibleChange}
+        onReferenceSettingsSave={handleReferenceSettingsSave}
         overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
         initialTab={themeSettingsInitialTab}
         storageScope="bible"

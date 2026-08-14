@@ -23,6 +23,7 @@ vi.mock("../services/userScopedStorage", () => ({
 }));
 
 import {
+  DEFAULT_DOCK_OUTPUT_FONT_FAMILY,
   hydrateDockOutputTypographyPreferences,
   loadDockOutputFontFamily,
   loadDockOutputFontScale,
@@ -42,6 +43,30 @@ describe("dock OBS output typography persistence", () => {
 
     expect(loadDockOutputFontScale()).toBe(1.25);
     expect(storage.durable).toMatchObject({ fontScale: 1.25 });
+  });
+
+  it("defaults OBS output to CMG Sans when no preference exists", () => {
+    expect(loadDockOutputFontFamily()).toBe(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
+  });
+
+  it("migrates the old Noto Sans/default OBS values to CMG Sans", async () => {
+    storage.local = {
+      fontFamily: '"Noto Sans", "Segoe UI", sans-serif',
+      fontScale: 1,
+    };
+
+    const preferences = await hydrateDockOutputTypographyPreferences();
+    await Promise.resolve();
+
+    expect(preferences.fontFamily).toBe(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
+    expect(loadDockOutputFontFamily()).toBe(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
+    expect(storage.durable).toMatchObject({ fontFamily: DEFAULT_DOCK_OUTPUT_FONT_FAMILY });
+  });
+
+  it("treats an imported empty OBS family as the CMG Sans default", () => {
+    saveDockOutputFontFamily("");
+
+    expect(loadDockOutputFontFamily()).toBe(DEFAULT_DOCK_OUTPUT_FONT_FAMILY);
   });
 
   it("keeps the selected OBS font family in the durable preference record", async () => {
