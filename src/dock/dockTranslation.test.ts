@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getOrderedTranslationParts,
+  getDockTranslationSourceSignature,
   normalizeDockTranslationOrder,
 } from "./dockTranslation";
 
@@ -28,5 +29,12 @@ describe("dock translation ordering", () => {
   it("falls back to original-first for older saved translation state", () => {
     expect(normalizeDockTranslationOrder(undefined)).toBe("original-first");
     expect(normalizeDockTranslationOrder("unexpected")).toBe("original-first");
+  });
+
+  it("creates a stable source signature for a translated set of sections", () => {
+    expect(getDockTranslationSourceSignature([
+      { id: "slide-1", text: "First" },
+      { id: "slide-2", text: "Second" },
+    ])).toBe("slide-1:First\u001fslide-2:Second");
   });
 });

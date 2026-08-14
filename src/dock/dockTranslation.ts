@@ -1,9 +1,20 @@
 export type DockTranslationOrder = "original-first" | "translation-first";
 
+export interface DockTranslationSourceSection {
+  id: string;
+  text: string;
+}
+
 export type DockTranslationPart = {
   kind: "original" | "translation";
   text: string;
 };
+
+export function getDockTranslationSourceSignature(
+  sections: readonly DockTranslationSourceSection[],
+): string {
+  return sections.map((section) => `${section.id}:${section.text}`).join("\u001f");
+}
 
 export function normalizeDockTranslationOrder(value: unknown): DockTranslationOrder {
   return value === "translation-first" ? "translation-first" : "original-first";

@@ -8,7 +8,11 @@ import {
   translateWithGoogleWeb,
   type GoogleTranslateLanguage,
 } from "../../services/googleTranslateWeb";
-import { normalizeDockTranslationOrder, type DockTranslationOrder } from "../dockTranslation";
+import {
+  getDockTranslationSourceSignature,
+  normalizeDockTranslationOrder,
+  type DockTranslationOrder,
+} from "../dockTranslation";
 import "./DockTranslationControls.css";
 
 export type { DockTranslationOrder } from "../dockTranslation";
@@ -24,6 +28,7 @@ export interface DockTranslationValue {
   translatedSections: Record<string, string>;
   showBoth: boolean;
   translationOrder: DockTranslationOrder;
+  sourceSignature?: string;
 }
 
 interface Props {
@@ -39,10 +44,9 @@ export default function DockTranslationControls({ sections, value, onChange, com
   const triggerRef = useRef<HTMLButtonElement>(null);
   const languageTriggerRef = useRef<HTMLButtonElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
-  const onChangeRef = useRef(onChange);
   const requestIdRef = useRef(0);
   const sourceSignature = useMemo(
-    () => sections.map((section) => `${section.id}:${section.text}`).join("\u001f"),
+    () => getDockTranslationSourceSignature(sections),
     [sections],
   );
   const [open, setOpen] = useState(false);
@@ -62,10 +66,10 @@ export default function DockTranslationControls({ sections, value, onChange, com
   } | null>(null);
 
   useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
+    // A source change invalidates an in-flight request, but it must not clear
+    // the parent's completed translation. The owner of the source (Notes or
+    // Worship) decides whether the current translation is still applicable.
+    requestIdRef.current += 1;
     setLanguageMenuOpen(false);
     setLanguageQuery("");
     setTargetLanguage("en");
@@ -73,7 +77,6 @@ export default function DockTranslationControls({ sections, value, onChange, com
     setTranslationOrder("original-first");
     setLoading(false);
     setError("");
-    onChangeRef.current(null);
   }, [sourceSignature]);
 
   useEffect(() => {
@@ -190,6 +193,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
         translatedSections: Object.fromEntries(translatedEntries),
         showBoth,
         translationOrder,
+        sourceSignature,
       });
     } catch (cause) {
       if (requestId !== requestIdRef.current) return;

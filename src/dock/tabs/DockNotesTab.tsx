@@ -25,7 +25,11 @@ import DockOutputQuickActions, {
 } from "../components/DockOutputQuickActions";
 import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
-import { getOrderedTranslationParts, normalizeDockTranslationOrder } from "../dockTranslation";
+import {
+  getDockTranslationSourceSignature,
+  getOrderedTranslationParts,
+  normalizeDockTranslationOrder,
+} from "../dockTranslation";
 import {
   DOCK_NOTES_KEY,
   DOCK_NOTES_BROADCAST_CHANNEL,
@@ -243,6 +247,49 @@ function getNoteQuickSettings(
 
 type ToastTone = "info" | "success" | "error";
 
+const DOCK_NOTES_TRANSLATIONS_KEY = "ocs-dock-notes-translations-v1";
+type StoredDockNoteTranslations = Record<string, DockTranslationValue>;
+
+function isStoredDockTranslation(value: unknown): value is DockTranslationValue {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DockTranslationValue>;
+  const translatedSections = candidate.translatedSections as Record<string, unknown> | undefined;
+  return typeof candidate.targetLanguage === "string"
+    && typeof candidate.targetLanguageLabel === "string"
+    && typeof translatedSections === "object"
+    && translatedSections !== null
+    && Object.values(translatedSections).every((text) => typeof text === "string")
+    && typeof candidate.showBoth === "boolean"
+    && (candidate.translationOrder === "original-first" || candidate.translationOrder === "translation-first");
+}
+
+function loadDockNoteTranslations(): StoredDockNoteTranslations {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_TRANSLATIONS_KEY));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => isStoredDockTranslation(value)),
+    ) as StoredDockNoteTranslations;
+  } catch {
+    return {};
+  }
+}
+
+function saveDockNoteTranslation(noteId: string, translation: DockTranslationValue | null): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const stored = loadDockNoteTranslations();
+    if (translation) stored[noteId] = translation;
+    else delete stored[noteId];
+    localStorage.setItem(getUserScopedKey(DOCK_NOTES_TRANSLATIONS_KEY), JSON.stringify(stored));
+  } catch {
+    // Ignore storage failures in embedded browser contexts.
+  }
+}
+
 export default function DockNotesTab({
   onStage,
   isActive,
@@ -329,6 +376,14 @@ export default function DockNotesTab({
     () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide) : []),
     [notesLinesPerSlide, selectedNote],
   );
+  const notesTranslationSourceSignature = useMemo(
+    () => getDockTranslationSourceSignature(selectedNoteSlides),
+    [selectedNoteSlides],
+  );
+  const effectiveNotesTranslation = useMemo(
+    () => notesTranslation?.sourceSignature === notesTranslationSourceSignature ? notesTranslation : null,
+    [notesTranslation, notesTranslationSourceSignature],
+  );
   const filteredNoteSlides = useMemo(() => {
     const query = noteSlidesSearchQuery.trim().toLocaleLowerCase();
     return selectedNoteSlides
@@ -352,9 +407,12 @@ export default function DockNotesTab({
 
   useEffect(() => {
     notesTranslationChangeRef.current = false;
-    setNotesTranslation(null);
+    const stored = selectedNote ? loadDockNoteTranslations()[selectedNote.id] : null;
+    const nextTranslation = stored?.sourceSignature === notesTranslationSourceSignature ? stored : null;
+    if (selectedNote && stored && !nextTranslation) saveDockNoteTranslation(selectedNote.id, null);
+    setNotesTranslation(nextTranslation);
     setNoteSlidesSearchQuery("");
-  }, [selectedNote?.id]);
+  }, [notesTranslationSourceSignature, selectedNote?.id]);
 
   const activeSlideIndex = useMemo(() => {
     if (selectedSlideIdx !== null && selectedSlideIdx < selectedNoteSlides.length) return selectedSlideIdx;
@@ -589,8 +647,20 @@ export default function DockNotesTab({
     setSelectedSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
     setVisibleSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
     setNotesTranslation(null);
+    saveDockNoteTranslation(selectedNote.id, null);
     showToast(t("notes.slideDeleted"), "info");
   }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
+
+  const handleNotesTranslationChange = useCallback((next: DockTranslationValue | null) => {
+    notesTranslationChangeRef.current = true;
+    setNotesTranslation(next);
+    if (selectedNote?.id) {
+      saveDockNoteTranslation(
+        selectedNote.id,
+        next?.sourceSignature === notesTranslationSourceSignature ? next : null,
+      );
+    }
+  }, [notesTranslationSourceSignature, selectedNote?.id]);
 
   const buildNoteObsPayload = useCallback(
     (idx: number) => {
@@ -602,8 +672,8 @@ export default function DockNotesTab({
       const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
       const themeSettings = quickSettings ?? theme.settings;
       const slideText = normalizeDockMultilineText(slide.text);
-      const translatedText = normalizeDockMultilineText(notesTranslation?.translatedSections[slide.id] ?? "").trim();
-      const showBoth = Boolean(notesTranslation?.showBoth && translatedText);
+      const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
+      const showBoth = Boolean(effectiveNotesTranslation?.showBoth && translatedText);
       const sectionText = showBoth ? slideText : (translatedText || slideText);
       const translationText = showBoth ? translatedText : "";
       return {
@@ -614,7 +684,7 @@ export default function DockNotesTab({
           data: {
             sectionText,
             translationText,
-            translationOrder: normalizeDockTranslationOrder(notesTranslation?.translationOrder),
+            translationOrder: normalizeDockTranslationOrder(effectiveNotesTranslation?.translationOrder),
             sectionLabel: slide.label,
             note: selectedNote,
             slideIdx: idx,
@@ -625,7 +695,7 @@ export default function DockNotesTab({
         obsData: {
           sectionText,
           translationText,
-          translationOrder: normalizeDockTranslationOrder(notesTranslation?.translationOrder),
+          translationOrder: normalizeDockTranslationOrder(effectiveNotesTranslation?.translationOrder),
           sectionLabel: slide.label || selectedNoteDisplayTitle,
           songTitle: selectedNoteDisplayTitle,
           overlayMode,
@@ -635,7 +705,7 @@ export default function DockNotesTab({
         },
       };
     },
-    [selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, notesTranslation, overlayMode, selectedFSTheme, selectedLTTheme, fullscreenQuickSettings, lowerThirdQuickSettings],
+    [selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, effectiveNotesTranslation, overlayMode, selectedFSTheme, selectedLTTheme, fullscreenQuickSettings, lowerThirdQuickSettings],
   );
 
   const pushNoteSlide = useCallback(
@@ -754,7 +824,7 @@ export default function DockNotesTab({
     notesTranslationChangeRef.current = false;
     if (activeSlideIndex === null || !overlayVisible || visibleSlideIdx === null) return;
     pushNoteSlide(activeSlideIndex);
-  }, [activeSlideIndex, notesTranslation, overlayVisible, pushNoteSlide, visibleSlideIdx]);
+  }, [activeSlideIndex, effectiveNotesTranslation, overlayVisible, pushNoteSlide, visibleSlideIdx]);
 
   const handleClear = useCallback(async () => {
     setActionError("");
@@ -967,11 +1037,8 @@ export default function DockNotesTab({
                 <DockTranslationControls
                   compact
                   sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
-                  value={notesTranslation}
-                  onChange={(next) => {
-                    notesTranslationChangeRef.current = true;
-                    setNotesTranslation(next);
-                  }}
+                  value={effectiveNotesTranslation}
+                  onChange={handleNotesTranslationChange}
                 />
                 <DockAutoAdvanceControl
                   items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
@@ -1045,9 +1112,9 @@ export default function DockNotesTab({
                         </div>
                         {getOrderedTranslationParts(
                           slide.text,
-                          normalizeDockMultilineText(notesTranslation?.translatedSections[slide.id] ?? ""),
-                          notesTranslation?.showBoth ?? false,
-                          notesTranslation?.translationOrder,
+                          normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? ""),
+                          effectiveNotesTranslation?.showBoth ?? false,
+                          effectiveNotesTranslation?.translationOrder,
                         ).map((part, partIndex) => (
                           <div
                             key={`${slide.id}-${part.kind}-${partIndex}`}

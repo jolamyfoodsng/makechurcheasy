@@ -75,7 +75,11 @@ import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import DockNotesTab from "./DockNotesTab";
 import { BulkImportDocumentFlow } from "../../worship/BulkImportDocumentFlow";
-import { getOrderedTranslationParts, normalizeDockTranslationOrder } from "../dockTranslation";
+import {
+  getDockTranslationSourceSignature,
+  getOrderedTranslationParts,
+  normalizeDockTranslationOrder,
+} from "../dockTranslation";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 
 interface Props {
@@ -1364,6 +1368,14 @@ export default function DockWorshipTab({
       : []),
     [effectiveLyrics, effectiveLinesPerSlide, linesPerSlideOverride, selectedSong, shouldSplitByLineCount],
   );
+  const worshipTranslationSourceSignature = useMemo(
+    () => getDockTranslationSourceSignature(selectedSongSections),
+    [selectedSongSections],
+  );
+  const effectiveWorshipTranslation = useMemo(
+    () => worshipTranslation?.sourceSignature === worshipTranslationSourceSignature ? worshipTranslation : null,
+    [worshipTranslation, worshipTranslationSourceSignature],
+  );
 
   const totalLyricLines = useMemo(
     () => selectedSongSections.reduce((total, section) => {
@@ -1989,11 +2001,11 @@ export default function DockWorshipTab({
       const backgroundOnly = options?.backgroundOnly ?? showWorshipBackgroundOnly;
       const presentationMeta = options?.showPresentationMeta ?? showPresentationMeta;
       const sectionTextSource = normalizeDockMultilineText(section.text);
-      const translatedSectionText = getWorshipSectionTranslation(section.id, worshipTranslation);
-      const showBoth = Boolean(worshipTranslation?.showBoth && translatedSectionText);
+      const translatedSectionText = getWorshipSectionTranslation(section.id, effectiveWorshipTranslation);
+      const showBoth = Boolean(effectiveWorshipTranslation?.showBoth && translatedSectionText);
       const sectionText = showBoth ? sectionTextSource : (translatedSectionText || sectionTextSource);
       const translationText = showBoth ? translatedSectionText : "";
-      const translationOrder = normalizeDockTranslationOrder(worshipTranslation?.translationOrder);
+      const translationOrder = normalizeDockTranslationOrder(effectiveWorshipTranslation?.translationOrder);
 
       const stageData = {
         song: selectedSong,
@@ -2045,7 +2057,7 @@ export default function DockWorshipTab({
       selectedSongSections,
       showPresentationMeta,
       showWorshipBackgroundOnly,
-      worshipTranslation,
+      effectiveWorshipTranslation,
     ],
   );
 
@@ -2403,7 +2415,7 @@ export default function DockWorshipTab({
       || visibleIdx === null
     ) return;
     void goLiveSection(activeSectionIndex);
-  }, [activeSectionIndex, goLiveSection, visibleIdx, worshipOverlayVisible, worshipTranslation]);
+  }, [activeSectionIndex, effectiveWorshipTranslation, goLiveSection, visibleIdx, worshipOverlayVisible]);
 
   const handleSaveFullscreenQuickThemeSettings = useCallback((nextSettings: DockFullscreenQuickThemeSettings) => {
     const nextSavedSettings = { ...nextSettings };
@@ -2516,8 +2528,10 @@ export default function DockWorshipTab({
     setDeletedSections([]);
     setShowDeletedSectionsPopover(false);
     worshipTranslationChangeRef.current = false;
-    setWorshipTranslation(null);
-  }, [selectedSong?.id]);
+    setWorshipTranslation((current) => (
+      current?.sourceSignature === worshipTranslationSourceSignature ? current : null
+    ));
+  }, [selectedSong?.id, worshipTranslationSourceSignature]);
 
   const handleSectionClick = useCallback(
     (idx: number) => {
@@ -3216,7 +3230,7 @@ export default function DockWorshipTab({
                     <DockTranslationControls
                       compact
                       sections={selectedSongSections.map((section) => ({ id: section.id, text: section.text }))}
-                      value={worshipTranslation}
+                      value={effectiveWorshipTranslation}
                       onChange={(next) => {
                         worshipTranslationChangeRef.current = true;
                         setWorshipTranslation(next);
@@ -3324,9 +3338,9 @@ export default function DockWorshipTab({
                             </div>
                             {getOrderedTranslationParts(
                               normalizeDockMultilineText(section.text),
-                              getWorshipSectionTranslation(section.id, worshipTranslation),
-                              worshipTranslation?.showBoth ?? false,
-                              worshipTranslation?.translationOrder,
+                              getWorshipSectionTranslation(section.id, effectiveWorshipTranslation),
+                              effectiveWorshipTranslation?.showBoth ?? false,
+                              effectiveWorshipTranslation?.translationOrder,
                             ).map((part, partIndex) => (
                               <div
                                 key={`${section.id}-${part.kind}-${partIndex}`}
