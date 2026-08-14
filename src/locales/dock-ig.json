@@ -177,6 +177,8 @@
   "bible.historySort": "Ụdị",
   "bible.installed": "Wụnye ya",
   "bible.keywordMatch": "Okwu Mmakọ",
+  "bible.keywordMatchDirectPush": "Zipụ dakọtara mkpụrụokwu ozugbo na OBS",
+  "bible.keywordMatchDirectPushDescription": "Mafee igbe nkwenye oge ọzọ.",
   "bible.letterSpacing": "Ọpụpụ akwụkwọ ozi",
   "bible.lineCount": "Ọnụ ọgụgụ ahịrị Bible",
   "bible.lineCountPopoverDesc": "Ọnụọgụ ahịrị amaokwu nke egosiri n'otu mkpuchi",

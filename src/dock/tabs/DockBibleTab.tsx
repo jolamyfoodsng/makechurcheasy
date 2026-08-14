@@ -87,6 +87,7 @@ import {
   buildBibleVerseClipboardText,
   copyTextToClipboard,
 } from "../bibleClipboard";
+import { getDockBibleKeywordMatchOutputOptions } from "../dockKeywordMatch";
 
 const BIBLE_BOOK_ORDER = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -187,6 +188,7 @@ interface DockBiblePreferences {
   lowerThirdQuickThemeSettingsLinkedToFullscreen?: boolean;
   referenceFormat?: BibleReferenceFormat;
   referenceVersionVisible?: boolean;
+  keywordMatchPushDirectlyToObs?: boolean;
   selectedBook?: string;
   selectedChapter?: number;
   updatedAt?: string;
@@ -360,6 +362,8 @@ interface BibleOutputControlsMenuProps {
   onReferenceBackgroundChange: (enabled: boolean) => void;
   onLineCountChange: (lineCount: number) => void;
   onUpdateImmediatelyChange: (checked: boolean) => void;
+  keywordMatchPushDirectlyToObs: boolean;
+  onKeywordMatchPushDirectlyToObsChange: (checked: boolean) => void;
   onSave: () => void;
 }
 
@@ -383,6 +387,8 @@ function BibleOutputControlsMenu({
   onReferenceBackgroundChange,
   onLineCountChange,
   onUpdateImmediatelyChange,
+  keywordMatchPushDirectlyToObs,
+  onKeywordMatchPushDirectlyToObsChange,
   onSave,
 }: BibleOutputControlsMenuProps) {
   const { t } = useTranslation();
@@ -542,14 +548,30 @@ function BibleOutputControlsMenu({
         </label>
       </div>
       <div className="dock-bible-reader__font-size-menu-footer">
-        <label className="dock-bible-reader__font-size-checkbox">
-          <input
-            type="checkbox"
-            checked={browserQuickUpdateImmediately}
-            onChange={(event) => onUpdateImmediatelyChange(event.target.checked)}
-          />
-          <span>{t("bible.updateImmediately", "Update Immediately")}</span>
-        </label>
+        <div className="dock-bible-reader__font-size-menu-preferences">
+          <label className="dock-bible-reader__font-size-checkbox">
+            <input
+              type="checkbox"
+              checked={browserQuickUpdateImmediately}
+              onChange={(event) => onUpdateImmediatelyChange(event.target.checked)}
+            />
+            <span>{t("bible.updateImmediately", "Update Immediately")}</span>
+          </label>
+          <label className="dock-bible-reader__font-size-checkbox dock-bible-reader__font-size-checkbox--stacked">
+            <input
+              type="checkbox"
+              checked={keywordMatchPushDirectlyToObs}
+              onChange={(event) => onKeywordMatchPushDirectlyToObsChange(event.target.checked)}
+              aria-describedby="bible-keyword-match-direct-push-description"
+            />
+            <span className="dock-bible-reader__font-size-checkbox-copy">
+              <span>{t("bible.keywordMatchDirectPush", "Push keyword matches directly to OBS")}</span>
+              <small id="bible-keyword-match-direct-push-description">
+                {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
+              </small>
+            </span>
+          </label>
+        </div>
         {!browserQuickUpdateImmediately && (
           <button
             type="button"
@@ -1436,6 +1458,9 @@ export default function DockBibleTab({
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [keywordActionResult, setKeywordActionResult] = useState<Extract<DockBibleSearchOption, { kind: "keyword" | "concept" }> | null>(null);
+  const [keywordMatchPushDirectlyToObs, setKeywordMatchPushDirectlyToObs] = useState(
+    () => initialPrefs.keywordMatchPushDirectlyToObs === true,
+  );
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentBibleSearches());
   const [activeIdx, setActiveIdx] = useState(-1);
   const [keywordResults, setKeywordResults] = useState<BibleKeywordResult[]>([]);
@@ -1819,6 +1844,7 @@ export default function DockBibleTab({
       setCompareLayout(prefs.compareLayout ?? "line-by-line");
       setReferenceFormat(sanitizeBibleReferenceFormat(prefs.referenceFormat));
       setReferenceVersionVisible(sanitizeReferenceVersionVisible(prefs.referenceVersionVisible));
+      setKeywordMatchPushDirectlyToObs(prefs.keywordMatchPushDirectlyToObs === true);
       setTranslationA(prefs.translationA ?? "KJV");
       setTranslationB(prefs.translationB ?? "NIV");
       setColumnTranslations(
@@ -1921,6 +1947,7 @@ export default function DockBibleTab({
         compareLayout,
         referenceFormat,
         referenceVersionVisible,
+        keywordMatchPushDirectlyToObs,
         verseLineCount,
         fullscreenThemeId: selectedBibleTheme.id,
         lowerThirdThemeId: selectedLowerThirdTheme.id,
@@ -1940,6 +1967,7 @@ export default function DockBibleTab({
     translationB,
     compareEnabled,
     compareLayout,
+    keywordMatchPushDirectlyToObs,
     referenceFormat,
     referenceVersionVisible,
     savedLowerThirdQuickThemeSettings,
@@ -2166,6 +2194,7 @@ export default function DockBibleTab({
       compareLayout,
       referenceFormat,
       referenceVersionVisible,
+      keywordMatchPushDirectlyToObs,
       verseLineCount,
       fullscreenThemeId: selectedBibleThemeRef.current.id,
       lowerThirdThemeId: selectedLowerThirdThemeRef.current.id,
@@ -2182,6 +2211,7 @@ export default function DockBibleTab({
     columnTranslations,
     compareEnabled,
     compareLayout,
+    keywordMatchPushDirectlyToObs,
     displayMode,
     referenceFormat,
     referenceVersionVisible,
@@ -3345,6 +3375,11 @@ export default function DockBibleTab({
     }
   }, [hasPendingBrowserQuickChanges, saveBrowserQuickSettings]);
 
+  const handleKeywordMatchPushDirectlyToObsChange = useCallback((checked: boolean) => {
+    setKeywordMatchPushDirectlyToObs(checked);
+    persistDockBiblePreferencesNow({ keywordMatchPushDirectlyToObs: checked });
+  }, [persistDockBiblePreferencesNow]);
+
   const persistQuickActionsPosition = useCallback((top: number, left: number | null) => {
     const nextKey = `${Math.round(top)}:${left === null ? "right" : Math.round(left)}`;
     if (quickActionsLastSavedPositionRef.current === nextKey) return;
@@ -3942,13 +3977,19 @@ export default function DockBibleTab({
       setActiveIdx(-1);
 
       if (result.kind === "keyword" || result.kind === "concept") {
-        const impliedLineCount = clampVerseLineCount(
-          result.endVerse && result.endVerse > result.verse
-            ? result.endVerse - result.verse + 1
-            : 1,
-        );
+        const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(result, MAX_VERSE_LINES);
+        const impliedLineCount = keywordOutputOptions.lineCount;
         setVerseLineCount(impliedLineCount);
         focusReference(result.book, result.chapter, result.verse);
+        if (keywordMatchPushDirectlyToObs) {
+          setKeywordActionResult(null);
+          await goLiveVerse(result.book, result.chapter, result.verse, {
+            translation: activeTranslation,
+            lineCount: keywordOutputOptions.lineCount,
+            rangeEndVerse: keywordOutputOptions.rangeEndVerse,
+          });
+          return;
+        }
         setKeywordActionResult(result);
         return;
       } else if (result.chapter !== null && result.verse !== null) {
@@ -3974,7 +4015,14 @@ export default function DockBibleTab({
         pendingScrollVerseRef.current = null;
       }
     },
-    [activeColumnIndex, activeTranslation, focusReference, stageVerse]
+    [
+      activeColumnIndex,
+      activeTranslation,
+      focusReference,
+      goLiveVerse,
+      keywordMatchPushDirectlyToObs,
+      stageVerse,
+    ]
   );
 
   const applyRecentBibleSearch = useCallback(
@@ -5614,6 +5662,8 @@ export default function DockBibleTab({
             onReferenceBackgroundChange={handleBrowserReferenceBackgroundChange}
             onLineCountChange={handleBrowserVerseLineCountChange}
             onUpdateImmediatelyChange={handleBrowserQuickUpdateImmediatelyChange}
+            keywordMatchPushDirectlyToObs={keywordMatchPushDirectlyToObs}
+            onKeywordMatchPushDirectlyToObsChange={handleKeywordMatchPushDirectlyToObsChange}
             onSave={saveBrowserQuickSettings}
           />
         </div>
@@ -5749,18 +5799,28 @@ export default function DockBibleTab({
                 <div className="dock-bible-keyword-modal__text">
                   {renderHighlightedKeywordText(keywordActionResult.text, keywordActionResult.query)}
                 </div>
+                <label className="dock-bible-keyword-modal__direct-push">
+                  <input
+                    type="checkbox"
+                    checked={keywordMatchPushDirectlyToObs}
+                    onChange={(event) => handleKeywordMatchPushDirectlyToObsChange(event.target.checked)}
+                    aria-describedby="dock-bible-keyword-direct-push-description"
+                  />
+                  <span className="dock-bible-keyword-modal__direct-push-copy">
+                    <span>{t("bible.keywordMatchDirectPush", "Push keyword matches directly to OBS")}</span>
+                    <small id="dock-bible-keyword-direct-push-description">
+                      {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
+                    </small>
+                  </span>
+                </label>
               </div>
               <div className="dock-dialog__footer dock-bible-keyword-modal__footer">
                 <button
                   type="button"
                   className="dock-btn dock-btn--ghost dock-btn--compact"
                   onClick={() => {
-                    const impliedLineCount = clampVerseLineCount(
-                      keywordActionResult.endVerse && keywordActionResult.endVerse > keywordActionResult.verse
-                        ? keywordActionResult.endVerse - keywordActionResult.verse + 1
-                        : 1,
-                    );
-                    setVerseLineCount(impliedLineCount);
+                    const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
+                    setVerseLineCount(keywordOutputOptions.lineCount);
                     focusReference(keywordActionResult.book, keywordActionResult.chapter, keywordActionResult.verse);
                     setKeywordActionResult(null);
                     window.setTimeout(() => {
@@ -5786,18 +5846,15 @@ export default function DockBibleTab({
                   type="button"
                   className="dock-btn dock-btn--primary dock-btn--compact"
                   onClick={() => {
+                    const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
                     void goLiveVerse(
                       keywordActionResult.book,
                       keywordActionResult.chapter,
                       keywordActionResult.verse,
                       {
                         translation: activeTranslation,
-                        lineCount: clampVerseLineCount(
-                          keywordActionResult.endVerse && keywordActionResult.endVerse > keywordActionResult.verse
-                            ? keywordActionResult.endVerse - keywordActionResult.verse + 1
-                            : 1,
-                        ),
-                        rangeEndVerse: keywordActionResult.endVerse ?? null,
+                        lineCount: keywordOutputOptions.lineCount,
+                        rangeEndVerse: keywordOutputOptions.rangeEndVerse,
                       },
                     );
                     setKeywordActionResult(null);

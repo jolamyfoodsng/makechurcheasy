@@ -177,6 +177,8 @@
   "bible.historySort": ".",
   "bible.installed": "SHINE",
   "bible.keywordMatch": "Daidaita Mahimman kalmomi",
+  "bible.keywordMatchDirectPush": "Aika sakamakon kalmomi kai tsaye zuwa OBS",
+  "bible.keywordMatchDirectPushDescription": "Tsallake taga tabbatarwa a gaba.",
   "bible.letterSpacing": "Tazarar wasiƙa",
   "bible.lineCount": "Ƙididdigar layin Littafi Mai Tsarki",
   "bible.lineCountPopoverDesc": "Adadin layukan aya da aka nuna kowane mai rufi",

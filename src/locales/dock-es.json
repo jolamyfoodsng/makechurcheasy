@@ -177,6 +177,8 @@
   "bible.historySort": "Ordenar",
   "bible.installed": "INSTALADO",
   "bible.keywordMatch": "Concordancia de palabras clave",
+  "bible.keywordMatchDirectPush": "Enviar coincidencias de palabras clave directamente a OBS",
+  "bible.keywordMatchDirectPushDescription": "Omitir el cuadro de confirmación la próxima vez.",
   "bible.letterSpacing": "Espaciado entre letras",
   "bible.lineCount": "Recuento de líneas de la Biblia",
   "bible.lineCountPopoverDesc": "Número de líneas de verso mostradas por superposición",

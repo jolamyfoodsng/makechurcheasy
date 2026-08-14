@@ -191,6 +191,8 @@
   "bible.historySort": "Sort",
   "bible.installed": "INSTALLED",
   "bible.keywordMatch": "Keyword Match",
+  "bible.keywordMatchDirectPush": "Push keyword matches directly to OBS",
+  "bible.keywordMatchDirectPushDescription": "Skip the confirmation modal next time.",
   "bible.kjv": "KJV",
   "bible.letterSpacing": "Letter Spacing",
   "bible.lineCount": "Bible line count",

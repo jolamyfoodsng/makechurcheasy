@@ -177,6 +177,8 @@
   "bible.historySort": "Nkyekyɛmu",
   "bible.installed": "WƆDE SI HƆ",
   "bible.keywordMatch": "Nsɛmfua titiriw a ɛne ne ho hyia",
+  "bible.keywordMatchDirectPush": "Fa nsɛmfua titiriw a ɛne ne ho hyia no kɔ OBS tee",
+  "bible.keywordMatchDirectPushDescription": "Twa saa nkɔmmɔbɔ no so bere a edi hɔ.",
   "bible.letterSpacing": "Nkrataa Ntam Ntrɛwmu",
   "bible.lineCount": "Bible mu nkyerɛwde dodow",
   "bible.lineCountPopoverDesc": "Nkyekyem nkyerɛwde dodow a wɔakyerɛ wɔ nkataso biara mu",

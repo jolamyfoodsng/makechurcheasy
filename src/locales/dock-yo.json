@@ -177,6 +177,8 @@
   "bible.historySort": "Too",
   "bible.installed": "Ti fi sori ẹrọ",
   "bible.keywordMatch": "Koko Baramu",
+  "bible.keywordMatchDirectPush": "Fi awọn ibamu ọrọ pataki ranṣẹ taara si OBS",
+  "bible.keywordMatchDirectPushDescription": "Foju apoti ìmúdájú ni igba miiran.",
   "bible.letterSpacing": "Aaye aaye lẹta",
   "bible.lineCount": "Awọn nọmba ila Bibeli",
   "bible.lineCountPopoverDesc": "Nọmba awọn ila ẹsẹ ti o han fun agbekọja",
