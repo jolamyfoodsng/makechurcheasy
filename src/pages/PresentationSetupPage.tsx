@@ -182,11 +182,9 @@ function getStatusLabel(status: DockObsStatus): string {
 function PresentationModeChooser({
   onBack,
   onUseBrowserLink,
-  onUseRemoteObs,
 }: {
   onBack: () => void;
   onUseBrowserLink: () => void;
-  onUseRemoteObs: () => void;
 }) {
   return (
     <div className="remote-presentation-page remote-presentation-page--centered">
@@ -200,7 +198,7 @@ function PresentationModeChooser({
           <p className="remote-eyebrow">Presentation</p>
           <h1 id="presentation-choice-title">Choose how you want to show the presentation</h1>
           <p>
-            Use the same dock controls, then choose whether the live screen should update a browser link or control OBS on another laptop.
+            Use the same dock controls, then choose whether the live screen should update a browser link.
           </p>
         </div>
 
@@ -223,27 +221,6 @@ function PresentationModeChooser({
             <button type="button" className="remote-primary-button" onClick={onUseBrowserLink}>
               <ExternalLink size={18} />
               Use Dock With Link
-            </button>
-          </article>
-
-          <article className="remote-choice-card">
-            <div className="remote-choice-card__icon remote-choice-card__icon--obs">
-              <MonitorUp size={28} />
-            </div>
-            <div className="remote-choice-card__body">
-              <h2>OBS On Another Laptop</h2>
-              <p>
-                Use this when OBS is running on Laptop 2. Connect to that OBS WebSocket target, then control it from this laptop.
-              </p>
-            </div>
-            <ul className="remote-choice-card__list">
-              <li>Connect to OBS on the second laptop</li>
-              <li>Use dock-style remote controls</li>
-              <li>Best for OBS-based broadcast output</li>
-            </ul>
-            <button type="button" className="remote-secondary-button remote-choice-card__button" onClick={onUseRemoteObs}>
-              <MonitorUp size={18} />
-              Set Up Remote OBS
             </button>
           </article>
         </div>
@@ -988,16 +965,11 @@ export default function PresentationSetupPage({
     navigate("/presentation/link", { replace: false });
   }, [navigate]);
 
-  const handleUseRemoteObs = useCallback(() => {
-    navigate("/presentation/remote-obs", { replace: false });
-  }, [navigate]);
-
   if (initialView === "choose") {
     return (
       <PresentationModeChooser
         onBack={handleBackHome}
         onUseBrowserLink={handleUseBrowserLink}
-        onUseRemoteObs={handleUseRemoteObs}
       />
     );
   }

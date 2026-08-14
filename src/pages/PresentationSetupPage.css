@@ -76,7 +76,7 @@
 }
 
 .remote-connect-card--choice {
-  width: min(980px, 100%);
+  width: min(720px, 100%);
 }
 
 .remote-connect-card__icon {
@@ -115,7 +115,7 @@
 
 .remote-choice-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 28px;
 }
@@ -140,11 +140,6 @@
   border-radius: 14px;
   background: rgba(29, 78, 216, 0.16);
   color: #93c5fd;
-}
-
-.remote-choice-card__icon--obs {
-  background: rgba(124, 58, 237, 0.16);
-  color: #d8b4fe;
 }
 
 .remote-choice-card__body h2 {
@@ -185,13 +180,6 @@
   height: 6px;
   border-radius: 999px;
   background: rgba(147, 197, 253, 0.9);
-}
-
-.remote-choice-card__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
 }
 
 .remote-connect-form {
