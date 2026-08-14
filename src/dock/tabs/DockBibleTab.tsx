@@ -60,6 +60,7 @@ import {
 } from "../lowerThirdQuickSettings";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 import { resolveInitialDockBibleCompareEnabled } from "../dockBibleComparePreferences";
+import { DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { trackBiblePresent } from "../../services/tracking";
@@ -182,13 +183,6 @@ const DEFAULT_BIBLE_REFERENCE_FORMAT: BibleReferenceFormat = "full";
 const QUICK_SELECT_VERSION_COUNT = 2;
 const MIN_COMPARE_PASSAGES = 2;
 const MAX_COMPARE_PASSAGES = 3;
-const LOWER_THIRD_QUICK_SIZE_OPTIONS = [
-  // The lower-third card remains full width; only the text area narrows as
-  // the selected text size grows so the verse stays visually strong.
-  { id: "big", labelKey: "bible.sizeLg", label: "LG", width: "xxl" },
-  { id: "bigger", labelKey: "bible.sizeXl", label: "XL", width: "xl" },
-  { id: "biggest", labelKey: "bible.sizeXxl", label: "XXL", width: "lg" },
-] as const;
 const MIN_DOCK_KEYWORD_SEARCH_LENGTH = 2;
 const DOCK_KEYWORD_SEARCH_LIMIT = 24;
 const DOCK_SEARCH_DEBOUNCE_MS = 300;
@@ -745,7 +739,7 @@ function extractFullscreenQuickThemeSettings(
   return {
     backgroundType: backgroundType ?? settings.backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
-    autoFontScale: settings.autoFontScale === true,
+    autoFontScale: settings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
     refFontSize: clampNumber(settings.refFontSize, 10, 150),
     refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
@@ -918,7 +912,9 @@ function sanitizeFullscreenQuickThemeSettings(
     // below are still normalized and validated before they reach OBS.
     ...source,
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
-    autoFontScale: source.autoFontScale === true,
+    autoFontScale: typeof source.autoFontScale === "boolean"
+      ? source.autoFontScale
+      : (DEFAULT_THEME_SETTINGS.autoFontScale ?? true),
     fontFamily: withScriptureFontFallback(
       typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
     ),
@@ -1073,7 +1069,7 @@ function applyFullscreenQuickThemeSettings(
       // a stale theme/background fallback from winning on the next verse.
       backgroundType: bgType,
       fontSize: quickSettings.fontSize,
-      autoFontScale: quickSettings.autoFontScale === true,
+      autoFontScale: quickSettings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
       fontFamily: quickSettings.fontFamily,
       refFontSize: quickSettings.refFontSize,
       fontColor: quickSettings.fontColor,

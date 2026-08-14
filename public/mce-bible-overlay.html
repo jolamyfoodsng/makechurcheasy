@@ -1211,7 +1211,7 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
-      let autoFontScaleEnabled = false;
+      let autoFontScaleEnabled = true;
       // Keep the fitted size stable between slides. A long verse may reduce
       // the size once, but a shorter verse must not grow it back immediately.
       let stableFullscreenTextSize = null;
@@ -2369,7 +2369,7 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
-        autoFontScaleEnabled = s.autoFontScale === true;
+        autoFontScaleEnabled = s.autoFontScale !== false;
         root.style.setProperty('--font-size', baseFontSize + 'px');
         root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');

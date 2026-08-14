@@ -6816,6 +6816,7 @@
   align-items: flex-start;
   gap: 4px;
   width: 100%;
+  min-width: 0;
   min-height: 35px;
   padding: 8px 36px 8px 8px;
   border: 0;
@@ -6903,8 +6904,12 @@
 }
 
 .dock-notes-card .dock-card__subtitle {
+  max-width: 100%;
   color: var(--dock-text);
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .dock-notes-text-tools {
@@ -18142,11 +18147,19 @@
   color: var(--dock-accent);
 }
 
-.dock-worship-slide-card__text {
+.dock-worship-slide-card__text,
+.dock-worship-slide-card__translation {
+  min-width: 0;
+  max-width: 100%;
   font-size: 14px;
   color: var(--dock-text);
   line-height: 1.5;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.dock-worship-slide-card__text {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;

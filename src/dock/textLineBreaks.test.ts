@@ -33,4 +33,12 @@ describe("Dock multiline text", () => {
       expect(cssBlock(overlay, ".compare-column__verse")).toContain("white-space: pre-line;");
     }
   });
+
+  it("gives Notes output text a real width so long words can wrap in OBS", () => {
+    expect(cssBlock(noteOverlay, "#verse-text")).toContain("width: 100%;");
+    expect(cssBlock(noteOverlay, "#verse-text")).toContain("overflow-wrap: anywhere;");
+    expect(cssBlock(noteOverlay, "#lt-verse-text")).toContain("width: 100%;");
+    expect(cssBlock(noteOverlay, "#lt-verse-text")).toContain("overflow-wrap: anywhere;");
+    expect(cssBlock(noteOverlay, ".compare-column__verse")).toContain("min-width: 0;");
+  });
 });

@@ -7,6 +7,13 @@ export type DockOutputQuickTextSettings = Pick<
   "fontSize" | "autoFontScale"
 >;
 
+export type DockOutputQuickSettingsPatch = Partial<DockFullscreenQuickThemeSettings>;
+
+export type DockOutputQuickSizePreset = {
+  id: string;
+  label: string;
+};
+
 export const DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP = 96;
 
 const QUICK_ACTIONS_MIN_TOP = 8;
@@ -28,7 +35,10 @@ interface DockOutputQuickActionsProps {
   top: number;
   left: number | null;
   onPositionChange: (top: number, left: number | null) => void;
-  onCommit: (patch: Partial<DockOutputQuickTextSettings>, lineCount?: number) => void;
+  onCommit: (patch: DockOutputQuickSettingsPatch, lineCount?: number) => void;
+  sizePresets?: readonly DockOutputQuickSizePreset[];
+  activeSizePreset?: string;
+  getSizePresetPatch?: (id: string) => DockOutputQuickSettingsPatch | null;
   onUpdateImmediatelyChange: (value: boolean) => void;
 }
 
@@ -124,10 +134,13 @@ export default function DockOutputQuickActions({
   left,
   onPositionChange,
   onCommit,
+  sizePresets,
+  activeSizePreset,
+  getSizePresetPatch,
   onUpdateImmediatelyChange,
 }: DockOutputQuickActionsProps) {
   const [open, setOpen] = useState(false);
-  const [draftSettings, setDraftSettings] = useState<Partial<DockOutputQuickTextSettings> | null>(null);
+  const [draftSettings, setDraftSettings] = useState<DockOutputQuickSettingsPatch | null>(null);
   const [draftLineCount, setDraftLineCount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ top: number; left: number } | null>(null);
@@ -177,7 +190,7 @@ export default function DockOutputQuickActions({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
-  const applySettingsPatch = useCallback((patch: Partial<DockOutputQuickTextSettings>) => {
+  const applySettingsPatch = useCallback((patch: DockOutputQuickSettingsPatch) => {
     if (updateImmediately) {
       onCommit(patch);
       return;
@@ -187,6 +200,16 @@ export default function DockOutputQuickActions({
       ...patch,
     }));
   }, [onCommit, settings, updateImmediately]);
+
+  const displayedSizePreset = typeof draftSettings?.lowerThirdSize === "string"
+    ? draftSettings.lowerThirdSize
+    : activeSizePreset;
+
+  const handleSizePresetChange = useCallback((id: string) => {
+    const patch = getSizePresetPatch?.(id);
+    if (!patch) return;
+    applySettingsPatch(patch);
+  }, [applySettingsPatch, getSizePresetPatch]);
 
   const applyLineCount = useCallback((nextLineCount: number) => {
     const next = Math.min(Math.max(1, Math.trunc(nextLineCount)), maxLineCount);
@@ -325,6 +348,28 @@ export default function DockOutputQuickActions({
               <span className="dtb-toggle__knob" />
             </button>
           </div>
+
+          {displayedSettings.autoFontScale && sizePresets && sizePresets.length > 0 && getSizePresetPatch && (
+            <div className="dock-bible-reader__font-size-field">
+              <span className="dock-bible-reader__font-size-field-label">Text size</span>
+              <small>Larger text uses a narrower frame.</small>
+              <div className="dock-bible-reader__size-presets" role="group" aria-label="Text size">
+                {sizePresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`dock-bible-reader__size-preset${
+                      displayedSizePreset === preset.id ? " dock-bible-reader__size-preset--active" : ""
+                    }`}
+                    onClick={() => handleSizePresetChange(preset.id)}
+                    aria-pressed={displayedSizePreset === preset.id}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="dock-bible-reader__font-size-field">
             <span className="dock-bible-reader__font-size-field-label">{textLabel}</span>

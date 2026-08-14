@@ -54,7 +54,7 @@ import DockTranslationControls, {
 import DockAutoAdvanceControl from "../components/DockAutoAdvanceControl";
 import DockOutputQuickActions, {
   DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
-  type DockOutputQuickTextSettings,
+  type DockOutputQuickSettingsPatch,
 } from "../components/DockOutputQuickActions";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import { requireEntitlement } from "../dockEntitlement";
@@ -820,7 +820,7 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
   const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
   return {
     fontSize: clampNumber(settings.fontSize, 28, 200),
-    autoFontScale: settings.autoFontScale === true,
+    autoFontScale: settings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
     refFontSize: clampNumber(settings.refFontSize, 14, 150),
     refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
@@ -918,7 +918,9 @@ function sanitizeQuickThemeSettings(
     // dropping them the next time the dock hydrates and saves preferences.
     ...source,
     fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
-    autoFontScale: source.autoFontScale === true,
+    autoFontScale: typeof source.autoFontScale === "boolean"
+      ? source.autoFontScale
+      : (DEFAULT_THEME_SETTINGS.autoFontScale ?? true),
     fontFamily: withScriptureFontFallback(
       typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
     ),
@@ -1055,7 +1057,7 @@ function applyQuickThemeSettings(
     settings: {
       ...theme.settings,
       fontSize: quickSettings.fontSize,
-      autoFontScale: quickSettings.autoFontScale === true,
+      autoFontScale: quickSettings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
       fontFamily: quickSettings.fontFamily,
       refFontSize: quickSettings.refFontSize,
       fontColor: quickSettings.fontColor,
@@ -1874,7 +1876,7 @@ export default function DockWorshipTab({
   const activeWorshipQuickSettings = fullscreenOnlyMode || overlayMode === "fullscreen"
     ? activeFullscreenQuickThemeSettings
     : activeLowerThirdQuickThemeSettings;
-  const handleWorshipQuickCommit = useCallback((patch: Partial<DockOutputQuickTextSettings>, nextLineCount?: number) => {
+  const handleWorshipQuickCommit = useCallback((patch: DockOutputQuickSettingsPatch, nextLineCount?: number) => {
     const nextFullscreenSettings = {
       ...(fullscreenQuickThemeSettings ?? defaultFullscreenQuickThemeSettings),
       ...patch,

@@ -5,7 +5,7 @@ import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import { dockObsClient, type DockTabContentPushData } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
-import type { BibleTheme } from "../../bible/types";
+import { LOWER_THIRD_SIZE_PRESETS, type BibleTheme } from "../../bible/types";
 import {
   extractStructuredTextTitle,
   parseWorshipSectionLabelLine,
@@ -21,8 +21,10 @@ import DockTranslationControls, {
 import DockAutoAdvanceControl from "../components/DockAutoAdvanceControl";
 import DockOutputQuickActions, {
   DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
+  type DockOutputQuickSettingsPatch,
   type DockOutputQuickTextSettings,
 } from "../components/DockOutputQuickActions";
+import { DOCK_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
@@ -241,7 +243,7 @@ function getNoteQuickSettings(
   const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
   return {
     fontSize: quickSettings?.fontSize ?? theme.settings.fontSize,
-    autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? false,
+    autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true,
   };
 }
 
@@ -670,7 +672,10 @@ export default function DockNotesTab({
       const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
-      const themeSettings = quickSettings ?? theme.settings;
+      const themeSettings = {
+        ...(quickSettings ?? theme.settings),
+        autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true,
+      };
       const slideText = normalizeDockMultilineText(slide.text);
       const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
       const showBoth = Boolean(effectiveNotesTranslation?.showBoth && translatedText);
@@ -784,11 +789,23 @@ export default function DockNotesTab({
     [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme],
   );
 
-  const handleNotesQuickCommit = useCallback((patch: Partial<DockOutputQuickTextSettings>, nextLineCount?: number) => {
+  const handleNotesQuickCommit = useCallback((patch: DockOutputQuickSettingsPatch, nextLineCount?: number) => {
     const fullscreenBase = fullscreenQuickSettings
-      ?? (getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings as unknown as DockFullscreenQuickThemeSettings);
+      ?? (() => {
+        const settings = getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings;
+        return {
+          ...(settings as unknown as DockFullscreenQuickThemeSettings),
+          autoFontScale: settings.autoFontScale ?? true,
+        };
+      })();
     const lowerThirdBase = lowerThirdQuickSettings
-      ?? (getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings);
+      ?? (() => {
+        const settings = getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings;
+        return {
+          ...(settings as unknown as DockFullscreenQuickThemeSettings),
+          autoFontScale: settings.autoFontScale ?? true,
+        };
+      })();
     setFullscreenQuickSettings({ ...fullscreenBase, ...patch });
     setLowerThirdQuickSettings({ ...lowerThirdBase, ...patch });
     if (nextLineCount !== undefined) {
@@ -801,6 +818,38 @@ export default function DockNotesTab({
       setQuickSettingsRefreshNonce((current) => current + 1);
     }
   }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayVisible, selectedFSTheme, selectedLTTheme]);
+
+  const activeNoteSizePreset = useMemo(() => {
+    const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+    const theme = overlayMode === "fullscreen"
+      ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
+      : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
+    return quickSettings?.lowerThirdSize ?? theme.settings.lowerThirdSize;
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme]);
+
+  const getNotesQuickSizePatch = useCallback((id: string): DockOutputQuickSettingsPatch | null => {
+    const option = DOCK_QUICK_SIZE_OPTIONS.find((item) => item.id === id);
+    if (!option) return null;
+    const preset = LOWER_THIRD_SIZE_PRESETS[option.id];
+    const minFontSize = overlayMode === "fullscreen" ? 28 : 14;
+    const maxFontSize = overlayMode === "fullscreen" ? 180 : 100;
+    const minRefFontSize = overlayMode === "fullscreen" ? 14 : 10;
+    const maxRefFontSize = overlayMode === "fullscreen" ? 150 : 80;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const horizontalPadding = Math.round(preset.padding * 1.55);
+    const fontSize = clamp(preset.fontSize, minFontSize, maxFontSize);
+    const refFontSize = clamp(preset.refFontSize, minRefFontSize, maxRefFontSize);
+    return {
+      fontSize,
+      refFontSize,
+      lineHeight: preset.lineHeight,
+      refSpacing: preset.refSpacing,
+      lowerThirdSize: option.id,
+      lowerThirdWidthPreset: option.width,
+      lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
+      lowerThirdBarMaxHeight: preset.maxHeight,
+    };
+  }, [overlayMode]);
 
   const handleNotesQuickActionsPositionChange = useCallback((top: number, left: number | null) => {
     setQuickActionsTop(top);
@@ -1172,6 +1221,9 @@ export default function DockNotesTab({
               left={quickActionsLeft}
               onPositionChange={handleNotesQuickActionsPositionChange}
               onCommit={handleNotesQuickCommit}
+              sizePresets={DOCK_QUICK_SIZE_OPTIONS}
+              activeSizePreset={activeNoteSizePreset}
+              getSizePresetPatch={getNotesQuickSizePatch}
               onUpdateImmediatelyChange={setQuickUpdateImmediately}
             />
           </section>

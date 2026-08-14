@@ -47,4 +47,10 @@ describe("dock shared styles", () => {
     expect(dockCss).toContain(".dock-bible-verse-row--compare .dock-bible-compare-stack");
     expect(dockCss).toContain("overflow-wrap: anywhere;");
   });
+
+  it("wraps long Notes previews and translated slide text", () => {
+    expect(cssBlock(".dock-notes-card .dock-card__subtitle {")).toContain("overflow-wrap: anywhere;");
+    expect(cssBlock(".dock-worship-slide-card__text,")).toContain("overflow-wrap: anywhere;");
+    expect(cssBlock(".dock-worship-slide-card__translation {")).toContain("word-break: break-word;");
+  });
 });

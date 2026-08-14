@@ -348,7 +348,7 @@ export interface BibleThemeSettings {
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   fontFamily: SCRIPTURE_FONT_FAMILY,
   fontSize: 48,
-  autoFontScale: false,
+  autoFontScale: true,
   fontWeight: "normal",
   fontStyle: "normal",
   fontColor: "#FFFFFF",

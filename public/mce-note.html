@@ -177,6 +177,9 @@
     }
 
     #verse-text {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -190,7 +193,8 @@
       text-transform: var(--text-transform);
       white-space: pre-line;
       word-wrap: break-word;
-      overflow-wrap: break-word;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     #reference {
@@ -308,6 +312,8 @@
     }
 
     .compare-column__verse {
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--compare-font-size, 36px);
       font-family: var(--compare-font-family, var(--font-family));
       color: var(--font-color, #ffffff);
@@ -321,7 +327,8 @@
       text-transform: var(--text-transform);
       white-space: pre-line;
       word-wrap: break-word;
-      overflow-wrap: break-word;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .compare-column__reference {
@@ -400,6 +407,11 @@
     }
     .lt-compare-col {
       display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: pre-line;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -592,6 +604,9 @@
     }
 
     #lt-verse-text {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -603,6 +618,8 @@
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
       white-space: pre-line;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       transform-origin: center;
     }
 
@@ -879,7 +896,7 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
-      let autoFontScaleEnabled = false;
+      let autoFontScaleEnabled = true;
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -1488,7 +1505,7 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
-        autoFontScaleEnabled = s.autoFontScale === true;
+        autoFontScaleEnabled = s.autoFontScale !== false;
         root.style.setProperty('--font-size', baseFontSize + 'px');
         root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
