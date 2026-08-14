@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import {
-  buildGoogleTranslateUrl,
   getGoogleTranslateLanguage,
   GOOGLE_TRANSLATE_LANGUAGES,
   translateWithGoogleWeb,
@@ -236,17 +234,6 @@ export default function DockTranslationControls({ sections, value, onChange, com
     onChange(null);
   };
 
-  const openGoogleTranslate = async () => {
-    const text = sections.map((section) => section.text.trim()).filter(Boolean).join("\n\n");
-    if (!text) return;
-    const url = buildGoogleTranslateUrl(text, targetLanguage);
-    try {
-      await openUrl(url);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
-
   const languageMenu = (
     <div
       ref={languageMenuRef}
@@ -394,28 +381,17 @@ export default function DockTranslationControls({ sections, value, onChange, com
               <Icon name={loading ? "sync" : "translate"} size={13} />
               {loading ? t("common.loading", { defaultValue: "Translating..." }) : t("common.translate", { defaultValue: "Translate" })}
             </button>
-            <button
-              type="button"
-              className="dock-btn dock-btn--ghost dock-translation__action"
-              onClick={() => void openGoogleTranslate()}
-              disabled={sections.length === 0}
-              title={t("dock.translation.openGoogle", { defaultValue: "Open in Google Translate" })}
-            >
-              <Icon name="open_in_new" size={13} />
-              Google Translate
-            </button>
+            {value && (
+              <button
+                type="button"
+                className="dock-btn dock-btn--ghost dock-translation__action"
+                onClick={resetToOriginal}
+              >
+                <Icon name="restart_alt" size={13} />
+                {t("dock.translation.reset", { defaultValue: "Reset to original" })}
+              </button>
+            )}
           </div>
-
-          {value && (
-            <button
-              type="button"
-              className="dock-btn dock-btn--ghost dock-translation__reset"
-              onClick={resetToOriginal}
-            >
-              <Icon name="restart_alt" size={13} />
-              {t("dock.translation.reset", { defaultValue: "Reset to original" })}
-            </button>
-          )}
 
           {error && <div className="dock-translation__error" role="alert">{error}</div>}
           {value && !loading && !error && (

@@ -333,14 +333,6 @@
   white-space: nowrap;
 }
 
-.dock-translation__reset {
-  width: 100%;
-  min-height: 30px;
-  margin-top: 6px;
-  padding: 0 8px;
-  font-size: 11px;
-}
-
 .dock-translation__error,
 .dock-translation__ready {
   display: flex;
