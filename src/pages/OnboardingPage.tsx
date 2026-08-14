@@ -390,7 +390,6 @@ export default function OnboardingPage() {
       {/* Content */}
       <div className="ob-content">
         <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}`}>
-          {showTutorial && <OnboardingTutorialPanel step={step} />}
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}
             {step === 2 && (
@@ -402,6 +401,7 @@ export default function OnboardingPage() {
             {step === 4 && <StepTest onFinish={finish} onBack={goPrev} />}
             {step === 5 && <StepReady onFinish={finish} />}
           </main>
+          {showTutorial && <OnboardingTutorialPanel step={step} />}
         </div>
       </div>
 
