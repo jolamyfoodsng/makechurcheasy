@@ -4505,12 +4505,47 @@ class DockObsClient {
   }
 
   /**
+   * Apply a CSS refresh to an existing browser source and ask obs-browser to
+   * restart its CEF document. Clear the one-shot flag afterwards so future
+   * source-setting changes do not unexpectedly restart the page.
+   */
+  private async setBrowserSourceCssAndRestart(
+    inputName: string,
+    css: string,
+    url?: string,
+  ): Promise<void> {
+    const inputSettings: Record<string, unknown> = {
+      css,
+      restart_cef: true,
+    };
+    if (url) inputSettings.url = url;
+
+    await this.call("SetInputSettings", { inputName, inputSettings });
+    await this.sleep(50);
+    await this.call("SetInputSettings", {
+      inputName,
+      inputSettings: { restart_cef: false },
+    }).catch(() => { });
+  }
+
+  /**
    * Reapply the selected OBS font family to browser sources that are already
    * live. Changing the Dock setting must not wait for the next verse/song
    * push; the active OBS document needs the same packet refresh as a theme
    * change.
    */
   async refreshOutputTypography(): Promise<void> {
+    // A font change can happen while the Dock is still reconnecting to OBS.
+    // The browser preview updates immediately, but returning here would leave
+    // the live source on its previous family with no later retry. Reuse the
+    // normal connection path and wait briefly for the socket to become ready.
+    if (!this.isConnected) {
+      await this.connect().catch(() => { });
+      const deadline = Date.now() + 3000;
+      while (!this.isConnected && Date.now() < deadline) {
+        await this.sleep(50);
+      }
+    }
     if (!this.isConnected) return;
 
     const entries = Object.entries(this._lastCssOverlayPacketBySource);
@@ -4519,15 +4554,30 @@ class DockObsClient {
       const tabType = this._lastCssOverlayTabBySource[sourceName];
       if (!baseUrl || !tabType) return;
 
-      const refreshedPacket = { ...packet, timestamp: Date.now() };
+      const refreshedPacket: Record<string, unknown> = { ...packet, timestamp: Date.now() };
       const themeCss = this._lastCssOverlayThemeCssBySource[sourceName] || "";
       const overlayCss = this.buildCssOverlayDataCss(refreshedPacket, themeCss);
       const emitted = await this.emitBrowserOverlayPacket(tabType, refreshedPacket, overlayCss, sourceName);
-      if (!emitted) {
-        await this.call("SetInputSettings", {
-          inputName: sourceName,
-          inputSettings: { css: overlayCss },
-        });
+      const mode = refreshedPacket.mode === "fullscreen" || refreshedPacket.mode === "lower-third"
+        ? refreshedPacket.mode
+        : "";
+      const rendered = emitted && mode
+        ? await this.waitForOverlayRenderAck(
+          tabType,
+          refreshedPacket.timestamp as number,
+          mode,
+          350,
+          undefined,
+          sourceName,
+        )
+        : false;
+
+      // OBS can acknowledge obs-browser's vendor request before the CEF page
+      // has actually consumed it. If no render acknowledgement arrives, put
+      // the complete packet into the source CSS and explicitly restart CEF so
+      // the live OBS source cannot remain on its old font.
+      if (!rendered) {
+        await this.setBrowserSourceCssAndRestart(sourceName, overlayCss, baseUrl);
       }
       this.rememberCssOverlayTransport(sourceName, refreshedPacket, baseUrl, themeCss, tabType);
     }));
@@ -4554,17 +4604,17 @@ class DockObsClient {
       .filter((inputName) => !trackedSources.has(inputName))
       .map(async (inputName) => {
         const response = await this.call("GetInputSettings", { inputName }) as {
-          inputSettings?: { css?: unknown };
+          inputSettings?: { css?: unknown; url?: unknown };
         };
         const currentCss = typeof response.inputSettings?.css === "string"
           ? response.inputSettings.css
           : "";
+        const currentUrl = typeof response.inputSettings?.url === "string"
+          ? response.inputSettings.url
+          : "";
         const nextCss = [currentCss, refreshCss].filter(Boolean).join("\n");
         if (nextCss === currentCss) return;
-        await this.call("SetInputSettings", {
-          inputName,
-          inputSettings: { css: nextCss },
-        });
+        await this.setBrowserSourceCssAndRestart(inputName, nextCss, currentUrl);
       }));
   }
 

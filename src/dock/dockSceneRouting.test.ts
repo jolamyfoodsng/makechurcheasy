@@ -71,6 +71,21 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("MCE Presentation only");
   });
 
+  it("verifies the live OBS browser source painted the new font", () => {
+    const methodStart = obsClientSource.indexOf("async refreshOutputTypography(): Promise<void>");
+    const methodEnd = obsClientSource.indexOf("\n  private extractOverlayPacketFromCss", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+    const restartStart = obsClientSource.indexOf("private async setBrowserSourceCssAndRestart");
+    const restartEnd = obsClientSource.indexOf("\n  /**", restartStart);
+    const restartSource = obsClientSource.slice(restartStart, restartEnd);
+
+    expect(methodSource).toContain("await this.connect().catch");
+    expect(methodSource).toContain("waitForOverlayRenderAck");
+    expect(methodSource).toContain("setBrowserSourceCssAndRestart");
+    expect(restartSource).toContain("restart_cef: true");
+    expect(restartSource).toContain("restart_cef: false");
+  });
+
   it("keeps the active MCE content family and structural program reference only", () => {
     const keepSet = getMcePresentationVisibilityKeepSet("MCE Browser - Bible", [
       { sourceName: "MCE Program Scene Reference", sceneItemIndex: 0 },
