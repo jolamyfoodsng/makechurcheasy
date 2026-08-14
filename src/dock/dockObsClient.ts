@@ -4484,6 +4484,26 @@ class DockObsClient {
     if (tabType) this._lastCssOverlayTabBySource[inputName] = tabType;
   }
 
+  private isRefreshableTextBrowserSource(sourceName: string): boolean {
+    const normalized = sourceName.trim();
+    return normalized === this._fullscreenSceneDefs.bible.browserSourceName
+      || normalized === this._fullscreenSceneDefs.worship.browserSourceName
+      || normalized === this._fullscreenSceneDefs.notes.browserSourceName
+      || normalized.startsWith("MCE Bible - ")
+      || normalized.startsWith("MCE Worship - ")
+      || normalized.startsWith("MCE Notes - ");
+  }
+
+  private buildOutputFontRefreshCss(): string {
+    const outputFontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
+    if (outputFontCss) return outputFontCss;
+
+    return [
+      ":root { --mce-output-font-family: var(--font-family); }",
+      "body, body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^=\"fa-\"]):not([class*=\" fa-\"]) { font-family: var(--font-family) !important; }",
+    ].join("\n");
+  }
+
   /**
    * Reapply the selected OBS font family to browser sources that are already
    * live. Changing the Dock setting must not wait for the next verse/song
@@ -4494,7 +4514,7 @@ class DockObsClient {
     if (!this.isConnected) return;
 
     const entries = Object.entries(this._lastCssOverlayPacketBySource);
-    await Promise.all(entries.map(async ([sourceName, packet]) => {
+    await Promise.allSettled(entries.map(async ([sourceName, packet]) => {
       const baseUrl = this._lastCssOverlayBaseUrlBySource[sourceName];
       const tabType = this._lastCssOverlayTabBySource[sourceName];
       if (!baseUrl || !tabType) return;
@@ -4511,6 +4531,41 @@ class DockObsClient {
       }
       this.rememberCssOverlayTransport(sourceName, refreshedPacket, baseUrl, themeCss, tabType);
     }));
+
+    // A source that was already live before this Dock session has no cached
+    // packet yet. Update those known MCE Bible/Notes/Worship browser inputs by
+    // appending the same override to their current OBS CSS.
+    let inputNames: string[] = [];
+    try {
+      const response = await this.call("GetInputList") as {
+        inputs?: Array<{ inputName?: string; inputKind?: string }>;
+      };
+      inputNames = (response.inputs ?? [])
+        .filter((input) => input.inputKind === "browser_source")
+        .map((input) => String(input.inputName || "").trim())
+        .filter((inputName) => inputName && this.isRefreshableTextBrowserSource(inputName));
+    } catch {
+      return;
+    }
+
+    const refreshCss = this.buildOutputFontRefreshCss();
+    const trackedSources = new Set(entries.map(([sourceName]) => sourceName));
+    await Promise.allSettled(inputNames
+      .filter((inputName) => !trackedSources.has(inputName))
+      .map(async (inputName) => {
+        const response = await this.call("GetInputSettings", { inputName }) as {
+          inputSettings?: { css?: unknown };
+        };
+        const currentCss = typeof response.inputSettings?.css === "string"
+          ? response.inputSettings.css
+          : "";
+        const nextCss = [currentCss, refreshCss].filter(Boolean).join("\n");
+        if (nextCss === currentCss) return;
+        await this.call("SetInputSettings", {
+          inputName,
+          inputSettings: { css: nextCss },
+        });
+      }));
   }
 
   private extractOverlayPacketFromCss(css: string | undefined): Record<string, unknown> | null {
