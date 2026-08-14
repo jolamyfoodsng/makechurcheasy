@@ -651,13 +651,14 @@
             };
           })
           .filter(Boolean)
-          .slice(0, 2);
+          .slice(0, 3);
       }
 
       function renderBibleCompareMarkup(columns, bodySize, referenceSize) {
         if (columns.length < 2) return "";
+        const columnCount = Math.max(2, Math.min(3, columns.length));
         return `
-          <div class="stage-compare">
+          <div class="stage-compare" style="grid-template-columns:repeat(${columnCount}, minmax(0, 1fr));">
             ${columns.map(function (column) {
               const label = [column.reference, column.translation ? `(${column.translation})` : ""].filter(Boolean).join(" ");
               return `<div class="stage-compare-reference" style="font-size:${referenceSize};">${escapeHtml(label)}</div>`;
@@ -710,7 +711,7 @@
         const showTitle = meta.showTitle !== false;
         const showSubtitle = meta.showSubtitle !== false;
         const compareColumns = isBible ? getBibleCompareColumns(item) : [];
-        const hasBibleCompare = compareColumns.length === 2;
+        const hasBibleCompare = compareColumns.length >= 2;
         const boxAlignClass = hasBibleCompare ? "align-center stage-box--compare" : alignClass;
 
         const bgImage = getContentUrl(style.backgroundImage);

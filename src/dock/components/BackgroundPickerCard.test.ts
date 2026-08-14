@@ -631,6 +631,10 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(comparePanelSource).toContain("bgPicker.textDirection");
     expect(overlayHtml).toContain("const isCompare = sl.layout === 'compare'");
     expect(overlayHtml).toContain("compareMode === 'passages' ? cc.length >= 2 : cc.length === 2");
+    expect(overlayHtml).toContain("grid-template-columns: repeat(var(--compare-column-count, 2), minmax(0, 1fr));");
+    expect(overlayHtml).toContain("compareLayout.style.setProperty('--compare-column-count', String(passageColumnCount));");
+    expect(overlayHtml).toContain("#compare-layout .compare-column--line-hidden {\n      display: none;");
+    expect(overlayHtml).not.toContain("#compare-layout.is-multi-passage .compare-column--line-hidden {\n      display: flex;");
     expect(overlayHtml).toContain("ltBar.classList.add('lt-edge-' + edge)");
     expect(overlayHtml).toContain("ltBar.classList.toggle('lt-text-inverted'");
   });

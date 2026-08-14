@@ -387,7 +387,7 @@
       justify-items: stretch;
     }
 
-    .compare-column--line-hidden {
+    #compare-layout .compare-column--line-hidden {
       display: none;
     }
 
@@ -1829,7 +1829,9 @@
           const hidden = currentCompareMode === 'passages'
             ? index >= passageColumnCount
             : index > 1;
-          column.classList.toggle('compare-column--line-hidden', hidden || (mode === 'line-by-line' && index > 0));
+          const shouldHide = hidden || (mode === 'line-by-line' && index > 0);
+          column.classList.toggle('compare-column--line-hidden', shouldHide);
+          column.style.display = shouldHide ? 'none' : '';
         });
         compareColumns.forEach((column, index) => {
           if (mode === 'line-by-line' && index === 0) {
@@ -2249,6 +2251,7 @@
           compareLayout.querySelectorAll('.compare-column').forEach((column) => {
             column.style.padding = '';
             column.style.justifyContent = '';
+            column.style.display = '';
           });
         }
         [compareTextLeft, compareTextRight].forEach((node) => {
@@ -2942,6 +2945,12 @@
         }
 
         try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
+        // Both layers render from the same packet. Lower-third theme setup
+        // clears fullscreen inline layout styles, so restore the fullscreen
+        // compare structure after the lower-third layer has finished.
+        if (compareLayout?.classList.contains('is-visible')) {
+          applyFullscreenCompareLayoutMode(currentCompareLayout);
+        }
         autoScaleLowerThirdContent();
         requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;

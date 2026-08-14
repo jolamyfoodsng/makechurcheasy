@@ -9,6 +9,8 @@ import ministryTabSource from "./tabs/DockMinistryTab.tsx?raw";
 import countdownTabSource from "./tabs/DockCountdownsTab.tsx?raw";
 import obsClientSource from "./dockObsClient.ts?raw";
 import bibleOverlaySource from "../../public/mce-bible-overlay.html?raw";
+import presentationOverlaySource from "../../public/presentation.html?raw";
+import presentationBridgeSource from "../services/presentationDockBridge.ts?raw";
 import worshipOverlaySource from "../../public/mce-worship-overlay.html?raw";
 import notesOverlaySource from "../../public/mce-note.html?raw";
 import lowerThirdOverlaySource from "../../public/lower-third-overlay.html?raw";
@@ -122,6 +124,21 @@ describe("dock scene routing", () => {
     expect(countdownTabSource).toContain("getObsTargets(cd)");
     expect(ministryTabSource).toContain("tickerSceneRoute.syncPresentation");
     expect(ministryTabSource).toContain("lowerThirdSceneRoute.syncPresentation");
+  });
+
+  it("keeps linked Bible presentation output aligned with two- and three-passage compare", () => {
+    expect(presentationBridgeSource).toContain(".slice(0, 3)");
+    expect(presentationBridgeSource).toContain("presentationCompareColumns.length >= 2");
+    expect(presentationOverlaySource).toContain(".slice(0, 3)");
+    expect(presentationOverlaySource).toContain("const columnCount = Math.max(2, Math.min(3, columns.length));");
+    expect(presentationOverlaySource).toContain("compareColumns.length >= 2");
+    expect(bibleOverlaySource).toContain("applyFullscreenCompareLayoutMode(currentCompareLayout);");
+  });
+
+  it("publishes linked compare navigation to the active OBS or presentation route", () => {
+    expect(bibleTabSource).toContain("const nextDrafts = comparePassageDrafts.map");
+    expect(bibleTabSource).toContain("draftsOverride: nextDrafts");
+    expect(bibleTabSource).toContain("void publishComparePassageOutput({");
   });
 
   it("keeps the Bible overlay fit cache tied to the active theme mode", () => {

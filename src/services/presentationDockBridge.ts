@@ -147,7 +147,7 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
         };
       })
       .filter((column): column is PresentationBibleCompareColumn => Boolean(column))
-      .slice(0, 2);
+      .slice(0, 3);
     const compareTranslationLabel = presentationCompareColumns
       .map((column) => column.translation)
       .filter(Boolean)
@@ -160,7 +160,7 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
       translation: compareTranslationLabel || asString(data.translation) || asString(data.translationA) || asString(data.translationB),
       text: asString(data.verseText) || item.subtitle || item.label,
       style: buildPresentationStyle(data),
-      compare: presentationCompareColumns.length === 2
+      compare: presentationCompareColumns.length >= 2
         ? {
           layout: normalizeCompareLayout(compare.layout || data.compareLayout),
           columns: presentationCompareColumns,
