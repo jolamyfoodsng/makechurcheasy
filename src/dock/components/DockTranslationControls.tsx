@@ -381,16 +381,15 @@ export default function DockTranslationControls({ sections, value, onChange, com
               <Icon name={loading ? "sync" : "translate"} size={13} />
               {loading ? t("common.loading", { defaultValue: "Translating..." }) : t("common.translate", { defaultValue: "Translate" })}
             </button>
-            {value && (
-              <button
-                type="button"
-                className="dock-btn dock-btn--ghost dock-translation__action"
-                onClick={resetToOriginal}
-              >
-                <Icon name="restart_alt" size={13} />
-                {t("dock.translation.reset", { defaultValue: "Reset to original" })}
-              </button>
-            )}
+            <button
+              type="button"
+              className="dock-btn dock-btn--ghost dock-translation__action"
+              onClick={resetToOriginal}
+              disabled={!value && !loading}
+            >
+              <Icon name="restart_alt" size={13} />
+              {t("dock.translation.reset", { defaultValue: "Reset to original" })}
+            </button>
           </div>
 
           {error && <div className="dock-translation__error" role="alert">{error}</div>}
