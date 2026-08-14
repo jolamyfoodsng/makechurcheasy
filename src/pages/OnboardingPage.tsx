@@ -83,6 +83,13 @@ const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
     watchUrl: "https://youtu.be/i-WnFFnuCMA?si=bnyZ0huirCa_oIaZ&t=16",
     startAt: 16,
   },
+  3: {
+    title: "Install MakeChurchEasy Dock",
+    description: "Learn how to add the MakeChurchEasy Dock to OBS.",
+    videoId: "i-WnFFnuCMA",
+    watchUrl: "https://youtu.be/i-WnFFnuCMA?si=LwLanAr5wZmXxVyR&t=83",
+    startAt: 83,
+  },
 };
 
 /* ── Helpers ── */
@@ -295,6 +302,7 @@ export function OnboardingResumeBanner() {
 export default function OnboardingPage() {
   const [step, setStep] = useState(() => getSavedStep());
   const [showSkipModal, setShowSkipModal] = useState(false);
+  const showTutorial = step === 2 || step === 3;
 
   const goNext = useCallback(() => {
     if (step < TOTAL_STEPS) {
@@ -381,8 +389,8 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="ob-content">
-        <div className={`ob-layout${step === 2 ? " ob-layout--with-tutorial" : ""}`}>
-          {step === 2 && <OnboardingTutorialPanel step={step} />}
+        <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}`}>
+          {showTutorial && <OnboardingTutorialPanel step={step} />}
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}
             {step === 2 && (
