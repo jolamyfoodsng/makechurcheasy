@@ -196,8 +196,8 @@
   top: 68px;
   right: 18px;
   z-index: 20;
-  width: min(420px, calc(100vw - 36px));
-  height: 380px;
+  width: min(520px, calc(100vw - 36px));
+  height: 450px;
   max-height: calc(100vh - 86px);
   min-width: 0;
   display: flex;
@@ -1121,7 +1121,8 @@
 
   .ob-tutorial-panel {
     right: 12px;
-    width: min(390px, calc(100vw - 24px));
+    width: min(480px, calc(100vw - 24px));
+    height: 420px;
   }
 }
 
@@ -1138,7 +1139,7 @@
     top: 62px;
     right: 12px;
     width: calc(100vw - 24px);
-    height: 310px;
+    height: 360px;
     padding: 14px;
   }
 

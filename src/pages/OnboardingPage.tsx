@@ -1,8 +1,7 @@
 /**
  * OnboardingPage — Desktop onboarding wizard for MakeChurchEasy.
  *
- * Flow: Welcome → Connect OBS → Optional Move Transition →
- *       Install Dock → Run Diagnostics → Ready
+ * Flow: Welcome → Connect OBS → Install Dock → Run Diagnostics → Ready
  *
  * Every step fires a milestone to the backend.
  * Persisted in localStorage so future launches skip straight to dashboard.
@@ -27,9 +26,6 @@ import {
   Maximize2,
   Minimize2,
   Play,
-  Puzzle,
-  RefreshCw,
-  Download,
   LayoutDashboard,
   Library,
   ListMusic,
@@ -37,16 +33,6 @@ import {
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getDockBaseUrl } from "../services/overlayUrl";
-import {
-  getObsMovePluginStatus,
-  ensureMoveTransition,
-  installObsMovePlugin,
-  isMceBridgeLoaded,
-  isMovePluginLoaded,
-  MOVE_TRANSITION_RELEASE_URL,
-  type ObsMovePluginStatus,
-} from "../services/obsMovePlugin";
-
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import {
@@ -62,8 +48,8 @@ import "./OnboardingPage.css";
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
 const FLOW_VERSION_KEY = "mce-onboarding-flow-version";
-const FLOW_VERSION = 2;
-const TOTAL_STEPS = 6;
+const FLOW_VERSION = 3;
+const TOTAL_STEPS = 5;
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
@@ -72,7 +58,6 @@ const API_BASE =
 const STEP_NAMES = [
   "Welcome",
   "OBS",
-  "Smooth Layouts",
   "Dock",
   "First Win",
   "Ready",
@@ -91,42 +76,12 @@ type OnboardingTutorial = {
  * changing the step components or the tutorial panel layout.
  */
 const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
-  1: {
-    title: "MakeChurchEasy overview",
-    description: "See how the full presentation workflow fits together.",
-    videoId: "NmneQhxY2jQ",
-    watchUrl: "https://www.youtube.com/watch?v=NmneQhxY2jQ",
-  },
   2: {
     title: "Connect MakeChurchEasy to OBS",
     description: "Follow the OBS connection setup before moving on.",
     videoId: "i-WnFFnuCMA",
     watchUrl: "https://youtu.be/i-WnFFnuCMA?si=bnyZ0huirCa_oIaZ&t=16",
     startAt: 16,
-  },
-  3: {
-    title: "Install smooth OBS layouts",
-    description: "Learn how to install the OBS plugin used for smooth layouts.",
-    videoId: "MIPOasmFFxU",
-    watchUrl: "https://www.youtube.com/watch?v=MIPOasmFFxU",
-  },
-  4: {
-    title: "Use the MakeChurchEasy Dock",
-    description: "See how the Dock brings your Bible, text, and media into OBS.",
-    videoId: "08UjSYtjmLU",
-    watchUrl: "https://www.youtube.com/watch?v=08UjSYtjmLU",
-  },
-  5: {
-    title: "Display your first Bible verse",
-    description: "Follow along and send your first verse to OBS.",
-    videoId: "Qut6hGAs7mM",
-    watchUrl: "https://www.youtube.com/watch?v=Qut6hGAs7mM",
-  },
-  6: {
-    title: "Add more Bible versions",
-    description: "Keep going with Bible resources after your setup is complete.",
-    videoId: "tq_EAHKO-Q4",
-    watchUrl: "https://www.youtube.com/watch?v=tq_EAHKO-Q4",
   },
 };
 
@@ -143,14 +98,18 @@ function getSavedStep(): number {
     if (n >= 1) savedStep = n;
   }
 
-  // The Move plugin step was inserted after OBS. Preserve the place where an
-  // incomplete older onboarding flow stopped instead of showing the wrong page.
+  // Migrate the earlier five-step flow, then remove the optional Move step that
+  // was briefly inserted after OBS. A user stopped on that step should continue
+  // at Dock instead of seeing it again.
   const savedVersion = parseInt(
     localStorage.getItem(FLOW_VERSION_KEY) || "1",
     10,
   );
-  if (savedVersion < FLOW_VERSION && raw != null && savedStep >= 3) {
+  if (raw != null && savedVersion < 2 && savedStep >= 3) {
     savedStep += 1;
+  }
+  if (raw != null && savedVersion < FLOW_VERSION && savedStep >= 3) {
+    savedStep = savedStep === 3 ? 3 : savedStep - 1;
   }
 
   const normalizedStep = Math.min(savedStep, TOTAL_STEPS);
@@ -203,7 +162,7 @@ function fireMilestone(milestone: string) {
 }
 
 function OnboardingTutorialPanel({ step }: { step: number }) {
-  const tutorial = ONBOARDING_TUTORIALS[step] ?? ONBOARDING_TUTORIALS[1];
+  const tutorial = ONBOARDING_TUTORIALS[step] ?? ONBOARDING_TUTORIALS[2];
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -430,13 +389,10 @@ export default function OnboardingPage() {
               <StepConnectOBS onNext={goNext} onBack={goPrev} />
             )}
             {step === 3 && (
-              <StepInstallMovePlugin onNext={goNext} onBack={goPrev} />
-            )}
-            {step === 4 && (
               <StepInstallDock onNext={goNext} onBack={goPrev} />
             )}
-            {step === 5 && <StepTest onFinish={finish} onBack={goPrev} />}
-            {step === 6 && <StepReady onFinish={finish} />}
+            {step === 4 && <StepTest onFinish={finish} onBack={goPrev} />}
+            {step === 5 && <StepReady onFinish={finish} />}
           </main>
         </div>
       </div>
@@ -649,202 +605,7 @@ function StepConnectOBS({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 3 — Install Move Transition
-   ══════════════════════════════════════════════════════════════ */
-
-type MoveSetupState =
-  | "checking"
-  | "not-installed"
-  | "installed"
-  | "installing"
-  | "ready"
-  | "error";
-
-function StepInstallMovePlugin({
-  onNext,
-  onBack,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const [plugin, setPlugin] = useState<ObsMovePluginStatus | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [bridgeLoaded, setBridgeLoaded] = useState(false);
-  const [state, setState] = useState<MoveSetupState>("checking");
-
-  const checkPlugin = useCallback(async () => {
-    setState("checking");
-
-    try {
-      const status = await getObsMovePluginStatus();
-      let runtimeLoaded = await isMovePluginLoaded();
-      let runtimeBridgeLoaded = await isMceBridgeLoaded();
-
-      // OBS normally reconnects automatically after a restart. If the socket
-      // has not reconnected yet, give the saved connection one explicit try.
-      if (!runtimeLoaded && status.installed && !obsService.isConnected) {
-        try {
-          await obsService.connect();
-          runtimeLoaded = await isMovePluginLoaded();
-          runtimeBridgeLoaded = await isMceBridgeLoaded();
-        } catch {
-          // The file check still lets the user continue with the fallback.
-        }
-      }
-
-      setPlugin(status);
-      setLoaded(runtimeLoaded);
-      setBridgeLoaded(runtimeBridgeLoaded);
-      if (runtimeLoaded && runtimeBridgeLoaded) {
-        void ensureMoveTransition();
-      }
-      const installed = status.installed && status.bridgeInstalled;
-      setState(
-        installed
-          ? runtimeLoaded && runtimeBridgeLoaded
-            ? "ready"
-            : "installed"
-          : "not-installed",
-      );
-    } catch {
-      setState("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    void checkPlugin();
-  }, [checkPlugin]);
-
-  const install = useCallback(async () => {
-    setState("installing");
-    if (!window.confirm("Install Move Transition and the MakeChurchEasy OBS Bridge for this user?")) {
-      setState(plugin?.installed && plugin.bridgeInstalled ? "installed" : "not-installed");
-      return;
-    }
-    try {
-      const status = await installObsMovePlugin();
-      setPlugin(status);
-      setLoaded(false);
-      setBridgeLoaded(false);
-      setState("installed");
-      fireMilestone("moveTransitionInstalledAt");
-    } catch {
-      setState("error");
-    }
-  }, [plugin]);
-
-  const openMoveTransitionRelease = useCallback(() => {
-    void openUrl(MOVE_TRANSITION_RELEASE_URL);
-  }, []);
-
-  const allInstalled = plugin?.installed === true && plugin.bridgeInstalled === true;
-  const allBundled = plugin?.bundled === true && plugin.bridgeBundled === true;
-  const statusLabel = loaded && bridgeLoaded
-    ? "Ready"
-    : allInstalled
-      ? "Restart OBS"
-      : "Optional";
-
-  return (
-    <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <div className="ob-hero-icon">
-          <Puzzle size={24} />
-        </div>
-        <h1>Optional: Enable smooth OBS layouts</h1>
-        <p>
-          Move Transition lets MakeChurchEasy animate layout changes smoothly
-          inside OBS. MakeChurchEasy installs Move Transition and its small
-          bridge for this user without requiring an administrator password. You
-          can skip this step and continue with the built-in layout fallback.
-        </p>
-      </div>
-
-      <div className="ob-plugin-card">
-        <div className="ob-plugin-card__header">
-          <div>
-            <div className="ob-url-card-title">OBS motion support</div>
-            <div className="ob-plugin-card__version">
-              Move {plugin?.version || "3.2.1"} · Bridge {plugin?.bridgeVersion || "1.0.0"} · {plugin?.platform || "Desktop"}
-            </div>
-          </div>
-          <span className={`ob-plugin-state ob-plugin-state--${loaded && bridgeLoaded ? "ready" : allInstalled ? "pending" : "idle"}`}>
-            {state === "checking" || state === "installing" ? "Checking" : statusLabel}
-          </span>
-        </div>
-
-        <p className="ob-url-desc">
-          {allInstalled
-            ? plugin?.message || "OBS motion support is installed."
-            : "Optional: install motion support for smoother OBS layouts, or continue without it."}
-        </p>
-
-        <div className="ob-plugin-card__detail">
-          <CheckCircle size={15} />
-          <span>
-            After installation, restart OBS once. Then choose <strong>Check again</strong> so
-            the app can confirm that OBS loaded the plugin.
-          </span>
-        </div>
-      </div>
-
-      {allInstalled && (!loaded || !bridgeLoaded) && (
-        <div className="ob-info-banner">
-          <RefreshCw size={16} />
-          <span>
-            Restart OBS now, leave MakeChurchEasy open, then click Check again.
-            The existing frame-by-frame fallback remains available if you continue
-            before OBS reloads.
-          </span>
-        </div>
-      )}
-
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-            Back
-          </button>
-          {allInstalled && (
-            <button
-              className="ob-btn ob-btn--secondary"
-              onClick={() => void checkPlugin()}
-              disabled={state === "checking" || state === "installing"}
-              title="Check plugin status">
-              <RefreshCw size={14} />
-              Check again
-            </button>
-          )}
-          {!allInstalled && (
-            <button
-              className="ob-btn ob-btn--secondary"
-              onClick={() => {
-                if (allBundled) void install();
-                else openMoveTransitionRelease();
-              }}
-              disabled={state === "checking" || state === "installing"}
-              title={allBundled ? "Install OBS motion support" : "Open Move Transition download"}>
-              {state === "installing" ? (
-                <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
-              ) : allBundled ? (
-                <Download size={14} />
-              ) : (
-                <ExternalLink size={14} />
-              )}
-              {allBundled ? "Install motion support" : "Open Move Transition"}
-            </button>
-          )}
-        </div>
-        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
-          Continue
-          <ArrowRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Step 4 — Install Dock
+   Step 3 — Install Dock
    ══════════════════════════════════════════════════════════════ */
 
 function StepInstallDock({
@@ -973,8 +734,6 @@ function StepTest({
 }) {
   const [diags, setDiags] = useState<DiagItem[]>([
     { label: "OBS Connected", status: "pending", detail: "" },
-    { label: "Move Transition", status: "pending", detail: "" },
-    { label: "MCE OBS Bridge", status: "pending", detail: "" },
     { label: "MakeChurchEasy Dock", status: "pending", detail: "" },
     { label: "AI Dock", status: "pending", detail: "" },
     { label: "Voice Bible", status: "pending", detail: "" },
@@ -994,40 +753,7 @@ function StepTest({
     });
     setDiags([...results]);
 
-    // 2. Move Transition — file installed is useful, but the runtime check
-    // confirms that OBS loaded it after the restart.
-    try {
-      const plugin = await getObsMovePluginStatus();
-      const loaded = await isMovePluginLoaded();
-      const bridgeLoaded = await isMceBridgeLoaded();
-      results.push({
-        label: "Move Transition",
-        status: loaded ? "ok" : "warn",
-        detail: loaded
-          ? "Loaded in OBS"
-          : plugin.installed
-            ? "Optional — restart OBS to load"
-            : "Optional — using built-in fallback",
-      });
-      results.push({
-        label: "MCE OBS Bridge",
-        status: bridgeLoaded ? "ok" : "warn",
-        detail: bridgeLoaded
-          ? "Loaded in OBS"
-          : plugin.bridgeInstalled
-            ? "Optional — restart OBS to load"
-            : "Optional — using built-in fallback",
-      });
-    } catch {
-      results.push({
-        label: "Move Transition",
-        status: "warn",
-        detail: "Could not verify",
-      });
-    }
-    setDiags([...results]);
-
-    // 3. MakeChurchEasy Dock
+    // 2. MakeChurchEasy Dock
     try {
       const dockUrl = `${base}/dock`;
       await fetch(dockUrl, { method: "HEAD", mode: "no-cors" });
@@ -1045,7 +771,7 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 4. AI Dock
+    // 3. AI Dock
     try {
       const aiUrl = `${base}/lm-dock.html`;
       await fetch(aiUrl, { method: "HEAD", mode: "no-cors" });
@@ -1059,7 +785,7 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 5. Voice Bible (check if mic permission is available)
+    // 4. Voice Bible (check if mic permission is available)
     try {
       if (navigator.mediaDevices) {
         results.push({
@@ -1145,7 +871,7 @@ function StepTest({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 6 — Ready
+   Step 5 — Ready
    ══════════════════════════════════════════════════════════════ */
 
 function StepReady({ onFinish }: { onFinish: () => void }) {

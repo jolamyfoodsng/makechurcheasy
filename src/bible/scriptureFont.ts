@@ -1,10 +1,10 @@
 /**
  * Fonts used for scripture and worship text.
  *
- * CMG Sans Black is the shared production default. Charis SIL and Noto Sans
- * remain fallbacks for characters outside the bundled CMG Sans glyph set.
+ * Questrial is bundled with the app for Pan-African Latin support. Charis SIL
+ * and Noto Sans remain fallbacks for any characters outside Questrial.
  */
-export const SCRIPTURE_FONT_FAMILY = '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", Arial, sans-serif';
+export const SCRIPTURE_FONT_FAMILY = '"Questrial", "Charis SIL", "Noto Sans", "CMG Sans", Arial, sans-serif';
 
 /**
  * Keep a user's selected typeface while guaranteeing a Unicode-safe fallback
@@ -21,13 +21,8 @@ export function withScriptureFontFallback(fontFamily?: string | null): string {
   }
 
   const lower = value.toLowerCase();
-  if (lower.includes("cmg sans")) {
-    const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
-    const generic = parts.filter((part) => /^(?:serif|sans-serif|cursive|fantasy|monospace|system-ui)$/iu.test(part));
-    const concrete = parts.filter((part) => !generic.includes(part));
-    const fallbacks = ["\"Charis SIL\"", "\"Noto Sans\""]
-      .filter((family) => !concrete.some((part) => part.toLowerCase() === family.toLowerCase()));
-    return [...concrete, ...fallbacks, ...generic].join(", ");
+  if (lower.includes("cmg sans") && !lower.includes("questrial")) {
+    return `"Questrial", "Charis SIL", "Noto Sans", ${value}`;
   }
 
   const additions: string[] = [];

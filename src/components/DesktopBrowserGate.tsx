@@ -41,7 +41,7 @@ function FullscreenMessage({
         padding: "24px",
         background: "#0f172a",
         color: "#e2e8f0",
-        fontFamily: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", system-ui, sans-serif',
+        fontFamily: 'Inter, "Open Sans", system-ui, sans-serif',
       }}
     >
       <div

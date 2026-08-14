@@ -7,7 +7,7 @@
   --primary-rgb: 29, 78, 216;
   --primary-soft: rgba(29, 78, 216, 0.12);
   --primary-soft-border: rgba(29, 78, 216, 0.35);
-  --font-african-latin: "CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans";
+  --font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
   --font-body: var(--font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-heading: var(--font-african-latin), "Inter", "SF Pro Display", "Segoe UI", sans-serif;
 

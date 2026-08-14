@@ -242,7 +242,7 @@ function PublicPresentationRoute() {
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc" }}>
-      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", system-ui, sans-serif' }}>
+      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: "Inter, system-ui, sans-serif" }}>
         <Icon name={error ? "warning" : "present_to_all"} size={28} />
         <span>{error || "Opening presentation screen..."}</span>
       </div>

@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "./scriptureFont";
 
 describe("scripture font fallback", () => {
-  it("uses the bundled CMG Sans Black font first by default", () => {
-    expect(SCRIPTURE_FONT_FAMILY.startsWith('"CMG Sans Black"')).toBe(true);
+  it("uses the bundled African-language font first by default", () => {
+    expect(SCRIPTURE_FONT_FAMILY.startsWith('"Questrial"')).toBe(true);
     expect(SCRIPTURE_FONT_FAMILY).toContain('"Charis SIL"');
     expect(SCRIPTURE_FONT_FAMILY).toContain('"Noto Sans"');
   });
 
-  it("keeps CMG Sans selected before its Unicode fallbacks", () => {
+  it("puts Questrial and Unicode fallbacks before legacy CMG Sans settings", () => {
     const family = withScriptureFontFallback('"CMG Sans", sans-serif');
-    expect(family.startsWith('"CMG Sans", "Charis SIL", "Noto Sans",')).toBe(true);
+    expect(family.startsWith('"Questrial", "Charis SIL", "Noto Sans",')).toBe(true);
     expect(family).toContain('"CMG Sans"');
   });
 
@@ -24,7 +24,7 @@ describe("scripture font fallback", () => {
 
   it("quotes bare admin font names before adding the fallback", () => {
     expect(withScriptureFontFallback("CMG Sans")).toBe(
-      '"CMG Sans", "Charis SIL", "Noto Sans"',
+      '"Questrial", "Charis SIL", "Noto Sans", "CMG Sans"',
     );
   });
 });
