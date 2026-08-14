@@ -192,19 +192,22 @@
 }
 
 .ob-tutorial-panel {
-  position: static;
-  width: 100%;
+  position: fixed;
+  top: 68px;
+  right: 18px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 36px));
+  height: 380px;
+  max-height: calc(100vh - 86px);
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  align-self: stretch;
-  padding: 20px 24px 24px;
+  padding: 16px 18px 18px;
   background: var(--surface);
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
 }
 
 .ob-tutorial-header {
@@ -270,7 +273,7 @@
 
 .ob-tutorial-video-shell {
   width: 100%;
-  max-width: 560px;
+  max-width: none;
   margin: 0 auto;
   overflow: hidden;
   aspect-ratio: 16 / 9;
@@ -280,7 +283,7 @@
 }
 
 .ob-tutorial-guide {
-  max-width: 560px;
+  max-width: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -306,7 +309,7 @@
 
 .ob-tutorial-footer {
   width: 100%;
-  max-width: 560px;
+  max-width: none;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -358,7 +361,7 @@
 
 .ob-tutorial-note {
   width: 100%;
-  max-width: 560px;
+  max-width: none;
   margin-inline: auto;
   margin: -4px auto 0;
   color: var(--text-muted);
@@ -1117,9 +1120,8 @@
   }
 
   .ob-tutorial-panel {
-    max-width: none;
-    justify-self: stretch;
-    border-bottom: 1px solid var(--border);
+    right: 12px;
+    width: min(390px, calc(100vw - 24px));
   }
 }
 
@@ -1133,8 +1135,11 @@
   }
 
   .ob-tutorial-panel {
-    max-width: none;
-    padding: 18px;
+    top: 62px;
+    right: 12px;
+    width: calc(100vw - 24px);
+    height: 310px;
+    padding: 14px;
   }
 
   .ob-card--dock-install {
