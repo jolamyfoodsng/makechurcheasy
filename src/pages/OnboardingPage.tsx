@@ -381,7 +381,7 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="ob-content">
-        <div className="ob-layout">
+        <div className={`ob-layout${step === 2 ? " ob-layout--with-tutorial" : ""}`}>
           {step === 2 && <OnboardingTutorialPanel step={step} />}
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}

@@ -183,6 +183,18 @@
   border-radius: var(--radius);
 }
 
+.ob-layout--with-tutorial {
+  max-width: 1240px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  align-items: stretch;
+  gap: 16px;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
 .ob-step-stage {
   width: 100%;
   min-width: 0;
@@ -191,14 +203,21 @@
   padding: 32px;
 }
 
+.ob-layout--with-tutorial .ob-step-stage {
+  align-items: stretch;
+  padding: 0;
+}
+
+.ob-layout--with-tutorial .ob-step-stage > .ob-card {
+  max-width: none;
+  height: 100%;
+}
+
 .ob-tutorial-panel {
-  position: fixed;
-  top: 68px;
-  right: 18px;
-  z-index: 20;
-  width: min(520px, calc(100vw - 36px));
-  height: 450px;
-  max-height: calc(100vh - 86px);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 450px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1119,10 +1138,14 @@
     padding: 24px;
   }
 
-  .ob-tutorial-panel {
-    right: 12px;
-    width: min(480px, calc(100vw - 24px));
-    height: 420px;
+  .ob-layout--with-tutorial {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr);
+    gap: 12px;
+  }
+
+  .ob-layout--with-tutorial .ob-tutorial-panel {
+    min-height: 420px;
+    padding: 14px;
   }
 }
 
@@ -1135,11 +1158,18 @@
     padding: 18px;
   }
 
-  .ob-tutorial-panel {
-    top: 62px;
-    right: 12px;
-    width: calc(100vw - 24px);
-    height: 360px;
+  .ob-layout--with-tutorial {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ob-layout--with-tutorial .ob-step-stage {
+    padding: 0;
+  }
+
+  .ob-layout--with-tutorial .ob-tutorial-panel {
+    height: auto;
+    min-height: 0;
     padding: 14px;
   }
 
