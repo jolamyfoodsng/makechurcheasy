@@ -36,6 +36,7 @@ import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
+import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { fetchPlanFromOverlayServer } from "../services/entitlementClient";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
@@ -852,6 +853,7 @@ export default function DockPage({
       )}
 
       <div className="dock-main-column">
+        <DockBrowserZoomWarning />
         {/* ── Force Update Banner ── */}
         {versionAge.forceUpdate && (
           <div className="dock-force-update-banner">
