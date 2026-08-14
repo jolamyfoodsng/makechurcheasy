@@ -22,6 +22,7 @@ import {
   CheckCircle,
   Loader2,
   AlertTriangle,
+  ArrowDown,
   ArrowUpRight,
   Maximize2,
   Minimize2,
@@ -82,6 +83,7 @@ type OnboardingTutorial = {
   description: string;
   videoId: string;
   watchUrl: string;
+  startAt?: number;
 };
 
 /**
@@ -99,7 +101,8 @@ const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
     title: "Connect MakeChurchEasy to OBS",
     description: "Follow the OBS connection setup before moving on.",
     videoId: "i-WnFFnuCMA",
-    watchUrl: "https://www.youtube.com/watch?v=i-WnFFnuCMA",
+    watchUrl: "https://youtu.be/i-WnFFnuCMA?si=bnyZ0huirCa_oIaZ&t=16",
+    startAt: 16,
   },
   3: {
     title: "Install smooth OBS layouts",
@@ -242,7 +245,9 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
 
   const embedUrl =
     `https://www.youtube-nocookie.com/embed/${tutorial.videoId}` +
-    "?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1";
+    `?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1${
+      tutorial.startAt ? `&start=${tutorial.startAt}` : ""
+    }`;
 
   return (
     <aside className="ob-tutorial-panel" aria-label={`Step ${step} tutorial`}>
@@ -264,6 +269,12 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
         >
           {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
+      </div>
+
+      <div className="ob-tutorial-guide" aria-label="Watch tutorial for this step">
+        <ArrowDown size={16} aria-hidden="true" />
+        <span>Watch tutorial for this step</span>
+        <ArrowDown size={16} aria-hidden="true" />
       </div>
 
       <div className="ob-tutorial-video-shell">
@@ -412,6 +423,7 @@ export default function OnboardingPage() {
       {/* Content */}
       <div className="ob-content">
         <div className="ob-layout">
+          <OnboardingTutorialPanel step={step} />
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}
             {step === 2 && (
@@ -426,7 +438,6 @@ export default function OnboardingPage() {
             {step === 5 && <StepTest onFinish={finish} onBack={goPrev} />}
             {step === 6 && <StepReady onFinish={finish} />}
           </main>
-          <OnboardingTutorialPanel step={step} />
         </div>
       </div>
 
