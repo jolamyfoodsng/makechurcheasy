@@ -249,7 +249,7 @@
    Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
    ══════════════════════════════════════════════════ */
 .dock-btm-toolbar--compact {
-  padding: 6px 0px;
+  padding: 8px 10px;
   min-height: auto;
 }
 
