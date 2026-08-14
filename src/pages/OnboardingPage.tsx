@@ -423,7 +423,7 @@ export default function OnboardingPage() {
       {/* Content */}
       <div className="ob-content">
         <div className="ob-layout">
-          <OnboardingTutorialPanel step={step} />
+          {step === 2 && <OnboardingTutorialPanel step={step} />}
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}
             {step === 2 && (
@@ -495,8 +495,8 @@ function StepWelcome({
       </div>
 
       <div className="ob-actions">
-        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Get started">
-          Get Started
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
+          Continue
           <ArrowRight size={16} />
         </button>
       </div>
