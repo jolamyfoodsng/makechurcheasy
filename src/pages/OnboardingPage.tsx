@@ -8,7 +8,7 @@
  * Persisted in localStorage so future launches skip straight to dashboard.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -22,6 +22,9 @@ import {
   CheckCircle,
   Loader2,
   AlertTriangle,
+  ArrowUpRight,
+  Maximize2,
+  Minimize2,
   Play,
   Puzzle,
   RefreshCw,
@@ -73,6 +76,56 @@ const STEP_NAMES = [
   "First Win",
   "Ready",
 ];
+
+type OnboardingTutorial = {
+  title: string;
+  description: string;
+  videoId: string;
+  watchUrl: string;
+};
+
+/**
+ * Keep onboarding videos in one place so they can be replaced without
+ * changing the step components or the tutorial panel layout.
+ */
+const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
+  1: {
+    title: "MakeChurchEasy overview",
+    description: "See how the full presentation workflow fits together.",
+    videoId: "NmneQhxY2jQ",
+    watchUrl: "https://www.youtube.com/watch?v=NmneQhxY2jQ",
+  },
+  2: {
+    title: "Connect MakeChurchEasy to OBS",
+    description: "Follow the OBS connection setup before moving on.",
+    videoId: "i-WnFFnuCMA",
+    watchUrl: "https://www.youtube.com/watch?v=i-WnFFnuCMA",
+  },
+  3: {
+    title: "Install smooth OBS layouts",
+    description: "Learn how to install the OBS plugin used for smooth layouts.",
+    videoId: "MIPOasmFFxU",
+    watchUrl: "https://www.youtube.com/watch?v=MIPOasmFFxU",
+  },
+  4: {
+    title: "Use the MakeChurchEasy Dock",
+    description: "See how the Dock brings your Bible, text, and media into OBS.",
+    videoId: "08UjSYtjmLU",
+    watchUrl: "https://www.youtube.com/watch?v=08UjSYtjmLU",
+  },
+  5: {
+    title: "Display your first Bible verse",
+    description: "Follow along and send your first verse to OBS.",
+    videoId: "Qut6hGAs7mM",
+    watchUrl: "https://www.youtube.com/watch?v=Qut6hGAs7mM",
+  },
+  6: {
+    title: "Add more Bible versions",
+    description: "Keep going with Bible resources after your setup is complete.",
+    videoId: "tq_EAHKO-Q4",
+    watchUrl: "https://www.youtube.com/watch?v=tq_EAHKO-Q4",
+  },
+};
 
 /* ── Helpers ── */
 function isOnboardingComplete(): boolean {
@@ -144,6 +197,104 @@ function fireMilestone(milestone: string) {
   } catch {
     // Not critical
   }
+}
+
+function OnboardingTutorialPanel({ step }: { step: number }) {
+  const tutorial = ONBOARDING_TUTORIALS[step] ?? ONBOARDING_TUTORIALS[1];
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === iframeRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    setIsFullscreen(false);
+  }, [tutorial.videoId]);
+
+  const openTutorial = useCallback(() => {
+    void openUrl(tutorial.watchUrl).catch(() => {
+      window.open(tutorial.watchUrl, "_blank", "noopener,noreferrer");
+    });
+  }, [tutorial.watchUrl]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await iframe.requestFullscreen();
+    } catch {
+      openTutorial();
+    }
+  }, [openTutorial]);
+
+  const embedUrl =
+    `https://www.youtube-nocookie.com/embed/${tutorial.videoId}` +
+    "?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1";
+
+  return (
+    <aside className="ob-tutorial-panel" aria-label={`Step ${step} tutorial`}>
+      <div className="ob-tutorial-header">
+        <div className="ob-tutorial-heading">
+          <span className="ob-tutorial-kicker">
+            <ArrowUpRight size={13} />
+            Step {step} tutorial
+          </span>
+          <h2>{tutorial.title}</h2>
+          <p>{tutorial.description}</p>
+        </div>
+        <button
+          className="ob-tutorial-icon-btn"
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
+          aria-label={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
+        >
+          {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      </div>
+
+      <div className="ob-tutorial-video-shell">
+        <iframe
+          key={tutorial.videoId}
+          ref={iframeRef}
+          src={embedUrl}
+          title={tutorial.title}
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+
+      <div className="ob-tutorial-footer">
+        <span className="ob-tutorial-playing">
+          <span className="ob-tutorial-live-dot" />
+          Playing for this step
+        </span>
+        <button
+          className="ob-tutorial-watch-btn"
+          type="button"
+          onClick={openTutorial}
+          title="Watch tutorial on YouTube"
+        >
+          Watch tutorial
+          <ExternalLink size={13} />
+        </button>
+      </div>
+      <p className="ob-tutorial-note">Autoplay starts muted. Turn sound on in the player.</p>
+    </aside>
+  );
 }
 
 /* ── Resume Banner (exported for dashboard) ── */
@@ -260,25 +411,23 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="ob-content">
-        {step === 1 && (
-          <StepWelcome onNext={goNext} />
-        )}
-        {step === 2 && (
-          <StepConnectOBS onNext={goNext} onBack={goPrev} />
-        )}
-        {step === 3 && (
-          <StepInstallMovePlugin onNext={goNext} onBack={goPrev} />
-        )}
-        {step === 4 && (
-          <StepInstallDock
-            onNext={goNext}
-            onBack={goPrev}
-          />
-        )}
-        {step === 5 && (
-          <StepTest onFinish={finish} onBack={goPrev} />
-        )}
-        {step === 6 && <StepReady onFinish={finish} />}
+        <div className="ob-layout">
+          <main className="ob-step-stage">
+            {step === 1 && <StepWelcome onNext={goNext} />}
+            {step === 2 && (
+              <StepConnectOBS onNext={goNext} onBack={goPrev} />
+            )}
+            {step === 3 && (
+              <StepInstallMovePlugin onNext={goNext} onBack={goPrev} />
+            )}
+            {step === 4 && (
+              <StepInstallDock onNext={goNext} onBack={goPrev} />
+            )}
+            {step === 5 && <StepTest onFinish={finish} onBack={goPrev} />}
+            {step === 6 && <StepReady onFinish={finish} />}
+          </main>
+          <OnboardingTutorialPanel step={step} />
+        </div>
       </div>
 
       {/* Skip modal */}

@@ -172,6 +172,170 @@
   overflow-y: auto;
 }
 
+.ob-layout {
+  width: 100%;
+  max-width: 1380px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  align-items: start;
+  gap: 24px;
+}
+
+.ob-step-stage {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.ob-tutorial-panel {
+  position: sticky;
+  top: 20px;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.22);
+}
+
+.ob-tutorial-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ob-tutorial-heading {
+  min-width: 0;
+}
+
+.ob-tutorial-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.ob-tutorial-heading h2 {
+  margin: 6px 0 4px;
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ob-tutorial-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ob-tutorial-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition),
+    background var(--transition);
+}
+
+.ob-tutorial-icon-btn:hover {
+  color: var(--text);
+  background: var(--primary-soft);
+  border-color: var(--primary-soft-border);
+}
+
+.ob-tutorial-video-shell {
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.ob-tutorial-video-shell iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.ob-tutorial-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ob-tutorial-playing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.ob-tutorial-live-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+
+.ob-tutorial-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  color: var(--text);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition);
+}
+
+.ob-tutorial-watch-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.ob-tutorial-note {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .ob-card {
   width: 100%;
   max-width: 720px;
@@ -908,9 +1072,27 @@
   margin-top: 1px;
 }
 
+@media (max-width: 980px) {
+  .ob-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .ob-tutorial-panel {
+    position: static;
+    order: -1;
+    max-width: 560px;
+    justify-self: end;
+  }
+}
+
 @media (max-width: 760px) {
   .ob-content {
     padding: 20px 12px 28px;
+  }
+
+  .ob-tutorial-panel {
+    max-width: none;
   }
 
   .ob-card--dock-install {
