@@ -49,6 +49,7 @@ import { loadProjectionSettings } from "./dockProjectionSettings";
 import { getUserScopedKey, readUserScopedStorage } from "../services/userScopedStorage";
 import { overlayBridge } from "./dockOverlayBridge";
 import { buildDockFontFamilyCss, loadDockFontFamily } from "./dockFontFamily";
+import { applyDockOutputFontScale, loadDockOutputFontScale } from "./dockOutputTypography";
 import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
 
@@ -88,11 +89,13 @@ export interface DockBiblePushData {
   liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
   backgroundOnly?: boolean;
   compareEnabled?: boolean;
+  compareMode?: "translations" | "passages";
   compareLayout?: "line-by-line" | "side-by-side";
   translationA?: string;
   translationB?: string;
   compare?: {
     enabled?: boolean;
+    mode?: "translations" | "passages";
     layout?: "line-by-line" | "side-by-side";
     columns?: Array<{
       book: string;
@@ -305,11 +308,13 @@ type PrimeBibleOverlayData = {
   liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
   backgroundOnly?: boolean;
   compareEnabled?: boolean;
+  compareMode?: "translations" | "passages";
   compareLayout?: "line-by-line" | "side-by-side";
   translationA?: string;
   translationB?: string;
   compare?: {
     enabled?: boolean;
+    mode?: "translations" | "passages";
     layout?: "line-by-line" | "side-by-side";
     columns?: Array<{
       book: string;
@@ -1528,11 +1533,13 @@ class DockObsClient {
       overlayMode?: "fullscreen" | "lower-third";
       backgroundOnly?: boolean;
       compareEnabled?: boolean;
+      compareMode?: "translations" | "passages";
       compareLayout?: "line-by-line" | "side-by-side";
       translationA?: string;
       translationB?: string;
       compare?: {
         enabled?: boolean;
+        mode?: "translations" | "passages";
         layout?: "line-by-line" | "side-by-side";
         columns?: Array<{
           book: string;
@@ -1564,6 +1571,7 @@ class DockObsClient {
       overlayMode: data.overlayMode ?? "fullscreen",
       backgroundOnly: Boolean(data.backgroundOnly),
       compareEnabled: Boolean(data.compareEnabled),
+      compareMode: data.compareMode ?? data.compare?.mode ?? "translations",
       compareLayout: data.compareLayout ?? "",
       translationA: data.translationA ?? "",
       translationB: data.translationB ?? "",
@@ -3910,10 +3918,13 @@ class DockObsClient {
     liveOverrides: DockLiveThemeOverrides | Record<string, unknown> | null | undefined,
   ): Record<string, unknown> | null {
     if (!themeSettings && !liveOverrides) return null;
-    return {
+    const merged = {
       ...(themeSettings ?? {}),
       ...(liveOverrides ?? {}),
     };
+    const outputFontFamily = loadDockFontFamily();
+    if (outputFontFamily) merged.fontFamily = outputFontFamily;
+    return applyDockOutputFontScale(merged, loadDockOutputFontScale());
   }
 
   private hasVisualBackground(themeSettings: Record<string, unknown> | null | undefined): boolean {
@@ -5625,9 +5636,10 @@ class DockObsClient {
       : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
     const displayVerseRange = backgroundOnly ? "" : verseRange;
     const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+    const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
     const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
     const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
-      ? data.compare.columns.filter(Boolean).slice(0, 2)
+      ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
       : [];
     const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
       this.mergeThemeSettingsWithLiveOverrides(
@@ -5640,7 +5652,10 @@ class DockObsClient {
       : effectiveThemeSettings;
     const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
     const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
-    const slide = compareColumns.length === 2
+    const hasCompareSlide = compareMode === "passages"
+      ? compareColumns.length >= 2
+      : compareColumns.length === 2;
+    const slide = hasCompareSlide
       ? {
         id: "dock-bible-compare-slide",
         layout: "compare",
@@ -5845,9 +5860,10 @@ class DockObsClient {
         ? ""
         : this.formatBibleReferenceDisplayText(reference, data.translation, data.displayReferenceLabel);
       const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+      const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
       const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
       const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
-        ? data.compare.columns.filter(Boolean).slice(0, 2)
+        ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
         : [];
       const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
         this.mergeThemeSettingsWithLiveOverrides(
@@ -5859,11 +5875,15 @@ class DockObsClient {
         ? this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings).overlayTheme
         : effectiveThemeSettings;
       const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
-      const slide = compareColumns.length === 2
+      const hasCompareSlide = compareMode === "passages"
+        ? compareColumns.length >= 2
+        : compareColumns.length === 2;
+      const slide = hasCompareSlide
         ? {
           id: "dock-bible-route-compare-slide",
           layout: "compare",
           compareEnabled: true,
+          compareMode,
           compareLayout,
           reference: referenceText,
           text,
@@ -6140,9 +6160,10 @@ class DockObsClient {
         : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
       const displayVerseRange = backgroundOnly ? "" : verseRange;
       const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+      const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
       const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
       const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
-        ? data.compare.columns.filter(Boolean).slice(0, 2)
+        ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
         : [];
       const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
         this.mergeThemeSettingsWithLiveOverrides(
@@ -6172,11 +6193,15 @@ class DockObsClient {
           await this._ensureFullscreenScene("bible", mode);
         }
 
-        const compareSlide = compareColumns.length === 2
+        const hasCompareSlide = compareMode === "passages"
+          ? compareColumns.length >= 2
+          : compareColumns.length === 2;
+        const compareSlide = hasCompareSlide
           ? {
             id: "dock-bible-compare-slide",
             layout: "compare",
             compareEnabled: true,
+            compareMode,
             compareLayout,
             reference: referenceText,
             text: primaryText,
@@ -6314,11 +6339,15 @@ class DockObsClient {
 
         const { cleanSettings, css } = this.stripThemeDataUris(effectiveThemeSettings);
         themeCss = css;
-        const slide = compareColumns.length === 2
+        const hasCompareSlide = compareMode === "passages"
+          ? compareColumns.length >= 2
+          : compareColumns.length === 2;
+        const slide = hasCompareSlide
           ? {
             id: "dock-bible-compare-slide",
             layout: "compare",
             compareEnabled: true,
+            compareMode,
             compareLayout,
             reference: referenceText,
             text: primaryText,
@@ -6588,6 +6617,7 @@ class DockObsClient {
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     themeId?: string;
     compareEnabled?: boolean;
+    compareMode?: "translations" | "passages";
     compareLayout?: string;
     compare?: Record<string, unknown> | null;
     translationA?: string;
@@ -6619,6 +6649,7 @@ class DockObsClient {
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: data.compareEnabled,
+        compareMode: data.compareMode,
         compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
         compare: data.compare ? {
           ...data.compare,
@@ -6651,6 +6682,7 @@ class DockObsClient {
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: true,
+        compareMode: data.compareMode,
         compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
         compare: {
           ...data.compare,
@@ -7020,6 +7052,7 @@ class DockObsClient {
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: Record<string, unknown> | null;
     compareEnabled?: boolean;
+    compareMode?: "translations" | "passages";
     compareLayout?: string;
     compare?: Record<string, unknown> | null;
     transitionId: number;
@@ -7046,13 +7079,17 @@ class DockObsClient {
 
     // Build slide
     const compareColumns = data.compareEnabled && Array.isArray(data.compare?.columns)
-      ? (data.compare.columns as Array<Record<string, unknown>>).filter(Boolean).slice(0, 2)
+      ? (data.compare.columns as Array<Record<string, unknown>>).filter(Boolean).slice(0, data.compareMode === "passages" ? 3 : 2)
       : [];
-    const slide = compareColumns.length === 2
+    const hasCompareSlide = data.compareMode === "passages"
+      ? compareColumns.length >= 2
+      : compareColumns.length === 2;
+    const slide = hasCompareSlide
       ? {
           id: "dock-bible-compare-slide",
           layout: "compare",
           compareEnabled: true,
+          compareMode: data.compareMode ?? "translations",
           compareLayout: data.compareLayout ?? "line-by-line",
           reference: data.referenceText,
           text: data.verseText,
@@ -8352,6 +8389,7 @@ class DockObsClient {
       overlayMode: string;
       compare: {
         enabled: boolean;
+        mode: string;
         layout: string;
         columns: Array<{
           book: string;
@@ -8373,9 +8411,10 @@ class DockObsClient {
         reference: string;
         text: string;
         overlayMode: string;
-        compare: {
-          enabled: boolean;
-          layout: string;
+      compare: {
+        enabled: boolean;
+        mode: string;
+        layout: string;
           columns: Array<{
             book: string;
             chapter: number;
@@ -8506,9 +8545,13 @@ class DockObsClient {
                     ? "lower-third"
                     : "fullscreen",
               compare:
-                slide.layout === "compare" && compareColumns.length === 2
+                slide.layout === "compare"
+                  && (slide.compareMode === "passages"
+                    ? compareColumns.length >= 2
+                    : compareColumns.length === 2)
                   ? {
                     enabled: true,
+                    mode: slide.compareMode === "passages" ? "passages" : "translations",
                     layout: typeof slide.compareLayout === "string"
                       ? slide.compareLayout
                       : "line-by-line",

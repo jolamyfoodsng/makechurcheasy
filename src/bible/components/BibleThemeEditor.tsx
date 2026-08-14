@@ -46,7 +46,8 @@ function autoTransparentForLowerThird(
 }
 
 const FONT_OPTIONS = [
-  { label: "Charis SIL (African languages)", value: SCRIPTURE_FONT_FAMILY },
+  { label: "CMG Sans Black (recommended)", value: SCRIPTURE_FONT_FAMILY },
+  { label: "Charis SIL (African languages)", value: '"Charis SIL", "Noto Sans", sans-serif' },
   { label: "CMG Sans", value: '"CMG Sans", sans-serif' },
   { label: "CMG Sans Bold", value: '"CMG Sans Bold", "CMG Sans", sans-serif' },
   { label: "CMG Sans Condensed", value: '"CMG Sans Condensed", "CMG Sans", sans-serif' },

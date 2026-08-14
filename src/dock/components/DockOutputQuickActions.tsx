@@ -24,6 +24,7 @@ interface DockOutputQuickActionsProps {
   minFontSize: number;
   maxFontSize: number;
   updateImmediately: boolean;
+  isLive: boolean;
   top: number;
   left: number | null;
   onPositionChange: (top: number, left: number | null) => void;
@@ -118,6 +119,7 @@ export default function DockOutputQuickActions({
   minFontSize,
   maxFontSize,
   updateImmediately,
+  isLive,
   top,
   left,
   onPositionChange,
@@ -304,7 +306,9 @@ export default function DockOutputQuickActions({
         <div className="dock-bible-reader__font-size-menu" role="dialog" aria-label={`${textLabel} output controls`}>
           <div className="dock-bible-reader__font-size-menu-header">
             <span>{title}</span>
-            <span className="dock-output-quick-actions__live">LIVE</span>
+            <span className={`dock-output-quick-actions__live${isLive ? "" : " dock-output-quick-actions__preview"}`}>
+              {isLive ? "LIVE" : "PREVIEW"}
+            </span>
           </div>
 
           <div className="dock-bible-reader__font-size-field">

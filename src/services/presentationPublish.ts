@@ -313,7 +313,7 @@ export async function publishTickerToPresentation(payload: {
       textColor: payload.textColor || "#ffffff",
       backgroundColor: payload.backgroundColor || "#0f172a",
       fontSize: payload.fontSize || 32,
-      fontFamily: payload.fontFamily || '"Charis SIL", "Noto Sans", "CMG Sans", "Inter", "Segoe UI", sans-serif',
+      fontFamily: payload.fontFamily || SCRIPTURE_FONT_FAMILY,
       paused: Boolean(payload.paused),
       hidden: false,
       version: Date.now(),

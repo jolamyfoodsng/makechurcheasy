@@ -1,6 +1,7 @@
 
 
 import { invoke } from "@tauri-apps/api/core";
+import JSZip from "jszip";
 import mammoth from "mammoth";
 import { extractPdfTextWithPdfJs } from "./pdfFallback";
 import { normalizeNfc } from "./unicodeUtils";
@@ -29,8 +30,10 @@ export async function extractTextFromFile(file: File): Promise<string> {
       return file.text();
     case "docx":
       return extractDocxText(file);
+    case "pptx":
+      return extractPptxText(file);
     default:
-      throw new Error(`Unsupported file type: .${ext}. Use PDF, TXT, or DOCX.`);
+      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, or TXT.`);
   }
 }
 
@@ -424,8 +427,106 @@ export function assessExtractedTextQuality(text: string): ExtractedTextQuality {
 
 async function extractDocxText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value;
+  try {
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return result.value;
+  } catch (error) {
+    // The browser Mammoth build accepts ArrayBuffer; the Node build used by
+    // tests and desktop tooling accepts Buffer. Support both entrypoints.
+    if (typeof Buffer === "undefined") throw error;
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+    return result.value;
+  }
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function readXmlAttribute(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`(?:^|\\s)(?:[\\w.-]+:)?${name}\\s*=\\s*([\"'])(.*?)\\1`, "i"));
+  return match?.[2] ? decodeXmlText(match[2]) : "";
+}
+
+function readXmlRelationshipId(tag: string): string {
+  const namespaced = tag.match(/\b[\w.-]+:id\s*=\s*([\"'])(.*?)\1/i);
+  return namespaced?.[2] ? decodeXmlText(namespaced[2]) : readXmlAttribute(tag, "id");
+}
+
+function resolveZipPath(basePath: string, target: string): string {
+  const parts = [
+    ...basePath.split("/").slice(0, -1),
+    ...decodeXmlText(target).replace(/\\/g, "/").split("/"),
+  ];
+  const normalized: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(part);
+  }
+  return normalized.join("/");
+}
+
+async function extractPptxText(file: File): Promise<string> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const presentationPath = "ppt/presentation.xml";
+  const presentationEntry = zip.file(presentationPath);
+  const relationshipEntry = zip.file("ppt/_rels/presentation.xml.rels");
+  if (!presentationEntry || !relationshipEntry) {
+    throw new Error("The PowerPoint file is missing its presentation metadata.");
+  }
+
+  const presentationXml = await presentationEntry.async("string");
+  const relationshipXml = await relationshipEntry.async("string");
+  const relationships = new Map<string, string>();
+
+  for (const match of relationshipXml.matchAll(/<Relationship\b[^>]*>/gi)) {
+    const id = readXmlAttribute(match[0], "Id");
+    const target = readXmlAttribute(match[0], "Target");
+    if (id && target) relationships.set(id, target);
+  }
+
+  const slidePaths = Array.from(
+    presentationXml.matchAll(/<(?:[\w.-]+:)?sldId\b[^>]*>/gi),
+  )
+    .map((match) => relationships.get(readXmlRelationshipId(match[0])) ?? "")
+    .filter(Boolean)
+    .map((target) => resolveZipPath(presentationPath, target));
+
+  if (slidePaths.length === 0) {
+    throw new Error("The PowerPoint file does not contain any slides.");
+  }
+
+  const slideTexts: string[] = [];
+  for (const slidePath of slidePaths) {
+    const slideEntry = zip.file(slidePath);
+    if (!slideEntry) continue;
+    const slideXml = await slideEntry.async("string");
+    const paragraphs = Array.from(
+      slideXml.matchAll(/<(?:[\w.-]+:)?p\b[^>]*>[\s\S]*?<\/(?:[\w.-]+:)?p>/gi),
+    )
+      .map((paragraph) => Array.from(
+        paragraph[0].matchAll(/<(?:[\w.-]+:)?t\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?t>/gi),
+      )
+        .map((text) => decodeXmlText(text[1] ?? ""))
+        .join(""))
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    slideTexts.push(paragraphs.join("\n"));
+  }
+
+  return slideTexts.join("\f");
 }
 
 export function getFileTypeLabel(fileName: string): string {
@@ -434,6 +535,7 @@ export function getFileTypeLabel(fileName: string): string {
     case "pdf": return "PDF";
     case "txt": return "Text";
     case "docx": return "DOCX";
+    case "pptx": return "PPTX";
     default: return ext?.toUpperCase() || "Unknown";
   }
 }

@@ -2680,7 +2680,8 @@ function PresetSection({
 
 const FONT_FAMILY_OPTIONS = [
   { value: "", label: "Use Theme Font" },
-  { value: '"Charis SIL", "Noto Sans", "CMG Sans", Arial, sans-serif', label: "Charis SIL (African languages)" },
+  { value: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", Arial, sans-serif', label: "CMG Sans Black (recommended)" },
+  { value: '"Charis SIL", "Noto Sans", sans-serif', label: "Charis SIL (African languages)" },
   { value: '"CMG Sans", sans-serif', label: "CMG Sans" },
   { value: '"Inter", system-ui, sans-serif', label: "Inter" },
   { value: '"Charis SIL", serif', label: "Charis SIL" },

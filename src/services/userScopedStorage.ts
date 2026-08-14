@@ -149,6 +149,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-bible-custom-themes",
 
   // Worship
+  "ocs-dock-auto-advance-worship",
   "ocs-dock-worship-preferences",
   "ocs-dock-worship-ui-preferences",
   "ocs-dock-worship-song-defaults-v1",
@@ -161,6 +162,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-media-library-v1",
 
   // Notes
+  "ocs-dock-auto-advance-notes",
   "ocs-dock-notes-preferences",
   "ocs-dock-notes-v1",
 
@@ -229,10 +231,12 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-projection-settings",
 
   // Misc user state
+  "ocs-dock-spellcheck-dictionary",
   "ocs-dock-typography",
   "ocs-song-title-counter-v1",
   "ocs-dock-font-family",
   "ocs-dock-font-scale",
+  "ocs-dock-output-typography",
   "ocs-dock-lt-speaker-hint-seen",
   "ocs-speech-to-scripture-mic-id",
   "bible-skip-layout-confirm",

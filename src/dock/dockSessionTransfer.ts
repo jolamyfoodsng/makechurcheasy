@@ -97,6 +97,7 @@ const SECTION_DEFINITIONS: ReadonlyArray<{
       { baseKey: "ocs-dock-typography", scope: "user" },
       { baseKey: "ocs-dock-font-family", scope: "user" },
       { baseKey: "ocs-dock-font-scale", scope: "user" },
+      { baseKey: "ocs-dock-output-typography", scope: "user" },
       { baseKey: "ocs-dock-shell-preferences", scope: "global" },
       { baseKey: "ocs-dock-projection-settings", scope: "user" },
       { baseKey: "ocs-production-mode-settings", scope: "user" },

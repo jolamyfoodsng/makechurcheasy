@@ -6,7 +6,7 @@
  * Startup sequence:
  *   1. Splash screen shown (environment-specific onboarding splash)
  *   2. Resources pre-loaded + GitHub update check runs in parallel
- *   3. If update available → non-blocking floating notification (bottom-right)
+ *   3. If update available → centered optional-update dialog
  *   4. App continues polling for updates while running
  *   5. Main app is always accessible — updates never block workflow
  */
@@ -242,7 +242,7 @@ function PublicPresentationRoute() {
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc" }}>
-      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: "Inter, system-ui, sans-serif" }}>
+      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", system-ui, sans-serif' }}>
         <Icon name={error ? "warning" : "present_to_all"} size={28} />
         <span>{error || "Opening presentation screen..."}</span>
       </div>
@@ -1020,11 +1020,6 @@ function App() {
     };
   }, [splashVisible, updateResult?.available, updateResult?.update, updateResult?.version, versionAge.forceUpdate, updateResult]);
 
-  // ── Update: dismiss (hide notification, app continues) ──
-  const handleDismissUpdate = useCallback(() => {
-    setUpdateResult(null);
-  }, []);
-
   // ── Update: remind later (hide temporarily, app continues) ──
   const handleRemindLaterUpdate = useCallback(() => {
     setUpdateResult(null);
@@ -1347,11 +1342,10 @@ function App() {
         />
       )}
 
-      {/* 3. Non-blocking update notification — floats in bottom-right (only when not forced) */}
+      {/* 3. Optional update dialog (only when the update is not forced) */}
       {!splashVisible && !versionFloorBlocked && updateResult?.available && !versionAge.forceUpdate && (
         <UpdateNotification
           result={updateResult}
-          onDismiss={handleDismissUpdate}
           onRemindLater={handleRemindLaterUpdate}
         />
       )}

@@ -1231,6 +1231,32 @@ export function parseKnownHymnalDrafts(text: string, fileName: string): SmartImp
   return nameLooksSpecific && drafts.length > 0 ? drafts : [];
 }
 
+function buildPowerPointDraft(text: string, fileName: string): SmartImportSongDraft | null {
+  const slideTexts = text
+    .split(/\f+/)
+    .map((slide) => slide.trim())
+    .filter(Boolean);
+  if (slideTexts.length === 0) return null;
+
+  const title = fileName.replace(/\.[^.]+$/, "").trim() || "Imported Presentation";
+  return {
+    id: generateId(),
+    title,
+    artist: "",
+    sections: slideTexts.map((content, index) => ({
+      id: generateId(),
+      type: "other" as const,
+      label: `Slide ${index + 1}`,
+      content,
+      warnings: [],
+    })),
+    method: "fallback",
+    warnings: [],
+    reviewNotes: ["PowerPoint slides were kept as separate sections. Review the slide text before importing."],
+    rawExcerpt: text.slice(0, 2400),
+  };
+}
+
 export async function processDocumentLocally(
   text: string,
   fileName: string,
@@ -1238,6 +1264,29 @@ export async function processDocumentLocally(
 ): Promise<AiProcessResult> {
   const startedAt = Date.now();
   const trimmed = text.trim();
+  if (/\.pptx$/i.test(fileName)) {
+    const presentationDraft = buildPowerPointDraft(trimmed, fileName);
+    if (presentationDraft) {
+      onProgress?.({
+        completed: presentationDraft.sections.length,
+        total: presentationDraft.sections.length,
+        label: `Prepared ${presentationDraft.sections.length} PowerPoint slide${presentationDraft.sections.length === 1 ? "" : "s"}.`,
+      });
+      return {
+        songs: [presentationDraft],
+        warnings: ["PowerPoint slide boundaries were preserved for review."],
+        aiUsed: false,
+        needsReview: true,
+        stats: {
+          totalChunks: 0,
+          aiChunks: 0,
+          fallbackChunks: 0,
+          provider: "pptx-local",
+          durationMs: Date.now() - startedAt,
+        },
+      };
+    }
+  }
   const knownHymnalDrafts = parseKnownHymnalDrafts(text, fileName);
   if (knownHymnalDrafts.length > 0) {
     onProgress?.({

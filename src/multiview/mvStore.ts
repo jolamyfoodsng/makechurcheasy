@@ -523,7 +523,7 @@ export const DEFAULT_SETTINGS: MVSettings = {
   brandColor: "#6A34DE",
   brandSecondaryColor: "",
   brandAccentColor: "#F59E0B",
-  brandFontFamily: "Inter",
+  brandFontFamily: "CMG Sans Black",
   brandFaviconUrl: "",
   churchName: "",
   mainPastorName: "",

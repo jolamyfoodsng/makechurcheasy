@@ -18,11 +18,13 @@ import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import DockTranslationControls, {
   type DockTranslationValue,
 } from "../components/DockTranslationControls";
+import DockAutoAdvanceControl from "../components/DockAutoAdvanceControl";
 import DockOutputQuickActions, {
   DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
   type DockOutputQuickTextSettings,
 } from "../components/DockOutputQuickActions";
 import DockNotesTextTools from "../components/DockNotesTextTools";
+import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import { getOrderedTranslationParts, normalizeDockTranslationOrder } from "../dockTranslation";
 import {
   DOCK_NOTES_KEY,
@@ -135,22 +137,23 @@ function DockNoteEditorDialog({
             buttonClassName="dock-notes-text-tools__btn"
             onAction={handleFormat}
           />
-          <label className="dock-dialog-field">
-            <span className="dock-dialog-field__label">
+          <div className="dock-dialog-field">
+            <label className="dock-dialog-field__label" htmlFor="dock-note-content">
               <span>{t("notes.content")}</span>
               <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t("common.required")}</span>
-            </span>
-            <textarea
+            </label>
+            <DockSpellcheckTextarea
+              id="dock-note-content"
               className="dock-input dock-dialog-textarea"
               value={content}
-              onChange={(event) => setContent(event.target.value)}
+              onChange={setContent}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
               placeholder={t("notes.contentPlaceholder")}
               rows={8}
             />
-          </label>
+          </div>
         </div>
         <div className="dock-dialog__footer">
           <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} title={t("common.cancel")}>{t("common.cancel")}</button>
@@ -335,6 +338,21 @@ export default function DockNotesTab({
       });
   }, [noteSlidesSearchQuery, selectedNoteSlides]);
   const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
+
+  const selectedNoteAutoAdvanceIndex = useMemo(
+    () => (selectedNote ? notes.findIndex((note) => note.id === selectedNote.id) : -1),
+    [notes, selectedNote],
+  );
+
+  const handleAutoAdvanceNote = useCallback((index: number) => {
+    const note = notes[index];
+    if (!note) return;
+    setSelectedNote(note);
+    setSelectedSlideIdx(0);
+    setVisibleSlideIdx(null);
+    setNoteSlidesSearchQuery("");
+    setActionError("");
+  }, [notes]);
 
   useEffect(() => {
     notesTranslationChangeRef.current = false;
@@ -678,9 +696,11 @@ export default function DockNotesTab({
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
     }
-    pendingQuickSettingsRefreshRef.current = true;
-    setQuickSettingsRefreshNonce((current) => current + 1);
-  }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
+    if (overlayVisible && activeSlideIndex !== null) {
+      pendingQuickSettingsRefreshRef.current = true;
+      setQuickSettingsRefreshNonce((current) => current + 1);
+    }
+  }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayVisible, selectedFSTheme, selectedLTTheme]);
 
   const handleNotesQuickActionsPositionChange = useCallback((top: number, left: number | null) => {
     setQuickActionsTop(top);
@@ -688,12 +708,16 @@ export default function DockNotesTab({
   }, []);
 
   useEffect(() => {
-    if (!pendingQuickSettingsRefreshRef.current || activeSlideIndex === null) return;
+    if (!pendingQuickSettingsRefreshRef.current) return;
+    if (!overlayVisible || activeSlideIndex === null) {
+      pendingQuickSettingsRefreshRef.current = false;
+      return;
+    }
     pendingQuickSettingsRefreshRef.current = false;
-    // The nonce waits for the new settings and note slide layout to render before
-    // pushing the current note to the configured output.
+    // Only refresh an output that is already visible. Quick settings must not
+    // publish a hidden or not-yet-presented note.
     pushNoteSlide(activeSlideIndex);
-  }, [activeSlideIndex, pushNoteSlide, quickSettingsRefreshNonce]);
+  }, [activeSlideIndex, overlayVisible, pushNoteSlide, quickSettingsRefreshNonce]);
 
   useEffect(() => {
     if (!notesTranslationChangeRef.current) return;
@@ -919,6 +943,13 @@ export default function DockNotesTab({
                     setNotesTranslation(next);
                   }}
                 />
+                <DockAutoAdvanceControl
+                  items={notes.map((note) => ({ id: note.id, label: getNoteDisplayTitle(note) }))}
+                  selectedIndex={selectedNoteAutoAdvanceIndex}
+                  onSelectIndex={handleAutoAdvanceNote}
+                  itemKind="note"
+                  storageScope="notes"
+                />
                 <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title={t("notes.editNote")} aria-label={t("notes.editNote")}>
                   <Icon name="edit" size={16} />
                 </button>
@@ -1036,6 +1067,7 @@ export default function DockNotesTab({
               minFontSize={overlayMode === "fullscreen" ? 28 : 14}
               maxFontSize={overlayMode === "fullscreen" ? 180 : 100}
               updateImmediately={quickUpdateImmediately}
+              isLive={overlayVisible}
               top={quickActionsTop}
               left={quickActionsLeft}
               onPositionChange={handleNotesQuickActionsPositionChange}
@@ -1055,20 +1087,27 @@ export default function DockNotesTab({
                 collapsed={toolbarCollapsed}
                 onCollapseChange={setToolbarCollapsed}
                 inlineAction={
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    <DockSceneRoutingControl
-                      module="notes"
-                      route={sceneRoute}
-                      onRouteChange={updateSceneRoute}
-                      disabled={presentationLinkMode}
-                      title={t("notes.output")}
-                      placement="above"
-                    />
-                    <button type="button" className="dock-btm-toolbar__icon-btn" onClick={() => setShowThemeSettings(true)} title={t("notes.theme")} aria-label={t("notes.theme")}>
-                      <Icon name="edit" size={14} />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="dock-btm-toolbar__icon-btn"
+                    onClick={() => setShowThemeSettings(true)}
+                    title={t("worship.quickEdits", "Quick Edits")}
+                    aria-label={t("worship.quickEdits", "Quick Edits")}
+                  >
+                    <Icon name="tune" size={14} />
+                  </button>
                 }
+                children={!presentationLinkMode ? (
+                  <DockSceneRoutingControl
+                    module="notes"
+                    route={sceneRoute}
+                    onRouteChange={updateSceneRoute}
+                    title={t("sceneRouting.bible", "Output")}
+                    placement="above"
+                    showLabel
+                    iconName="cast"
+                  />
+                ) : undefined}
               />
             </div>
           </section>
@@ -1141,17 +1180,20 @@ export default function DockNotesTab({
                     : current);
                 }}
               />
-              <label className="dock-dialog-field">
-                <span>{t("notes.slideText")}</span>
-                <textarea
+              <div className="dock-dialog-field">
+                <label className="dock-dialog-field__label" htmlFor="dock-note-slide-text">
+                  <span>{t("notes.slideText")}</span>
+                </label>
+                <DockSpellcheckTextarea
+                  id="dock-note-slide-text"
                   className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                   value={noteSlideEditor.text}
-                  onChange={(event) => setNoteSlideEditor((current) => current ? { ...current, text: event.target.value } : current)}
+                  onChange={(value) => setNoteSlideEditor((current) => current ? { ...current, text: value } : current)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") event.stopPropagation();
                   }}
                 />
-              </label>
+              </div>
             </div>
             <div className="dock-dialog__footer">
               <button type="button" className="dock-btn dock-btn--ghost" onClick={closeNoteSlideEditor} title={t("common.cancel")}>{t("common.cancel")}</button>

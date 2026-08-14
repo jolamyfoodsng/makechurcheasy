@@ -629,7 +629,8 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(comparePanelSource).toContain("bgPicker.lowerThirdBar");
     expect(comparePanelSource).toContain("bgPicker.lowerThirdPlacement");
     expect(comparePanelSource).toContain("bgPicker.textDirection");
-    expect(overlayHtml).toContain("const isCompare = sl.layout === 'compare' && cc.length === 2");
+    expect(overlayHtml).toContain("const isCompare = sl.layout === 'compare'");
+    expect(overlayHtml).toContain("compareMode === 'passages' ? cc.length >= 2 : cc.length === 2");
     expect(overlayHtml).toContain("ltBar.classList.add('lt-edge-' + edge)");
     expect(overlayHtml).toContain("ltBar.classList.toggle('lt-text-inverted'");
   });
@@ -757,10 +758,9 @@ describe("Active OBS Bible overlay wiring", () => {
 
   it("renders compare reference and bible version as one label", () => {
     expect(overlayHtml).toContain("function formatCompareReference");
-    expect(overlayHtml).toContain("formatCompareReference(l.reference, l.translation)");
-    expect(overlayHtml).toContain("formatCompareReference(r.reference, r.translation)");
-    expect(overlayHtml).toContain("compareTranslationLeft.textContent = ''");
-    expect(overlayHtml).toContain("compareTranslationRight.textContent = ''");
+    expect(overlayHtml).toContain("formatCompareReference(value.reference, value.translation)");
+    expect(overlayHtml).toContain("const columns = [");
+    expect(overlayHtml).toContain("[compareTranslationLeft, compareTranslationRight, compareTranslationThird]");
     expect(overlayHtml).toContain("lt-compare-unit");
   });
 

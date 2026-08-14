@@ -71,14 +71,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
+      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
+      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 400;
       --font-style: normal;
@@ -380,6 +380,28 @@
       pointer-events: auto;
     }
 
+    #compare-layout.is-multi-passage {
+      grid-template-columns: repeat(var(--compare-column-count, 2), minmax(0, 1fr));
+      align-content: center;
+      justify-content: center;
+      justify-items: stretch;
+    }
+
+    .compare-column--line-hidden {
+      display: none;
+    }
+
+    #compare-layout.is-multi-passage .compare-column {
+      align-items: center;
+      text-align: center;
+    }
+
+    #compare-layout.is-multi-passage .compare-column__verse,
+    #compare-layout.is-multi-passage .compare-column__reference,
+    #compare-layout.is-multi-passage .compare-column__translation {
+      text-align: center;
+    }
+
     #compare-layout.is-line-by-line {
       display: flex;
       flex-direction: column;
@@ -615,6 +637,14 @@
       display: block;
       width: 100%;
       text-align: var(--compare-text-align, var(--text-align, center));
+    }
+
+    #lt-verse-text.is-multi-passage .lt-compare-row,
+    #lt-verse-text.is-multi-passage .lt-compare-unit,
+    #lt-verse-text.is-multi-passage .lt-compare-col,
+    #lt-verse-text.is-multi-passage .lt-compare-ref {
+      align-items: center;
+      text-align: center;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -988,6 +1018,13 @@
           <div class="compare-column__reference" id="compare-reference-right"></div>
           <div class="compare-column__translation" id="compare-translation-right"></div>
         </div>
+        <div class="compare-column compare-column--line-hidden">
+          <div class="compare-column__text-wrap">
+            <div class="compare-column__verse" id="compare-text-third"></div>
+          </div>
+          <div class="compare-column__reference" id="compare-reference-third"></div>
+          <div class="compare-column__translation" id="compare-translation-third"></div>
+        </div>
       </div>
       <img id="logo" alt="">
     </div>
@@ -1081,10 +1118,13 @@
       const compareLayout = document.getElementById('compare-layout');
       const compareTextLeft = document.getElementById('compare-text-left');
       const compareTextRight = document.getElementById('compare-text-right');
+      const compareTextThird = document.getElementById('compare-text-third');
       const compareReferenceLeft = document.getElementById('compare-reference-left');
       const compareReferenceRight = document.getElementById('compare-reference-right');
+      const compareReferenceThird = document.getElementById('compare-reference-third');
       const compareTranslationLeft = document.getElementById('compare-translation-left');
       const compareTranslationRight = document.getElementById('compare-translation-right');
+      const compareTranslationThird = document.getElementById('compare-translation-third');
       const ltBar = document.getElementById('lt-bar');
       const ltBarBg = document.getElementById('lt-bar-bg');
       const barBackgroundVideoEl = document.getElementById('bar-background-video');
@@ -1126,6 +1166,8 @@
       body.dataset.mode = initialMode;
       let activeMode = '';
       let currentCompareLayout = 'line-by-line';
+      let currentCompareMode = 'translations';
+      let currentCompareColumnCount = 2;
       let initialStorageSyncPending = true;
       let currentOverlayData = null;
       let lastTimestamp = 0;
@@ -1243,7 +1285,7 @@
 
       function scriptureFontFamily(fontFamily) {
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
-        if (!value) return '"Charis SIL","Noto Sans","CMG Sans",Arial,sans-serif';
+        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
         var lower = value.toLowerCase();
         if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
           value = '"Charis SIL","Noto Sans",' + value;
@@ -1780,9 +1822,15 @@
         currentCompareLayout = mode;
         if (!compareLayout) return mode;
         const compareColumns = Array.from(compareLayout.querySelectorAll('.compare-column'));
-        if (compareColumns[1]) {
-          compareColumns[1].classList.toggle('compare-column--line-hidden', mode === 'line-by-line');
-        }
+        const passageColumnCount = Math.max(2, Math.min(3, currentCompareColumnCount));
+        compareLayout.style.setProperty('--compare-column-count', String(passageColumnCount));
+        compareLayout.classList.toggle('is-multi-passage', currentCompareMode === 'passages');
+        compareColumns.forEach((column, index) => {
+          const hidden = currentCompareMode === 'passages'
+            ? index >= passageColumnCount
+            : index > 1;
+          column.classList.toggle('compare-column--line-hidden', hidden || (mode === 'line-by-line' && index > 0));
+        });
         compareColumns.forEach((column, index) => {
           if (mode === 'line-by-line' && index === 0) {
             column.style.width = '100%';
@@ -1811,7 +1859,9 @@
         const leftWidth = rootStyle.getPropertyValue('--compare-left-width').trim() || '40fr';
         const rightWidth = rootStyle.getPropertyValue('--compare-right-width').trim() || '40fr';
         const gap = rootStyle.getPropertyValue('--compare-gap').trim() || '40px';
-        compareLayout.style.gridTemplateColumns = `minmax(0,${leftWidth}) minmax(0,${rightWidth})`;
+        compareLayout.style.gridTemplateColumns = currentCompareMode === 'passages'
+          ? `repeat(${passageColumnCount}, minmax(0, 1fr))`
+          : `minmax(0,${leftWidth}) minmax(0,${rightWidth})`;
         compareLayout.style.gap = gap;
         compareLayout.style.alignItems = '';
         compareLayout.style.justifyItems = '';
@@ -2023,14 +2073,15 @@
         const targetHeight = Math.max(260, viewportHeight - safeArea * 2);
         const columns = Array.from(compareLayout.querySelectorAll('.compare-column'));
         const apply = () => {
-          [compareTextLeft, compareTextRight].forEach((node) => {
+          [compareTextLeft, compareTextRight, compareTextThird].forEach((node) => {
+            if (!node) return;
             node.style.fontSize = `${textSize}px`;
             node.style.lineHeight = getComputedStyle(root).getPropertyValue('--compare-line-height').trim() || '1.4';
           });
-          [compareReferenceLeft, compareReferenceRight].forEach((node) => {
+          [compareReferenceLeft, compareReferenceRight, compareReferenceThird].forEach((node) => {
             if (node) node.style.fontSize = `${referenceSize}px`;
           });
-          [compareTranslationLeft, compareTranslationRight].forEach((node) => {
+          [compareTranslationLeft, compareTranslationRight, compareTranslationThird].forEach((node) => {
             if (node) node.style.fontSize = `${translationSize}px`;
           });
         };
@@ -2194,6 +2245,7 @@
           compareLayout.style.gap = '';
           compareLayout.style.padding = '';
           compareLayout.style.alignContent = '';
+          compareLayout.style.removeProperty('--compare-column-count');
           compareLayout.querySelectorAll('.compare-column').forEach((column) => {
             column.style.padding = '';
             column.style.justifyContent = '';
@@ -2418,6 +2470,7 @@
         root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
         applyCompareReferencePlacement(compareReferenceLeft, compareMetaPosition(s.compareReferencePositionLeft), compareReferenceAlign);
         applyCompareReferencePlacement(compareReferenceRight, compareMetaPosition(s.compareReferencePositionRight), compareReferenceAlign);
+        applyCompareReferencePlacement(compareReferenceThird, compareMetaPosition(s.compareReferencePositionRight || s.compareReferencePositionLeft), compareReferenceAlign);
         if (compareLayout) {
           applyFullscreenCompareLayoutMode(currentCompareLayout);
           compareLayout.style.padding = `${outerTop}px ${outerRight}px ${outerBottom}px ${outerLeft}px`;
@@ -2793,29 +2846,49 @@
         if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
         if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
-        const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
+        const compareMode = sl.compareMode === 'passages' ? 'passages' : 'translations';
+        const cc = Array.isArray(sl.columns)
+          ? sl.columns.slice(0, compareMode === 'passages' ? 3 : 2)
+          : [];
+        const isCL = sl.layout === 'compare'
+          && (compareMode === 'passages' ? cc.length >= 2 : cc.length === 2);
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
         if (isCL) {
+          currentCompareMode = compareMode;
+          currentCompareColumnCount = cc.length;
           compareLayout.style.display = '';
           compareLayout.classList.add('is-visible');
           verseContainer.classList.add('is-hidden');
-          const [l, r] = cc;
-          const layoutMode = applyFullscreenCompareLayoutMode(resolveCompareLayoutMode(data, sl));
-          compareTranslationLeft.textContent = '';
-          compareTranslationRight.textContent = '';
-          if (layoutMode === 'line-by-line') {
+          const [l, r, third] = cc;
+          const layoutMode = compareMode === 'passages' ? 'side-by-side' : applyFullscreenCompareLayoutMode(resolveCompareLayoutMode(data, sl));
+          if (compareMode === 'passages') applyFullscreenCompareLayoutMode('side-by-side');
+          [compareTranslationLeft, compareTranslationRight, compareTranslationThird].forEach((node) => {
+            if (node) node.textContent = '';
+          });
+          if (layoutMode === 'line-by-line' && compareMode !== 'passages') {
             compareReferenceLeft.textContent = formatUnifiedCompareReference(l, r);
             compareReferenceRight.textContent = '';
+            compareReferenceThird.textContent = '';
             compareTextLeft.innerHTML = renderCompareLineByLineContent(l, r);
             compareTextRight.innerHTML = '';
+            compareTextThird.innerHTML = '';
           } else {
-            compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
-            compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
-            compareTextLeft.innerHTML = renderVerseLines(l.text);
-            compareTextRight.innerHTML = renderVerseLines(r.text);
+            const columns = [
+              [compareTextLeft, compareReferenceLeft, l],
+              [compareTextRight, compareReferenceRight, r],
+              [compareTextThird, compareReferenceThird, third],
+            ];
+            columns.forEach(([textNode, referenceNode, column]) => {
+              if (!textNode || !referenceNode) return;
+              const value = column || {};
+              referenceNode.textContent = formatCompareReference(value.reference, value.translation);
+              textNode.innerHTML = renderVerseLines(value.text);
+            });
           }
         }
         else {
+          currentCompareMode = 'translations';
+          currentCompareColumnCount = 2;
           applyFullscreenCompareLayoutMode('side-by-side');
           compareLayout.classList.remove('is-line-by-line');
           compareLayout.classList.remove('is-visible');
@@ -2840,28 +2913,31 @@
         if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
 
-        // ── Compare mode: show both translations side-by-side or line-by-line ──
-        const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [];
-        const isCompare = sl.layout === 'compare' && cc.length === 2;
+        // ── Compare mode: show two translations or 2–3 passages ──
+        const compareMode = sl.compareMode === 'passages' ? 'passages' : 'translations';
+        const cc = Array.isArray(sl.columns)
+          ? sl.columns.slice(0, compareMode === 'passages' ? 3 : 2)
+          : [];
+        const isCompare = sl.layout === 'compare'
+          && (compareMode === 'passages' ? cc.length >= 2 : cc.length === 2);
         if (isCompare) {
-          const [l, r] = cc;
-          const layoutMode = resolveCompareLayoutMode(data, sl);
-          const lText = renderVerseLines(l.text || '');
-          const rText = renderVerseLines(r.text || '');
-          const lRefText = formatCompareReference(l.reference, l.translation);
-          const rRefText = formatCompareReference(r.reference, r.translation);
-          const lRef = lRefText ? `<span class="lt-compare-ref">${escapeHtml(lRefText)}</span>` : '';
-          const rRef = rRefText ? `<span class="lt-compare-ref">${escapeHtml(rRefText)}</span>` : '';
-          const lBlock = `<div class="lt-compare-unit">${lRef}${lText ? `<div class="lt-compare-col">${lText}</div>` : ''}</div>`;
-          const rBlock = `<div class="lt-compare-unit">${rRef}${rText ? `<div class="lt-compare-col">${rText}</div>` : ''}</div>`;
+          const layoutMode = compareMode === 'passages' ? 'side-by-side' : resolveCompareLayoutMode(data, sl);
+          ltVerseText.classList.toggle('is-multi-passage', compareMode === 'passages');
+          const blocks = cc.map((column) => {
+            const text = renderVerseLines(column.text || '');
+            const refText = formatCompareReference(column.reference, column.translation);
+            const ref = refText ? `<span class="lt-compare-ref">${escapeHtml(refText)}</span>` : '';
+            return `<div class="lt-compare-unit">${ref}${text ? `<div class="lt-compare-col">${text}</div>` : ''}</div>`;
+          });
           if (layoutMode === 'side-by-side') {
-            ltVerseText.innerHTML = `<div class="lt-compare-row">${lBlock}<span class="lt-compare-divider"></span>${rBlock}</div>`;
+            ltVerseText.innerHTML = `<div class="lt-compare-row">${blocks.join('<span class="lt-compare-divider"></span>')}</div>`;
           } else {
-            ltVerseText.innerHTML = `<div class="lt-compare-stack">${lBlock}<span class="lt-compare-divider"></span>${rBlock}</div>`;
+            ltVerseText.innerHTML = `<div class="lt-compare-stack">${blocks.join('<span class="lt-compare-divider"></span>')}</div>`;
           }
           ltRefText.textContent = '';
           ltRefText.style.display = 'none';
         } else {
+          ltVerseText.classList.remove('is-multi-passage');
           ltVerseText.innerHTML = renderVerseLines(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
         }
 

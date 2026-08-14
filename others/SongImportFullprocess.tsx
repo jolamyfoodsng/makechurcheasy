@@ -26,6 +26,7 @@ import {
   processDocumentLocally,
 } from "../src/worship/bulkImportAiService";
 import {
+  buildFallbackDraft,
   createEmptyImportSection,
   estimateDraftSlideCount,
   importSmartSongs,
@@ -233,7 +234,7 @@ export default function SongImportFullprocess({
               nextWarnings.push("The extracted text looks noisy. Review titles and lyrics carefully before importing.");
             }
           } else {
-            throw new Error("No readable text was extracted locally. Try a clearer PDF/DOCX or paste the lyrics text.");
+            throw new Error("No readable text was extracted locally. Try a clearer PDF, DOCX, or PPTX, or paste the lyrics text.");
           }
         } catch (extractError) {
           const message = extractError instanceof Error ? extractError.message : String(extractError);
@@ -271,11 +272,16 @@ export default function SongImportFullprocess({
         nextWarnings.push(...localResult.warnings);
       } catch (localError) {
         const message = localError instanceof Error ? localError.message : String(localError);
-        throw new Error(`Local OpenCode import failed: ${message}`);
+        const fallbackDrafts = buildFallbackDraft(normalizedText, resolvedSourceName);
+        if (fallbackDrafts.length === 0) {
+          throw new Error(`Local import failed: ${message}`);
+        }
+        processedSongs = fallbackDrafts;
+        nextWarnings.push("Automatic song structuring was unavailable. The document was opened as editable text for review.");
       }
 
       if (processedSongs.length === 0) {
-        throw new Error("OpenCode did not return any songs. Try a clearer PDF/DOCX or paste readable lyrics.");
+        throw new Error("OpenCode did not return any songs. Try a clearer PDF, DOCX, or PPTX, or paste readable lyrics.");
       }
 
       const editableDrafts = processedSongs.map((draft) => ({
@@ -320,7 +326,12 @@ export default function SongImportFullprocess({
 
       const imported = await importSmartSongs(
         sanitizedDrafts,
-        { sourceName },
+        {
+          sourceName,
+          // A PowerPoint already has deliberate slide boundaries. Keep those
+          // boundaries instead of re-chunking the deck as lyric lines.
+          autoSplit: !/\.pptx$/i.test(sourceName),
+        },
         (saved, total) => setImportProgress({ saved, total }),
       );
 
@@ -462,11 +473,11 @@ export default function SongImportFullprocess({
                     ref={fileInputRef}
                     className="song-import-hidden-input"
                     type="file"
-                    accept=".pdf,.docx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept=".pdf,.docx,.pptx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                     onChange={(event) => handleFileSelected(event.target.files?.[0] ?? null)}
                   />
                   <Upload size={28} />
-                  <h3>{selectedFile ? selectedFile.name : "Drop a PDF, DOCX, or TXT file here"}</h3>
+                  <h3>{selectedFile ? selectedFile.name : "Drop a PDF, DOCX, PPTX, or TXT file here"}</h3>
                   <p>
                     {selectedFile
                       ? `${getFileTypeLabel(selectedFile.name)} ready for extraction`
@@ -545,7 +556,10 @@ export default function SongImportFullprocess({
             <div className="song-import-review__body">
               <aside className="song-import-review__list">
                 {drafts.map((draft) => {
-                  const slideCount = estimateDraftSlideCount(draft, { linesPerSlide: 2, autoSplit: true });
+                  const slideCount = estimateDraftSlideCount(draft, {
+                    linesPerSlide: 2,
+                    autoSplit: !/\.pptx$/i.test(sourceName),
+                  });
                   return (
                     <button
                       key={draft.id}

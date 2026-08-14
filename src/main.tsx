@@ -43,7 +43,7 @@ function getPublicPresentationSessionId(): string | null {
 function renderPresentationOpening(message = "Opening presentation screen...") {
   root.render(
     <React.StrictMode>
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc", fontFamily: "Inter, system-ui, sans-serif" }}>
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc", fontFamily: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", system-ui, sans-serif' }}>
         <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
           <div style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid #1D4ED8", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
           <span>{message}</span>

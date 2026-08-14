@@ -24,7 +24,7 @@
 
 /* ── Root container ── */
 .dock-root {
-  --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
+  --dock-font-african-latin: "CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans";
   --dock-font-unicode-fallback: "Charis SIL", "Noto Sans", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   --dock-font-body: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", var(--dock-font-unicode-fallback);
   --dock-font-heading: var(--dock-font-african-latin), "Inter", -apple-system, BlinkMacSystemFont, var(--dock-font-unicode-fallback);
@@ -7669,6 +7669,10 @@
   letter-spacing: 0.04em;
 }
 
+.dock-output-quick-actions__preview {
+  color: var(--dock-text-dim, #94A3B8);
+}
+
 .dock-bible-reader__font-size-field {
   display: flex;
   flex-direction: column;
@@ -7853,8 +7857,8 @@
   top: 100%;
   right: 0;
   z-index: 200;
-  width: max(200px, 250px);
-  max-width: 250px;
+  width: 220px;
+  max-width: calc(100vw - 24px);
   margin-top: 4px;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
@@ -7872,6 +7876,10 @@
   border: none;
   border-bottom: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.5));
   background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition: background 0.12s;
 }
 
@@ -7879,8 +7887,11 @@
   border-bottom: none;
 }
 
-.dock-bible-reader__history-item:hover {
+.dock-bible-reader__history-item:hover,
+.dock-bible-reader__history-item:focus-visible {
   background: var(--dock-surface-hover, #374151);
+  outline: 2px solid var(--dock-accent, #1D4ED8);
+  outline-offset: -2px;
 }
 
 .dock-bible-reader__history-copy {
@@ -7892,61 +7903,23 @@
 }
 
 .dock-bible-reader__history-ref {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   color: var(--dock-accent, #1D4ED8);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .dock-bible-reader__history-text {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--dock-text, #F8FAFC);
-  line-height: 1.35;
+  line-height: 1.3;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   word-break: break-word;
-  max-height: calc(11px * 1.35 * 2);
-}
-
-.dock-bible-reader__history-actions {
-  display: flex;
-  gap: 4px;
-  align-self: flex-start;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.dock-bible-reader__history-item:hover .dock-bible-reader__history-actions {
-  opacity: 1;
-}
-
-.dock-bible-reader__history-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 4px;
-  background: var(--dock-surface-alt, #1F2937);
-  color: var(--dock-text-dim, #6B7280);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.dock-bible-reader__history-btn:hover {
-  background: var(--dock-surface-hover, #374151);
-  color: var(--dock-text, #F8FAFC);
-  border-color: var(--dock-border-active, #6B7280);
-}
-
-.dock-bible-reader__history-btn--push:hover {
-  background: var(--dock-accent, #1D4ED8);
-  border-color: var(--dock-accent, #1D4ED8);
-  color: #fff;
 }
 
 .dock-bible-reader__ref-header-history {
@@ -8031,7 +8004,8 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 200;
-  min-width: 220px;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 24px));
   padding: 10px;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
@@ -8270,6 +8244,135 @@
 
 .dock-bible-compare-popover__select {
   width: 100%;
+}
+
+.dock-bible-compare-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface-alt, #0F172A);
+}
+
+.dock-bible-compare-tabs__tab {
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dock-bible-compare-tabs__tab:hover {
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-bible-compare-tabs__tab--active {
+  background: var(--dock-accent, #1D4ED8);
+  color: #fff;
+}
+
+.dock-bible-compare-popover__passages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dock-bible-compare-popover__passage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dock-surface-2, #1F2937) 72%, transparent);
+}
+
+.dock-bible-compare-popover__passage--active {
+  border-color: color-mix(in srgb, var(--dock-accent, #1D4ED8) 62%, var(--dock-border, #334155));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent, #1D4ED8) 18%, transparent);
+}
+
+.dock-bible-compare-popover__passage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-bible-compare-popover__input {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+
+.dock-bible-compare-popover__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+}
+
+.dock-bible-compare-popover__remove:hover {
+  background: var(--dock-surface-hover, #374151);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-bible-compare-popover__remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dock-bible-compare-popover__field-error {
+  color: var(--dock-danger, #F87171);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.dock-bible-compare-popover__hint--block {
+  display: block;
+  line-height: 1.4;
+}
+
+.dock-bible-compare-popover__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px dashed var(--dock-border-active, #6B7280);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dock-bible-compare-popover__add:hover {
+  background: var(--dock-surface-hover, #374151);
+}
+
+.dock-bible-compare-popover__add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .dock-bible-version-bar {
@@ -9689,6 +9792,171 @@
   min-height: 140px;
 }
 
+.dock-spellcheck {
+  width: 100%;
+  min-width: 0;
+}
+
+.dock-spellcheck__editor {
+  position: relative;
+  min-width: 0;
+}
+
+.dock-spellcheck__textarea,
+.dock-spellcheck__mirror {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.dock-spellcheck__textarea {
+  position: relative;
+  z-index: 1;
+  font-weight: inherit;
+}
+
+.dock-spellcheck__mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: var(--dock-font-body);
+  color: transparent;
+  pointer-events: none;
+  scrollbar-width: none;
+}
+
+.dock-spellcheck__mirror::-webkit-scrollbar {
+  display: none;
+}
+
+.dock-spellcheck__mirror mark {
+  color: transparent;
+  background: color-mix(in srgb, var(--dock-red) 18%, transparent);
+  border-bottom: 1px wavy var(--dock-red);
+  border-radius: 2px;
+}
+
+.dock-spellcheck__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 22px;
+  margin-top: 4px;
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.dock-spellcheck__toolbar--errors .dock-spellcheck__status {
+  color: var(--dock-red);
+}
+
+.dock-spellcheck__status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-spellcheck__action,
+.dock-spellcheck__suggestion-btn,
+.dock-spellcheck__ignore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.dock-spellcheck__action {
+  min-height: 24px;
+  padding: 3px 7px;
+}
+
+.dock-spellcheck__action--primary {
+  border-color: color-mix(in srgb, var(--dock-accent) 62%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 18%, var(--dock-surface-alt));
+  color: var(--dock-accent);
+}
+
+.dock-spellcheck__action:hover,
+.dock-spellcheck__suggestion-btn:hover,
+.dock-spellcheck__ignore:hover {
+  border-color: var(--dock-accent);
+  color: var(--dock-accent);
+}
+
+.dock-spellcheck__action:focus-visible,
+.dock-spellcheck__suggestion-btn:focus-visible,
+.dock-spellcheck__ignore:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: 1px;
+}
+
+.dock-spellcheck__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.dock-spellcheck__suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 23px;
+  padding: 2px 3px 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--dock-red) 34%, var(--dock-border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-red) 7%, var(--dock-surface));
+  color: var(--dock-text);
+  font-size: 11px;
+  text-transform: none;
+}
+
+.dock-spellcheck__word {
+  color: var(--dock-red);
+}
+
+.dock-spellcheck__suggestion-btn {
+  min-height: 19px;
+  padding: 1px 5px;
+  border-color: color-mix(in srgb, var(--dock-accent) 55%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface-alt));
+  color: var(--dock-accent);
+}
+
+.dock-spellcheck__ignore {
+  min-height: 19px;
+  padding: 1px 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--dock-text-dim);
+}
+
+.dock-spellcheck__no-suggestion,
+.dock-spellcheck__more {
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  text-transform: none;
+}
+
 .dock-dialog__error {
   padding: 8px 8px;
   border: 1px solid color-mix(in srgb, var(--dock-red) 28%, var(--dock-border));
@@ -10074,6 +10342,119 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+}
+
+.dock-bible-passage-reader {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0 8px;
+}
+
+.dock-bible-passage-reader__toolbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--dock-text-dim, #94A3B8);
+}
+
+.dock-bible-passage-reader__toolbar-label {
+  min-width: 120px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dock-bible-passage-reader__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  min-width: 0;
+}
+
+.dock-bible-passage-reader__card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dock-surface-2, #1F2937) 86%, transparent);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dock-bible-passage-reader__card:hover {
+  border-color: var(--dock-border-active, #6B7280);
+  background: var(--dock-surface-hover, #374151);
+}
+
+.dock-bible-passage-reader__card--active {
+  border-color: color-mix(in srgb, var(--dock-accent, #1D4ED8) 70%, var(--dock-border, #334155));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent, #1D4ED8) 20%, transparent);
+}
+
+.dock-bible-passage-reader__card-header,
+.dock-bible-passage-reader__card-reference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dock-bible-passage-reader__card-number {
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dock-bible-passage-reader__card-header .translation-badge {
+  margin-bottom: 0;
+}
+
+.dock-bible-passage-reader__card-reference {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-bible-passage-reader__card-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.dock-bible-passage-reader__text {
+  width: 100%;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.dock-bible-passage-reader__status {
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 11px;
 }
 
 .dock-bible-verse-row--compare {
@@ -17137,6 +17518,336 @@
 .dock-worship-summary__actions .dock-shell-icon-btn {
   width: 40px;
   height: 40px;
+}
+
+.dock-auto-advance {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.dock-auto-advance__trigger {
+  position: relative;
+}
+
+.dock-auto-advance__trigger--active {
+  color: var(--dock-accent-hover);
+}
+
+.dock-auto-advance__dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--dock-surface);
+  border-radius: 999px;
+  background: var(--dock-green);
+}
+
+.dock-auto-advance__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 260;
+  width: min(360px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 94%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dock-surface) 98%, black 2%);
+  color: var(--dock-text);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+}
+
+.dock-auto-advance__header,
+.dock-auto-advance__status-head,
+.dock-auto-advance__timers,
+.dock-auto-advance__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-auto-advance__eyebrow,
+.dock-auto-advance__option-label {
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dock-auto-advance__title {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.dock-auto-advance__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dock-text-dim);
+  cursor: pointer;
+}
+
+.dock-auto-advance__close:hover,
+.dock-auto-advance__close:focus-visible {
+  border-color: var(--dock-accent-soft-border);
+  background: var(--dock-accent-soft);
+  color: var(--dock-text);
+}
+
+.dock-auto-advance__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  margin-top: 10px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-green-soft-border);
+  border-radius: 999px;
+  background: var(--dock-green-soft);
+  color: var(--dock-green);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.dock-auto-advance__description {
+  margin: 8px 0 12px;
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.dock-auto-advance__status {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--dock-accent-soft-border);
+  border-radius: 8px;
+  background: var(--dock-accent-soft);
+}
+
+.dock-auto-advance__status--paused {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.dock-auto-advance__status--completed {
+  border-color: var(--dock-green-soft-border);
+  background: var(--dock-green-soft);
+}
+
+.dock-auto-advance__status-label {
+  color: var(--dock-text);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.dock-auto-advance__position,
+.dock-auto-advance__timers {
+  color: var(--dock-text-dim);
+  font-size: 11px;
+}
+
+.dock-auto-advance__current {
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--dock-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-auto-advance__progress {
+  height: 4px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dock-border) 82%, transparent);
+}
+
+.dock-auto-advance__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dock-accent-hover);
+  transition: width 0.22s linear;
+}
+
+.dock-auto-advance__timers {
+  margin-top: 7px;
+}
+
+.dock-auto-advance__pause-note {
+  margin-top: 7px;
+  color: #FBBF24;
+  font-size: 11px;
+}
+
+.dock-auto-advance__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dock-auto-advance__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dock-auto-advance__number-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid var(--dock-border);
+  border-radius: 7px;
+  background: var(--dock-surface-alt);
+}
+
+.dock-auto-advance__number-input:focus-within {
+  border-color: var(--dock-accent-hover);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dock-accent) 22%, transparent);
+}
+
+.dock-auto-advance__number-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.dock-auto-advance__number-input input::-webkit-inner-spin-button,
+.dock-auto-advance__number-input input::-webkit-outer-spin-button {
+  margin: 0;
+}
+
+.dock-auto-advance__number-input span {
+  flex-shrink: 0;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.dock-auto-advance__option-section {
+  margin-top: 12px;
+}
+
+.dock-auto-advance__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.dock-auto-advance__option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 74%, transparent);
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.dock-auto-advance__option:has(input:checked) {
+  border-color: var(--dock-accent-soft-border);
+  background: var(--dock-accent-soft);
+  color: var(--dock-text);
+}
+
+.dock-auto-advance__option input {
+  accent-color: var(--dock-accent-hover);
+  margin: 0;
+}
+
+.dock-auto-advance__footer {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.dock-auto-advance__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.dock-auto-advance__button--primary {
+  border-color: var(--dock-accent);
+  background: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-auto-advance__button--primary:hover {
+  background: var(--dock-accent-hover);
+}
+
+.dock-auto-advance__button--danger {
+  border-color: var(--dock-red-soft-border);
+  background: var(--dock-red-soft);
+  color: var(--dock-red-text);
+}
+
+.dock-auto-advance__button--danger:hover {
+  border-color: var(--dock-red);
+  background: color-mix(in srgb, var(--dock-red-soft) 72%, var(--dock-red));
+}
+
+.dock-auto-advance__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dock-auto-advance__empty {
+  margin-top: 8px;
+  color: var(--dock-text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+@media (max-width: 480px) {
+  .dock-auto-advance__popover {
+    right: -8px;
+  }
 }
 
 .dock-worship-summary__left {
@@ -34499,4 +35210,14 @@ button.dock-btm-toolbar__clear--inline,
 .dock-bible-verse-row--compare .dock-bible-compare-block__text {
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+.dock-module--bible--narrow .dock-bible-passage-reader__grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 520px) {
+  .dock-bible-passage-reader__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

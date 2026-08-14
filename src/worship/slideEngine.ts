@@ -71,6 +71,12 @@ function classifySectionLabel(rawLabel: string): SectionLabel | null {
     return { label: `Outro${suffix}`, shortLabel: `O${outroMatch[1] ?? ""}`, type: "outro" };
   }
 
+  const presentationPageMatch = label.match(/^(?:slide|page)\s*(\d+)$/i);
+  if (presentationPageMatch) {
+    const number = presentationPageMatch[1];
+    return { label: `Slide ${number}`, shortLabel: `S${number}`, type: "other" };
+  }
+
   return null;
 }
 

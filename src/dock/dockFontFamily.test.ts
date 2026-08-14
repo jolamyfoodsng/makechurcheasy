@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 import {
+  DEFAULT_DOCK_FONT_FAMILY,
   DEFAULT_DOCK_FONT_SCALE,
   DOCK_FONT_FAMILY_OPTIONS,
   DOCK_UNICODE_FALLBACK_FAMILY,
@@ -26,6 +27,12 @@ describe("dock typography settings", () => {
 
     const css = buildDockFontFamilyCss(selected?.family);
     expect(css).toContain('"Noto Sans Symbols 2"');
+  });
+
+  it("offers CMG Sans Black as the default bundled family", () => {
+    const selected = DOCK_FONT_FAMILY_OPTIONS.find((option) => option.id === "cmg-sans-black");
+    expect(selected?.family).toBe(DEFAULT_DOCK_FONT_FAMILY);
+    expect(buildDockFontFamilyStack(undefined)).toContain('"CMG Sans Black"');
   });
 
   it("does not accept arbitrary CSS as a selectable font family", () => {

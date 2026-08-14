@@ -75,14 +75,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
+      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'Charis SIL', 'Noto Sans', 'CMG Sans', Arial, sans-serif;
+      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 400;
       --font-style: normal;
@@ -984,7 +984,7 @@
 
       function scriptureFontFamily(fontFamily) {
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
-        if (!value) return '"Charis SIL","Noto Sans","CMG Sans",Arial,sans-serif';
+        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
         var lower = value.toLowerCase();
         if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
           value = '"Charis SIL","Noto Sans",' + value;

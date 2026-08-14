@@ -49,7 +49,7 @@ export const DOCK_FONT_SCALE_OPTIONS = [
   { id: "extra-large", label: "Extra large (125%)", value: 1.25 },
 ] as const;
 
-const DEFAULT_DOCK_FONT_FAMILY = '"Questrial", "Charis SIL", "Noto Sans"';
+export const DEFAULT_DOCK_FONT_FAMILY = '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", sans-serif';
 const GENERIC_FONT_FAMILIES = new Set([
   "cursive",
   "fantasy",
@@ -83,6 +83,7 @@ export const DOCK_UNICODE_FALLBACK_FAMILY = [
 export const DOCK_FONT_FAMILY_OPTIONS: readonly DockFontFamilyOption[] = [
   { id: "questrial", label: "Questrial (Pan-African)", family: '"Questrial", "Charis SIL", "Noto Sans", sans-serif', group: "Unicode & regional" },
   { id: "charis-sil", label: "Charis SIL (African languages)", family: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif', group: "Unicode & regional" },
+  { id: "cmg-sans-black", label: "CMG Sans Black", family: '"CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans", sans-serif', group: "Unicode & regional" },
   { id: "cmg-sans", label: "CMG Sans", family: '"CMG Sans", "Noto Sans", sans-serif', group: "Unicode & regional" },
   { id: "noto-sans", label: "Noto Sans", family: '"Noto Sans", "Segoe UI", sans-serif', group: "Unicode & regional" },
   { id: "inter", label: "Inter", family: '"Inter", "Segoe UI", sans-serif', group: "Clean & readable" },
@@ -155,7 +156,9 @@ function normalizeTypographyPreferences(value: Partial<DockTypographyPreferences
   const legacy = readLegacyTypographyPreferences();
   const hasFontFamily = Boolean(value && Object.prototype.hasOwnProperty.call(value, "fontFamily"));
   return {
-    fontFamily: hasFontFamily ? normalizeDockFontFamily(value?.fontFamily) : legacy.fontFamily,
+    fontFamily: hasFontFamily
+      ? normalizeDockFontFamily(value?.fontFamily)
+      : (legacy.fontFamily || DEFAULT_DOCK_FONT_FAMILY),
     fontScale: value?.fontScale === undefined
       ? legacy.fontScale
       : normalizeDockFontScale(value.fontScale),

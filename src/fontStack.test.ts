@@ -15,10 +15,10 @@ describe("African-language font stack", () => {
     expect(existsSync(new URL("../public/fonts/questrial/OFL.txt", import.meta.url))).toBe(true);
   });
 
-  it("uses Questrial in app and dock input font stacks", () => {
-    expect(appCss).toContain('--font-african-latin: "Questrial", "Charis SIL", "Noto Sans"');
+  it("uses CMG Sans Black in app and dock input font stacks", () => {
+    expect(appCss).toContain('--font-african-latin: "CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans"');
     expect(appCss).toContain(':where(input, textarea, select, button, [contenteditable="true"])');
-    expect(dockCss).toContain('--dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans"');
+    expect(dockCss).toContain('--dock-font-african-latin: "CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans"');
     expect(dockCss).toContain('.dock-root :where(input, textarea, select, button, [contenteditable="true"])');
   });
 
