@@ -17556,11 +17556,11 @@
 }
 
 .dock-auto-advance__popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 260;
-  width: min(360px, calc(100vw - 24px));
+  z-index: 10000;
+  box-sizing: border-box;
+  max-width: min(360px, calc((100vw - 16px) / var(--dock-font-scale, 1)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 94%, transparent);
   border-radius: 10px;
@@ -17577,6 +17577,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.dock-auto-advance__header > :first-child {
+  min-width: 0;
 }
 
 .dock-auto-advance__eyebrow,
@@ -17790,6 +17794,11 @@
   font-size: 11px;
 }
 
+.dock-auto-advance__option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dock-auto-advance__option:has(input:checked) {
   border-color: var(--dock-accent-soft-border);
   background: var(--dock-accent-soft);
@@ -17855,8 +17864,9 @@
 }
 
 @media (max-width: 480px) {
-  .dock-auto-advance__popover {
-    right: -8px;
+  .dock-auto-advance__fields,
+  .dock-auto-advance__options {
+    grid-template-columns: 1fr;
   }
 }
 

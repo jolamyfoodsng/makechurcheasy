@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import {
@@ -43,6 +44,71 @@ interface DockAutoAdvanceControlProps {
   onActiveChange?: (active: boolean) => void;
   itemKind: AutoAdvanceItemKind;
   storageScope: AutoAdvanceStorageScope;
+}
+
+export interface DockAutoAdvanceViewport {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface DockAutoAdvancePopoverPosition {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+}
+
+/** Keep the auto-advance panel inside the visible Dock viewport. */
+export function getAutoAdvancePopoverPosition(
+  triggerRect: Pick<DOMRect, "top" | "right" | "bottom">,
+  viewport: DockAutoAdvanceViewport,
+  popoverHeight: number,
+  measuredPopoverWidth?: number,
+): DockAutoAdvancePopoverPosition {
+  const viewportPadding = 8;
+  const gap = 8;
+  const maxWidth = 360;
+  const viewportWidth = Math.max(0, viewport.width);
+  const viewportHeight = Math.max(0, viewport.height);
+  const availableWidth = Math.max(0, viewportWidth - (viewportPadding * 2));
+  const width = Math.min(
+    maxWidth,
+    availableWidth,
+    Number.isFinite(measuredPopoverWidth) && measuredPopoverWidth && measuredPopoverWidth > 0
+      ? measuredPopoverWidth
+      : maxWidth,
+  );
+  const maxViewportHeight = Math.max(0, viewportHeight - (viewportPadding * 2));
+  const minimumPanelHeight = Math.min(120, maxViewportHeight);
+  const naturalHeight = Math.min(
+    Math.max(Number.isFinite(popoverHeight) && popoverHeight > 0 ? popoverHeight : 420, minimumPanelHeight),
+    maxViewportHeight,
+  );
+  const availableBelow = Math.max(
+    0,
+    viewport.top + viewport.height - triggerRect.bottom - gap - viewportPadding,
+  );
+  const availableAbove = Math.max(0, triggerRect.top - viewport.top - gap - viewportPadding);
+  const openAbove = availableBelow < naturalHeight && availableAbove > availableBelow;
+  const availableHeight = openAbove ? availableAbove : availableBelow;
+  const maxHeight = Math.max(
+    minimumPanelHeight,
+    Math.min(maxViewportHeight, availableHeight || maxViewportHeight),
+  );
+  const renderedHeight = Math.min(naturalHeight, maxHeight);
+  const preferredTop = openAbove
+    ? triggerRect.top - gap - renderedHeight
+    : triggerRect.bottom + gap;
+  const minTop = viewport.top + viewportPadding;
+  const maxTop = viewport.top + viewport.height - viewportPadding - renderedHeight;
+  const top = Math.max(minTop, Math.min(preferredTop, Math.max(minTop, maxTop)));
+  const minLeft = viewport.left + viewportPadding;
+  const maxLeft = Math.max(minLeft, viewport.left + viewport.width - viewportPadding - width);
+  const left = Math.max(minLeft, Math.min(triggerRect.right - width, maxLeft));
+
+  return { top, left, width, maxHeight };
 }
 
 const DEFAULT_SETTINGS: DockAutoAdvanceSettings = {
@@ -122,6 +188,8 @@ export default function DockAutoAdvanceControl({
 }: DockAutoAdvanceControlProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const previousSelectedIndexRef = useRef(selectedIndex);
   const expectedIndexRef = useRef<number | null>(null);
   const currentIndexRef = useRef(selectedIndex);
@@ -134,6 +202,7 @@ export default function DockAutoAdvanceControl({
   const [remainingRunMs, setRemainingRunMs] = useState(0);
   const [remainingItemMs, setRemainingItemMs] = useState(0);
   const [activeRunDurationMs, setActiveRunDurationMs] = useState(0);
+  const [popoverPosition, setPopoverPosition] = useState<DockAutoAdvancePopoverPosition | null>(null);
 
   currentIndexRef.current = selectedIndex;
   statusRef.current = status;
@@ -288,7 +357,8 @@ export default function DockAutoAdvanceControl({
   useEffect(() => {
     if (!isOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setIsOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setIsOpen(false);
@@ -298,6 +368,67 @@ export default function DockAutoAdvanceControl({
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPopoverPosition(null);
+      return;
+    }
+
+    const updatePopoverPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const dockRoot = rootRef.current?.closest<HTMLElement>(".dock-root");
+      const dockRect = dockRoot?.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 320;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 480;
+      const viewport: DockAutoAdvanceViewport = dockRect && dockRect.width > 0 && dockRect.height > 0
+        ? {
+          left: dockRect.left,
+          top: dockRect.top,
+          width: Math.min(viewportWidth, dockRect.width),
+          height: Math.min(viewportHeight, dockRect.height),
+        }
+        : { left: 0, top: 0, width: viewportWidth, height: viewportHeight };
+      const popoverRect = popoverRef.current?.getBoundingClientRect();
+      const nextPosition = getAutoAdvancePopoverPosition(
+        trigger.getBoundingClientRect(),
+        viewport,
+        popoverRect?.height ?? 420,
+        popoverRect?.width,
+      );
+
+      setPopoverPosition((current) => (
+        current
+        && current.top === nextPosition.top
+        && current.left === nextPosition.left
+        && current.width === nextPosition.width
+        && current.maxHeight === nextPosition.maxHeight
+          ? current
+          : nextPosition
+      ));
+    };
+
+    updatePopoverPosition();
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+    window.visualViewport?.addEventListener("resize", updatePopoverPosition);
+    window.visualViewport?.addEventListener("scroll", updatePopoverPosition);
+
+    const resizeObserver = typeof ResizeObserver !== "undefined" && popoverRef.current
+      ? new ResizeObserver(updatePopoverPosition)
+      : null;
+    if (resizeObserver && popoverRef.current) resizeObserver.observe(popoverRef.current);
+
+    return () => {
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+      window.visualViewport?.removeEventListener("resize", updatePopoverPosition);
+      window.visualViewport?.removeEventListener("scroll", updatePopoverPosition);
+      resizeObserver?.disconnect();
     };
   }, [isOpen]);
 
@@ -314,6 +445,7 @@ export default function DockAutoAdvanceControl({
     <div ref={rootRef} className="dock-auto-advance">
       <button
         type="button"
+        ref={triggerRef}
         className={`dock-shell-icon-btn dock-auto-advance__trigger${isActive ? " dock-shell-icon-btn--active dock-auto-advance__trigger--active" : ""}`}
         onClick={() => setIsOpen((open) => !open)}
         disabled={items.length === 0}
@@ -325,8 +457,22 @@ export default function DockAutoAdvanceControl({
         {isActive && <span className="dock-auto-advance__dot" aria-hidden="true" />}
       </button>
 
-      {isOpen && (
-        <div className="dock-auto-advance__popover" role="dialog" aria-label={t("autoAdvance.title")}>
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          className="dock-auto-advance__popover"
+          data-dock-keep-overflow-open="true"
+          role="dialog"
+          aria-label={t("autoAdvance.title")}
+          style={{
+            position: "fixed",
+            top: popoverPosition?.top ?? 0,
+            left: popoverPosition?.left ?? 0,
+            width: popoverPosition?.width ?? 360,
+            maxHeight: popoverPosition?.maxHeight,
+            visibility: popoverPosition ? "visible" : "hidden",
+          }}
+        >
           <div className="dock-auto-advance__header">
             <div>
               <div className="dock-auto-advance__eyebrow">{t("autoAdvance.title")}</div>
@@ -502,7 +648,8 @@ export default function DockAutoAdvanceControl({
           </div>
 
           {!canStart && <div className="dock-auto-advance__empty">{t("autoAdvance.selectItem")}</div>}
-        </div>
+        </div>,
+        rootRef.current?.closest<HTMLElement>(".dock-root") ?? document.body,
       )}
     </div>
   );
