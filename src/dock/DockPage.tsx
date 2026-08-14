@@ -893,93 +893,93 @@ export default function DockPage({
 
         {/* ── Page Header (hamburger L, refresh and theme R) ── */}
         {!hideShellHeader && (
-        <div
-          className="dock-inline-header"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: headerCollapsed ? "2px 8px" : "6px 8px",
-            borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
-            flexShrink: 0,
-            userSelect: "none",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <button
-              type="button"
-              aria-expanded={!headerCollapsed}
-              aria-controls="dock-shell-header-actions"
-              aria-label={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
-              title={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
-              onClick={() => setHeaderCollapsed((prev) => !prev)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                padding: 0,
-                border: "none",
-                borderRadius: 3,
-                background: "transparent",
-                color: "#9CA3AF",
-                cursor: "pointer",
-              }}
-            >
-              <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} />
-            </button>
-            {!headerCollapsed && (
+          <div
+            className="dock-inline-header"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: headerCollapsed ? "2px 8px" : "6px 8px",
+              borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+              flexShrink: 0,
+              userSelect: "none",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setShowSettingsMenu((prev) => !prev); }}
+                aria-expanded={!headerCollapsed}
+                aria-controls="dock-shell-header-actions"
+                aria-label={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
+                title={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
+                onClick={() => setHeaderCollapsed((prev) => !prev)}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  width: 28, height: 28,
+                  width: 28,
+                  height: 28,
+                  padding: 0,
                   border: "none",
                   borderRadius: 3,
                   background: "transparent",
                   color: "#9CA3AF",
                   cursor: "pointer",
                 }}
-                aria-label={t("page.menu", "Menu")}
-                title={t("page.menu", "Menu")}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+                <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} />
               </button>
-            )}
-          </div>
-          <div
-            id="dock-shell-header-actions"
-            hidden={headerCollapsed}
-            style={{ display: "flex", alignItems: "center", gap: 2 }}
-          >
-            {!headerCollapsed && (
-              <>
+              {!headerCollapsed && (
                 <button
                   type="button"
-                  className="dock-inline-header__icon-btn"
-                  onClick={() => setTheme(nextTheme)}
-                  aria-label={themeToggleLabel}
-                  title={themeToggleLabel}
+                  onClick={(e) => { e.stopPropagation(); setShowSettingsMenu((prev) => !prev); }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 28, height: 28,
+                    border: "none",
+                    borderRadius: 3,
+                    background: "transparent",
+                    color: "#9CA3AF",
+                    cursor: "pointer",
+                  }}
+                  aria-label={t("page.menu", "Menu")}
+                  title={t("page.menu", "Menu")}
                 >
-                  <Icon name={themeToggleIcon} size={14} />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg>
                 </button>
-                <button
-                  type="button"
-                  className="dock-inline-header__icon-btn"
-                  onClick={() => window.location.reload()}
-                  aria-label={t("common.refresh", "Refresh")}
-                  title={t("common.refresh", "Refresh")}
-                >
-                  <Icon name="refresh" size={14} />
-                </button>
-              </>
-            )}
+              )}
+            </div>
+            <div
+              id="dock-shell-header-actions"
+              hidden={headerCollapsed}
+              style={{ display: "flex", alignItems: "center", gap: 2 }}
+            >
+              {!headerCollapsed && (
+                <>
+                  <button
+                    type="button"
+                    className="dock-inline-header__icon-btn"
+                    onClick={() => setTheme(nextTheme)}
+                    aria-label={themeToggleLabel}
+                    title={themeToggleLabel}
+                  >
+                    <Icon name={themeToggleIcon} size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-inline-header__icon-btn"
+                    onClick={() => window.location.reload()}
+                    aria-label={t("common.refresh", "Refresh")}
+                    title={t("common.refresh", "Refresh")}
+                  >
+                    <Icon name="refresh" size={14} />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         {/* ── Sidebar ── */}
@@ -1485,9 +1485,7 @@ export default function DockPage({
                       {t('common.import', 'Import')}
                     </button>
                   </div>
-                  <div className="dock-session-transfer__hint">
-                    {t('page.dockSessionHint', 'Known settings are validated before import. Local media files must still exist on the computer.')}
-                  </div>
+
                 </div>
               </div>
             </div>
