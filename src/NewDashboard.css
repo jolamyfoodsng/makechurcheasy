@@ -41,6 +41,7 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
+    min-width: 0;
 }
 
 .app-container ::selection {
@@ -53,6 +54,8 @@
     flex: 1;
     height: 100%;
     overflow-y: auto;
+    min-width: 0;
+    container: dashboard / inline-size;
     /* padding: 1rem; */
     position: relative;
     transition: margin-left 0.2s ease;
@@ -85,11 +88,17 @@
 
 .app-content {
     max-width: 100%;
+    min-width: 0;
     margin-left: auto;
     margin-right: auto;
     opacity: 0;
     padding: 0.5rem 1rem;
     animation: fadeIn 0.5s ease-out forwards;
+}
+
+.app-page__inner {
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────── */
@@ -904,6 +913,7 @@
     grid-template-columns: 1fr 1fr auto auto;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 @media (max-width: 1100px) {
@@ -938,6 +948,11 @@
     display: flex;
     align-items: center;
     gap: 1rem;
+    min-width: 0;
+}
+
+.status-item > div {
+    min-width: 0;
 }
 
 .status-icon {
@@ -1072,6 +1087,7 @@
     grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 1.5rem;
     margin-bottom: 1.5rem;
+    min-width: 0;
 }
 
 @media (min-width: 768px) {
@@ -1097,6 +1113,7 @@
     text-align: center;
     position: relative;
     overflow: hidden;
+    min-width: 0;
     transition: border-color var(--transition);
 }
 
@@ -1332,6 +1349,7 @@
     grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 1.5rem;
     margin-bottom: 1.5rem;
+    min-width: 0;
 }
 
 @media (min-width: 1024px) {
@@ -1345,6 +1363,7 @@
     border: 1px solid var(--border);
     border-radius: 0.75rem;
     padding: 1.5rem;
+    min-width: 0;
 }
 
 .panel-header {
@@ -1619,6 +1638,7 @@
     flex-direction: column;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
+    min-width: 0;
 }
 
 .urls-header {
@@ -1658,6 +1678,7 @@
 .urls-row {
     display: flex;
     gap: 1rem;
+    min-width: 0;
 }
 
 .url-label-block {
@@ -1962,9 +1983,10 @@
 
 .summary-cards {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
+    min-width: 0;
 }
 
 .summary-card {
@@ -1977,6 +1999,69 @@
     gap: 0.875rem;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     min-height: 5rem;
+    min-width: 0;
+}
+
+/*
+ * The sidebar changes the usable content width without changing the viewport
+ * width. Container queries keep the dashboard responsive in compact desktop
+ * windows and when the sidebar is expanded.
+ */
+@container dashboard (max-width: 1100px) {
+    .status-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .status-panel > .btn-primary,
+    .status-panel > .btn-secondary {
+        grid-column: 1 / -1;
+    }
+
+    .summary-cards,
+    .grid-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .activity-status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .actions-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .footer-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@container dashboard (max-width: 680px) {
+    .header-container {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .header-right {
+        justify-content: space-between;
+    }
+
+    .status-panel,
+    .summary-cards,
+    .grid-container,
+    .actions-grid,
+    .footer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .status-panel > .btn-primary,
+    .status-panel > .btn-secondary {
+        grid-column: auto;
+    }
+
+    .urls-row {
+        flex-direction: column;
+    }
 }
 
 .summary-card:hover {
