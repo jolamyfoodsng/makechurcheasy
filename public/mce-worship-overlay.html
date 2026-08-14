@@ -137,6 +137,11 @@
       background: transparent !important;
     }
 
+    body,
+    body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]) {
+      font-family: var(--mce-output-font-family, var(--font-family)) !important;
+    }
+
     /* ── Shared: Background layers ── */
     #background {
       position: absolute;
@@ -1979,8 +1984,8 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
-          applyObsBrowserEventCss(data.css || data.overlayCss || '');
           processOverlayUpdate(packet);
+          applyObsBrowserEventCss(data.css || data.overlayCss || '');
           return true;
         } catch { }
         return false;

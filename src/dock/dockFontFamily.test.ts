@@ -27,6 +27,7 @@ describe("dock typography settings", () => {
 
     const css = buildDockFontFamilyCss(selected?.family);
     expect(css).toContain('"Noto Sans Symbols 2"');
+    expect(css).toContain('--mce-output-font-family');
   });
 
   it("offers CMG Sans Black as the default bundled family", () => {

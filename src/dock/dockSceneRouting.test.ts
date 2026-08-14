@@ -141,7 +141,11 @@ describe("dock scene routing", () => {
     expect(dockPageSource).toContain("page.dockFontSize");
     expect(dockPageSource).toContain("page.obsFontFamily");
     expect(dockPageSource).not.toContain("OBS output size");
+    expect(dockPageSource).toContain("refreshOutputTypography");
     expect(obsClientSource).toContain("loadDockOutputFontFamily");
+    expect(obsClientSource).toContain("async refreshOutputTypography");
+    expect(bibleOverlaySource).toContain("--mce-output-font-family");
+    expect(bibleOverlaySource).toContain("'--mce-output-font-family'");
     expect(presentationBridgeSource).toContain("loadDockOutputFontFamily");
   });
 
@@ -170,6 +174,6 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("url: parsed.baseUrl");
     expect(methodSource).toContain("overlayPacket: parsed.payload");
     expect(methodSource).toContain('overlayTab: "lower-third"');
-    expect(methodSource).toContain("this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, \"\")");
+    expect(methodSource).toContain("this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, \"\", \"lower-third\")");
   });
 });

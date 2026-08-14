@@ -573,6 +573,7 @@ class DockObsClient {
   private _lastCssOverlayPacketBySource: Record<string, Record<string, unknown>> = {};
   private _lastCssOverlayBaseUrlBySource: Record<string, string> = {};
   private _lastCssOverlayThemeCssBySource: Record<string, string> = {};
+  private _lastCssOverlayTabBySource: Record<string, CssOverlayPacketTab> = {};
   /** Track the last browser source URL per input so identical verse pushes can skip reloads. */
   private _lastBrowserSourceUrlBySource: Record<string, string> = {};
   /** Avoid repeating expensive source order/fit checks on every fast overlay packet. */
@@ -4324,7 +4325,7 @@ class DockObsClient {
     if (mode === "fullscreen" || mode === "lower-third") {
       this._lastOverlayMode[sourceName] = mode;
     }
-    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss);
+    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss, tabType);
     return true;
   }
 
@@ -4447,27 +4448,27 @@ class DockObsClient {
       // fullscreen layer while the CSS packet is arriving. It is ignored by
       // URL comparison after bootstrap, so later verse updates stay in place.
       await this.setBrowserSourceUrl(inputName, bootstrapUrl, sourceWasNotTracked, overlayCss);
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
     if (modeChanged) {
       // The running page morphs in place; never recreate it for a mode switch.
       await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
     if (!themePayloadChanged) {
       await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
     // Theme changes use the same in-place event path, so changing a background
     // or font cannot blank the browser source between slides.
     await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
-    this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+    this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
   }
 
   private rememberCssOverlayTransport(
@@ -4475,10 +4476,41 @@ class DockObsClient {
     packet: Record<string, unknown>,
     baseUrl: string,
     themeCss = "",
+    tabType?: CssOverlayPacketTab,
   ): void {
     this._lastCssOverlayPacketBySource[inputName] = packet;
     this._lastCssOverlayBaseUrlBySource[inputName] = baseUrl;
     this._lastCssOverlayThemeCssBySource[inputName] = themeCss || "";
+    if (tabType) this._lastCssOverlayTabBySource[inputName] = tabType;
+  }
+
+  /**
+   * Reapply the selected OBS font family to browser sources that are already
+   * live. Changing the Dock setting must not wait for the next verse/song
+   * push; the active OBS document needs the same packet refresh as a theme
+   * change.
+   */
+  async refreshOutputTypography(): Promise<void> {
+    if (!this.isConnected) return;
+
+    const entries = Object.entries(this._lastCssOverlayPacketBySource);
+    await Promise.all(entries.map(async ([sourceName, packet]) => {
+      const baseUrl = this._lastCssOverlayBaseUrlBySource[sourceName];
+      const tabType = this._lastCssOverlayTabBySource[sourceName];
+      if (!baseUrl || !tabType) return;
+
+      const refreshedPacket = { ...packet, timestamp: Date.now() };
+      const themeCss = this._lastCssOverlayThemeCssBySource[sourceName] || "";
+      const overlayCss = this.buildCssOverlayDataCss(refreshedPacket, themeCss);
+      const emitted = await this.emitBrowserOverlayPacket(tabType, refreshedPacket, overlayCss, sourceName);
+      if (!emitted) {
+        await this.call("SetInputSettings", {
+          inputName: sourceName,
+          inputSettings: { css: overlayCss },
+        });
+      }
+      this.rememberCssOverlayTransport(sourceName, refreshedPacket, baseUrl, themeCss, tabType);
+    }));
   }
 
   private extractOverlayPacketFromCss(css: string | undefined): Record<string, unknown> | null {
@@ -5927,7 +5959,7 @@ class DockObsClient {
         overlayTab: "bible",
         css: this.buildCssOverlayDataCss(packet, css),
       });
-      this.rememberCssOverlayTransport(sourceName, packet, baseUrl, css);
+      this.rememberCssOverlayTransport(sourceName, packet, baseUrl, css, "bible");
     });
   }
 
@@ -5988,7 +6020,7 @@ class DockObsClient {
       overlayTab: tab,
       css: this.buildCssOverlayDataCss(packet, themeCss),
     });
-    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss);
+    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss, tab);
   }
 
   async pushWorshipToScene(data: DockTabContentPushData, sceneName: string): Promise<void> {
@@ -6021,7 +6053,7 @@ class DockObsClient {
         width: options?.sourceWidth,
         height: options?.sourceHeight,
       });
-      this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, "");
+      this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, "", "lower-third");
       return;
     }
 

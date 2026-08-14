@@ -227,7 +227,7 @@ export function buildDockFontFamilyCss(value: unknown): string {
   const safeFamily = buildDockFontFamilyStack(family);
 
   return [
-    `:root { --font-family: ${safeFamily}; --ref-font-family: ${safeFamily}; --compare-font-family: ${safeFamily}; }`,
+    `:root { --font-family: ${safeFamily}; --ref-font-family: ${safeFamily}; --compare-font-family: ${safeFamily}; --mce-output-font-family: ${safeFamily}; }`,
     `body, body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]) { font-family: ${safeFamily} !important; }`,
   ].join("\n");
 }

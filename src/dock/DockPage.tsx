@@ -299,6 +299,9 @@ export default function DockPage({
     typographyHydrationGenerationRef.current += 1;
     setDockOutputFontFamily(value);
     saveDockOutputFontFamily(value);
+    void dockObsClient.refreshOutputTypography().catch((error) => {
+      console.warn("[Dock] Failed to refresh OBS text typography:", error);
+    });
   }, []);
 
   const resetDockTypography = useCallback(() => {
