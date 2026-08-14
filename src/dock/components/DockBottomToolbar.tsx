@@ -30,6 +30,8 @@ interface Props {
   morphing?: boolean;
   /** Hide Full/LT mode controls when the output is fixed to fullscreen */
   hideOverlayModeToggle?: boolean;
+  /** Disable Full/LT while an automated slide run owns the output mode */
+  overlayModeToggleDisabled?: boolean;
   /** Action buttons rendered between the divider and spacer */
   children?: React.ReactNode;
   /** Label for the clear button */
@@ -61,6 +63,7 @@ export default function DockBottomToolbar({
   onDisplayModeChange,
   morphing = false,
   hideOverlayModeToggle = false,
+  overlayModeToggleDisabled = false,
   children,
   clearLabel,
   onClear,
@@ -81,6 +84,7 @@ export default function DockBottomToolbar({
   const [showDisplayModeMenu, setShowDisplayModeMenu] = useState(false);
   const displayModeMenuRef = useRef<HTMLDivElement>(null);
   const visibilityIcon = sourceVisible ? "visibility_off" : "visibility";
+  const modeToggleDisabled = morphing || overlayModeToggleDisabled;
 
   // Close overflow on outside click
   useEffect(() => {
@@ -182,8 +186,8 @@ export default function DockBottomToolbar({
                 onClick={() => {
                   if (!morphing && overlayMode !== "fullscreen") onModeChange("fullscreen");
                 }}
-                disabled={morphing}
-                aria-busy={morphing}
+                disabled={modeToggleDisabled}
+                aria-busy={morphing || undefined}
                 aria-pressed={overlayMode === "fullscreen"}
                 title={t("dock.bottomToolbar.fullscreenTooltip")}
               >
@@ -211,8 +215,8 @@ export default function DockBottomToolbar({
               onClick={() => {
                 if (!morphing && overlayMode !== "lower-third") onModeChange("lower-third");
               }}
-              disabled={morphing}
-              aria-busy={morphing}
+              disabled={modeToggleDisabled}
+              aria-busy={morphing || undefined}
               aria-pressed={overlayMode === "lower-third"}
               title={t("dock.bottomToolbar.lowerThirdTooltip")}
             >

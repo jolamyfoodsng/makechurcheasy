@@ -6481,6 +6481,16 @@
   color: var(--dock-text);
 }
 
+.dock-console-segmented__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dock-console-segmented__item:disabled:hover {
+  background: transparent;
+  color: var(--dock-text-dim);
+}
+
 .dock-console-segmented__item--active {
   background: var(--dock-accent);
   color: #fff;
@@ -20953,6 +20963,18 @@
   color: var(--dock-text);
 }
 
+.dock-media-tab:disabled,
+.dock-media-tab--locked {
+  color: var(--dock-text-dim);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dock-media-tab:disabled:hover,
+.dock-media-tab--locked:hover {
+  color: var(--dock-text-dim);
+}
+
 .dock-media-tab--active {
   color: var(--dock-text);
   font-weight: 600;
@@ -34094,7 +34116,7 @@ button.dock-btm-toolbar__clear--inline,
   zoom: 0.35 !important;
 }
 
-/* ── Animation Square Tile Grid ── */
+/* ── Animation video preview grid ── */
 
 .dock-animation-grid {
   display: grid;
@@ -34105,6 +34127,11 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-animation-tile {
   position: relative;
+  /* Keep the row height deterministic in Windows WebView2. The old layout
+     put aspect-ratio on the child while its height was percentage-based,
+     which could collapse remote video previews into thin strips. */
+  aspect-ratio: 16 / 9;
+  min-height: 62px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--dock-surface-alt);
@@ -34128,9 +34155,8 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-animation-tile__thumb {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   background: var(--dock-surface-alt);
 }

@@ -28,7 +28,7 @@ import {
 } from "../../services/templateVideos";
 import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { isInternalDockMediaItem, isInternalDockUploadFile } from "../internalMediaAssets";
-import { requireEntitlement, showUpgradeModal } from "../dockEntitlement";
+import { getDockPlan, requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { isSupportedMediaFile } from "../../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
@@ -36,7 +36,7 @@ import {
   isSupportedDocumentFile,
   type DocumentPageFile,
 } from "../documentConversion";
-import { getFeatureLimit } from "../../services/entitlementClient";
+import { checkEntitlementSync, getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { isUserSelectableObsScene } from "../../services/dockSceneNames";
@@ -606,6 +606,7 @@ export default function DockMediaTab({
   const [isMicroHeight, setIsMicroHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
+  const [dockPlan, setDockPlan] = useState(() => getDockPlan());
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
   const [assetSearch, setAssetSearch] = useState("");
@@ -657,6 +658,12 @@ export default function DockMediaTab({
   const mediaPollBusyRef = useRef(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
 
+  const animationEntitlement = useMemo(
+    () => checkEntitlementSync("slideshow", dockPlan),
+    [dockPlan],
+  );
+  const animationsLocked = !animationEntitlement.allowed;
+
   useEffect(() => {
     if (!presentationLinkMode || textOverlay.background.mode !== "lower-third") return;
     setTextOverlay((current) => ({
@@ -684,6 +691,29 @@ export default function DockMediaTab({
       mountedRef.current = false;
     };
   }, []);
+
+  // Keep the animation lock in sync when the desktop app refreshes or upgrades
+  // the dock session without requiring a full dock reload.
+  useEffect(() => {
+    const syncPlan = () => setDockPlan(getDockPlan());
+    const unsubscribe = dockClient.onState((msg) => {
+      if (msg.type === "state:plan-update") syncPlan();
+    });
+    const onStorage = () => syncPlan();
+    window.addEventListener("storage", onStorage);
+    const interval = window.setInterval(syncPlan, 60_000);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("storage", onStorage);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!animationsLocked) return;
+    if (browserTab === "animations") setBrowserTab("uploads");
+    if (addMediaTab === "template-videos") setAddMediaTab("background");
+  }, [addMediaTab, animationsLocked, browserTab]);
 
   // Compact tabs when the console is narrow
   useEffect(() => {
@@ -820,6 +850,7 @@ export default function DockMediaTab({
   }, []);
 
   const loadTemplateVideos = useCallback(async () => {
+    if (animationsLocked) return;
     setTemplateVideosLoading(true);
     setTemplateVideosError(null);
     try {
@@ -835,9 +866,10 @@ export default function DockMediaTab({
         setTemplateVideosLoading(false);
       }
     }
-  }, []);
+  }, [animationsLocked, t]);
 
-  const openAddMediaModal = useCallback((tab: DockAddMediaTab = "background") => {
+  const openAddMediaModal = useCallback(async (tab: DockAddMediaTab = "background") => {
+    if (tab === "template-videos" && !(await requireEntitlement("slideshow", 0))) return;
     setAddMediaTab(tab);
     setTemplateVideoSearch("");
     setShowAddMediaModal(true);
@@ -961,11 +993,11 @@ export default function DockMediaTab({
   }, [localLibrary]);
 
   useEffect(() => {
-    if (!showAddMediaModal || addMediaTab !== "template-videos" || templateVideos.length > 0 || templateVideosLoading) {
+    if (animationsLocked || !showAddMediaModal || addMediaTab !== "template-videos" || templateVideos.length > 0 || templateVideosLoading) {
       return;
     }
     void loadTemplateVideos();
-  }, [addMediaTab, loadTemplateVideos, showAddMediaModal, templateVideos.length, templateVideosLoading]);
+  }, [addMediaTab, animationsLocked, loadTemplateVideos, showAddMediaModal, templateVideos.length, templateVideosLoading]);
 
   // ── Play uploaded media via OBS — send to Preview or Go Live ──
 
@@ -1469,8 +1501,7 @@ export default function DockMediaTab({
   // ── Plan-locked items: items beyond the plan limit get a blur + padlock ──
   const lockedKeys = useMemo(() => {
     const locked = new Set<string>();
-    let plan = "free";
-    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
+    const plan = dockPlan;
 
     // Try server-provided entitlements first, then FALLBACK_LIMITS
     let serverEntitlements: Record<string, number | boolean> | null = null;
@@ -1514,16 +1545,10 @@ export default function DockMediaTab({
     }
 
     return locked;
-  }, [mediaEntries]);
+  }, [dockPlan, mediaEntries]);
 
   // Free-plan gating: restrict visible uploads to the allowed count only
-  const isFreePlan = useMemo(() => {
-    try {
-      return (localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free").toLowerCase() === "free";
-    } catch {
-      return true;
-    }
-  }, []);
+  const isFreePlan = dockPlan === "free";
 
   const filteredUploadEntries = useMemo(() => {
     const pool = activeKind === "all"
@@ -1554,10 +1579,11 @@ export default function DockMediaTab({
     return patternEntries.filter((entry) => entry.name.toLowerCase().includes(query));
   }, [assetSearch, patternEntries]);
   const filteredAnimationEntries = useMemo(() => {
+    if (animationsLocked) return [];
     const query = assetSearch.trim().toLowerCase();
     if (!query) return animationEntries;
     return animationEntries.filter((entry) => entry.name.toLowerCase().includes(query));
-  }, [animationEntries, assetSearch]);
+  }, [animationEntries, animationsLocked, assetSearch]);
   const filteredTemplateVideos = useMemo(() => {
     const query = templateVideoSearch.trim().toLowerCase();
     return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
@@ -1621,6 +1647,7 @@ export default function DockMediaTab({
 
   const handleCreateVlcPlaylist = useCallback(async () => {
     if (selectedKeys.size === 0) return;
+    if (!(await requireEntitlement("slideshow", 0))) return;
     const videoCount = libraryMedia.filter((m) => m.type === "video").length;
     if (!(await requireEntitlement("videos", videoCount))) return;
     try {
@@ -2023,6 +2050,9 @@ export default function DockMediaTab({
     async (entry: DockMediaEntry, optionOverrides: DockMediaSendOptions = {}) => {
       // Presentation actions do NOT consume storage quota — no entitlement check needed.
       // The media already exists within the user's allowed quota.
+      if (entry.libraryItem && isAnimationMediaItem(entry.libraryItem)) {
+        if (!(await requireEntitlement("slideshow", 0))) return false;
+      }
       let success = false;
       const options = { ...getEntrySendOptions(entry), ...optionOverrides };
       if (entry.uploadFile) {
@@ -2791,10 +2821,10 @@ export default function DockMediaTab({
                   uploadInputRef.current?.click();
                 }
               }}
-              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations") || (browserTab === "animations" && animationsLocked)}
               title={
                 browserTab === "animations"
-                  ? t('media.addAnimation')
+                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
                   : browserTab !== "uploads"
                     ? t('media.uploadRestricted')
                     : uploading ? t('media.preparing') : t('media.addMedia')
@@ -2804,7 +2834,7 @@ export default function DockMediaTab({
               {uploading
                 ? t('media.preparing')
                 : browserTab === "animations"
-                  ? t('media.addAnimation')
+                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
                   : t('media.addMedia')}
             </button>
             <button
@@ -2862,11 +2892,15 @@ export default function DockMediaTab({
             type="button"
             role="tab"
             aria-selected={browserTab === "animations"}
-            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}`}
-            onClick={() => setBrowserTab("animations")}
+            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
+            onClick={() => {
+              if (!animationsLocked) setBrowserTab("animations");
+            }}
+            disabled={animationsLocked}
+            title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
           >
-            {compactTabs ? <Icon name="animation" size={12} /> : t('media.tabAnimations')}
-            {!compactTabs && <span className="dock-media-tab__count">{animationEntries.length}</span>}
+            {compactTabs ? <Icon name={animationsLocked ? "lock" : "animation"} size={12} /> : t('media.tabAnimations')}
+            {!compactTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationEntries.length}</span>}
           </button>
           <button
             type="button"
@@ -2900,10 +2934,10 @@ export default function DockMediaTab({
                   uploadInputRef.current?.click();
                 }
               }}
-              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations")}
+              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations") || (browserTab === "animations" && animationsLocked)}
               title={
                 browserTab === "animations"
-                  ? t('media.addAnimation')
+                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
                   : browserTab !== "uploads"
                     ? t('media.uploadRestricted')
                     : uploading ? t('media.preparing') : t('media.addMedia')
@@ -3434,6 +3468,24 @@ export default function DockMediaTab({
         )}
 
         {browserTab === "animations" && (
+          animationsLocked ? (
+            <div className="dock-media-empty dock-media-empty--locked">
+              <div className="dock-media-empty__icon">
+                <Icon name="lock" size={24} />
+              </div>
+              <div className="dock-media-empty__title">{t('media.tabAnimations')}</div>
+              <div className="dock-media-empty__text">{t('media.upgradeToAccess')}</div>
+              <button
+                type="button"
+                className="dock-btn dock-btn--preview dock-btn--compact"
+                onClick={() => void requireEntitlement("slideshow", 0)}
+                title={t('media.upgradeToAccess')}
+              >
+                <Icon name="upgrade" size={12} />
+                {t('media.upgradeToAccess')}
+              </button>
+            </div>
+          ) : (
           <>
             {filteredAnimationEntries.length === 0 ? (
               <div className="dock-media-empty">
@@ -3498,6 +3550,7 @@ export default function DockMediaTab({
               </div>
             )}
           </>
+          )
         )}
 
         {browserTab === "patterns" && (
@@ -4099,8 +4152,11 @@ export default function DockMediaTab({
                   role="tab"
                   aria-selected={addMediaTab === "template-videos"}
                   className={`dock-console-segmented__item${addMediaTab === "template-videos" ? " dock-console-segmented__item--active" : ""}`}
-                  onClick={() => setAddMediaTab("template-videos")}
-                  title={t('media.templateVideos')}>
+                  onClick={() => {
+                    if (!animationsLocked) setAddMediaTab("template-videos");
+                  }}
+                  disabled={animationsLocked}
+                  title={animationsLocked ? t('media.upgradeToAccess') : t('media.templateVideos')}>
                   {t('media.templateVideos')}
                 </button>
               </div>

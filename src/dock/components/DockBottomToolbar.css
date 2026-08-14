@@ -70,6 +70,15 @@
   color: var(--dock-text, #F8FAFC);
 }
 
+.dock-btm-segmented__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dock-btm-segmented__item:disabled:hover {
+  background: transparent;
+}
+
 .dock-btm-segmented__item--full {
   flex: 3;
 }

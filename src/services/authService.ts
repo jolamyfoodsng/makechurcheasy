@@ -764,6 +764,7 @@ export async function redeemPairingCode(
       if (res.status === 410) return { success: false, error: data.error === "Code already used" ? "This code has already been used. Generate a new one." : "This code has expired. Generate a new one.", code: data.error === "Code already used" ? "already_used" : "expired" };
       if (res.status === 403 && data.error === "email_not_verified") return { success: false, error: "Please verify your email address before pairing.", code: "email_not_verified" };
       if (res.status === 403 && data.error === "device_limit_reached") return { success: false, error: data.message || "Device limit reached.", code: "device_limit_reached" };
+      if (res.status === 403 && data.error === "trial_already_claimed") return { success: false, error: data.message || "This device has already used its free trial. Please subscribe to continue.", code: "trial_already_claimed" };
       return { success: false, error: data.error || "Failed to pair device. Please try again." };
     }
 
@@ -928,6 +929,12 @@ export function watchPairingStatus(
     finish(() => {
       callbacks.onError(data.message || "Device limit reached. Remove an old device or upgrade your plan.");
     });
+  });
+
+  es.addEventListener("trial_unavailable", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'trial_unavailable' event:", e.data);
+    const data = JSON.parse(e.data);
+    finish(() => callbacks.onError(data.message || "This device has already used its free trial. Please subscribe to continue."));
   });
 
   es.addEventListener("error", (e: MessageEvent | Event) => {

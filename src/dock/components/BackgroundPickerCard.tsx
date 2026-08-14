@@ -815,8 +815,8 @@ export default function BackgroundPickerCard({
                 )}
               </div>
 
-              {storageScope === "bible" && (
-                <BibleAnimationSection
+              {(storageScope === "bible" || storageScope === "worship" || storageScope === "notes") && (
+                <MotionSection
                   quickSettings={quickSettings}
                   onQuickSettingsChange={onQuickSettingsChange}
                 />
@@ -1670,7 +1670,7 @@ function PatternTab({
   );
 }
 
-const BIBLE_ANIMATION_OPTIONS: Array<{ value: NonNullable<DockFullscreenQuickThemeSettings["animation"]>; label: string }> = [
+const MOTION_OPTIONS: Array<{ value: NonNullable<DockFullscreenQuickThemeSettings["animation"]>; label: string }> = [
   { value: "none", label: "Off" },
   { value: "fade", label: "Fade" },
   { value: "slide-up", label: "Slide up" },
@@ -1679,7 +1679,7 @@ const BIBLE_ANIMATION_OPTIONS: Array<{ value: NonNullable<DockFullscreenQuickThe
   { value: "reveal-bg-then-text", label: "Reveal background + text" },
 ];
 
-function BibleAnimationSection({
+function MotionSection({
   quickSettings,
   onQuickSettingsChange,
 }: {
@@ -1691,10 +1691,10 @@ function BibleAnimationSection({
   const animationEnabled = animation !== "none";
 
   return (
-    <section className="dtb-bg-picker__motion-section" aria-labelledby="dtb-bible-motion-title">
+    <section className="dtb-bg-picker__motion-section" aria-labelledby="dtb-motion-title">
       <div className="dtb-bg-picker__motion-header">
         <div>
-          <div id="dtb-bible-motion-title" className="dtb-bg-picker__motion-title">
+          <div id="dtb-motion-title" className="dtb-bg-picker__motion-title">
             {t("bgPicker.motion", "Motion")}
           </div>
         </div>
@@ -1707,7 +1707,7 @@ function BibleAnimationSection({
           }))}
           aria-label={t("bgPicker.motion", "Motion")}
         >
-          {BIBLE_ANIMATION_OPTIONS.map((option) => (
+          {MOTION_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>

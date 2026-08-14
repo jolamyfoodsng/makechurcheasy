@@ -18,4 +18,9 @@ describe("dock auto-advance queue", () => {
     expect(getAutoAdvanceIndex(3, 3, "loop")).toBeNull();
     expect(getAutoAdvanceIndex(0, 0, "loop")).toBeNull();
   });
+
+  it("keeps a single-item queue scoped to the selected item", () => {
+    expect(getAutoAdvanceIndex(0, 1, "stop")).toBeNull();
+    expect(getAutoAdvanceIndex(0, 1, "loop")).toBe(0);
+  });
 });

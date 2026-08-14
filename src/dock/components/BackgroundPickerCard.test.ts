@@ -123,10 +123,12 @@ describe("Text Tab settings pipeline", () => {
   });
 });
 
-describe("Bible motion defaults", () => {
+describe("Dock motion defaults", () => {
   it("defaults to fade and keeps the dock motion in the live theme payload", () => {
     expect(DEFAULT_THEME_SETTINGS.animation).toBe("fade");
-    expect(backgroundPickerSource).toContain("BIBLE_ANIMATION_OPTIONS");
+    expect(backgroundPickerSource).toContain("MOTION_OPTIONS");
+    expect(backgroundPickerSource).toContain("function MotionSection");
+    expect(backgroundPickerSource).toContain('storageScope === "bible" || storageScope === "worship" || storageScope === "notes"');
     expect(backgroundPickerSource).toContain('quickSettings.animation ?? "fade"');
     expect(backgroundPickerSource).not.toContain("Animations are off by default");
     expect(backgroundPickerSource).toContain("animation: event.target.value");
@@ -139,6 +141,17 @@ describe("Bible motion defaults", () => {
     expect(overlayHtml).toContain("isOverlayAnimationEnabled(packet)");
     expect(overlayHtml).toContain("const animationsEnabled = animationName !== 'none';");
     expect(overlayHtml).toContain("const animateIn = hasShownOnce");
+  });
+
+  it("applies the selected motion to Worship and Notes live slide changes", () => {
+    for (const source of [worshipOverlayHtml, noteOverlayHtml]) {
+      expect(source).toContain("function getOverlayAnimationName(data)");
+      expect(source).toContain("function runOverlayTransitionQueue()");
+      expect(source).toContain("mce-preview-text-fade-in");
+      expect(source).toContain("mce-preview-text-exit");
+      expect(source).toContain("prefers-reduced-motion");
+      expect(source).toContain("pendingOverlayPacket = packet");
+    }
   });
 });
 

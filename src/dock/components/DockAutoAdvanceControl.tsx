@@ -17,6 +17,16 @@ type AutoAdvanceEndBehavior = "stop" | "loop";
 type AutoAdvanceItemKind = "song" | "note";
 type AutoAdvanceStorageScope = "worship" | "notes";
 
+export interface DockAutoAdvanceTransition {
+  handled: boolean;
+  nextIndex?: number;
+}
+
+export type DockAutoAdvanceHandler = (
+  currentIndex: number,
+  defaultNextIndex: number | null,
+) => DockAutoAdvanceTransition | void;
+
 interface DockAutoAdvanceSettings {
   durationMinutes: number;
   intervalSeconds: number;
@@ -28,6 +38,9 @@ interface DockAutoAdvanceControlProps {
   items: readonly DockAutoAdvanceItem[];
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
+  onAdvance?: DockAutoAdvanceHandler;
+  onStart?: (startIndex: number) => void;
+  onActiveChange?: (active: boolean) => void;
   itemKind: AutoAdvanceItemKind;
   storageScope: AutoAdvanceStorageScope;
 }
@@ -101,6 +114,9 @@ export default function DockAutoAdvanceControl({
   items,
   selectedIndex,
   onSelectIndex,
+  onAdvance,
+  onStart,
+  onActiveChange,
   itemKind,
   storageScope,
 }: DockAutoAdvanceControlProps) {
@@ -127,6 +143,12 @@ export default function DockAutoAdvanceControl({
   const currentItem = items[selectedIndex];
   const canStart = items.length > 0 && selectedIndex >= 0 && selectedIndex < items.length;
   const isActive = status === "running" || status === "paused";
+
+  useEffect(() => {
+    onActiveChange?.(isActive);
+  }, [isActive, onActiveChange]);
+
+  useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
 
   useEffect(() => {
     writeUserScopedStorage(storageKey, JSON.stringify(settings));
@@ -169,6 +191,7 @@ export default function DockAutoAdvanceControl({
     const now = Date.now();
     expectedIndexRef.current = startIndex === selectedIndex ? null : startIndex;
     onSelectIndex(startIndex);
+    onStart?.(startIndex);
     deadlinesRef.current = {
       runAt: now + durationMs,
       itemAt: now + intervalMs,
@@ -178,7 +201,7 @@ export default function DockAutoAdvanceControl({
     setRemainingItemMs(intervalMs);
     setActiveRunDurationMs(durationMs);
     setStatus("running");
-  }, [canStart, items.length, onSelectIndex, selectedIndex, settings]);
+  }, [canStart, items.length, onSelectIndex, onStart, selectedIndex, settings]);
 
   const handleResume = useCallback(() => {
     if (statusRef.current !== "paused" || remainingRunMs <= 0) return;
@@ -232,6 +255,14 @@ export default function DockAutoAdvanceControl({
           items.length,
           settings.endBehavior,
         );
+        const transition = onAdvance?.(nextIndex, candidate);
+        if (transition?.handled) {
+          nextIndex = transition.nextIndex ?? nextIndex;
+          // A custom transition owns the nested queue. Process one transition
+          // at a time so a delayed timer cannot skip several slides at once.
+          nextItemAt = now + intervalMs;
+          break;
+        }
         if (candidate === null) {
           finishAutomation();
           return;
@@ -252,7 +283,7 @@ export default function DockAutoAdvanceControl({
     }, AUTO_ADVANCE_TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [finishAutomation, items.length, onSelectIndex, settings.endBehavior, settings.intervalSeconds, status]);
+  }, [finishAutomation, items.length, onAdvance, onSelectIndex, settings.endBehavior, settings.intervalSeconds, status]);
 
   useEffect(() => {
     if (!isOpen) return;

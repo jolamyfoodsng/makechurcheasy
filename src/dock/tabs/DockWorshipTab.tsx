@@ -1242,6 +1242,7 @@ export default function DockWorshipTab({
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [worshipOverlayVisible, setWorshipOverlayVisible] = useState(true);
+  const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
   const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(
     productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0],
   );
@@ -2432,19 +2433,56 @@ export default function DockWorshipTab({
   }, []);
 
   const selectedSongAutoAdvanceIndex = useMemo(
-    () => (selectedSong ? accessibleSongs.findIndex((song) => song.id === selectedSong.id) : -1),
-    [accessibleSongs, selectedSong],
+    () => (selectedSong ? 0 : -1),
+    [selectedSong],
   );
 
-  const handleAutoAdvanceSong = useCallback((index: number) => {
-    const song = accessibleSongs[index];
-    if (!song) return;
-    setSelectedSong(song);
-    setSelectedIdx(0);
-    setVisibleIdx(null);
-    setHiddenSectionIndexes(new Set());
-    setActionError("");
-  }, [accessibleSongs]);
+  const handleAutoAdvanceSongSelection = useCallback((_index: number) => {
+    // Auto-advance is scoped to the opened song. It must never select from
+    // the worship song list.
+  }, []);
+
+  const handleAutoAdvanceStart = useCallback((startIndex: number) => {
+    if (startIndex !== selectedSongAutoAdvanceIndex) return;
+    const startSectionIndex = activeSectionIndex ?? visibleSectionIndexes[0] ?? null;
+    if (startSectionIndex !== null) goLiveSection(startSectionIndex);
+  }, [activeSectionIndex, goLiveSection, selectedSongAutoAdvanceIndex, visibleSectionIndexes]);
+
+  const handleAutoAdvanceSongStep = useCallback(
+    (currentSongIndex: number, nextItemIndex: number | null) => {
+      if (!selectedSong || currentSongIndex !== selectedSongAutoAdvanceIndex) return;
+
+      const currentSectionIndex = activeSectionIndex ?? visibleSectionIndexes[0] ?? null;
+      const currentVisiblePosition = currentSectionIndex === null
+        ? -1
+        : visibleSectionIndexes.indexOf(currentSectionIndex);
+      const nextSectionIndex = currentVisiblePosition >= 0
+        ? visibleSectionIndexes[currentVisiblePosition + 1]
+        : undefined;
+
+      if (nextSectionIndex !== undefined) {
+        goLiveSection(nextSectionIndex);
+        return { handled: true, nextIndex: currentSongIndex };
+      }
+
+      // A loop stays inside this song and returns to its first visible slide.
+      // A null candidate means stop-at-end, so the control finishes the run.
+      if (nextItemIndex === currentSongIndex) {
+        const firstSectionIndex = visibleSectionIndexes[0];
+        if (firstSectionIndex !== undefined) goLiveSection(firstSectionIndex);
+        return { handled: true, nextIndex: currentSongIndex };
+      }
+
+      return;
+    },
+    [
+      activeSectionIndex,
+      goLiveSection,
+      selectedSong,
+      selectedSongAutoAdvanceIndex,
+      visibleSectionIndexes,
+    ],
+  );
 
   const applyRecentWorshipSearch = useCallback(
     (recentLabel: string) => {
@@ -2859,6 +2897,7 @@ export default function DockWorshipTab({
     if (activeSectionIndex === null) return;
     const nextBackgroundOnly = !showWorshipBackgroundOnly;
     setShowWorshipBackgroundOnly(nextBackgroundOnly);
+    setShowLineCountPopover(false);
     setActionError("");
 
     await goLiveSection(activeSectionIndex, { backgroundOnly: nextBackgroundOnly });
@@ -3184,9 +3223,12 @@ export default function DockWorshipTab({
                       }}
                     />
                     <DockAutoAdvanceControl
-                      items={accessibleSongs.map((song) => ({ id: song.id, label: song.title }))}
+                      items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
                       selectedIndex={selectedSongAutoAdvanceIndex}
-                      onSelectIndex={handleAutoAdvanceSong}
+                      onSelectIndex={handleAutoAdvanceSongSelection}
+                      onAdvance={handleAutoAdvanceSongStep}
+                      onStart={handleAutoAdvanceStart}
+                      onActiveChange={setAutoAdvanceActive}
                       itemKind="song"
                       storageScope="worship"
                     />
@@ -3367,6 +3409,7 @@ export default function DockWorshipTab({
                       overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
                       onModeChange={handleOverlayModeChange}
                       hideOverlayModeToggle={fullscreenOnlyMode}
+                      overlayModeToggleDisabled={autoAdvanceActive}
                       clearLabel={worshipOverlayVisible ? t("worship.hideLyrics") : t("worship.showLyrics")}
                       onClear={handleToggleWorshipVisibility}
                       sourceVisible={worshipOverlayVisible}
@@ -3404,7 +3447,7 @@ export default function DockWorshipTab({
                         aria-label={t("worship.viewDeletedSlides")}
                         aria-expanded={showDeletedSectionsPopover}
                       >
-                        <Icon name="history" size={14} />
+                        <Icon name="delete_sweep" size={14} />
                         {deletedSections.length > 0 && (
                           <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
                         )}
@@ -3416,7 +3459,7 @@ export default function DockWorshipTab({
                         onClick={handleShowWorshipBackgroundOnly}
                         title={showWorshipBackgroundOnly ? t('worship.presentLyrics') : t('worship.backgroundOnly')}
                       >
-                        <Icon name={showWorshipBackgroundOnly ? "visibility_off" : "visibility"} size={14} />
+                        <Icon name={showWorshipBackgroundOnly ? "lyrics" : "wallpaper"} size={14} />
                       </button>
 
                       {presentationLinkMode && (
@@ -3431,10 +3474,11 @@ export default function DockWorshipTab({
                         </button>
                       )}
 
-                      <div
-                        className={`dock-line-popover dock-line-popover--toolbar${showLineCountPopover ? " is-open" : ""}`}
-                        ref={lineCountPopoverRef}
-                      >
+                      {!showWorshipBackgroundOnly && (
+                        <div
+                          className={`dock-line-popover dock-line-popover--toolbar${showLineCountPopover ? " is-open" : ""}`}
+                          ref={lineCountPopoverRef}
+                        >
                         <button
                           type="button"
                           className={`dock-btm-toolbar__icon-btn${showLineCountPopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
@@ -3470,7 +3514,8 @@ export default function DockWorshipTab({
                             </div>
                           </div>
                         )}
-                      </div>
+                        </div>
+                      )}
                     </DockBottomToolbar>
                   </div>
                 </section>

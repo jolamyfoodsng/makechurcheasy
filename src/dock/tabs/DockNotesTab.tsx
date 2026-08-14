@@ -286,6 +286,7 @@ export default function DockNotesTab({
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
+  const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
   const [overlayMode, setOverlayMode] = useState<OverlayMode>(initialOverlayMode);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(() =>
@@ -340,19 +341,14 @@ export default function DockNotesTab({
   const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
 
   const selectedNoteAutoAdvanceIndex = useMemo(
-    () => (selectedNote ? notes.findIndex((note) => note.id === selectedNote.id) : -1),
-    [notes, selectedNote],
+    () => (selectedNote ? 0 : -1),
+    [selectedNote],
   );
 
-  const handleAutoAdvanceNote = useCallback((index: number) => {
-    const note = notes[index];
-    if (!note) return;
-    setSelectedNote(note);
-    setSelectedSlideIdx(0);
-    setVisibleSlideIdx(null);
-    setNoteSlidesSearchQuery("");
-    setActionError("");
-  }, [notes]);
+  const handleAutoAdvanceNoteSelection = useCallback((_index: number) => {
+    // Auto-advance is scoped to the opened note. It must never select from
+    // the notes list.
+  }, []);
 
   useEffect(() => {
     notesTranslationChangeRef.current = false;
@@ -673,6 +669,40 @@ export default function DockNotesTab({
     [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput],
   );
 
+  const handleAutoAdvanceStart = useCallback((startIndex: number) => {
+    if (startIndex !== selectedNoteAutoAdvanceIndex) return;
+    const startSlideIndex = activeSlideIndex ?? (selectedNoteSlides.length > 0 ? 0 : null);
+    if (startSlideIndex !== null) pushNoteSlide(startSlideIndex);
+  }, [activeSlideIndex, pushNoteSlide, selectedNoteAutoAdvanceIndex, selectedNoteSlides.length]);
+
+  const handleAutoAdvanceNoteStep = useCallback(
+    (currentNoteIndex: number, nextItemIndex: number | null) => {
+      if (!selectedNote || currentNoteIndex !== selectedNoteAutoAdvanceIndex) return;
+
+      const nextSlideIndex = activeSlideIndex === null ? undefined : activeSlideIndex + 1;
+      if (nextSlideIndex !== undefined && nextSlideIndex < selectedNoteSlides.length) {
+        pushNoteSlide(nextSlideIndex);
+        return { handled: true, nextIndex: currentNoteIndex };
+      }
+
+      // A loop stays inside this note and returns to its first slide. A null
+      // candidate means stop-at-end, so the control finishes the run.
+      if (nextItemIndex === currentNoteIndex) {
+        if (selectedNoteSlides.length > 0) pushNoteSlide(0);
+        return { handled: true, nextIndex: currentNoteIndex };
+      }
+
+      return;
+    },
+    [
+      activeSlideIndex,
+      pushNoteSlide,
+      selectedNote,
+      selectedNoteAutoAdvanceIndex,
+      selectedNoteSlides.length,
+    ],
+  );
+
   const activeNoteQuickSettings = useMemo(
     () => getNoteQuickSettings(
       overlayMode,
@@ -944,9 +974,12 @@ export default function DockNotesTab({
                   }}
                 />
                 <DockAutoAdvanceControl
-                  items={notes.map((note) => ({ id: note.id, label: getNoteDisplayTitle(note) }))}
+                  items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
                   selectedIndex={selectedNoteAutoAdvanceIndex}
-                  onSelectIndex={handleAutoAdvanceNote}
+                  onSelectIndex={handleAutoAdvanceNoteSelection}
+                  onAdvance={handleAutoAdvanceNoteStep}
+                  onStart={handleAutoAdvanceStart}
+                  onActiveChange={setAutoAdvanceActive}
                   itemKind="note"
                   storageScope="notes"
                 />
@@ -1081,6 +1114,7 @@ export default function DockNotesTab({
               <DockBottomToolbar
                 overlayMode={overlayMode}
                 onModeChange={handleOverlayModeChange}
+                overlayModeToggleDisabled={autoAdvanceActive}
                 clearLabel={overlayVisible ? t("notes.hide") : t("notes.show")}
                 onClear={handleClear}
                 sourceVisible={overlayVisible}
