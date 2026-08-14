@@ -9,6 +9,7 @@ import worshipOverlayHtml from "../../../public/mce-worship-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
+import { toBackgroundAssetUrl } from "./BackgroundPickerCard";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
 import dockBibleThemeResolutionSource from "../dockBibleThemeResolution.ts?raw";
@@ -54,7 +55,7 @@ const BASE: DockFullscreenQuickThemeSettings = {
   fontStyle: "normal",
   textTransform: "none",
   textShadow: "none",
-  animation: "none",
+  animation: "fade",
   animationDuration: 400,
   backgroundImage: "",
   backgroundImageFilePath: "",
@@ -122,18 +123,22 @@ describe("Text Tab settings pipeline", () => {
   });
 });
 
-describe("Bible motion opt-in", () => {
-  it("defaults motion off and exposes the opt-in control in BackgroundPickerCard", () => {
-    expect(DEFAULT_THEME_SETTINGS.animation).toBe("none");
+describe("Bible motion defaults", () => {
+  it("defaults to fade and keeps the dock motion in the live theme payload", () => {
+    expect(DEFAULT_THEME_SETTINGS.animation).toBe("fade");
     expect(backgroundPickerSource).toContain("BIBLE_ANIMATION_OPTIONS");
+    expect(backgroundPickerSource).toContain('quickSettings.animation ?? "fade"');
+    expect(backgroundPickerSource).not.toContain("Animations are off by default");
     expect(backgroundPickerSource).toContain("animation: event.target.value");
-    expect(dockBibleTabSource).toContain('return { ...extracted, animation: "none" };');
+    expect(dockBibleTabSource).toContain("return extracted;");
+    expect(dockBibleTabSource).toContain('| "animation"');
   });
 
   it("does not restart the preview fade when motion is disabled", () => {
     expect(overlayHtml).toContain("function isOverlayAnimationEnabled(data)");
     expect(overlayHtml).toContain("isOverlayAnimationEnabled(packet)");
-    expect(overlayHtml).toContain("const animationsEnabled = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text']");
+    expect(overlayHtml).toContain("const animationsEnabled = animationName !== 'none';");
+    expect(overlayHtml).toContain("const animateIn = hasShownOnce");
   });
 });
 
@@ -176,6 +181,23 @@ describe("Background picker background retention", () => {
     expect(backgroundPickerSource).not.toContain('backgroundPattern: ""');
     expect(dockBibleTabSource).toContain('bgType === "pattern"');
     expect(dockBibleThemeResolutionSource).toContain('bgType === "pattern"');
+  });
+});
+
+describe("Background picker media URLs", () => {
+  it("uses the managed uploads URL for legacy filesystem-backed records", () => {
+    expect(toBackgroundAssetUrl({
+      url: "/Users/pc/Documents/MakeChurchEasy/uploads/old-background.png",
+      filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/old-background.png",
+    })).toBe("/uploads/old-background.png");
+  });
+
+  it("prefers the stable disk filename for uploaded video records", () => {
+    expect(toBackgroundAssetUrl({
+      url: "http://localhost:1420/uploads/stale-video.mp4",
+      filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/live-video.mp4",
+      diskFileName: "live-video.mp4",
+    })).toBe("/uploads/live-video.mp4");
   });
 });
 
@@ -223,7 +245,7 @@ describe("Bible reader font-size quick actions", () => {
     expect(dockBibleTabSource).toContain('Icon name="add"');
     expect(dockBibleTabSource).toContain('field: "fontSize" | "refFontSize"');
     expect(dockBibleTabSource).toContain("handleSyncBibleBrowserSettings");
-    expect(dockBibleTabSource).toContain("autoFontScale: !displayedBrowserFontSettings.autoFontScale");
+    expect(dockBibleTabSource).toContain("onApplyPatch({ autoFontScale: !settings.autoFontScale })");
     expect(dockBibleTabSource).toContain("nextLowerThirdSettings");
     expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("saveBrowserQuickSettings");
@@ -252,9 +274,10 @@ function applyFullscreenQuickThemeSettings(
   const useNoBg = bgType === "off";
   const useColorBg = bgType === "color";
   return {
-    ...theme,
+      ...theme,
     settings: {
       ...theme.settings,
+      backgroundType: bgType,
       fontSize: quickSettings.fontSize,
       refFontSize: quickSettings.refFontSize,
       fontColor: quickSettings.fontColor,
@@ -378,6 +401,7 @@ describe("Full pipeline: Text tab → BibleThemeSettings → extract back", () =
     };
     const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
     expect(themed.settings.backgroundImage).toBe("/uploads/example.png");
+    expect(themed.settings.backgroundType).toBe("image");
     expect(themed.settings.backgroundColor).toBe("transparent");
     expect(themed.settings.backgroundColorEnd).toBe("");
   });
@@ -392,6 +416,7 @@ describe("Full pipeline: Text tab → BibleThemeSettings → extract back", () =
     };
     const themed = applyFullscreenQuickThemeSettings(baseTheme, quickSettings);
     expect(themed.settings.backgroundVideo).toBe("/uploads/example.mp4");
+    expect(themed.settings.backgroundType).toBe("video");
     expect(themed.settings.backgroundColor).toBe("transparent");
     expect(themed.settings.backgroundColorEnd).toBe("");
   });
@@ -802,10 +827,14 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("function applyFullscreenBackground");
     expect(overlayHtml).toContain("function readInjectedCssVar");
     expect(overlayHtml).toContain("function resolveBackgroundImageCss");
-    expect(overlayHtml).toContain("const bgVideoUrl = String(theme.backgroundVideo || '').trim()");
+    expect(overlayHtml).toContain("function resolveOverlayMediaUrl");
+    expect(overlayHtml).toContain("const bgImageCss = resolveBackgroundImageCss(bgUrl)");
+    expect(overlayHtml).toContain("const bgVideoUrl = resolveOverlayMediaUrl(theme.backgroundVideo)");
     expect(overlayHtml).toContain("const patternCss = resolvePatternCss(theme.backgroundPattern)");
     expect(overlayHtml).toContain("const bgImageCss = resolveBackgroundImageCss(s.backgroundImage)");
-    expect(overlayHtml).toContain("if (hasGradient)");
+    expect(overlayHtml).toContain("const backgroundType = String(theme.backgroundType || '').trim().toLowerCase()");
+    expect(overlayHtml).toContain("const shouldUseImage = Boolean(resolvedRawBgImage)");
+    expect(overlayHtml).toContain("const shouldUseGradient = hasGradient");
     expect(overlayHtml).toContain("const rawBgImage = String(theme.backgroundImage || '').trim()");
     expect(overlayHtml).toContain("value === '__FROM_CSS__'");
     expect(overlayHtml).toContain("url(\"${value.replace(/\"/g, '\\\\\"')}\")");
@@ -817,11 +846,11 @@ describe("Active OBS Bible overlay wiring", () => {
 
     const videoIndex = overlayHtml.indexOf("const bgVideoUrl = String(theme.backgroundVideo || '').trim()");
     const patternIndex = overlayHtml.indexOf("const patternCss = resolvePatternCss(theme.backgroundPattern)");
-    const gradientIndex = overlayHtml.indexOf("if (hasGradient)");
+    const gradientIndex = overlayHtml.indexOf("const shouldUseGradient = hasGradient");
     const imageIndex = overlayHtml.indexOf("const rawBgImage = String(theme.backgroundImage || '').trim()");
     expect(videoIndex).toBeLessThan(patternIndex);
-    expect(patternIndex).toBeLessThan(gradientIndex);
-    expect(gradientIndex).toBeLessThan(imageIndex);
+    expect(patternIndex).toBeLessThan(imageIndex);
+    expect(imageIndex).toBeLessThan(gradientIndex);
   });
 
   it("fades Bible content without fading the background layer", () => {
@@ -857,7 +886,7 @@ describe("Active OBS Bible overlay wiring", () => {
 
   it("sends the active theme with Bible full/lower-third staged payloads", () => {
     expect(dockBibleTabSource).toContain('theme: liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id');
-    expect(dockBibleTabSource).toContain("liveOverlayMode === \"fullscreen\"\n              ? effectiveSelectedBibleTheme.settings\n              : effectiveSelectedLowerThirdTheme.settings");
+    expect(dockBibleTabSource).toContain("liveOverlayMode === \"fullscreen\"\n              ? liveFullscreenThemeSettings\n              : liveLowerThirdThemeSettings");
     expect(dockBibleTabSource).toContain("fullscreenLiveOverrides as Record<string, unknown> | null");
     expect(dockBibleTabSource).toContain("saveDockBibleOverlayMode(nextMode)");
   });
@@ -904,8 +933,8 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(dockBibleTabSource).toContain('LOWER_THIRD_QUICK_SIZE_OPTIONS');
     expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`');
     expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: preset.maxHeight');
-    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || displayedBrowserFontSettings.fontSize <= browserFontSizeMin}');
-    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || displayedBrowserFontSettings.refFontSize <= browserReferenceFontSizeMin}');
+    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || settings.fontSize <= browserFontSizeMin}');
+    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || settings.refFontSize <= browserReferenceFontSizeMin}');
   });
 
   it("pairs dual-variant Bible theme selection so later lower-third uses the same theme", () => {

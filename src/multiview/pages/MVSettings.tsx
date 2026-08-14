@@ -1556,16 +1556,6 @@ export function MVSettings() {
 
 
                     {/* Toggles */}
-                    <div className="switch-row">
-                      <div className="switch-left">
-                        <span className="switch-title">{t("mvSettings.appearance.highContrastMode")}</span>
-                        <span className="switch-subtitle">{t("mvSettings.appearance.highContrastDesc")}</span>
-                      </div>
-                      <label className="switch-toggle-label">
-                        <input type="checkbox" checked={highContrastUI} onChange={() => { setHighContrastUI(!highContrastUI); update({ highContrast: !highContrastUI }); }} />
-                        <span className="switch-slider"></span>
-                      </label>
-                    </div>
 
 
                   </div>
@@ -1943,74 +1933,74 @@ export function MVSettings() {
 
             {/* Right: widgets column */}
             {hasSettingsSidebar && (
-            <div className="widgets-column">
-              {/* Appearance preview widget */}
+              <div className="widgets-column">
+                {/* Appearance preview widget */}
 
 
-              {/* Settings summary widget */}
+                {/* Settings summary widget */}
 
 
-              {/* OBS connection widget */}
-              {activeTab === "obs" && (
-                <div className="widget-card">
-                  <div className="widget-header">
-                    <h4 className="widget-title">Connection Status</h4>
-                  </div>
-                  <div className="widget-body">
-                    <div className="radar-pulse-ambient">
-                      <div className="radar-circle-outer">
-                        <div className="radar-circle-inner" style={{ borderColor: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)", color: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)" }}>
-                          <Radio size={28} />
+                {/* OBS connection widget */}
+                {activeTab === "obs" && (
+                  <div className="widget-card">
+                    <div className="widget-header">
+                      <h4 className="widget-title">Connection Status</h4>
+                    </div>
+                    <div className="widget-body">
+                      <div className="radar-pulse-ambient">
+                        <div className="radar-circle-outer">
+                          <div className="radar-circle-inner" style={{ borderColor: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)", color: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)" }}>
+                            <Radio size={28} />
+                          </div>
+                        </div>
+                        {obsStatus === "connected" && <div className="radar-ripple"></div>}
+                      </div>
+                      <div className="details-rows-list" style={{ marginTop: "16px" }}>
+                        <div className="details-row">
+                          <span className="details-label">Ping</span>
+                          <span className="details-value">
+                            {obsStatus === "connected" ? (<><span className="dot-indicator dot-success"></span><span>Connected</span></>) : <span>Disconnected</span>}
+                          </span>
+                        </div>
+                        <div className="details-row">
+                          <span className="details-label">Endpoint</span>
+                          <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
                         </div>
                       </div>
-                      {obsStatus === "connected" && <div className="radar-ripple"></div>}
-                    </div>
-                    <div className="details-rows-list" style={{ marginTop: "16px" }}>
-                      <div className="details-row">
-                        <span className="details-label">Ping</span>
-                        <span className="details-value">
-                          {obsStatus === "connected" ? (<><span className="dot-indicator dot-success"></span><span>Connected</span></>) : <span>Disconnected</span>}
-                        </span>
-                      </div>
-                      <div className="details-row">
-                        <span className="details-label">Endpoint</span>
-                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
-                      </div>
-                    </div>
 
-                    {/* Connection actions */}
-                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
-                        <RefreshCw size={14} /><span>Force Reconnect</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
-                        <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
-                        <Trash2 size={14} /><span>Disconnect</span>
-                      </button>
-                    </div>
-                    {showLogsPanel && (
-                      <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
-                        {obsLogs.map((log) => (
-                          <div key={log.id} className="log-entry">
-                            <span className="log-time">[{log.timestamp}]</span>
-                            <span className="log-source">[{log.source}]</span>
-                            <span>{log.message}</span>
-                          </div>
-                        ))}
+                      {/* Connection actions */}
+                      <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
+                          <RefreshCw size={14} /><span>Force Reconnect</span>
+                        </button>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
+                          <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
+                        </button>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
+                          <Trash2 size={14} /><span>Disconnect</span>
+                        </button>
                       </div>
-                    )}
+                      {showLogsPanel && (
+                        <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
+                          {obsLogs.map((log) => (
+                            <div key={log.id} className="log-entry">
+                              <span className="log-time">[{log.timestamp}]</span>
+                              <span className="log-source">[{log.source}]</span>
+                              <span>{log.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* ══════════════ AUDIO TAB ══════════════ */}
+                {/* ══════════════ AUDIO TAB ══════════════ */}
 
 
-              {/* Tips card */}
+                {/* Tips card */}
 
-            </div>
+              </div>
             )}
           </div>
         </div>

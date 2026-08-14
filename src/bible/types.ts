@@ -279,6 +279,9 @@ export interface BibleThemeSettings {
   referenceBackgroundRadius: number;
 
   // Background
+  /** Dock-selected background mode. Kept with the live settings so OBS and
+   * the Bible overlay agree on which background asset is active. */
+  backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
   backgroundColor: string;
   backgroundColorEnd?: string;   // gradient end color (optional)
   bgGradientAngle?: number;      // gradient angle in degrees (optional, default 135)
@@ -408,7 +411,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   compareTranslationWidth: 40,
   compareTranslationGap: 40,
 
-  animation: "none",
+  animation: "fade",
   animationDuration: 400,
 };
 

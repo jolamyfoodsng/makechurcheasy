@@ -656,15 +656,15 @@ function DockLyricsEditorDialog({
           </div>
           <label className="dock-dialog-field dock-dialog-field--lyrics">
             <span>{t('worship.songLyrics')}</span>
-            <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Lyrics formatting tools">
+            <div className="dock-lyrics-toolbar" role="toolbar" aria-label={t("worship.lyricsFormattingTools")}>
               <div className="dock-lyrics-toolbar__actions">
                 <div className="dock-lyrics-autosplit" ref={autoSplitPopoverRef}>
                   <button
                     type="button"
                     className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--accent${autoSplitOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
                     onClick={() => setAutoSplitOpen((current) => !current)}
-                    title="Auto Split"
-                    aria-label="Auto Split"
+                    title={t("worship.autoSplit")}
+                    aria-label={t("worship.autoSplit")}
                     aria-haspopup="menu"
                     aria-expanded={autoSplitOpen}
                   >
@@ -672,7 +672,7 @@ function DockLyricsEditorDialog({
                     <span className="dock-lyrics-toolbar__caret">▾</span>
                   </button>
                   {autoSplitOpen && (
-                    <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
+                    <div className="dock-lyrics-autosplit__menu" role="menu" aria-label={t("worship.autoSplitOptions")}>
                       {[2, 3, 4].map((count) => (
                         <button
                           key={count}
@@ -683,7 +683,7 @@ function DockLyricsEditorDialog({
                             setAutoSplitOpen(false);
                           }}
                         >
-                          {count} lines
+                          {t("worship.linesCount", { count })}
                         </button>
                       ))}
                     </div>
@@ -693,20 +693,20 @@ function DockLyricsEditorDialog({
                   type="button"
                   className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon"
                   onClick={() => formatDraft("clean")}
-                  title="Clean Text"
-                  aria-label="Clean Text">
+                  title={t("worship.cleanText")}
+                  aria-label={t("worship.cleanText")}>
                   <Icon name="auto_fix_high" size={12} />
                 </button>
                 <button
                   type="button"
                   className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--toggle"
                   onClick={() => formatDraft("remove-verse-numbers")}
-                  title="Verse Numbers"
-                  aria-label="Verse Numbers">
+                  title={t("worship.verseNumbers")}
+                  aria-label={t("worship.verseNumbers")}>
                   <Icon name="tag" size={12} />
                 </button>
               </div>
-              <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
+              <div className="dock-lyrics-toolbar__group" role="group" aria-label={t("worship.textCaseControls")}>
                 <button
                   type="button"
                   className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
@@ -719,8 +719,8 @@ function DockLyricsEditorDialog({
                   type="button"
                   className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
                   onClick={() => formatDraft("lowercase")}
-                  title="Lowercase"
-                  aria-label="Lowercase">
+                  title={t("worship.lowercase")}
+                  aria-label={t("worship.lowercase")}>
                   <span>aa</span>
                 </button>
                 <button
@@ -2584,7 +2584,7 @@ export default function DockWorshipTab({
         ...current,
       ].slice(0, 12));
       setShowDeletedSectionsPopover(true);
-      showToast(t("worship.slideDeleted", { defaultValue: "Slide removed" }), "success");
+      showToast(t("worship.slideDeleted"), "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
@@ -2638,7 +2638,7 @@ export default function DockWorshipTab({
 
       setDeletedSections((current) => current.filter((entry) => entry.id !== item.id));
       setShowDeletedSectionsPopover((current) => current && deletedSections.length > 1);
-      showToast(t("worship.slideRestored", { defaultValue: "Slide restored" }), "success");
+      showToast(t("worship.slideRestored"), "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
@@ -2916,7 +2916,7 @@ export default function DockWorshipTab({
           onClick={() => setWorshipSubTab("worship")}
         >
           <Icon name="music_note" size={13} />
-          Worship
+          {t("worship.title")}
         </button>
         <button
           type="button"
@@ -2924,7 +2924,7 @@ export default function DockWorshipTab({
           onClick={() => setWorshipSubTab("notes")}
         >
           <Icon name="edit_note" size={13} />
-          Notes
+          {t("notes.title")}
         </button>
       </div>
 
@@ -3130,7 +3130,7 @@ export default function DockWorshipTab({
                     <div className="dock-worship-summary__meta">
                       <span>{t('worship.slideCount', { count: selectedSongSections.length })}</span>
                       <span className="dock-worship-summary__meta-dot">·</span>
-                      <span>{linesPerSlide} {linesPerSlide === 1 ? t('worship.linePerSlide', { defaultValue: 'line per slide' }) : t('worship.linesPerSlide')}</span>
+                      <span>{linesPerSlide} {linesPerSlide === 1 ? t('worship.linePerSlide') : t('worship.linesPerSlide')}</span>
                     </div>
                   </div>
                   <div className="dock-worship-summary__actions">
@@ -3211,7 +3211,7 @@ export default function DockWorshipTab({
                         <div
                           key={section.id}
                           className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
-                          title={presentationLinkMode ? "Click to show on presentation screen" : "Click to view in OBS"}
+                          title={presentationLinkMode ? t("worship.clickToShowPresentation") : t("worship.clickToViewObs")}
                         >
                           <button
                             type="button"
@@ -3281,8 +3281,8 @@ export default function DockWorshipTab({
                   </div>
                 )}
                 <DockOutputQuickActions
-                  textLabel="Song text"
-                  lineLabel="Lines per slide"
+                  textLabel={t("worship.songText")}
+                  lineLabel={t("worship.linesPerSlide")}
                   settings={activeWorshipQuickSettings}
                   lineCount={linesPerSlide}
                   maxLineCount={MAX_LINES_PER_SLIDE}
@@ -3319,9 +3319,7 @@ export default function DockWorshipTab({
                       overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
                       onModeChange={handleOverlayModeChange}
                       hideOverlayModeToggle={fullscreenOnlyMode}
-                      clearLabel={worshipOverlayVisible
-                        ? t('worship.hideLyrics', { defaultValue: 'Hide lyrics' })
-                        : t('worship.showLyrics', { defaultValue: 'Show lyrics' })}
+                      clearLabel={worshipOverlayVisible ? t("worship.hideLyrics") : t("worship.showLyrics")}
                       onClear={handleToggleWorshipVisibility}
                       sourceVisible={worshipOverlayVisible}
                       collapsed={toolbarCollapsed}
@@ -3333,7 +3331,7 @@ export default function DockWorshipTab({
                             route={sceneRoute}
                             onRouteChange={updateSceneRoute}
                             disabled={presentationLinkMode}
-                            title={t("sceneRouting.worship", "Worship output")}
+                            title={t("sceneRouting.worship")}
                             placement="above"
                           />
                           <button
@@ -3353,8 +3351,8 @@ export default function DockWorshipTab({
                         ref={deletedSectionsTriggerRef}
                         className={`dock-btm-toolbar__icon-btn${showDeletedSectionsPopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
                         onClick={handleToggleDeletedSectionsPopover}
-                        title={t("worship.viewDeletedSlides", { defaultValue: "View deleted slides" })}
-                        aria-label={t("worship.viewDeletedSlides", { defaultValue: "View deleted slides" })}
+                        title={t("worship.viewDeletedSlides")}
+                        aria-label={t("worship.viewDeletedSlides")}
                         aria-expanded={showDeletedSectionsPopover}
                       >
                         <Icon name="history" size={14} />
@@ -3377,8 +3375,8 @@ export default function DockWorshipTab({
                           type="button"
                           className={`dock-btm-toolbar__icon-btn${showPresentationMeta ? " dock-btm-toolbar__icon-btn--active" : ""}`}
                           onClick={() => void handleTogglePresentationMeta()}
-                          title={showPresentationMeta ? "Hide title and section on screen" : "Show title and section on screen"}
-                          aria-label={showPresentationMeta ? "Hide title and section on presentation screen" : "Show title and section on presentation screen"}
+                          title={showPresentationMeta ? t("worship.hidePresentationMeta") : t("worship.showPresentationMeta")}
+                          aria-label={showPresentationMeta ? t("worship.hidePresentationMeta") : t("worship.showPresentationMeta")}
                         >
                           <Icon name="title" size={14} />
                         </button>
@@ -3467,15 +3465,15 @@ export default function DockWorshipTab({
                   </button>
                 </div>
                 <div className="dock-dialog__body">
-                  <div className="dock-lyrics-toolbar" role="toolbar" aria-label="Slide text formatting">
+                  <div className="dock-lyrics-toolbar" role="toolbar" aria-label={t("worship.slideTextFormatting")}>
                     <div className="dock-lyrics-toolbar__actions">
                       <div className="dock-lyrics-autosplit" ref={slideEditorAutoSplitPopoverRef}>
                         <button
                           type="button"
                           className={`dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--accent${slideEditorAutoSplitPopoverOpen ? " dock-lyrics-toolbar__btn--active" : ""}`}
                           onClick={() => setSlideEditorAutoSplitPopoverOpen((v) => !v)}
-                          title="Auto Split"
-                          aria-label="Auto Split"
+                          title={t("worship.autoSplit")}
+                          aria-label={t("worship.autoSplit")}
                           aria-haspopup="menu"
                           aria-expanded={slideEditorAutoSplitPopoverOpen}
                         >
@@ -3483,7 +3481,7 @@ export default function DockWorshipTab({
                           <span className="dock-lyrics-toolbar__caret">▾</span>
                         </button>
                         {slideEditorAutoSplitPopoverOpen && (
-                          <div className="dock-lyrics-autosplit__menu" role="menu" aria-label="Auto split options">
+                          <div className="dock-lyrics-autosplit__menu" role="menu" aria-label={t("worship.autoSplitOptions")}>
                             {[2, 3, 4].map((n) => (
                               <button
                                 key={n}
@@ -3494,30 +3492,30 @@ export default function DockWorshipTab({
                                   setSlideEditorAutoSplitPopoverOpen(false);
                                 }}
                               >
-                                {n} lines
+                                {t("worship.linesCount", { count: n })}
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
-                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon" onClick={() => handleFormatSlideEditor("clean")} title="Clean Text" aria-label="Clean Text">
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon" onClick={() => handleFormatSlideEditor("clean")} title={t("worship.cleanText")} aria-label={t("worship.cleanText")}>
                         <Icon name="auto_fix_high" size={12} />
                       </button>
-                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--toggle" onClick={() => handleFormatSlideEditor("remove-verse-numbers")} title="Verse Numbers" aria-label="Verse Numbers">
+                      <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--icon dock-lyrics-toolbar__btn--toggle" onClick={() => handleFormatSlideEditor("remove-verse-numbers")} title={t("worship.verseNumbers")} aria-label={t("worship.verseNumbers")}>
                         <Icon name="tag" size={12} />
                       </button>
                     </div>
-                    <div className="dock-lyrics-toolbar__group" role="group" aria-label="Text case controls">
+                    <div className="dock-lyrics-toolbar__group" role="group" aria-label={t("worship.textCaseControls")}>
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-                        onClick={() => handleFormatSlideEditor("uppercase")} title="Uppercase" aria-label="Uppercase">
+                        onClick={() => handleFormatSlideEditor("uppercase")} title={t("bible.uppercase")} aria-label={t("bible.uppercase")}>
                         <span>AA</span>
                       </button>
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-                        onClick={() => handleFormatSlideEditor("lowercase")} title="Lowercase" aria-label="Lowercase">
+                        onClick={() => handleFormatSlideEditor("lowercase")} title={t("worship.lowercase")} aria-label={t("worship.lowercase")}>
                         <span>aa</span>
                       </button>
                       <button type="button" className="dock-lyrics-toolbar__btn dock-lyrics-toolbar__btn--case"
-                        onClick={() => handleFormatSlideEditor("capitalize")} title="Capitalize" aria-label="Capitalize">
+                        onClick={() => handleFormatSlideEditor("capitalize")} title={t("common.capitalize")} aria-label={t("common.capitalize")}>
                         <span>Aa</span>
                       </button>
                     </div>
@@ -3628,7 +3626,7 @@ export default function DockWorshipTab({
                       aria-label={t('worship.searchOnline')}
                       title={t('worship.searchOnline')}
                     >
-                      Search
+                      {t("common.search")}
                     </button>
                   </form>
                   {onlineSearchLoading && (
@@ -3723,7 +3721,7 @@ export default function DockWorshipTab({
           ref={deletedSectionsPopoverRef}
           className="dock-worship-history__popover"
           role="dialog"
-          aria-label={t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+          aria-label={t("worship.deletedSlides")}
           style={{
             position: "fixed",
             top: deletedSectionsPopoverPos.top,
@@ -3733,7 +3731,7 @@ export default function DockWorshipTab({
         >
           <div className="dock-worship-history__popover-header">
             <span className="dock-worship-history__popover-title">
-              {t("worship.deletedSlides", { defaultValue: "Deleted slides" })}
+              {t("worship.deletedSlides")}
             </span>
             <button
               type="button"
@@ -3745,9 +3743,9 @@ export default function DockWorshipTab({
               <Icon name="close" size={12} />
             </button>
           </div>
-          {deletedSections.length === 0 ? (
-            <div className="dock-worship-history__empty">
-              {t("worship.deletedSlidesEmpty", { defaultValue: "Deleted slides will appear here until you switch songs." })}
+              {deletedSections.length === 0 ? (
+                <div className="dock-worship-history__empty">
+                  {t("worship.deletedSlidesEmpty")}
             </div>
           ) : (
             <div className="dock-worship-history__list">

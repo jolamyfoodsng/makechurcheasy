@@ -10,6 +10,7 @@ import {
   readUserScopedStorage,
   writeUserScopedStorage,
 } from "../../services/userScopedStorage";
+import { toStoredOverlayAssetUrl } from "../../services/overlayUrl";
 import {
   loadDockPreferenceList,
   readDockPreferenceList,
@@ -111,14 +112,31 @@ const INLINE_COLOR_SWATCHES = [
 ];
 
 /* ── Helpers ── */
-function toRelativeUrl(url: string): string {
-  if (!url) return "";
-  try {
-    const u = new URL(url, window.location.origin);
-    return u.pathname;
-  } catch {
-    return url;
+function isOverlayAssetUrl(value: string): boolean {
+  return /^(?:data:|blob:|https?:\/\/|\/uploads\/|uploads\/)/i.test(value);
+}
+
+/**
+ * Normalize current and legacy library records to a URL the OBS overlay can
+ * load. Older records may have a filesystem-style path in `url`; uploaded
+ * records have a stable disk filename that is safer than the URL's origin.
+ */
+export function toBackgroundAssetUrl(item: Pick<MediaItem, "url" | "filePath" | "diskFileName">): string {
+  if (item.diskFileName) {
+    return `/uploads/${encodeURIComponent(item.diskFileName)}`;
   }
+
+  const storedUrl = toStoredOverlayAssetUrl(item.url);
+  if (isOverlayAssetUrl(storedUrl)) return storedUrl;
+
+  const fileName = String(item.filePath || "")
+    .replace(/^file:\/\//i, "")
+    .split(/[\\/]/)
+    .pop()
+    ?.trim();
+  if (fileName) return `/uploads/${encodeURIComponent(fileName)}`;
+
+  return storedUrl;
 }
 
 function formatFileSize(bytes: number): string {
@@ -648,7 +666,7 @@ export default function BackgroundPickerCard({
                 onClick={() => setActiveTab("background")}
               >
                 <Icon name="wallpaper" size={13} />
-                <span>{t('bgPicker.background')}</span>
+                <span>{t("bgPicker.bg", "BG")}</span>
               </button>
             )}
             {displayMode === "compare" && (
@@ -1240,7 +1258,7 @@ function ImageTab({
   const selectedUrl = quickSettings.backgroundImage;
 
   const handleSelect = useCallback((item: MediaItem) => {
-    const relUrl = toRelativeUrl(item.url);
+    const relUrl = toBackgroundAssetUrl(item);
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "image",
@@ -1263,7 +1281,7 @@ function ImageTab({
           const { registerDockMediaItem } = await import("../dockUploadService");
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
-          const relUrl = toRelativeUrl(result.item.url);
+          const relUrl = toBackgroundAssetUrl(result.item);
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundType: "image",
@@ -1335,7 +1353,7 @@ function ImageTab({
       ) : (
         <div className="dtb-bg-picker__grid">
           {filtered.map((item) => {
-            const relUrl = toRelativeUrl(item.url);
+            const relUrl = toBackgroundAssetUrl(item);
             const isSelected = selectedUrl === relUrl;
             return (
               <button
@@ -1347,7 +1365,7 @@ function ImageTab({
               >
                 <div
                   className="dtb-bg-picker__thumb"
-                  style={{ backgroundImage: `url(${item.thumbnailUrl || item.url})` }}
+                  style={{ backgroundImage: `url(${item.thumbnailUrl || relUrl})` }}
                 />
                 <div className="dtb-bg-picker__card-info">
                   <span className="dtb-bg-picker__card-name">{item.name}</span>
@@ -1441,7 +1459,7 @@ function VideoTab({
   const selectedUrl = quickSettings.backgroundVideo;
 
   const handleSelect = useCallback((item: MediaItem) => {
-    const relUrl = toRelativeUrl(item.url);
+    const relUrl = toBackgroundAssetUrl(item);
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "video",
@@ -1464,7 +1482,7 @@ function VideoTab({
           const { registerDockMediaItem } = await import("../dockUploadService");
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
-          const relUrl = toRelativeUrl(result.item.url);
+          const relUrl = toBackgroundAssetUrl(result.item);
           onQuickSettingsChange((prev) => ({
             ...prev,
             backgroundType: "video",
@@ -1536,7 +1554,7 @@ function VideoTab({
       ) : (
         <div className="dtb-bg-picker__grid">
           {filtered.map((item) => {
-            const relUrl = toRelativeUrl(item.url);
+            const relUrl = toBackgroundAssetUrl(item);
             const isSelected = selectedUrl === relUrl;
             return (
               <button
@@ -1548,7 +1566,7 @@ function VideoTab({
               >
                 <div
                   className="dtb-bg-picker__thumb dtb-bg-picker__thumb--video"
-                  style={{ backgroundImage: item.thumbnailUrl ? `url(${item.thumbnailUrl})` : undefined }}
+                  style={{ backgroundImage: item.thumbnailUrl ? `url(${item.thumbnailUrl})` : `url(${relUrl})` }}
                 >
                   <div className="dtb-bg-picker__play-icon">
                     <Icon name="play_arrow" size={18} />
@@ -1669,7 +1687,7 @@ function BibleAnimationSection({
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
 }) {
   const { t } = useTranslation();
-  const animation = quickSettings.animation ?? "none";
+  const animation = quickSettings.animation ?? "fade";
   const animationEnabled = animation !== "none";
 
   return (
@@ -1678,9 +1696,6 @@ function BibleAnimationSection({
         <div>
           <div id="dtb-bible-motion-title" className="dtb-bg-picker__motion-title">
             {t("bgPicker.motion", "Motion")}
-          </div>
-          <div className="dtb-bg-picker__motion-help">
-            {t("bgPicker.motionHelp", "Animations are off by default. Enable one when you want verse transitions.")}
           </div>
         </div>
         <select

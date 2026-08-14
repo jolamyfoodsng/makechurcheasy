@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship, and Media production controls inside OBS.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -53,6 +53,10 @@ import {
   saveDockFontFamily,
   saveDockFontScale,
 } from "./dockFontFamily";
+import {
+  downloadDockSession,
+  importDockSessionFromFile,
+} from "./dockSessionTransfer";
 import "./dock.css";
 import "./dock-theme.css";
 import "../accessibility.css";
@@ -310,6 +314,10 @@ export default function DockPage({
   const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; currentVersion?: string; latestVersion?: string }>({ daysOld: 0, forceUpdate: false });
   const [dockSaveFeedback, setDockSaveFeedback] = useState<{ id: number; message: string } | null>(null);
   const dockSaveFeedbackTimerRef = useRef<number | null>(null);
+  const [dockSessionTransferBusy, setDockSessionTransferBusy] = useState(false);
+  const [dockSessionFeedback, setDockSessionFeedback] = useState<{ id: number; message: string; tone: "success" | "error" } | null>(null);
+  const dockSessionImportInputRef = useRef<HTMLInputElement | null>(null);
+  const dockSessionFeedbackTimerRef = useRef<number | null>(null);
 
   const showDockSaveFeedback = useCallback((message: string) => {
     setDockSaveFeedback({ id: Date.now(), message });
@@ -326,7 +334,65 @@ export default function DockPage({
     if (dockSaveFeedbackTimerRef.current !== null) {
       window.clearTimeout(dockSaveFeedbackTimerRef.current);
     }
+    if (dockSessionFeedbackTimerRef.current !== null) {
+      window.clearTimeout(dockSessionFeedbackTimerRef.current);
+    }
   }, []);
+
+  const showDockSessionFeedback = useCallback((message: string, tone: "success" | "error" = "success") => {
+    setDockSessionFeedback({ id: Date.now(), message, tone });
+    if (dockSessionFeedbackTimerRef.current !== null) {
+      window.clearTimeout(dockSessionFeedbackTimerRef.current);
+    }
+    dockSessionFeedbackTimerRef.current = window.setTimeout(() => {
+      setDockSessionFeedback(null);
+      dockSessionFeedbackTimerRef.current = null;
+    }, 3200);
+  }, []);
+
+  const handleDockSessionExport = useCallback(async () => {
+    if (dockSessionTransferBusy) return;
+    setDockSessionTransferBusy(true);
+    try {
+      const result = await downloadDockSession();
+      if (result.cancelled) {
+        showDockSessionFeedback("Export cancelled.", "error");
+        return;
+      }
+      const sectionCount = result.session.sections.filter((section) => Object.keys(section.storage).length > 0).length;
+      setShowSettingsMenu(false);
+      const destination = result.savedPath
+        ? `Saved to ${result.savedPath}.`
+        : result.usedBrowserDownload
+          ? "Downloaded to your browser's Downloads folder."
+          : "Saved as a JSON file.";
+      showDockSessionFeedback(`Exported ${sectionCount || result.session.sections.length} Dock sections. ${destination}`);
+    } catch (error) {
+      console.error("[Dock] Failed to export Dock session:", error);
+      showDockSessionFeedback("Could not export the Dock session.", "error");
+    } finally {
+      setDockSessionTransferBusy(false);
+    }
+  }, [dockSessionTransferBusy, showDockSessionFeedback]);
+
+  const handleDockSessionImport = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || dockSessionTransferBusy) return;
+
+    setDockSessionTransferBusy(true);
+    try {
+      const result = await importDockSessionFromFile(file);
+      setShowSettingsMenu(false);
+      showDockSessionFeedback(`Imported ${result.sectionCount} Dock sections. Refreshing the Dock…`);
+      window.setTimeout(() => window.location.reload(), 850);
+    } catch (error) {
+      console.error("[Dock] Failed to import Dock session:", error);
+      showDockSessionFeedback(error instanceof Error ? error.message : "Could not import the Dock session.", "error");
+    } finally {
+      setDockSessionTransferBusy(false);
+    }
+  }, [dockSessionTransferBusy, showDockSessionFeedback]);
 
   // ── Global drag-and-drop ──
   const { isDragging, onDrop: registerDropHandler } = useDockDragDrop();
@@ -742,6 +808,14 @@ export default function DockPage({
 
   return (
     <div className={dockRootClassName} ref={dockRootRef} style={dockStyle}>
+      <input
+        ref={dockSessionImportInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleDockSessionImport}
+        hidden
+        aria-hidden="true"
+      />
       <a className="mce-skip-link" href="#dock-main-content">
         {t('mvShell.skipToContent', 'Skip to main content')}
       </a>
@@ -794,7 +868,7 @@ export default function DockPage({
           </div>
         )}
 
-        {/* ── Page Header (hamburger L, refresh R) ── */}
+        {/* ── Page Header (hamburger L, refresh and theme R) ── */}
         {!hideShellHeader && (
         <div
           className="dock-inline-header"
@@ -854,27 +928,32 @@ export default function DockPage({
               </button>
             )}
           </div>
-          <div id="dock-shell-header-actions" hidden={headerCollapsed}>
+          <div
+            id="dock-shell-header-actions"
+            hidden={headerCollapsed}
+            style={{ display: "flex", alignItems: "center", gap: 2 }}
+          >
             {!headerCollapsed && (
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 28, height: 28,
-                  border: "none",
-                  borderRadius: 3,
-                  background: "transparent",
-                  color: "#9CA3AF",
-                  cursor: "pointer",
-                }}
-                aria-label={t("common.refresh", "Refresh")}
-                title={t("common.refresh", "Refresh")}
-              >
-                <Icon name="refresh" size={14} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="dock-inline-header__icon-btn"
+                  onClick={() => setTheme(nextTheme)}
+                  aria-label={themeToggleLabel}
+                  title={themeToggleLabel}
+                >
+                  <Icon name={themeToggleIcon} size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="dock-inline-header__icon-btn"
+                  onClick={() => window.location.reload()}
+                  aria-label={t("common.refresh", "Refresh")}
+                  title={t("common.refresh", "Refresh")}
+                >
+                  <Icon name="refresh" size={14} />
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -897,20 +976,6 @@ export default function DockPage({
               </div>
 
               <div className="dock-sidebar__content">
-                {/* Theme */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => {
-                    setTheme(nextTheme);
-                    setShowSettingsMenu(false);
-                  }}
-                  title={themeToggleLabel}
-                >
-                  <Icon name={themeToggleIcon} size={16} />
-                  <span>{themeToggleLabel}</span>
-                </button>
-
                 {/* Appearance */}
                 <button
                   type="button"
@@ -1326,6 +1391,47 @@ export default function DockPage({
                     </button>
                   </>
                 )}
+
+                {/* Session sections — keep this at the end of the menu after the destructive OBS action. */}
+                <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
+                  {t('page.sessionSections', 'Session sections')}
+                </div>
+                <div className="dock-session-transfer">
+                  <div className="dock-session-transfer__copy">
+                    <span className="dock-session-transfer__title">
+                      <Icon name="folder_zip" size={13} />
+                      <span>{t('page.dockSession', 'Dock Session')}</span>
+                    </span>
+                    <span className="dock-session-transfer__desc">
+                      {t('page.dockSessionDesc', 'Move Bible, lyrics, notes, media, Ministry, Multi-View, and appearance in one JSON file.')}
+                    </span>
+                  </div>
+                  <div className="dock-session-transfer__actions">
+                    <button
+                      type="button"
+                      className="dock-btn dock-btn--preview dock-btn--sm"
+                      onClick={() => { void handleDockSessionExport(); }}
+                      disabled={dockSessionTransferBusy}
+                      title={t('page.exportDockSession', 'Export Dock session')}
+                    >
+                      <Icon name={dockSessionTransferBusy ? "sync" : "download"} size={13} className={dockSessionTransferBusy ? "dock-spin" : undefined} />
+                      {t('common.export', 'Export')}
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-btn dock-btn--primary dock-btn--sm"
+                      onClick={() => dockSessionImportInputRef.current?.click()}
+                      disabled={dockSessionTransferBusy}
+                      title={t('page.importDockSession', 'Import Dock session')}
+                    >
+                      <Icon name={dockSessionTransferBusy ? "sync" : "upload_file"} size={13} className={dockSessionTransferBusy ? "dock-spin" : undefined} />
+                      {t('common.import', 'Import')}
+                    </button>
+                  </div>
+                  <div className="dock-session-transfer__hint">
+                    {t('page.dockSessionHint', 'Known settings are validated before import. Local media files must still exist on the computer.')}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1682,6 +1788,19 @@ export default function DockPage({
           <div key={dockSaveFeedback.id} className="dock-feedback-toast" role="status">
             <Icon name="check_circle" size={13} />
             <span>{dockSaveFeedback.message}</span>
+          </div>
+        </div>
+      )}
+
+      {dockSessionFeedback && (
+        <div className="dock-feedback-toast-stack" aria-live="polite" aria-atomic="true">
+          <div
+            key={dockSessionFeedback.id}
+            className={`dock-feedback-toast${dockSessionFeedback.tone === "error" ? " dock-feedback-toast--error" : ""}`}
+            role={dockSessionFeedback.tone === "error" ? "alert" : "status"}
+          >
+            <Icon name={dockSessionFeedback.tone === "error" ? "error" : "check_circle"} size={13} />
+            <span>{dockSessionFeedback.message}</span>
           </div>
         </div>
       )}

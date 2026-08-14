@@ -720,46 +720,8 @@
       pointer-events: auto;
     }
 
-    /* Keep a freshly loaded source quiet until its saved Bible packet arrives.
-       This prevents a lower-third source from painting the fullscreen layer
-       for one frame during its first OBS load. */
-    #overlay-loading {
-      position: absolute;
-      inset: 0;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      color: rgba(255, 255, 255, 0.88);
-      font: 500 24px/1.2 'CMG Sans', 'Noto Sans', Arial, sans-serif;
-      letter-spacing: 0.01em;
-      background: transparent;
-      opacity: 1;
-      transition: opacity 140ms ease;
-      pointer-events: none;
-    }
-
-    #overlay-loading.is-hidden {
-      opacity: 0;
-      visibility: hidden;
-    }
-
-    #overlay-loading__spinner {
-      width: 22px;
-      height: 22px;
-      border: 2px solid rgba(255, 255, 255, 0.28);
-      border-top-color: rgba(255, 255, 255, 0.92);
-      border-radius: 50%;
-      animation: mce-overlay-loading-spin 720ms linear infinite;
-    }
-
-    @keyframes mce-overlay-loading-spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Verse changes fade the text out completely before the new verse enters.
-       The background remains visible throughout the handoff. */
+    /* Verse changes bring the new text in while keeping the background and
+       existing layer mounted throughout the handoff. */
     @keyframes mce-preview-text-exit {
       from { opacity: 1; }
       to { opacity: 0; }
@@ -999,11 +961,6 @@
        ══════════════════════════════════════ -->
   <div id="overlay-stage">
 
-    <div id="overlay-loading" role="status" aria-live="polite">
-      <span id="overlay-loading__spinner" aria-hidden="true"></span>
-      <span>Loading Bible…</span>
-    </div>
-
     <!-- ─── Fullscreen Layer ─── -->
     <div id="fullscreen-layer" class="mode-layer">
       <div id="background"></div>
@@ -1137,7 +1094,6 @@
       const overlayStage = document.getElementById('overlay-stage');
       const fullscreenLayer = document.getElementById('fullscreen-layer');
       const lowerThirdLayer = document.getElementById('lower-third-layer');
-      const overlayLoading = document.getElementById('overlay-loading');
 
       const _tabParam = new URLSearchParams(window.location.search).get('tab') || 'bible';
       const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
@@ -1483,6 +1439,25 @@
         return PATTERN_CSS[value] || '';
       }
 
+      function resolveOverlayMediaUrl(value) {
+        let trimmed = String(value || '').trim();
+        if (!trimmed) return '';
+        if (/^(?:data:|blob:|https?:\/\/)/i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('/uploads/')) return trimmed;
+        if (trimmed.startsWith('uploads/')) return '/' + trimmed;
+
+        if (/^file:\/\//i.test(trimmed)) {
+          try { trimmed = decodeURIComponent(trimmed.replace(/^file:\/\//i, '')); }
+          catch { trimmed = trimmed.replace(/^file:\/\//i, ''); }
+        }
+
+        // Legacy Bible media can contain an absolute local path. OBS's CEF
+        // cannot read that path directly, but the overlay server exposes the
+        // same uploaded file under /uploads/<filename>.
+        const fileName = trimmed.split(/[\\/]/).pop()?.trim() || '';
+        return fileName ? '/uploads/' + encodeURIComponent(fileName) : trimmed;
+      }
+
       function resolveBackgroundImageCss(image) {
         let value = String(image || '').trim();
         if (!value || value === '__BG_SOURCE__') return '';
@@ -1490,7 +1465,8 @@
         if (value === '__FROM_LOCALSTORAGE__') value = localStorage.getItem('bible-overlay-bg-image') || '';
         if (!value || value === 'none') return '';
         if (/^url\(/i.test(value)) return value;
-        return `url("${value.replace(/"/g, '\\"')}")`;
+        const resolved = resolveOverlayMediaUrl(value);
+        return resolved ? `url("${resolved.replace(/"/g, '\\"')}")` : '';
       }
 
       function clearVideoElement(videoEl) {
@@ -1530,8 +1506,10 @@
           'backgroundColor',
           'backgroundColorEnd',
           'backgroundImage',
+          'backgroundImageFilePath',
           'backgroundPattern',
           'backgroundVideo',
+          'backgroundVideoFilePath',
           'backgroundOpacity',
           'fullscreenShadeEnabled',
           'fullscreenShadeColor',
@@ -1550,12 +1528,27 @@
         const bgColorFinal = hasGradient
           ? `linear-gradient(${bgGradientAngle}deg, ${bgColor}, ${bgColorEnd})`
           : bgColor;
+        const backgroundType = String(theme.backgroundType || '').trim().toLowerCase();
+        const isThemeBackground = !backgroundType || backgroundType === 'theme';
+        const isBackgroundOff = backgroundType === 'off';
 
         root.style.setProperty('--bg-opacity', bgOpacity);
         hideBackgroundCrossfade();
 
-        const bgVideoUrl = String(theme.backgroundVideo || '').trim();
-        if (bgVideoUrl) {
+        if (isBackgroundOff) {
+          clearFullscreenBackgroundVideo();
+          root.style.setProperty('--bg-image', 'none');
+          root.style.setProperty('--bg-color', 'transparent');
+          root.style.setProperty('--bg-opacity', '0');
+          return;
+        }
+
+        const bgVideoUrl = resolveOverlayMediaUrl(theme.backgroundVideo);
+        const bgVideoFilePathUrl = resolveOverlayMediaUrl(theme.backgroundVideoFilePath);
+        const resolvedBgVideoUrl = bgVideoUrl || bgVideoFilePathUrl;
+        const shouldUseVideo = Boolean(resolvedBgVideoUrl)
+          && (backgroundType === 'video' || isThemeBackground);
+        if (shouldUseVideo) {
           const controller = seamlessLoopControllers.get(backgroundVideoEl);
           if (controller) {
             stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
@@ -1566,8 +1559,8 @@
           backgroundVideoEl.style.display = 'block';
           backgroundVideoEl.style.opacity = bgOpacity;
           backgroundVideoEl.loop = true;
-          if (backgroundVideoEl.getAttribute('src') !== bgVideoUrl) {
-            backgroundVideoEl.src = bgVideoUrl;
+          if (backgroundVideoEl.getAttribute('src') !== resolvedBgVideoUrl) {
+            backgroundVideoEl.src = resolvedBgVideoUrl;
             try { backgroundVideoEl.load(); } catch { }
           }
           const playPromise = backgroundVideoEl.play();
@@ -1580,21 +1573,20 @@
         clearFullscreenBackgroundVideo();
 
         const patternCss = resolvePatternCss(theme.backgroundPattern);
-        if (patternCss) {
+        const shouldUsePattern = Boolean(patternCss)
+          && (backgroundType === 'pattern' || isThemeBackground);
+        if (shouldUsePattern) {
           root.style.setProperty('--bg-image', patternCss);
           root.style.setProperty('--bg-color', 'transparent');
           return;
         }
 
-        if (hasGradient) {
-          root.style.setProperty('--bg-color', 'transparent');
-          root.style.setProperty('--bg-image', bgColorFinal);
-          return;
-        }
-
         const rawBgImage = String(theme.backgroundImage || '').trim();
-        if (rawBgImage) {
-          let bgUrl = rawBgImage;
+        const resolvedRawBgImage = rawBgImage || String(theme.backgroundImageFilePath || '').trim();
+        const shouldUseImage = Boolean(resolvedRawBgImage)
+          && (backgroundType === 'image' || isThemeBackground);
+        if (shouldUseImage) {
+          let bgUrl = resolvedRawBgImage;
           if (bgUrl === '__BG_SOURCE__') {
             root.style.setProperty('--bg-image', 'none');
             root.style.setProperty('--bg-color', 'transparent');
@@ -1612,13 +1604,24 @@
           if (bgUrl === '__FROM_LOCALSTORAGE__') {
             bgUrl = localStorage.getItem('bible-overlay-bg-image') || '';
           }
-          root.style.setProperty('--bg-image', bgUrl ? `url(${bgUrl})` : 'none');
-          root.style.setProperty('--bg-color', bgUrl ? 'transparent' : bgColor);
+          const bgImageCss = resolveBackgroundImageCss(bgUrl);
+          root.style.setProperty('--bg-image', bgImageCss || 'none');
+          root.style.setProperty('--bg-color', bgImageCss ? 'transparent' : bgColor);
+          return;
+        }
+
+        const shouldUseGradient = hasGradient
+          && (backgroundType === 'color' || backgroundType === 'gradient' || isThemeBackground);
+        if (shouldUseGradient) {
+          root.style.setProperty('--bg-color', 'transparent');
+          root.style.setProperty('--bg-image', bgColorFinal);
           return;
         }
 
         root.style.setProperty('--bg-image', 'none');
-        root.style.setProperty('--bg-color', bgColor);
+        root.style.setProperty('--bg-color', backgroundType === 'image' || backgroundType === 'pattern' || backgroundType === 'video'
+          ? 'transparent'
+          : bgColor);
       }
 
       function resolveSafeArea() {
@@ -1869,9 +1872,6 @@
         console.log('[Mode] ' + mode);
       }
 
-      function setOverlayLoading(isLoading) {
-        if (overlayLoading) overlayLoading.classList.toggle('is-hidden', !isLoading);
-      }
 
       /* ═══ FULLSCREEN: Fixed-size rendering ═══ */
       function getSingleFitKey() {
@@ -2344,7 +2344,13 @@
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
-        const animationsEnabled = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'].includes(String(s.animation || ''));
+        const configuredAnimation = String(s.animation || '').trim();
+        const animationName = configuredAnimation === 'none'
+          ? 'none'
+          : ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'].includes(configuredAnimation)
+            ? configuredAnimation
+            : 'fade';
+        const animationsEnabled = animationName !== 'none';
         const ead = animationsEnabled
           ? Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)))
           : 0;
@@ -2502,12 +2508,14 @@
         root.style.setProperty('--box-background', fbb);
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
-        const barBgV = String(s.backgroundVideo || '').trim();
+        const barBgV = resolveOverlayMediaUrl(s.backgroundVideo);
+        const barBgFilePathV = resolveOverlayMediaUrl(s.backgroundVideoFilePath);
+        const resolvedBarBgV = barBgV || barBgFilePathV;
         const currentBarBgV = barBackgroundVideoEl.getAttribute('src') || '';
-        if (barBgV && targetMode === 'lower-third') {
+        if (resolvedBarBgV && targetMode === 'lower-third') {
           barBackgroundVideoEl.classList.add('visible');
-          if (currentBarBgV !== barBgV) {
-            barBackgroundVideoEl.src = barBgV;
+          if (currentBarBgV !== resolvedBarBgV) {
+            barBackgroundVideoEl.src = resolvedBarBgV;
             barBackgroundVideoEl.load();
           }
           barBackgroundVideoEl.play().catch(() => { });
@@ -2519,11 +2527,12 @@
             barBackgroundVideoEl.load();
           }
         }
-        if (!barBgV && targetMode === 'lower-third') {
+        if (!resolvedBarBgV && targetMode === 'lower-third') {
           const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+          const resolvedBgImageCss = bgImageCss || resolveBackgroundImageCss(s.backgroundImageFilePath);
           const bgPattern = String(s.backgroundPattern || '').trim();
-          if (bgImageCss) {
-            ltBarBg.style.background = bgImageCss;
+          if (resolvedBgImageCss) {
+            ltBarBg.style.background = resolvedBgImageCss;
             ltBarBg.style.backgroundSize = 'cover';
             ltBarBg.style.backgroundPosition = 'center';
             ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
@@ -2606,8 +2615,10 @@
         const animation = data && data.theme && data.theme.animation
           || currentOverlayData && currentOverlayData.theme && currentOverlayData.theme.animation
           || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
+        const configuredAnimation = String(animation || '').trim();
+        if (configuredAnimation === 'none') return 'none';
         const allowed = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'];
-        return allowed.includes(String(animation || '')) ? String(animation) : 'none';
+        return allowed.includes(configuredAnimation) ? configuredAnimation : 'fade';
       }
 
       function prefersReducedMotion() {
@@ -2618,8 +2629,11 @@
         }
       }
 
+      // Verse selection is a live projection update. Animate the new text in
+      // place, but never animate the old text out first; that keeps the
+      // background visible and avoids a black frame between verses.
       function isOverlayAnimationEnabled(data) {
-        return !prefersReducedMotion() && getOverlayAnimationName(data) !== 'none';
+        return getOverlayAnimationName(data) !== 'none' && !prefersReducedMotion();
       }
 
       function getOverlayAnimationDurationMs(data) {
@@ -2693,7 +2707,6 @@
         currentOverlayData = packet;
         hasReceivedLiveOverlayUpdate = true;
         persistOverlayPacket(packet);
-        setOverlayLoading(false);
 
         if (mode === 'fullscreen' || mode === 'lower-third') {
           setActiveLayer(mode);
@@ -2748,7 +2761,6 @@
           // Show overlay immediately so cached background is visible on reload
           overlay.classList.remove('hidden');
           ltBar.classList.remove('hidden');
-          setOverlayLoading(false);
           autoScaleActiveContent();
           writeRenderAck(packet);
           return;
@@ -2769,18 +2781,12 @@
           : 0;
         if (revision && revision < Math.max(currentBibleRevision, pendingRevision)) return;
         const previousSlideKey = getOverlaySlideKey(currentOverlayData);
-        const shouldAnimateVerse = hasShownOnce &&
-          hasRenderableSlide(packet) &&
-          previousSlideKey !== getOverlaySlideKey(packet) &&
-          isOverlayAnimationEnabled(packet);
-
-        if (overlayTransitionInFlight || shouldAnimateVerse) {
-          pendingOverlayPacket = packet;
-          void runOverlayTransitionQueue();
-          return;
-        }
-
-        commitOverlayPacket(packet, false);
+        const nextSlideKey = getOverlaySlideKey(packet);
+        const animateIn = hasShownOnce
+          && hasRenderableSlide(packet)
+          && previousSlideKey !== nextSlideKey
+          && isOverlayAnimationEnabled(packet);
+        commitOverlayPacket(packet, animateIn);
       }
 
       function processSlideFullscreen(data) {
@@ -3126,7 +3132,6 @@
         }
 
         if (!currentBibleState && !currentOverlayData) {
-          setOverlayLoading(true);
           return;
         }
 

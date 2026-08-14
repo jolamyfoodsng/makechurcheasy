@@ -10,6 +10,28 @@ html.mv-theme-light,
   --mce-focus-ring: #1D4ED8;
 }
 
+/* Search inputs stay quiet across every routed surface. Chromium adds its own
+   glyphs to type=search fields, while older Dock controls also place a
+   leading SVG beside the input. Keep the field itself as the only visual
+   affordance. */
+body :where(input[type="search"]) {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+body :where(input[type="search"])::-webkit-search-decoration,
+body :where(input[type="search"])::-webkit-search-cancel-button,
+body :where(input[type="search"])::-webkit-search-results-button,
+body :where(input[type="search"])::-webkit-search-results-decoration {
+  display: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+body :where(div, label, form):has(> svg + input) > svg:first-child {
+  display: none;
+}
+
 /* Keep keyboard focus visible even when a component's base style removes the
    browser outline. Mouse focus remains quiet through :focus:not(:focus-visible). */
 body :is(button, a, input, select, textarea, [role="button"]):focus-visible {

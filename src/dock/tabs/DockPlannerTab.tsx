@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
 import { dockClient, type DockStateMessage } from "../../services/dockBridge";
@@ -134,8 +134,8 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
   const [draftNotes, setDraftNotes] = useState("");
   const [quickPoint, setQuickPoint] = useState("");
   const [actionError, setActionError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
   const [sending, setSending] = useState(false);
-  const clickTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!initialSnapshot) return;
@@ -167,7 +167,11 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
   );
   const selectedCue = activePlan?.items.find((item) => item.id === activePlan.selectedItemId) ?? activePlan?.items[0] ?? null;
   const selectedIndex = activePlan && selectedCue ? activePlan.items.findIndex((item) => item.id === selectedCue.id) : -1;
-  const nextCue = activePlan && selectedIndex >= 0 ? activePlan.items[selectedIndex + 1] ?? null : null;
+  const liveCue = activePlan?.items.find((item) => item.id === activePlan.lastSentItemId) ?? null;
+  const liveIndex = activePlan && liveCue ? activePlan.items.findIndex((item) => item.id === liveCue.id) : -1;
+  const navigationIndex = liveIndex >= 0 ? liveIndex : selectedIndex;
+  const previousCue = activePlan && navigationIndex > 0 ? activePlan.items[navigationIndex - 1] ?? null : null;
+  const nextCue = activePlan && navigationIndex >= 0 ? activePlan.items[navigationIndex + 1] ?? null : null;
   const filteredItems = useMemo(() => {
     if (!activePlan) return [];
     const q = filter.trim().toLowerCase();
@@ -195,11 +199,6 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
       timestamp: Date.now(),
     });
   }, []);
-
-  const patchActivePlan = useCallback((patch: Partial<ServicePlan>) => {
-    if (!activePlan) return;
-    savePlan({ ...activePlan, ...patch, updatedAt: Date.now() });
-  }, [activePlan, savePlan]);
 
   const patchCue = useCallback((cueId: string, patch: Partial<ServicePlanItem>) => {
     if (!activePlan) return;
@@ -229,8 +228,9 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
     setEditingCueId("");
   }, [draftLabel, draftNotes, draftSubtitle, editingCueId, patchCue]);
 
-  const sendCue = useCallback(async (cue: ServicePlanItem) => {
+  const sendCue = useCallback(async (cue: ServicePlanItem, action: "preview" | "live") => {
     setActionError("");
+    setActionNotice("");
     setSending(true);
     try {
       if (!dockObsClient.isConnected) {
@@ -249,6 +249,15 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         await dockObsClient.pushMedia(media.filePath, media.fileName);
       }
 
+      const outputTab = cue.type === "worship"
+        ? "worship"
+        : cue.type === "media"
+          ? "media"
+          : cue.type === "bible"
+            ? "bible"
+            : "lower-third";
+      const output = await dockObsClient.preparePlannerOutput(outputTab, action === "live");
+
       onStage({
         type: cue.type,
         label: cue.label,
@@ -256,6 +265,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         data: {
           ...payload,
           plannerCueId: cue.id,
+          plannerAction: action,
         },
       });
 
@@ -263,10 +273,21 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         savePlan({
           ...activePlan,
           selectedItemId: cue.id,
-          completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), cue.id])),
-          lastSentItemId: cue.id,
+          ...(action === "live"
+            ? {
+              completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), cue.id])),
+              lastSentItemId: cue.id,
+            }
+            : {}),
           updatedAt: Date.now(),
         });
+      }
+
+      if (action === "preview" && output.outputMode === "program") {
+        setActionNotice(t(
+          "planner.previewRequiresStudio",
+          "OBS Studio Mode is off, so Preview was sent to Program.",
+        ));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -278,24 +299,16 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
     } finally {
       setSending(false);
     }
-  }, [activePlan, onStage, savePlan]);
+  }, [activePlan, onStage, savePlan, t]);
 
   const selectCue = useCallback((cue: ServicePlanItem) => {
-    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      clickTimerRef.current = null;
-      void sendCue(cue);
-    }, 210);
+    void sendCue(cue, "preview");
   }, [sendCue]);
 
-  const moveSelection = useCallback((direction: -1 | 1) => {
-    if (!activePlan || activePlan.items.length === 0) return;
-    const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
-    const nextIndex = Math.min(Math.max(currentIndex + direction, 0), activePlan.items.length - 1);
-    const next = activePlan.items[nextIndex];
-    if (!next) return;
-    patchActivePlan({ selectedItemId: next.id });
-  }, [activePlan, patchActivePlan, selectedIndex]);
+  const sendRelativeCue = useCallback((cue: ServicePlanItem | null) => {
+    if (!cue) return;
+    void sendCue(cue, "live");
+  }, [sendCue]);
 
   const addQuickPoint = useCallback(() => {
     if (!activePlan || !quickPoint.trim()) return;
@@ -372,20 +385,25 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
 
       <div className="dock-planner-now">
         <div>
-          <div className="dock-planner-now__label">{t("planner.current")}</div>
-          <div className="dock-planner-now__title">{selectedCue?.label ?? t("planner.noCueSelected")}</div>
+          <div className="dock-planner-now__label">{liveCue ? t("planner.onAir", "On air") : t("planner.current")}</div>
+          <div className="dock-planner-now__title">{(liveCue ?? selectedCue)?.label ?? t("planner.noCueSelected")}</div>
           <div className="dock-planner-now__meta">
-            {selectedCue ? `${cueKindLabel(selectedCue.type, t)} · ${selectedCue.subtitle || t("planner.snapshotCue")}` : t("planner.selectCueBelow")}
+            {(liveCue ?? selectedCue)
+              ? `${cueKindLabel((liveCue ?? selectedCue)!.type, t)} · ${(liveCue ?? selectedCue)!.subtitle || t("planner.snapshotCue")}`
+              : t("planner.selectCueBelow")}
           </div>
         </div>
         <div className="dock-planner-now__actions">
-          <button type="button" onClick={() => selectedCue && sendCue(selectedCue)} disabled={!selectedCue || sending} title={t("common.send")}>
-            {t("common.send")}
+          <button type="button" onClick={() => selectedCue && void sendCue(selectedCue, "preview")} disabled={!selectedCue || sending} title={t("common.preview")}>
+            {t("common.preview")}
           </button>
-          <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0} title={t("common.prev")}>
+          <button type="button" onClick={() => selectedCue && void sendCue(selectedCue, "live")} disabled={!selectedCue || sending} title={t("planner.goLive", "Go Live")}>
+            {t("planner.goLive", "Go Live")}
+          </button>
+          <button type="button" onClick={() => sendRelativeCue(previousCue)} disabled={!previousCue || sending} title={t("common.prev")}>
             {t("common.prev")}
           </button>
-          <button type="button" onClick={() => moveSelection(1)} disabled={!nextCue} title={t("common.next")}>
+          <button type="button" onClick={() => sendRelativeCue(nextCue)} disabled={!nextCue || sending} title={t("common.next")}>
             {t("common.next")}
           </button>
         </div>
@@ -413,12 +431,13 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
         {filteredItems.map((cue, index) => {
           const isSelected = activePlan.selectedItemId === cue.id || (!activePlan.selectedItemId && index === 0);
           const isCompleted = activePlan.completedItemIds?.includes(cue.id);
+          const isLive = activePlan.lastSentItemId === cue.id;
           return (
             <div
               key={cue.id}
               role="button"
               tabIndex={0}
-              className={`dock-planner-cue${isSelected ? " dock-planner-cue--active" : ""}${isCompleted ? " dock-planner-cue--done" : ""}`}
+              className={`dock-planner-cue${isSelected ? " dock-planner-cue--active" : ""}${isCompleted ? " dock-planner-cue--done" : ""}${isLive ? " dock-planner-cue--live" : ""}`}
               onClick={() => selectCue(cue)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -433,6 +452,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
                   <span className={`dock-planner-cue__type dock-planner-cue__type--${cue.type}`}>
                     {cueKindLabel(cue.type, t)}
                   </span>
+                  {isLive && <span className="dock-planner-cue__live">{t("common.live")}</span>}
                   {isCompleted && <span className="dock-planner-cue__done">{t("common.done")}</span>}
                 </span>
                 <span className="dock-planner-cue__title">{cue.label}</span>
@@ -456,7 +476,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
 
       <div className="dock-planner-footer">
         <div className="dock-planner-hint">
-          {t("planner.hint")}
+          {t("planner.hint", "Click a cue to Preview · Go Live sends it to Program · Next advances the rundown")}
         </div>
         <div className="dock-planner-quickadd">
           <input
@@ -470,6 +490,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
           </button>
         </div>
         {actionError && <div className="dock-error-msg">{actionError}</div>}
+        {actionNotice && <div className="dock-planner-notice">{actionNotice}</div>}
         {sending && <div className="dock-planner-sending">{t("planner.sendingCue")}</div>}
       </div>
 

@@ -17,6 +17,7 @@ const PREMIUM_FEATURES = [
 ];
 
 const INITIAL_REFRESH_DELAY_MS = 1500;
+const INITIAL_REFRESH_RETRY_DELAY_MS = 3500;
 const FALLBACK_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const FOCUS_REFRESH_THROTTLE_MS = 60 * 1000;
 
@@ -123,18 +124,25 @@ export function AnnouncementModalHost() {
     let cancelled = false;
     let lastRefreshAt = 0;
 
-    const refreshIfActive = async () => {
-      if (!isAppVisible()) return;
+    const refresh = async () => {
       lastRefreshAt = Date.now();
       const next = await fetchNextDesktopAnnouncement().catch(() => null);
       if (!cancelled) setAnnouncement(next);
+    };
+    const refreshIfActive = () => {
+      if (!isAppVisible()) return;
+      void refresh();
     };
     const refreshIfStale = () => {
       if (Date.now() - lastRefreshAt < FOCUS_REFRESH_THROTTLE_MS) return;
       void refreshIfActive();
     };
 
-    const timer = window.setTimeout(() => void refreshIfActive(), INITIAL_REFRESH_DELAY_MS);
+    // Fetch once after the app mounts even when the webview reports itself as
+    // hidden during startup. A second lightweight retry covers the brief auth
+    // store hydration window without adding a hot polling loop.
+    const timer = window.setTimeout(() => void refresh(), INITIAL_REFRESH_DELAY_MS);
+    const retryTimer = window.setTimeout(() => void refreshIfActive(), INITIAL_REFRESH_RETRY_DELAY_MS);
     const handleOnline = refreshIfStale;
     const handleFocus = refreshIfStale;
     const handleVisibilityChange = () => {
@@ -158,6 +166,7 @@ export function AnnouncementModalHost() {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.clearTimeout(retryTimer);
       window.clearInterval(interval);
       if (eventSource) eventSource.close();
       window.removeEventListener("online", handleOnline);

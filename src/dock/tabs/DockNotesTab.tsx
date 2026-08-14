@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { DockStagedItem } from "../dockTypes";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
@@ -99,6 +100,7 @@ function DockNoteEditorDialog({
   onSave,
   onFormat,
 }: DockNoteEditorDialogProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
 
@@ -111,22 +113,22 @@ function DockNoteEditorDialog({
       <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-note-editor-title">
         <div className="dock-dialog__header">
           <div>
-            <div className="dock-dialog__eyebrow">{editing ? "Edit Note" : "Add Note"}</div>
+            <div className="dock-dialog__eyebrow">{editing ? t("notes.editNote") : t("notes.addNote")}</div>
             <h2 id="dock-note-editor-title" className="dock-dialog__title">
-              {editing ? "Edit Note" : "New Note"}
+              {editing ? t("notes.editNote") : t("notes.newNote")}
             </h2>
           </div>
-          <button type="button" className="dock-dialog__close" onClick={onCancel} aria-label="Close" title="Close">
+          <button type="button" className="dock-dialog__close" onClick={onCancel} aria-label={t("common.close")} title={t("common.close")}>
             <Icon name="close" size={14} />
           </button>
         </div>
         <div className="dock-dialog__body">
           <label className="dock-dialog-field">
             <span className="dock-dialog-field__label">
-              <span>Title</span>
-              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+              <span>{t("common.title")}</span>
+              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t("common.required")}</span>
             </span>
-            <input className="dock-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Note title" />
+            <input className="dock-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("notes.noteTitlePlaceholder")} />
           </label>
           <DockNotesTextTools
             className="dock-notes-text-tools dock-notes-text-tools--editor"
@@ -135,8 +137,8 @@ function DockNoteEditorDialog({
           />
           <label className="dock-dialog-field">
             <span className="dock-dialog-field__label">
-              <span>Content</span>
-              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">Required</span>
+              <span>{t("notes.content")}</span>
+              <span className="dock-dialog-field__tag dock-dialog-field__tag--required">{t("common.required")}</span>
             </span>
             <textarea
               className="dock-input dock-dialog-textarea"
@@ -145,20 +147,20 @@ function DockNoteEditorDialog({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              placeholder="Lines are grouped by the Lines per note setting."
+              placeholder={t("notes.contentPlaceholder")}
               rows={8}
             />
           </label>
         </div>
         <div className="dock-dialog__footer">
-          <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} title="Cancel">Cancel</button>
+          <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} title={t("common.cancel")}>{t("common.cancel")}</button>
           <button
             type="button"
             className="dock-btn dock-btn--primary"
             onClick={() => onSave({ title, content })}
             disabled={!title.trim() || !content.trim()}
-            title="Save">
-            Save
+            title={t("common.save")}>
+            {t("common.save")}
           </button>
         </div>
       </div>
@@ -243,6 +245,7 @@ export default function DockNotesTab({
   isActive,
   presentationOutputTarget = "obs",
 }: Props) {
+  const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
   const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
@@ -533,8 +536,8 @@ export default function DockNotesTab({
   const openNoteSlideEditor = useCallback((idx: number) => {
     const slide = selectedNoteSlides[idx];
     if (!slide) return;
-    setNoteSlideEditor({ index: idx, label: slide.label || `Slide ${idx + 1}`, text: slide.text });
-  }, [selectedNoteSlides]);
+    setNoteSlideEditor({ index: idx, label: slide.label || `${t("notes.slideLabel")} ${idx + 1}`, text: slide.text });
+  }, [selectedNoteSlides, t]);
 
   const closeNoteSlideEditor = useCallback(() => setNoteSlideEditor(null), []);
 
@@ -554,8 +557,8 @@ export default function DockNotesTab({
     saveDockNotes(nextNotes);
     setSelectedNote(updated);
     setNoteSlideEditor(null);
-    showToast("Slide updated", "success");
-  }, [noteSlideEditor, notes, selectedNote, selectedNoteSlides, showToast]);
+    showToast(t("notes.slideUpdated"), "success");
+  }, [noteSlideEditor, notes, selectedNote, selectedNoteSlides, showToast, t]);
 
   const deleteNoteSlide = useCallback((idx: number) => {
     if (!selectedNote || selectedNoteSlides.length <= 1) return;
@@ -572,8 +575,8 @@ export default function DockNotesTab({
     setSelectedSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
     setVisibleSlideIdx((current) => current === null ? null : Math.min(current > idx ? current - 1 : current, nextSlides.length - 1));
     setNotesTranslation(null);
-    showToast("Slide deleted", "info");
-  }, [notes, selectedNote, selectedNoteSlides, showToast]);
+    showToast(t("notes.slideDeleted"), "info");
+  }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
 
   const buildNoteObsPayload = useCallback(
     (idx: number) => {
@@ -814,11 +817,11 @@ export default function DockNotesTab({
                   route={sceneRoute}
                   onRouteChange={updateSceneRoute}
                   disabled={presentationLinkMode}
-                  title="Note output"
+                  title={t("notes.output")}
                 />
-                <button type="button" className="dock-console-toggle" onClick={openNewNote} title="Add Note" aria-label="Add Note">
+                <button type="button" className="dock-console-toggle" onClick={openNewNote} title={t("notes.addNote")} aria-label={t("notes.addNote")}>
                   <Icon name="add" size={13} />
-                  <span className="dock-console-toggle__label">Add Note</span>
+                  <span className="dock-console-toggle__label">{t("notes.addNote")}</span>
                 </button>
               </div>
             </div>
@@ -826,13 +829,13 @@ export default function DockNotesTab({
               <Icon name="search" size={14} className="dock-search__icon" />
               <input
                 className="dock-input"
-                placeholder="Search notes..."
+                placeholder={t("notes.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search notes"
+                aria-label={t("notes.searchPlaceholder")}
               />
               {searchQuery && (
-                <button type="button" className="dock-search__clear" onClick={() => setSearchQuery("")} aria-label="Clear" title="Clear">
+                <button type="button" className="dock-search__clear" onClick={() => setSearchQuery("")} aria-label={t("common.clear")} title={t("common.clear")}>
                   <Icon name="close" size={13} />
                 </button>
               )}
@@ -844,10 +847,10 @@ export default function DockNotesTab({
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name={notes.length === 0 ? "sticky_note_2" : "search_off"} size={20} />
                 <div className="dock-empty__title">
-                  {notes.length === 0 ? "No notes yet" : "No notes match"}
+                  {notes.length === 0 ? t("notes.noNotesYet") : t("notes.noNotesMatch")}
                 </div>
                 <div className="dock-empty__text">
-                  {notes.length === 0 ? 'Click "Add Note" to create your first one.' : `No results for "${searchQuery}"`}
+                  {notes.length === 0 ? t("notes.createFirstHint") : t("notes.noResultsFor", { query: searchQuery })}
                 </div>
               </div>
             ) : (
@@ -867,10 +870,10 @@ export default function DockNotesTab({
                     >
                       <span className="dock-card__title">{getNoteDisplayTitle(note)}</span>
                       <span className="dock-card__subtitle">
-                        {extractStructuredTextTitle(normalizeDockMultilineText(note.content)).body.split("\n")[0]?.substring(0, 80) || "No content"}
+                        {extractStructuredTextTitle(normalizeDockMultilineText(note.content)).body.split("\n")[0]?.substring(0, 80) || t("notes.noContent")}
                       </span>
                     </button>
-                    <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label="Edit" title="Edit">
+                    <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label={t("common.edit")} title={t("common.edit")}>
                       <Icon name="edit" size={12} />
                     </button>
                   </div>
@@ -892,17 +895,17 @@ export default function DockNotesTab({
                     setSelectedSlideIdx(null);
                     setVisibleSlideIdx(null);
                   }}
-                  title="Back"
+                  title={t("common.back")}
                 >
                   <Icon name="arrow_back" size={14} />
                 </button>
                 <div className="dock-worship-summary__copy">
                   <div className="dock-worship-summary__title">{selectedNoteDisplayTitle}</div>
-                  <div className="dock-worship-summary__artist">Note</div>
+                  <div className="dock-worship-summary__artist">{t("notes.note")}</div>
                   <div className="dock-worship-summary__meta">
-                    <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? "slide" : "slides"}</span>
+                    <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? t("notes.slide") : t("notes.slides")}</span>
                     <span className="dock-worship-summary__meta-dot">·</span>
-                    <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? "line per note" : "lines per note"}</span>
+                    <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? t("notes.linePerNote") : t("notes.linesPerNote")}</span>
                   </div>
                 </div>
               </div>
@@ -916,7 +919,7 @@ export default function DockNotesTab({
                     setNotesTranslation(next);
                   }}
                 />
-                <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title="Edit note" aria-label="Edit note">
+                <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title={t("notes.editNote")} aria-label={t("notes.editNote")}>
                   <Icon name="edit" size={16} />
                 </button>
               </div>
@@ -927,18 +930,18 @@ export default function DockNotesTab({
             <div className="dock-media-search dock-media-search--plain">
               <input
                 className="dock-media-search__input"
-                placeholder="Search note slides..."
+                placeholder={t("notes.searchSlidesPlaceholder")}
                 value={noteSlidesSearchQuery}
                 onChange={(event) => setNoteSlidesSearchQuery(event.target.value)}
-                aria-label="Search note slides"
+                aria-label={t("notes.searchSlidesPlaceholder")}
               />
               {noteSlidesSearchQuery && (
                 <button
                   type="button"
                   className="dock-media-search__clear"
                   onClick={() => setNoteSlidesSearchQuery("")}
-                  aria-label="Clear"
-                  title="Clear"
+                  aria-label={t("common.clear")}
+                  title={t("common.clear")}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -950,12 +953,12 @@ export default function DockNotesTab({
             {selectedNoteSlides.length === 0 ? (
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name="sticky_note_2" size={18} />
-                <div className="dock-empty__text">No content to display</div>
+                <div className="dock-empty__text">{t("notes.noContentToDisplay")}</div>
               </div>
             ) : filteredNoteSlides.length === 0 ? (
               <div className="dock-empty dock-worship-workspace__empty">
                 <Icon name="search_off" size={18} />
-                <div className="dock-empty__text">No note slides match “{noteSlidesSearchQuery}”</div>
+                <div className="dock-empty__text">{t("notes.noSlidesMatch", { query: noteSlidesSearchQuery })}</div>
               </div>
             ) : (
               <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
@@ -966,12 +969,12 @@ export default function DockNotesTab({
                     <div
                       key={slide.id}
                       className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
-                      title="Click to view in OBS"
+                      title={t("notes.clickToView")}
                     >
                       <button type="button" className="dock-worship-slide-card__main" onClick={() => void pushNoteSlide(idx)}>
                         <div className="dock-worship-slide-card__header">
                           <div className="dock-worship-slide-card__label">
-                            <span className="dock-worship-slide-card__name">{slide.label || `Slide ${idx + 1}`}</span>
+                            <span className="dock-worship-slide-card__name">{slide.label || `${t("notes.slideLabel")} ${idx + 1}`}</span>
                             <span className="dock-worship-slide-card__index">{idx + 1}</span>
                           </div>
                           <div className="dock-worship-slide-card__badges" />
@@ -1000,8 +1003,8 @@ export default function DockNotesTab({
                             event.stopPropagation();
                             openNoteSlideEditor(idx);
                           }}
-                          title="Quick edit slide"
-                          aria-label="Quick edit slide"
+                          title={t("notes.quickEditSlide")}
+                          aria-label={t("notes.quickEditSlide")}
                         >
                           <Icon name="edit" size={16} />
                         </button>
@@ -1012,8 +1015,8 @@ export default function DockNotesTab({
                             event.stopPropagation();
                             deleteNoteSlide(idx);
                           }}
-                          title="Delete slide"
-                          aria-label="Delete slide"
+                          title={t("notes.deleteSlide")}
+                          aria-label={t("notes.deleteSlide")}
                           disabled={selectedNoteSlides.length <= 1}
                         >
                           <Icon name="delete" size={15} />
@@ -1025,8 +1028,8 @@ export default function DockNotesTab({
               </div>
             )}
             <DockOutputQuickActions
-              textLabel="Note text"
-              lineLabel="Lines per note"
+              textLabel={t("notes.text")}
+              lineLabel={t("notes.linesPerNote")}
               settings={activeNoteQuickSettings}
               lineCount={notesLinesPerSlide}
               maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
@@ -1046,7 +1049,7 @@ export default function DockNotesTab({
               <DockBottomToolbar
                 overlayMode={overlayMode}
                 onModeChange={handleOverlayModeChange}
-                clearLabel={overlayVisible ? "Hide note" : "Show note"}
+                clearLabel={overlayVisible ? t("notes.hide") : t("notes.show")}
                 onClear={handleClear}
                 sourceVisible={overlayVisible}
                 collapsed={toolbarCollapsed}
@@ -1058,10 +1061,10 @@ export default function DockNotesTab({
                       route={sceneRoute}
                       onRouteChange={updateSceneRoute}
                       disabled={presentationLinkMode}
-                      title="Note output"
+                      title={t("notes.output")}
                       placement="above"
                     />
-                    <button type="button" className="dock-btm-toolbar__icon-btn" onClick={() => setShowThemeSettings(true)} title="Theme Settings" aria-label="Theme Settings">
+                    <button type="button" className="dock-btm-toolbar__icon-btn" onClick={() => setShowThemeSettings(true)} title={t("notes.theme")} aria-label={t("notes.theme")}>
                       <Icon name="edit" size={14} />
                     </button>
                   </div>
@@ -1096,8 +1099,8 @@ export default function DockNotesTab({
           if (overlayMode === "fullscreen") setFullscreenQuickSettings(settings);
           else setLowerThirdQuickSettings(settings);
         }}
-        title="Note Theme"
-        subtitle="Customize how notes appear"
+        title={t("notes.theme")}
+        subtitle={t("notes.themeDescription")}
         storageScope="notes"
       />
 
@@ -1121,10 +1124,10 @@ export default function DockNotesTab({
           <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-note-slide-editor-title">
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">Quick edit</div>
+                <div className="dock-dialog__eyebrow">{t("notes.quickEdit")}</div>
                 <h2 id="dock-note-slide-editor-title" className="dock-dialog__title">{noteSlideEditor.label}</h2>
               </div>
-              <button type="button" className="dock-dialog__close" onClick={closeNoteSlideEditor} aria-label="Close" title="Close">
+              <button type="button" className="dock-dialog__close" onClick={closeNoteSlideEditor} aria-label={t("common.close")} title={t("common.close")}>
                 <Icon name="close" size={14} />
               </button>
             </div>
@@ -1139,7 +1142,7 @@ export default function DockNotesTab({
                 }}
               />
               <label className="dock-dialog-field">
-                <span>Slide text</span>
+                <span>{t("notes.slideText")}</span>
                 <textarea
                   className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
                   value={noteSlideEditor.text}
@@ -1151,8 +1154,8 @@ export default function DockNotesTab({
               </label>
             </div>
             <div className="dock-dialog__footer">
-              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeNoteSlideEditor} title="Cancel">Cancel</button>
-              <button type="button" className="dock-btn dock-btn--primary" onClick={saveNoteSlideEditor} disabled={!noteSlideEditor.text.trim()} title="Save">Save</button>
+              <button type="button" className="dock-btn dock-btn--ghost" onClick={closeNoteSlideEditor} title={t("common.cancel")}>{t("common.cancel")}</button>
+              <button type="button" className="dock-btn dock-btn--primary" onClick={saveNoteSlideEditor} disabled={!noteSlideEditor.text.trim()} title={t("common.save")}>{t("common.save")}</button>
             </div>
           </div>
         </div>

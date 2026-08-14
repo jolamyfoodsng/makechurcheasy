@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import {
   NOTE_TEXT_TOOL_BUTTONS,
@@ -16,6 +17,7 @@ export default function DockNotesTextTools({
   buttonClassName,
   onAction,
 }: DockNotesTextToolsProps) {
+  const { t } = useTranslation();
   const [autoSplitOpen, setAutoSplitOpen] = useState(false);
   const autoSplitRef = useRef<HTMLDivElement>(null);
 
@@ -29,8 +31,16 @@ export default function DockNotesTextTools({
   }, [autoSplitOpen]);
 
   return (
-    <div className={className} role="toolbar" aria-label="Note text tools" onClick={(event) => event.stopPropagation()}>
+    <div className={className} role="toolbar" aria-label={t("notes.textTools")} onClick={(event) => event.stopPropagation()}>
       {NOTE_TEXT_TOOL_BUTTONS.map((tool) => {
+        const title = {
+          autosplit: t("notes.autoSplit"),
+          clean: t("notes.cleanText"),
+          "remove-verse-numbers": t("notes.verseNumbers"),
+          uppercase: t("bible.uppercase"),
+          lowercase: t("notes.lowercase"),
+          capitalize: t("common.capitalize"),
+        }[tool.action];
         if (tool.action === "autosplit") {
           return (
             <div key={tool.action} className="dock-notes-text-tools__autosplit" ref={autoSplitRef}>
@@ -41,8 +51,8 @@ export default function DockNotesTextTools({
                   event.stopPropagation();
                   setAutoSplitOpen((open) => !open);
                 }}
-                title={tool.title}
-                aria-label={tool.title}
+                title={title}
+                aria-label={title}
                 aria-haspopup="menu"
                 aria-expanded={autoSplitOpen}
               >
@@ -50,7 +60,7 @@ export default function DockNotesTextTools({
                 <span className="dock-lyrics-toolbar__caret">▾</span>
               </button>
               {autoSplitOpen && (
-                <div className="dock-notes-text-tools__menu" role="menu" aria-label="Auto split options">
+                <div className="dock-notes-text-tools__menu" role="menu" aria-label={t("notes.autoSplitOptions")}>
                   {[2, 3, 4].map((lines) => (
                     <button
                       key={lines}
@@ -62,7 +72,7 @@ export default function DockNotesTextTools({
                         setAutoSplitOpen(false);
                       }}
                     >
-                      {lines} lines
+                      {t("notes.linesCount", { count: lines })}
                     </button>
                   ))}
                 </div>
@@ -80,8 +90,8 @@ export default function DockNotesTextTools({
               event.stopPropagation();
               onAction(tool.action);
             }}
-            title={tool.title}
-            aria-label={tool.title}
+            title={title}
+            aria-label={title}
           >
             {tool.icon ? <Icon name={tool.icon} size={12} /> : <span>{tool.label}</span>}
           </button>

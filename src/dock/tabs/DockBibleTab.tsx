@@ -123,6 +123,8 @@ type BibleBrowserQuickSettingsPatch = Partial<Pick<
   | "compareReferenceFontSizeRight"
   | "compareAutoFitMaxFontSize"
   | "autoFontScale"
+  | "animation"
+  | "animationDuration"
   | "referenceBackgroundEnabled"
   | "referenceBackgroundColor"
   | "referenceBackgroundStyle"
@@ -695,7 +697,7 @@ function extractFullscreenQuickThemeSettings(
 ): DockFullscreenQuickThemeSettings {
   const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
   return {
-    backgroundType,
+    backgroundType: backgroundType ?? settings.backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
     autoFontScale: settings.autoFontScale === true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
@@ -804,10 +806,9 @@ function extractThemeQuickSettingsForOverlayMode(
   const extracted = mode === "fullscreen"
     ? extractFullscreenQuickThemeSettings(baseTheme.settings, "theme")
     : extractLowerThirdQuickThemeSettings(baseTheme.settings, "theme");
-  // Theme catalog animations are opt-in from the Bible picker. A theme may
-  // still provide its preferred animation, but it must not activate until
-  // the user explicitly chooses one in BackgroundPickerCard.
-  return { ...extracted, animation: "none" };
+  // Keep the selected theme's motion in the live dock payload. Missing motion
+  // falls back to the shared fade default instead of silently disabling it.
+  return extracted;
 }
 
 function applyLowerThirdQuickThemeSettings(
@@ -1021,6 +1022,10 @@ function applyFullscreenQuickThemeSettings(
     ...theme,
     settings: {
       ...theme.settings,
+      // Keep the selected background mode in the live theme payload. The
+      // overlay also receives the asset fields, but this explicit mode prevents
+      // a stale theme/background fallback from winning on the next verse.
+      backgroundType: bgType,
       fontSize: quickSettings.fontSize,
       autoFontScale: quickSettings.autoFontScale === true,
       fontFamily: quickSettings.fontFamily,
@@ -2108,18 +2113,18 @@ export default function DockBibleTab({
   const activeFullscreenQuickThemeSettings = useMemo(
     () => {
       const extracted = extractFullscreenQuickThemeSettings(effectiveSelectedBibleTheme.settings, fullscreenQuickThemeSettings?.backgroundType ?? "theme");
-      return fullscreenQuickThemeSettings ? extracted : { ...extracted, animation: "none" as const };
+      return extracted;
     },
     [effectiveSelectedBibleTheme.settings, fullscreenQuickThemeSettings],
   );
 
   const defaultFullscreenQuickThemeSettings = useMemo(
-    () => ({ ...extractFullscreenQuickThemeSettings(baseFullscreenTheme.settings, "theme"), animation: "none" as const }),
+    () => extractFullscreenQuickThemeSettings(baseFullscreenTheme.settings, "theme"),
     [baseFullscreenTheme.settings],
   );
 
   const defaultLowerThirdQuickThemeSettings = useMemo(
-    () => ({ ...buildDefaultLowerThirdQuickThemeSettings(baseLowerThirdTheme.settings, "theme"), animation: "none" as const }),
+    () => buildDefaultLowerThirdQuickThemeSettings(baseLowerThirdTheme.settings, "theme"),
     [baseLowerThirdTheme.settings],
   );
 

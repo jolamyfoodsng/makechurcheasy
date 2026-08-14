@@ -4231,6 +4231,132 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: save a complete Dock session export to the user's Downloads folder.
+            // The Dock can run inside OBS's embedded browser, where Blob downloads can
+            // create a zero-byte file. Writing through the local server keeps the export
+            // reliable in that environment.
+            if clean == "api/save-dock-session" && request.method() == &tiny_http::Method::Options {
+                let resp = tiny_http::Response::from_string("")
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                    .with_header(overlay_header(
+                        "Access-Control-Allow-Methods",
+                        "POST, OPTIONS",
+                    ))
+                    .with_header(overlay_header(
+                        "Access-Control-Allow-Headers",
+                        "Content-Type",
+                    ));
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            if clean == "api/save-dock-session" && request.method() == &tiny_http::Method::Post {
+                let mut body = String::new();
+                if request.as_reader().read_to_string(&mut body).is_err() || body.trim().is_empty()
+                {
+                    let resp = tiny_http::Response::from_string(
+                        r#"{"error":"A Dock session JSON body is required"}"#,
+                    )
+                    .with_status_code(400);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let is_dock_session = serde_json::from_str::<serde_json::Value>(&body)
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("_format")
+                            .and_then(|format| format.as_str())
+                            .map(|format| format == "makechurch-easy-dock-session")
+                    })
+                    .unwrap_or(false);
+                if !is_dock_session {
+                    let resp = tiny_http::Response::from_string(
+                        r#"{"error":"Invalid MakeChurchEasy Dock session"}"#,
+                    )
+                    .with_status_code(400);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let requested_name = url_path
+                    .find('?')
+                    .and_then(|index| {
+                        url_path[index + 1..]
+                            .split('&')
+                            .find(|part| part.starts_with("filename="))
+                            .map(|part| &part[9..])
+                    })
+                    .map(|value| urlencoding::decode(value).unwrap_or_default().into_owned())
+                    .unwrap_or_else(|| "makechurch-easy-dock-session.json".to_string());
+                let safe_name = match sanitize_filename_for_storage(&requested_name) {
+                    Ok(name) => name,
+                    Err(error) => {
+                        let json = serde_json::json!({ "error": error }).to_string();
+                        let resp = tiny_http::Response::from_string(json).with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+                let downloads_dir = match dirs::download_dir()
+                    .or_else(|| dirs::home_dir().map(|home| home.join("Downloads")))
+                {
+                    Some(path) => path,
+                    None => {
+                        let resp = tiny_http::Response::from_string(
+                            r#"{"error":"Could not determine the Downloads folder"}"#,
+                        )
+                        .with_status_code(500);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = fs::create_dir_all(&downloads_dir) {
+                    let json = serde_json::json!({
+                        "error": format!("Could not create Downloads folder: {}", error)
+                    })
+                    .to_string();
+                    let resp = tiny_http::Response::from_string(json).with_status_code(500);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let destination = downloads_dir.join(safe_name);
+                match fs::write(&destination, body.as_bytes()) {
+                    Ok(()) => {
+                        let path = destination.to_string_lossy().to_string();
+                        println!(
+                            "[Overlay API] Saved Dock session: {} ({} bytes)",
+                            path,
+                            body.len()
+                        );
+                        let json = serde_json::json!({
+                            "path": path,
+                            "bytes": body.len()
+                        })
+                        .to_string();
+                        let resp = tiny_http::Response::from_string(json)
+                            .with_header(overlay_header(
+                                "Content-Type",
+                                "application/json; charset=utf-8",
+                            ))
+                            .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                        let _ = request.respond(resp);
+                    }
+                    Err(error) => {
+                        let json = serde_json::json!({
+                            "error": format!("Could not save Dock session: {}", error)
+                        })
+                        .to_string();
+                        let resp = tiny_http::Response::from_string(json).with_status_code(500);
+                        let _ = request.respond(resp);
+                    }
+                }
+                continue;
+            }
+
             // API: list uploaded files as JSON array
             if clean == "api/uploads" {
                 let mut files: Vec<String> = Vec::new();
@@ -5866,9 +5992,19 @@ pub fn run() {
                 Err(error) => eprintln!("[Tauri] Failed to seed local LLM model: {}", error),
             }
 
-            let serve_dir = resolve_bundled_overlay_dir(&resource_dir)
-                .or_else(resolve_dev_public_dir)
-                .unwrap_or(resource_dir.clone());
+            // In debug/dev mode, serve the live project `public/` directory
+            // first. A stale copied `target/**/dist` directory can otherwise
+            // win this lookup and make OBS keep rendering an older overlay
+            // (including the removed loading screen and verse transition).
+            let serve_dir = if cfg!(debug_assertions) {
+                resolve_dev_public_dir()
+                    .or_else(|| resolve_bundled_overlay_dir(&resource_dir))
+                    .unwrap_or(resource_dir.clone())
+            } else {
+                resolve_bundled_overlay_dir(&resource_dir)
+                    .or_else(resolve_dev_public_dir)
+                    .unwrap_or(resource_dir.clone())
+            };
 
             println!("[Tauri] Overlay resource dir : {:?}", resource_dir);
             println!("[Tauri] Overlay serve dir    : {:?}", serve_dir);

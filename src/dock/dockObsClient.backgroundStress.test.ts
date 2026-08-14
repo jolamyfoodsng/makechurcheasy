@@ -344,6 +344,28 @@ describe("dockObsClient background reflection stress", () => {
     }
   });
 
+  it("removes legacy Bible background slots for the unified browser source", async () => {
+    inputs.set("MCE BG - Bible", {
+      inputKind: "color_source_v3",
+      inputSettings: {},
+    });
+    inputs.set("MCE BG - Bible 2", {
+      inputKind: "image_source",
+      inputSettings: {},
+    });
+    sceneItems.set("MCE Presentation", new Map([
+      ["MCE BG - Bible", { sourceName: "MCE BG - Bible", sceneItemId: 1, sceneItemIndex: 0, enabled: true }],
+      ["MCE BG - Bible 2", { sourceName: "MCE BG - Bible 2", sceneItemId: 2, sceneItemIndex: 1, enabled: false }],
+    ]));
+
+    await client._removeFullscreenBgSources("bible");
+
+    expect(inputs.has("MCE BG - Bible")).toBe(false);
+    expect(inputs.has("MCE BG - Bible 2")).toBe(false);
+    expect(sceneItems.get("MCE Presentation")?.size).toBe(0);
+    expect(client._activeFullscreenBgSignature.bible).toBe("__hidden__");
+  });
+
   it("recreates MCE Presentation before retrying a scene-source add after repeated manual deletion", async () => {
     const realCall = originalMethods.call as (requestType: string, requestData?: Record<string, unknown>) => Promise<unknown>;
     const sceneNames = new Set(["Main"]);
@@ -804,7 +826,7 @@ describe("dockObsClient background reflection stress", () => {
     expect(cssWrites).toHaveLength(0);
   });
 
-  it("recovers the browser source when OBS accepts an event but the page does not render it", async () => {
+  it("does not reload the browser source when a render acknowledgement is delayed", async () => {
     const sourceName = "MCE Browser - Bible";
     const baseUrl = "http://overlay.test/mce-bible-overlay.html?v=2026-07-29-1-lt-bg-image&tab=bible";
     inputs.set(sourceName, {
@@ -843,7 +865,8 @@ describe("dockObsClient background reflection stress", () => {
     expect(callLog.some((entry) => (
       entry.method === "SetInputSettings" &&
       Object.prototype.hasOwnProperty.call(entry.payload.inputSettings as Record<string, unknown>, "css")
-    ))).toBe(true);
+    ))).toBe(false);
+    expect(client.waitForOverlayRenderAck).not.toHaveBeenCalled();
   });
 
   it("keeps Bible fullscreen setup stable when only background settings change", () => {

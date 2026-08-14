@@ -1639,20 +1639,14 @@ export default function DockMediaTab({
       if (!entry) continue;
 
       let filePath: string | null = null;
-      if (entry.uploadFile) {
-        let dir = uploadsDir;
-        if (!dir) {
-          try {
-            const res = await fetch("/api/uploads-dir");
-            if (res.ok) { const data = await res.json(); dir = data.path || null; }
-          } catch { /* ignore */ }
+      try {
+        if (entry.uploadFile) {
+          filePath = await resolveUploadFilePath(entry.uploadFile);
+        } else if (entry.libraryItem) {
+          filePath = await resolveLibraryMediaFilePath(entry.libraryItem);
         }
-        if (dir) {
-          const sep = dir.includes("\\") ? "\\" : "/";
-          filePath = `${dir}${sep}${entry.uploadFile}`;
-        }
-      } else if (entry.libraryItem?.filePath) {
-        filePath = entry.libraryItem.filePath;
+      } catch (err) {
+        console.warn("[DockMediaTab] Could not resolve playlist media path:", entry.name, err);
       }
 
       if (filePath) {
@@ -1693,7 +1687,17 @@ export default function DockMediaTab({
     } catch (err) {
       console.warn("[DockMediaTab] Failed to create playlist:", err);
     }
-  }, [allResolvableEntries, selectedKeys, uploadsDir, playlistName, playlistLoop, playlistShuffle, playlistMuted, clearSelection]);
+  }, [
+    allResolvableEntries,
+    clearSelection,
+    playlistLoop,
+    playlistMuted,
+    playlistName,
+    playlistShuffle,
+    resolveLibraryMediaFilePath,
+    resolveUploadFilePath,
+    selectedKeys,
+  ]);
 
   const selectedEntries = useMemo(
     () => {
@@ -4272,14 +4276,23 @@ export default function DockMediaTab({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            className="dock-btn dock-btn--primary dock-btn--compact"
-            onClick={() => setShowPlaylistModal(true)}
-            title={t('common.play')}>
-            <Icon name="playlist_add" size={12} />
-
-          </button>
+          <div className="dock-media-selection-tray__actions">
+            <button
+              type="button"
+              className="dock-btn dock-btn--primary dock-btn--compact"
+              onClick={() => setShowPlaylistModal(true)}
+              title={t('media.createSlideshow')}>
+              <Icon name="playlist_add" size={12} />
+              {t('media.createSlideshow')}
+            </button>
+            <button
+              type="button"
+              className="dock-btn dock-btn--secondary dock-btn--compact"
+              onClick={clearSelection}
+              title={t('common.cancel')}>
+              {t('common.cancel')}
+            </button>
+          </div>
         </div>
       )}
 
