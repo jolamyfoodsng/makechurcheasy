@@ -59,6 +59,7 @@ import {
   mergeQuickThemeBackground,
 } from "../lowerThirdQuickSettings";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
+import { resolveInitialDockBibleCompareEnabled } from "../dockBibleComparePreferences";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { trackBiblePresent } from "../../services/tracking";
@@ -1451,9 +1452,7 @@ export default function DockBibleTab({
   const initialChapter = initialBook
     ? Math.min(Math.max(initialPrefs.selectedChapter ?? 1, 1), maxInitialChapter)
     : null;
-  const initialCompareEnabled = typeof initialPrefs.compareEnabled === "boolean"
-    ? initialPrefs.compareEnabled
-    : initialPrefs.displayMode === "compare";
+  const initialCompareEnabled = resolveInitialDockBibleCompareEnabled(initialPrefs);
   const initialCompareMode: CompareMode = initialPrefs.compareMode === "passages" ? "passages" : "translations";
   const initialFullscreenQuickThemeSettings = sanitizeFullscreenQuickThemeSettings(
     initialPrefs.fullscreenQuickThemeSettings,
@@ -1917,9 +1916,7 @@ export default function DockBibleTab({
         setSelectedLowerThirdTheme(productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0]);
       }
       setOverlayMode(prefs.overlayMode ?? productionDefaults.defaultMode);
-      const restoredCompareEnabled = typeof prefs.compareEnabled === "boolean"
-        ? prefs.compareEnabled
-        : prefs.displayMode === "compare";
+      const restoredCompareEnabled = resolveInitialDockBibleCompareEnabled(prefs);
       setCompareEnabled(restoredCompareEnabled);
       setDisplayMode(restoredCompareEnabled ? "compare" : "single");
       setCompareMode(prefs.compareMode === "passages" ? "passages" : "translations");
@@ -4030,8 +4027,6 @@ export default function DockBibleTab({
 
   const handleCompareModeChange = useCallback((mode: CompareMode) => {
     setCompareMode(mode);
-    setCompareEnabled(true);
-    setDisplayMode("compare");
   }, []);
 
   const selectedVerseRef = useRef(selectedVerse);
