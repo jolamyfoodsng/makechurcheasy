@@ -52,6 +52,7 @@ interface SavedLocalStyle {
 interface Props {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  /** Persist the current style after an edit settles, without requiring the modal footer. */
   onQuickSettingsSave?: (settings: DockFullscreenQuickThemeSettings) => void;
   onSaveFeedback?: (message: string) => void;
   selectedThemeId: string | null;
@@ -273,6 +274,7 @@ function getModeLabel(mode: NonNullable<Props["overlayMode"]>): string {
 export default function BackgroundPickerCard({
   quickSettings,
   onQuickSettingsChange,
+  onQuickSettingsSave,
   selectedThemeId: _selectedThemeId,
   onThemeSelect: _onThemeSelect,
   templateType: _templateType,
@@ -326,6 +328,10 @@ export default function BackgroundPickerCard({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const prevStorageKeysRef = useRef(storageKeys);
+  const onQuickSettingsSaveRef = useRef(onQuickSettingsSave);
+  const currentStyleSaveTimerRef = useRef<number | null>(null);
+  const pendingCurrentStyleRef = useRef<DockFullscreenQuickThemeSettings | null>(null);
+  const lastObservedQuickSettingsRef = useRef<string | null>(null);
   const compareBackdropValue: BackgroundType = bgType;
   const lowerThirdPadding = parseLowerThirdPadding(quickSettings.lowerThirdCardPadding);
   const lowerThirdPaddingLinked = quickSettings.lowerThirdPaddingLinked ?? false;
@@ -339,6 +345,52 @@ export default function BackgroundPickerCard({
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
   const autoFontScaleEnabled = quickSettings.autoFontScale === true;
   const isBiblePicker = storageScope === "bible" && showReferences;
+
+  useEffect(() => {
+    onQuickSettingsSaveRef.current = onQuickSettingsSave;
+  }, [onQuickSettingsSave]);
+
+  const scheduleCurrentStyleSave = useCallback((settings: DockFullscreenQuickThemeSettings) => {
+    if (!onQuickSettingsSaveRef.current) return;
+    pendingCurrentStyleRef.current = cloneQuickSettings(settings);
+    if (currentStyleSaveTimerRef.current !== null) {
+      window.clearTimeout(currentStyleSaveTimerRef.current);
+    }
+    currentStyleSaveTimerRef.current = window.setTimeout(() => {
+      currentStyleSaveTimerRef.current = null;
+      const pending = pendingCurrentStyleRef.current;
+      pendingCurrentStyleRef.current = null;
+      if (pending) onQuickSettingsSaveRef.current?.(pending);
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    if (!onQuickSettingsSaveRef.current) return;
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(quickSettings);
+    } catch {
+      return;
+    }
+
+    if (lastObservedQuickSettingsRef.current === null) {
+      lastObservedQuickSettingsRef.current = serialized;
+      return;
+    }
+    if (lastObservedQuickSettingsRef.current === serialized) return;
+    lastObservedQuickSettingsRef.current = serialized;
+    scheduleCurrentStyleSave(quickSettings);
+  }, [quickSettings, scheduleCurrentStyleSave]);
+
+  useEffect(() => () => {
+    if (currentStyleSaveTimerRef.current !== null) {
+      window.clearTimeout(currentStyleSaveTimerRef.current);
+      currentStyleSaveTimerRef.current = null;
+    }
+    const pending = pendingCurrentStyleRef.current;
+    pendingCurrentStyleRef.current = null;
+    if (pending) onQuickSettingsSaveRef.current?.(pending);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -565,7 +617,7 @@ export default function BackgroundPickerCard({
   const compareOnlyMode = hideBackgroundOnCompare && displayMode === "compare";
   const localStylesControl = (
     <>
-      <div className="dtb-local-styles dtb-local-styles--theme">
+      <div className="dtb-local-styles">
         <label className="dtb-local-styles__label" htmlFor={localStylesSelectId}>
           Saved Styles
         </label>
@@ -770,6 +822,7 @@ export default function BackgroundPickerCard({
                 )}
               </div>
 
+              {localStylesControl}
 
 
               {/* Content based on type */}
@@ -803,15 +856,12 @@ export default function BackgroundPickerCard({
                   />
                 )}
                 {bgType === "theme" && (
-                  <div className="dtb-bg-picker__theme-stack">
-                    {localStylesControl}
-                    <ThemeSection
-                      selectedThemeId={_selectedThemeId}
-                      onThemeSelect={_onThemeSelect}
-                      allowedCategories={_allowedCategories}
-                      overlayMode={overlayMode}
-                    />
-                  </div>
+                  <ThemeSection
+                    selectedThemeId={_selectedThemeId}
+                    onThemeSelect={_onThemeSelect}
+                    allowedCategories={_allowedCategories}
+                    overlayMode={overlayMode}
+                  />
                 )}
               </div>
 

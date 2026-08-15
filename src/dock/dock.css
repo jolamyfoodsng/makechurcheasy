@@ -25395,10 +25395,6 @@
   margin-bottom: 12px;
 }
 
-.dtb-local-styles--theme {
-  margin-bottom: 4px;
-}
-
 .dtb-local-styles__label {
   font-size: 11px;
   font-weight: 700;
@@ -26571,12 +26567,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.dtb-bg-picker__theme-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .dtb-theme-section__loading,
