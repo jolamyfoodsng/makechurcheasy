@@ -6504,6 +6504,23 @@ export default function DockBibleTab({
                     <span className="dock-bible-verse-row__text">{verse.text}</span>
                   </div>
                 )}
+                <div className="dock-hover-actions dock-bible-verse-row__actions">
+                  <button
+                    type="button"
+                    className="dock-hover-actions__btn dock-hover-actions__btn--program"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleVerseClick(verse.verse, activeColumnIndex, activeTranslation);
+                    }}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    aria-label={`${presentationLinkMode ? t("bible.showOnPresentation", "Show on presentation") : t("bible.pushToObs", "Push to OBS")} — ${selectedBook} ${selectedChapter}:${verse.verse}`}
+                    title={presentationLinkMode ? t("bible.showOnPresentation", "Show on presentation") : t("bible.pushToObs", "Push to OBS")}
+                  >
+                    <Icon name="cast" size={13} />
+                  </button>
+                </div>
               </div>
             );
           })
