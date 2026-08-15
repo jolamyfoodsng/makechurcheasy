@@ -665,13 +665,14 @@ export default function DockNotesTab({
   }, [notesTranslationSourceSignature, selectedNote?.id]);
 
   const buildNoteObsPayload = useCallback(
-    (idx: number) => {
+    (idx: number, quickSettingsOverride?: DockFullscreenQuickThemeSettings) => {
       if (!selectedNote) return null;
       const slide = selectedNoteSlides[idx];
       if (!slide) return null;
       const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
-      const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+      const quickSettings = quickSettingsOverride
+        ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
       const themeSettings = {
         ...(quickSettings ?? theme.settings),
         autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true,
@@ -714,8 +715,8 @@ export default function DockNotesTab({
   );
 
   const pushNoteSlide = useCallback(
-    (idx: number) => {
-      const payload = buildNoteObsPayload(idx);
+    (idx: number, quickSettingsOverride?: DockFullscreenQuickThemeSettings) => {
+      const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
       setActionError("");
       setSelectedSlideIdx(idx);
@@ -806,18 +807,28 @@ export default function DockNotesTab({
           autoFontScale: settings.autoFontScale ?? true,
         };
       })();
-    setFullscreenQuickSettings({ ...fullscreenBase, ...patch });
-    setLowerThirdQuickSettings({ ...lowerThirdBase, ...patch });
+    const nextFullscreenSettings = { ...fullscreenBase, ...patch };
+    const nextLowerThirdSettings = { ...lowerThirdBase, ...patch };
+    setFullscreenQuickSettings(nextFullscreenSettings);
+    setLowerThirdQuickSettings(nextLowerThirdSettings);
     if (nextLineCount !== undefined) {
       setNotesLinesPerSlide(clampNoteLinesPerSlide(nextLineCount));
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
     }
-    if (overlayVisible && activeSlideIndex !== null) {
+    if (overlayVisible && activeSlideIndex !== null && nextLineCount === undefined) {
+      // Publish the exact settings selected by the operator. Waiting for the
+      // state update effect here can send the previous font size to OBS when
+      // the same note remains live.
+      const nextSettings = overlayMode === "fullscreen"
+        ? nextFullscreenSettings
+        : nextLowerThirdSettings;
+      void pushNoteSlide(activeSlideIndex, nextSettings);
+    } else if (overlayVisible && activeSlideIndex !== null) {
       pendingQuickSettingsRefreshRef.current = true;
       setQuickSettingsRefreshNonce((current) => current + 1);
     }
-  }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayVisible, selectedFSTheme, selectedLTTheme]);
+  }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, overlayVisible, pushNoteSlide, selectedFSTheme, selectedLTTheme]);
 
   const activeNoteSizePreset = useMemo(() => {
     const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
