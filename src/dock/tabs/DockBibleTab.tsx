@@ -90,6 +90,11 @@ import {
   copyTextToClipboard,
 } from "../bibleClipboard";
 import { getDockBibleKeywordMatchOutputOptions } from "../dockKeywordMatch";
+import {
+  formatDockFavoriteBibleSearch,
+  mergeFavoriteBibleSearches,
+  type DockFavoriteBibleSearch,
+} from "../bibleSearchSuggestions";
 import DockBibleComparePassageControls from "../components/DockBibleComparePassageControls";
 import {
   buildInstalledTranslationOptions,
@@ -215,6 +220,10 @@ function getHistoryVersePreview(verseText: string): string {
 
 function getRecentBibleHistoryItems(items: BibleHistoryItem[]): BibleHistoryItem[] {
   return [...items].sort((a, b) => b.timestamp - a.timestamp).slice(0, 30);
+}
+
+function getFavoriteBibleHistoryItems(): BibleHistoryItem[] {
+  return loadBibleHistory().filter((item) => item.isFavorite);
 }
 
 interface DockBiblePreferences {
@@ -1557,6 +1566,17 @@ export default function DockBibleTab({
   const [highlightVerse, setHighlightVerse] = useState<number | null>(null);
   const [favoriteRefs, setFavoriteRefs] = useState<Set<string>>(new Set());
   const [favoritePassages, setFavoritePassages] = useState<BiblePassage[]>([]);
+  const [favoriteHistorySearches, setFavoriteHistorySearches] = useState<BibleHistoryItem[]>(
+    () => getFavoriteBibleHistoryItems(),
+  );
+  const favoriteSearches = useMemo(
+    () => mergeFavoriteBibleSearches(favoritePassages, favoriteHistorySearches),
+    [favoriteHistorySearches, favoritePassages],
+  );
+  const hasSavedSearches = recentSearches.length > 0 || favoriteSearches.length > 0;
+  const refreshFavoriteHistorySearches = useCallback(() => {
+    setFavoriteHistorySearches(getFavoriteBibleHistoryItems());
+  }, []);
   const [isUtilityCollapsed, _setIsUtilityCollapsed] = useState(
     () => initialUiPrefs.controlsCollapsed ?? false,
   );
@@ -1873,11 +1893,13 @@ export default function DockBibleTab({
         if (cancelled) return;
         setFavoriteRefs(new Set(favorites.map((passage) => passage.reference)));
         setFavoritePassages(favorites);
+        setFavoriteHistorySearches(getFavoriteBibleHistoryItems());
       })
       .catch(() => {
         if (!cancelled) {
           setFavoriteRefs(new Set());
           setFavoritePassages([]);
+          setFavoriteHistorySearches(getFavoriteBibleHistoryItems());
         }
       });
 
@@ -4494,9 +4516,9 @@ export default function DockBibleTab({
     const val = e.target.value;
     setSearchQuery(val);
     setShowDropdown(val.trim().length > 0);
-    setShowRecentSearches(val.trim().length === 0);
+    setShowRecentSearches(val.trim().length === 0 && hasSavedSearches);
     setActiveIdx(-1);
-  }, []);
+  }, [hasSavedSearches]);
 
   // ── Pick a search result ──
   const handlePickResult = useCallback(
@@ -4572,8 +4594,8 @@ export default function DockBibleTab({
     [handlePickResult],
   );
 
-  const handleFavoriteClick = useCallback((passage: BiblePassage) => {
-    const result = parseBibleSearch(`${passage.book} ${passage.chapter}:${passage.startVerse}`)[0];
+  const handleFavoriteClick = useCallback((favorite: DockFavoriteBibleSearch) => {
+    const result = parseBibleSearch(favorite.reference)[0];
     setSearchQuery("");
     setShowRecentSearches(false);
     setShowDropdown(false);
@@ -4980,7 +5002,8 @@ export default function DockBibleTab({
       return;
     }
 
-    const reference = selectedPassageForFavorite.reference;
+    const passage = selectedPassageForFavorite;
+    const reference = passage.reference;
     const nextIsFavorite = !favoriteRefs.has(reference);
     setFavoriteRefs((current) => {
       const next = new Set(current);
@@ -4991,10 +5014,16 @@ export default function DockBibleTab({
       }
       return next;
     });
+    setFavoritePassages((current) => {
+      if (nextIsFavorite) {
+        return [passage, ...current.filter((item) => item.reference !== reference)];
+      }
+      return current.filter((item) => item.reference !== reference);
+    });
 
     try {
       if (nextIsFavorite) {
-        await addFavorite(selectedPassageForFavorite);
+        await addFavorite(passage);
       } else {
         await removeFavorite(reference);
       }
@@ -5007,6 +5036,14 @@ export default function DockBibleTab({
           next.add(reference);
         }
         return next;
+      });
+      setFavoritePassages((current) => {
+        if (nextIsFavorite) {
+          return current.filter((item) => item.reference !== reference);
+        }
+        return current.some((item) => item.reference === reference)
+          ? current
+          : [passage, ...current];
       });
       setActionError(error instanceof Error ? error.message : t("bible.unableToUpdateFavorites"));
     }
@@ -6135,7 +6172,15 @@ export default function DockBibleTab({
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => {
                   if (searchQuery.trim()) setShowDropdown(true);
-                  else if (recentSearches.length > 0) setShowRecentSearches(true);
+                  else {
+                    const nextFavoriteHistorySearches = getFavoriteBibleHistoryItems();
+                    setFavoriteHistorySearches(nextFavoriteHistorySearches);
+                    setShowRecentSearches(
+                      recentSearches.length > 0
+                      || favoritePassages.length > 0
+                      || nextFavoriteHistorySearches.length > 0,
+                    );
+                  }
                 }}
               />
               {searchQuery && (
@@ -6145,7 +6190,7 @@ export default function DockBibleTab({
                   onClick={() => {
                     setSearchQuery("");
                     setShowDropdown(false);
-                    setShowRecentSearches(recentSearches.length > 0);
+                    setShowRecentSearches(hasSavedSearches);
                   }}
                   aria-label={t("bible.clearSearchShort")}
                   title={t("bible.clearSearchShort")}
@@ -6210,21 +6255,23 @@ export default function DockBibleTab({
                       ))}
                     </>
                   )}
-                  {favoritePassages.length > 0 && (
+                  {favoriteSearches.length > 0 && (
                     <>
                       <div className="dock-search-dropdown__heading">{t("bible.favorites", "Favorites")}</div>
-                      {favoritePassages.map((passage) => (
+                      {favoriteSearches.map((favorite) => (
                         <button
                           type="button"
-                          key={passage.reference}
+                          key={favorite.reference}
                           className="dock-search-dropdown__item dock-search-dropdown__item--favorite"
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => handleFavoriteClick(passage)}
-                          title={passage.reference}
+                          onClick={() => handleFavoriteClick(favorite)}
+                          title={formatDockFavoriteBibleSearch(favorite)}
                         >
                           <Icon name="star" size={13} style={{ opacity: 0.7 }} />
                           <span className="dock-search-dropdown__content">
-                            <span className="dock-search-dropdown__label">{passage.reference}</span>
+                            <span className="dock-search-dropdown__label">
+                              {formatDockFavoriteBibleSearch(favorite)}
+                            </span>
                           </span>
                         </button>
                       ))}
@@ -6836,10 +6883,12 @@ export default function DockBibleTab({
       {showBibleHistory && (
         <BibleHistoryScreen
           onBack={() => {
+            refreshFavoriteHistorySearches();
             setShowBibleHistory(false);
             onHistoryClose?.();
           }}
           onNavigateToVerse={(book, chapter, verse) => {
+            refreshFavoriteHistorySearches();
             setSelectedBook(book);
             setSelectedChapter(chapter);
             setHighlightVerse(verse);
