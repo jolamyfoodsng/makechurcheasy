@@ -2081,6 +2081,11 @@ export default function DockWorshipTab({
     (idx: number, options?: { backgroundOnly?: boolean; showPresentationMeta?: boolean }) => {
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
+      if (!presentationLinkMode && (!hasSceneRoute || sceneRoute.syncPresentation)) {
+        void dockObsClient.focusMcePresentationModule("worship").catch((err) => {
+          console.warn("[DockWorshipTab] Failed to focus Worship presentation source:", err);
+        });
+      }
       const requestId = ++liveSectionRequestIdRef.current;
 
       setActionError("");
@@ -2128,7 +2133,7 @@ export default function DockWorshipTab({
           }
         });
     },
-    [buildSectionPayload, hasSceneRoute, onStage, presentationLinkMode, pushWorshipToConfiguredOutput],
+    [buildSectionPayload, hasSceneRoute, onStage, presentationLinkMode, pushWorshipToConfiguredOutput, sceneRoute.syncPresentation],
   );
 
   const saveSongInMainApp = useCallback(

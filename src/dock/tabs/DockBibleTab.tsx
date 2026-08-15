@@ -3160,6 +3160,11 @@ export default function DockBibleTab({
         pushComparePassages?: boolean;
       },
     ) => {
+      if (!presentationLinkMode && (!hasSceneRoute || sceneRoute.syncPresentation)) {
+        void dockObsClient.focusMcePresentationModule("bible").catch((err) => {
+          console.warn("[DockBibleTab] Failed to focus Bible presentation source:", err);
+        });
+      }
       const requestId = ++liveVerseRequestIdRef.current;
       const effectiveTranslation = options?.translation ?? activeTranslation;
       if (compareEnabled && compareMode === "passages") {
@@ -3467,6 +3472,7 @@ export default function DockBibleTab({
       referenceFormat,
       referenceVersionVisible,
       hasSceneRoute,
+      sceneRoute.syncPresentation,
       pushBibleToConfiguredOutput,
       recordBibleHistory,
     ],

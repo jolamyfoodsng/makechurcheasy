@@ -718,6 +718,11 @@ export default function DockNotesTab({
     (idx: number, quickSettingsOverride?: DockFullscreenQuickThemeSettings) => {
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
+      if (!presentationLinkMode && (!hasSceneRoute || sceneRoute.syncPresentation)) {
+        void dockObsClient.focusMcePresentationModule("notes").catch((err) => {
+          console.warn("[DockNotesTab] Failed to focus Notes presentation source:", err);
+        });
+      }
       setActionError("");
       setSelectedSlideIdx(idx);
       setVisibleSlideIdx(idx);
@@ -742,7 +747,7 @@ export default function DockNotesTab({
           setActionError(err instanceof Error ? err.message : String(err));
         });
     },
-    [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput],
+    [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput, sceneRoute.syncPresentation],
   );
 
   const handleAutoAdvanceStart = useCallback((startIndex: number) => {

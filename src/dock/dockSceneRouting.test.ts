@@ -5,6 +5,7 @@ import routingControlSource from "./components/DockSceneRoutingControl.tsx?raw";
 import bibleTabSource from "./tabs/DockBibleTab.tsx?raw";
 import worshipTabSource from "./tabs/DockWorshipTab.tsx?raw";
 import notesTabSource from "./tabs/DockNotesTab.tsx?raw";
+import mediaTabSource from "./tabs/DockMediaTab.tsx?raw";
 import ministryTabSource from "./tabs/DockMinistryTab.tsx?raw";
 import countdownTabSource from "./tabs/DockCountdownsTab.tsx?raw";
 import dockPageSource from "./DockPage.tsx?raw";
@@ -69,6 +70,31 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("lowerThirdSourceVisibility");
     expect(methodSource).toContain("PRESENTATION_SCENE_NAME");
     expect(methodSource).toContain("MCE Presentation only");
+  });
+
+  it("focuses the clicked module before slow output work and keeps fast paths covered", () => {
+    expect(bibleTabSource).toContain('focusMcePresentationModule("bible")');
+    expect(notesTabSource).toContain('focusMcePresentationModule("notes")');
+    expect(worshipTabSource).toContain('focusMcePresentationModule("worship")');
+    expect(obsClientSource).toContain('focusMcePresentationModule("bible")');
+    expect(obsClientSource).toContain('focusMcePresentationModule("worship")');
+    expect(obsClientSource).toContain('focusMcePresentationModule("notes")');
+    expect(obsClientSource).toContain("Fast packet updates must still switch the active MCE family");
+    expect(obsClientSource).toContain("focusMcePresentationModule(\"media\")");
+    expect(mediaTabSource).toContain("How the slideshow works");
+    expect(mediaTabSource).toContain('useState("MC slideshow")');
+    expect(mediaTabSource).toContain('const sourceName = playlistName.trim() || "MC slideshow"');
+  });
+
+  it("does not reorder the active source when only the verse payload changes", () => {
+    const methodStart = obsClientSource.indexOf("private async ensureActiveMceOverlaySource(");
+    const methodEnd = obsClientSource.indexOf("\n  /** Apply the operator's MCE-only visibility preference", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+    const stateCheckIndex = methodSource.indexOf("if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;");
+    const firstOrderingIndex = methodSource.indexOf("await this.ensureTickerAboveSource(targetScene, primary)");
+
+    expect(stateCheckIndex).toBeGreaterThan(-1);
+    expect(firstOrderingIndex).toBeGreaterThan(stateCheckIndex);
   });
 
   it("removes legacy single-Bible content before compare output is shown", () => {

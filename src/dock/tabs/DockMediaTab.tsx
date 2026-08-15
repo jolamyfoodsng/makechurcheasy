@@ -676,7 +676,7 @@ export default function DockMediaTab({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [playlistName, setPlaylistName] = useState(t('media.vlcPlaylist'));
+  const [playlistName, setPlaylistName] = useState("MC slideshow");
   const [playlistLoop, setPlaylistLoop] = useState(true);
   const [playlistShuffle, setPlaylistShuffle] = useState(false);
   const [playlistMuted, setPlaylistMuted] = useState(true);
@@ -1078,6 +1078,13 @@ export default function DockMediaTab({
         }
       }
 
+      // Focus the Media family immediately on the card action. The native
+      // media push can take a moment to resolve a local file, so waiting for
+      // the push would leave the previously selected MCE source visible.
+      void dockObsClient.focusMcePresentationModule("media").catch((err) => {
+        console.warn("[DockMediaTab] Failed to focus Media presentation source:", err);
+      });
+
       try {
         await ensureObsConnected();
       } catch {
@@ -1135,6 +1142,10 @@ export default function DockMediaTab({
           setSendingFile(null);
         }
       }
+
+      void dockObsClient.focusMcePresentationModule("media").catch((err) => {
+        console.warn("[DockMediaTab] Failed to focus Media presentation source:", err);
+      });
 
       try {
         await ensureObsConnected();
@@ -1686,7 +1697,9 @@ export default function DockMediaTab({
     }
 
     try {
-      const sourceName = playlistName.trim() || t('media.mediaPlaylist');
+      // Keep the OBS source name readable when the operator leaves the name
+      // empty. The media-type suffix keeps image and video sources distinct.
+      const sourceName = playlistName.trim() || "MC slideshow";
 
       // Create Slideshow for videos
       if (videoPaths.length > 0) {
@@ -2194,6 +2207,11 @@ export default function DockMediaTab({
 
   const handleSendPattern = useCallback(async (entry: DockMediaEntry) => {
     // Presentation actions do NOT consume storage quota — no entitlement check needed.
+    if (!presentationLinkMode) {
+      void dockObsClient.focusMcePresentationModule("media").catch((err) => {
+        console.warn("[DockMediaTab] Failed to focus Media presentation source:", err);
+      });
+    }
     setSendingFile(entry.playingKey);
     try {
       if (!entry.previewUrl) return;
@@ -2856,6 +2874,27 @@ export default function DockMediaTab({
             </button>
           </div>
         </div>
+      )}
+
+      {selectionMode && (
+        <section className="dock-media-slideshow-guide" aria-label={t("media.slideshowGuideTitle", "How the slideshow works")}>
+          <div className="dock-media-slideshow-guide__intro">
+            <span className="dock-media-slideshow-guide__icon" aria-hidden="true">
+              <Icon name="slideshow" size={14} />
+            </span>
+            <div>
+              <h2 className="dock-media-slideshow-guide__title">{t("media.slideshowGuideTitle", "How the slideshow works")}</h2>
+              <p className="dock-media-slideshow-guide__description">
+                {t("media.slideshowGuideDescription", "Select the media you want to play, configure it, then send it to OBS as one slideshow.")}
+              </p>
+            </div>
+          </div>
+          <ol className="dock-media-slideshow-guide__steps">
+            <li>{t("media.slideshowGuideStepSelect", "Select images and videos")}</li>
+            <li>{t("media.slideshowGuideStepConfigure", "Choose playback options")}</li>
+            <li>{t("media.slideshowGuideStepCreate", "Create the OBS slideshow")}</li>
+          </ol>
+        </section>
       )}
 
       <input

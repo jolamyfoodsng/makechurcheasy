@@ -74,6 +74,9 @@ export interface DockLTThemeRef {
 
 export type DockSceneRouteModule = "bible" | "worship" | "notes" | "ticker" | "lower-third" | "countdown";
 
+/** Shared MCE Presentation content families that can be focused by a dock card. */
+export type DockPresentationModule = "bible" | "worship" | "notes" | "media";
+
 export interface DockBiblePushData {
   book: string;
   chapter: number;
@@ -205,6 +208,12 @@ const DOCK_PRESENTATION_SCENE = "MCE Presentation";
 const DOCK_BIBLE_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_WORSHIP_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_MEDIA_SCENE = DOCK_PRESENTATION_SCENE;
+const MCE_PRESENTATION_FOCUS_SOURCES: Record<DockPresentationModule, string> = {
+  bible: FULLSCREEN_SOURCE_NAMES.BIBLE,
+  worship: DOCK_WORSHIP_SOURCE,
+  notes: DOCK_NOTES_SOURCE,
+  media: DOCK_MEDIA_VIDEO_SOURCE,
+};
 const FULLSCREEN_CLEAR_WAIT_MS = 240;
 const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
@@ -1943,11 +1952,13 @@ class DockObsClient {
       lowerThirdSourceVisibility: projectionSettings.lowerThirdSourceVisibility,
     });
 
-    // Always ensure ticker is positioned correctly, even if overlay state
-    // hasn't changed (e.g., another tab reordered scene items).
-    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
-
+    // Do not touch the scene-item order when only the verse/slide payload is
+    // changing. Re-running SetSceneItemIndex for every Bible arrow press can
+    // make OBS move the neighbouring source above the active source. A new
+    // active source still falls through and gets ordered below the ticker.
     if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
+
+    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
 
     const targetItems = await this.getSceneItemListCached(targetScene);
     const presentationItems = targetScene === PRESENTATION_SCENE_NAME
@@ -2040,6 +2051,20 @@ class DockObsClient {
       [primary],
       DOCK_RESOURCES,
     );
+  }
+
+  /**
+   * Focus the shared MCE Presentation family directly from a dock action.
+   *
+   * This is intentionally called by the card/live handlers instead of a
+   * React effect. The OBS request is still asynchronous at the transport
+   * boundary, but the visibility decision starts in the same click event.
+   */
+  async focusMcePresentationModule(module: DockPresentationModule): Promise<void> {
+    if (!this.isConnected) return;
+    await this.runSerializedPresentationMutation(() => (
+      this.applyMcePresentationSourceVisibility(MCE_PRESENTATION_FOCUS_SOURCES[module])
+    ));
   }
 
   private invalidateActiveMceOverlayState(sceneName?: string): void {
@@ -6820,6 +6845,11 @@ class DockObsClient {
     const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
     const mode = "lower-third";
 
+    // Fast packet updates must still switch the active MCE family. They do
+    // not pass through the full push path where source visibility is normally
+    // reconciled.
+    void this.focusMcePresentationModule("bible").catch(() => { });
+
     // If the LT source is not already active in the current mode, use the full push.
     if (
       !this._bibleLtInitialized
@@ -6964,6 +6994,7 @@ class DockObsClient {
     const resources = getDockResources();
     const sourceName = resources.worshipSource;
     const mode = "lower-third";
+    void this.focusMcePresentationModule("worship").catch(() => { });
     const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("worship", sourceName);
 
     if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
@@ -7092,6 +7123,7 @@ class DockObsClient {
     const resources = getDockResources();
     const sourceName = resources.notesSource;
     const mode = "lower-third";
+    void this.focusMcePresentationModule("notes").catch(() => { });
     const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
 
     if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
@@ -9220,6 +9252,11 @@ class DockObsClient {
     const mediaTextSource = "MCE Media - Text";
     const remoteMediaSource = "MCE Media - Remote";
 
+    // Start source-family reconciliation before resolving the target scene or
+    // local file so the previous MCE module is not left visible during a
+    // slower media load.
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
@@ -9428,6 +9465,8 @@ class DockObsClient {
   }): Promise<void> {
     const { sourceName, playlist, loop = true, shuffle = false, muted = true } = options;
 
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     // Get the current scene via clone workflow
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
@@ -9523,6 +9562,8 @@ class DockObsClient {
   }): Promise<void> {
     const { sourceName, images, loop = true, slideTime = 3000 } = options;
     if (images.length === 0) return;
+
+    void this.focusMcePresentationModule("media").catch(() => { });
 
     // Stop any existing rotation timer for this source
     this.stopImageSlideshow(sourceName);
@@ -9717,6 +9758,8 @@ class DockObsClient {
     const mediaPatternSource = "MCE Media - Pattern";
     const mediaTextSource = "MCE Media - Text";
 
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
@@ -9786,6 +9829,8 @@ class DockObsClient {
       } catch { /* ignore */ }
       return;
     }
+
+    void this.focusMcePresentationModule("media").catch(() => { });
 
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
