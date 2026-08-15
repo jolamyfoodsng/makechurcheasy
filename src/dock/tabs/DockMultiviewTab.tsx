@@ -4,7 +4,7 @@
  * Card-based Multi-View manager:
  *   - Each Multi-View is an independent card stacked vertically
  *   - Inline template selection + scene assignment per card
- *   - Per-card Push to OBS-
+ *   - Per-card Preview in OBS
  *   - Card actions menu (⋮): Rename, Duplicate, Delete
  *   - No detail pages, no back buttons, everything on one screen
  */
@@ -1117,6 +1117,7 @@ function FramingEditor({
   const captureGenRef = useRef(0);
 
   const isCustom = draft.displayMode !== "fit";
+  const isPortraitPreview = slotHeight > slotWidth;
   const zoomPixels = Math.round(draft.zoom * 100);
 
   // ── Capture screenshot when modal opens ──
@@ -1294,6 +1295,7 @@ function FramingEditor({
           <div
             className={[
               "dock-mv-framing-editor__preview",
+              isPortraitPreview ? "dock-mv-framing-editor__preview--portrait" : "",
               isCustom ? "dock-mv-framing-editor__preview--draggable" : "",
               dragging ? "dock-mv-framing-editor__preview--dragging" : "",
               draft.displayMode === "fit" ? "dock-mv-framing-editor__preview--fit" : "",
@@ -2672,7 +2674,7 @@ const MVCard = memo(function MVCard({
       </>
       )}
 
-      {/* Push to OBS — per card */}
+      {/* Preview in OBS — per card */}
       <div className="dock-mv-card__actions">
         <button
           type="button"
@@ -2680,9 +2682,9 @@ const MVCard = memo(function MVCard({
           onClick={() => onPush(mv)}
           disabled={isPushing || isClearing || !allSlotsFilled}
           style={{ flex: 1 }}
-          title={t('multiview.pushing')}>
+          title={isPushing ? t('multiview.previewing', 'Previewing…') : t('common.preview', 'Preview')}>
           <Icon name="cast" size={14} />
-          <span>{isPushing ? t('multiview.pushing') : t('multiview.applyToObs')}</span>
+          <span>{isPushing ? t('multiview.previewing', 'Previewing…') : t('common.preview', 'Preview')}</span>
         </button>
         {isActive && (
           <button
@@ -3487,10 +3489,10 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
 
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
-      showFeedback("success", `"${sceneName}" pushed to OBS`);
+      showFeedback("success", `"${sceneName}" previewed in OBS`);
       refreshObsScenes({ forceThumbnails: true });
     } catch (err) {
-      showFeedback("error", err instanceof Error ? err.message : t('multiview.pushFailed'));
+      showFeedback("error", err instanceof Error ? err.message : t('multiview.previewFailed', 'Preview failed'));
     } finally {
       if (mountedRef.current) setPushingId(null);
     }

@@ -30594,6 +30594,7 @@
   flex-direction: column;
   z-index: 1000;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
 
 .dock-mv-framing-editor__header {
@@ -30697,9 +30698,20 @@
 .dock-mv-framing-editor__preview {
   position: relative;
   width: 100%;
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 4px;
   background: #0a0c14;
+}
+
+/* Portrait OBS slots can make the preview taller than the Dock viewport.
+   Keep the slot ratio while shrinking only the editor preview so the mode,
+   zoom, and save controls stay reachable. This does not change OBS output. */
+.dock-mv-framing-editor__preview--portrait {
+  width: auto;
+  height: min(42vh, 360px);
+  max-width: 100%;
+  margin-inline: auto;
 }
 
 .dock-mv-framing-editor__preview--fit {
