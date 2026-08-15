@@ -4,18 +4,23 @@
  * Matches the existing MakeChurchEasy Dock dark theme palette and component patterns.
  */
 
-/* ── Full-screen overlay ── */
+/* ── Compact history panel ── */
 .bible-history-screen {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
   z-index: 200;
   display: flex;
   flex-direction: column;
+  height: 50vh;
+  max-height: 50vh;
+  min-height: 0;
   background: var(--dock-bg, #0F172A);
   color: var(--dock-text, #F8FAFC);
   font-family: var(--dock-font-body, "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 11px;
   line-height: 1.4;
+  border-bottom: 1px solid var(--dock-border, #334155);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
   overflow: hidden;
   animation: bible-history-slide-in 180ms ease-out;
 }
@@ -274,8 +279,10 @@
 
 /* ── Scrollable Content ── */
 .bible-history-scroll {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 8px 12px;
 }
 
