@@ -16,7 +16,7 @@ export default function DockBrowserZoomWarning() {
         <span>
           {t(
             "page.browserZoomWarningDescription",
-            "Right-click this OBS/Chrome page and choose “Reset zoom” to return to 100%.",
+            "Browser zoom changes the Dock layout, which can move controls off-screen and make text hard to read. Right-click this OBS/Chrome page and choose “Reset zoom” to return to 100%.",
           )}
         </span>
       </div>
