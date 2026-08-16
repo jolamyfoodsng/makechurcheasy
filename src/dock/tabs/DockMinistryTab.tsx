@@ -1506,16 +1506,16 @@ export default function DockMinistryTab({
             {/* Live Control */}
             <div className="dock-mv-tab__section dock-mv-tab__section--ticker-live">
               <div style={{ display: "flex", gap: 6, padding: "4px 0" }}>
-                {/* Go Live — always shown */}
+                {/* Send to OBS — always shown */}
                 <button
                   type="button"
                   className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
                   onClick={handlePush}
                   disabled={sending || activeMessages.length === 0 || (!obsConnected && !presentationLinkMode)}
                   style={{ flex: 1 }}
-                  title={t("ministry.goLive")}>
+                  title={t("common.sendToObs", "Send to OBS")}>
                   <Icon name="play_arrow" size={14} />
-                  <span>{t("ministry.goLive")}</span>
+                  <span>{t("common.sendToObs", "Send to OBS")}</span>
                 </button>
 
                 {/* Pause / Resume — only when running */}
@@ -1941,7 +1941,7 @@ export default function DockMinistryTab({
                     style={{ flex: 1 }}
                   >
                     <Icon name="play_arrow" size={14} />
-                    <span>{t("ministry.goLive")}</span>
+                    <span>{t("common.sendToObs", "Send to OBS")}</span>
                   </button>
                   {ltLive && (
                     <button

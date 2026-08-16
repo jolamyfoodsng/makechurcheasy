@@ -100,12 +100,12 @@ function saveGalleryLayoutToDock(layout: GalleryLayout): void {
 // ── Slot content type → display info ───────────────────────────────────────
 
 const CONTENT_TYPE_INFO: Record<string, { label: string; icon: string; color: string }> = {
-  camera: { label: "Camera", icon: "videocam", color: "#0078d4" },
-  scripture: { label: "Scripture", icon: "menu_book", color: "#3B82F6" },
-  translation: { label: "Translation", icon: "translate", color: "#00bcd4" },
-  "lower-third": { label: "Lower Third", icon: "subtitles", color: "#ff9800" },
-  browser: { label: "Browser", icon: "language", color: "#ff5722" },
-  image: { label: "Image", icon: "image", color: "#9c27b0" },
+  camera: { label: "Content area", icon: "view_quilt", color: "#0078d4" },
+  scripture: { label: "Scripture area", icon: "menu_book", color: "#3B82F6" },
+  translation: { label: "Translation area", icon: "translate", color: "#00bcd4" },
+  "lower-third": { label: "Lower-third area", icon: "subtitles", color: "#ff9800" },
+  browser: { label: "Browser area", icon: "language", color: "#ff5722" },
+  image: { label: "Overlay area", icon: "layers", color: "#9c27b0" },
 };
 
 // ── SVG Preview ────────────────────────────────────────────────────────────
@@ -185,12 +185,12 @@ function PreviewModal({
 }) {
   const { t } = useTranslation();
   const contentTypeLabels = useMemo(() => ({
-    camera: t("gallery.type.camera"),
-    scripture: t("gallery.type.scripture"),
-    translation: t("gallery.type.translation"),
-    "lower-third": t("gallery.type.lowerThird"),
-    browser: t("gallery.type.browser"),
-    image: t("gallery.type.image"),
+    camera: "Content area",
+    scripture: "Scripture area",
+    translation: "Translation area",
+    "lower-third": "Lower-third area",
+    browser: "Browser area",
+    image: "Overlay area",
   }), [t]);
 
   return (
@@ -577,6 +577,14 @@ export default function MultiViewGalleryPage() {
               <Icon name="close" size={14} />
             </button>
           )}
+        </div>
+
+        <div className="mvg-guidance" role="note">
+          <Icon name="view_quilt" size={18} className="mvg-guidance-icon" />
+          <div className="mvg-guidance-copy">
+            <strong>Layout only</strong>
+            <span>Choose the arrangement here, then assign your own OBS scenes, Scripture, media, or overlays.</span>
+          </div>
         </div>
 
         {/* Category filters */}

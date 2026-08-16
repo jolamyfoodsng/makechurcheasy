@@ -9,7 +9,9 @@
 // Dock Tabs
 // ---------------------------------------------------------------------------
 
-export type DockTab = "planner" | "bible" | "worship" | "media" | "multiview" | "ministry";
+// `notes` remains a legacy value so saved sessions and staged items can still
+// be read, but Notes now lives inside the combined Worship tab in the Dock.
+export type DockTab = "planner" | "bible" | "worship" | "notes" | "media" | "multiview" | "ministry";
 export type DockStageType = DockTab | "live" | "speaker" | "sermon" | "event" | "media" | "animated-lt" | "notes";
 
 export interface DockTabDef {
@@ -22,7 +24,7 @@ export interface DockTabDef {
 export const DOCK_TABS: DockTabDef[] = [
   // { id: "planner", label: "Planner", icon: "event_note", summary: "Plan and schedule service elements" },
   { id: "bible", label: "Bible", icon: "menu_book", summary: "Search, select, and display scripture verses" },
-  { id: "worship", label: "Text", icon: "text_fields", summary: "Manage song lyrics, notes, and text slides" },
+  { id: "worship", label: "Text", icon: "text_fields", summary: "Manage text slides, worship lyrics, notes, and songs" },
   { id: "media", label: "Media", icon: "photo_library", summary: "Upload and present images, videos, and graphics" },
   { id: "ministry", label: "Ministry", icon: "campaign", summary: "Live ticker announcements and ministry updates" },
   { id: "multiview", label: "Multi-View", icon: "grid_view", summary: "Compose and push multi-source layouts to OBS" },

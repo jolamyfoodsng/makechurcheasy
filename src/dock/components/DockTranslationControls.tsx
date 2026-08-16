@@ -36,9 +36,16 @@ interface Props {
   value?: DockTranslationValue | null;
   onChange: (value: DockTranslationValue | null) => void;
   compact?: boolean;
+  compactLabel?: boolean;
 }
 
-export default function DockTranslationControls({ sections, value, onChange, compact = false }: Props) {
+export default function DockTranslationControls({
+  sections,
+  value,
+  onChange,
+  compact = false,
+  compactLabel = false,
+}: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -99,7 +106,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       const viewportPadding = 8;
-      const width = Math.min(320, Math.max(220, window.innerWidth - (viewportPadding * 2)));
+      const width = Math.min(300, Math.max(220, window.innerWidth - (viewportPadding * 2)));
       const left = Math.max(
         viewportPadding,
         Math.min(rect.right - width, window.innerWidth - width - viewportPadding),
@@ -279,7 +286,7 @@ export default function DockTranslationControls({ sections, value, onChange, com
   );
 
   return (
-    <div className={`dock-translation${compact ? " dock-translation--compact" : ""}`} ref={panelRef}>
+    <div className={`dock-translation${compact ? " dock-translation--compact" : ""}${compactLabel ? " dock-translation--compact-label" : ""}`} ref={panelRef}>
       <div className="dock-translation__trigger-row">
         <button
           type="button"

@@ -251,12 +251,10 @@ export default function DockLmTab({
     : allowLocalMicControls
       ? "Choose a microphone in settings, then start listening from this presentation page."
       : t("lm.openAppToStart");
-  const pushActionLabel = presentationLinkMode ? "Show" : t("lm.pushToObs");
-  const pushActionTitle = presentationLinkMode
-    ? "Show this scripture on the presentation screen"
-    : t("lm.pushToObsTitle");
-  const transcriptPushLabel = presentationLinkMode ? "Show on screen" : "Push to OBS";
-  const transcriptPushShortLabel = presentationLinkMode ? "Show" : "Push OBS";
+  const pushActionLabel = t("common.sendToObs", "Send to OBS");
+  const pushActionTitle = t("common.sendToObs", "Send to OBS");
+  const transcriptPushLabel = t("common.sendToObs", "Send to OBS");
+  const transcriptPushShortLabel = t("common.sendToObs", "Send to OBS");
 
   const [settings, setSettings] = useState<LmDockSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(false);

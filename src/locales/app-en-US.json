@@ -4369,7 +4369,7 @@
   "resources.ariaSections": "Resource sections",
   "gallery.eyebrow": "Multi-View",
   "gallery.title": "Multi-View Layouts",
-  "gallery.subtitle": "Choose a layout for displaying multiple cameras, speakers, scriptures, translations, and other content in OBS.",
+  "gallery.subtitle": "Choose the screen arrangement first. Add your own OBS scenes, Scripture, media, and overlays after selecting a layout.",
   "gallery.searchPlaceholder": "Search layouts...",
   "gallery.close": "Close",
   "gallery.clearSearch": "Clear",

@@ -52,7 +52,9 @@ const DEFAULT_SLOT_FRAMING = { displayMode: "fit" as const, zoom: 1, focalX: 0.5
 const BACKGROUND_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
 const BACKGROUND_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]);
 const MV_IMAGE_LIBRARY_UPDATED_EVENT = "dock-mv-image-library-updated";
-const MV_OBS_SCAN_MS = 20_000;
+// Scene/source inventory is useful while the tab is open, but it does not
+// need to compete with OBS every few seconds on low-end machines.
+const MV_OBS_SCAN_MS = 30_000;
 const MV_THUMBNAIL_REFRESH_MS = 60_000;
 const MV_THUMBNAIL_CONCURRENCY = 2;
 
@@ -3039,7 +3041,17 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
       setObsScenes(current => areStringListsEqual(current, sceneNames) ? current : sceneNames);
       setObsSources(current => areStringListsEqual(current, sourceNames) ? current : sourceNames);
       setObsContentLoaded(true);
-      void refreshAssignedThumbnails(sceneNames, { force: Boolean(options?.forceThumbnails) || scenesChanged });
+
+      // Let the card list paint before the heavier OBS screenshot work starts.
+      // The screenshots are useful previews, but they are not required to open
+      // the tab and can otherwise compete with the first visible render.
+      if (Boolean(options?.forceThumbnails) || scenesChanged) {
+        window.setTimeout(() => {
+          if (mountedRef.current) {
+            void refreshAssignedThumbnails(sceneNames, { force: Boolean(options?.forceThumbnails) || scenesChanged });
+          }
+        }, 0);
+      }
     } catch (err) {
       console.warn("[MV] refreshObsScenes FAILED", err);
       if (mountedRef.current) setObsContentLoaded(true);
@@ -3051,13 +3063,31 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
 
   useEffect(() => {
     if (!isActive || !obsReady) return;
-    mountedRef.current = true;
-    refreshObsScenes({ forceThumbnails: true });
-    const interval = setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      refreshObsScenes();
-    }, getRecommendedPollingInterval(MV_OBS_SCAN_MS));
-    return () => { mountedRef.current = false; clearInterval(interval); };
+    let cancelled = false;
+    let interval: number | null = null;
+    let startTimer: number | null = null;
+
+    // Defer OBS enumeration until after the active tab has committed. This
+    // keeps the navigation response independent from WebSocket round trips.
+    const frame = window.requestAnimationFrame(() => {
+      startTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        mountedRef.current = true;
+        void refreshObsScenes({ forceThumbnails: true });
+        interval = window.setInterval(() => {
+          if (document.visibilityState === "hidden") return;
+          void refreshObsScenes();
+        }, getRecommendedPollingInterval(MV_OBS_SCAN_MS));
+      }, 0);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      if (startTimer !== null) window.clearTimeout(startTimer);
+      if (interval !== null) window.clearInterval(interval);
+      mountedRef.current = false;
+    };
   }, [isActive, obsReady, refreshObsScenes]);
 
   // ── Show feedback briefly ──

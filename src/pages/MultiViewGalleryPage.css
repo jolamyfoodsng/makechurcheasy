@@ -40,6 +40,43 @@
   color: var(--text-muted);
 }
 
+/* ── Layout guidance ── */
+.mvg-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--surface-dark);
+}
+
+.mvg-guidance-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+  margin-top: 1px;
+}
+
+.mvg-guidance-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mvg-guidance-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mvg-guidance-copy span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .mvg-search-clear {
   position: absolute;
   right: 8px;
@@ -95,6 +132,14 @@
   color: #fff;
 }
 
+.mvg-filter:focus-visible,
+.mvg-btn:focus-visible,
+.mvg-search-clear:focus-visible,
+.mvg-modal-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .mvg-filter-count {
   font-size: 9px;
   font-weight: 700;
@@ -108,7 +153,8 @@
 /* ── Layout Grid ── */
 .mvg-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  /* Three columns is the desktop minimum, including when the app sidebar is open. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -637,5 +683,19 @@
 @keyframes mvg-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Keep the gallery scan-friendly: four cards on wide screens, three on
+   medium screens, then collapse before card copy becomes cramped. */
+@media (min-width: 1501px) {
+  .mvg-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .mvg-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

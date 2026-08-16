@@ -9,7 +9,7 @@
  * Replaces the former "Ticker" tab.
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { dockObsClient, type DockDocumentMediaOptions, type DockMediaSendOptions } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { dockClient } from "../../services/dockBridge";
@@ -351,7 +351,7 @@ function loadMediaSessionState(): DockMediaSessionState {
       verticalPos: "center",
       headlineSize: 72,
       sublineSize: 28,
-      animation: "fade-up",
+      animation: "fade",
       animationDuration: 1.0,
       background: { ...DEFAULT_BACKGROUND_SETTINGS },
     },
@@ -589,7 +589,7 @@ function AnimationTilePreview({ src, label }: { src: string; label: string }) {
   );
 }
 
-export default function DockMediaTab({
+function DockMediaTab({
   staged: _staged,
   onStage: _onStage,
   isActive = true,
@@ -601,6 +601,7 @@ export default function DockMediaTab({
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [compactTabs, setCompactTabs] = useState(false);
+  const [isNarrowWidth, setIsNarrowWidth] = useState(false);
   const [isCompactHeight, setIsCompactHeight] = useState(false);
   const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
   const [isMicroHeight, setIsMicroHeight] = useState(false);
@@ -612,6 +613,7 @@ export default function DockMediaTab({
   const [assetSearch, setAssetSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
+  const [templateVideoOnlyModal, setTemplateVideoOnlyModal] = useState(false);
   const [addMediaTab, setAddMediaTab] = useState<DockAddMediaTab>("background");
   const [templateVideoSearch, setTemplateVideoSearch] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
@@ -623,6 +625,8 @@ export default function DockMediaTab({
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
+  const [editingEntryLabelKey, setEditingEntryLabelKey] = useState<string | null>(null);
+  const [entryLabelDraft, setEntryLabelDraft] = useState("");
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
   const [documentDeck, setDocumentDeck] = useState<DockDocumentDeck | null>(null);
   const [documentPageIndex, setDocumentPageIndex] = useState(0);
@@ -720,7 +724,9 @@ export default function DockMediaTab({
     const el = tabsRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
-      setCompactTabs(entry.contentRect.width < 290);
+      const width = entry.contentRect.width;
+      setIsNarrowWidth(width <= 300);
+      setCompactTabs(width <= 300);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -871,12 +877,14 @@ export default function DockMediaTab({
   const openAddMediaModal = useCallback(async (tab: DockAddMediaTab = "background") => {
     if (tab === "template-videos" && !(await requireEntitlement("slideshow", 0))) return;
     setAddMediaTab(tab);
+    setTemplateVideoOnlyModal(tab === "template-videos");
     setTemplateVideoSearch("");
     setShowAddMediaModal(true);
   }, []);
 
   const closeAddMediaModal = useCallback(() => {
     setShowAddMediaModal(false);
+    setTemplateVideoOnlyModal(false);
   }, []);
 
   // Load library media on mount
@@ -999,7 +1007,7 @@ export default function DockMediaTab({
     void loadTemplateVideos();
   }, [addMediaTab, animationsLocked, loadTemplateVideos, showAddMediaModal, templateVideos.length, templateVideosLoading]);
 
-  // ── Play uploaded media via OBS — send to Preview or Go Live ──
+  // ── Play uploaded media via OBS — send to Preview or Send to OBS ──
 
   const resolveUploadFilePath = useCallback(async (fileName: string): Promise<string> => {
     let dir = uploadsDir;
@@ -1847,7 +1855,20 @@ export default function DockMediaTab({
     updateMediaPreference(entry.prefKey, { label });
   }, [updateMediaPreference]);
 
+  const beginEntryLabelEdit = useCallback((entry: DockMediaEntry) => {
+    const currentLabel = mediaPrefs[entry.prefKey]?.label?.trim();
+    const fallbackLabel = entry.name.replace(/^media_\d+_/, "").replace(/\.[^.]+$/, "");
+    setEntryLabelDraft(currentLabel || fallbackLabel);
+    setEditingEntryLabelKey(entry.key);
+  }, [mediaPrefs]);
+
+  const commitEntryLabel = useCallback((entry: DockMediaEntry) => {
+    setEntryLabel(entry, entryLabelDraft.trim());
+    setEditingEntryLabelKey(null);
+  }, [entryLabelDraft, setEntryLabel]);
+
   const closeEntryOptions = useCallback(() => {
+    setEditingEntryLabelKey(null);
     setOpenOptionsKey(null);
   }, []);
 
@@ -2275,8 +2296,14 @@ export default function DockMediaTab({
     }
   }, [
     dockClient,
+    libraryMedia,
     persistLocalLibrary,
+    t,
   ]);
+
+  const playDownloadedTemplateVideo = useCallback((item: MediaItem) => {
+    void handleSendEntry(createLibraryEntry(item, overlayBaseUrl, t('media.animation')));
+  }, [handleSendEntry, overlayBaseUrl, t]);
 
   const applyTextOverlay = useCallback(async () => {
     const trimmedHeadline = textOverlay.headline.trim();
@@ -2730,7 +2757,7 @@ export default function DockMediaTab({
         ) : previewBaseEntry?.thumbnailUrl ? (
           <img src={previewBaseEntry.thumbnailUrl} alt="" />
         ) : previewBaseEntry?.previewUrl ? (
-          <video src={previewBaseEntry.previewUrl} muted playsInline loop autoPlay />
+          <video src={previewBaseEntry.previewUrl} muted playsInline preload="metadata" />
         ) : (
           <div className="dock-overlay-canvas__placeholder">
             <Icon name="theaters" size={24} />
@@ -2815,13 +2842,65 @@ export default function DockMediaTab({
 
   const hasVisibleDocumentDecks = (activeKind === "all" || activeKind === "document") && filteredDocumentDecks.length > 0;
   const hasVisibleMediaEntries = filteredUploadEntries.length > 0;
+  const useCompactMediaTabs = compactTabs || isCompactHeight;
+  const renderCompactMediaActions = () => (
+    <div className="dock-media-search-row__actions">
+      <button
+        type="button"
+        className="dock-btn dock-btn--compact dock-btn--primary"
+        onClick={() => {
+          if (browserTab === "animations") {
+            openAddMediaModal("template-videos");
+          } else {
+            uploadInputRef.current?.click();
+          }
+        }}
+        disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations") || (browserTab === "animations" && animationsLocked)}
+        title={
+          browserTab === "animations"
+            ? animationsLocked ? t('media.upgradeToAccess') : t('common.add')
+            : browserTab !== "uploads"
+              ? t('media.uploadRestricted')
+              : uploading ? t('media.preparing') : t('media.addMedia')
+        }
+        aria-label={
+          browserTab === "animations"
+            ? animationsLocked ? t('media.upgradeToAccess') : t('common.add')
+            : browserTab !== "uploads"
+              ? t('media.uploadRestricted')
+              : uploading ? t('media.preparing') : t('media.addMedia')
+        }
+      >
+        {t('common.add')}
+      </button>
+      {!isUltraCompactHeight && (
+        <button
+          type="button"
+          className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+          onClick={async () => {
+            if (selectionMode) {
+              toggleSelectionMode();
+              return;
+            }
+            if (!(await requireEntitlement("slideshow", 0))) return;
+            toggleSelectionMode();
+          }}
+          disabled={browserTab !== "uploads"}
+          title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+          aria-label={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+        >
+          <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+        </button>
+      )}
+    </div>
+  );
 
   // ── Render ──
 
 
 
   return (
-    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " " : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}${isMicroHeight ? " dock-media-console--micro" : ""}`}>
+    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isNarrowWidth || isCompactHeight ? " dock-media-console--narrow" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}${isMicroHeight ? " dock-media-console--micro" : ""}`}>
       {/* ── Header (normal mode only) ── */}
       {!isCompactHeight && (
         <div className="dock-media-header">
@@ -2842,7 +2921,7 @@ export default function DockMediaTab({
               disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations") || (browserTab === "animations" && animationsLocked)}
               title={
                 browserTab === "animations"
-                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
+                  ? animationsLocked ? t('media.upgradeToAccess') : t('common.add')
                   : browserTab !== "uploads"
                     ? t('media.uploadRestricted')
                     : uploading ? t('media.preparing') : t('media.addMedia')
@@ -2852,7 +2931,7 @@ export default function DockMediaTab({
               {uploading
                 ? t('media.preparing')
                 : browserTab === "animations"
-                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
+                  ? animationsLocked ? t('media.upgradeToAccess') : t('common.add')
                   : t('media.addMedia')}
             </button>
             <button
@@ -2914,9 +2993,11 @@ export default function DockMediaTab({
         }}
       />
 
+      <div className="dock-media-content-layout">
+        <aside className="dock-media-tabs-column" aria-label={t('media.mediaBrowserViews')}>
       {/* ── Category Tabs (with inline actions in compact mode) ── */}
       <div className={`dock-media-tabs-row${isCompactHeight ? " dock-media-tabs-row--compact" : ""}`}>
-        <div className={`dock-media-tabs${compactTabs || isCompactHeight ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-label={t('media.mediaBrowserViews')}>
+        <div className={`dock-media-tabs${useCompactMediaTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-orientation={isNarrowWidth || isCompactHeight ? "vertical" : "horizontal"} aria-label={t('media.mediaBrowserViews')}>
           <button
             type="button"
             role="tab"
@@ -2924,8 +3005,8 @@ export default function DockMediaTab({
             className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("uploads")}
             title={t('media.uploads')}>
-            {compactTabs ? <Icon name="upload" size={12} /> : t('media.uploads')}
-            {!compactTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
+            {useCompactMediaTabs ? <Icon name="upload" size={12} /> : t('media.uploads')}
+            {!useCompactMediaTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
           </button>
           <button
             type="button"
@@ -2938,8 +3019,8 @@ export default function DockMediaTab({
             disabled={animationsLocked}
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
           >
-            {compactTabs ? <Icon name={animationsLocked ? "lock" : "animation"} size={12} /> : t('media.tabAnimations')}
-            {!compactTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationEntries.length}</span>}
+            {useCompactMediaTabs ? <Icon name={animationsLocked ? "lock" : "animation"} size={12} /> : t('media.tabAnimations')}
+            {!useCompactMediaTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationEntries.length}</span>}
           </button>
           <button
             type="button"
@@ -2948,8 +3029,8 @@ export default function DockMediaTab({
             className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("patterns")}
             title={t('media.gridView')}>
-            {compactTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
-            {!compactTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
+            {useCompactMediaTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
+            {!useCompactMediaTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
           </button>
           <button
             type="button"
@@ -2958,91 +3039,53 @@ export default function DockMediaTab({
             className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("text")}
             title={t('media.tabText')}>
-            {compactTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
+            {useCompactMediaTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
           </button>
         </div>
-        {isCompactHeight && (
-          <div className="dock-media-tabs-row__actions">
-            <button
-              type="button"
-              className="dock-btn dock-btn--compact dock-btn--primary"
-              onClick={() => {
-                if (browserTab === "animations") {
-                  openAddMediaModal("template-videos");
-                } else {
-                  uploadInputRef.current?.click();
-                }
-              }}
-              disabled={uploading || (browserTab !== "uploads" && browserTab !== "animations") || (browserTab === "animations" && animationsLocked)}
-              title={
-                browserTab === "animations"
-                  ? animationsLocked ? t('media.upgradeToAccess') : t('media.addAnimation')
-                  : browserTab !== "uploads"
-                    ? t('media.uploadRestricted')
-                    : uploading ? t('media.preparing') : t('media.addMedia')
-              }
-            >
-              <Icon name="add" size={12} />
-            </button>
-            {!isUltraCompactHeight && (
-              <button
-                type="button"
-                className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
-                onClick={async () => {
-                  if (selectionMode) {
-                    toggleSelectionMode();
-                    return;
-                  }
-                  if (!(await requireEntitlement("slideshow", 0))) return;
-                  toggleSelectionMode();
-                }}
-                disabled={browserTab !== "uploads"}
-                title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
-              >
-                <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
+        </aside>
+        <div className="dock-media-content-main">
       {/* ── Search Bar (collapsible) ── */}
       {browserTab !== "text" && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setSearchOpen((prev) => !prev)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSearchOpen((prev) => !prev); } }}
-          className="dock-media-search"
-          style={{ cursor: "pointer", userSelect: "none" }}
-          title={searchOpen ? "Collapse search" : "Expand search"}
-        >
-          <Icon name={searchOpen ? "search" : "search"} size={12} className="dock-media-search__icon" />
-          {searchOpen && (
-            <>
-              <input
-                type="text"
-                className="dock-media-search__input"
-                value={assetSearch}
-                onChange={(event) => { event.stopPropagation(); setAssetSearch(event.target.value); }}
-                onClick={(e) => e.stopPropagation()}
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-                autoFocus
-              />
-              {assetSearch && (
-                <button
-                  type="button"
-                  className="dock-media-search__clear"
-                  onClick={(e) => { e.stopPropagation(); setAssetSearch(""); }}
-                  aria-label={t('media.clearAssetSearch')}
-                  title={t('media.clearAssetSearch')}
-                >
-                  <Icon name="close" size={10} />
-                </button>
-              )}
-            </>
-          )}
+        <div className={`dock-media-search-row${isCompactHeight ? " dock-media-search-row--compact" : ""}`}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setSearchOpen((prev) => !prev)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSearchOpen((prev) => !prev); } }}
+            className="dock-media-search"
+            style={{ cursor: "pointer", userSelect: "none" }}
+            title={searchOpen ? "Collapse search" : "Expand search"}
+          >
+            <Icon name={searchOpen ? "search" : "search"} size={12} className="dock-media-search__icon" />
+            {searchOpen && (
+              <>
+                <input
+                  type="text"
+                  className="dock-media-search__input"
+                  value={assetSearch}
+                  onChange={(event) => { event.stopPropagation(); setAssetSearch(event.target.value); }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
+                  autoFocus
+                />
+                {assetSearch && (
+                  <button
+                    type="button"
+                    className="dock-media-search__clear"
+                    onClick={(e) => { e.stopPropagation(); setAssetSearch(""); }}
+                    aria-label={t('media.clearAssetSearch')}
+                    title={t('media.clearAssetSearch')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {isCompactHeight && renderCompactMediaActions()}
         </div>
       )}
 
@@ -3537,9 +3580,9 @@ export default function DockMediaTab({
                   type="button"
                   className="dock-btn dock-btn--preview dock-btn--compact"
                   onClick={() => openAddMediaModal("template-videos")}
-                  title={t('media.addAnimation')}>
-                  <Icon name="download" size={12} />
-                  {t('media.addAnimation')}
+                  title={t('common.add')}>
+                  <Icon name="add" size={12} />
+                  {t('common.add')}
                 </button>
               </div>
             ) : (
@@ -4156,6 +4199,8 @@ export default function DockMediaTab({
           </div>
         )}
       </div>
+        </div>
+      </div>
 
       {showAddMediaModal && (
         <div className="dock-dialog-backdrop" role="presentation" onClick={closeAddMediaModal}>
@@ -4168,7 +4213,7 @@ export default function DockMediaTab({
           >
             <div className="dock-dialog__header">
               <div>
-                <div className="dock-dialog__eyebrow">{t('media.addMedia')}</div>
+                <div className="dock-dialog__eyebrow">{templateVideoOnlyModal ? t('common.add') : t('media.addMedia')}</div>
                 {/* <h2 id="dock-media-add-title" className="dock-dialog__title">{t('media.chooseWhatToAdd')}</h2> */}
               </div>
               <button type="button" className="dock-dialog__close" onClick={closeAddMediaModal} aria-label={t('media.closeAddMediaDialog')} title={t('common.close')}>
@@ -4176,29 +4221,31 @@ export default function DockMediaTab({
               </button>
             </div>
             <div className="dock-dialog__body">
-              <div className="dock-console-segmented dock-media-tabs" role="tablist" aria-label={t('media.addMediaTabs')}>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={addMediaTab === "background"}
-                  className={`dock-console-segmented__item${addMediaTab === "background" ? " dock-console-segmented__item--active" : ""}`}
-                  onClick={() => setAddMediaTab("background")}
-                  title={t('media.background')}>
-                  {t('media.background')}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={addMediaTab === "template-videos"}
-                  className={`dock-console-segmented__item${addMediaTab === "template-videos" ? " dock-console-segmented__item--active" : ""}`}
-                  onClick={() => {
-                    if (!animationsLocked) setAddMediaTab("template-videos");
-                  }}
-                  disabled={animationsLocked}
-                  title={animationsLocked ? t('media.upgradeToAccess') : t('media.templateVideos')}>
-                  {t('media.templateVideos')}
-                </button>
-              </div>
+              {!templateVideoOnlyModal && (
+                <div className="dock-console-segmented dock-media-tabs" role="tablist" aria-label={t('media.addMediaTabs')}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={addMediaTab === "background"}
+                    className={`dock-console-segmented__item${addMediaTab === "background" ? " dock-console-segmented__item--active" : ""}`}
+                    onClick={() => setAddMediaTab("background")}
+                    title={t('media.background')}>
+                    {t('media.background')}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={addMediaTab === "template-videos"}
+                    className={`dock-console-segmented__item${addMediaTab === "template-videos" ? " dock-console-segmented__item--active" : ""}`}
+                    onClick={() => {
+                      if (!animationsLocked) setAddMediaTab("template-videos");
+                    }}
+                    disabled={animationsLocked}
+                    title={animationsLocked ? t('media.upgradeToAccess') : t('media.templateVideos')}>
+                    {t('media.templateVideos')}
+                  </button>
+                </div>
+              )}
 
               {addMediaTab === "background" ? (
                 <div className="dock-media-add-modal__pane">
@@ -4304,9 +4351,26 @@ export default function DockMediaTab({
                             key={asset.id}
                             className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
                           >
-                            {downloadedItem?.thumbnailUrl ? (
-                              <div className="dock-animation-tile__thumb">
-                                <img src={downloadedItem.thumbnailUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+                            {downloadedItem ? (
+                              <div
+                                className="dock-animation-tile__thumb dock-animation-tile__thumb--playable"
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`${t('common.play')}: ${asset.fileName}`}
+                                title={`${t('common.play')}: ${asset.fileName}`}
+                                onClick={() => playDownloadedTemplateVideo(downloadedItem)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    playDownloadedTemplateVideo(downloadedItem);
+                                  }
+                                }}
+                              >
+                                {downloadedItem.thumbnailUrl ? (
+                                  <img src={downloadedItem.thumbnailUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+                                ) : (
+                                  <video src={getMediaPreviewUrl(downloadedItem, overlayBaseUrl)} className="dock-animation-tile__img" muted playsInline preload="metadata" />
+                                )}
                                 <div className="dock-animation-tile__play-hint">
                                   <Icon name="play_arrow" size={22} />
                                 </div>
@@ -4320,6 +4384,12 @@ export default function DockMediaTab({
                               </div>
                             ) : (
                               <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
+                            )}
+                            {downloadedItem && (
+                              <span className="dock-animation-tile__downloaded-label" role="status">
+                                <Icon name="check_circle" size={10} />
+                                {t('media.downloaded')}
+                              </span>
                             )}
                             <button
                               type="button"
@@ -4460,19 +4530,68 @@ export default function DockMediaTab({
 
               {/* ── Title + Status ── */}
               <div className="dock-media-inspector__title-block">
-                <h2 id="dock-media-inspector-title" className="dock-media-inspector__title">{cleanName}</h2>
-              </div>
-
-              {/* ── Quick Rename ── */}
-              <div className="dock-media-inspector__section">
-                <label className="dock-media-inspector__label">{t('media.label')}</label>
-                <input
-                  type="text"
-                  className="dock-input dock-media-inspector__rename-input"
-                  value={entryPrefs.label ?? ""}
-                  onChange={(event) => setEntryLabel(entry, event.target.value)}
-                  placeholder={cleanName}
-                />
+                {editingEntryLabelKey === entry.key ? (
+                  <div
+                    className="dock-media-inspector__title-editing"
+                    onBlur={(event) => {
+                      const nextFocus = event.relatedTarget;
+                      if (!nextFocus || !event.currentTarget.contains(nextFocus as Node)) {
+                        commitEntryLabel(entry);
+                      }
+                    }}
+                  >
+                    <input
+                      type="text"
+                      className="dock-input dock-media-inspector__title-input"
+                      value={entryLabelDraft}
+                      onChange={(event) => setEntryLabelDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitEntryLabel(entry);
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          setEditingEntryLabelKey(null);
+                        }
+                      }}
+                      aria-label={t('media.label')}
+                      autoFocus
+                    />
+                    <div className="dock-media-inspector__title-actions">
+                      <button
+                        type="button"
+                        className="dock-media-inspector__title-action dock-media-inspector__title-action--confirm"
+                        onClick={() => commitEntryLabel(entry)}
+                        aria-label={t('common.save')}
+                        title={t('common.save')}
+                      >
+                        <Icon name="check" size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        className="dock-media-inspector__title-action dock-media-inspector__title-action--cancel"
+                        onClick={() => setEditingEntryLabelKey(null)}
+                        aria-label={t('common.cancel')}
+                        title={t('common.cancel')}
+                      >
+                        <Icon name="close" size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h2 id="dock-media-inspector-title" className="dock-media-inspector__title">{cleanName}</h2>
+                    <button
+                      type="button"
+                      className="dock-media-inspector__title-edit"
+                      onClick={() => beginEntryLabelEdit(entry)}
+                      aria-label={t('common.edit')}
+                      title={t('common.edit')}
+                    >
+                      <Icon name="edit" size={14} />
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* ── Actions ── */}
@@ -4513,56 +4632,62 @@ export default function DockMediaTab({
                 </div>
               )}
 
-              {/* ── Display ── */}
-              <div className="dock-media-inspector__card">
-                <h4 className="dock-media-inspector__card-title">{t('media.display')}</h4>
-                <div className="dock-media-inspector__segmented">
-                  {(["cover", "contain", "stretch"] as DockMediaFitMode[]).map((option) => {
-                    const isActiveFit = (entryPrefs.fitMode ?? "cover") === option;
-                    const icons: Record<DockMediaFitMode, string> = { cover: "crop", contain: "fit_screen", stretch: "aspect_ratio" };
-                    const fitTitles: Record<DockMediaFitMode, string> = { cover: t('media.fillScreen'), contain: t('media.fitWithinScreen'), stretch: t('media.stretchToScreen') };
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        className={`dock-media-inspector__seg-btn${isActiveFit ? " dock-media-inspector__seg-btn--active" : ""}`}
-                        onClick={() => void setEntryFitMode(entry, option)}
-                        title={fitTitles[option]}
-                      >
-                        <Icon name={icons[option]} size={12} />
-                        {formatFitMode(option, t)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* ── Audio (video only) ── */}
-              {entry.kind === "video" && (
+              <div className={`dock-media-inspector__options${entry.kind === "video" ? " dock-media-inspector__options--with-audio" : ""}`}>
+                {/* ── Display ── */}
                 <div className="dock-media-inspector__card">
-                  <h4 className="dock-media-inspector__card-title">{t('media.audio')}</h4>
-                  <div className="dock-media-inspector__chips">
-                    <button
-                      type="button"
-                      className={`dock-media-inspector__chip${!(entryPrefs.videoMuted ?? true) ? " dock-media-inspector__chip--active" : ""}`}
-                      disabled={sendingFile === entry.playingKey}
-                      onClick={() => void toggleVideoMute(entry)}
-                      title={t('media.muted')}>
-                      <Icon name={(entryPrefs.videoMuted ?? true) ? "volume_off" : "volume_up"} size={12} />
-                      {(entryPrefs.videoMuted ?? true) ? t('media.muted') : t('media.audioOn')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`dock-media-inspector__chip${(entryPrefs.loop ?? true) ? " dock-media-inspector__chip--active" : ""}`}
-                      disabled={sendingFile === entry.playingKey}
-                      onClick={() => void setEntryLoop(entry, !(entryPrefs.loop ?? true))}
-                      title={t('media.loop')}>
-                      <Icon name="refresh" size={12} />
-                      {(entryPrefs.loop ?? true) ? t('media.loop') : t('media.once')}
-                    </button>
+                  <h4 className="dock-media-inspector__card-title">{t('media.display')}</h4>
+                  <div className="dock-media-inspector__segmented" role="group" aria-label={t('media.display')}>
+                    {["cover", "contain", "stretch"].map((option) => {
+                      const fitMode = option as DockMediaFitMode;
+                      const isActiveFit = (entryPrefs.fitMode ?? "cover") === fitMode;
+                      const icons: Record<DockMediaFitMode, string> = { cover: "crop", contain: "fit_screen", stretch: "aspect_ratio" };
+                      const fitTitles: Record<DockMediaFitMode, string> = { cover: t('media.fillScreen'), contain: t('media.fitWithinScreen'), stretch: t('media.stretchToScreen') };
+                      return (
+                        <button
+                          key={fitMode}
+                          type="button"
+                          className={`dock-media-inspector__seg-btn${isActiveFit ? " dock-media-inspector__seg-btn--active" : ""}`}
+                          onClick={() => void setEntryFitMode(entry, fitMode)}
+                          title={fitTitles[fitMode]}
+                          aria-pressed={isActiveFit}
+                        >
+                          <Icon name={icons[fitMode]} size={12} />
+                          {formatFitMode(fitMode, t)}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
+
+                {/* ── Audio (video only) ── */}
+                {entry.kind === "video" && (
+                  <div className="dock-media-inspector__card">
+                    <h4 className="dock-media-inspector__card-title">{t('media.audio')}</h4>
+                    <div className="dock-media-inspector__chips" role="group" aria-label={t('media.audio')}>
+                      <button
+                        type="button"
+                        className={`dock-media-inspector__chip${!(entryPrefs.videoMuted ?? true) ? " dock-media-inspector__chip--active" : ""}`}
+                        disabled={sendingFile === entry.playingKey}
+                        onClick={() => void toggleVideoMute(entry)}
+                        title={t('media.muted')}
+                        aria-pressed={!(entryPrefs.videoMuted ?? true)}>
+                        <Icon name={(entryPrefs.videoMuted ?? true) ? "volume_off" : "volume_up"} size={12} />
+                        {(entryPrefs.videoMuted ?? true) ? t('media.muted') : t('media.audioOn')}
+                      </button>
+                      <button
+                        type="button"
+                        className={`dock-media-inspector__chip${(entryPrefs.loop ?? true) ? " dock-media-inspector__chip--active" : ""}`}
+                        disabled={sendingFile === entry.playingKey}
+                        onClick={() => void setEntryLoop(entry, !(entryPrefs.loop ?? true))}
+                        title={t('media.loop')}
+                        aria-pressed={entryPrefs.loop ?? true}>
+                        <Icon name="refresh" size={12} />
+                        {(entryPrefs.loop ?? true) ? t('media.loop') : t('media.once')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* ── Information ── */}
 
@@ -4862,3 +4987,5 @@ export default function DockMediaTab({
     </div >
   );
 }
+
+export default memo(DockMediaTab);

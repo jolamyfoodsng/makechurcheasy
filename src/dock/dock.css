@@ -275,6 +275,18 @@
   scroll-behavior: auto !important;
 }
 
+/* Respect the operating system's reduced-motion preference in the standalone Dock. */
+@media (prefers-reduced-motion: reduce) {
+  .dock-root *,
+  .dock-root *::before,
+  .dock-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── Status bar ── */
 .dock-status-bar {
   display: flex;
@@ -358,26 +370,53 @@
 }
 
 /* ── Worship subtab (moved to top — must load before file truncation) ── */
+.dock-worship-content-layout {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-worship-content-layout__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .dock-worship-subtab-bar {
   display: flex;
   gap: 6px;
-  width: calc(100% - 16px);
+  width: max-content;
+  max-width: calc(100% - 16px);
   margin: 8px 8px 6px;
   padding: 4px;
   border: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.55));
   border-radius: 8px;
   background: color-mix(in srgb, var(--dock-surface-alt) 56%, var(--dock-surface));
   box-sizing: border-box;
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dock-worship-subtab-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .dock-worship-subtab {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 7px;
   min-height: 32px;
-  padding: 0 14px;
+  min-width: 96px;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 700;
   border: none;
@@ -398,6 +437,67 @@
   background: var(--dock-accent, #1D4ED8);
   color: #FFFFFF;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 35%, transparent);
+}
+
+.dock-worship-subtab:focus-visible {
+  outline: 2px solid var(--dock-accent, #1D4ED8);
+  outline-offset: -2px;
+}
+
+/* When the primary Dock nav becomes vertical, keep Worship/Notes as a
+   matching secondary rail immediately beside it. */
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-content-layout {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab-bar {
+  flex: 0 0 40px;
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  width: 40px;
+  max-width: 40px;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  gap: 0;
+  padding: 4px 0;
+  border: 0;
+  border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  border-radius: 0;
+  background: var(--dock-surface);
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0;
+  gap: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  font-size: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-content-layout__body {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ── Buttons ── */
@@ -2330,7 +2430,7 @@
 }
 
 .dock-search .dock-input {
-  min-height: 30px;
+  min-height: 34px;
   padding: 0 14px 0 18px;
   font-size: 12px;
   line-height: 1.35;
@@ -6362,6 +6462,31 @@
   gap: 8px;
 }
 
+.dock-notes-browser-toolbar {
+  align-items: center;
+}
+
+.dock-notes-browser-toolbar > .dock-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-notes-browser-toolbar > .dock-search .dock-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dock-notes-browser-toolbar > .dock-console-actions {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+.dock-notes-browser-toolbar > .dock-console-actions--song-browser {
+  padding: 0;
+  border-bottom: 0;
+}
+
 .dock-console-header__eyebrow {
   font-size: 12px;
   padding: 0;
@@ -6392,6 +6517,38 @@
   border-bottom: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.3));
   flex-wrap: nowrap;
   gap: 6px;
+}
+
+/* Keep the search field and import actions on one compact row. */
+.dock-worship-song-browser {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 6px;
+}
+
+.dock-worship-song-browser .dock-console-header {
+  display: contents;
+}
+
+.dock-worship-song-browser > .dock-search {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.dock-worship-song-browser > .dock-search .dock-input {
+  width: 100% !important;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dock-worship-song-browser .dock-console-actions--song-browser {
+  grid-column: 2;
+  min-width: max-content;
+  padding: 0;
+  border-bottom: 0;
 }
 
 .dock-console-deck__header {
@@ -6431,6 +6588,22 @@
   min-width: 30px;
   padding: 0;
   flex: 0 0 30px;
+}
+
+.dock-console-toggle--primary {
+  border-color: transparent;
+  background: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-console-toggle.dock-console-toggle--primary:hover {
+  border-color: transparent;
+  background: var(--dock-accent-hover);
+  color: #fff;
+}
+
+.dock-console-toggle--add .dock-console-toggle__label {
+  display: inline;
 }
 
 .dock-console-toggle__label {
@@ -7985,7 +8158,7 @@
 .dock-bible-reader__history-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
   padding: 6px 8px;
   border: none;
@@ -7994,19 +8167,43 @@
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s;
 }
 
 .dock-bible-reader__history-item:last-child {
   border-bottom: none;
 }
 
-.dock-bible-reader__history-item:hover,
-.dock-bible-reader__history-item:focus-visible {
+.dock-bible-reader__history-view {
+  display: flex;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+
+.dock-bible-reader__history-view:hover,
+.dock-bible-reader__history-view:focus-visible {
   background: var(--dock-surface-hover, #374151);
   outline: 2px solid var(--dock-accent, #1D4ED8);
   outline-offset: -2px;
+}
+
+.dock-bible-reader__history-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.dock-bible-reader__history-action {
+  min-height: 22px;
+  padding: 3px 7px;
+  font-size: 10px;
 }
 
 .dock-bible-reader__history-copy {
@@ -9763,6 +9960,10 @@
   width: min(420px, 100%);
 }
 
+.dock-dialog--online-lyrics {
+  width: min(460px, 100%);
+}
+
 .dock-dialog__header,
 .dock-dialog__footer {
   display: flex;
@@ -11008,6 +11209,14 @@
 }
 
 .dock-vertical-nav__item--active {
+  color: #fff;
+  border-left-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
+}
+
+/* Keep the Worship/Notes secondary rail visibly selected as a filled item,
+   matching the primary vertical navigation. */
+.dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab.dock-vertical-nav__item--active {
   color: #fff;
   border-left-color: var(--dock-accent);
   background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
@@ -13375,15 +13584,107 @@
 
 /* ── Title + Status ── */
 .dock-media-inspector__title-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 16px 16px 10px;
 }
 
 .dock-media-inspector__title {
+  min-width: 0;
+  flex: 1 1 auto;
   margin: 0;
   font-size: 16px;
   font-weight: 700;
   color: var(--dock-text);
   line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-media-inspector__title-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+}
+
+.dock-media-inspector__title-edit:hover,
+.dock-media-inspector__title-edit:focus-visible {
+  border-color: var(--dock-accent);
+  background: var(--dock-accent-soft);
+  color: var(--dock-text);
+}
+
+.dock-media-inspector__title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 5px 7px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.dock-media-inspector__title-editing {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 4px;
+}
+
+.dock-media-inspector__title-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.dock-media-inspector__title-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+}
+
+.dock-media-inspector__title-action--confirm {
+  background: var(--dock-accent);
+  border-color: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-media-inspector__title-action--cancel {
+  background: var(--dock-surface-alt);
+}
+
+.dock-media-inspector__title-action:hover,
+.dock-media-inspector__title-action:focus-visible {
+  border-color: var(--dock-accent);
+  background: var(--dock-accent-soft);
+  color: var(--dock-text);
+}
+
+.dock-media-inspector__title-action--confirm:hover,
+.dock-media-inspector__title-action--confirm:focus-visible {
+  background: var(--dock-accent-hover, var(--dock-accent));
+  color: #fff;
 }
 
 .dock-media-inspector__subtitle {
@@ -13504,6 +13805,21 @@
 }
 
 /* ── Cards (Display, Audio, Info) ── */
+.dock-media-inspector__options {
+  padding: 0 12px 10px;
+}
+
+.dock-media-inspector__options--with-audio {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(108px, 0.9fr);
+  gap: 8px;
+}
+
+.dock-media-inspector__options .dock-media-inspector__card {
+  min-width: 0;
+  margin: 0;
+}
+
 .dock-media-inspector__card {
   margin: 0 12px 10px;
   padding: 12px;
@@ -13548,6 +13864,12 @@
   transition: all 0.12s ease;
 }
 
+.dock-media-inspector__options .dock-media-inspector__seg-btn {
+  gap: 3px;
+  padding: 7px 4px;
+  font-size: 11px;
+}
+
 .dock-media-inspector__seg-btn:last-child {
   border-right: none;
 }
@@ -13582,6 +13904,14 @@
   font-family: inherit;
   cursor: pointer;
   transition: all 0.12s ease;
+}
+
+.dock-media-inspector__options .dock-media-inspector__chip {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  padding: 5px 6px;
+  font-size: 11px;
 }
 
 .dock-media-inspector__chip:hover {
@@ -17622,6 +17952,22 @@
   opacity: 0.5;
 }
 
+.dock-worship-summary__compact-search {
+  display: none;
+  min-width: 0;
+}
+
+.dock-worship-summary__compact-search .dock-media-search {
+  min-width: 0;
+  padding: 2px 5px;
+}
+
+.dock-worship-summary__compact-search .dock-media-search__input {
+  min-width: 0;
+  min-height: 26px;
+  font-size: 11px;
+}
+
 .dock-worship-summary__actions {
   display: flex;
   align-items: center;
@@ -17630,9 +17976,86 @@
   flex-shrink: 0;
 }
 
+.dock-worship-summary__primary-actions {
+  display: contents;
+}
+
+.dock-worship-summary__overflow-wrap {
+  position: relative;
+  display: none;
+  flex-shrink: 0;
+}
+
+.dock-worship-summary__overflow-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface-alt);
+  color: var(--dock-text-secondary);
+  cursor: pointer;
+}
+
+.dock-worship-summary__overflow-trigger:hover,
+.dock-worship-summary__overflow-trigger[aria-expanded="true"] {
+  border-color: var(--dock-accent-soft-border);
+  background: var(--dock-accent-soft);
+  color: var(--dock-text);
+}
+
+.dock-worship-summary__overflow-trigger:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: 1px;
+}
+
+.dock-worship-summary__overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 250;
+  display: flex;
+  min-width: 172px;
+  max-width: calc(100vw - 16px);
+  padding: 5px;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
+.dock-worship-summary__overflow-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  gap: 8px;
+  padding: 0 4px 0 7px;
+  color: var(--dock-text);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .dock-worship-summary__actions .dock-shell-icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+}
+
+.dock-worship-summary__actions .dock-shell-icon-btn svg,
+.dock-worship-summary__actions .dock-translation--compact .dock-translation__trigger svg,
+.dock-worship-back-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .dock-auto-advance {
@@ -17643,6 +18066,20 @@
 
 .dock-auto-advance__trigger {
   position: relative;
+}
+
+.dock-auto-advance__trigger--labeled {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.dock-auto-advance__trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dock-auto-advance__trigger--active {
@@ -17663,10 +18100,10 @@
 .dock-auto-advance__popover {
   z-index: 10000;
   box-sizing: border-box;
-  max-width: min(360px, calc((100vw - 16px) / var(--dock-font-scale, 1)));
+  max-width: min(330px, calc((100vw - 16px) / var(--dock-font-scale, 1)));
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 94%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--dock-surface) 98%, black 2%);
@@ -17722,21 +18159,6 @@
   border-color: var(--dock-accent-soft-border);
   background: var(--dock-accent-soft);
   color: var(--dock-text);
-}
-
-.dock-auto-advance__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  margin-top: 10px;
-  padding: 0 8px;
-  border: 1px solid var(--dock-green-soft-border);
-  border-radius: 999px;
-  background: var(--dock-green-soft);
-  color: var(--dock-green);
-  font-size: 11px;
-  font-weight: 750;
 }
 
 .dock-auto-advance__description {
@@ -17878,41 +18300,19 @@
   margin-top: 12px;
 }
 
-.dock-auto-advance__options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.dock-auto-advance__option {
+.dock-auto-advance__select-field {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 8px;
-  border: 1px solid var(--dock-border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--dock-surface-alt) 74%, transparent);
-  color: var(--dock-text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.dock-auto-advance__option > span {
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
-.dock-auto-advance__option:has(input:checked) {
-  border-color: var(--dock-accent-soft-border);
-  background: var(--dock-accent-soft);
-  color: var(--dock-text);
-}
-
-.dock-auto-advance__option input {
-  accent-color: var(--dock-accent-hover);
-  margin: 0;
+.dock-auto-advance__select {
+  min-height: 36px;
+  border-radius: 7px;
+  background-color: var(--dock-surface-alt);
+  font-size: 11px;
 }
 
 .dock-auto-advance__footer {
@@ -17968,13 +18368,6 @@
   text-align: right;
 }
 
-@media (max-width: 480px) {
-  .dock-auto-advance__fields,
-  .dock-auto-advance__options {
-    grid-template-columns: 1fr;
-  }
-}
-
 .dock-worship-summary__left {
   display: flex;
   align-items: center;
@@ -17995,8 +18388,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
@@ -20993,6 +21387,102 @@
   overflow: hidden;
 }
 
+/* The media browser owns its responsive navigation. Keep this layout scoped
+   to the Media tab so the primary Bible/Worship/Media/MultiView navigation is
+   never changed by the narrow presentation. */
+.dock-media-content-layout,
+.dock-media-tabs-column,
+.dock-media-content-main {
+  display: contents;
+}
+
+.dock-media-console--narrow {
+  gap: 8px;
+  padding-left: 0;
+}
+
+.dock-media-console--narrow .dock-media-content-layout {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock-media-console--narrow .dock-media-tabs-column {
+  display: flex;
+  flex: 0 0 48px;
+  min-width: 48px;
+}
+
+.dock-media-console--narrow .dock-media-tabs-row {
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+}
+
+.dock-media-console--narrow .dock-media-tabs {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.dock-media-console--narrow .dock-media-tabs--compact .dock-media-tab {
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  gap: 0;
+  border-right: 2px solid transparent;
+  border-bottom-color: transparent;
+}
+
+.dock-media-console--narrow .dock-media-tabs--compact .dock-media-tab--active {
+  border-right-color: var(--dock-accent);
+  border-bottom-color: transparent;
+}
+
+.dock-media-console--narrow .dock-media-tabs--compact .dock-media-tab svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dock-media-console--narrow .dock-media-tabs-row__actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin-left: 0;
+}
+
+.dock-media-console--narrow .dock-media-tabs-row__actions .dock-btn {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+}
+
+.dock-media-console--narrow .dock-media-content-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+
+.dock-media-console--narrow .dock-media-browser {
+  min-height: 0;
+}
+
 /* Media owns this action; keep it independent from the bottom toolbar's
    collapsed/compact visibility rules and stable while media rehydrates. */
 .dock-media-hide-btn {
@@ -21143,6 +21633,7 @@
 
 .dock-media-search__input {
   flex: 1;
+  min-height: 30px;
   border: none;
   background: transparent;
   color: var(--dock-text);
@@ -33186,7 +33677,7 @@ button.dock-btm-toolbar__clear--inline,
   }
 
   .dock-bible-search-row__input .dock_search__input {
-    min-height: 12px;
+    min-height: 32px;
     font-size: 11px;
     padding: 4px 6px;
   }
@@ -33226,7 +33717,7 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-module--bible--compact .dock-bible-search-row__input .dock_search__input {
-  min-height: 26px;
+  min-height: 32px;
   font-size: 11px;
 }
 
@@ -33386,6 +33877,42 @@ button.dock-btm-toolbar__clear--inline,
 .dock-module--bible--compact .dock-bible-search-bar {
   padding: 4px 0;
   border-bottom: none;
+}
+
+/* ── Ultra-short Bible Dock: the shell arrow hides the search controls ── */
+@media screen and (max-height: 300px) {
+  .dock-root--header-collapsed .dock-module--bible .dock-bible-search-row,
+  .dock-root--header-collapsed .dock-module--bible .dock-bible-controls-panel {
+    display: none;
+  }
+
+  /* Keep the reading reference compact enough to leave room for the verse. */
+  .dock-module--bible .dock-bible-reader__ref-header {
+    gap: 2px;
+    min-height: 24px;
+    padding: 2px 4px;
+  }
+
+  .dock-module--bible .dock-bible-reader__ref-header-label,
+  .dock-module--bible .dock-bible-reader__ref-header-translation {
+    height: 14px;
+    padding: 1px 4px;
+    font-size: 8px;
+  }
+
+  .dock-module--bible .dock-bible-reader__ref-header-reference {
+    font-size: 10px;
+  }
+
+  .dock-module--bible .dock-bible-reader__ref-header-fav,
+  .dock-module--bible .dock-bible-reader__ref-header-history-btn {
+    width: 16px;
+    height: 16px;
+  }
+
+  .dock-module--bible .dock-bible-reader__quick-actions {
+    top: 28px;
+  }
 }
 
 /* ── Compact compare popover position ── */
@@ -34347,6 +34874,21 @@ button.dock-btm-toolbar__clear--inline,
   background: var(--dock-surface-alt);
 }
 
+.dock-animation-tile__thumb--playable {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.dock-animation-tile__thumb--playable:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: -2px;
+}
+
 .dock-animation-tile__img {
   width: 100%;
   height: 100%;
@@ -34478,6 +35020,28 @@ button.dock-btm-toolbar__clear--inline,
   pointer-events: none;
 }
 
+.dock-animation-tile__downloaded-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: calc(100% - 38px);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(22, 163, 74, 0.88);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 .dock-media-add-modal__pane--template .dock-animation-grid {
   max-height: 360px;
   overflow-y: auto;
@@ -34589,6 +35153,63 @@ button.dock-btm-toolbar__clear--inline,
   align-items: center;
   gap: 4px;
   margin-left: auto;
+}
+
+.dock-media-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dock-media-search-row > .dock-media-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-media-search-row__actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.dock-media-search-row--compact {
+  gap: 4px;
+}
+
+.dock-media-search-row--compact .dock-media-search {
+  min-height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--dock-accent) 42%, var(--dock-border-soft));
+}
+
+.dock-media-search-row--compact .dock-media-search__input {
+  min-height: 24px;
+  font-size: 11px;
+}
+
+.dock-media-search-row--compact .dock-media-search__input::placeholder {
+  color: var(--dock-text-secondary);
+  opacity: 1;
+}
+
+.dock-media-search-row--compact .dock-media-search-row__actions .dock-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.dock-media-search-row--compact .dock-media-search-row__actions .dock-btn--primary {
+  width: auto;
+  min-width: 34px;
+  padding: 0 7px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ── Media playlist / preview modals ── */
@@ -35207,10 +35828,13 @@ button.dock-btm-toolbar__clear--inline,
   right: 0;
   z-index: 250;
   display: flex;
-  min-width: 174px;
+  width: min(220px, calc(100vw - 16px));
+  min-width: min(174px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   padding: 4px;
   flex-direction: column;
   gap: 2px;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
@@ -35367,7 +35991,7 @@ button.dock-btm-toolbar__clear--inline,
 .dock-bible-search-row__input .dock-bible-search-bar,
 .dock-bible-search-row__input .dock-search {
   width: 100%;
-  min-width: 95px;
+  min-width: 0;
 }
 
 .dock-bible-search-row__input .dock_search__input {
@@ -35378,9 +36002,40 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-bible-search-row__translation {
   order: 2;
-  margin-left: auto;
-  margin-right: 0;
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  gap: 4px;
   justify-content: flex-end;
+}
+
+/* Keep the search field usable below the old 250px wrap breakpoint. The
+   selector and overflow action stay fixed; the search field owns every
+   remaining pixel instead of moving to a disabled-looking second row. */
+@media (max-width: 250px) {
+  .dock-bible-search-row {
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  .dock-bible-search-row__input {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+  }
+
+  .dock-bible-search-row__input .dock-bible-search-bar,
+  .dock-bible-search-row__input .dock-search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dock-bible-search-row__translation {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 0;
+  }
 }
 
 .dock-module--bible--narrow .dock-bible-compact-actions__popover {
@@ -35431,5 +36086,159 @@ button.dock-btm-toolbar__clear--inline,
 @media (max-width: 520px) {
   .dock-bible-passage-reader__grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Worship/Notes micro dock ──────────────────────────────────────────────
+   A short OBS dock needs the text-mode switcher and selected-item actions to
+   leave room for the actual slide list. Keep the buttons left-sized instead
+   of stretching two large tabs across the whole panel. */
+@media screen and (max-width: 300px) {
+  .dock-module--worship {
+    gap: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary__header {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    column-gap: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary__title {
+    font-size: 11px;
+  }
+
+  .dock-module--worship .dock-worship-summary__artist {
+    margin-top: 1px;
+    font-size: 10px;
+  }
+
+  .dock-module--worship .dock-worship-summary__meta {
+    column-gap: 4px;
+    margin-top: 1px;
+    font-size: 9px;
+  }
+
+  .dock-module--worship .dock-worship-summary__actions {
+    gap: 3px;
+  }
+
+  .dock-module--worship .dock-worship-summary__actions .dock-shell-icon-btn,
+  .dock-module--worship .dock-worship-summary__actions .dock-translation--compact .dock-translation__trigger {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .dock-module--worship .dock-worship-back-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dock-module--worship .dock-worship-lyrics-search {
+    padding: 2px 4px;
+  }
+
+  .dock-module--worship .dock-worship-lyrics-search .dock-media-search {
+    gap: 4px;
+    padding: 3px 6px;
+  }
+
+  .dock-module--worship .dock-worship-lyrics-search .dock-media-search__input {
+    min-height: 20px;
+    font-size: 10px;
+  }
+
+}
+
+/* At short dock heights, keep the song identity, lyrics search, edit, and
+   overflow controls in one compact row. Width alone should not activate this
+   layout; a narrow but tall dock keeps the normal controls visible. */
+@media screen and (max-height: 600px) {
+  .dock-module--worship .dock-worship-summary__header {
+    grid-template-columns: 26px minmax(0, 1fr) minmax(110px, 1fr) auto;
+    column-gap: 8px;
+  }
+
+  .dock-module--worship .dock-worship-summary__compact-search {
+    display: block;
+    grid-column: 3;
+    justify-self: stretch;
+  }
+
+  .dock-module--worship .dock-worship-summary__compact-search .dock-media-search {
+    min-height: 28px;
+    padding: 0 7px;
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--dock-accent) 42%, var(--dock-border));
+    background: var(--dock-input-bg);
+  }
+
+  .dock-module--worship .dock-worship-summary__compact-search .dock-media-search__input {
+    min-height: 26px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .dock-module--worship .dock-worship-summary__compact-search .dock-media-search__input::placeholder {
+    color: var(--dock-text-secondary);
+    opacity: 1;
+  }
+
+  .dock-module--worship .dock-worship-summary__actions {
+    grid-column: 4;
+    gap: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary__copy {
+    padding-left: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary__primary-actions,
+  .dock-module--worship .dock-worship-lyrics-search {
+    display: none;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-wrap {
+    display: inline-flex;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-trigger,
+  .dock-module--worship .dock-worship-summary__actions .dock-shell-icon-btn,
+  .dock-module--worship .dock-worship-summary__actions .dock-translation--compact .dock-translation__trigger {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .dock-module--worship .dock-worship-back-btn {
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-item {
+    padding: 0;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-item > .dock-translation--compact-label,
+  .dock-module--worship .dock-worship-summary__overflow-item > .dock-auto-advance--labeled {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-item .dock-translation--compact-label .dock-translation__trigger,
+  .dock-module--worship .dock-worship-summary__overflow-item .dock-auto-advance--labeled .dock-auto-advance__trigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dock-module--worship .dock-worship-summary__overflow-menu {
+    min-width: 164px;
   }
 }

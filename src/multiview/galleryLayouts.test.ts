@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { GALLERY_LAYOUTS } from "./galleryLayouts";
+import { GALLERY_CATEGORIES, GALLERY_LAYOUTS } from "./galleryLayouts";
+
+describe("gallery language", () => {
+  it("describes source-neutral layouts instead of implying bundled cameras or logos", () => {
+    const layout = GALLERY_LAYOUTS.find((item) => item.id === "logo-tr");
+
+    expect(layout?.name).toBe("Full Frame + Top-Right Overlay");
+    expect(layout?.description).toContain("Add your own");
+    expect(layout?.slots.map((slot) => slot.label)).toEqual([
+      "Main content",
+      "top right overlay",
+    ]);
+  });
+
+  it("uses layout-focused category labels", () => {
+    expect(GALLERY_CATEGORIES.find((category) => category.key === "cameras")?.label).toBe("Multi-source");
+    expect(GALLERY_CATEGORIES.find((category) => category.key === "hybrid")?.label).toBe("Combined");
+  });
+});
 
 describe("multimedia scene portrait layout", () => {
   it("exposes separate full-canvas and portrait scene slots", () => {

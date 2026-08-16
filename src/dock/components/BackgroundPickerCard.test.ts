@@ -172,7 +172,7 @@ describe("Background picker layout", () => {
     expect(dockCssSource).toContain('--dtb-studio-height: min(');
     expect(dockCssSource).toContain('--dtb-studio-width: min(');
     expect(dockCssSource).toContain('width: var(--dtb-studio-width);\n  max-width: none;\n  height: var(--dtb-studio-height);');
-    expect(dockCssSource).not.toContain('height: 50vh;');
+    expect(dockCssSource).not.toMatch(/(?:^|\n)\s*height:\s*50vh;/);
     expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: hidden;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}');
@@ -183,6 +183,13 @@ describe("Background picker layout", () => {
 });
 
 describe("Background picker background retention", () => {
+  it("invalidates cached overlay themes when an injected image or pattern changes", () => {
+    for (const source of [overlayHtml, worshipOverlayHtml, noteOverlayHtml]) {
+      expect(source).toContain("lastAppliedThemeKeyByMode.fullscreen = ''");
+      expect(source).toContain("lastAppliedThemeKeyByMode['lower-third'] = ''");
+    }
+  });
+
   it("keeps the last selected pattern when switching through another background mode", () => {
     const typeChangeStart = backgroundPickerSource.indexOf("const handleTypeChange = useCallback");
     const typeChangeEnd = backgroundPickerSource.indexOf("const persistSavedStyles", typeChangeStart);

@@ -4,7 +4,7 @@
  * Dense operator console for song browsing, lyric cueing, and live transport.
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, startTransition } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
@@ -74,7 +74,6 @@ import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import DockNotesTab from "./DockNotesTab";
-import { BulkImportDocumentFlow } from "../../worship/BulkImportDocumentFlow";
 import {
   getDockTranslationSourceSignature,
   getOrderedTranslationParts,
@@ -89,6 +88,9 @@ interface Props {
   isActive?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
   fullscreenOnly?: boolean;
+  showSubtabs?: boolean;
+  initialSubTab?: WorshipSubTab;
+  compactVerticalNav?: boolean;
 }
 
 type OverlayMode = "fullscreen" | "lower-third";
@@ -1160,13 +1162,16 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export default function DockWorshipTab({
+function DockWorshipTab({
   staged,
   onStage,
   productionDefaults,
   isActive = true,
   presentationOutputTarget = "obs",
   fullscreenOnly = false,
+  showSubtabs = true,
+  initialSubTab,
+  compactVerticalNav = false,
 }: Props) {
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
@@ -1240,7 +1245,7 @@ export default function DockWorshipTab({
   const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [worshipSubTab, setWorshipSubTab] = useState<WorshipSubTab>(
-    () => loadDockWorshipUiPreferences().activeSubTab ?? "worship",
+    () => initialSubTab ?? loadDockWorshipUiPreferences().activeSubTab ?? "worship",
   );
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentWorshipSearches());
   const [selectedSong, setSelectedSong] = useState<DockSong | null>(null);
@@ -1297,8 +1302,8 @@ export default function DockWorshipTab({
   }, []);
   const [deletedSections, setDeletedSections] = useState<DeletedWorshipSection[]>([]);
   const [showDeletedSectionsPopover, setShowDeletedSectionsPopover] = useState(false);
+  const [showCompactSummaryActions, setShowCompactSummaryActions] = useState(false);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
-  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [onlineSearchQuery, setOnlineSearchQuery] = useState("");
   const [onlineSearchSubmittedQuery, setOnlineSearchSubmittedQuery] = useState("");
   const [onlineResults, setOnlineResults] = useState<OnlineLyricsSearchResult[]>([]);
@@ -1316,6 +1321,7 @@ export default function DockWorshipTab({
   const lineCountPopoverRef = useRef<HTMLDivElement>(null);
   const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
   const deletedSectionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const compactSummaryActionsRef = useRef<HTMLDivElement>(null);
   const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const prefsReadyRef = useRef(false);
   const prefsLoadIdRef = useRef(0);
@@ -1706,10 +1712,17 @@ export default function DockWorshipTab({
       ) {
         setShowDeletedSectionsPopover(false);
       }
+      if (
+        showCompactSummaryActions &&
+        compactSummaryActionsRef.current &&
+        !compactSummaryActionsRef.current.contains(event.target as Node)
+      ) {
+        setShowCompactSummaryActions(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showDeletedSectionsPopover]);
+  }, [showCompactSummaryActions, showDeletedSectionsPopover]);
 
   const handleToggleDeletedSectionsPopover = useCallback(() => {
     setShowDeletedSectionsPopover((current) => {
@@ -2444,6 +2457,7 @@ export default function DockWorshipTab({
   const handleSelectSong = useCallback((song: DockSong) => {
     setRecentSearches(pushRecentWorshipSearch(`song: ${song.title}`));
     setShowRecentSearches(false);
+    setShowCompactSummaryActions(false);
     setSelectedSong(song);
     setSelectedIdx(0);
     setVisibleIdx(null);
@@ -2522,6 +2536,7 @@ export default function DockWorshipTab({
   );
 
   const handleBackToSongList = useCallback(() => {
+    setShowCompactSummaryActions(false);
     setSelectedSong(null);
     setSelectedIdx(null);
     setVisibleIdx(null);
@@ -2940,13 +2955,13 @@ export default function DockWorshipTab({
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === "Escape") {
-        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || bulkImportOpen) {
+        if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || showCompactSummaryActions) {
           event.preventDefault();
           closeSongEditor();
           closeSlideEditor();
           closeNewSongModal();
           setOnlineSearchOpen(false);
-          setBulkImportOpen(false);
+          setShowCompactSummaryActions(false);
           return;
         }
         if (targetElement?.closest(".dtb-modal, .dock-dialog")) return;
@@ -2989,10 +3004,10 @@ export default function DockWorshipTab({
     handleShowCurrent,
     isActive,
     isNewSongModalOpen,
-    bulkImportOpen,
     navigateSection,
     onlineSearchOpen,
     selectedSong,
+    showCompactSummaryActions,
     slideEditor,
     songEditor,
     visibleSectionIndexes.length,
@@ -3000,51 +3015,46 @@ export default function DockWorshipTab({
 
   return (
     <div className="dock-module dock-module--worship">
-      <div className="dock-worship-subtab-bar">
+      <div className="dock-worship-content-layout">
+      {showSubtabs && <nav className={`dock-worship-subtab-bar${compactVerticalNav ? " dock-vertical-nav" : ""}`} aria-label={`${t("worship.title")} / ${t("notes.title")}`}>
         <button
           type="button"
-          className={`dock-worship-subtab${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}`}
+          role="tab"
+          aria-selected={worshipSubTab === "worship"}
+          className={`dock-worship-subtab${compactVerticalNav ? " dock-vertical-nav__item" : ""}${worshipSubTab === "worship" ? " dock-worship-subtab--active" : ""}${compactVerticalNav && worshipSubTab === "worship" ? " dock-vertical-nav__item--active" : ""}`}
           onClick={() => setWorshipSubTab("worship")}
+          aria-label={t("worship.title")}
+          title={t("worship.title")}
+          data-label={t("worship.title")}
         >
           <Icon name="music_note" size={13} />
           {t("worship.title")}
         </button>
         <button
           type="button"
-          className={`dock-worship-subtab${worshipSubTab === "notes" ? " dock-worship-subtab--active" : ""}`}
+          role="tab"
+          aria-selected={worshipSubTab === "notes"}
+          className={`dock-worship-subtab${compactVerticalNav ? " dock-vertical-nav__item" : ""}${worshipSubTab === "notes" ? " dock-worship-subtab--active" : ""}${compactVerticalNav && worshipSubTab === "notes" ? " dock-vertical-nav__item--active" : ""}`}
           onClick={() => setWorshipSubTab("notes")}
+          aria-label={t("notes.title")}
+          title={t("notes.title")}
+          data-label={t("notes.title")}
         >
           <Icon name="edit_note" size={13} />
           {t("notes.title")}
         </button>
-      </div>
+      </nav>}
 
-      {worshipSubTab === "worship" ? (
+      <div className="dock-worship-content-layout__body">
+        {worshipSubTab === "worship" ? (
         <>
       {/* Song Browser (when no song selected) */}
       {!selectedSong ? (
             <>
-              <section className="dock-console-panel dock-console-panel--toolbar">
-                <div className="dock-console-header">
-                  <div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow"></div>
-                    <div className="dock-console-header__eyebrow">{t('worship.searchSongs')}</div>
-                    <div className="dock-console-header__eyebrow"></div>
-
-                  </div>
-	                  <div className="dock-console-actions dock-console-actions--song-browser">
-	                    <button
-	                      type="button"
-	                      className="dock-console-toggle dock-console-toggle--icon-only"
-	                      onClick={() => setBulkImportOpen(true)}
-	                      title="Import PDF, DOCX, or PowerPoint"
-	                      aria-label="Import PDF, DOCX, or PowerPoint"
-	                    >
-	                      <Icon name="upload" size={14} />
-	                    </button>
-	                    <button
+              <section className="dock-console-panel dock-console-panel--toolbar dock-worship-song-browser">
+                <div className="dock-console-header dock-worship-song-browser__header">
+                  <div className="dock-console-actions dock-console-actions--song-browser">
+                    <button
 	                      type="button"
                       className="dock-console-toggle dock-console-toggle--icon-only"
                       onClick={() => {
@@ -3054,19 +3064,20 @@ export default function DockWorshipTab({
                         setOnlineSearchOpen(true);
                         setOnlineSearchError("");
                       }}
-                      title={t('worship.importOnline')}
-	                      aria-label={t('worship.importOnline')}
+	                      title={t('worship.searchOnline')}
+	                      aria-label={t('worship.searchOnline')}
 	                    >
 	                      <Icon name="travel_explore" size={14} />
 	                    </button>
-	                    <button
+                    <button
 	                      type="button"
-	                      className="dock-console-toggle dock-console-toggle--icon-only"
+	                      className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
 	                      onClick={() => openNewSongModal()}
 	                      title={t('worship.addSong')}
 	                      aria-label={t('worship.addSong')}
 	                    >
 	                      <Icon name="add" size={14} />
+	                      <span className="dock-console-toggle__label">{t('common.add')}</span>
 	                    </button>
 	                  </div>
 	                </div>
@@ -3233,26 +3244,50 @@ export default function DockWorshipTab({
                       <span>{linesPerSlide} {linesPerSlide === 1 ? t('worship.linePerSlide') : t('worship.linesPerSlide')}</span>
                     </div>
                   </div>
+                  <div className="dock-worship-summary__compact-search">
+                    <div className="dock-media-search dock-media-search--plain">
+                      <input
+                        className="dock-media-search__input"
+                        placeholder={t('worship.lyricsSearchPlaceholder')}
+                        value={lyricsSearchQuery}
+                        onChange={(e) => setLyricsSearchQuery(e.target.value)}
+                        aria-label={t('worship.lyricsSearchPlaceholder')}
+                      />
+                      {lyricsSearchQuery && (
+                        <button
+                          type="button"
+                          className="dock-media-search__clear"
+                          onClick={() => setLyricsSearchQuery("")}
+                          aria-label={t('common.clear')}
+                          title={t('common.close')}
+                        >
+                          <Icon name="close" size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div className="dock-worship-summary__actions">
-                    <DockTranslationControls
-                      compact
-                      sections={selectedSongSections.map((section) => ({ id: section.id, text: section.text }))}
-                      value={effectiveWorshipTranslation}
-                      onChange={(next) => {
-                        worshipTranslationChangeRef.current = true;
-                        setWorshipTranslation(next);
-                      }}
-                    />
-                    <DockAutoAdvanceControl
-                      items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
-                      selectedIndex={selectedSongAutoAdvanceIndex}
-                      onSelectIndex={handleAutoAdvanceSongSelection}
-                      onAdvance={handleAutoAdvanceSongStep}
-                      onStart={handleAutoAdvanceStart}
-                      onActiveChange={setAutoAdvanceActive}
-                      itemKind="song"
-                      storageScope="worship"
-                    />
+                    <div className="dock-worship-summary__primary-actions">
+                      <DockTranslationControls
+                        compact
+                        sections={selectedSongSections.map((section) => ({ id: section.id, text: section.text }))}
+                        value={effectiveWorshipTranslation}
+                        onChange={(next) => {
+                          worshipTranslationChangeRef.current = true;
+                          setWorshipTranslation(next);
+                        }}
+                      />
+                      <DockAutoAdvanceControl
+                        items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
+                        selectedIndex={selectedSongAutoAdvanceIndex}
+                        onSelectIndex={handleAutoAdvanceSongSelection}
+                        onAdvance={handleAutoAdvanceSongStep}
+                        onStart={handleAutoAdvanceStart}
+                        onActiveChange={setAutoAdvanceActive}
+                        itemKind="song"
+                        storageScope="worship"
+                      />
+                    </div>
                     <button
                       type="button"
                       className="dock-shell-icon-btn"
@@ -3262,6 +3297,51 @@ export default function DockWorshipTab({
                     >
                       <Icon name="edit" size={16} />
                     </button>
+                    <div className="dock-worship-summary__overflow-wrap" ref={compactSummaryActionsRef}>
+                      <button
+                        type="button"
+                        className="dock-worship-summary__overflow-trigger"
+                        onClick={() => setShowCompactSummaryActions((open) => !open)}
+                        aria-label={t('common.moreActions', 'More actions')}
+                        title={t('common.moreActions', 'More actions')}
+                        aria-haspopup="menu"
+                        aria-expanded={showCompactSummaryActions}
+                      >
+                        <Icon name="more_vert" size={14} />
+                      </button>
+                      <div
+                        className="dock-worship-summary__overflow-menu"
+                        role="menu"
+                        aria-label={t('common.moreActions', 'More actions')}
+                        hidden={!showCompactSummaryActions}
+                      >
+                          <div className="dock-worship-summary__overflow-item">
+                            <DockTranslationControls
+                              compact
+                              compactLabel
+                              sections={selectedSongSections.map((section) => ({ id: section.id, text: section.text }))}
+                              value={effectiveWorshipTranslation}
+                              onChange={(next) => {
+                                worshipTranslationChangeRef.current = true;
+                                setWorshipTranslation(next);
+                              }}
+                            />
+                          </div>
+                          <div className="dock-worship-summary__overflow-item">
+                            <DockAutoAdvanceControl
+                              items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
+                              selectedIndex={selectedSongAutoAdvanceIndex}
+                              onSelectIndex={handleAutoAdvanceSongSelection}
+                              onAdvance={handleAutoAdvanceSongStep}
+                              onStart={handleAutoAdvanceStart}
+                              onActiveChange={setAutoAdvanceActive}
+                              itemKind="song"
+                              storageScope="worship"
+                              compactLabel
+                            />
+                          </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -3445,6 +3525,16 @@ export default function DockWorshipTab({
                           aria-label={t('worship.quickEdits')}
                         >
                           <Icon name="tune" size={14} />
+                        </button>
+                      }
+                      narrowOverflowActions={
+                        <button
+                          type="button"
+                          className="dock-btm-overflow__menu-item"
+                          data-dock-close-overflow="true"
+                          onClick={() => setShowThemeSettings(true)}
+                        >
+                          <span>{t('worship.quickEdits')}</span>
                         </button>
                       }
                     >
@@ -3687,10 +3777,10 @@ export default function DockWorshipTab({
 
           {onlineSearchOpen && (
             <div className="dock-dialog-backdrop" role="presentation">
-              <div className="dock-dialog" role="dialog" aria-modal="true" aria-labelledby="dock-online-song-title">
+              <div className="dock-dialog dock-dialog--online-lyrics" role="dialog" aria-modal="true" aria-labelledby="dock-online-song-title">
                 <div className="dock-dialog__header">
                   <div>
-                    <div className="dock-dialog__eyebrow">{t('worship.importOnline')}</div>
+                    <div className="dock-dialog__eyebrow">{t('worship.searchOnline')}</div>
                     <h2 id="dock-online-song-title" className="dock-dialog__title">{t('worship.importLyrics')}</h2>
                   </div>
                   <button
@@ -3779,24 +3869,17 @@ export default function DockWorshipTab({
             </div>
           )}
 
-          {bulkImportOpen && (
-            <BulkImportDocumentFlow
-              onClose={() => setBulkImportOpen(false)}
-              onImported={() => {
-                void loadSongs(false);
-              }}
-            />
-          )}
-
           </>
         ) : (
-          <DockNotesTab
-            staged={staged}
-            onStage={onStage}
-            isActive={isActive && worshipSubTab === "notes"}
-            presentationOutputTarget={presentationOutputTarget}
-          />
+        <DockNotesTab
+          staged={staged}
+          onStage={onStage}
+          isActive={isActive && worshipSubTab === "notes"}
+          presentationOutputTarget={presentationOutputTarget}
+        />
         )}
+      </div>
+      </div>
 
       {/* Theme Settings Modal */}
       <DockThemeSettingsModal
@@ -3818,6 +3901,10 @@ export default function DockWorshipTab({
             handleSaveFullscreenQuickThemeSettings(next);
           } else {
             handleSaveLowerThirdQuickThemeSettings(next);
+          }
+          if (worshipOverlayVisible && activeSectionIndex !== null) {
+            pendingQuickSettingsRefreshRef.current = true;
+            setQuickSettingsRefreshNonce((current) => current + 1);
           }
         }}
         resolveThemeQuickSettings={resolveThemeQuickSettings}
@@ -3901,3 +3988,5 @@ export default function DockWorshipTab({
     </div>
   );
 }
+
+export default memo(DockWorshipTab);

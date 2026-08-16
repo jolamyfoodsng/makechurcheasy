@@ -1,7 +1,7 @@
 /**
  * DockPage.tsx — MakeChurchEasy Dock Control Panel
  *
- * The dock keeps Bible, Worship, and Media production controls inside OBS.
+ * The dock keeps Bible, Worship + Notes, and Media production controls inside OBS.
  */
 
 import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
@@ -38,7 +38,6 @@ import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
-import { fetchPlanFromOverlayServer } from "../services/entitlementClient";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import {
   DEFAULT_DOCK_FONT_SCALE,
@@ -71,14 +70,36 @@ import "./dock-theme.css";
 import "../accessibility.css";
 import Icon from "./DockIcon";
 
-const DockBibleTab = lazy(() => import("./tabs/DockBibleTab"));
-const DockMediaTab = lazy(() => import("./tabs/DockMediaTab"));
-const DockWorshipTab = lazy(() => import("./tabs/DockWorshipTab"));
-const DockPlannerTab = lazy(() => import("./tabs/DockPlannerTab"));
-const DockMultiviewTab = lazy(() => import("./tabs/DockMultiviewTab"));
-const DockMinistryTab = lazy(() => import("./tabs/DockMinistryTab"));
-const DockLmTab = lazy(() => import("./tabs/DockLmTab"));
-const DockBibleCommandPaletteHost = lazy(() => import("./DockBibleCommandPaletteHost"));
+const loadDockBibleTab = () => import("./tabs/DockBibleTab");
+const loadDockMediaTab = () => import("./tabs/DockMediaTab");
+const loadDockWorshipTab = () => import("./tabs/DockWorshipTab");
+const loadDockPlannerTab = () => import("./tabs/DockPlannerTab");
+const loadDockMultiviewTab = () => import("./tabs/DockMultiviewTab");
+const loadDockMinistryTab = () => import("./tabs/DockMinistryTab");
+const loadDockLmTab = () => import("./tabs/DockLmTab");
+const loadDockBibleCommandPaletteHost = () => import("./DockBibleCommandPaletteHost");
+
+const DockBibleTab = lazy(loadDockBibleTab);
+const DockMediaTab = lazy(loadDockMediaTab);
+const DockWorshipTab = lazy(loadDockWorshipTab);
+const DockPlannerTab = lazy(loadDockPlannerTab);
+const DockMultiviewTab = lazy(loadDockMultiviewTab);
+const DockMinistryTab = lazy(loadDockMinistryTab);
+const DockLmTab = lazy(loadDockLmTab);
+const DockBibleCommandPaletteHost = lazy(loadDockBibleCommandPaletteHost);
+
+const DOCK_TAB_PRELOADERS: Partial<Record<DockTab, () => Promise<unknown>>> = {
+  bible: loadDockBibleTab,
+  worship: loadDockWorshipTab,
+  media: loadDockMediaTab,
+  planner: loadDockPlannerTab,
+  multiview: loadDockMultiviewTab,
+  ministry: loadDockMinistryTab,
+};
+
+function preloadDockTab(tab: DockTab): void {
+  void DOCK_TAB_PRELOADERS[tab]?.();
+}
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
 const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
@@ -91,6 +112,7 @@ interface DockShellPreferences {
 import { loadProjectionSettings, saveProjectionSettings, type ProjectionSettings } from "./dockProjectionSettings";
 
 function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
+  if (tab === "notes") return "worship";
   if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
     return tab;
   }
@@ -160,6 +182,8 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
       return t('page.shortcutTabBible');
     case "worship":
       return t('page.shortcutTabWorship');
+    case "notes":
+      return t('notes.title');
     case "media":
       return t('page.shortcutTabMedia');
     case "ministry":
@@ -218,9 +242,11 @@ export default function DockPage({
   const initialActiveTab = resolveDockTab(shellPreferences.activeTab);
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
-  const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() => shellPreferences.disabledTabs ?? []);
+  const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
+    (shellPreferences.disabledTabs ?? []).filter((tab) => tab !== "notes"),
+  );
   const [dockHeight, setDockHeight] = useState(0);
-  const verticalTabs = dockHeight > 0 && dockHeight < 550;
+  const verticalTabs = dockHeight > 0 && dockHeight <= 600;
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");
   const [staged, setStaged] = useState<DockStagedItem | null>(() => loadDockStagedItem());
@@ -441,30 +467,11 @@ export default function DockPage({
     setActiveTab(visibleDockTabs[0]?.id ?? "bible");
   }, [activeTab, visibleDockTabs]);
 
-  // Refresh plan from overlay server on every tab switch
-  useEffect(() => {
-    void fetchPlanFromOverlayServer();
-  }, [activeTab]);
-
   const mountedDockTabs = useMemo(() => {
     const mounted = new Set(visitedTabs);
     mounted.add(activeTab);
     return mounted;
   }, [activeTab, visitedTabs]);
-
-  // Refresh plan from overlay server on any click in the dock (debounced)
-  useEffect(() => {
-    let lastRefresh = 0;
-    const MIN_INTERVAL = 10_000; // don't poll more than once per 10s
-    const handleClick = () => {
-      const now = Date.now();
-      if (now - lastRefresh < MIN_INTERVAL) return;
-      lastRefresh = now;
-      void fetchPlanFromOverlayServer();
-    };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, []);
 
   useEffect(() => {
     saveDockStagedItem(staged);
@@ -818,6 +825,7 @@ export default function DockPage({
     appearance.dockVisuals.radialGlow ? "dock-root--radial-glow" : "",
     appearance.dockVisuals.softShadow ? "dock-root--soft-shadow" : "",
     appearance.dockVisuals.motion ? "dock-root--motion" : "dock-root--motion-off",
+    headerCollapsed ? "dock-root--header-collapsed" : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -842,6 +850,9 @@ export default function DockPage({
               type="button"
               className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
+              onPointerEnter={() => preloadDockTab(tab.id)}
+              onPointerDown={() => preloadDockTab(tab.id)}
+              onFocus={() => preloadDockTab(tab.id)}
               aria-label={tab.label}
               title={tab.label}
               data-label={tab.label}
@@ -891,7 +902,7 @@ export default function DockPage({
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: headerCollapsed ? "2px 8px" : "6px 8px",
+              padding: headerCollapsed ? "0 4px" : "6px 8px",
               borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
               flexShrink: 0,
               userSelect: "none",
@@ -909,8 +920,8 @@ export default function DockPage({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  width: 28,
-                  height: 28,
+                  width: headerCollapsed ? 24 : 28,
+                  height: headerCollapsed ? 24 : 28,
                   padding: 0,
                   border: "none",
                   borderRadius: 3,
@@ -919,7 +930,7 @@ export default function DockPage({
                   cursor: "pointer",
                 }}
               >
-                <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={14} />
+                <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={headerCollapsed ? 12 : 14} />
               </button>
               {!headerCollapsed && (
                 <button
@@ -1603,6 +1614,7 @@ export default function DockPage({
                           onStage={handleStage}
                           productionDefaults={productionSettings.bible}
                           appConnected={appConnected}
+                          isActive={activeTab === "bible"}
                           presentationOutputTarget={presentationOutputTarget}
                           onSaveFeedback={showDockSaveFeedback}
                           showHistory={showHistory}
@@ -1623,6 +1635,7 @@ export default function DockPage({
                       onStage={handleStage}
                       productionDefaults={productionSettings.bible}
                       appConnected={appConnected}
+                      isActive={activeTab === "bible"}
                       presentationOutputTarget={presentationOutputTarget}
                       onSaveFeedback={showDockSaveFeedback}
                       fullscreenOnly={hideLowerThirdControls}
@@ -1638,8 +1651,12 @@ export default function DockPage({
                     staged={staged}
                     onStage={handleStage}
                     productionDefaults={productionSettings.worship}
+                    isActive={activeTab === "worship"}
                     presentationOutputTarget={presentationOutputTarget}
                     fullscreenOnly={hideLowerThirdControls}
+                    showSubtabs
+                    compactVerticalNav={verticalTabs}
+                    initialSubTab={shellPreferences.activeTab === "notes" ? "notes" : undefined}
                   />
                 </div>
               )}
@@ -1648,6 +1665,7 @@ export default function DockPage({
                   <DockMediaTab
                     staged={staged}
                     onStage={handleStage}
+                    isActive={activeTab === "media"}
                     presentationOutputTarget={presentationOutputTarget}
                   />
                 </div>
@@ -1682,6 +1700,9 @@ export default function DockPage({
               type="button"
               className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
+              onPointerEnter={() => preloadDockTab(tab.id)}
+              onPointerDown={() => preloadDockTab(tab.id)}
+              onFocus={() => preloadDockTab(tab.id)}
               aria-label={tab.label}
               title={tab.label}
               data-label={tab.label}

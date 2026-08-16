@@ -3002,7 +3002,7 @@
         return false;
       }
       function applyObsBrowserEventCss(cssText) {
-        if (typeof cssText !== 'string') return;
+        if (typeof cssText !== 'string') return false;
         let styleEl = document.getElementById('obs-cssoverride');
         if (!styleEl) {
           styleEl = document.createElement('style');
@@ -3024,6 +3024,12 @@
           '--box-bg-image',
           '--mce-output-font-family',
         ];
+        const backgroundPropertyNames = [
+          '--bg-image',
+          '--bg-pattern-data',
+          '--box-bg-image',
+          '--logo-data-uri',
+        ];
         let rootRule = null;
         try {
           const rules = styleEl.sheet && styleEl.sheet.cssRules;
@@ -3043,13 +3049,30 @@
             rootRule = styleEl.sheet && styleEl.sheet.cssRules && styleEl.sheet.cssRules[0];
           } catch { }
         }
-        if (!rootRule || !rootRule.style) return;
+        if (!rootRule || !rootRule.style) return false;
+        const previousBackgroundValues = backgroundPropertyNames.map((name) => (
+          rootRule.style.getPropertyValue(name).trim()
+        ));
+        const nextBackgroundValues = backgroundPropertyNames.map((name) => (
+          extractCssCustomPropertyValue(cssText, name)
+        ));
         propertyNames.forEach((name) => {
           const value = extractCssCustomPropertyValue(cssText, name);
           if (value) rootRule.style.setProperty(name, value);
           else rootRule.style.removeProperty(name);
         });
+        const backgroundChanged = nextBackgroundValues.some((value, index) => (
+          value !== previousBackgroundValues[index]
+        ));
+        if (backgroundChanged) {
+          // A data URI is intentionally replaced by the same __FROM_CSS__
+          // marker in the packet. Invalidate the JSON theme cache when the
+          // injected asset itself changes so the new pattern/image is applied.
+          lastAppliedThemeKeyByMode.fullscreen = '';
+          lastAppliedThemeKeyByMode['lower-third'] = '';
+        }
         lastCssOverlayData = '';
+        return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
         try {
@@ -3066,8 +3089,12 @@
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           if (targetSource) lastTargetSource = targetSource;
-          processOverlayUpdate(packet);
+          // Apply the CSS variables before rendering the packet. Large image
+          // and SVG pattern backgrounds are delivered through CSS with a
+          // __FROM_CSS__ marker; rendering first makes the theme resolve the
+          // previous background and leaves the new one waiting for a reload.
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
+          processOverlayUpdate(packet);
           return true;
         } catch { }
         return false;

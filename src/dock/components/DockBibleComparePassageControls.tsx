@@ -21,7 +21,7 @@ interface Props {
   onNavigationModeChange: (mode: ComparePassageNavigation) => void;
   onAddPassage: () => void;
   onRemovePassage: (id: string) => void;
-  onApply: () => void;
+  onSendToObs: () => void;
 }
 
 export default function DockBibleComparePassageControls({
@@ -38,10 +38,10 @@ export default function DockBibleComparePassageControls({
   onNavigationModeChange,
   onAddPassage,
   onRemovePassage,
-  onApply,
+  onSendToObs,
 }: Props) {
   const { t } = useTranslation();
-  const canApply = compareEnabled
+  const canSendToObs = compareEnabled
     && drafts.length >= 2
     && previews.length === drafts.length
     && previews.every((preview) => Boolean(preview.parsed && preview.text && !preview.loading && !preview.error));
@@ -180,18 +180,18 @@ export default function DockBibleComparePassageControls({
       </button>
 
       <div className="dock-bible-compare-popover__hint dock-bible-compare-popover__hint--block">
-        {t("dock.compare.passageApplyHint", "Use the active passage selector in the Bible reader, then Apply to preview and present all passages.")}
+        {t("dock.compare.passageSendToObsHint", "Use the active passage selector in the Bible reader, then Send to OBS to send all passages.")}
       </div>
 
       <button
         type="button"
         className="dock-bible-compare-popover__send"
-        onClick={onApply}
-        disabled={!canApply}
-        title={t("dock.compare.applyPassages", "Apply and present passages")}
+        onClick={onSendToObs}
+        disabled={!canSendToObs}
+        title={t("common.sendToObs", "Send to OBS")}
       >
         <Icon name="cast" size={13} />
-        {t("dock.compare.applyPassages", "Apply & Present")}
+        {t("common.sendToObs", "Send to OBS")}
       </button>
     </>
   );

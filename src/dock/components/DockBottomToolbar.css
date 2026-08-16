@@ -1,7 +1,7 @@
 /**
  * DockBottomToolbar.css
  *
- * Compact one-row layout at every width.
+ * Compact layout with a two-row fallback for ultra-narrow docks.
  * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
@@ -380,6 +380,11 @@
   flex-shrink: 0;
 }
 
+/* At 350px and below, Quick Edit moves into the existing ⋯ menu. */
+.dock-btm-toolbar--narrow .dock-btm-toolbar__inline-action {
+  display: none;
+}
+
 /* ── Overflow menu container ── */
 .dock-btm-overflow {
   position: relative;
@@ -424,6 +429,46 @@
   display: none;
   flex-direction: column;
   gap: 2px;
+}
+
+.dock-btm-toolbar--narrow .dock-btm-overflow__narrow-actions {
+  display: flex;
+}
+
+/* At 239px and below, keep Bible navigation above the remaining controls. */
+.dock-btm-toolbar.dock-btm-toolbar--ultra-narrow .dock-btm-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.dock-btm-toolbar.dock-btm-toolbar--ultra-narrow .dock-btm-toolbar__center {
+  order: 1;
+  flex: 0 0 100%;
+  width: 100%;
+  grid-column: auto;
+  justify-self: auto;
+  justify-content: center;
+}
+
+.dock-btm-toolbar.dock-btm-toolbar--ultra-narrow .dock-btm-segmented {
+  order: 2;
+  flex: 0 0 auto;
+  width: fit-content;
+}
+
+.dock-btm-toolbar.dock-btm-toolbar--ultra-narrow .dock_bottom_bar {
+  order: 3;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 0;
+  gap: 4px;
+  grid-column: auto;
+  justify-self: auto;
 }
 
 .dock-btm-overflow__children {
@@ -510,6 +555,17 @@
   bottom: calc(100% + 6px);
   right: 0;
   left: auto;
+}
+
+/* Overflow actions stay readable at narrow widths: labels only, no duplicate icons. */
+.dock-btm-overflow__narrow-actions > * svg,
+.dock-btm-overflow__children > * > button > svg {
+  display: none;
+}
+
+.dock-btm-overflow__narrow-actions > *,
+.dock-btm-overflow__children > * > button {
+  gap: 0;
 }
 
 /* ══════════════════════════════════════════════════

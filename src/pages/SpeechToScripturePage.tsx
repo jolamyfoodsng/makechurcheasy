@@ -428,7 +428,7 @@ export default function SpeechToScripturePage() {
       stoppedForCreditFailureRef.current = false;
       track("sts_listening_started", { mic: selectedMic || "default" });
       trackVoiceSessionStarted();
-      void lmDockService.startListening(selectedMic || undefined);
+      await lmDockService.startListening(selectedMic || undefined);
     } catch (err) {
       console.warn("[SpeechToScripture] ❌ Access check FAILED (network/error):", err);
       const isNetworkError = err instanceof TypeError && /fetch|network/i.test(err.message);
@@ -681,7 +681,7 @@ export default function SpeechToScripturePage() {
 
   // Track AssemblyAI errors
   useEffect(() => {
-    if (snapshot.status === "error" && isOnline) {
+    if (snapshot.status === "error") {
       setAssemblyAIError(true);
     }
     if (snapshot.status === "listening" || snapshot.status === "connecting") {
@@ -1605,6 +1605,11 @@ export default function SpeechToScripturePage() {
             <p className="sts3-lock-desc">
               {t("verseAi.voiceBibleUnavailableDesc")}
             </p>
+            {snapshot.error && (
+              <p className="sts3-lock-desc" role="alert" style={{ color: "var(--error)" }}>
+                {snapshot.error}
+              </p>
+            )}
             <button
               className="sts3-btn sts3-btn--primary"
               onClick={() => {

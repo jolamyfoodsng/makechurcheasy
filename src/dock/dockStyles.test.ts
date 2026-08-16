@@ -53,4 +53,29 @@ describe("dock shared styles", () => {
     expect(cssBlock(".dock-worship-slide-card__text,")).toContain("overflow-wrap: anywhere;");
     expect(cssBlock(".dock-worship-slide-card__translation {")).toContain("word-break: break-word;");
   });
+
+  it("compresses the Worship/Notes controls in a micro dock", () => {
+    expect(dockCss).toContain("@media screen and (max-width: 300px)");
+    expect(dockCss).toContain(".dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab {\n  position: relative;");
+    expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__header {\n    grid-template-columns: 28px minmax(0, 1fr) auto;");
+    expect(dockCss).toContain(".dock-module--worship .dock-worship-lyrics-search .dock-media-search__input {");
+  });
+
+  it("moves the selected song controls into the compact row at 600px height", () => {
+    expect(dockCss).toContain("@media screen and (max-height: 600px)");
+    expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__compact-search");
+    expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__overflow-wrap");
+  });
+
+  it("anchors Worship/Notes tabs to the left instead of stretching them", () => {
+    const tabs = cssBlock(".dock-worship-subtab-bar {");
+    const tab = cssBlock(".dock-worship-subtab {");
+
+    expect(tabs).toContain("width: max-content;");
+    expect(tabs).toContain("max-width: calc(100% - 16px);");
+    expect(tabs).toContain("justify-content: flex-start;");
+    expect(tab).toContain("flex: 0 0 auto;");
+    expect(tab).toContain("justify-content: flex-start;");
+    expect(tab).not.toContain("flex: 1 1 0");
+  });
 });

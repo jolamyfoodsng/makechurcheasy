@@ -895,6 +895,8 @@ class LmDockService {
     this.lastQueuedQuoteSearchAt = 0;
     this.pushStatus();
 
+    let nativeStartCompleted = false;
+
     try {
       if (!hasTauriInvoke()) {
         throw new Error("Speech listening must run inside the desktop app so the microphone engine can start.");
@@ -922,12 +924,13 @@ class LmDockService {
       }
 
       // Listen for transcript events from Rust backend
-      this.transcriptUnlisten = await safeTauriListen<{
-        text: string;
-        end_of_turn: boolean;
-        audio_start: number;
-        audio_end: number;
-      }>("assemblyai-transcript", (event) => {
+      this.transcriptUnlisten = await withTimeout(
+        safeTauriListen<{
+          text: string;
+          end_of_turn: boolean;
+          audio_start: number;
+          audio_end: number;
+        }>("assemblyai-transcript", (event) => {
         if (token !== this.sessionToken) return;
         const { text, end_of_turn, audio_start, audio_end } = event.payload;
         this.lastSpeechReceivedAt = Date.now();
@@ -984,16 +987,20 @@ class LmDockService {
             this.scheduleLiveQuoteSearch(text);
           }
         }
-      });
+        }),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing audio events.",
+      );
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
       }
 
       // Listen for status events from Rust backend
-      this.statusUnlisten = await safeTauriListen<{ status: string }>(
-        "assemblyai-status",
-        (event) => {
+      this.statusUnlisten = await withTimeout(
+        safeTauriListen<{ status: string }>(
+          "assemblyai-status",
+          (event) => {
           if (token !== this.sessionToken) return;
           const { status } = event.payload;
           if (status === "connected") {
@@ -1009,7 +1016,10 @@ class LmDockService {
             this.pushStatus();
             this.recoverFromUnexpectedStreamEnd("The speech connection closed unexpectedly.");
           }
-        },
+          },
+        ),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing connection events.",
       );
       if (token !== this.sessionToken) {
         await this.cleanup();
@@ -1017,9 +1027,10 @@ class LmDockService {
       }
 
       // Listen for audio level events from Rust backend
-      this.levelUnlisten = await safeTauriListen<{ level: number }>(
-        "assemblyai-audio-level",
-        (event) => {
+      this.levelUnlisten = await withTimeout(
+        safeTauriListen<{ level: number }>(
+          "assemblyai-audio-level",
+          (event) => {
           if (token !== this.sessionToken) return;
           const level = event.payload.level;
           this.snapshot = { ...this.snapshot, inputLevel: level };
@@ -1037,7 +1048,10 @@ class LmDockService {
             this.lastLevelValue = level;
             this.notifyListeners();
           }
-        },
+          },
+        ),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing the audio meter.",
       );
       if (token !== this.sessionToken) {
         await this.cleanup();
@@ -1088,8 +1102,9 @@ class LmDockService {
       await withTimeout(
         nativeStartPromise,
         LmDockService.MIC_START_TIMEOUT_MS,
-        "Microphone start timed out. Check macOS microphone permission or choose another input.",
+        "Microphone start timed out. Check microphone permission, the default input device, or choose another input.",
       );
+      nativeStartCompleted = true;
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
@@ -1106,7 +1121,11 @@ class LmDockService {
       }
       console.warn("[LmDockService] Failed to start listening:", err);
       const msg = err instanceof Error ? err.message : String(err);
-      const stopStartup = err instanceof LmStartupTimeoutError || isLocalStartupFailure(msg);
+      // Errors thrown from this method happen during startup. Runtime network
+      // failures are reported through `assemblyai-status` and handled by the
+      // reconnect path there. Retrying an unhandled startup error would keep
+      // cycling the UI back to "Requesting Mic" forever.
+      const stopStartup = !nativeStartCompleted || err instanceof LmStartupTimeoutError || isLocalStartupFailure(msg);
       if (stopStartup) {
         this.shouldKeepListening = false;
         this.startInFlight = false;

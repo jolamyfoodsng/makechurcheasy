@@ -1006,9 +1006,9 @@ export default function DockLowerThirdEditor({
           onClick={handleSend}
           disabled={sending}
           style={{ flex: 1 }}
-          title={t("lowerThird.goLive")}>
+          title={t("common.sendToObs", "Send to OBS")}>
           <Icon name="play_arrow" size={14} />
-          <span>{t("lowerThird.goLive")}</span>
+          <span>{t("common.sendToObs", "Send to OBS")}</span>
         </button>
         {onAnimateOut && (
           <button

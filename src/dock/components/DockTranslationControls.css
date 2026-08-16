@@ -53,6 +53,27 @@
   border: 0;
 }
 
+.dock-translation--compact-label .dock-translation__trigger {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  justify-content: flex-start;
+}
+
+.dock-translation--compact-label .dock-translation__trigger-label {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: nowrap;
+  border: 0;
+}
+
 .dock-translation__trigger:hover,
 .dock-translation__trigger--active {
   border-color: var(--dock-accent);
@@ -92,7 +113,7 @@
   top: 0;
   right: auto;
   left: 0;
-  width: min(320px, calc(100vw - 24px));
+  width: min(300px, calc(100vw - 20px));
   margin-top: 0;
   max-height: calc(100vh - 16px);
   overflow-y: auto;

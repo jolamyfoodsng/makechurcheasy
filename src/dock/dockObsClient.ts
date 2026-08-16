@@ -16,7 +16,7 @@
  *   4. "Send to Preview" → Auto-enable Studio Mode if off, then push
  *      overlay to Preview scene. Hide overlay in Program to prevent
  *      the global URL update from leaking across.
- *   5. "Go Live"         → push overlay to the current Program scene.
+ *   5. "Send to OBS"     → send overlay to the configured OBS destination.
  *      Hide overlay in Preview to prevent cross-contamination.
  *   6. "Clear"           → blank / hide the overlay source.
  *

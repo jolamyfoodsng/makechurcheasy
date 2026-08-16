@@ -356,6 +356,7 @@ export default function DockNotesTab({
   const [quickUpdateImmediately, setQuickUpdateImmediately] = useState(() => initialPrefs.quickUpdateImmediately !== false);
   const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
+  const [showCompactSummaryActions, setShowCompactSummaryActions] = useState(false);
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
   const [noteSlideEditor, setNoteSlideEditor] = useState<{ index: number; label: string; text: string } | null>(null);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
@@ -365,6 +366,7 @@ export default function DockNotesTab({
   const processedAppendCommandIdsRef = useRef<Set<string>>(new Set());
   const pendingQuickSettingsRefreshRef = useRef(false);
   const notesTranslationChangeRef = useRef(false);
+  const compactSummaryActionsRef = useRef<HTMLDivElement>(null);
 
   const filteredNotes = useMemo(() => {
     if (!debouncedSearchQuery.trim()) return notes;
@@ -415,6 +417,23 @@ export default function DockNotesTab({
     setNotesTranslation(nextTranslation);
     setNoteSlidesSearchQuery("");
   }, [notesTranslationSourceSignature, selectedNote?.id]);
+
+  useEffect(() => {
+    if (!showCompactSummaryActions) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (compactSummaryActionsRef.current && !compactSummaryActionsRef.current.contains(event.target as Node)) {
+        setShowCompactSummaryActions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showCompactSummaryActions]);
+
+  useEffect(() => {
+    setShowCompactSummaryActions(false);
+  }, [selectedNote?.id]);
 
   const activeSlideIndex = useMemo(() => {
     if (selectedSlideIdx !== null && selectedSlideIdx < selectedNoteSlides.length) return selectedSlideIdx;
@@ -955,6 +974,11 @@ export default function DockNotesTab({
           setEditingNote(null);
           return;
         }
+        if (showCompactSummaryActions) {
+          event.preventDefault();
+          setShowCompactSummaryActions(false);
+          return;
+        }
         if (targetElement?.closest(".dtb-modal, .dock-dialog")) return;
         if (selectedNote) {
           event.preventDefault();
@@ -985,20 +1009,28 @@ export default function DockNotesTab({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActive, showNoteEditor, selectedNote, selectedNoteSlides, activeSlideIndex, clearNotesFromConfiguredOutput, onStage, presentationLinkMode, pushNoteSlide]);
+  }, [isActive, showNoteEditor, showCompactSummaryActions, selectedNote, selectedNoteSlides, activeSlideIndex, clearNotesFromConfiguredOutput, onStage, presentationLinkMode, pushNoteSlide]);
 
   return (
     <div className="dock-module dock-module--worship">
       {!selectedNote ? (
         <>
           <section className="dock-console-panel dock-console-panel--toolbar">
-            <div className="dock-console-header">
-              <div>
-                <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow"></div>
-                <div className="dock-console-header__eyebrow"></div>
-                {/* <div className="dock-console-header__eyebrow">Search Notes</div> */}
-                <div className="dock-console-header__eyebrow"></div>
+            <div className="dock-console-header dock-notes-browser-toolbar">
+              <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
+                <Icon name="search" size={14} className="dock-search__icon" />
+                <input
+                  className="dock-input"
+                  placeholder={t("notes.searchPlaceholder")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label={t("notes.searchPlaceholder")}
+                />
+                {searchQuery && (
+                  <button type="button" className="dock-search__clear" onClick={() => setSearchQuery("")} aria-label={t("common.clear")} title={t("common.clear")}>
+                    <Icon name="close" size={13} />
+                  </button>
+                )}
               </div>
               <div className="dock-console-actions dock-console-actions--song-browser">
                 <DockSceneRoutingControl
@@ -1008,26 +1040,11 @@ export default function DockNotesTab({
                   disabled={presentationLinkMode}
                   title={t("notes.output")}
                 />
-                <button type="button" className="dock-console-toggle" onClick={openNewNote} title={t("notes.addNote")} aria-label={t("notes.addNote")}>
+                <button type="button" className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add" onClick={openNewNote} title={t("notes.addNote")} aria-label={t("notes.addNote")}>
                   <Icon name="add" size={13} />
-                  <span className="dock-console-toggle__label">{t("notes.addNote")}</span>
+                  <span className="dock-console-toggle__label">{t("common.add")}</span>
                 </button>
               </div>
-            </div>
-            <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
-              <Icon name="search" size={14} className="dock-search__icon" />
-              <input
-                className="dock-input"
-                placeholder={t("notes.searchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label={t("notes.searchPlaceholder")}
-              />
-              {searchQuery && (
-                <button type="button" className="dock-search__clear" onClick={() => setSearchQuery("")} aria-label={t("common.clear")} title={t("common.clear")}>
-                  <Icon name="close" size={13} />
-                </button>
-              )}
             </div>
           </section>
 
@@ -1075,51 +1092,115 @@ export default function DockNotesTab({
         <>
           <section className="dock-console-panel dock-console-panel--toolbar dock-worship-summary">
             <div className="dock-worship-summary__header">
-              <div className="dock-worship-summary__left">
-                <button
-                  type="button"
-                  className="dock-worship-back-btn"
-                  onClick={() => {
-                    setSelectedNote(null);
-                    setSelectedSlideIdx(null);
-                    setVisibleSlideIdx(null);
-                  }}
-                  title={t("common.back")}
-                >
-                  <Icon name="arrow_back" size={14} />
-                </button>
-                <div className="dock-worship-summary__copy">
-                  <div className="dock-worship-summary__title">{selectedNoteDisplayTitle}</div>
-                  <div className="dock-worship-summary__artist">{t("notes.note")}</div>
-                  <div className="dock-worship-summary__meta">
-                    <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? t("notes.slide") : t("notes.slides")}</span>
-                    <span className="dock-worship-summary__meta-dot">·</span>
-                    <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? t("notes.linePerNote") : t("notes.linesPerNote")}</span>
+              <button
+                type="button"
+                className="dock-worship-back-btn"
+                onClick={() => {
+                  setSelectedNote(null);
+                  setSelectedSlideIdx(null);
+                  setVisibleSlideIdx(null);
+                  setShowCompactSummaryActions(false);
+                }}
+                title={t("common.back")}
+              >
+                <Icon name="arrow_back" size={14} />
+              </button>
+              <div className="dock-worship-summary__copy">
+                <div className="dock-worship-summary__title">{selectedNoteDisplayTitle}</div>
+                <div className="dock-worship-summary__meta">
+                  <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? t("notes.slide") : t("notes.slides")}</span>
+                  <span className="dock-worship-summary__meta-dot">·</span>
+                  <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? t("notes.linePerNote") : t("notes.linesPerNote")}</span>
+                </div>
+              </div>
+                <div className="dock-worship-summary__compact-search">
+                  <div className="dock-media-search dock-media-search--plain">
+                    <input
+                      className="dock-media-search__input"
+                      placeholder={t("notes.searchSlidesPlaceholder")}
+                      value={noteSlidesSearchQuery}
+                      onChange={(event) => setNoteSlidesSearchQuery(event.target.value)}
+                      aria-label={t("notes.searchSlidesPlaceholder")}
+                    />
+                    {noteSlidesSearchQuery && (
+                      <button
+                        type="button"
+                        className="dock-media-search__clear"
+                        onClick={() => setNoteSlidesSearchQuery("")}
+                        aria-label={t("common.clear")}
+                        title={t("common.close")}
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="dock-worship-summary__actions">
+                  <div className="dock-worship-summary__primary-actions">
+                    <DockTranslationControls
+                      compact
+                      sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
+                      value={effectiveNotesTranslation}
+                      onChange={handleNotesTranslationChange}
+                    />
+                    <DockAutoAdvanceControl
+                      items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
+                      selectedIndex={selectedNoteAutoAdvanceIndex}
+                      onSelectIndex={handleAutoAdvanceNoteSelection}
+                      onAdvance={handleAutoAdvanceNoteStep}
+                      onStart={handleAutoAdvanceStart}
+                      onActiveChange={setAutoAdvanceActive}
+                      itemKind="note"
+                      storageScope="notes"
+                    />
+                  </div>
+                  <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title={t("notes.editNote")} aria-label={t("notes.editNote")}>
+                    <Icon name="edit" size={16} />
+                  </button>
+                  <div className="dock-worship-summary__overflow-wrap" ref={compactSummaryActionsRef}>
+                    <button
+                      type="button"
+                      className="dock-worship-summary__overflow-trigger"
+                      onClick={() => setShowCompactSummaryActions((open) => !open)}
+                      aria-label={t("common.moreActions", "More actions")}
+                      title={t("common.moreActions", "More actions")}
+                      aria-haspopup="menu"
+                      aria-expanded={showCompactSummaryActions}
+                    >
+                      <Icon name="more_vert" size={14} />
+                    </button>
+                    <div
+                      className="dock-worship-summary__overflow-menu"
+                      role="menu"
+                      aria-label={t("common.moreActions", "More actions")}
+                      hidden={!showCompactSummaryActions}
+                    >
+                        <div className="dock-worship-summary__overflow-item">
+                          <DockTranslationControls
+                            compact
+                            compactLabel
+                            sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
+                            value={effectiveNotesTranslation}
+                            onChange={handleNotesTranslationChange}
+                          />
+                        </div>
+                        <div className="dock-worship-summary__overflow-item">
+                          <DockAutoAdvanceControl
+                            items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
+                            selectedIndex={selectedNoteAutoAdvanceIndex}
+                            onSelectIndex={handleAutoAdvanceNoteSelection}
+                            onAdvance={handleAutoAdvanceNoteStep}
+                            onStart={handleAutoAdvanceStart}
+                            onActiveChange={setAutoAdvanceActive}
+                            itemKind="note"
+                            storageScope="notes"
+                            compactLabel
+                          />
+                        </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="dock-worship-summary__actions">
-                <DockTranslationControls
-                  compact
-                  sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
-                  value={effectiveNotesTranslation}
-                  onChange={handleNotesTranslationChange}
-                />
-                <DockAutoAdvanceControl
-                  items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
-                  selectedIndex={selectedNoteAutoAdvanceIndex}
-                  onSelectIndex={handleAutoAdvanceNoteSelection}
-                  onAdvance={handleAutoAdvanceNoteStep}
-                  onStart={handleAutoAdvanceStart}
-                  onActiveChange={setAutoAdvanceActive}
-                  itemKind="note"
-                  storageScope="notes"
-                />
-                <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title={t("notes.editNote")} aria-label={t("notes.editNote")}>
-                  <Icon name="edit" size={16} />
-                </button>
-              </div>
-            </div>
           </section>
 
           <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
@@ -1266,6 +1347,16 @@ export default function DockNotesTab({
                     <Icon name="tune" size={14} />
                   </button>
                 }
+                narrowOverflowActions={
+                  <button
+                    type="button"
+                    className="dock-btm-overflow__menu-item"
+                    data-dock-close-overflow="true"
+                    onClick={() => setShowThemeSettings(true)}
+                  >
+                    <span>{t("worship.quickEdits", "Quick Edits")}</span>
+                  </button>
+                }
                 children={!presentationLinkMode ? (
                   <DockSceneRoutingControl
                     module="notes"
@@ -1306,6 +1397,10 @@ export default function DockNotesTab({
         onQuickSettingsSave={(settings) => {
           if (overlayMode === "fullscreen") setFullscreenQuickSettings(settings);
           else setLowerThirdQuickSettings(settings);
+          if (overlayVisible && activeSlideIndex !== null) {
+            pendingQuickSettingsRefreshRef.current = true;
+            setQuickSettingsRefreshNonce((current) => current + 1);
+          }
         }}
         title={t("notes.theme")}
         subtitle={t("notes.themeDescription")}

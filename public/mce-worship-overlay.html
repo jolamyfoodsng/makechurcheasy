@@ -2165,15 +2165,33 @@
       function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
       function applyObsBrowserEventCss(cssText) {
-        if (typeof cssText !== 'string') return;
+        if (typeof cssText !== 'string') return false;
         let styleEl = document.getElementById('obs-cssoverride');
         if (!styleEl) {
           styleEl = document.createElement('style');
           styleEl.id = 'obs-cssoverride';
           document.head.appendChild(styleEl);
         }
+        const backgroundPropertyNames = [
+          '--bg-image',
+          '--bg-pattern-data',
+          '--box-bg-image',
+          '--logo-data-uri',
+        ];
+        const previousCssText = styleEl.textContent || '';
+        const backgroundChanged = backgroundPropertyNames.some((name) => (
+          extractCssCustomPropertyValue(previousCssText, name)
+          !== extractCssCustomPropertyValue(cssText, name)
+        ));
         styleEl.textContent = cssText;
+        if (backgroundChanged) {
+          // The packet uses __FROM_CSS__ for large assets, so the serialized
+          // theme can stay identical while the actual image/pattern changes.
+          lastAppliedThemeKeyByMode.fullscreen = '';
+          lastAppliedThemeKeyByMode['lower-third'] = '';
+        }
         lastCssOverlayData = '';
+        return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
         try {
@@ -2185,8 +2203,11 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
-          processOverlayUpdate(packet);
+          // Background images and SVG patterns may be represented by the
+          // __FROM_CSS__ marker. Install their CSS variables before applying
+          // the theme so the packet renders the newly saved background.
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
+          processOverlayUpdate(packet);
           return true;
         } catch { }
         return false;

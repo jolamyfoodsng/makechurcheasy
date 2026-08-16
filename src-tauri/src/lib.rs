@@ -2317,13 +2317,15 @@ fn search_african_gospel_lyrics(
         }
 
         let title = clean_inline_text(&link.text().collect::<Vec<_>>().join(" "));
-        let detail_html = client
-            .get(&url)
-            .send()
-            .and_then(|response| response.error_for_status())
-            .map_err(|err| format!("African Gospel Lyrics detail fetch failed: {}", err))?
-            .text()
-            .map_err(|err| format!("African Gospel Lyrics detail decode failed: {}", err))?;
+        let Ok(detail_response) = client.get(&url).send() else {
+            continue;
+        };
+        let Ok(detail_response) = detail_response.error_for_status() else {
+            continue;
+        };
+        let Ok(detail_html) = detail_response.text() else {
+            continue;
+        };
         let detail_doc = Html::parse_document(&detail_html);
         let raw_content = detail_doc
             .select(&content_selector)
@@ -2496,23 +2498,16 @@ fn search_online_song_lyrics_blocking(
     let mut results = Vec::new();
     let search_queries = build_online_lyrics_search_queries(&trimmed_query);
 
-    // Prefer LRCLIB because it returns structured track metadata and either
-    // plain or synchronized lyrics. The other providers remain a fallback
-    // for songs that are not present in LRCLIB.
-    for search_query in &search_queries {
-        match search_lrclib(&client, search_query) {
-            Ok(lrclib_results) => {
-                let finished = finish_online_lyrics_results(lrclib_results);
-                if !finished.is_empty() {
-                    return Ok(finished);
-                }
-            }
-            Err(err) => eprintln!("[OnlineLyrics] {}", err),
-        }
-    }
-
+    // Search every provider for every normalized query. LRCLIB is useful for
+    // structured metadata, while the regional lyric sites often contain
+    // Nigerian and other African songs that LRCLIB does not have. Returning
+    // as soon as one provider responds hid those better matches from users.
     for search_query in &search_queries {
         std::thread::scope(|scope| {
+            let lrclib_client = client.clone();
+            let lrclib_query = search_query.clone();
+            let lrclib = scope.spawn(move || search_lrclib(&lrclib_client, &lrclib_query));
+
             let gospel_client = client.clone();
             let gospel_query = search_query.clone();
             let gospellyrics = scope.spawn(move || {
@@ -2522,6 +2517,18 @@ fn search_online_song_lyrics_blocking(
                     "GospellyricsNG",
                     "https://gospellyricsng.com/wp-json/wp/v2/posts",
                     &gospel_query,
+                )
+            });
+
+            let gospel_songs_client = client.clone();
+            let gospel_songs_query = search_query.clone();
+            let gospel_songs = scope.spawn(move || {
+                search_wordpress_source(
+                    &gospel_songs_client,
+                    "gospelsongs",
+                    "GospelSongs.com.ng",
+                    "https://gospelsongs.com.ng/wp-json/wp/v2/posts",
+                    &gospel_songs_query,
                 )
             });
 
@@ -2554,49 +2561,37 @@ fn search_online_song_lyrics_blocking(
             let godlyrics =
                 scope.spawn(move || search_godlyrics(&godlyrics_client, &godlyrics_query));
 
+            let african_client = client.clone();
+            let african_query = search_query.clone();
+            let african =
+                scope.spawn(move || search_african_gospel_lyrics(&african_client, &african_query));
+
             for source_results in [
+                lrclib
+                    .join()
+                    .unwrap_or_else(|_| Err("LRCLIB search worker panicked".to_string())),
                 gospellyrics
                     .join()
                     .unwrap_or_else(|_| Err("GospellyricsNG search worker panicked".to_string())),
                 ceenaija
                     .join()
                     .unwrap_or_else(|_| Err("CeeNaija search worker panicked".to_string())),
+                gospel_songs.join().unwrap_or_else(|_| {
+                    Err("GospelSongs.com.ng search worker panicked".to_string())
+                }),
                 nglyrics
                     .join()
                     .unwrap_or_else(|_| Err("NgLyrics search worker panicked".to_string())),
                 godlyrics
                     .join()
                     .unwrap_or_else(|_| Err("GodLyrics search worker panicked".to_string())),
+                african.join().unwrap_or_else(|_| {
+                    Err("African Gospel Lyrics search worker panicked".to_string())
+                }),
             ] {
                 append_source_results(&mut results, source_results);
             }
         });
-
-        let finished = finish_online_lyrics_results(results.clone());
-        if !finished.is_empty() {
-            return Ok(finished);
-        }
-    }
-
-    for search_query in &search_queries {
-        std::thread::scope(|scope| {
-            let african_client = client.clone();
-            let african_query = search_query.clone();
-            let african =
-                scope.spawn(move || search_african_gospel_lyrics(&african_client, &african_query));
-
-            append_source_results(
-                &mut results,
-                african.join().unwrap_or_else(|_| {
-                    Err("African Gospel Lyrics search worker panicked".to_string())
-                }),
-            );
-        });
-
-        let finished = finish_online_lyrics_results(results.clone());
-        if !finished.is_empty() {
-            return Ok(finished);
-        }
     }
 
     Ok(finish_online_lyrics_results(results))

@@ -397,8 +397,8 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
           <button type="button" onClick={() => selectedCue && void sendCue(selectedCue, "preview")} disabled={!selectedCue || sending} title={t("common.preview")}>
             {t("common.preview")}
           </button>
-          <button type="button" onClick={() => selectedCue && void sendCue(selectedCue, "live")} disabled={!selectedCue || sending} title={t("planner.goLive", "Go Live")}>
-            {t("planner.goLive", "Go Live")}
+          <button type="button" onClick={() => selectedCue && void sendCue(selectedCue, "live")} disabled={!selectedCue || sending} title={t("common.sendToObs", "Send to OBS")}>
+            {t("common.sendToObs", "Send to OBS")}
           </button>
           <button type="button" onClick={() => sendRelativeCue(previousCue)} disabled={!previousCue || sending} title={t("common.prev")}>
             {t("common.prev")}
@@ -476,7 +476,7 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
 
       <div className="dock-planner-footer">
         <div className="dock-planner-hint">
-          {t("planner.hint", "Click a cue to Preview · Go Live sends it to Program · Next advances the rundown")}
+          {t("planner.hint", "Click a cue to Preview · Send to OBS sends it to the configured OBS destination · Next advances the rundown")}
         </div>
         <div className="dock-planner-quickadd">
           <input

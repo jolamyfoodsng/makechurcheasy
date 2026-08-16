@@ -1,7 +1,7 @@
 /**
  * DockBottomToolbar.tsx — Shared bottom toolbar for Bible & Worship tabs
  *
- * Always compact one-row layout at every width.
+ * Compact layout with a two-row fallback for ultra-narrow docks.
  * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
  */
 
@@ -83,8 +83,28 @@ export default function DockBottomToolbar({
   const overflowRef = useRef<HTMLDivElement>(null);
   const [showDisplayModeMenu, setShowDisplayModeMenu] = useState(false);
   const displayModeMenuRef = useRef<HTMLDivElement>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const [isUltraNarrow, setIsUltraNarrow] = useState(false);
   const visibilityIcon = sourceVisible ? "visibility_off" : "visibility";
   const modeToggleDisabled = morphing || overlayModeToggleDisabled;
+
+  // The dock can be narrower than the browser window, so use the toolbar's
+  // actual width instead of a viewport media query for the compact action set.
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar || typeof ResizeObserver === "undefined") return;
+
+    const updateNarrowState = () => {
+      const width = toolbar.clientWidth;
+      setIsNarrow(width <= 350);
+      setIsUltraNarrow(width <= 239);
+    };
+    updateNarrowState();
+
+    const observer = new ResizeObserver(updateNarrowState);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [collapsed]);
 
   // Close overflow on outside click
   useEffect(() => {
@@ -171,7 +191,10 @@ export default function DockBottomToolbar({
   }
 
   return (
-    <div className="dock-btm-toolbar dock-btm-toolbar--compact" ref={toolbarRef}>
+    <div
+      className={`dock-btm-toolbar dock-btm-toolbar--compact${isNarrow ? " dock-btm-toolbar--narrow" : ""}${isUltraNarrow ? " dock-btm-toolbar--ultra-narrow" : ""}`}
+      ref={toolbarRef}
+    >
       <div className={`dock-btm-toolbar__row${centerAction ? " dock-btm-toolbar__row--centered" : ""}`}>
         {!hideOverlayModeToggle && (
           <div
@@ -259,7 +282,15 @@ export default function DockBottomToolbar({
                 <div className="dock-btm-overflow__menu" role="menu">
                   {onClear && clearInOverflow && renderVisibilityButton("dock-btm-toolbar__icon-btn")}
                   {narrowOverflowActions && (
-                    <div className="dock-btm-overflow__narrow-actions">
+                    <div
+                      className="dock-btm-overflow__narrow-actions"
+                      onClick={(event) => {
+                        const target = event.target as Element | null;
+                        if (target?.closest("[data-dock-close-overflow='true']")) {
+                          setShowOverflow(false);
+                        }
+                      }}
+                    >
                       {narrowOverflowActions}
                     </div>
                   )}

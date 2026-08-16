@@ -44,6 +44,7 @@ interface DockAutoAdvanceControlProps {
   onActiveChange?: (active: boolean) => void;
   itemKind: AutoAdvanceItemKind;
   storageScope: AutoAdvanceStorageScope;
+  compactLabel?: boolean;
 }
 
 export interface DockAutoAdvanceViewport {
@@ -69,7 +70,7 @@ export function getAutoAdvancePopoverPosition(
 ): DockAutoAdvancePopoverPosition {
   const viewportPadding = 8;
   const gap = 8;
-  const maxWidth = 360;
+  const maxWidth = 330;
   const viewportWidth = Math.max(0, viewport.width);
   const viewportHeight = Math.max(0, viewport.height);
   const availableWidth = Math.max(0, viewportWidth - (viewportPadding * 2));
@@ -185,6 +186,7 @@ export default function DockAutoAdvanceControl({
   onActiveChange,
   itemKind,
   storageScope,
+  compactLabel = false,
 }: DockAutoAdvanceControlProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -442,11 +444,11 @@ export default function DockAutoAdvanceControl({
     : 0;
 
   return (
-    <div ref={rootRef} className="dock-auto-advance">
+    <div ref={rootRef} className={`dock-auto-advance${compactLabel ? " dock-auto-advance--labeled" : ""}`}>
       <button
         type="button"
         ref={triggerRef}
-        className={`dock-shell-icon-btn dock-auto-advance__trigger${isActive ? " dock-shell-icon-btn--active dock-auto-advance__trigger--active" : ""}`}
+        className={`dock-shell-icon-btn dock-auto-advance__trigger${compactLabel ? " dock-auto-advance__trigger--labeled" : ""}${isActive ? " dock-shell-icon-btn--active dock-auto-advance__trigger--active" : ""}`}
         onClick={() => setIsOpen((open) => !open)}
         disabled={items.length === 0}
         title={t("autoAdvance.open")}
@@ -454,6 +456,7 @@ export default function DockAutoAdvanceControl({
         aria-expanded={isOpen}
       >
         <Icon name={isActive ? "timer" : "playlist_play"} size={16} />
+        {compactLabel && <span className="dock-auto-advance__trigger-label">{t("autoAdvance.title")}</span>}
         {isActive && <span className="dock-auto-advance__dot" aria-hidden="true" />}
       </button>
 
@@ -489,10 +492,6 @@ export default function DockAutoAdvanceControl({
             </button>
           </div>
 
-          <div className="dock-auto-advance__badge">
-            <Icon name="check_circle" size={13} />
-            {t("autoAdvance.selectionOnly")}
-          </div>
           <p className="dock-auto-advance__description">{t("autoAdvance.description")}</p>
 
           {status !== "idle" && (
@@ -563,55 +562,41 @@ export default function DockAutoAdvanceControl({
           </div>
 
           <div className="dock-auto-advance__option-section">
-            <div className="dock-auto-advance__option-label">{t("autoAdvance.startFrom")}</div>
-            <div className="dock-auto-advance__options" role="radiogroup" aria-label={t("autoAdvance.startFrom")}>
-              <label className="dock-auto-advance__option">
-                <input
-                  type="radio"
-                  name={`auto-advance-start-${storageScope}`}
-                  checked={settings.startFrom === "current"}
-                  onChange={() => setSettings((current) => ({ ...current, startFrom: "current" }))}
-                  disabled={isActive}
-                />
-                <span>{t("autoAdvance.currentItem")}</span>
-              </label>
-              <label className="dock-auto-advance__option">
-                <input
-                  type="radio"
-                  name={`auto-advance-start-${storageScope}`}
-                  checked={settings.startFrom === "first"}
-                  onChange={() => setSettings((current) => ({ ...current, startFrom: "first" }))}
-                  disabled={isActive}
-                />
-                <span>{t("autoAdvance.firstItem")}</span>
-              </label>
-            </div>
+            <label className="dock-auto-advance__select-field">
+              <span className="dock-auto-advance__option-label">{t("autoAdvance.startFrom")}</span>
+              <select
+                className="dock-select dock-auto-advance__select"
+                value={settings.startFrom}
+                onChange={(event) => setSettings((current) => ({
+                  ...current,
+                  startFrom: event.target.value === "first" ? "first" : "current",
+                }))}
+                disabled={isActive}
+                aria-label={t("autoAdvance.startFrom")}
+              >
+                <option value="current">{t("autoAdvance.currentItem")}</option>
+                <option value="first">{t("autoAdvance.firstItem")}</option>
+              </select>
+            </label>
           </div>
 
           <div className="dock-auto-advance__option-section">
-            <div className="dock-auto-advance__option-label">{t("autoAdvance.whenListEnds")}</div>
-            <div className="dock-auto-advance__options" role="radiogroup" aria-label={t("autoAdvance.whenListEnds")}>
-              <label className="dock-auto-advance__option">
-                <input
-                  type="radio"
-                  name={`auto-advance-end-${storageScope}`}
-                  checked={settings.endBehavior === "stop"}
-                  onChange={() => setSettings((current) => ({ ...current, endBehavior: "stop" }))}
-                  disabled={isActive}
-                />
-                <span>{t("autoAdvance.stopAtEnd")}</span>
-              </label>
-              <label className="dock-auto-advance__option">
-                <input
-                  type="radio"
-                  name={`auto-advance-end-${storageScope}`}
-                  checked={settings.endBehavior === "loop"}
-                  onChange={() => setSettings((current) => ({ ...current, endBehavior: "loop" }))}
-                  disabled={isActive}
-                />
-                <span>{t("autoAdvance.loop")}</span>
-              </label>
-            </div>
+            <label className="dock-auto-advance__select-field">
+              <span className="dock-auto-advance__option-label">{t("autoAdvance.whenListEnds")}</span>
+              <select
+                className="dock-select dock-auto-advance__select"
+                value={settings.endBehavior}
+                onChange={(event) => setSettings((current) => ({
+                  ...current,
+                  endBehavior: event.target.value === "loop" ? "loop" : "stop",
+                }))}
+                disabled={isActive}
+                aria-label={t("autoAdvance.whenListEnds")}
+              >
+                <option value="stop">{t("autoAdvance.stopAtEnd")}</option>
+                <option value="loop">{t("autoAdvance.loop")}</option>
+              </select>
+            </label>
           </div>
 
           <div className="dock-auto-advance__footer">

@@ -5,7 +5,7 @@
  * Resolves straight into a fast chapter reader with stage / live actions per verse.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SearchResult as BibleKeywordResult } from "../../bible/bibleData";
 import { addFavorite, getFavorites, removeFavorite } from "../../bible/bibleDb";
@@ -616,7 +616,7 @@ function BibleOutputControlsMenu({
               aria-describedby="bible-keyword-match-direct-push-description"
             />
             <span className="dock-bible-reader__font-size-checkbox-copy">
-              <span>{t("bible.keywordMatchDirectPush", "Push keyword matches directly to OBS")}</span>
+              <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
               <small id="bible-keyword-match-direct-push-description">
                 {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
               </small>
@@ -1403,7 +1403,7 @@ function renderHighlightedKeywordText(text: string, query: string): React.ReactN
   ));
 }
 
-export default function DockBibleTab({
+function DockBibleTab({
   staged,
   onStage,
   productionDefaults,
@@ -1611,7 +1611,6 @@ export default function DockBibleTab({
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false);
   const [historyItems, setHistoryItems] = useState<BibleHistoryItem[]>([]);
   const historyPopoverRef = useRef<HTMLDivElement>(null);
-  const historyClickTimerRef = useRef<number | null>(null);
   const recordBibleHistory = useCallback((
     book: string,
     chapter: number,
@@ -1840,13 +1839,7 @@ export default function DockBibleTab({
     };
 
     document.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      if (historyClickTimerRef.current !== null) {
-        window.clearTimeout(historyClickTimerRef.current);
-        historyClickTimerRef.current = null;
-      }
-    };
+    return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
   useEffect(() => {
@@ -3455,10 +3448,10 @@ export default function DockBibleTab({
               return;
             } catch (retryErr) {
               message = retryErr instanceof Error ? retryErr.message : String(retryErr);
-              console.warn("[DockBibleTab] Go live verse retry failed:", retryErr);
+              console.warn("[DockBibleTab] Send to OBS verse retry failed:", retryErr);
             }
           }
-          console.warn("[DockBibleTab] Go live verse failed:", err);
+          console.warn("[DockBibleTab] Send to OBS verse failed:", err);
           setActionError(message);
         });
 
@@ -4072,8 +4065,9 @@ export default function DockBibleTab({
     backgroundPresetRef.current = backgroundPreset;
   }, [backgroundPreset]);
 
-  // Mode, theme, and line-count changes are saved locally. The next explicit
-  // Show/Go Live action is responsible for applying them to OBS/presentation.
+  // Mode, theme, and line-count changes are saved locally. If Bible is already
+  // live, the active OBS output is republished immediately; hidden output is
+  // picked up by the next explicit send.
 
   useEffect(() => {
     if (!initialVoiceBible) return;
@@ -4606,31 +4600,25 @@ export default function DockBibleTab({
   }, [handlePickResult]);
 
   const handleHistoryClick = useCallback((item: BibleHistoryItem) => {
-    if (historyClickTimerRef.current !== null) {
-      window.clearTimeout(historyClickTimerRef.current);
-    }
-    historyClickTimerRef.current = window.setTimeout(() => {
-      historyClickTimerRef.current = null;
-      setShowHistoryDropdown(false);
-      focusReference(item.book, item.chapter, item.verse);
-    }, 220);
+    setShowHistoryDropdown(false);
+    focusReference(item.book, item.chapter, item.verse);
   }, [focusReference]);
 
-  const handleHistoryDoubleClick = useCallback((item: BibleHistoryItem) => {
-    if (historyClickTimerRef.current !== null) {
-      window.clearTimeout(historyClickTimerRef.current);
-      historyClickTimerRef.current = null;
-    }
+  const handleHistoryPreview = useCallback((item: BibleHistoryItem) => {
     setShowHistoryDropdown(false);
-    void handlePickResult({
-      kind: "reference",
-      book: item.book,
-      chapter: item.chapter,
-      verse: item.verse,
-      label: item.reference,
-      score: 100,
+    void stageVerse(item.book, item.chapter, item.verse, {
+      translation: activeTranslation,
+      columnIndex: activeColumnIndex,
     });
-  }, [handlePickResult]);
+  }, [activeColumnIndex, activeTranslation, stageVerse]);
+
+  const handleHistorySendToObs = useCallback((item: BibleHistoryItem) => {
+    setShowHistoryDropdown(false);
+    void goLiveVerse(item.book, item.chapter, item.verse, {
+      translation: activeTranslation,
+      columnIndex: activeColumnIndex,
+    });
+  }, [activeColumnIndex, activeTranslation, goLiveVerse]);
 
   const openHistoryDropdown = useCallback(() => {
     setHistoryItems(getRecentBibleHistoryItems(loadBibleHistory()));
@@ -4847,7 +4835,7 @@ export default function DockBibleTab({
       preview.parsed && preview.text && !preview.loading && !preview.error
     ));
     if (readyPreviews.length !== comparePassageDrafts.length || readyPreviews.length < MIN_COMPARE_PASSAGES) {
-      setActionError(t("dock.compare.completePassages", "Enter at least two valid passages before applying."));
+      setActionError(t("dock.compare.completePassages", "Enter at least two valid passages before sending to OBS."));
       return;
     }
 
@@ -4858,7 +4846,7 @@ export default function DockBibleTab({
     const first = readyPreviews[0];
     if (!first.parsed) return;
     const columns = readyPreviews.map((preview) => {
-      if (!preview.parsed) throw new Error(t("dock.compare.completePassages", "Enter at least two valid passages before applying."));
+      if (!preview.parsed) throw new Error(t("dock.compare.completePassages", "Enter at least two valid passages before sending to OBS."));
       return {
         book: preview.parsed.book,
         chapter: preview.parsed.chapter,
@@ -5838,6 +5826,19 @@ export default function DockBibleTab({
                       {isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBibleActionsMenu(false);
+                      setShowReferencePopover(false);
+                      setShowComparePopover(true);
+                    }}
+                  >
+                    <Icon name="swap_horiz" size={14} />
+                    <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+                  </button>
                 </div>
               )}
             {showComparePopover && (
@@ -5942,10 +5943,10 @@ export default function DockBibleTab({
                   className="dock-bible-compare-popover__send"
                   onClick={() => void handleSendCompareToObs()}
                   disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                  title={t("dock.compare.apply", "Apply compare layout")}
+                  title={t("common.sendToObs", "Send to OBS")}
                 >
                   <Icon name="cast" size={13} />
-                  {t("common.apply", "Apply")}
+                  {t("common.sendToObs", "Send to OBS")}
                 </button>
                 </>
                 ) : (
@@ -5963,7 +5964,7 @@ export default function DockBibleTab({
                     onNavigationModeChange={setComparePassageNavigation}
                     onAddPassage={handleAddComparePassage}
                     onRemovePassage={handleRemoveComparePassage}
-                    onApply={() => void handleSendComparePassagesToObs()}
+                    onSendToObs={() => void handleSendComparePassagesToObs()}
                   />
                 )}
               </div>
@@ -6016,6 +6017,19 @@ export default function DockBibleTab({
                   <span>
                     {isTopbarExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowBibleActionsMenu(false);
+                    setShowReferencePopover(false);
+                    setShowComparePopover(true);
+                  }}
+                >
+                  <Icon name="swap_horiz" size={14} />
+                  <span>{t("dock.compare.toggle", "Compare Translations")}</span>
                 </button>
               </div>
             )}
@@ -6121,10 +6135,10 @@ export default function DockBibleTab({
                   className="dock-bible-compare-popover__send"
                   onClick={() => void handleSendCompareToObs()}
                   disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                  title={t("dock.compare.apply", "Apply compare layout")}
+                  title={t("common.sendToObs", "Send to OBS")}
                 >
                   <Icon name="cast" size={13} />
-                  {t("common.apply", "Apply")}
+                  {t("common.sendToObs", "Send to OBS")}
                 </button>
                 </>
                 ) : (
@@ -6142,7 +6156,7 @@ export default function DockBibleTab({
                     onNavigationModeChange={setComparePassageNavigation}
                     onAddPassage={handleAddComparePassage}
                     onRemovePassage={handleRemoveComparePassage}
-                    onApply={() => void handleSendComparePassagesToObs()}
+                    onSendToObs={() => void handleSendComparePassagesToObs()}
                   />
                 )}
               </div>
@@ -6340,20 +6354,43 @@ export default function DockBibleTab({
                   {showHistoryDropdown && historyItems.length > 0 && (
                     <div className="dock-bible-reader__history-dropdown">
                       {historyItems.map((item) => (
-                        <button
+                        <div
                           key={item.id}
-                          type="button"
                           className="dock-bible-reader__history-item"
-                          onClick={() => handleHistoryClick(item)}
-                          onDoubleClick={() => handleHistoryDoubleClick(item)}
-                          aria-label={`${item.reference}: ${t("bible.view", "View")}; double-click to ${presentationLinkMode ? "show on presentation screen" : t("bible.pushToObs", "push to OBS")}`}
-                          title={`${item.reference} — click to view, double-click to ${presentationLinkMode ? "show on presentation screen" : t("bible.pushToObs", "push to OBS")}`}
                         >
-                          <div className="dock-bible-reader__history-copy">
-                            <span className="dock-bible-reader__history-ref">{item.reference}</span>
-                            <span className="dock-bible-reader__history-text">{getHistoryVersePreview(item.verseText)}</span>
+                          <button
+                            type="button"
+                            className="dock-bible-reader__history-view"
+                            onClick={() => handleHistoryClick(item)}
+                            aria-label={`${item.reference}: ${t("bible.view", "View")}`}
+                            title={`${item.reference} — ${t("bible.view", "View")}`}
+                          >
+                            <span className="dock-bible-reader__history-copy">
+                              <span className="dock-bible-reader__history-ref">{item.reference}</span>
+                              <span className="dock-bible-reader__history-text">{getHistoryVersePreview(item.verseText)}</span>
+                            </span>
+                          </button>
+                          <div className="dock-bible-reader__history-actions">
+                            <button
+                              type="button"
+                              className="dock-btn dock-btn--ghost dock-btn--compact dock-bible-reader__history-action"
+                              onClick={() => handleHistoryPreview(item)}
+                              aria-label={`${t("common.preview", "Preview")} ${item.reference}`}
+                              title={t("common.preview", "Preview")}
+                            >
+                              {t("common.preview", "Preview")}
+                            </button>
+                            <button
+                              type="button"
+                              className="dock-btn dock-btn--primary dock-btn--compact dock-bible-reader__history-action"
+                              onClick={() => handleHistorySendToObs(item)}
+                              aria-label={`${t("common.sendToObs", "Send to OBS")} ${item.reference}`}
+                              title={t("common.sendToObs", "Send to OBS")}
+                            >
+                              {t("common.sendToObs", "Send to OBS")}
+                            </button>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -6551,23 +6588,6 @@ export default function DockBibleTab({
                     <span className="dock-bible-verse-row__text">{verse.text}</span>
                   </div>
                 )}
-                <div className="dock-hover-actions dock-bible-verse-row__actions">
-                  <button
-                    type="button"
-                    className="dock-hover-actions__btn dock-hover-actions__btn--program"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleVerseClick(verse.verse, activeColumnIndex, activeTranslation);
-                    }}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                    aria-label={`${presentationLinkMode ? t("bible.showOnPresentation", "Show on presentation") : t("bible.pushToObs", "Push to OBS")} — ${selectedBook} ${selectedChapter}:${verse.verse}`}
-                    title={presentationLinkMode ? t("bible.showOnPresentation", "Show on presentation") : t("bible.pushToObs", "Push to OBS")}
-                  >
-                    <Icon name="cast" size={13} />
-                  </button>
-                </div>
               </div>
             );
           })
@@ -6699,6 +6719,16 @@ export default function DockBibleTab({
               <Icon name="tune" size={14} />
             </button>
           }
+          narrowOverflowActions={
+            <button
+              type="button"
+              className="dock-btm-overflow__menu-item"
+              data-dock-close-overflow="true"
+              onClick={() => openThemeSettings("text")}
+            >
+              <span>{t("worship.quickEdits", "Quick Edits")}</span>
+            </button>
+          }
           children={
             <>
               <DockSceneRoutingControl
@@ -6762,7 +6792,7 @@ export default function DockBibleTab({
                     aria-describedby="dock-bible-keyword-direct-push-description"
                   />
                   <span className="dock-bible-keyword-modal__direct-push-copy">
-                    <span>{t("bible.keywordMatchDirectPush", "Push keyword matches directly to OBS")}</span>
+                    <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
                     <small id="dock-bible-keyword-direct-push-description">
                       {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
                     </small>
@@ -6815,9 +6845,9 @@ export default function DockBibleTab({
                     );
                     setKeywordActionResult(null);
                   }}
-                  title={t("common.show")}>
+                  title={t("common.sendToObs", "Send to OBS")}>
                   <Icon name="cast" size={14} />
-                  {t("common.show")}
+                  {t("common.sendToObs", "Send to OBS")}
                 </button>
               </div>
             </div>
@@ -6900,3 +6930,5 @@ export default function DockBibleTab({
     </BibleDockContainer >
   );
 }
+
+export default memo(DockBibleTab);
