@@ -147,6 +147,9 @@ jobs:
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
 
+      - name: Verify bundled mobile web client
+        run: npm run mobile:web
+
       - name: Apply production Tauri identity
         run: node scripts/build-env-config.mjs
         env:
@@ -333,6 +336,9 @@ jobs:
 
       - name: Prepare bundled assets
         run: node scripts/prepare-bundle-assets.cjs
+
+      - name: Verify bundled mobile web client
+        run: npm run mobile:web
 
       - name: Apply production Tauri identity
         run: node scripts/build-env-config.mjs

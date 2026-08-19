@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "mobile:web": "node scripts/prepare-mobile-web.cjs",
+    "mobile:web:build": "node scripts/prepare-mobile-web.cjs --build",
     "check:locales": "node ../scripts/check-locales.cjs",
     "generate:embeddings": "node scripts/generate-bible-embeddings.cjs",
     "sync:local-llm-model": "node scripts/sync-local-llm-model.cjs",
