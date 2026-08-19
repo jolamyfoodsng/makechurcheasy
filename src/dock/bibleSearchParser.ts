@@ -102,9 +102,9 @@ const BOOK_ALIASES: BookAlias[] = [
   { book: "James", aliases: ["jas", "ja", "jm"] },
   { book: "1 Peter", aliases: ["1pet", "1pe", "1pt", "1p"] },
   { book: "2 Peter", aliases: ["2pet", "2pe", "2pt", "2p"] },
-  { book: "1 John", aliases: ["1jn", "1jo", "1joh", "1john"] },
-  { book: "2 John", aliases: ["2jn", "2jo", "2joh", "2john"] },
-  { book: "3 John", aliases: ["3jn", "3jo", "3joh", "3john"] },
+  { book: "1 John", aliases: ["1jn", "1jo", "1joh", "1jhn", "1john"] },
+  { book: "2 John", aliases: ["2jn", "2jo", "2joh", "2jhn", "2john"] },
+  { book: "3 John", aliases: ["3jn", "3jo", "3joh", "3jhn", "3john"] },
   { book: "Jude", aliases: ["jude", "jud", "jd"] },
   { book: "Revelation", aliases: ["rev", "re", "rv"] },
 ];

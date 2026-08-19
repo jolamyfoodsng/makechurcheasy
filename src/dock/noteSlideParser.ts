@@ -24,6 +24,20 @@ export interface NoteSlideChunk {
 }
 
 /**
+ * Keep the note's stored blank-line sections intact. This is the Notes
+ * equivalent of a Worship song's Original layout: each authored paragraph is
+ * one slide and the operator's line-count setting is not applied.
+ */
+export function preserveNoteSections(sections: NoteSlideSection[]): NoteSlideChunk[] {
+  return sections
+    .map((section) => ({
+      headingLabel: section.headingLabel,
+      text: section.lines.map((line) => line.trim()).filter(Boolean).join("\n"),
+    }))
+    .filter((section) => Boolean(section.text));
+}
+
+/**
  * Group every non-empty note line as one continuous sequence.
  * Blank lines may separate stored paragraphs, but they must not prevent the
  * Dock's Lines per note setting from grouping the next lines together.

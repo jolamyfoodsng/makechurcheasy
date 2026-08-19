@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paginateNoteSections, splitNoteBodyIntoSections } from "./noteSlideParser";
+import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "./noteSlideParser";
 
 describe("note slide boundaries", () => {
   it("keeps consecutive editor lines together until a blank line", () => {
@@ -39,6 +39,18 @@ describe("note slide boundaries", () => {
     ]);
     expect(paginateNoteSections(sections, 5).map((slide) => slide.text)).toEqual([
       "One\nTwo\nThree\nFour\nFive",
+    ]);
+  });
+
+  it("keeps authored paragraphs intact in Original mode", () => {
+    const sections = [
+      { headingLabel: "Opening", lines: ["First line", "Second line"] },
+      { headingLabel: "", lines: ["Another paragraph"] },
+    ];
+
+    expect(preserveNoteSections(sections)).toEqual([
+      { headingLabel: "Opening", text: "First line\nSecond line" },
+      { headingLabel: "", text: "Another paragraph" },
     ]);
   });
 });

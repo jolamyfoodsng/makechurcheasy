@@ -24,7 +24,7 @@ export interface DockTabDef {
 export const DOCK_TABS: DockTabDef[] = [
   // { id: "planner", label: "Planner", icon: "event_note", summary: "Plan and schedule service elements" },
   { id: "bible", label: "Bible", icon: "menu_book", summary: "Search, select, and display scripture verses" },
-  { id: "worship", label: "Text", icon: "text_fields", summary: "Manage text slides, worship lyrics, notes, and songs" },
+  { id: "worship", label: "Worship and Notes", icon: "text_fields", summary: "Manage worship lyrics, songs, and user's notes" },
   { id: "media", label: "Media", icon: "photo_library", summary: "Upload and present images, videos, and graphics" },
   { id: "ministry", label: "Ministry", icon: "campaign", summary: "Live ticker announcements and ministry updates" },
   { id: "multiview", label: "Multi-View", icon: "grid_view", summary: "Compose and push multi-source layouts to OBS" },

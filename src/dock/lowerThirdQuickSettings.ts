@@ -1,7 +1,29 @@
 import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscreenThemeQuickSettings";
 
+/**
+ * The readable starting point for lower-third fit mode.  Fit mode may reduce
+ * a larger preset to this value, but it must never collapse below it.
+ */
+export const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
+export const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+export function normalizeLowerThirdFitSettings(
+  settings: DockFullscreenQuickThemeSettings,
+): DockFullscreenQuickThemeSettings {
+  if (settings.autoFontScale !== true) return settings;
+
+  return {
+    ...settings,
+    fontSize: Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, settings.fontSize),
+    refFontSize: Math.max(
+      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+      settings.refFontSize,
+    ),
+  };
 }
 
 const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [
@@ -131,5 +153,5 @@ export function buildLinkedLowerThirdQuickThemeSettings(
     assignableNext.refFontSize = clampNumber(assignableNext.refFontSize, 10, 80);
   }
 
-  return next;
+  return normalizeLowerThirdFitSettings(next);
 }

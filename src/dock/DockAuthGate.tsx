@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { refreshAppAppearance } from "../services/appAppearance";
+import { hydrateNativeDockSettings } from "../services/localDockSettings";
+import { refreshAppThemePreference } from "../hooks/useAppTheme";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
 import {
   getEffectivePlan as resolveCanonicalPlan,
@@ -169,6 +171,7 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     if (authCheckInFlightRef.current) return authCheckInFlightRef.current;
 
     const run = (async () => {
+      let sessionConfirmed = false;
       // Retry the local handoff before showing the blocked state. This is
       // important on Windows, where OBS can load the dock before the Tauri
       // webview has finished posting its restored session.
@@ -180,6 +183,18 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
         // 1) Try the local overlay server first (works offline).
         const localStatus = await checkLocalAuth(deviceId);
         if (localStatus === "authenticated") {
+          sessionConfirmed = true;
+          try {
+            await hydrateNativeDockSettings();
+          } catch (error) {
+            // Do not release the Dock with default settings. The DockPage has
+            // the same retry guard, but keeping this gate closed prevents a
+            // first-paint click from acting on an unhydrated local database.
+            console.warn("[DockAuthGate] Waiting for native Dock settings:", error);
+            continue;
+          }
+          refreshAppAppearance();
+          refreshAppThemePreference();
           setAuthed(true);
           setReady(true);
           return;
@@ -189,17 +204,37 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
         // This recovers from a stale/missed local session without requiring a
         // new pairing or asking the user to reinstall the dock.
         if (!isTestEnv && deviceId) {
-          const onlineOk = await checkDeviceOnline(deviceId);
-          if (onlineOk) {
-            setAuthed(true);
-            setReady(true);
-            return;
+        const onlineOk = await checkDeviceOnline(deviceId);
+        if (onlineOk) {
+          sessionConfirmed = true;
+          try {
+            await hydrateNativeDockSettings();
+          } catch (error) {
+            console.warn("[DockAuthGate] Waiting for native Dock settings:", error);
+            continue;
+          }
+          refreshAppAppearance();
+          refreshAppThemePreference();
+          setAuthed(true);
+          setReady(true);
+          return;
           }
         }
 
         if (attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+          // Keep recovery for a desktop session that is still starting, but
+          // avoid holding a reload on a blank spinner for the old 4.5 seconds
+          // of backoff. The polling effect continues after the quick pass.
+          await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
         }
+      }
+
+      // Authentication succeeded but the local database is still unavailable.
+      // Keep the loading screen up and let the polling effect retry instead of
+      // showing a false auth error or releasing default Dock settings.
+      if (sessionConfirmed) {
+        setReady(false);
+        return;
       }
 
       setAuthed(false);
@@ -221,7 +256,7 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   // Auto-poll while blocked so a session restored by the desktop app unlocks
   // an already-open OBS dock without a manual reload.
   useEffect(() => {
-    if (authed || !ready) return;
+    if (authed) return;
     const id = setInterval(() => void checkAuth(), 5_000);
     const retryOnFocus = () => void checkAuth();
     const retryWhenVisible = () => {

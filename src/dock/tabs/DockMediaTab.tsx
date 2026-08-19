@@ -39,6 +39,7 @@ import {
 import { checkEntitlementSync, getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { isUserSelectableObsScene } from "../../services/dockSceneNames";
 import { useTranslation } from "react-i18next";
 import {
@@ -46,11 +47,11 @@ import {
   publishMediaToPresentation,
   publishTextOverlayToPresentation,
 } from "../../services/presentationPublish";
+import { isDockTabVisible } from "../dockTabVisibility";
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
-  isActive?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
 }
 
@@ -147,6 +148,8 @@ interface DockMediaPreference {
   loop?: boolean;
   fitMode?: "cover" | "contain" | "stretch";
   label?: string;
+  pinned?: boolean;
+  folder?: string | null;
   hidden?: boolean;
   lastUsedAt?: string;
 }
@@ -175,8 +178,12 @@ interface DockMediaSessionState {
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "avi", "mkv", "wmv", "flv"]);
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"]);
 const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
+const MEDIA_FOLDERS_STORAGE_KEY = "ocs-dock-media-folders-v1";
 const MEDIA_LOCAL_LIBRARY_STORAGE_KEY = "ocs-dock-media-library-v1";
 const MEDIA_SESSION_STORAGE_KEY = "ocs-dock-media-session-v1";
+const MEDIA_CONTEXT_MENU_WIDTH = 236;
+const MEDIA_CONTEXT_MENU_GAP = 8;
+const MEDIA_CONTEXT_MENU_GUTTER = 8;
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
 const TEXT_OVERLAY_HEADLINE_MIN_SIZE = 24;
 const TEXT_OVERLAY_SUBLINE_MIN_SIZE = 14;
@@ -268,13 +275,30 @@ function getUploadDisplayName(filename: string): string {
 
 function loadMediaPreferences(): DockMediaPreferences {
   try {
-    const stored = localStorage.getItem(getUserScopedKey(MEDIA_PREFS_STORAGE_KEY));
+    const stored = readNativeDockSetting<unknown>(MEDIA_PREFS_STORAGE_KEY);
     if (!stored) return {};
-    const parsed = JSON.parse(stored);
+    const parsed = typeof stored === "string" ? JSON.parse(stored) : stored;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return parsed as DockMediaPreferences;
   } catch {
     return {};
+  }
+}
+
+function loadMediaFolders(): string[] {
+  try {
+    const stored = readNativeDockSetting<unknown>(MEDIA_FOLDERS_STORAGE_KEY);
+    const parsed = typeof stored === "string" ? JSON.parse(stored) : stored;
+    if (!Array.isArray(parsed)) return [];
+
+    return Array.from(new Set(
+      parsed
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    )).slice(0, 100);
+  } catch {
+    return [];
   }
 }
 
@@ -502,6 +526,17 @@ function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel
   };
 }
 
+function matchesMediaEntrySearch(
+  entry: DockMediaEntry,
+  preference: DockMediaPreference | undefined,
+  query: string,
+): boolean {
+  if (!query) return true;
+  return [entry.name, preference?.label]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .some((value) => value.toLocaleLowerCase().includes(query));
+}
+
 function getDocumentImportDate(createdAt: string | undefined): string {
   if (!createdAt || createdAt.startsWith("0001-")) return "";
   return createdAt;
@@ -592,7 +627,6 @@ function AnimationTilePreview({ src, label }: { src: string; label: string }) {
 function DockMediaTab({
   staged: _staged,
   onStage: _onStage,
-  isActive = true,
   presentationOutputTarget = "obs",
 }: Props) {
   const { t } = useTranslation();
@@ -600,7 +634,6 @@ function DockMediaTab({
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [compactTabs, setCompactTabs] = useState(false);
   const [isNarrowWidth, setIsNarrowWidth] = useState(false);
   const [isCompactHeight, setIsCompactHeight] = useState(false);
   const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
@@ -621,10 +654,19 @@ function DockMediaTab({
   const [sendingFile, setSendingFile] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [mediaPrefs, setMediaPrefs] = useState<DockMediaPreferences>(() => loadMediaPreferences());
+  const [mediaFolders, setMediaFolders] = useState<string[]>(() => loadMediaFolders());
+  const [activeFolder, setActiveFolder] = useState("all");
   const [localLibrary, setLocalLibrary] = useState<MediaItem[]>(() => loadLocalMediaLibrary());
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [openOptionsKey, setOpenOptionsKey] = useState<string | null>(null);
+  const [mediaContextMenu, setMediaContextMenu] = useState<{
+    entry: DockMediaEntry;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [mediaContextFolderOpen, setMediaContextFolderOpen] = useState(false);
+  const [newFolderDraft, setNewFolderDraft] = useState("");
   const [editingEntryLabelKey, setEditingEntryLabelKey] = useState<string | null>(null);
   const [entryLabelDraft, setEntryLabelDraft] = useState("");
   const [previewEntry, setPreviewEntry] = useState<DockMediaEntry | null>(null);
@@ -719,14 +761,14 @@ function DockMediaTab({
     if (addMediaTab === "template-videos") setAddMediaTab("background");
   }, [addMediaTab, animationsLocked, browserTab]);
 
-  // Compact tabs when the console is narrow
+  // Use icon-only tabs when the media console is narrow, but keep the tabs
+  // horizontal. The left rail is reserved for short-height docks below.
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const width = entry.contentRect.width;
       setIsNarrowWidth(width <= 300);
-      setCompactTabs(width <= 300);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -746,12 +788,38 @@ function DockMediaTab({
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(getUserScopedKey(MEDIA_PREFS_STORAGE_KEY), JSON.stringify(mediaPrefs));
-    } catch {
-      // Dock preferences are convenience-only; ignore storage failures.
-    }
+    writeNativeDockSetting(MEDIA_PREFS_STORAGE_KEY, mediaPrefs);
   }, [mediaPrefs]);
+
+  useEffect(() => {
+    writeNativeDockSetting(MEDIA_FOLDERS_STORAGE_KEY, mediaFolders);
+  }, [mediaFolders]);
+
+  useEffect(() => {
+    if (activeFolder !== "all" && !mediaFolders.includes(activeFolder)) {
+      setActiveFolder("all");
+    }
+  }, [activeFolder, mediaFolders]);
+
+  useEffect(() => {
+    if (!mediaContextMenu) return;
+
+    const closeMenu = () => setMediaContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+
+    window.addEventListener("mousedown", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mediaContextMenu]);
 
   useEffect(() => {
     try {
@@ -769,6 +837,45 @@ function DockMediaTab({
         ...patch,
       },
     }));
+  }, []);
+
+  const openMediaContextMenu = useCallback((
+    event: React.MouseEvent<HTMLElement>,
+    entry: DockMediaEntry,
+    isLocked: boolean,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isLocked) return;
+
+    // Context menus should open to the left of the pointer when possible so
+    // media cards near the right edge of a narrow OBS dock do not cover or
+    // spill beyond the dock boundary.
+    const menuWidth = Math.min(
+      MEDIA_CONTEXT_MENU_WIDTH,
+      Math.max(0, window.innerWidth - MEDIA_CONTEXT_MENU_GUTTER * 2),
+    );
+    const menuHeight = 320;
+    const leftPlacement = event.clientX - menuWidth - MEDIA_CONTEXT_MENU_GAP;
+    const rightmostX = Math.max(
+      MEDIA_CONTEXT_MENU_GUTTER,
+      window.innerWidth - menuWidth - MEDIA_CONTEXT_MENU_GUTTER,
+    );
+    const x = leftPlacement >= MEDIA_CONTEXT_MENU_GUTTER
+      ? leftPlacement
+      : Math.min(
+        Math.max(MEDIA_CONTEXT_MENU_GUTTER, event.clientX + MEDIA_CONTEXT_MENU_GAP),
+        rightmostX,
+      );
+    const y = Math.min(
+      Math.max(MEDIA_CONTEXT_MENU_GUTTER, event.clientY),
+      Math.max(MEDIA_CONTEXT_MENU_GUTTER, window.innerHeight - menuHeight - MEDIA_CONTEXT_MENU_GUTTER),
+    );
+
+    setOpenOptionsKey(null);
+    setMediaContextFolderOpen(false);
+    setNewFolderDraft("");
+    setMediaContextMenu({ entry, x, y });
   }, []);
 
   const persistLocalLibrary = useCallback((updater: (current: MediaItem[]) => MediaItem[]) => {
@@ -795,8 +902,13 @@ function DockMediaTab({
       }
       if (!cancelled) console.warn("[DockMediaTab] Could not fetch uploads dir after retries");
     }
-    fetchDir();
-    return () => { cancelled = true; };
+    const timer = window.setTimeout(() => {
+      void fetchDir();
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   // ── Library media items (from main app) ──
@@ -889,8 +1001,11 @@ function DockMediaTab({
 
   // Load library media on mount
   useEffect(() => {
-    loadLibraryMedia();
-    dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+    const timer = window.setTimeout(() => {
+      void loadLibraryMedia();
+      dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadLibraryMedia]);
 
   // Listen for library-updated signal to refresh media
@@ -909,15 +1024,14 @@ function DockMediaTab({
 
   // Fallback polling: refresh media every 30s in case event-based sync fails
   useEffect(() => {
-    if (!isActive) return;
-
     const interval = setInterval(() => {
+      if (!isDockTabVisible(containerRef.current)) return;
       if (mediaPollBusyRef.current) return;
       mediaPollBusyRef.current = true;
       void loadLibraryMedia().finally(() => { mediaPollBusyRef.current = false; });
     }, 30_000);
     return () => clearInterval(interval);
-  }, [isActive, loadLibraryMedia]);
+  }, [loadLibraryMedia]);
 
   // ── Fetch uploaded files from overlay server ──
 
@@ -940,7 +1054,10 @@ function DockMediaTab({
 
   // Fetch uploads on mount
   useEffect(() => {
-    fetchUploads();
+    const timer = window.setTimeout(() => {
+      void fetchUploads();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchUploads]);
 
   // Validate file existence on load — remove entries whose files are missing from disk
@@ -1398,12 +1515,21 @@ function DockMediaTab({
     () => mergedLibraryItems
       .filter((item) => isAnimationMediaItem(item))
       .map((item) => createLibraryEntry(item, overlayBaseUrl, t('media.animation')))
-      .filter((entry) => !mediaPrefs[entry.prefKey]?.hidden),
+      .filter((entry) => !mediaPrefs[entry.prefKey]?.hidden)
+      .sort((a, b) => {
+        const aPinned = Boolean(mediaPrefs[a.prefKey]?.pinned);
+        const bPinned = Boolean(mediaPrefs[b.prefKey]?.pinned);
+        return aPinned === bPinned ? 0 : aPinned ? -1 : 1;
+      }),
     [mediaPrefs, mergedLibraryItems, overlayBaseUrl],
   );
 
   const mediaEntries = useMemo(
     () => [...libraryEntries, ...uploadedEntries].sort((a, b) => {
+      const aPinned = Boolean(mediaPrefs[a.prefKey]?.pinned);
+      const bPinned = Boolean(mediaPrefs[b.prefKey]?.pinned);
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+
       if (viewMode === "recent") {
         // Recently Used: sort by lastUsedAt DESC, items without usage go to bottom
         const aUsed = mediaPrefs[a.prefKey]?.lastUsedAt || "";
@@ -1578,19 +1704,27 @@ function DockMediaTab({
           ? []
           : imageEntries;
     const query = assetSearch.trim().toLowerCase();
-    let result = !query ? pool : pool.filter((entry) => entry.name.toLowerCase().includes(query));
+    const folderPool = activeFolder === "all"
+      ? pool
+      : pool.filter((entry) => mediaPrefs[entry.prefKey]?.folder === activeFolder);
+    let result = !query
+      ? folderPool
+      : folderPool.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
     // Free plan: only show the allowed items so search never reveals locked media
     if (isFreePlan) {
       result = result.filter((entry) => !lockedKeys.has(entry.key));
     }
     return result;
-  }, [activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, nonDocumentMediaEntries, videoEntries]);
+  }, [activeFolder, activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
-    if (!query) return documentDecks;
-    return documentDecks.filter((deck) => deck.name.toLowerCase().includes(query));
-  }, [assetSearch, documentDecks]);
+    const folderDecks = activeFolder === "all"
+      ? documentDecks
+      : documentDecks.filter((deck) => deck.pages.some((page) => mediaPrefs[page.prefKey]?.folder === activeFolder));
+    if (!query) return folderDecks;
+    return folderDecks.filter((deck) => deck.name.toLowerCase().includes(query));
+  }, [activeFolder, assetSearch, documentDecks, mediaPrefs]);
 
   const filteredPatternEntries = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -1600,9 +1734,12 @@ function DockMediaTab({
   const filteredAnimationEntries = useMemo(() => {
     if (animationsLocked) return [];
     const query = assetSearch.trim().toLowerCase();
-    if (!query) return animationEntries;
-    return animationEntries.filter((entry) => entry.name.toLowerCase().includes(query));
-  }, [animationEntries, animationsLocked, assetSearch]);
+    const folderEntries = activeFolder === "all"
+      ? animationEntries
+      : animationEntries.filter((entry) => mediaPrefs[entry.prefKey]?.folder === activeFolder);
+    if (!query) return folderEntries;
+    return folderEntries.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
+  }, [activeFolder, animationEntries, animationsLocked, assetSearch, mediaPrefs]);
   const filteredTemplateVideos = useMemo(() => {
     const query = templateVideoSearch.trim().toLowerCase();
     return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
@@ -1866,6 +2003,41 @@ function DockMediaTab({
     setEntryLabel(entry, entryLabelDraft.trim());
     setEditingEntryLabelKey(null);
   }, [entryLabelDraft, setEntryLabel]);
+
+  const toggleMediaPinned = useCallback((entry: DockMediaEntry) => {
+    setMediaPrefs((prev) => ({
+      ...prev,
+      [entry.prefKey]: {
+        ...prev[entry.prefKey],
+        pinned: !prev[entry.prefKey]?.pinned,
+      },
+    }));
+    setMediaContextMenu(null);
+  }, []);
+
+  const assignMediaFolder = useCallback((entry: DockMediaEntry, folder: string | null) => {
+    updateMediaPreference(entry.prefKey, { folder: folder || null });
+    setMediaContextMenu(null);
+    setMediaContextFolderOpen(false);
+  }, [updateMediaPreference]);
+
+  const createMediaFolder = useCallback((entry: DockMediaEntry) => {
+    const requestedName = newFolderDraft.trim();
+    if (!requestedName) return;
+
+    const existingFolder = mediaFolders.find(
+      (folder) => folder.toLocaleLowerCase() === requestedName.toLocaleLowerCase(),
+    );
+    const folder = existingFolder || requestedName;
+    if (!existingFolder) {
+      setMediaFolders((current) => [...current, folder].sort((a, b) => a.localeCompare(b)));
+    }
+    updateMediaPreference(entry.prefKey, { folder });
+    setActiveFolder(folder);
+    setNewFolderDraft("");
+    setMediaContextMenu(null);
+    setMediaContextFolderOpen(false);
+  }, [mediaFolders, newFolderDraft, updateMediaPreference]);
 
   const closeEntryOptions = useCallback(() => {
     setEditingEntryLabelKey(null);
@@ -2500,11 +2672,12 @@ function DockMediaTab({
       return (
         <div
           key={entry.key}
-          className={`dock-media-gallery-card${isActiveTarget ? " dock-media-gallery-card--active" : ""}${isSelected ? " dock-media-gallery-card--selected" : ""}${isLocked ? " dock-media-gallery-card--locked" : ""}`}
+          className={`dock-media-gallery-card${isActiveTarget ? " dock-media-gallery-card--active" : ""}${isSelected ? " dock-media-gallery-card--selected" : ""}${isLocked ? " dock-media-gallery-card--locked" : ""}${prefs.pinned ? " dock-media-gallery-card--pinned" : ""}`}
           role="button"
           tabIndex={0}
           onClick={handleCardClick}
           onKeyDown={handleCardKeyDown}
+          onContextMenu={(event) => openMediaContextMenu(event, entry, isLocked)}
         >
           <div className="dock-media-gallery-card__image-wrap">
             {canSelect && !isLocked && (
@@ -2520,6 +2693,15 @@ function DockMediaTab({
               <div className="dock-media-gallery-card__placeholder">
                 <Icon name={getFileIcon(entry.kind)} size={24} />
               </div>
+            )}
+            {prefs.pinned && !isLocked && (
+              <span
+                className="dock-media-gallery-card__pin-badge"
+                title={t('media.pinned', 'Pinned')}
+                aria-label={t('media.pinned', 'Pinned')}
+              >
+                <Icon name="push_pin" size={11} />
+              </span>
             )}
             {isLocked ? (
               <div className="dock-media-gallery-card__lock-overlay">
@@ -2540,6 +2722,7 @@ function DockMediaTab({
                         aria-label={t('media.moreOptions')}
                         onClick={(event) => {
                           event.stopPropagation();
+                          setMediaContextMenu(null);
                           setOpenOptionsKey(openOptionsKey === entry.key ? null : entry.key);
                         }}
                         title={t('media.moreOptions')}>
@@ -2553,6 +2736,14 @@ function DockMediaTab({
             )}
             {!isLocked && openOptionsKey === entry.key && (
               <div className="dock-media-gallery-card__context-menu" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="dock-media-gallery-card__context-item"
+                  onClick={() => beginEntryLabelEdit(entry)}
+                  title={t('common.rename')}>
+                  <Icon name="edit" size={13} />
+                  {t('common.rename')}
+                </button>
                 <button
                   type="button"
                   className="dock-media-gallery-card__context-item"
@@ -2604,11 +2795,13 @@ function DockMediaTab({
     },
     [
       activeTargets.active,
+      beginEntryLabelEdit,
       deleteEntry,
       getEntryPrefs,
       handleSendEntry,
       imageEntries.length,
       lockedKeys,
+      openMediaContextMenu,
       openOptionsKey,
       pausedTargets.active,
       selectionMode,
@@ -2842,7 +3035,7 @@ function DockMediaTab({
 
   const hasVisibleDocumentDecks = (activeKind === "all" || activeKind === "document") && filteredDocumentDecks.length > 0;
   const hasVisibleMediaEntries = filteredUploadEntries.length > 0;
-  const useCompactMediaTabs = compactTabs || isCompactHeight;
+  const useCompactMediaTabs = isNarrowWidth || isCompactHeight;
   const renderCompactMediaActions = () => (
     <div className="dock-media-search-row__actions">
       <button
@@ -2895,12 +3088,36 @@ function DockMediaTab({
     </div>
   );
 
+  const renderMediaFolderFilter = () => {
+    if (mediaFolders.length === 0 || (browserTab !== "uploads" && browserTab !== "animations")) {
+      return null;
+    }
+
+    return (
+      <label className="dock-media-folder-filter">
+        <Icon name="folder" size={12} />
+        <span className="dock-media-folder-filter__label">{t('media.folder', 'Folder')}</span>
+        <select
+          className="dock-media-folder-filter__select"
+          value={activeFolder}
+          onChange={(event) => setActiveFolder(event.target.value)}
+          aria-label={t('media.filterByFolder', 'Filter by folder')}
+        >
+          <option value="all">{t('media.allFolders', 'All folders')}</option>
+          {mediaFolders.map((folder) => (
+            <option key={folder} value={folder}>{folder}</option>
+          ))}
+        </select>
+      </label>
+    );
+  };
+
   // ── Render ──
 
 
 
   return (
-    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isNarrowWidth || isCompactHeight ? " dock-media-console--narrow" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}${isMicroHeight ? " dock-media-console--micro" : ""}`}>
+    <div ref={(node) => { tabsRef.current = node; containerRef.current = node; }} className={`dock-media-console${isCompactHeight ? " dock-media-console--short-height" : ""}${isUltraCompactHeight ? " dock-media-console--ultra-compact" : ""}${isMicroHeight ? " dock-media-console--micro" : ""}`}>
       {/* ── Header (normal mode only) ── */}
       {!isCompactHeight && (
         <div className="dock-media-header">
@@ -2997,7 +3214,7 @@ function DockMediaTab({
         <aside className="dock-media-tabs-column" aria-label={t('media.mediaBrowserViews')}>
       {/* ── Category Tabs (with inline actions in compact mode) ── */}
       <div className={`dock-media-tabs-row${isCompactHeight ? " dock-media-tabs-row--compact" : ""}`}>
-        <div className={`dock-media-tabs${useCompactMediaTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-orientation={isNarrowWidth || isCompactHeight ? "vertical" : "horizontal"} aria-label={t('media.mediaBrowserViews')}>
+        <div className={`dock-media-tabs${useCompactMediaTabs ? " dock-media-tabs--compact" : ""}`} role="tablist" aria-orientation={isCompactHeight ? "vertical" : "horizontal"} aria-label={t('media.mediaBrowserViews')}>
           <button
             type="button"
             role="tab"
@@ -3483,6 +3700,8 @@ function DockMediaTab({
                       </button>
                     </div>
 
+                    {renderMediaFolderFilter()}
+
                     {/* View mode toggle — hidden for free plan users */}
                     {!isFreePlan && (
                       <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
@@ -3550,89 +3769,98 @@ function DockMediaTab({
         )}
 
         {browserTab === "animations" && (
-          animationsLocked ? (
-            <div className="dock-media-empty dock-media-empty--locked">
-              <div className="dock-media-empty__icon">
-                <Icon name="lock" size={24} />
-              </div>
-              <div className="dock-media-empty__title">{t('media.tabAnimations')}</div>
-              <div className="dock-media-empty__text">{t('media.upgradeToAccess')}</div>
-              <button
-                type="button"
-                className="dock-btn dock-btn--preview dock-btn--compact"
-                onClick={() => void requireEntitlement("slideshow", 0)}
-                title={t('media.upgradeToAccess')}
-              >
-                <Icon name="upgrade" size={12} />
-                {t('media.upgradeToAccess')}
-              </button>
-            </div>
-          ) : (
           <>
-            {filteredAnimationEntries.length === 0 ? (
-              <div className="dock-media-empty">
+            {renderMediaFolderFilter()}
+            {animationsLocked ? (
+              <div className="dock-media-empty dock-media-empty--locked">
                 <div className="dock-media-empty__icon">
-                  <Icon name="movie" size={24} />
+                  <Icon name="lock" size={24} />
                 </div>
-                <div className="dock-media-empty__title">{t('media.downloadedAnimations')}</div>
-                <div className="dock-media-empty__text">{t('media.browseTemplatesDesc')}</div>
+                <div className="dock-media-empty__title">{t('media.tabAnimations')}</div>
+                <div className="dock-media-empty__text">{t('media.upgradeToAccess')}</div>
                 <button
                   type="button"
                   className="dock-btn dock-btn--preview dock-btn--compact"
-                  onClick={() => openAddMediaModal("template-videos")}
-                  title={t('common.add')}>
-                  <Icon name="add" size={12} />
-                  {t('common.add')}
+                  onClick={() => void requireEntitlement("slideshow", 0)}
+                  title={t('media.upgradeToAccess')}
+                >
+                  <Icon name="upgrade" size={12} />
+                  {t('media.upgradeToAccess')}
                 </button>
               </div>
             ) : (
-              <div className="dock-animation-grid">
-                {filteredAnimationEntries.map((entry) => {
-                  const isActiveTarget = activeTargets.active?.key === entry.key;
-                  const prefs = getEntryPrefs(entry);
-                  const displayName = prefs.label?.trim() || entry.name;
-                  const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
+            <>
+              {filteredAnimationEntries.length === 0 ? (
+                <div className="dock-media-empty">
+                  <div className="dock-media-empty__icon">
+                    <Icon name="movie" size={24} />
+                  </div>
+                  <div className="dock-media-empty__title">{t('media.downloadedAnimations')}</div>
+                  <div className="dock-media-empty__text">{t('media.browseTemplatesDesc')}</div>
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--preview dock-btn--compact"
+                    onClick={() => openAddMediaModal("template-videos")}
+                    title={t('common.add')}>
+                    <Icon name="add" size={12} />
+                    {t('common.add')}
+                  </button>
+                </div>
+              ) : (
+                <div className="dock-animation-grid">
+                  {filteredAnimationEntries.map((entry) => {
+                    const isActiveTarget = activeTargets.active?.key === entry.key;
+                    const prefs = getEntryPrefs(entry);
+                    const displayName = prefs.label?.trim() || entry.name;
+                    const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
 
-                  return (
-                    <div
-                      key={entry.key}
-                      className={`dock-animation-tile${isActiveTarget ? " dock-animation-tile--active" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => { void handleSendEntry(entry); }}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void handleSendEntry(entry); } }}
-                    >
-                      <div className="dock-animation-tile__thumb">
-                        {thumbUrl ? (
-                          <img src={thumbUrl} alt={displayName} loading="lazy" className="dock-animation-tile__img" />
-                        ) : entry.previewUrl && entry.kind === "video" ? (
-                          <video src={entry.previewUrl} className="dock-animation-tile__img" muted playsInline preload="metadata" />
-                        ) : (
-                          <div className="dock-animation-tile__placeholder">
-                            <Icon name="movie" size={20} />
+                    return (
+                      <div
+                        key={entry.key}
+                        className={`dock-animation-tile${isActiveTarget ? " dock-animation-tile--active" : ""}${prefs.pinned ? " dock-animation-tile--pinned" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { void handleSendEntry(entry); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void handleSendEntry(entry); } }}
+                        onContextMenu={(event) => openMediaContextMenu(event, entry, false)}
+                      >
+                        <div className="dock-animation-tile__thumb">
+                          {thumbUrl ? (
+                            <img src={thumbUrl} alt={displayName} loading="lazy" className="dock-animation-tile__img" />
+                          ) : entry.previewUrl && entry.kind === "video" ? (
+                            <video src={entry.previewUrl} className="dock-animation-tile__img" muted playsInline preload="metadata" />
+                          ) : (
+                            <div className="dock-animation-tile__placeholder">
+                              <Icon name="movie" size={20} />
+                            </div>
+                          )}
+                          <div className="dock-animation-tile__play-hint">
+                            <Icon name="play_arrow" size={22} />
                           </div>
-                        )}
-                        <div className="dock-animation-tile__play-hint">
-                          <Icon name="play_arrow" size={22} />
-                        </div>
-                        <div className="dock-animation-tile__gradient" />
-                        <div className="dock-animation-tile__info">
-                          <span className="dock-animation-tile__name">{displayName}</span>
-                          <span className="dock-animation-tile__meta">
-                            {entry.durationSec ? fmtDuration(entry.durationSec) : t('media.animation').toUpperCase()}
+                          <div className="dock-animation-tile__gradient" />
+                          {prefs.pinned && (
+                            <span className="dock-animation-tile__pin-badge" title={t('media.pinned', 'Pinned')}>
+                              <Icon name="push_pin" size={11} />
+                            </span>
+                          )}
+                          <div className="dock-animation-tile__info">
+                            <span className="dock-animation-tile__name">{displayName}</span>
+                            <span className="dock-animation-tile__meta">
+                              {entry.durationSec ? fmtDuration(entry.durationSec) : t('media.animation').toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="dock-animation-tile__dl-badge">
+                            <Icon name="check_circle" size={11} />
                           </span>
                         </div>
-                        <span className="dock-animation-tile__dl-badge">
-                          <Icon name="check_circle" size={11} />
-                        </span>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
             )}
           </>
-          )
         )}
 
         {browserTab === "patterns" && (
@@ -4948,6 +5176,155 @@ function DockMediaTab({
           </div>
         </div>
       )}
+
+      {mediaContextMenu && (() => {
+        const contextEntry = mediaContextMenu.entry;
+        const contextPrefs = getEntryPrefs(contextEntry);
+        const contextDisplayName = contextPrefs.label?.trim() || contextEntry.name;
+        const contextFolder = contextPrefs.folder?.trim() || "";
+        const contextPinned = Boolean(contextPrefs.pinned);
+
+        return (
+          <div
+            className="dock-media-context-menu"
+            role="menu"
+            style={{ left: mediaContextMenu.x, top: mediaContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <div className="dock-media-context-menu__header">
+              <Icon name={getFileIcon(contextEntry.kind)} size={13} />
+              <span title={contextDisplayName}>{contextDisplayName}</span>
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item"
+              onClick={() => {
+                setOpenOptionsKey(contextEntry.key);
+                beginEntryLabelEdit(contextEntry);
+                setMediaContextMenu(null);
+              }}
+            >
+              <Icon name="edit" size={13} />
+              <span className="dock-media-context-menu__label">{t('common.rename')}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item"
+              onClick={() => toggleMediaPinned(contextEntry)}
+            >
+              <Icon name="push_pin" size={13} />
+              <span className="dock-media-context-menu__label">
+                {contextPinned ? t('media.unpin', 'Unpin') : t('media.pin', 'Pin')}
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item"
+              onClick={() => {
+                setPreviewEntry(contextEntry);
+                setMediaContextMenu(null);
+              }}
+            >
+              <Icon name="open_in_full" size={13} />
+              <span className="dock-media-context-menu__label">{t('common.preview')}</span>
+            </button>
+            {!presentationLinkMode && canSendEntryToScene(contextEntry) && (
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-media-context-menu__item"
+                onClick={() => {
+                  void openSceneSendDialog(contextEntry);
+                  setMediaContextMenu(null);
+                }}
+              >
+                <Icon name="send" size={13} />
+                <span className="dock-media-context-menu__label">{t('media.sendToScene')}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              aria-expanded={mediaContextFolderOpen}
+              className="dock-media-context-menu__item"
+              onClick={() => setMediaContextFolderOpen((current) => !current)}
+            >
+              <Icon name="folder" size={13} />
+              <span className="dock-media-context-menu__label">{t('media.addToFolder', 'Add to folder')}</span>
+              <Icon name={mediaContextFolderOpen ? "expand_less" : "expand_more"} size={13} />
+            </button>
+            {mediaContextFolderOpen && (
+              <div className="dock-media-context-menu__folders">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`dock-media-context-menu__folder${!contextFolder ? " dock-media-context-menu__folder--active" : ""}`}
+                  onClick={() => assignMediaFolder(contextEntry, null)}
+                >
+                  <Icon name="folder_off" size={12} />
+                  <span className="dock-media-context-menu__label">{t('media.noFolder', 'No folder')}</span>
+                </button>
+                {mediaFolders.map((folder) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`dock-media-context-menu__folder${contextFolder === folder ? " dock-media-context-menu__folder--active" : ""}`}
+                    key={folder}
+                    onClick={() => assignMediaFolder(contextEntry, folder)}
+                  >
+                    <Icon name="folder" size={12} />
+                    <span title={folder}>{folder}</span>
+                    {contextFolder === folder && <Icon name="check" size={12} />}
+                  </button>
+                ))}
+                <div className="dock-media-context-menu__new-folder">
+                  <input
+                    type="text"
+                    value={newFolderDraft}
+                    onChange={(event) => setNewFolderDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        createMediaFolder(contextEntry);
+                      }
+                    }}
+                    placeholder={t('media.folderNamePlaceholder', 'New folder name')}
+                    aria-label={t('media.folderNamePlaceholder', 'New folder name')}
+                  />
+                  <button
+                    type="button"
+                    aria-label={t('media.createFolder', 'Create folder')}
+                    title={t('media.createFolder', 'Create folder')}
+                    disabled={!newFolderDraft.trim()}
+                    onClick={() => createMediaFolder(contextEntry)}
+                  >
+                    <Icon name="add" size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item dock-media-context-menu__item--danger"
+              onClick={() => {
+                void deleteEntry(contextEntry);
+                setMediaContextMenu(null);
+              }}
+            >
+              <Icon name="delete" size={13} />
+              <span className="dock-media-context-menu__label">
+                {contextEntry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
+              </span>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ── Clear All Confirmation Dialog ── */}
       {showClearAllConfirm && (() => {

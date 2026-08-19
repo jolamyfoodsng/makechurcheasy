@@ -817,6 +817,15 @@
     background-color: var(--bg-card-hover);
 }
 
+.action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.action-btn:disabled:hover {
+    background-color: var(--bg-card);
+}
+
 .action-btn.btn-primary {
     background-color: var(--accent-color);
     border-color: var(--accent-color);
@@ -2194,6 +2203,67 @@
     opacity: 0.9;
 }
 
+.mr-mobile-settings-section {
+    container-type: inline-size;
+    container-name: mobile-settings;
+}
+
+.mr-mobile-primary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+    gap: 24px;
+    align-items: stretch;
+}
+
+.mr-mobile-primary-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+}
+
+.mr-mobile-primary-section {
+    min-width: 0;
+}
+
+.mr-mobile-primary-section--qr {
+    display: flex;
+    flex-direction: column;
+}
+
+.mr-mobile-qr-card {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mr-mobile-qr-card .mr-qr-container {
+    flex: 1;
+    justify-content: center;
+}
+
+.mr-mobile-qr-card .mr-qr-actions {
+    margin-top: auto;
+    flex-wrap: wrap;
+}
+
+@container mobile-settings (max-width: 760px) {
+    .mr-mobile-primary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mr-mobile-qr-card .mr-qr-container {
+        flex: initial;
+    }
+}
+
+@container mobile-settings (min-width: 761px) {
+    .mr-mobile-primary-stack .mr-status-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 /* Status grid for server info */
 .mr-status-grid {
     display: grid;
@@ -2592,6 +2662,29 @@
     opacity: 0.8;
 }
 
+.mr-device-panels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+}
+
+.mr-device-panel {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.mr-device-panel .settings-card {
+    flex: 1;
+}
+
+@container mobile-settings (max-width: 760px) {
+    .mr-device-panels {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ── Permissions list ── */
 .mr-permissions-list {
     display: flex;
@@ -2615,8 +2708,121 @@
     opacity: 0.55;
 }
 
+/* ── Local iPhone / iPad PWA link ── */
+.mr-pwa-card {
+    border-color: rgba(var(--accent-rgb), 0.34);
+}
+
+.mr-pwa-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.mr-pwa-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--accent-rgb), 0.14);
+    color: var(--accent-color);
+}
+
+.mr-pwa-title {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: 0.98rem;
+    font-weight: 650;
+}
+
+.mr-pwa-url-row {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.mr-pwa-url {
+    min-width: 0;
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+}
+
+.mr-pwa-url:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--bg-accent-light);
+}
+
+.mr-pwa-hint {
+    margin: 10px 0 0;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+
+.mr-qr-print-view {
+    display: none;
+}
+
+@media print {
+    @page {
+        margin: 0.5in;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    .mr-qr-print-view,
+    .mr-qr-print-view * {
+        visibility: visible !important;
+    }
+
+    .mr-qr-print-view {
+        position: fixed;
+        inset: 0;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 16px;
+        background: #fff;
+        color: #111;
+        font-family: sans-serif;
+    }
+
+    .mr-qr-print-view h1 {
+        margin: 0;
+        font-size: 24px;
+    }
+
+    .mr-qr-print-view img {
+        width: 300px;
+        height: 300px;
+    }
+
+    .mr-qr-print-view p {
+        margin: 0;
+        font-size: 14px;
+    }
+}
+
 /* ── Responsive adjustments ── */
 @media (max-width: 640px) {
+    .mr-mobile-primary-grid {
+        gap: 20px;
+    }
+
     .mr-status-grid {
         grid-template-columns: 1fr;
     }
@@ -2627,5 +2833,13 @@
 
     .mr-device-actions {
         flex-direction: column;
+    }
+
+    .mr-pwa-url-row {
+        flex-direction: column;
+    }
+
+    .mr-pwa-url-row .action-btn {
+        width: 100%;
     }
 }

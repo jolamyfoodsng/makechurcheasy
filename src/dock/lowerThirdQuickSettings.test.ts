@@ -4,6 +4,7 @@ import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
   mergeQuickThemeBackground,
+  normalizeLowerThirdFitSettings,
 } from "./lowerThirdQuickSettings";
 
 function makeSettings(
@@ -58,6 +59,28 @@ function makeSettings(
 }
 
 describe("lowerThirdQuickSettings", () => {
+  it("keeps fit-to-frame lower thirds at a readable 45px minimum", () => {
+    const normalized = normalizeLowerThirdFitSettings(makeSettings({
+      autoFontScale: true,
+      fontSize: 32,
+      refFontSize: 10,
+    }));
+
+    expect(normalized.fontSize).toBe(45);
+    expect(normalized.refFontSize).toBe(16);
+  });
+
+  it("does not change manually sized lower thirds", () => {
+    const normalized = normalizeLowerThirdFitSettings(makeSettings({
+      autoFontScale: false,
+      fontSize: 32,
+      refFontSize: 10,
+    }));
+
+    expect(normalized.fontSize).toBe(32);
+    expect(normalized.refFontSize).toBe(10);
+  });
+
   it("detects equivalent quick settings snapshots", () => {
     const left = makeSettings();
     const right = makeSettings();

@@ -1,7 +1,7 @@
 {
   "name": "makechurcheasy",
   "private": true,
-  "version": "3.7.0",
+  "version": "3.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "mobile:web": "node scripts/prepare-mobile-web.cjs",
     "check:locales": "node ../scripts/check-locales.cjs",
     "generate:embeddings": "node scripts/generate-bible-embeddings.cjs",
     "sync:local-llm-model": "node scripts/sync-local-llm-model.cjs",

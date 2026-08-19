@@ -9,7 +9,7 @@
 
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
-import type { CountdownConfig, CountdownOverlayPayload } from "./types";
+import type { CountdownConfig, CountdownOverlayPayload, OverlaySyncState } from "./types";
 
 const COUNTDOWN_SOURCE = "MCE Countdown";
 const PREVIEW_COUNTDOWN_SOURCE = "MCE Preview Countdown";
@@ -117,6 +117,7 @@ async function ensureCountdownSource(
 export async function sendCountdownToObs(
   config: CountdownConfig,
   live: boolean,
+  sync?: OverlaySyncState,
 ): Promise<void> {
   if (!obsService.isConnected) {
     throw new Error("OBS is not connected.");
@@ -134,6 +135,7 @@ export async function sendCountdownToObs(
     config,
     baseUrl,
     timestamp: Date.now(),
+    ...(sync ? { sync } : {}),
   };
 
   const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;

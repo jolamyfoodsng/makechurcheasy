@@ -61,7 +61,7 @@ function makeCountdown(title: string, minutes: number, templateId: "minimal" | "
   };
 }
 
-const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
+export const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
   makeCountdown("Pre-Service", 15, "minimal"),
   makeCountdown("Worship Set", 5, "circular"),
   makeCountdown("Sermon Start", 10, "modern"),
@@ -598,7 +598,7 @@ export default function DockCountdownsTab({
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("countdown");
-  const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
+  const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>(HARDCODED_COUNTDOWNS);
   const [liveCountdownId, setLiveCountdownId] = useState<string | null>(() => readLivePersistState()?.id ?? null);
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
@@ -756,22 +756,22 @@ export default function DockCountdownsTab({
       }];
     }
 
-    const selectedTarget = {
-      sceneName: sceneRoute.sceneName,
-      contentSourceName: dockObsClient.getSceneRouteSourceName("countdown", sceneRoute.sceneName),
-      backgroundSourceName: dockObsClient.getSceneRouteSourceName("countdown", sceneRoute.sceneName, "Background"),
-    };
-    if (!sceneRoute.syncPresentation) return [selectedTarget];
+    const selectedTargets = sceneRoute.targets.map((target) => ({
+      sceneName: target.sceneName,
+      contentSourceName: dockObsClient.getSceneRouteSourceName("countdown", target.sceneName),
+      backgroundSourceName: dockObsClient.getSceneRouteSourceName("countdown", target.sceneName, "Background"),
+    }));
+    if (!sceneRoute.syncPresentation) return selectedTargets;
 
     return [
-      selectedTarget,
+      ...selectedTargets,
       {
         sceneName: resolveCountdownTargetScene(),
         contentSourceName: COUNTDOWN_SOURCE,
         backgroundSourceName: BG_SOURCE,
       },
     ];
-  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
 
   async function loadObsScenes(): Promise<string[]> {
     if (presentationLinkMode) return [];

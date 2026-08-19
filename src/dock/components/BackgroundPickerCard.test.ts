@@ -153,6 +153,15 @@ describe("Dock motion defaults", () => {
       expect(source).toContain("pendingOverlayPacket = packet");
     }
   });
+
+  it("uses the configured motion duration instead of compressing it to a fixed short transition", () => {
+    for (const source of [overlayHtml, worshipOverlayHtml, noteOverlayHtml]) {
+      expect(source).toContain("Number.isFinite(configuredAnimationDuration)");
+      expect(source).toContain("Math.min(1500");
+      expect(source).not.toContain("Math.min(170");
+      expect(source).not.toContain("* 0.38");
+    }
+  });
 });
 
 describe("Background picker layout", () => {
@@ -183,6 +192,24 @@ describe("Background picker layout", () => {
 });
 
 describe("Background picker background retention", () => {
+  it("shows Darkness and Opacity for image, pattern, and video without adding them to Theme", () => {
+    expect(backgroundPickerSource).toContain("function BackgroundAppearanceControls");
+    expect(backgroundPickerSource).toContain(
+      '(bgType === "image" || bgType === "video" || bgType === "pattern")',
+    );
+    expect(backgroundPickerSource).toContain("fullscreenShadeOpacity: Number(e.target.value) / 100");
+    expect(backgroundPickerSource).toContain("backgroundOpacity: Number(e.target.value) / 100");
+    expect(backgroundPickerSource).toContain('bgType === "theme"');
+  });
+
+  it("passes those controls through to every projected background layer", () => {
+    expect(dockBibleThemeResolutionSource).toContain("fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity");
+    expect(dockBibleThemeResolutionSource).toContain("backgroundOpacity: useNoBg ? 0");
+    expect(overlayHtml).toContain("backgroundVideoEl.style.opacity = bgOpacity");
+    expect(overlayHtml).toContain("root.style.setProperty('--bg-opacity', bgOpacity)");
+    expect(overlayHtml).toContain("buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42)");
+  });
+
   it("invalidates cached overlay themes when an injected image or pattern changes", () => {
     for (const source of [overlayHtml, worshipOverlayHtml, noteOverlayHtml]) {
       expect(source).toContain("lastAppliedThemeKeyByMode.fullscreen = ''");

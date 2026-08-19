@@ -1221,6 +1221,10 @@
       let stableCompareTranslationSize = null;
       let stableLowerThirdTextSize = null;
       let stableLowerThirdReferenceSize = null;
+      // Lower-third fit mode must remain readable. It may reduce a larger
+      // preset, but it must never collapse into the tiny output seen before.
+      const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
+      const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
 
       function resetStableAutoFitSizes() {
         stableFullscreenTextSize = null;
@@ -2165,15 +2169,15 @@
         // Keep lower-third scripture readable. The card itself is allowed to
         // clip overflowing content, so the floor must be explicit rather than
         // inferred from the clipped scroll height.
-        const textFloor = resolveAutoFontFloor(baseFontSize, 24);
+        const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
         let textSize = stableLowerThirdTextSize === null
           ? baseTextSize
           : Math.max(textFloor, Math.min(baseTextSize, stableLowerThirdTextSize));
         let referenceSize = stableLowerThirdReferenceSize === null
-          ? Math.max(10, Math.round(baseRefFontSize))
-          : Math.max(10, stableLowerThirdReferenceSize);
+          ? Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize))
+          : Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, stableLowerThirdReferenceSize);
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
         const targetWidth = Math.max(280, viewportWidth);
         const targetHeight = Math.max(100, Math.min(barMaxHeight, viewportHeight));
@@ -2202,7 +2206,10 @@
         let guard = 0;
         while (overflowing() && textSize > textFloor && guard < 180) {
           textSize -= 1;
-          referenceSize = Math.max(10, Math.round(textSize * ratio));
+          referenceSize = Math.max(
+            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+            Math.round(textSize * ratio),
+          );
           apply();
           guard += 1;
         }
@@ -2412,8 +2419,13 @@
             ? configuredAnimation
             : 'fade';
         const animationsEnabled = animationName !== 'none';
+        const configuredAnimationDuration = Number(s.animationDuration);
         const ead = animationsEnabled
-          ? Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)))
+          ? Math.max(100, Math.min(1500, Math.round(
+            Number.isFinite(configuredAnimationDuration) && configuredAnimationDuration > 0
+              ? configuredAnimationDuration
+              : 400,
+          )))
           : 0;
         root.style.setProperty('--anim-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
@@ -2707,7 +2719,9 @@
               ? currentBibleState.theme
               : {};
         const configured = Number(theme.animationDuration);
-        return Math.max(95, Math.min(170, Math.round((Number.isFinite(configured) && configured > 0 ? configured : 400) * 0.38)));
+        return Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configured) && configured > 0 ? configured : 400,
+        )));
       }
 
       function getVerseAnimationTargets(mode) {

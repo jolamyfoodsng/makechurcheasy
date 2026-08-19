@@ -7,9 +7,9 @@ import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
 import {
-  readUserScopedStorage,
-  writeUserScopedStorage,
-} from "../../services/userScopedStorage";
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "../../services/localDockSettings";
 import { toStoredOverlayAssetUrl } from "../../services/overlayUrl";
 import {
   loadDockPreferenceList,
@@ -174,7 +174,7 @@ function resolveInitialTab(
 
   const stored = !tab ? (() => {
     try {
-      const v = readUserScopedStorage(activeTabKey);
+      const v = readNativeDockSetting<string>(activeTabKey);
       if (v === "text" || v === "layout" || v === "background" || v === "compare") return v;
     } catch { /* ignore */ }
     return null;
@@ -308,8 +308,8 @@ export default function BackgroundPickerCard({
   );
   const [bgType, setBgType] = useState<BackgroundType>(() => {
     try {
-      const stored = readUserScopedStorage(storageKeys.bgType);
-      if (isBackgroundType(stored)) return stored;
+      const stored = readNativeDockSetting<string>(storageKeys.bgType);
+      if (stored && isBackgroundType(stored)) return stored;
     } catch { /* ignore */ }
     return inferBgTypeFromSettings(quickSettings);
   });
@@ -359,8 +359,8 @@ export default function BackgroundPickerCard({
     prevStorageKeysRef.current = storageKeys;
     setActiveTab(resolveInitialTab(initialTab, displayMode, storageKeys.activeTab, hideBackgroundOnCompare && displayMode === "compare"));
     try {
-      const stored = readUserScopedStorage(storageKeys.bgType);
-      setBgType(isBackgroundType(stored) ? stored : inferBgTypeFromSettings(quickSettings));
+      const stored = readNativeDockSetting<string>(storageKeys.bgType);
+      setBgType(stored && isBackgroundType(stored) ? stored : inferBgTypeFromSettings(quickSettings));
     } catch {
       setBgType(inferBgTypeFromSettings(quickSettings));
     }
@@ -386,7 +386,7 @@ export default function BackgroundPickerCard({
 
   // Persist active tab preference
   useEffect(() => {
-    writeUserScopedStorage(storageKeys.activeTab, activeTab);
+    writeNativeDockSetting(storageKeys.activeTab, activeTab);
   }, [activeTab, storageKeys.activeTab]);
 
   useEffect(() => {
@@ -406,7 +406,7 @@ export default function BackgroundPickerCard({
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
     setDropdownOpen(false);
-    writeUserScopedStorage(storageKeys.bgType, type);
+    writeNativeDockSetting(storageKeys.bgType, type);
 
     // Build the updater for the given type
     let updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings;
@@ -533,7 +533,7 @@ export default function BackgroundPickerCard({
       return;
     }
     setBgType(style.backgroundType);
-    writeUserScopedStorage(storageKeys.bgType, style.backgroundType);
+    writeNativeDockSetting(storageKeys.bgType, style.backgroundType);
     onQuickSettingsChange(() => cloneQuickSettings(style.settings));
     setLocalStyleStatus(`Applied ${style.name}`);
   }, [onQuickSettingsChange, savedStyles, storageKeys.bgType]);
@@ -812,6 +812,14 @@ export default function BackgroundPickerCard({
                   />
                 )}
               </div>
+
+              {(bgType === "image" || bgType === "video" || bgType === "pattern") && (
+                <BackgroundAppearanceControls
+                  quickSettings={quickSettings}
+                  onQuickSettingsChange={onQuickSettingsChange}
+                  onBackgroundPresetChange={onBackgroundPresetChange}
+                />
+              )}
 
               {(storageScope === "bible" || storageScope === "worship" || storageScope === "notes") && (
                 <MotionSection
@@ -1994,6 +2002,78 @@ function ColorSection({
         onQuickSettingsChange={onQuickSettingsChange}
       />
     </div>
+  );
+}
+
+function BackgroundAppearanceControls({
+  quickSettings,
+  onQuickSettingsChange,
+  onBackgroundPresetChange,
+}: {
+  quickSettings: DockFullscreenQuickThemeSettings;
+  onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+}) {
+  const { t } = useTranslation();
+  const updateAppearance = (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
+    onQuickSettingsChange(updater);
+    onBackgroundPresetChange?.("theme");
+  };
+
+  return (
+    <>
+      <div className="dtb-colors__section">
+        <div className="dtb-slider-field">
+          <div className="dtb-slider-field__head">
+            <span>{t('bgPicker.darkness')}</span>
+            <span className="dtb-slider-field__value">
+              {Math.round(quickSettings.fullscreenShadeOpacity * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            className="dtb-slider"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(quickSettings.fullscreenShadeOpacity * 100)}
+            onChange={(e) =>
+              updateAppearance((prev) => ({
+                ...prev,
+                fullscreenShadeOpacity: Number(e.target.value) / 100,
+              }))
+            }
+            aria-label={t('bgPicker.darkness')}
+          />
+        </div>
+      </div>
+
+      <div className="dtb-colors__section">
+        <div className="dtb-slider-field">
+          <div className="dtb-slider-field__head">
+            <span>{t('bgPicker.opacity')}</span>
+            <span className="dtb-slider-field__value">
+              {Math.round(quickSettings.backgroundOpacity * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            className="dtb-slider"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(quickSettings.backgroundOpacity * 100)}
+            onChange={(e) =>
+              updateAppearance((prev) => ({
+                ...prev,
+                backgroundOpacity: Number(e.target.value) / 100,
+              }))
+            }
+            aria-label={t('bgPicker.opacity')}
+          />
+        </div>
+      </div>
+    </>
   );
 }
 

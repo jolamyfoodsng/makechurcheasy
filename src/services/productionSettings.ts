@@ -1,21 +1,14 @@
 import type { BibleTheme } from "../bible/types";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
-import { getByKey, putRecord, STORES, getCurrentUserId } from "./db";
 import { serializeBibleThemesForDock } from "./dockBibleThemeAssets";
 import { getSettings } from "../multiview/mvStore";
+import {
+  hydrateNativeDockSettings,
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "./localDockSettings";
 
-const PRODUCTION_SETTINGS_KEY = "production-mode-settings";
 const PRODUCTION_SETTINGS_STORAGE_KEY = "ocs-production-mode-settings";
-
-function scopedDbKey(): string {
-  const uid = getCurrentUserId();
-  return uid ? `${PRODUCTION_SETTINGS_KEY}:${uid}` : PRODUCTION_SETTINGS_KEY;
-}
-
-function scopedLocalStorageKey(): string {
-  const uid = getCurrentUserId();
-  return uid ? `${PRODUCTION_SETTINGS_STORAGE_KEY}:${uid}` : PRODUCTION_SETTINGS_STORAGE_KEY;
-}
 
 export type ProductionOverlayMode = "fullscreen" | "lower-third";
 
@@ -57,10 +50,6 @@ const DEFAULT_MODULE_SETTINGS: ProductionModuleSettings = {
   lowerThirdThemeId: FALLBACK_LOWER_THIRD_THEME.id,
 };
 
-function canUseLocalStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
 function canSyncDockData(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -82,36 +71,20 @@ function isBibleTheme(value: unknown): value is BibleTheme {
 }
 
 function readLocalSettings(): Partial<ProductionSettings> | null {
-  if (!canUseLocalStorage()) return null;
+  const raw = readNativeDockSetting<unknown>(PRODUCTION_SETTINGS_STORAGE_KEY);
+  if (!raw) return null;
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw as Partial<ProductionSettings>;
+  if (typeof raw !== "string") return null;
   try {
-    const scopedKey = scopedLocalStorageKey();
-    const raw = window.localStorage.getItem(scopedKey);
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") return parsed as Partial<ProductionSettings>;
-    }
-    // Migration: try legacy unscoped key
-    if (scopedKey !== PRODUCTION_SETTINGS_STORAGE_KEY) {
-      const legacy = window.localStorage.getItem(PRODUCTION_SETTINGS_STORAGE_KEY);
-      if (legacy) {
-        window.localStorage.setItem(scopedKey, legacy);
-        const parsed: unknown = JSON.parse(legacy);
-        if (parsed && typeof parsed === "object") return parsed as Partial<ProductionSettings>;
-      }
-    }
-    return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Partial<ProductionSettings> : null;
   } catch {
     return null;
   }
 }
 
 function writeLocalSettings(settings: ProductionSettings): void {
-  if (!canUseLocalStorage()) return;
-  try {
-    window.localStorage.setItem(scopedLocalStorageKey(), JSON.stringify(settings));
-  } catch (err) {
-    console.warn("[productionSettings] Failed to mirror production settings to localStorage:", err);
-  }
+  writeNativeDockSetting(PRODUCTION_SETTINGS_STORAGE_KEY, settings);
 }
 
 async function readSettingsFromDockData(): Promise<Partial<ProductionSettings> | null> {
@@ -232,21 +205,8 @@ export function getDefaultDockProductionSettings(): DockProductionSettingsPayloa
 }
 
 export async function getProductionSettings(): Promise<ProductionSettings> {
-  const key = scopedDbKey();
-  const [fromDb, fromLocal] = await Promise.all([
-    getByKey<ProductionSettings>(STORES.APP_SETTINGS, key).catch(() => undefined),
-    Promise.resolve(readLocalSettings() ?? undefined),
-  ]);
-
-  // Migration: try legacy unscoped key
-  let resolved = fromDb ?? fromLocal ?? undefined;
-  if (!resolved && key !== PRODUCTION_SETTINGS_KEY) {
-    const legacy = await getByKey<ProductionSettings>(STORES.APP_SETTINGS, PRODUCTION_SETTINGS_KEY).catch(() => undefined);
-    if (legacy) {
-      await putRecord(STORES.APP_SETTINGS, legacy, key);
-      resolved = legacy;
-    }
-  }
+  await hydrateNativeDockSettings().catch(() => undefined);
+  let resolved = readLocalSettings() ?? undefined;
 
   if (!resolved) {
     const dockSettings = await readSettingsFromDockData();
@@ -256,9 +216,6 @@ export async function getProductionSettings(): Promise<ProductionSettings> {
   }
 
   const normalized = normalizeProductionSettings(resolved);
-  await putRecord(STORES.APP_SETTINGS, normalized, scopedDbKey()).catch((err) => {
-    console.warn("[productionSettings] Failed to restore production settings to IndexedDB:", err);
-  });
   writeLocalSettings(normalized);
   return normalized;
 }
@@ -269,9 +226,6 @@ export async function saveProductionSettings(settings: ProductionSettings): Prom
     updatedAt: new Date().toISOString(),
   });
 
-  await putRecord(STORES.APP_SETTINGS, normalized, scopedDbKey()).catch((err) => {
-    console.warn("[productionSettings] Failed to save production settings to IndexedDB:", err);
-  });
   writeLocalSettings(normalized);
   return normalized;
 }
@@ -372,6 +326,20 @@ function normalizeDockPayload(raw: unknown): DockProductionSettingsPayload | nul
 }
 
 export async function loadDockProductionSettings(): Promise<DockProductionSettingsPayload> {
+  // The signed-in user's native Dock database is the source of truth. The
+  // JSON file is a bootstrap fallback for an installation that has never
+  // saved production settings; reading it first can overwrite a locally
+  // selected theme/mode with an older published value during Dock startup.
+  try {
+    await hydrateNativeDockSettings();
+    const local = readLocalSettings();
+    if (local) {
+      return await buildDockProductionSettingsPayload();
+    }
+  } catch {
+    // Fall through to the published bootstrap payload below.
+  }
+
   try {
     const response = await fetch("/uploads/dock-production-settings.json", { cache: "no-store" });
     if (response.ok) {

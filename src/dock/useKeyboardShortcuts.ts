@@ -1,7 +1,8 @@
 /**
  * useKeyboardShortcuts.ts — Centralized keyboard shortcut manager for the dock UI.
  *
- * Uses ALT + SHIFT + KEY namespace to avoid conflicts with OBS, browsers, and OS shortcuts.
+ * Supports the Dock's primary Command/Ctrl shortcuts plus the legacy ALT + SHIFT + KEY
+ * namespace used for utility actions.
  * Supports:
  * - Focus detection (ignores shortcuts when typing in inputs)
  * - Emergency action double-trigger logic
@@ -15,12 +16,14 @@ import { useEffect, useRef, useCallback, useState } from "react";
 
 export type ShortcutKey = string;
 export type ShortcutHandler = () => void;
+export type ShortcutModifier = "altShift" | "primary";
 
 export interface ShortcutDefinition {
   key: ShortcutKey;
   handler: ShortcutHandler;
   label: string;
   category: ShortcutCategory;
+  modifier?: ShortcutModifier;
   dangerous?: boolean;
 }
 
@@ -81,13 +84,19 @@ export function useKeyboardShortcuts(
     if (!enabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.altKey || !event.shiftKey) return;
       if (isTypingInInput()) return;
 
       const key = event.key.toLowerCase();
       const defs = shortcutsRef.current;
       const def = defs.find((d) => d.key.toLowerCase() === key);
       if (!def) return;
+
+      const modifier = def.modifier ?? "altShift";
+      const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+      const modifierMatches = modifier === "primary"
+        ? hasPrimaryModifier && !event.altKey && !event.shiftKey
+        : event.altKey && event.shiftKey && !hasPrimaryModifier;
+      if (!modifierMatches) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -131,6 +140,12 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
   "Utility",
 ];
 
-export function formatShortcut(key: string): string {
+export function formatShortcut(key: string, modifier: ShortcutModifier = "altShift"): string {
+  if (modifier === "primary") {
+    const platform = typeof navigator === "undefined"
+      ? ""
+      : `${navigator.platform} ${navigator.userAgent}`;
+    return `${/Mac|iPhone|iPad|iPod/i.test(platform) ? "⌘" : "Ctrl"} + ${key.toUpperCase()}`;
+  }
   return `Alt + Shift + ${key.toUpperCase()}`;
 }

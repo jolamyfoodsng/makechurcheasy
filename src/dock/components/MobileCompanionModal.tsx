@@ -9,15 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { X, Smartphone, Wifi, WifiOff, RefreshCw } from "lucide-react";
-
-interface PairingInfo {
-  version?: number;
-  ip: string;
-  port: number;
-  wsPort?: number;
-  apiPort?: number;
-  pairingToken: string;
-}
+import {
+  buildMobilePairingPayload,
+  resolveMobilePairingPorts,
+  type MobilePairingInfo,
+} from "../../services/mobilePairing";
 
 interface MobileServerStatus {
   running: boolean;
@@ -79,7 +75,7 @@ interface MobileCompanionModalProps {
 
 export default function MobileCompanionModal({ onClose }: MobileCompanionModalProps) {
   const { t } = useTranslation();
-  const [pairing, setPairing] = useState<PairingInfo | null>(null);
+  const [pairing, setPairing] = useState<MobilePairingInfo | null>(null);
   const [status, setStatus] = useState<MobileServerStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -88,8 +84,11 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
     try {
       setLoading(true);
       setError("");
-      const info = await invoke<PairingInfo>("get_mobile_pairing_info");
+      const info = await invoke<MobilePairingInfo>("get_mobile_pairing_info");
       setPairing(info);
+      if (!resolveMobilePairingPorts(info)) {
+        setError("Mobile services are still starting. Try again in a moment.");
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -107,21 +106,18 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
   }, []);
 
   useEffect(() => {
-    void fetchPairingInfo();
-    void fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
+    const refresh = () => {
+      void fetchPairingInfo();
+      void fetchStatus();
+    };
+    refresh();
+    const interval = setInterval(refresh, 3000);
     return () => clearInterval(interval);
   }, [fetchPairingInfo, fetchStatus]);
 
-  const wsPort = pairing?.wsPort ?? pairing?.port ?? 8765;
-  const wsUrl = pairing ? `ws://${pairing.ip}:${wsPort}` : "";
-  const pairingPayload = pairing ? JSON.stringify({
-    version: pairing.version ?? 1,
-    ip: pairing.ip,
-    wsPort,
-    apiPort: pairing.apiPort ?? 45678,
-    pairingToken: pairing.pairingToken,
-  }) : "";
+  const pairingPorts = pairing ? resolveMobilePairingPorts(pairing) : null;
+  const wsUrl = pairing && pairingPorts ? `ws://${pairing.ip}:${pairingPorts.wsPort}` : "";
+  const pairingPayload = pairing ? buildMobilePairingPayload(pairing) : "";
 
   return (
     <div className="mc-modal-backdrop" onMouseDown={onClose}>
@@ -159,7 +155,7 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
                 {t("dock.mobileCompanion.retry")}
               </button>
             </div>
-          ) : pairing ? (
+          ) : pairing && pairingPayload ? (
             <>
               {/* QR Code */}
               <div className="mc-qr-section">

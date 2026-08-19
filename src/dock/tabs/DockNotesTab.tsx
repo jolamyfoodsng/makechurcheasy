@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { DockStagedItem } from "../dockTypes";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
+import type { DockSearchPlacement } from "../dockSearchPlacement";
 import { dockObsClient, type DockTabContentPushData } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { LOWER_THIRD_SIZE_PRESETS, type BibleTheme } from "../../bible/types";
@@ -13,6 +14,7 @@ import {
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
+import DockBottomSearchPanel from "../components/DockBottomSearchPanel";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import DockTranslationControls, {
@@ -21,12 +23,17 @@ import DockTranslationControls, {
 import DockAutoAdvanceControl from "../components/DockAutoAdvanceControl";
 import DockOutputQuickActions, {
   DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
+  type DockOutputLineMode,
   type DockOutputQuickSettingsPatch,
   type DockOutputQuickTextSettings,
 } from "../components/DockOutputQuickActions";
 import { DOCK_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
+import {
+  LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  normalizeLowerThirdFitSettings,
+} from "../lowerThirdQuickSettings";
 import {
   getDockTranslationSourceSignature,
   getOrderedTranslationParts,
@@ -50,6 +57,7 @@ import {
   type DockNotesOverlayMode,
 } from "../dockNotesStorage";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import {
   loadDockNotesAppendCommands,
   type DockNotesAppendCommand,
@@ -60,7 +68,7 @@ import {
   formatNoteText,
   type NoteTextToolAction,
 } from "../noteTextTools";
-import { paginateNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
+import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
@@ -70,6 +78,7 @@ interface Props {
   onStage: (item: DockStagedItem | null) => void;
   isActive?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
+  searchPlacement?: DockSearchPlacement;
 }
 
 type OverlayMode = DockNotesOverlayMode;
@@ -177,7 +186,11 @@ function DockNoteEditorDialog({
   );
 }
 
-function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_PER_SLIDE): { id: string; label: string; text: string }[] {
+function generateNoteSlides(
+  note: DockNote,
+  linesPerSlide = DEFAULT_NOTE_LINES_PER_SLIDE,
+  autoSplit = true,
+): { id: string; label: string; text: string }[] {
   const slides: { id: string; label: string; text: string }[] = [];
   const structuredText = extractStructuredTextTitle(normalizeDockMultilineText(note.content));
   const displayTitle = structuredText.title || note.title;
@@ -204,7 +217,11 @@ function generateNoteSlides(note: DockNote, linesPerSlide = DEFAULT_NOTE_LINES_P
       groupedSections.push({ headingLabel: "", lines: sectionLines });
     });
 
-    paginateNoteSections(groupedSections, clampNoteLinesPerSlide(linesPerSlide)).forEach((slide, slideIndex) => {
+    const generatedSections = autoSplit
+      ? paginateNoteSections(groupedSections, clampNoteLinesPerSlide(linesPerSlide))
+      : preserveNoteSections(groupedSections);
+
+    generatedSections.forEach((slide, slideIndex) => {
       slides.push({
         id: `note-${note.id}-${slideIndex}`,
         label: slide.headingLabel || (slideIndex === 0 ? displayTitle : ""),
@@ -241,9 +258,13 @@ function getNoteQuickSettings(
     ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
     : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
   const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+  const autoFontScale = quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true;
+  const fontSize = quickSettings?.fontSize ?? theme.settings.fontSize;
   return {
-    fontSize: quickSettings?.fontSize ?? theme.settings.fontSize,
-    autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true,
+    fontSize: overlayMode === "fullscreen" || !autoFontScale
+      ? fontSize
+      : Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, fontSize),
+    autoFontScale,
   };
 }
 
@@ -266,11 +287,10 @@ function isStoredDockTranslation(value: unknown): value is DockTranslationValue 
 }
 
 function loadDockNoteTranslations(): StoredDockNoteTranslations {
-  if (typeof localStorage === "undefined") return {};
   try {
-    const raw = localStorage.getItem(getUserScopedKey(DOCK_NOTES_TRANSLATIONS_KEY));
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
+    const stored = readNativeDockSetting<unknown>(DOCK_NOTES_TRANSLATIONS_KEY);
+    if (!stored) return {};
+    const parsed: unknown = typeof stored === "string" ? JSON.parse(stored) : stored;
     if (!parsed || typeof parsed !== "object") return {};
     return Object.fromEntries(
       Object.entries(parsed).filter(([, value]) => isStoredDockTranslation(value)),
@@ -281,14 +301,13 @@ function loadDockNoteTranslations(): StoredDockNoteTranslations {
 }
 
 function saveDockNoteTranslation(noteId: string, translation: DockTranslationValue | null): void {
-  if (typeof localStorage === "undefined") return;
   try {
     const stored = loadDockNoteTranslations();
     if (translation) stored[noteId] = translation;
     else delete stored[noteId];
-    localStorage.setItem(getUserScopedKey(DOCK_NOTES_TRANSLATIONS_KEY), JSON.stringify(stored));
+    writeNativeDockSetting(DOCK_NOTES_TRANSLATIONS_KEY, stored);
   } catch {
-    // Ignore storage failures in embedded browser contexts.
+    // Ignore malformed translation records.
   }
 }
 
@@ -296,29 +315,45 @@ export default function DockNotesTab({
   onStage,
   isActive,
   presentationOutputTarget = "obs",
+  searchPlacement = "top",
 }: Props) {
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
-  const hasSceneRoute = sceneRoute.enabled && Boolean(sceneRoute.sceneName);
+  const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
 
   const pushNotesToConfiguredOutput = useCallback(async (data: DockTabContentPushData) => {
     if (!hasSceneRoute) {
       await dockObsClient.pushNotesLyrics(data);
       return;
     }
-    await dockObsClient.pushNotesToScene(data, sceneRoute.sceneName);
+    await Promise.all(sceneRoute.targets.map((target) => {
+      if (target.mode === "inherit") {
+        return dockObsClient.pushNotesToScene(data, target.sceneName);
+      }
+
+      const targetThemeSettings = target.mode === "fullscreen"
+        ? (liveFullscreenThemeSettingsRef.current ?? data.bibleThemeSettings)
+        : (liveLowerThirdThemeSettingsRef.current ?? data.bibleThemeSettings);
+      return dockObsClient.pushNotesToScene({
+        ...data,
+        overlayMode: target.mode,
+        bibleThemeSettings: targetThemeSettings,
+      }, target.sceneName);
+    }));
     if (sceneRoute.syncPresentation) await dockObsClient.pushNotesLyrics(data);
-  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
 
   const clearNotesFromConfiguredOutput = useCallback(async () => {
     if (!hasSceneRoute) {
       await dockObsClient.clearNotesLyrics();
       return;
     }
-    await dockObsClient.clearSceneRouteSource("notes", sceneRoute.sceneName);
+    await Promise.all(sceneRoute.targets.map((target) => (
+      dockObsClient.clearSceneRouteSource("notes", target.sceneName)
+    )));
     if (sceneRoute.syncPresentation) await dockObsClient.clearNotesLyrics();
-  }, [hasSceneRoute, sceneRoute.sceneName, sceneRoute.syncPresentation]);
+  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
   const initialPrefsRef = useRef<DockNotesPreferences | null>(null);
   if (initialPrefsRef.current === null) {
     initialPrefsRef.current = loadDockNotesPreferences();
@@ -347,6 +382,7 @@ export default function DockNotesTab({
   const [fullscreenQuickSettings, setFullscreenQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.fullscreenQuickSettings ?? null);
   const [lowerThirdQuickSettings, setLowerThirdQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.lowerThirdQuickSettings ?? null);
   const [notesLinesPerSlide, setNotesLinesPerSlide] = useState(() => clampNoteLinesPerSlide(initialPrefs.linesPerSlide));
+  const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit !== false);
   const [quickActionsTop, setQuickActionsTop] = useState(() => (
     typeof initialPrefs.quickActionsTop === "number" && Number.isFinite(initialPrefs.quickActionsTop)
       ? initialPrefs.quickActionsTop
@@ -360,6 +396,7 @@ export default function DockNotesTab({
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
   const [noteSlideEditor, setNoteSlideEditor] = useState<{ index: number; label: string; text: string } | null>(null);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [bottomSearchExpanded, setBottomSearchExpanded] = useState(true);
   const [actionError, setActionError] = useState("");
   const [toasts, setToasts] = useState<{ id: string; message: string; tone: ToastTone }[]>([]);
   const prefsReadyRef = useRef(false);
@@ -367,6 +404,17 @@ export default function DockNotesTab({
   const pendingQuickSettingsRefreshRef = useRef(false);
   const notesTranslationChangeRef = useRef(false);
   const compactSummaryActionsRef = useRef<HTMLDivElement>(null);
+  const liveFullscreenThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
+  const liveLowerThirdThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    liveFullscreenThemeSettingsRef.current = (
+      fullscreenQuickSettings ?? getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings
+    ) as unknown as Record<string, unknown>;
+    liveLowerThirdThemeSettingsRef.current = (
+      lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings
+    ) as unknown as Record<string, unknown>;
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
 
   const filteredNotes = useMemo(() => {
     if (!debouncedSearchQuery.trim()) return notes;
@@ -377,8 +425,8 @@ export default function DockNotesTab({
   }, [debouncedSearchQuery, notes]);
 
   const selectedNoteSlides = useMemo(
-    () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide) : []),
-    [notesLinesPerSlide, selectedNote],
+    () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide, notesAutoSplit) : []),
+    [notesAutoSplit, notesLinesPerSlide, selectedNote],
   );
   const notesTranslationSourceSignature = useMemo(
     () => getDockTranslationSourceSignature(selectedNoteSlides),
@@ -737,11 +785,6 @@ export default function DockNotesTab({
     (idx: number, quickSettingsOverride?: DockFullscreenQuickThemeSettings) => {
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
-      if (!presentationLinkMode && (!hasSceneRoute || sceneRoute.syncPresentation)) {
-        void dockObsClient.focusMcePresentationModule("notes").catch((err) => {
-          console.warn("[DockNotesTab] Failed to focus Notes presentation source:", err);
-        });
-      }
       setActionError("");
       setSelectedSlideIdx(idx);
       setVisibleSlideIdx(idx);
@@ -814,7 +857,11 @@ export default function DockNotesTab({
     [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme],
   );
 
-  const handleNotesQuickCommit = useCallback((patch: DockOutputQuickSettingsPatch, nextLineCount?: number) => {
+  const handleNotesQuickCommit = useCallback((
+    patch: DockOutputQuickSettingsPatch,
+    nextLineCount?: number,
+    nextLineMode?: DockOutputLineMode,
+  ) => {
     const fullscreenBase = fullscreenQuickSettings
       ?? (() => {
         const settings = getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings;
@@ -832,15 +879,21 @@ export default function DockNotesTab({
         };
       })();
     const nextFullscreenSettings = { ...fullscreenBase, ...patch };
-    const nextLowerThirdSettings = { ...lowerThirdBase, ...patch };
+    const nextLowerThirdSettings = normalizeLowerThirdFitSettings({ ...lowerThirdBase, ...patch });
     setFullscreenQuickSettings(nextFullscreenSettings);
     setLowerThirdQuickSettings(nextLowerThirdSettings);
+    if (nextLineMode !== undefined) {
+      setNotesAutoSplit(nextLineMode !== "original");
+      setSelectedSlideIdx(0);
+      setVisibleSlideIdx(null);
+    }
     if (nextLineCount !== undefined) {
       setNotesLinesPerSlide(clampNoteLinesPerSlide(nextLineCount));
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
     }
-    if (overlayVisible && activeSlideIndex !== null && nextLineCount === undefined) {
+    const lineLayoutChanged = nextLineCount !== undefined || nextLineMode !== undefined;
+    if (overlayVisible && activeSlideIndex !== null && !lineLayoutChanged) {
       // Publish the exact settings selected by the operator. Waiting for the
       // state update effect here can send the previous font size to OBS when
       // the same note remains live.
@@ -954,11 +1007,12 @@ export default function DockNotesTab({
     prefs.fullscreenQuickSettings = fullscreenQuickSettings;
     prefs.lowerThirdQuickSettings = lowerThirdQuickSettings;
     prefs.linesPerSlide = notesLinesPerSlide;
+    prefs.autoSplit = notesAutoSplit;
     prefs.quickActionsTop = quickActionsTop;
     prefs.quickActionsLeft = quickActionsLeft;
     prefs.quickUpdateImmediately = quickUpdateImmediately;
     saveDockNotesPreferences(prefs);
-  }, [fullscreenQuickSettings, lowerThirdQuickSettings, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, notesAutoSplit, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
 
   // Escape key handler
   useEffect(() => {
@@ -1011,42 +1065,83 @@ export default function DockNotesTab({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isActive, showNoteEditor, showCompactSummaryActions, selectedNote, selectedNoteSlides, activeSlideIndex, clearNotesFromConfiguredOutput, onStage, presentationLinkMode, pushNoteSlide]);
 
+  const renderNotesSearchPanel = () => (
+    <section className="dock-console-panel dock-console-panel--toolbar">
+      <div className="dock-console-header dock-notes-browser-toolbar">
+        <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
+          <Icon name="search" size={14} className="dock-search__icon" />
+          <input
+            className="dock-input"
+            placeholder={t("notes.searchPlaceholder")}
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label={t("notes.searchPlaceholder")}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="dock-search__clear"
+              onClick={() => setSearchQuery("")}
+              aria-label={t("common.clear")}
+              title={t("common.clear")}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          )}
+        </div>
+        <div className="dock-console-actions dock-console-actions--song-browser">
+          <DockSceneRoutingControl
+            module="notes"
+            route={sceneRoute}
+            onRouteChange={updateSceneRoute}
+            disabled={presentationLinkMode}
+            title={t("notes.output")}
+          />
+          <button
+            type="button"
+            className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
+            onClick={openNewNote}
+            title={t("notes.addNote")}
+            aria-label={t("notes.addNote")}
+          >
+            <Icon name="add" size={13} />
+            <span className="dock-console-toggle__label">{t("common.add")}</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderNoteSlidesSearchPanel = () => (
+    <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
+      <div className="dock-media-search dock-media-search--plain">
+        <input
+          className="dock-media-search__input"
+          placeholder={t("notes.searchSlidesPlaceholder")}
+          value={noteSlidesSearchQuery}
+          onChange={(event) => setNoteSlidesSearchQuery(event.target.value)}
+          aria-label={t("notes.searchSlidesPlaceholder")}
+        />
+        {noteSlidesSearchQuery && (
+          <button
+            type="button"
+            className="dock-media-search__clear"
+            onClick={() => setNoteSlidesSearchQuery("")}
+            aria-label={t("common.clear")}
+            title={t("common.close")}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+
   return (
     <div className="dock-module dock-module--worship">
       {!selectedNote ? (
         <>
-          <section className="dock-console-panel dock-console-panel--toolbar">
-            <div className="dock-console-header dock-notes-browser-toolbar">
-              <div className="dock-search dock-search--console" style={{ marginBottom: 0 }}>
-                <Icon name="search" size={14} className="dock-search__icon" />
-                <input
-                  className="dock-input"
-                  placeholder={t("notes.searchPlaceholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label={t("notes.searchPlaceholder")}
-                />
-                {searchQuery && (
-                  <button type="button" className="dock-search__clear" onClick={() => setSearchQuery("")} aria-label={t("common.clear")} title={t("common.clear")}>
-                    <Icon name="close" size={13} />
-                  </button>
-                )}
-              </div>
-              <div className="dock-console-actions dock-console-actions--song-browser">
-                <DockSceneRoutingControl
-                  module="notes"
-                  route={sceneRoute}
-                  onRouteChange={updateSceneRoute}
-                  disabled={presentationLinkMode}
-                  title={t("notes.output")}
-                />
-                <button type="button" className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add" onClick={openNewNote} title={t("notes.addNote")} aria-label={t("notes.addNote")}>
-                  <Icon name="add" size={13} />
-                  <span className="dock-console-toggle__label">{t("common.add")}</span>
-                </button>
-              </div>
-            </div>
-          </section>
+          {searchPlacement !== "bottom" && renderNotesSearchPanel()}
 
           <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace">
             {filteredNotes.length === 0 ? (
@@ -1087,6 +1182,14 @@ export default function DockNotesTab({
               </div>
             )}
           </section>
+          {searchPlacement !== "top" && (
+            <DockBottomSearchPanel
+              expanded={bottomSearchExpanded}
+              onToggle={() => setBottomSearchExpanded((current) => !current)}
+            >
+              {renderNotesSearchPanel()}
+            </DockBottomSearchPanel>
+          )}
         </>
       ) : (
         <>
@@ -1110,10 +1213,12 @@ export default function DockNotesTab({
                 <div className="dock-worship-summary__meta">
                   <span>{selectedNoteSlides.length} {selectedNoteSlides.length === 1 ? t("notes.slide") : t("notes.slides")}</span>
                   <span className="dock-worship-summary__meta-dot">·</span>
-                  <span>{notesLinesPerSlide} {notesLinesPerSlide === 1 ? t("notes.linePerNote") : t("notes.linesPerNote")}</span>
+                  <span>{notesAutoSplit
+                    ? `${notesLinesPerSlide} ${notesLinesPerSlide === 1 ? t("notes.linePerNote") : t("notes.linesPerNote")}`
+                    : t("notes.original", "Original")}</span>
                 </div>
               </div>
-                <div className="dock-worship-summary__compact-search">
+                {searchPlacement !== "bottom" && <div className="dock-worship-summary__compact-search">
                   <div className="dock-media-search dock-media-search--plain">
                     <input
                       className="dock-media-search__input"
@@ -1134,7 +1239,7 @@ export default function DockNotesTab({
                       </button>
                     )}
                   </div>
-                </div>
+                </div>}
                 <div className="dock-worship-summary__actions">
                   <div className="dock-worship-summary__primary-actions">
                     <DockTranslationControls
@@ -1203,28 +1308,7 @@ export default function DockNotesTab({
               </div>
           </section>
 
-          <section className="dock-console-panel dock-console-panel--toolbar dock-worship-lyrics-search">
-            <div className="dock-media-search dock-media-search--plain">
-              <input
-                className="dock-media-search__input"
-                placeholder={t("notes.searchSlidesPlaceholder")}
-                value={noteSlidesSearchQuery}
-                onChange={(event) => setNoteSlidesSearchQuery(event.target.value)}
-                aria-label={t("notes.searchSlidesPlaceholder")}
-              />
-              {noteSlidesSearchQuery && (
-                <button
-                  type="button"
-                  className="dock-media-search__clear"
-                  onClick={() => setNoteSlidesSearchQuery("")}
-                  aria-label={t("common.clear")}
-                  title={t("common.clear")}
-                >
-                  <Icon name="close" size={13} />
-                </button>
-              )}
-            </div>
-          </section>
+          {searchPlacement !== "bottom" && renderNoteSlidesSearchPanel()}
 
           <section className="dock-console-panel dock-console-panel--workspace dock-worship-workspace" data-toolbar-collapsed={toolbarCollapsed || undefined}>
             {selectedNoteSlides.length === 0 ? (
@@ -1309,6 +1393,7 @@ export default function DockNotesTab({
               lineLabel={t("notes.linesPerNote")}
               settings={activeNoteQuickSettings}
               lineCount={notesLinesPerSlide}
+              lineMode={notesAutoSplit ? "count" : "original"}
               maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
               minFontSize={overlayMode === "fullscreen" ? 28 : 14}
               maxFontSize={overlayMode === "fullscreen" ? 180 : 100}
@@ -1318,6 +1403,7 @@ export default function DockNotesTab({
               left={quickActionsLeft}
               onPositionChange={handleNotesQuickActionsPositionChange}
               onCommit={handleNotesQuickCommit}
+              originalLineLabel={t("notes.original", "Original")}
               sizePresets={DOCK_QUICK_SIZE_OPTIONS}
               activeSizePreset={activeNoteSizePreset}
               getSizePresetPatch={getNotesQuickSizePatch}
@@ -1336,6 +1422,14 @@ export default function DockNotesTab({
                 sourceVisible={overlayVisible}
                 collapsed={toolbarCollapsed}
                 onCollapseChange={setToolbarCollapsed}
+                bottomPanel={searchPlacement !== "top" ? (
+                  <DockBottomSearchPanel
+                    expanded={bottomSearchExpanded}
+                    onToggle={() => setBottomSearchExpanded((current) => !current)}
+                  >
+                    {renderNoteSlidesSearchPanel()}
+                  </DockBottomSearchPanel>
+                ) : undefined}
                 inlineAction={
                   <button
                     type="button"

@@ -12,6 +12,9 @@ import { clearStore, getByKey, getCentralDb, getCurrentUserId, putRecord, STORES
 const DB_NAME = "obs-church-studio-worship";
 const DB_VERSION = 4;
 
+/** Emitted after any song create/update/archive/restore so open app views refresh. */
+export const WORSHIP_SONGS_UPDATED_EVENT = "mce-worship-songs-updated";
+
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function isSongArchived(song: Song): boolean {
@@ -33,6 +36,12 @@ function sortArchivedSongs(songs: Song[]): Song[] {
 }
 
 function notifySongsChanged(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(WORSHIP_SONGS_UPDATED_EVENT));
+  } catch {
+    // Non-browser callers (tests/import scripts) do not have a window.
+  }
+
   syncSongsToDock()
     .then(() => {
       import("../services/dockBridge").then((m) => m.dockBridge.sendLibraryUpdated());

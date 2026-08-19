@@ -8,10 +8,105 @@
 
 import type { MediaItem } from "./libraryTypes";
 import { getCurrentUserId } from "../services/db";
+import { getOverlayBaseUrl } from "../services/overlayUrl";
+import { isInternalDockUploadFile } from "../dock/internalMediaAssets";
 
 const DB_NAME = "obs-church-studio-media-library";
 const STORE_NAME = "media";
 const DB_VERSION = 2;
+const MEDIA_UPLOAD_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp",
+  "mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv",
+]);
+const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
+
+function getUploadMediaType(fileName: string): MediaItem["type"] | null {
+  const extension = fileName.split(".").pop()?.toLowerCase() || "";
+  if (!MEDIA_UPLOAD_EXTENSIONS.has(extension)) return null;
+  return ["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"].includes(extension)
+    ? "video"
+    : "image";
+}
+
+function isInternalUploadFile(fileName: string): boolean {
+  const normalized = fileName.split(/[\\/]/).pop()?.toLowerCase() || "";
+  return isInternalDockUploadFile(fileName)
+    || INTERNAL_UPLOAD_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function getUploadDisplayName(fileName: string): string {
+  return fileName.replace(/^media_\d{10,13}_/, "");
+}
+
+function getUploadCreatedAt(fileName: string): string {
+  const match = fileName.match(/^media_(\d{10,13})_/);
+  if (!match) return new Date().toISOString();
+  const raw = Number(match[1]);
+  const timestamp = match[1].length <= 10 ? raw * 1000 : raw;
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
+}
+
+/**
+ * Dock uploads are written from an OBS browser origin, so that origin has a
+ * separate IndexedDB database from the main desktop window. The uploads
+ * folder is the shared physical source of truth; discover its media files so
+ * every surface can reconcile the same library.
+ */
+async function discoverUploadedMedia(): Promise<MediaItem[]> {
+  try {
+    const baseUrl = await getOverlayBaseUrl();
+    const [uploadsResponse, directoryResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/uploads`, { cache: "no-store" }),
+      fetch(`${baseUrl}/api/uploads-dir`, { cache: "no-store" }),
+    ]);
+    if (!uploadsResponse.ok) return [];
+
+    const files = await uploadsResponse.json();
+    if (!Array.isArray(files)) return [];
+    const directoryPayload = directoryResponse.ok
+      ? await directoryResponse.json() as { path?: string }
+      : {};
+    const directory = typeof directoryPayload.path === "string"
+      ? directoryPayload.path.trim()
+      : "";
+    const separator = directory.includes("\\") ? "\\" : "/";
+
+    return files
+      .filter((value): value is string => typeof value === "string")
+      .filter((fileName) => Boolean(getUploadMediaType(fileName)) && !isInternalUploadFile(fileName))
+      .map((fileName) => {
+        const type = getUploadMediaType(fileName)!;
+        return {
+          id: `upload:${fileName}`,
+          name: getUploadDisplayName(fileName),
+          type,
+          url: `${baseUrl}/uploads/${encodeURIComponent(fileName)}`,
+          ...(directory ? { filePath: `${directory}${separator}${fileName}` } : {}),
+          diskFileName: fileName,
+          createdAt: getUploadCreatedAt(fileName),
+          source: "local" as const,
+        } satisfies MediaItem;
+      });
+  } catch (error) {
+    console.warn("[libraryDb] Failed to discover shared uploads:", error);
+    return [];
+  }
+}
+
+function mergeMediaItems(stored: MediaItem[], discovered: MediaItem[]): MediaItem[] {
+  const result: MediaItem[] = [];
+  const seen = new Set<string>();
+  for (const item of [...stored, ...discovered]) {
+    const key = item.diskFileName || item.filePath || item.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // IndexedDB Helpers
@@ -117,10 +212,11 @@ export async function getAllMedia(): Promise<MediaItem[]> {
   // Fire migration in background - don't block on it
   migrateFromLocalStorageIfNeeded().catch(() => { });
 
+  let storedItems: MediaItem[] = [];
   try {
     const db = await openDb();
     const uid = getCurrentUserId();
-    const items = await new Promise<MediaItem[]>((resolve, reject) => {
+    storedItems = await new Promise<MediaItem[]>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       let request: IDBRequest;
@@ -133,14 +229,16 @@ export async function getAllMedia(): Promise<MediaItem[]> {
       request.onsuccess = () => resolve(request.result as MediaItem[]);
       request.onerror = () => reject(request.error);
     });
-
-    return items.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
   } catch (err) {
     console.warn("[libraryDb] Failed to read media from IndexedDB:", err);
-    return [];
   }
+
+  // Dock uploads can be created from a separate browser origin and therefore
+  // do not necessarily have an IndexedDB record in this window. Reconcile the
+  // shared uploads folder on every read so the desktop library, Dock, and
+  // mobile companion all see the same media inventory.
+  const discoveredItems = await discoverUploadedMedia();
+  return mergeMediaItems(storedItems, discoveredItems);
 }
 
 /** Save (create or update) a media item — auto-injects userId */

@@ -4,7 +4,6 @@ import {
   saveDockPreference,
   writeDockPreference,
 } from "../services/dockPreferenceStorage";
-import { writeUserScopedStorage } from "../services/userScopedStorage";
 import {
   DEFAULT_DOCK_FONT_FAMILY,
   normalizeDockFontFamily,
@@ -85,7 +84,6 @@ function persistPreferences(value: Partial<DockOutputTypographyPreferences>): vo
     ...value,
     updatedAt: new Date().toISOString(),
   });
-  writeUserScopedStorage(DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY, JSON.stringify(next));
   writeDockPreference(DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY, next);
   void saveDockPreference(DOCK_OUTPUT_TYPOGRAPHY_STORAGE_KEY, next);
 }

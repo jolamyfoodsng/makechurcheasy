@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dockObsClient } from "./dockObsClient";
+import { removeNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 
 type BackgroundTheme = Record<string, unknown>;
 type InputState = {
@@ -165,6 +166,7 @@ describe("dockObsClient background reflection stress", () => {
       hideFullscreenBg: client.hideFullscreenBg,
       _hideLowerThirdBgSource: client._hideLowerThirdBgSource,
       waitForOverlayRenderAck: client.waitForOverlayRenderAck,
+      focusMcePresentationModule: client.focusMcePresentationModule,
       promotePresentationScene: client.promotePresentationScene,
       ensurePresentationPreviewActive: client.ensurePresentationPreviewActive,
       ensurePresentationSceneReady: client.ensurePresentationSceneReady,
@@ -191,6 +193,8 @@ describe("dockObsClient background reflection stress", () => {
 
     client.resetPresentationSceneState();
     client._programSceneBeforePush.clear();
+    client._programBackgroundManagedScenes = new Set<string>();
+    client._programBackgroundManagedScenesHydrated = true;
     client._status = "connected";
 
     client.getCanvasSize = vi.fn(async () => ({ width: 1920, height: 1080 }));
@@ -320,7 +324,12 @@ describe("dockObsClient background reflection stress", () => {
   afterEach(() => {
     Object.assign(client, originalMethods);
     client._programSceneBeforePush.clear();
+    client._programBackgroundManagedScenes = null;
+    client._programBackgroundManagedScenesHydrated = false;
     client.resetPresentationSceneState();
+    removeNativeDockSetting("ocs-dock-program-background-scenes-v1");
+    removeNativeDockSetting("ocs-dock-program-background-last-scene-v1");
+    removeNativeDockSetting("ocs-dock-projection-settings");
     vi.restoreAllMocks();
   });
 
@@ -508,6 +517,7 @@ describe("dockObsClient background reflection stress", () => {
     client.readSceneMode = vi.fn(() => "no-clone");
     client.ensurePresentationSceneReady = vi.fn(async () => {});
     client.getCurrentProgramSceneName = vi.fn(async () => "Pastor Camera");
+    client._programBackgroundManagedScenes = new Set(["Pastor Camera"]);
 
     await client.applyProjectionSettings({ allowSceneMutation: true });
 
@@ -527,6 +537,7 @@ describe("dockObsClient background reflection stress", () => {
     client.isStudioModeEnabled = vi.fn(async () => true);
     client.ensurePresentationSceneReady = vi.fn(async () => {});
     client.getCurrentProgramSceneName = vi.fn(async () => "Camera 2");
+    client._programBackgroundManagedScenes = new Set(["Pastor Camera"]);
 
     await client.ensureProgramSceneAsSourceInPresentation(true);
 
@@ -537,6 +548,56 @@ describe("dockObsClient background reflection stress", () => {
     expect(Array.from(presentationItems?.values() ?? []).filter((item) => (
       item.sourceName === "Pastor Camera" || item.sourceName === "Camera 2"
     ))).toHaveLength(1);
+  });
+
+  it("leaves an untracked user scene source inside MCE Presentation untouched", async () => {
+    sceneItems.set("MCE Presentation", new Map([
+      ["User Camera Scene", { sourceName: "User Camera Scene", sceneItemId: 10, sceneItemIndex: 0, enabled: true }],
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("User Camera Scene", new Map());
+    sceneItems.set("Camera 2", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => true);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+    client.getCurrentProgramSceneName = vi.fn(async () => "Camera 2");
+
+    await client.ensureProgramSceneAsSourceInPresentation(true);
+
+    expect(sceneItems.get("MCE Presentation")?.has("User Camera Scene")).toBe(true);
+    expect(callLog.some((entry) => (
+      entry.method === "RemoveSceneItem" &&
+      entry.payload.sceneName === "MCE Presentation" &&
+      entry.payload.sceneItemId === 10
+    ))).toBe(false);
+  });
+
+  it("reconciles a Program scene in non-Studio Mode when background routing is on", async () => {
+    writeNativeDockSetting("ocs-dock-projection-settings", {
+      sceneMode: "auto-duplicate",
+      settingsVersion: 3,
+      programBackgroundOptIn: true,
+    });
+    sceneItems.set("MCE Presentation", new Map([
+      ["MCE Worship", { sourceName: "MCE Worship", sceneItemId: 11, sceneItemIndex: 1, enabled: true }],
+    ]));
+    sceneItems.set("Camera 2", new Map());
+    client.readSceneMode = vi.fn(() => "auto-duplicate");
+    client.isStudioModeEnabled = vi.fn(async () => false);
+    client.ensurePresentationSceneReady = vi.fn(async () => {});
+
+    try {
+      await client.reconcileProgramBackground("Camera 2", true);
+
+      expect(sceneItems.get("MCE Presentation")?.has("Camera 2")).toBe(true);
+      expect(callLog.some((entry) => (
+        entry.method === "CreateSceneItem" &&
+        entry.payload.sceneName === "MCE Presentation" &&
+        entry.payload.sourceName === "Camera 2"
+      ))).toBe(true);
+    } finally {
+      removeNativeDockSetting("ocs-dock-projection-settings");
+    }
   });
 
   it("reuses the current Program scene underlay when it is already correct", async () => {
@@ -601,7 +662,7 @@ describe("dockObsClient background reflection stress", () => {
     await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
     await client.prepareFastOverlayScene("bible", "MCE Browser - Bible", fitSource);
 
-    expect(client.promotePresentationScene).toHaveBeenCalledTimes(1);
+    expect(client.promotePresentationScene).toHaveBeenCalledTimes(0);
     expect(fitSource).toHaveBeenCalledTimes(2);
   });
 
@@ -738,6 +799,47 @@ describe("dockObsClient background reflection stress", () => {
       event_data?: { event_data?: { targetSource?: string } };
     }).event_data?.event_data?.targetSource).toBe(sourceName);
     expect(client._lastBrowserSourceUrlBySource[sourceName]).toBe(baseUrl);
+  });
+
+  it("automatically cache-busts the first Bible document after a Dock startup", async () => {
+    const sourceName = "MCE Browser - Bible";
+    const baseUrl = "http://overlay.test/mce-bible-overlay.html";
+    inputs.set(sourceName, {
+      inputKind: "browser_source",
+      inputSettings: { url: baseUrl, css: "" },
+    });
+    delete client._lastBrowserSourceUrlBySource[sourceName];
+
+    const packet = {
+      slide: { id: "dock-bible-slide", reference: "John 3:16 (KJV)", text: "For God so loved the world.", verseRange: "16" },
+      theme: makeBackgroundTheme({ backgroundColor: "#101820" }),
+      live: true,
+      blanked: false,
+      timestamp: 125,
+      mode: "fullscreen",
+    };
+
+    await client.deliverCssOverlayPacket(sourceName, "bible", packet, baseUrl, "");
+
+    const startupWrite = callLog.find((entry) => entry.method === "SetInputSettings" && String(
+      (entry.payload.inputSettings as Record<string, unknown>).url || "",
+    ).includes("mceReload="));
+    const startupUrl = String((startupWrite?.payload.inputSettings as Record<string, unknown> | undefined)?.url || "");
+    expect(startupUrl).toContain("mceReload=");
+    expect((startupWrite?.payload.inputSettings as Record<string, unknown> | undefined)?.css).toContain("--overlay-data");
+
+    callLog.length = 0;
+    await client.deliverCssOverlayPacket(
+      sourceName,
+      "bible",
+      { ...packet, timestamp: 126, slide: { ...packet.slide, text: "A new verse without a document reload." } },
+      baseUrl,
+      "",
+    );
+    expect(callLog.some((entry) => entry.method === "SetInputSettings" && (
+      entry.payload.inputSettings as Record<string, unknown>
+    ).url)).toBe(false);
+    expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
   });
 
   it("delivers Bible background changes through the in-place browser event", async () => {
@@ -942,6 +1044,90 @@ describe("dockObsClient background reflection stress", () => {
     expect(callLog.some((entry) => entry.method === "GetInputSettings" && entry.payload.inputName === sourceName)).toBe(true);
     expect(callLog.some((entry) => entry.method === "CallVendorRequest")).toBe(true);
     expect(sourceWrites).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      label: "Bible",
+      sourceName: "MCE Browser - Bible",
+      initializedKey: "_bibleLtInitialized",
+      lastModeKey: "_lastBibleMode",
+      fastMethod: "pushBibleOverlayFast",
+      tab: "bible",
+      payload: {
+        verseText: "New Bible text",
+        referenceText: "John 3:16 (KJV)",
+        verseRange: "16",
+      },
+    },
+    {
+      label: "Worship",
+      sourceName: "MCE Worship",
+      initializedKey: "_worshipInitialized",
+      lastModeKey: "_lastOverlayMode",
+      fastMethod: "pushWorshipOverlayFast",
+      tab: "worship",
+      payload: {
+        sectionText: "New worship text",
+        sectionLabel: "Verse",
+        songTitle: "New song",
+      },
+    },
+    {
+      label: "Notes",
+      sourceName: "MCE Notes",
+      initializedKey: "_notesInitialized",
+      lastModeKey: "_lastOverlayMode",
+      fastMethod: "pushNotesOverlayFast",
+      tab: "notes",
+      payload: {
+        sectionText: "New note text",
+        sectionLabel: "Note",
+        songTitle: "New note",
+      },
+    },
+  ] as const)("delivers the new $label packet before focusing its source", async ({
+    sourceName,
+    initializedKey,
+    lastModeKey,
+    fastMethod,
+    tab,
+    payload,
+  }) => {
+    const events: string[] = [];
+    client[initializedKey] = true;
+    client._lastBrowserSourceUrlBySource[sourceName] = "http://overlay.test/existing";
+    if (lastModeKey === "_lastBibleMode") {
+      client._lastBibleMode = "lower-third";
+    } else {
+      client._lastOverlayMode[sourceName] = "lower-third";
+    }
+    client.publishFullscreenOverlayPacket = vi.fn();
+    client.deliverCssOverlayPacket = vi.fn(async () => {
+      events.push("deliver");
+    });
+    client.focusMcePresentationModule = vi.fn(async () => {
+      events.push("focus");
+    });
+    client.prepareFastOverlayScene = vi.fn(async () => {
+      events.push("prepare");
+    });
+    client.promotePresentationScene = vi.fn(async () => {
+      events.push("promote");
+    });
+
+    await client[fastMethod]({
+      ...payload,
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+    });
+
+    expect(events.indexOf("deliver")).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf("focus")).toBeGreaterThan(events.indexOf("deliver"));
+    if (tab !== "bible") {
+      expect(events.indexOf("prepare")).toBeGreaterThan(events.indexOf("deliver"));
+      expect(events.indexOf("focus")).toBeGreaterThan(events.indexOf("prepare"));
+      expect(events.indexOf("promote")).toBeGreaterThan(events.indexOf("focus"));
+    }
   });
 
   it.each([

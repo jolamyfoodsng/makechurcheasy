@@ -2,6 +2,25 @@ import { describe, expect, it } from "vitest";
 import { generateSlides } from "./slideEngine";
 
 describe("explicit worship lines-per-slide settings", () => {
+  it("preserves authored stanzas when Original mode is selected", () => {
+    const lyrics = [
+      "Verse 1:",
+      "First line",
+      "Second line",
+      "",
+      "Chorus:",
+      "Sing",
+      "Again",
+    ].join("\n");
+
+    const slides = generateSlides(lyrics, 1, false);
+
+    expect(slides.map((slide) => slide.content)).toEqual([
+      "First line\nSecond line",
+      "Sing\nAgain",
+    ]);
+  });
+
   it("groups blank-separated unlabelled lyric lines by the selected count", () => {
     const lyrics = [
       "First line",

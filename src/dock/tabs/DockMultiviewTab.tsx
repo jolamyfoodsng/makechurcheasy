@@ -17,8 +17,7 @@ import { useDockObsReady } from "../useDockObsReady";
 import Icon from "../DockIcon";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { checkEntitlementSync } from "../../services/entitlementClient";
-import { readUserScopedStorage } from "../../services/userScopedStorage";
-import { loadDockPreferenceList, saveDockPreferenceList } from "../../services/dockPreferenceStorage";
+import { loadDockPreferenceList, readDockPreferenceList, saveDockPreferenceList } from "../../services/dockPreferenceStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import {
@@ -495,32 +494,14 @@ interface SavedStorageSnapshot {
   canPersist: boolean;
 }
 
-function parseSavedItems(raw: string | null): SavedMultiView[] | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    const items = Array.isArray(parsed)
-      ? parsed
-      : parsed && typeof parsed === "object" && Array.isArray((parsed as { items?: unknown }).items)
-        ? (parsed as { items: unknown[] }).items
-        : null;
-    return items
-      ? (items as SavedMultiView[]).map(normalizeLoadedMultiView)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function loadSavedSnapshot(): SavedStorageSnapshot {
   try {
-    const raw = readUserScopedStorage(STORAGE_KEY);
-    const items = parseSavedItems(raw);
-    if (items) return { items, hasStoredValue: true, shouldMigrate: false, canPersist: true };
+    const storedItems = readDockPreferenceList<SavedMultiView>(STORAGE_KEY);
+    if (storedItems !== null) {
+      return { items: storedItems.map(normalizeLoadedMultiView), hasStoredValue: true, shouldMigrate: false, canPersist: true };
+    }
 
-    // A malformed value must not be replaced with fresh default cards during a
-    // remount. Leave it untouched and let an explicit user edit repair it.
-    return { items: [], hasStoredValue: raw !== null, shouldMigrate: false, canPersist: raw === null };
+    return { items: [], hasStoredValue: false, shouldMigrate: false, canPersist: true };
   } catch {
     // Storage can be temporarily unavailable while the dock/auth document is
     // being restored. Treat that as an unreadable session, never as an empty

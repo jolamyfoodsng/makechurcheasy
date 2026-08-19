@@ -5,6 +5,7 @@ import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscre
 import { normalizeCompareThemeSettings } from "./compareThemeConfig";
 import { loadDockFavoriteBibleThemes } from "./dockThemeData";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 
 export type DockNotesOverlayMode = "fullscreen" | "lower-third";
 
@@ -25,6 +26,7 @@ export interface DockNotesPreferences {
   fullscreenQuickSettings?: DockFullscreenQuickThemeSettings | null;
   lowerThirdQuickSettings?: DockFullscreenQuickThemeSettings | null;
   linesPerSlide?: number;
+  autoSplit?: boolean;
   quickActionsTop?: number;
   quickActionsLeft?: number | null;
   quickUpdateImmediately?: boolean;
@@ -333,22 +335,16 @@ export function appendTextToDockNotes(
 }
 
 export function loadDockNotesPreferences(): DockNotesPreferences {
-  if (typeof localStorage === "undefined") return {};
-  const raw = readScopedStorage(DOCK_NOTES_PREFS_KEY);
-  const parsed = safeJsonParse<unknown>(raw, {});
+  const raw = readNativeDockSetting<unknown>(DOCK_NOTES_PREFS_KEY);
+  const parsed = typeof raw === "string" ? safeJsonParse<unknown>(raw, {}) : raw ?? {};
   return parsed && typeof parsed === "object" ? parsed as DockNotesPreferences : {};
 }
 
 export function saveDockNotesPreferences(prefs: DockNotesPreferences): void {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(getUserScopedKey(DOCK_NOTES_PREFS_KEY), JSON.stringify({
-      ...prefs,
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // Ignore storage failures inside OBS/browser dock contexts.
-  }
+  writeNativeDockSetting(DOCK_NOTES_PREFS_KEY, {
+    ...prefs,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function readDockNotesOverlayMode(fallback: DockNotesOverlayMode = "fullscreen"): DockNotesOverlayMode {

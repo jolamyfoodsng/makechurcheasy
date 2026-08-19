@@ -18,6 +18,7 @@ import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
 import { getDesktopConfig } from "../services/desktopConfig";
 import { initOverlayUrl } from "../services/overlayUrl";
+import { writeNativeDockSetting } from "../services/localDockSettings";
 import "../fonts.css";
 import "./dock.css";
 import "./dock-auth.css";
@@ -33,7 +34,7 @@ dockClient.onState((msg) => {
     if (payload?.code) {
       const code = resolveInterfaceLocale(payload.code);
       void i18n.changeLanguage(code);
-      localStorage.setItem("mce_interface_language", code);
+      writeNativeDockSetting("mce_interface_language", code);
     }
   }
 });
@@ -41,8 +42,8 @@ dockClient.onState((msg) => {
 function bootstrapDock() {
   // The dock runs outside the main app bootstrap, so seed the shared
   // config/overlay caches here before DockPage starts auto-connecting.
-  // Do this in the background so a slow/unreachable API cannot leave the
-  // OBS dock blank while it waits for remote configuration.
+  // The DockPage gate owns the local settings/production-settings readiness;
+  // these caches can still warm in parallel without exposing default content.
   void Promise.all([
     getDesktopConfig(),
     initOverlayUrl(),
@@ -60,6 +61,16 @@ function bootstrapDock() {
       </DockAuthGate>
     </React.StrictMode>
   );
+
+  // The HTML loader covers the gap before React has its first commit. Remove
+  // it after that commit so an auth/settings wait still shows the Dock's own
+  // intentional loading state instead of an empty page.
+  window.requestAnimationFrame(() => {
+    const loader = document.getElementById("dock-boot-loader");
+    if (!loader) return;
+    loader.classList.add("is-hidden");
+    window.setTimeout(() => loader.remove(), 220);
+  });
 }
 
 bootstrapDock();

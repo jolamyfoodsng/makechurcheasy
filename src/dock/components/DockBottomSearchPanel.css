@@ -1,0 +1,98 @@
+.dock-bottom-search-panel {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--dock-border, #334155);
+  background: var(--dock-surface, #111827);
+}
+
+.dock-bottom-search-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 3px 8px 3px 10px;
+}
+
+.dock-bottom-search-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dock-bottom-search-panel__title svg {
+  color: var(--dock-accent, #1D4ED8);
+}
+
+.dock-bottom-search-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+}
+
+.dock-bottom-search-panel__toggle:hover,
+.dock-bottom-search-panel__toggle:focus-visible {
+  border-color: var(--dock-border-active, #2563EB);
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
+  outline: none;
+}
+
+.dock-bottom-search-panel__body {
+  border-top: 1px solid color-mix(in srgb, var(--dock-border, #334155) 72%, transparent);
+}
+
+.dock-bottom-search-panel .dock-bible-search-row,
+.dock-bottom-search-panel .dock-console-panel,
+.dock-bottom-search-panel .dock-search {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.dock-bottom-search-panel .dock-console-panel {
+  margin: 0;
+}
+
+.dock-bottom-search-panel .dock-bible-actions__menu,
+.dock-bottom-search-panel .dock-bible-compare-popover {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.dock-bottom-search-panel .bible-version-library__panel {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* Search menus in the bottom bar should grow into the available space above it. */
+.dock-bottom-search-panel .dock-search-dropdown {
+  top: auto;
+  bottom: calc(100% + 4px);
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+/* Keep the Bible browser controls above the bottom search row. */
+.dock-bottom-search-panel .dock-bible-controls-panel--bottom {
+  border-top: 1px solid color-mix(in srgb, var(--dock-border, #334155) 72%, transparent);
+  border-bottom: 0;
+}
+
+.dock-bottom-search-panel .dock-bible-controls__book-dropdown,
+.dock-bottom-search-panel .dock-bible-controls__chapter-dropdown,
+.dock-bottom-search-panel .dock-bible-controls__verse-dropdown {
+  top: auto;
+  bottom: calc(100% + 4px);
+}

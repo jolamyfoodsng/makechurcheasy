@@ -194,7 +194,8 @@ export default function BibleVersionLibrary({
         className="bible-version-library__trigger"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        aria-label={t("bible.selectBibleVersion")}
+        aria-label={disabled ? t("bible.compareModeActive", "Disabled while compare mode is active") : t("bible.selectBibleVersion")}
+        aria-disabled={disabled || undefined}
         aria-expanded={isOpen}
         title={disabled ? t("bible.compareModeActive", "Disabled while compare mode is active") : t("bible.selectBibleVersion")}>
         <span className="bible-version-library__trigger-abbr">

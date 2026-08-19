@@ -3,7 +3,12 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { isUserSelectableObsScene } from "../../services/dockSceneNames";
 import { dockObsClient } from "../dockObsClient";
-import type { DockSceneRoute, DockSceneRouteModule } from "../dockSceneRouting";
+import type {
+  DockSceneOutputMode,
+  DockSceneRoute,
+  DockSceneRouteModule,
+  DockSceneRouteTarget,
+} from "../dockSceneRouting";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import Icon from "../DockIcon";
 
@@ -19,7 +24,7 @@ interface Props {
 }
 
 export default function DockSceneRoutingControl({
-  module: _module,
+  module,
   route,
   onRouteChange,
   disabled = false,
@@ -58,15 +63,18 @@ export default function DockSceneRoutingControl({
           return a.localeCompare(b);
         });
       setScenes(choices);
-      if (route.enabled && !route.sceneName && choices[0]) {
-        onRouteChange({ sceneName: choices[0] });
+      if (route.enabled && route.targets.length === 0 && choices[0]) {
+        onRouteChange({
+          sceneName: choices[0],
+          targets: [{ sceneName: choices[0], mode: "inherit" }],
+        });
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : t("media.unableToLoadScenes", "Unable to load OBS scenes."));
     } finally {
       setLoading(false);
     }
-  }, [disabled, onRouteChange, route.enabled, route.sceneName, t]);
+  }, [disabled, onRouteChange, route.enabled, route.targets.length, t]);
 
   useEffect(() => {
     if (open) void loadScenes();
@@ -107,7 +115,7 @@ export default function DockSceneRoutingControl({
       const viewportPadding = 8;
       const gap = 8;
       const popoverWidth = popoverRect?.width || Math.min(300, viewportWidth - viewportPadding * 2);
-      const popoverHeight = popoverRect?.height || 280;
+      const popoverHeight = popoverRect?.height || 420;
 
       // Prefer the natural reading direction: open beside the trigger to the
       // right, then flip left when a narrow/scaled dock has no room there.
@@ -162,8 +170,47 @@ export default function DockSceneRoutingControl({
   if (disabled) return null;
 
   const label = title ?? t("sceneRouting.title", "Scene output");
-  const summary = route.enabled && route.sceneName
-    ? `${t("sceneRouting.to", "To")} ${route.sceneName}`
+  const selectedTargets = route.targets;
+  const selectedTargetByScene = new Map(selectedTargets.map((target) => [target.sceneName, target]));
+  const supportsFormatOverrides = module === "bible" || module === "worship" || module === "notes";
+  const formatOptions: Array<{ value: DockSceneOutputMode; label: string }> = [
+    { value: "inherit", label: t("sceneRouting.followTab", "Follow tab") },
+    { value: "fullscreen", label: t("sceneRouting.fullscreenOutput", "Full screen") },
+    { value: "lower-third", label: t("sceneRouting.lowerThirdOutput", "Lower third") },
+  ];
+  const updateTargets = (targets: DockSceneRouteTarget[]) => {
+    onRouteChange({
+      targets,
+      sceneName: targets[0]?.sceneName ?? "",
+      enabled: targets.length > 0 ? route.enabled : false,
+    });
+  };
+  const handleTargetToggle = (sceneName: string, checked: boolean) => {
+    const nextTargets = checked
+      ? [...selectedTargets, { sceneName, mode: "inherit" as const }]
+      : selectedTargets.filter((target) => target.sceneName !== sceneName);
+    updateTargets(nextTargets);
+  };
+  const handleTargetModeChange = (sceneName: string, mode: DockSceneOutputMode) => {
+    updateTargets(selectedTargets.map((target) => (
+      target.sceneName === sceneName ? { ...target, mode } : target
+    )));
+  };
+  const handleRouteEnabledChange = (enabled: boolean) => {
+    if (enabled && selectedTargets.length === 0) {
+      const fallbackScene = route.sceneName || scenes[0] || "";
+      const targets = fallbackScene
+        ? [{ sceneName: fallbackScene, mode: "inherit" as const }]
+        : [];
+      onRouteChange({ enabled: targets.length > 0, sceneName: fallbackScene, targets });
+      return;
+    }
+    onRouteChange({ enabled });
+  };
+  const summary = route.enabled && selectedTargets.length > 0
+    ? selectedTargets.length === 1
+      ? `${t("sceneRouting.to", "To")} ${selectedTargets[0].sceneName}`
+      : `${t("sceneRouting.to", "To")} ${selectedTargets.length} ${t("sceneRouting.scenes", "scenes")}`
     : t("sceneRouting.presentation", "MCE Presentation");
 
   return (
@@ -193,7 +240,7 @@ export default function DockSceneRoutingControl({
             top: popoverPosition?.top ?? 0,
             left: popoverPosition?.left ?? 0,
             zIndex: 10000,
-            width: 268,
+            width: 344,
             maxWidth: "calc(100vw - 16px)",
             boxSizing: "border-box",
             padding: 10,
@@ -224,42 +271,66 @@ export default function DockSceneRoutingControl({
             </button>
           </div>
 
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 7, cursor: "pointer", fontSize: 11, lineHeight: 1.35 }}>
+          <label className="dock-scene-routing-control__toggle">
             <input
               type="checkbox"
               checked={route.enabled}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                onRouteChange({ enabled, sceneName: enabled && !route.sceneName ? (scenes[0] ?? "") : route.sceneName });
-              }}
+              onChange={(event) => handleRouteEnabledChange(event.target.checked)}
             />
-            <span>
-              <span style={{ display: "block", fontWeight: 600 }}>{t("sceneRouting.sendToScene", "Send to another scene")}</span>
-              <small style={{ display: "block", color: "var(--dock-text-dim)", marginTop: 2 }}>
+            <span className="dock-scene-routing-control__toggle-copy">
+              <span className="dock-scene-routing-control__label">{t("sceneRouting.sendToScene", "Send to another scene")}</span>
+              <small>
                 {t("sceneRouting.sendToSceneHint", "Use the selected scene.")}
               </small>
             </span>
           </label>
 
-          <label style={{ display: "block", marginTop: 9 }}>
-            <span style={{ display: "block", marginBottom: 4, fontSize: 10, color: "var(--dock-text-dim)" }}>{t("media.scene", "Scene")}</span>
-            <select
-              className="dock-input"
-              value={route.sceneName}
-              disabled={!route.enabled || loading || scenes.length === 0}
-              onChange={(event) => onRouteChange({ sceneName: event.target.value })}
-              style={{ width: "100%", minHeight: 32, fontSize: 11 }}
-            >
+          <div className="dock-scene-routing-control__section">
+            <div className="dock-scene-routing-control__section-head">
+              <span>{t("sceneRouting.targetScenes", "Target scenes")}</span>
+              <span className="dock-scene-routing-control__count">{selectedTargets.length}</span>
+            </div>
+            <div className="dock-scene-routing-control__scene-list" role="group" aria-label={t("sceneRouting.targetScenes", "Target scenes")}>
               {scenes.length === 0 ? (
-                <option value="">{loading ? t("media.loadingScenes", "Loading scenes…") : t("media.noScenesAvailable", "No scenes available")}</option>
-              ) : (
-                <>
-                  {!route.sceneName && <option value="">{t("sceneRouting.selectScene", "Select a scene")}</option>}
-                  {scenes.map((sceneName) => <option key={sceneName} value={sceneName}>{sceneName}</option>)}
-                </>
-              )}
-            </select>
-          </label>
+                <div className="dock-scene-routing-control__empty">
+                  {loading ? t("media.loadingScenes", "Loading scenes…") : t("media.noScenesAvailable", "No scenes available")}
+                </div>
+              ) : scenes.map((sceneName) => {
+                const target = selectedTargetByScene.get(sceneName);
+                return (
+                  <div key={sceneName} className={`dock-scene-routing-control__scene-row${target ? " is-selected" : ""}`}>
+                    <label className="dock-scene-routing-control__scene-check">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(target)}
+                        disabled={!route.enabled || loading}
+                        onChange={(event) => handleTargetToggle(sceneName, event.target.checked)}
+                      />
+                      <span title={sceneName}>{sceneName}</span>
+                    </label>
+                    {supportsFormatOverrides && target && (
+                      <select
+                        className="dock-scene-routing-control__mode-select"
+                        value={target.mode}
+                        disabled={!route.enabled}
+                        aria-label={`${sceneName} ${t("sceneRouting.outputFormat", "output format")}`}
+                        onChange={(event) => handleTargetModeChange(sceneName, event.target.value as DockSceneOutputMode)}
+                      >
+                        {formatOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <small className="dock-scene-routing-control__hint">
+              {supportsFormatOverrides
+                ? t("sceneRouting.targetScenesHint", "Select one or more scenes and choose how each one should receive this content.")
+                : t("sceneRouting.targetScenesSimpleHint", "Select one or more scenes for this output.")}
+            </small>
+          </div>
 
           <label style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 9, cursor: route.enabled ? "pointer" : "not-allowed", opacity: route.enabled ? 1 : 0.55, fontSize: 11, lineHeight: 1.35 }}>
             <input

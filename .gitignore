@@ -33,6 +33,9 @@ renewal-keys.md
 # Runtime auth session (written by desktop app for dock)
 makechurcheasy-session.json
 
+# Generated Flutter web client served by the desktop on the local network
+public/mobile/
+
 # Generated embedding files (too large for git)
 public/bible-embeddings-kjv.json
 public/bible-hnsw-index.json

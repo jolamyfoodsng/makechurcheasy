@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MakeChurchEasy",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "identifier": "com.makechurcheasy.desktop",
   "build": {
-    "beforeDevCommand": "node scripts/prepare-bundle-assets.cjs && npm run dev",
+    "beforeDevCommand": "node scripts/prepare-bundle-assets.cjs && npm run mobile:web && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "node scripts/prepare-bundle-assets.cjs && npm run build",
+    "beforeBuildCommand": "node scripts/prepare-bundle-assets.cjs && npm run mobile:web && npm run build",
     "beforeBundleCommand": "node scripts/prepare-bundle-assets.cjs",
     "frontendDist": "../dist"
   },
@@ -48,7 +48,8 @@
       "resources/obs-mce-bridge/**/*",
       "../dist/animated-lower-thirds/**/*",
       "../dist/assets/**/*",
-      "../dist/fonts/**/*"
+      "../dist/fonts/**/*",
+      "../dist/mobile/**/*"
     ],
     "windows": {
       "nsis": {

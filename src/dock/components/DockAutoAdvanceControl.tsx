@@ -3,9 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import {
-  readUserScopedStorage,
-  writeUserScopedStorage,
-} from "../../services/userScopedStorage";
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "../../services/localDockSettings";
 
 export interface DockAutoAdvanceItem {
   id: string;
@@ -132,9 +132,11 @@ function clampNumber(value: number, min: number, max: number): number {
 
 function loadSettings(storageScope: AutoAdvanceStorageScope): DockAutoAdvanceSettings {
   try {
-    const raw = readUserScopedStorage(`ocs-dock-auto-advance-${storageScope}`);
+    const raw = readNativeDockSetting<unknown>(`ocs-dock-auto-advance-${storageScope}`);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<DockAutoAdvanceSettings>;
+    const parsed = typeof raw === "string"
+      ? JSON.parse(raw) as Partial<DockAutoAdvanceSettings>
+      : raw as Partial<DockAutoAdvanceSettings>;
     return {
       durationMinutes: clampNumber(
         Number(parsed.durationMinutes),
@@ -222,7 +224,7 @@ export default function DockAutoAdvanceControl({
   useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
 
   useEffect(() => {
-    writeUserScopedStorage(storageKey, JSON.stringify(settings));
+    writeNativeDockSetting(storageKey, settings);
   }, [settings, storageKey]);
 
   const pauseAutomation = useCallback((reason: "manual" | "user" = "user") => {

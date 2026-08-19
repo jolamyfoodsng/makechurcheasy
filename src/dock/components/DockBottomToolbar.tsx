@@ -50,6 +50,10 @@ interface Props {
   narrowOverflowActions?: React.ReactNode;
   /** Optional action centered between the overlay mode and toolbar actions */
   centerAction?: React.ReactNode;
+  /** Optional search/control card rendered inside the lower-third toolbar */
+  bottomPanel?: React.ReactNode;
+  /** Notify consumers when the shared lower-toolbar overflow opens or closes */
+  onOverflowChange?: (open: boolean) => void;
   /** Whether the toolbar is collapsed (controlled) */
   collapsed?: boolean;
   /** Called when collapse/expand is toggled */
@@ -73,6 +77,8 @@ export default function DockBottomToolbar({
   inlineAction,
   narrowOverflowActions,
   centerAction,
+  bottomPanel,
+  onOverflowChange,
   collapsed = false,
   onCollapseChange,
 }: Props) {
@@ -112,11 +118,14 @@ export default function DockBottomToolbar({
     const handlePointerDown = (e: PointerEvent) => {
       const target = e.target as Element | null;
       if (target?.closest("[data-dock-keep-overflow-open='true']")) return;
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) setShowOverflow(false);
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflow(false);
+        onOverflowChange?.(false);
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [showOverflow]);
+  }, [onOverflowChange, showOverflow]);
 
   // Close display mode menu on outside click
   useEffect(() => {
@@ -130,7 +139,18 @@ export default function DockBottomToolbar({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showDisplayModeMenu]);
 
-  const toggleOverflow = useCallback(() => setShowOverflow((prev) => !prev), []);
+  const toggleOverflow = useCallback(() => {
+    setShowOverflow((prev) => {
+      const next = !prev;
+      onOverflowChange?.(next);
+      return next;
+    });
+  }, [onOverflowChange]);
+
+  const closeOverflow = useCallback(() => {
+    setShowOverflow(false);
+    onOverflowChange?.(false);
+  }, [onOverflowChange]);
 
   const renderVisibilityButton = (className: string) => (
     <button
@@ -195,6 +215,7 @@ export default function DockBottomToolbar({
       className={`dock-btm-toolbar dock-btm-toolbar--compact${isNarrow ? " dock-btm-toolbar--narrow" : ""}${isUltraNarrow ? " dock-btm-toolbar--ultra-narrow" : ""}`}
       ref={toolbarRef}
     >
+      {bottomPanel}
       <div className={`dock-btm-toolbar__row${centerAction ? " dock-btm-toolbar__row--centered" : ""}`}>
         {!hideOverlayModeToggle && (
           <div
@@ -287,7 +308,7 @@ export default function DockBottomToolbar({
                       onClick={(event) => {
                         const target = event.target as Element | null;
                         if (target?.closest("[data-dock-close-overflow='true']")) {
-                          setShowOverflow(false);
+                          closeOverflow();
                         }
                       }}
                     >
@@ -300,7 +321,7 @@ export default function DockBottomToolbar({
                       onClick={(event) => {
                         const target = event.target as Element | null;
                         if (target?.closest("[data-dock-close-overflow='true']")) {
-                          setShowOverflow(false);
+                          closeOverflow();
                         }
                       }}
                     >

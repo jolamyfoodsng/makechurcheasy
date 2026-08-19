@@ -21,6 +21,18 @@ function normalizeApiBase(value: string | undefined): string {
   return (value || PRODUCTION_API_BASE).replace(/\/+$/, "");
 }
 
+/** Pairing codes may be copied with spaces, hyphens, or other visual separators. */
+export function normalizePairingCode(raw: string): string {
+  return raw.normalize("NFKC").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function formatPairingCodeForDisplay(raw: string): string {
+  const normalized = normalizePairingCode(raw);
+  return normalized.length > 4
+    ? `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}`
+    : normalized;
+}
+
 const API_BASE = normalizeApiBase(import.meta.env.VITE_AUTH_API_URL);
 let _activePairingApiBase = API_BASE;
 
@@ -49,8 +61,30 @@ function authApiCandidates(): string[] {
   return Array.from(new Set([API_BASE, PRODUCTION_API_BASE].map(normalizeApiBase)));
 }
 
-async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
-  const candidates = authApiCandidates();
+export function resolvePairingApiBaseCandidates(configuredApiBase: string): string[] {
+  // A dashboard-generated code can be created through the dashboard's API
+  // proxy. If the direct API deployment is briefly out of sync, retry the
+  // same request through that proxy before reporting the code as invalid.
+  if (isLocalApiBase(configuredApiBase)) {
+    return Array.from(new Set([configuredApiBase, LOCAL_DASHBOARD_BASE].map(normalizeApiBase)));
+  }
+
+  return Array.from(new Set([
+    configuredApiBase,
+    PRODUCTION_API_BASE,
+    PRODUCTION_DASHBOARD_BASE,
+  ].map(normalizeApiBase)));
+}
+
+function pairingRedeemApiCandidates(): string[] {
+  return resolvePairingApiBaseCandidates(API_BASE);
+}
+
+async function fetchAuthApi(
+  path: string,
+  init?: RequestInit,
+  candidates: string[] = authApiCandidates(),
+): Promise<{ response: Response; apiBase: string }> {
   let lastResponse: Response | null = null;
   let lastError: unknown = null;
 
@@ -205,6 +239,24 @@ export type RefreshPlanResult =
   | { status: "network_error" };
 
 const SESSION_KEY = "mce-auth-session";
+// The native Dock settings database is shared by the desktop app and the OBS
+// browser dock. Keep the authenticated user id available to both contexts so
+// they resolve the same settings scope even when the desktop session itself
+// lives in Tauri's secure store instead of page localStorage.
+const DOCK_AUTH_USER_ID_KEY = "mce-dock-auth-user-id";
+
+function syncDockAuthUserId(userId: string | null | undefined): void {
+  try {
+    const normalized = typeof userId === "string" ? userId.trim() : "";
+    if (normalized) {
+      localStorage.setItem(DOCK_AUTH_USER_ID_KEY, normalized);
+    } else {
+      localStorage.removeItem(DOCK_AUTH_USER_ID_KEY);
+    }
+  } catch {
+    // The Dock can still use its device scope if browser storage is restricted.
+  }
+}
 
 // ── Tauri secure store (IPC-backed, not accessible to page JS) ──────────────
 // Session is loaded once from the store into a module-level cache on init().
@@ -264,6 +316,11 @@ export async function initAuthStore(): Promise<void> {
       localStorage.removeItem(SESSION_KEY);
     }
   }
+
+  // Keep the page-visible scope hint in sync even when the real session was
+  // loaded from Tauri's secure store. Without this, the main window used the
+  // device scope while the OBS Dock used the user scope.
+  syncDockAuthUserId(_session?.user?.id);
 
   // Refresh plan from server in the background — never block startup on network.
   // The cached session (with potentially stale plan) is available synchronously
@@ -329,6 +386,7 @@ export async function clearDeviceSecretForRecovery(): Promise<void> {
 
 async function saveSession(session: AuthSession) {
   _session = session;
+  syncDockAuthUserId(session.user?.id);
 
   if (_store) {
     await _store.set(SESSION_KEY, JSON.stringify(session));
@@ -457,6 +515,7 @@ export function isAuthenticated(): boolean {
 export function logout() {
   console.debug("[authService] logout: clearing session (deviceId=%s)", _session?.deviceId);
   _session = null;
+  syncDockAuthUserId(null);
   if (_store) {
     _store.delete(SESSION_KEY).then(() => _store.save()).catch(() => { });
   } else {
@@ -711,8 +770,9 @@ export async function createPairingCode(
       };
     }
     const data = await res.json();
-    _lastPairingCode = data.code;
-    return data;
+    const normalizedCode = normalizePairingCode(data.code || "");
+    _lastPairingCode = normalizedCode;
+    return { ...data, code: normalizedCode };
   } catch {
     return { error: "Connection failed. Is the server running?" };
   }
@@ -750,17 +810,17 @@ export async function redeemPairingCode(
         "X-App-Version": APP_VERSION,
       },
       body: JSON.stringify({
-        code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+        code: normalizePairingCode(code),
         deviceName: os,
         installationId,
         fingerprintHash,
       }),
-    });
+    }, pairingRedeemApiCandidates());
 
     const data = await res.json();
 
     if (!res.ok) {
-      if (res.status === 404) return { success: false, error: "Invalid code. Please check and try again.", code: "invalid" };
+      if (res.status === 404) return { success: false, error: "Pairing code not found on the connected server. Generate a new code and try again.", code: "invalid" };
       if (res.status === 410) return { success: false, error: data.error === "Code already used" ? "This code has already been used. Generate a new one." : "This code has expired. Generate a new one.", code: data.error === "Code already used" ? "already_used" : "expired" };
       if (res.status === 403 && data.error === "email_not_verified") return { success: false, error: "Please verify your email address before pairing.", code: "email_not_verified" };
       if (res.status === 403 && data.error === "device_limit_reached") return { success: false, error: data.message || "Device limit reached.", code: "device_limit_reached" };

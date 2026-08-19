@@ -21,6 +21,15 @@ describe("Bible reference search parser", () => {
   });
 
   it.each([
+    ["john55", "John 5:5"],
+    ["joh 55", "John 5:5"],
+    ["2john 55", "2 John 1:55"],
+    ["2jhn 55", "2 John 1:55"],
+  ])("keeps numbered John references distinct for %s", (query, expected) => {
+    expect(parseBibleSearch(query)[0]?.label).toBe(expected);
+  });
+
+  it.each([
     ["1 Kings", "1 Kings"],
     ["1kings", "1 Kings"],
     ["I Kings", "1 Kings"],

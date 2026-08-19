@@ -1,4 +1,4 @@
-import { getUserScopedKey } from "../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 
 export interface ProjectionSettings {
   sceneMode: "auto-duplicate" | "no-clone";
@@ -28,6 +28,16 @@ type StoredProjectionSettings = Partial<ProjectionSettings> & {
   settingsVersion?: number;
 };
 
+function readStoredProjectionSettings(): StoredProjectionSettings | undefined {
+  const native = readNativeDockSetting<StoredProjectionSettings>(PROJECTION_SETTINGS_KEY);
+  if (native && typeof native === "object") return native;
+
+  // Do not read browser storage here. Legacy values are imported into the
+  // native Dock settings store by hydrateNativeDockSettings() before the Dock
+  // renders, so a stale browser copy can never override the local database.
+  return undefined;
+}
+
 function normalizeSceneMode(value: unknown, stored?: StoredProjectionSettings): ProjectionSettings["sceneMode"] {
   if (value === "no-clone") return "no-clone";
   if (value === "reference") return "auto-duplicate";
@@ -42,9 +52,8 @@ function normalizeSceneMode(value: unknown, stored?: StoredProjectionSettings): 
 
 export function loadProjectionSettings(): ProjectionSettings {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(PROJECTION_SETTINGS_KEY));
-    if (!raw) return { ...DEFAULT_PROJECTION_SETTINGS };
-    const parsed = JSON.parse(raw) as StoredProjectionSettings;
+    const parsed = readStoredProjectionSettings();
+    if (!parsed) return { ...DEFAULT_PROJECTION_SETTINGS };
     return {
       sceneMode: normalizeSceneMode(parsed.sceneMode, parsed),
       tickerLayerPriority: parsed.tickerLayerPriority === "ticker-above"
@@ -65,13 +74,9 @@ export function loadProjectionSettings(): ProjectionSettings {
 }
 
 export function saveProjectionSettings(next: ProjectionSettings): void {
-  try {
-    localStorage.setItem(getUserScopedKey(PROJECTION_SETTINGS_KEY), JSON.stringify({
-      ...next,
-      settingsVersion: PROJECTION_SETTINGS_VERSION,
-      programBackgroundOptIn: next.sceneMode === "auto-duplicate",
-    }));
-  } catch {
-    // ignore OBS CEF storage failures
-  }
+  writeNativeDockSetting(PROJECTION_SETTINGS_KEY, {
+    ...next,
+    settingsVersion: PROJECTION_SETTINGS_VERSION,
+    programBackgroundOptIn: next.sceneMode === "auto-duplicate",
+  });
 }

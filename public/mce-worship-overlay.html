@@ -1672,7 +1672,12 @@
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
-        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        const configuredAnimationDuration = Number(s.animationDuration);
+        const ead = Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configuredAnimationDuration) && configuredAnimationDuration > 0
+            ? configuredAnimationDuration
+            : 400,
+        )));
         root.style.setProperty('--anim-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
@@ -1920,7 +1925,9 @@
               ? currentBibleState.theme
               : {};
         const configured = Number(theme.animationDuration);
-        return Math.max(95, Math.min(170, Math.round((Number.isFinite(configured) && configured > 0 ? configured : 400) * 0.38)));
+        return Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configured) && configured > 0 ? configured : 400,
+        )));
       }
 
       function getVerseAnimationTargets(mode) {

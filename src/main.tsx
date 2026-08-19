@@ -109,12 +109,24 @@ if (publicPresentationSessionId) {
   void openPublicPresentationRoute(publicPresentationSessionId);
 } else {
 void initAuthStore().then(async () => {
+  // Hydrate the native Dock database before any Dock page computes its
+  // synchronous initial state. This keeps defaults from briefly replacing
+  // the user's saved appearance or output settings.
+  try {
+    const { hydrateNativeDockSettings } = await import("./services/localDockSettings");
+    await hydrateNativeDockSettings();
+  } catch (error) {
+    console.warn("[Desktop] Native Dock settings hydration delayed:", error);
+  }
+
   // appAppearance is imported by the app shell before the async Tauri auth
   // store has finished loading. Re-read it now that the user scope is known,
   // so a saved palette is hydrated before MVSettings renders.
   try {
     const { refreshAppAppearance } = await import("./services/appAppearance");
     refreshAppAppearance();
+    const { refreshAppThemePreference } = await import("./hooks/useAppTheme");
+    refreshAppThemePreference();
   } catch { /* appearance hydration is best-effort */ }
 
   // Sync church profile from web API on startup (ensures speakers, branding, etc. are in localStorage)

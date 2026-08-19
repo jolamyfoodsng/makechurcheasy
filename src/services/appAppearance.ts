@@ -1,8 +1,5 @@
 import { useSyncExternalStore } from "react";
-import {
-  readUserScopedStorage,
-  writeUserScopedStorage,
-} from "./userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "./localDockSettings";
 
 export type AppAppearancePaletteId =
   | "classic-blue"
@@ -195,13 +192,7 @@ export function normalizeAppAppearance(value: unknown): AppAppearancePreferences
 }
 
 export function loadAppAppearance(): AppAppearancePreferences {
-  const raw = readUserScopedStorage(APP_APPEARANCE_STORAGE_KEY);
-  if (!raw) return { ...DEFAULT_APP_APPEARANCE };
-  try {
-    return normalizeAppAppearance(JSON.parse(raw));
-  } catch {
-    return { ...DEFAULT_APP_APPEARANCE };
-  }
+  return normalizeAppAppearance(readNativeDockSetting(APP_APPEARANCE_STORAGE_KEY));
 }
 
 let currentAppearance = loadAppAppearance();
@@ -247,7 +238,7 @@ export function setAppAppearance(patch: Partial<AppAppearancePreferences>): AppA
     ...patch,
     updatedAt: Date.now(),
   });
-  writeUserScopedStorage(APP_APPEARANCE_STORAGE_KEY, JSON.stringify(currentAppearance));
+  writeNativeDockSetting(APP_APPEARANCE_STORAGE_KEY, currentAppearance);
   try {
     appearanceChannel?.postMessage({ type: "appearance-updated" });
   } catch {

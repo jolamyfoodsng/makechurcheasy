@@ -27,10 +27,21 @@ import {
   isSupportedDocumentFile,
   type DocumentPageFile,
 } from "../dock/documentConversion";
+import {
+  completeReceiverFile,
+  downloadReceiverFile,
+  formatReceiverFileSize,
+  formatReceiverFileTime,
+  getPendingReceiverFiles,
+  saveReceiverFileToFolder,
+  type ReceiverFile,
+} from "../services/receiverService";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import { MediaShareTab } from "./MediaShareTab";
 
 type FilterType = "all" | "image" | "video";
 type AddMediaCategory = "image" | "video" | "document";
+type MediaView = "library" | "share";
 
 export interface LibraryMediaImportItem {
   file: File;
@@ -288,7 +299,7 @@ export async function saveLibraryMediaFile(file: File, overrideName?: string): P
 /* MediaTab                                                                  */
 /* ========================================================================= */
 
-export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
+export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?: string; openReceiver?: boolean }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -299,12 +310,11 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [showFilter, setShowFilter] = useState(false);
   const [pageDragging, setPageDragging] = useState(false);
   const [pageUploading, setPageUploading] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [showMediaLimitModal, setShowMediaLimitModal] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
+  const [mediaView, setMediaView] = useState<MediaView>("library");
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
@@ -369,12 +379,13 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     }, 0);
   }, [focusMediaId, items]);
 
+  useEffect(() => {
+    if (openReceiver) setMediaView("share");
+  }, [openReceiver]);
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setShowFilter(false);
-      }
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpenId(null);
       }
@@ -392,7 +403,6 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         if (renameId) { setRenameId(null); return; }
         if (showMediaLimitModal) { setShowMediaLimitModal(false); return; }
         setMenuOpenId(null);
-        setShowFilter(false);
       }
     };
     window.addEventListener("keydown", handler);
@@ -534,12 +544,6 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     }
   }, [effectivePlan, reload, t]);
 
-  const filterLabel = filter === "all"
-    ? t("common.all")
-    : filter === "image"
-      ? t("library.mediaTab.preview.image")
-      : t("library.mediaTab.preview.video");
-
   return (
     <div
       className={`lib-media-shell${pageDragging ? " lib-media-shell--dragging" : ""}`}
@@ -569,6 +573,36 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         }
       }}
     >
+      <div className="lib-media-view-switcher" role="tablist" aria-label={t("library.share.mediaViews")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mediaView === "library"}
+          className={`lib-media-view-btn${mediaView === "library" ? " is-active" : ""}`}
+          onClick={() => setMediaView("library")}
+        >
+          <Icon name="perm_media" size={16} />
+          <span>{t("library.receiver.mediaLibrary")}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mediaView === "share"}
+          className={`lib-media-view-btn${mediaView === "share" ? " is-active" : ""}`}
+          onClick={() => setMediaView("share")}
+        >
+          <Icon name="send" size={16} />
+          <span className="lib-media-view-btn__copy">
+            <span>{t("library.share.openShare")}</span>
+            <small>{t("library.share.receiveTab")} / {t("library.share.sendTab")}</small>
+          </span>
+        </button>
+      </div>
+
+      {mediaView === "share" && <MediaShareTab initialMode={openReceiver ? "receive" : "send"} onMediaChanged={reload} />}
+
+      {mediaView === "library" && (
+        <>
       <input
         ref={fileInputRef}
         type="file"
@@ -609,29 +643,28 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             )}
           </div>
 
-          {/* Filter dropdown */}
-          <div className="lib-filter-wrap" ref={filterRef}>
-            <button
-              className="lib-filter-btn"
-              onClick={() => setShowFilter((v) => !v)}
-              title={t("library.mediaTab.filter")}>
-              <Icon name="filter_list" size={18} />
-              <span>{t("library.mediaTab.filter")}: {filterLabel}</span>
-              <Icon name="arrow_drop_down" size={18} />
-            </button>
-            {showFilter && (
-              <div className="lib-filter-dropdown">
-                {(["all", "image", "video"] as FilterType[]).map((f) => (
-                  <button
-                    key={f}
-                    className={`lib-filter-option${filter === f ? " is-active" : ""}`}
-                    onClick={() => { setFilter(f); setShowFilter(false); }}
-                    title={f === "all" ? t("common.all") : f === "image" ? t("library.mediaTab.preview.image") : t("library.mediaTab.preview.video")}>
-                    {f === "all" ? t("common.all") : f === "image" ? t("library.mediaTab.preview.image") : t("library.mediaTab.preview.video")}
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Direct media filters */}
+          <div className="lib-media-filter-tabs" role="tablist" aria-label={t("library.mediaTab.filter")}>
+            {(["all", "image", "video"] as FilterType[]).map((f) => {
+              const label = f === "all"
+                ? t("common.all")
+                : f === "image"
+                  ? t("library.mediaTab.preview.image")
+                  : t("library.mediaTab.preview.video");
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === f}
+                  className={`lib-media-filter-tab${filter === f ? " is-active" : ""}`}
+                  onClick={() => setFilter(f)}
+                  title={label}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -908,7 +941,292 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
           </div>
         </div>
       )}
+        </>
+      )}
     </div>
+  );
+}
+
+interface ReceiverDirectoryHandle {
+  getFileHandle: (name: string, options: { create: boolean }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+}
+
+type ReceiverDirectoryWindow = Window & {
+  showDirectoryPicker?: (options?: { mode?: "readwrite" }) => Promise<ReceiverDirectoryHandle>;
+};
+
+interface MediaReceiverPanelProps {
+  visible: boolean;
+  onPendingCountChange: (count: number) => void;
+  onIncomingFile: (file: ReceiverFile) => void;
+  onMediaChanged: () => void;
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function isReceiverAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function receiverFileIcon(file: ReceiverFile): string {
+  if (file.fileType.startsWith("image/")) return "image";
+  if (file.fileType.startsWith("video/")) return "movie";
+  return "insert_drive_file";
+}
+
+function receiverFileTypeIsVideo(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return ["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv", "flv"].includes(
+    file.name.split(".").pop()?.toLowerCase() || "",
+  );
+}
+
+function receiverFileTypeLabel(file: ReceiverFile): string {
+  if (file.fileType.startsWith("image/")) return "Image";
+  if (file.fileType.startsWith("video/")) return "Video";
+  return file.fileName.split(".").pop()?.toUpperCase() || "FILE";
+}
+
+function receiverCanSaveToMce(file: ReceiverFile): boolean {
+  if (file.fileType.startsWith("image/") || file.fileType.startsWith("video/")) return true;
+  return ["pdf", "docx", "pptx"].includes(file.fileName.split(".").pop()?.toLowerCase() || "");
+}
+
+export function MediaReceiverPanel({
+  visible,
+  onPendingCountChange,
+  onIncomingFile,
+  onMediaChanged,
+}: MediaReceiverPanelProps) {
+  const { t } = useTranslation();
+  const { user: receiverUser } = useAuth();
+  const receiverPlan = getEffectivePlan(receiverUser);
+  const [files, setFiles] = useState<ReceiverFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const knownIdsRef = useRef<Set<string> | null>(null);
+
+  const refresh = useCallback(async (quiet = false) => {
+    if (!quiet) setRefreshing(true);
+    try {
+      const nextFiles = await getPendingReceiverFiles();
+      const knownIds = knownIdsRef.current;
+      if (knownIds) {
+        const incoming = nextFiles.find((file) => !knownIds.has(file.pendingId));
+        if (incoming) onIncomingFile(incoming);
+      }
+      knownIdsRef.current = new Set(nextFiles.map((file) => file.pendingId));
+      setFiles(nextFiles);
+      onPendingCountChange(nextFiles.length);
+      if (!quiet) setStatus(null);
+    } catch (error) {
+      if (visible) {
+        setStatus({
+          tone: "error",
+          message: error instanceof Error ? error.message : t("library.receiver.unavailable"),
+        });
+      }
+    } finally {
+      setLoading(false);
+      if (!quiet) setRefreshing(false);
+    }
+  }, [onIncomingFile, onPendingCountChange, t, visible]);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(true), 1800);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const removeFile = useCallback((pendingId: string) => {
+    setFiles((current) => {
+      const next = current.filter((file) => file.pendingId !== pendingId);
+      onPendingCountChange(next.length);
+      knownIdsRef.current = new Set(next.map((file) => file.pendingId));
+      return next;
+    });
+  }, [onPendingCountChange]);
+
+  const handleSaveToFolder = useCallback(async (file: ReceiverFile) => {
+    setBusyId(file.pendingId);
+    setStatus(null);
+    try {
+      if (isTauriRuntime()) {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const folderPath = await open({
+          directory: true,
+          multiple: false,
+          title: t("library.receiver.chooseFolder"),
+        });
+        if (typeof folderPath !== "string" || !folderPath.trim()) return;
+        const result = await saveReceiverFileToFolder(file, folderPath);
+        removeFile(file.pendingId);
+        setStatus({ tone: "success", message: `${result.fileName} saved to the selected folder.` });
+        return;
+      }
+
+      const picker = (window as ReceiverDirectoryWindow).showDirectoryPicker;
+      if (typeof picker !== "function") {
+        throw new Error(t("library.receiver.openDesktopApp"));
+      }
+      const directory = await picker({ mode: "readwrite" });
+      const blob = await downloadReceiverFile(file);
+      const target = await directory.getFileHandle(file.fileName, { create: true });
+      const writable = await target.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      await completeReceiverFile(file);
+      removeFile(file.pendingId);
+      setStatus({ tone: "success", message: `${file.fileName} saved to the selected folder.` });
+    } catch (error) {
+      if (!isReceiverAbortError(error)) {
+        setStatus({
+          tone: "error",
+          message: error instanceof Error ? error.message : t("library.receiver.saveFolderFailed"),
+        });
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }, [removeFile, t]);
+
+  const handleSaveToMce = useCallback(async (file: ReceiverFile) => {
+    setBusyId(file.pendingId);
+    setStatus(null);
+    try {
+      if (!receiverCanSaveToMce(file)) {
+        throw new Error(t("library.receiver.mceTypeHint"));
+      }
+
+      const blob = await downloadReceiverFile(file);
+      const sourceFile = new File([blob], file.fileName, {
+        type: file.fileType || blob.type || "application/octet-stream",
+      });
+      const queue = await expandLibraryMediaImportFiles([sourceFile]);
+      if (queue.length === 0) throw new Error(t("library.receiver.mceTypeHint"));
+
+      const existingItems = await getAllMedia();
+      const incomingImages = queue.filter(({ file: item }) => !receiverFileTypeIsVideo(item)).length;
+      const incomingVideos = queue.length - incomingImages;
+      const imageEntitlement = checkEntitlementSync("images", receiverPlan).limit;
+      const videoEntitlement = checkEntitlementSync("videos", receiverPlan).limit;
+      const existingImages = existingItems.filter((item) => item.type === "image").length;
+      const existingVideos = existingItems.filter((item) => item.type === "video").length;
+
+      if ((imageEntitlement !== -1 && existingImages + incomingImages > imageEntitlement)
+        || (videoEntitlement !== -1 && existingVideos + incomingVideos > videoEntitlement)) {
+        throw new Error(t("library.receiver.mediaLimitHint"));
+      }
+
+      for (const item of queue) {
+        await saveLibraryMediaItem(item);
+      }
+      await completeReceiverFile(file);
+      removeFile(file.pendingId);
+      onMediaChanged();
+      setStatus({ tone: "success", message: `${file.fileName} is now ready in Media.` });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("library.receiver.saveMceFailed"),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }, [onMediaChanged, receiverPlan, removeFile, t]);
+
+  if (!visible) return null;
+
+  return (
+    <section className="lib-media-receiver" aria-labelledby="lib-media-receiver-title">
+      <header className="lib-media-receiver__header">
+        <div>
+          <div className="lib-media-receiver__eyebrow">{t("library.receiver.eyebrow")}</div>
+          <h2 id="lib-media-receiver-title">{t("library.receiver.title")}</h2>
+          <p>{t("library.receiver.description")}</p>
+        </div>
+        <button
+          type="button"
+          className="lib-icon-btn"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          aria-label={t("library.receiver.refresh")}
+          title={t("library.receiver.refresh")}
+        >
+          <Icon name="refresh" size={18} />
+        </button>
+      </header>
+
+      <div className="lib-media-receiver__ready" role="status" aria-live="polite">
+        <span className="lib-media-receiver__ready-icon"><Icon name="phonelink_ring" size={19} /></span>
+        <span>
+          <strong>{t("library.receiver.ready")}</strong>
+          <small>{files.length === 0 ? t("library.receiver.waitingForPhone") : `${files.length} file${files.length === 1 ? "" : "s"} waiting for a save choice`}</small>
+        </span>
+        <span className="lib-media-receiver__ready-dot" aria-hidden="true" />
+      </div>
+
+      <div className="lib-media-receiver__hint">
+        <Icon name="info" size={16} />
+        <span>{t("library.receiver.anyFileHint")}</span>
+      </div>
+
+      {status && (
+        <div className={`lib-media-receiver__status lib-media-receiver__status--${status.tone}`} role={status.tone === "error" ? "alert" : "status"}>
+          <Icon name={status.tone === "error" ? "error" : "check_circle"} size={16} />
+          <span>{status.message}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="lib-media-receiver__empty">
+          <span className="lib-media-receiver__spinner" aria-hidden="true" />
+          <strong>{t("library.receiver.loading")}</strong>
+        </div>
+      ) : files.length === 0 ? (
+        <div className="lib-media-receiver__empty">
+          <div className="lib-media-receiver__empty-icon"><Icon name="move_to_inbox" size={34} /></div>
+          <strong>{t("library.receiver.emptyTitle")}</strong>
+          <p>{t("library.receiver.emptyDescription")}</p>
+        </div>
+      ) : (
+        <div className="lib-media-receiver__list" aria-label={t("library.receiver.incomingFiles")}>
+          {files.map((file) => {
+            const busy = busyId === file.pendingId;
+            return (
+              <article key={file.pendingId} className="lib-media-receiver-card">
+                <div className="lib-media-receiver-card__identity">
+                  <span className="lib-media-receiver-card__icon"><Icon name={receiverFileIcon(file)} size={23} /></span>
+                  <span className="lib-media-receiver-card__copy">
+                    <strong title={file.fileName}>{file.fileName}</strong>
+                    <small>{receiverFileTypeLabel(file)} · {formatReceiverFileSize(file.fileSize)} · {formatReceiverFileTime(file.receivedAt)}</small>
+                  </span>
+                </div>
+                <div className="lib-media-receiver-card__actions">
+                  <button type="button" className="lib-receiver-action lib-receiver-action--secondary" onClick={() => void handleSaveToFolder(file)} disabled={busy}>
+                    <Icon name="folder" size={15} />
+                    {busy ? t("library.receiver.saving") : t("library.receiver.saveToFolder")}
+                  </button>
+                  <button type="button" className="lib-receiver-action lib-receiver-action--primary" onClick={() => void handleSaveToMce(file)} disabled={busy}>
+                    <Icon name="save" size={15} />
+                    {t("library.receiver.saveToMce")}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

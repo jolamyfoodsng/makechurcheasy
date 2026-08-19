@@ -477,6 +477,48 @@
   gap: 2px;
 }
 
+/* Bible Browse/Compare share the toolbar's existing overflow menu. Keep the
+   original action tree mounted so its compare controls and state stay in one
+   place, but hide its duplicate trigger and render the menu inline here. */
+.dock-btm-overflow__children .dock-bible-bottom-overflow-actions {
+  width: min(280px, calc(100vw - 24px));
+}
+
+.dock-btm-overflow__children .dock-bible-header-actions,
+.dock-btm-overflow__children .dock-bible-actions__compare-group,
+.dock-btm-overflow__children .dock-bible-compare-trigger {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.dock-btm-overflow__children .dock-bible-actions__overflow {
+  display: none;
+}
+
+.dock-btm-overflow__menu .dock-btm-overflow__children .dock-bible-actions__menu {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dock-btm-overflow__menu .dock-btm-overflow__children .dock-bible-compare-popover {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 4px 0 0;
+  box-sizing: border-box;
+}
+
 .dock-btm-overflow__menu-item,
 .dock-scene-routing-control__trigger--labelled {
   display: flex;
@@ -506,6 +548,133 @@
   background: var(--dock-surface-hover, #334155);
   color: var(--dock-text, #F8FAFC);
   outline: none;
+}
+
+.dock-scene-routing-control__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dock-scene-routing-control__toggle-copy {
+  min-width: 0;
+}
+
+.dock-scene-routing-control__toggle-copy small,
+.dock-scene-routing-control__hint {
+  display: block;
+  margin-top: 3px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.dock-scene-routing-control__label {
+  display: block;
+  color: var(--dock-text, #F8FAFC);
+  font-weight: 700;
+}
+
+.dock-scene-routing-control__section {
+  margin-top: 12px;
+}
+
+.dock-scene-routing-control__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dock-scene-routing-control__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 999px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  font-size: 9px;
+}
+
+.dock-scene-routing-control__scene-list {
+  max-height: 204px;
+  overflow-y: auto;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 7px;
+  background: var(--dock-bg, #0F172A);
+}
+
+.dock-scene-routing-control__scene-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 4px 7px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+}
+
+.dock-scene-routing-control__scene-row:last-child {
+  border-bottom: none;
+}
+
+.dock-scene-routing-control__scene-row.is-selected {
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.08));
+}
+
+.dock-scene-routing-control__scene-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--dock-text, #F8FAFC);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.dock-scene-routing-control__scene-check span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-scene-routing-control__mode-select {
+  flex: 0 0 112px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--dock-input-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 9px;
+  outline: none;
+}
+
+.dock-scene-routing-control__mode-select:focus-visible {
+  border-color: var(--dock-border-active, #2563EB);
+  box-shadow: 0 0 0 2px var(--dock-accent-soft-border, rgba(37, 99, 235, 0.2));
+}
+
+.dock-scene-routing-control__empty {
+  padding: 12px 9px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10px;
 }
 
 .dock-btm-overflow__menu .dock-bible-reference-trigger__btn {
@@ -603,6 +772,13 @@
   gap: 2px;
   z-index: 100;
   animation: dock-btm-display-mode-open 0.15s ease;
+}
+
+/* The toolbar is anchored to the bottom edge, so its own dropdowns open into
+   the usable space above it. */
+.dock-btm-toolbar--compact .dock-btm-display-mode-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 @keyframes dock-btm-display-mode-open {

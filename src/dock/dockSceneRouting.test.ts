@@ -16,6 +16,7 @@ import presentationBridgeSource from "../services/presentationDockBridge.ts?raw"
 import worshipOverlaySource from "../../public/mce-worship-overlay.html?raw";
 import notesOverlaySource from "../../public/mce-note.html?raw";
 import lowerThirdOverlaySource from "../../public/lower-third-overlay.html?raw";
+import { getDockSceneRouteTargets, normalizeDockSceneRoute } from "./dockSceneRouting";
 
 describe("dock scene routing", () => {
   it("gives every selected-scene overlay its own stable source name", () => {
@@ -30,7 +31,33 @@ describe("dock scene routing", () => {
   it("persists an independent target and an explicit MCE Presentation sync choice per module", () => {
     expect(routingSource).toContain('const SCENE_ROUTING_STORAGE_KEY = "dock-scene-routing-v1"');
     expect(routingSource).toContain("syncPresentation: candidate.syncPresentation === true");
-    expect(routingSource).toContain("getUserScopedKey(SCENE_ROUTING_STORAGE_KEY)");
+    expect(routingSource).toContain("readNativeDockSetting<StoredSceneRoutes>(SCENE_ROUTING_STORAGE_KEY)");
+    expect(routingSource).toContain('export type DockSceneOutputMode = "inherit" | "fullscreen" | "lower-third"');
+    expect(routingSource).toContain("targets: DockSceneRouteTarget[]");
+  });
+
+  it("migrates the legacy single-scene route and preserves per-scene formats", () => {
+    expect(normalizeDockSceneRoute({ enabled: true, sceneName: "Camera", syncPresentation: false })).toEqual({
+      enabled: true,
+      sceneName: "Camera",
+      targets: [{ sceneName: "Camera", mode: "inherit" }],
+      syncPresentation: false,
+    });
+
+    const route = normalizeDockSceneRoute({
+      enabled: true,
+      targets: [
+        { sceneName: "Full Screen", mode: "fullscreen" },
+        { sceneName: "Lower Third", mode: "lower-third" },
+        { sceneName: "Full Screen", mode: "inherit" },
+      ],
+      syncPresentation: true,
+    });
+    expect(route.sceneName).toBe("Full Screen");
+    expect(getDockSceneRouteTargets(route)).toEqual([
+      { sceneName: "Full Screen", mode: "fullscreen" },
+      { sceneName: "Lower Third", mode: "lower-third" },
+    ]);
   });
 
   it("uses a small, stable URL and targets packets to the independent browser input", () => {
@@ -40,15 +67,20 @@ describe("dock scene routing", () => {
 
     expect(methodSource).toContain("ensureOverlaySource(sceneName, sourceName");
     expect(methodSource).toContain("buildSceneRouteOverlayUrl(options.url, sourceName)");
-    expect(methodSource).toContain('options.overlayPacket ? "" : options.css');
+    expect(methodSource).toContain("const documentNeedsLoad = needsRouteReconciliation");
+    expect(methodSource).toContain("await this.hasBrowserSourceUrlChanged(sourceName, stableSourceUrl)");
+    expect(methodSource).toContain("if (documentNeedsLoad) await this.sleep(220)");
+    expect(methodSource).toContain("const needsRouteReconciliation = !routeWasRecentlyPrepared || !hasStableLoadedDocument");
+    expect(obsClientSource).toContain("SCENE_ROUTE_SOURCE_RECONCILE_MS");
     expect(methodSource).toContain("emitBrowserOverlayPacket(");
-    expect(methodSource).toContain("this.buildOverlayUrlFromPayload(sourceUrl, options.overlayPacket)");
+    expect(methodSource).toContain("this.buildOverlayUrlFromPayload(stableSourceUrl, options.overlayPacket)");
+    expect(methodSource).toContain("if (documentNeedsLoad) {");
   });
 
   it("keeps route packets isolated from the shared MCE Presentation overlays", () => {
     expect(obsClientSource).toContain("...(targetSource ? { targetSource } : {})");
     expect(obsClientSource).toContain('event_name: "mce-overlay-packet"');
-    expect(obsClientSource).toContain("event_data: {\n              tab: tabType,");
+    expect(obsClientSource).toContain("event_data: {\n                tab: tabType,");
     for (const overlaySource of [bibleOverlaySource, worshipOverlaySource, notesOverlaySource]) {
       expect(overlaySource).toContain("const _routeSource");
       expect(overlaySource).toContain("const _routeSuffix = _routeSource");
@@ -72,14 +104,13 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("MCE Presentation only");
   });
 
-  it("focuses the clicked module before slow output work and keeps fast paths covered", () => {
-    expect(bibleTabSource).toContain('focusMcePresentationModule("bible")');
-    expect(notesTabSource).toContain('focusMcePresentationModule("notes")');
-    expect(worshipTabSource).toContain('focusMcePresentationModule("worship")');
+  it("updates the clicked module before focusing its shared output source", () => {
     expect(obsClientSource).toContain('focusMcePresentationModule("bible")');
     expect(obsClientSource).toContain('focusMcePresentationModule("worship")');
     expect(obsClientSource).toContain('focusMcePresentationModule("notes")');
-    expect(obsClientSource).toContain("Fast packet updates must still switch the active MCE family");
+    expect(obsClientSource).toContain("Deliver the new verse while the source is still hidden");
+    expect(obsClientSource).toContain("The packet is now current.");
+    expect(obsClientSource).toContain("Only after that do we isolate this tab's");
     expect(obsClientSource).toContain("focusMcePresentationModule(\"media\")");
     expect(mediaTabSource).toContain("How the slideshow works");
     expect(mediaTabSource).toContain('useState("MC slideshow")');
@@ -103,6 +134,26 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain("if (compareEnabled)");
     expect(obsClientSource).toContain("PRESENTATION_SCENE_NAME, sceneName");
     expect(bibleOverlaySource).toContain("visibility: hidden;");
+  });
+
+  it("sends a compare selection through one authoritative Bible projection path", () => {
+    const comparePushStart = bibleTabSource.indexOf("const publishComparePassageOutput");
+    const comparePushEnd = bibleTabSource.indexOf("const handleComparePassageNavigation", comparePushStart);
+    const comparePushSource = bibleTabSource.slice(comparePushStart, comparePushEnd);
+
+    expect(comparePushSource).toContain("await pushLive()");
+    expect(comparePushSource).not.toContain("primeBibleOverlay(");
+  });
+
+  it("keeps an already-live Bible source visible across a Dock refresh", () => {
+    expect(obsClientSource).toContain('const MCE_PRESENTATION_ACTIVE_MODULE_KEY = "ocs-dock-presentation-active-module-v1"');
+    expect(obsClientSource).toContain("writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module)");
+    expect(obsClientSource).toContain("private async tryPushRestoredLiveBiblePacket");
+    expect(obsClientSource).toContain("if (await this.tryPushRestoredLiveBiblePacket(data)) return;");
+    expect(obsClientSource).toContain("await this.deliverCssOverlayPacket(sourceName, \"bible\", packet, baseUrl, themeCss)");
+    expect(obsClientSource).toContain("const preserveExistingLiveBibleSource = !data.targetScene");
+    expect(obsClientSource).toContain('MCE_PRESENTATION_ACTIVE_MODULE_KEY) === "bible"');
+    expect(obsClientSource).toContain('this._ensureFullscreenScene("bible", mode, preserveExistingLiveBibleSource)');
   });
 
   it("verifies the live OBS browser source painted the new font", () => {
@@ -157,6 +208,9 @@ describe("dock scene routing", () => {
   it("exposes the same scene picker in every requested output area", () => {
     expect(routingControlSource).toContain("Send to another scene");
     expect(routingControlSource).toContain("Also update MCE Presentation");
+    expect(routingControlSource).toContain("Target scenes");
+    expect(routingControlSource).toContain("Full screen");
+    expect(routingControlSource).toContain("Lower third");
     expect(bibleTabSource).toContain('module="bible"');
     expect(worshipTabSource).toContain('module="worship"');
     expect(notesTabSource).toContain('module="notes"');

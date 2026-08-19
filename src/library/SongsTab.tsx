@@ -4,7 +4,7 @@
  * Features:
  *   • Search by title / artist
  *   • Song list with lyrics preview, slide count, key badge
- *   • Add Song modal (title, key, leader, lyrics, auto-split)
+ *   • Add Song modal (title, artist, lyrics, and slide layout)
  *   • Edit Song modal (same fields, pre-filled)
  *   • Archive with confirmation
  *   • ESC closes modals
@@ -48,6 +48,7 @@ import {
   getArchivedSongs,
   restoreSong,
   saveSong,
+  WORSHIP_SONGS_UPDATED_EVENT,
 } from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
@@ -158,6 +159,15 @@ export function SongsTab() {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  // Keep the Library list current when the Dock creates or edits a song.
+  useEffect(() => {
+    const handleSongsUpdated = () => {
+      void reload();
+    };
+    window.addEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
+    return () => window.removeEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
   }, [reload]);
 
   // Recompute song limits whenever the song list or plan changes

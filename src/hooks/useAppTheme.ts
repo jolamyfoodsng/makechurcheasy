@@ -10,7 +10,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { track } from "../services/analytics";
-import { getUserScopedKey } from "../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import {
   applyAppAppearanceToDOM,
   loadAppAppearance,
@@ -30,14 +30,13 @@ function resolveTheme(pref: ThemePref): "dark" | "light" {
 
 function loadPref(): ThemePref {
   try {
-    const stored = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
+    const stored = readNativeDockSetting(STORAGE_KEY);
     if (stored === "dark" || stored === "light" || stored === "system") return stored;
 
     // Preserve the older settings-page preference when upgrading to the
     // shared app/Dock theme source of truth.
-    const legacyRaw = localStorage.getItem(getUserScopedKey("mv-settings"));
-    if (legacyRaw) {
-      const legacy = JSON.parse(legacyRaw) as { theme?: unknown };
+    const legacy = readNativeDockSetting<Record<string, unknown>>("mv-settings");
+    if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
       if (legacy.theme === "dark" || legacy.theme === "light" || legacy.theme === "system") {
         return legacy.theme;
       }
@@ -75,18 +74,22 @@ function getSnapshot() {
   return currentPref;
 }
 
+/** Re-read the native preference after the desktop database is hydrated. */
+export function refreshAppThemePreference(): ThemePref {
+  const next = loadPref();
+  if (next === currentPref) return currentPref;
+  currentPref = next;
+  applyToDOM(resolveTheme(currentPref));
+  listeners.forEach((cb) => cb());
+  return currentPref;
+}
+
 export function setAppTheme(pref: ThemePref) {
   currentPref = pref;
-  try {
-    localStorage.setItem(getUserScopedKey(STORAGE_KEY), pref);
-    const legacyKey = getUserScopedKey("mv-settings");
-    const legacyRaw = localStorage.getItem(legacyKey);
-    if (legacyRaw) {
-      const legacy = JSON.parse(legacyRaw) as Record<string, unknown>;
-      localStorage.setItem(legacyKey, JSON.stringify({ ...legacy, theme: pref }));
-    }
-  } catch {
-    // ignore
+  writeNativeDockSetting(STORAGE_KEY, pref);
+  const legacy = readNativeDockSetting<Record<string, unknown>>("mv-settings");
+  if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
+    writeNativeDockSetting("mv-settings", { ...legacy, theme: pref });
   }
   applyToDOM(resolveTheme(pref));
   track("theme_changed", { mode: pref });

@@ -11,6 +11,8 @@ import { forwardRef, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import BibleVersionLibrary from "./BibleVersionLibrary";
+import DockBottomSearchPanel from "./DockBottomSearchPanel";
+import type { DockSearchPlacement } from "../dockSearchPlacement";
 
 interface BibleControlsProps {
   selectedBook: string | null;
@@ -246,55 +248,6 @@ export function BibleControls({
         </div>
       </div>
 
-      <div
-        className="dock-bible-controls__keyboard-cue"
-        role="note"
-        aria-label={t(
-          "bible.keyboardShortcutsDescription",
-          "Use the arrow keys to move through chapters and verses. Hold Shift with Left or Right to change books.",
-        )}
-      >
-        <span className="dock-bible-controls__keyboard-cue-label">
-          <span aria-hidden="true"><Icon name="keyboard" size={12} /></span>
-          <span>{t("bible.keyboardCueLabel", "Keyboard")}</span>
-        </span>
-        <span
-          className="dock-bible-controls__keyboard-cue-group"
-          title={t("bible.keyboardChapterCue", "Left arrow: previous chapter. Right arrow: next chapter.")}
-          aria-label={t("bible.keyboardChapterCue", "Left arrow: previous chapter. Right arrow: next chapter.")}
-        >
-          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
-            <kbd>←</kbd>
-            <kbd>→</kbd>
-          </span>
-          <span>{t("bible.chapter", "Chapter")}</span>
-        </span>
-        <span
-          className="dock-bible-controls__keyboard-cue-group"
-          title={t("bible.keyboardVerseCue", "Up arrow: previous verse. Down arrow: next verse.")}
-          aria-label={t("bible.keyboardVerseCue", "Up arrow: previous verse. Down arrow: next verse.")}
-        >
-          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
-            <kbd>↑</kbd>
-            <kbd>↓</kbd>
-          </span>
-          <span>{t("bible.verse", "Verse")}</span>
-        </span>
-        <span
-          className="dock-bible-controls__keyboard-cue-group"
-          title={t("bible.keyboardBookCue", "Shift + Left arrow: previous book. Shift + Right arrow: next book.")}
-          aria-label={t("bible.keyboardBookCue", "Shift + Left arrow: previous book. Shift + Right arrow: next book.")}
-        >
-          <span className="dock-bible-controls__keyboard-cue-keys" aria-hidden="true">
-            <kbd>Shift</kbd>
-            <span>+</span>
-            <kbd>←</kbd>
-            <kbd>→</kbd>
-          </span>
-          <span>{t("bible.book", "Book")}</span>
-        </span>
-      </div>
-
       {/* Right: Version + Options */}
 
     </div>
@@ -307,9 +260,17 @@ interface BibleTopbarProps {
   onToggle: () => void;
   headerActions?: React.ReactNode;
   children?: React.ReactNode;
+  hideToggle?: boolean;
 }
 
-export function BibleTopbar({ isExpanded, selectedBook: _selectedBook, onToggle, headerActions, children }: BibleTopbarProps) {
+export function BibleTopbar({
+  isExpanded,
+  selectedBook: _selectedBook,
+  onToggle,
+  headerActions,
+  children,
+  hideToggle = false,
+}: BibleTopbarProps) {
   const { t } = useTranslation();
   const toggleLabel = isExpanded
     ? t("bible.closeBibleBrowser", "Close Bible browser")
@@ -318,22 +279,87 @@ export function BibleTopbar({ isExpanded, selectedBook: _selectedBook, onToggle,
   return (
     <section className={`dock-bible-topbar${isExpanded ? " dock-bible-topbar--expanded" : ""}`}>
       <div className="dock-bible-topbar__header">
-        <button
-          type="button"
-          className={`dock-bible-topbar__toggle-btn${isExpanded ? " dock-bible-topbar__toggle-btn--active" : ""}`}
-          onClick={onToggle}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-        >
-          <Icon name="menu_book" size={14} />
-          <span className="dock-bible-topbar__toggle-label">{t("bible.browse", "Browse")}</span>
-          <Icon name={isExpanded ? "expand_less" : "expand_more"} size={12} />
-        </button>
+        {!hideToggle && (
+          <button
+            type="button"
+            className={`dock-bible-topbar__toggle-btn${isExpanded ? " dock-bible-topbar__toggle-btn--active" : ""}`}
+            onClick={onToggle}
+            aria-label={toggleLabel}
+            title={toggleLabel}
+          >
+            <Icon name="menu_book" size={14} />
+            <Icon name={isExpanded ? "expand_less" : "expand_more"} size={12} />
+          </button>
+        )}
         {headerActions}
       </div>
 
       {isExpanded && children}
     </section>
+  );
+}
+
+type BibleContextualActions = React.ReactNode | ((isExpanded: boolean, onToggle: () => void) => React.ReactNode);
+
+interface BibleSearchRowProps {
+  searchSection: React.ReactNode;
+  activeTranslation: string;
+  availableTranslations: Array<{ value: string; label: string; language?: string }>;
+  onVersionChange: (version: string) => void;
+  compareEnabled: boolean;
+  isCompact: boolean;
+  compactActions?: BibleContextualActions;
+  isExpanded: boolean;
+  onToggle: () => void;
+  headerActions?: BibleContextualActions;
+  hideBrowseToggle?: boolean;
+}
+
+export function BibleSearchRow({
+  searchSection,
+  activeTranslation,
+  availableTranslations,
+  onVersionChange,
+  compareEnabled,
+  isCompact,
+  compactActions,
+  isExpanded,
+  onToggle,
+  headerActions,
+  hideBrowseToggle = false,
+}: BibleSearchRowProps) {
+  const renderedCompactActions = typeof compactActions === "function"
+    ? compactActions(isExpanded, onToggle)
+    : compactActions;
+  const renderedHeaderActions = typeof headerActions === "function"
+    ? headerActions(isExpanded, onToggle)
+    : headerActions;
+
+  return (
+    <div className="dock-bible-search-row">
+      <div className="dock-bible-search-row__input">
+        {searchSection}
+      </div>
+      <div className="dock-bible-search-row__translation">
+        <BibleVersionLibrary
+          activeTranslation={activeTranslation}
+          availableTranslations={availableTranslations}
+          onVersionChange={onVersionChange}
+          disabled={compareEnabled}
+        />
+        {!hideBrowseToggle && isCompact && renderedCompactActions ? (
+          <div className="dock-bible-compact-actions">{renderedCompactActions}</div>
+        ) : !hideBrowseToggle ? (
+          <BibleTopbar
+            isExpanded={isExpanded}
+            selectedBook={null}
+            onToggle={onToggle}
+            headerActions={renderedHeaderActions}
+            hideToggle={hideBrowseToggle}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -366,9 +392,10 @@ interface BibleDockContainerProps {
   abbreviateBook: (book: string) => string;
   BOOK_CHAPTERS: typeof import("../dockTypes").BOOK_CHAPTERS;
   searchSection: React.ReactNode;
-  headerActions?: React.ReactNode;
-  compactActions?: React.ReactNode;
-  children: React.ReactNode;
+  searchPlacement?: DockSearchPlacement;
+  headerActions?: BibleContextualActions;
+  compactActions?: BibleContextualActions;
+  children: React.ReactNode | ((bottomPanel: React.ReactNode, bottomToolbarActions: React.ReactNode) => React.ReactNode);
   isCompact?: boolean;
   isNarrowWidth?: boolean;
 }
@@ -407,8 +434,11 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   children,
   isCompact = false,
   isNarrowWidth = false,
+  searchPlacement = "top",
 }: BibleDockContainerProps, ref) {
   const [_isNarrowScreen, _setIsNarrowScreen] = useState(false);
+  const [isBottomSearchExpanded, setIsBottomSearchExpanded] = useState(true);
+  const [isBottomBrowseExpanded, setIsBottomBrowseExpanded] = useState(false);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -455,41 +485,80 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     />
   );
 
+  const renderSearchRow = (
+    expanded: boolean,
+    onToggle: () => void,
+    hideBrowseToggle = false,
+  ) => (
+    <BibleSearchRow
+      searchSection={searchSection}
+      activeTranslation={activeTranslation}
+      availableTranslations={_availableTranslations}
+      onVersionChange={onVersionChange}
+      compareEnabled={compareEnabled}
+      isCompact={isCompact}
+      compactActions={compactActions}
+      isExpanded={expanded}
+      onToggle={onToggle}
+      headerActions={headerActions}
+      hideBrowseToggle={hideBrowseToggle}
+    />
+  );
+
+  const showTopSearch = searchPlacement !== "bottom";
+  const showBottomSearch = searchPlacement !== "top";
+  const bottomSearchPanel = showBottomSearch ? (
+    <DockBottomSearchPanel
+      expanded={isBottomSearchExpanded}
+      onToggle={() => setIsBottomSearchExpanded((current) => !current)}
+    >
+      {isBottomBrowseExpanded && (
+        <div className="dock-bible-controls-panel dock-bible-controls-panel--bottom">
+          {browseControls}
+        </div>
+      )}
+      {renderSearchRow(
+        isBottomBrowseExpanded,
+        () => setIsBottomBrowseExpanded((current) => !current),
+        true,
+      )}
+    </DockBottomSearchPanel>
+  ) : null;
+  const bottomBrowseExpanded = searchPlacement === "bottom"
+    ? isBottomBrowseExpanded
+    : isTopbarExpanded;
+  const onBottomBrowseToggle = searchPlacement === "bottom"
+    ? () => setIsBottomBrowseExpanded((current) => !current)
+    : () => setIsTopbarExpanded((current) => !current);
+  const bottomToolbarActions = isCompact
+    ? (typeof compactActions === "function"
+      ? compactActions(bottomBrowseExpanded, onBottomBrowseToggle)
+      : compactActions)
+    : (typeof headerActions === "function"
+      ? headerActions(bottomBrowseExpanded, onBottomBrowseToggle)
+      : headerActions);
+  const renderedChildren = typeof children === "function"
+    ? children(bottomSearchPanel, bottomToolbarActions)
+    : children;
+
   return (
     <div ref={ref} className={rootClass}>
-      {/* Search bar + Translation select row */}
-      <div className="dock-bible-search-row">
-        <div className="dock-bible-search-row__input">
-          {searchSection}
-        </div>
-        <div className="dock-bible-search-row__translation">
-          <BibleVersionLibrary
-            activeTranslation={activeTranslation}
-            availableTranslations={_availableTranslations}
-            onVersionChange={onVersionChange}
-            disabled={compareEnabled}
-          />
-          {isCompact && compactActions ? (
-            <div className="dock-bible-compact-actions">{compactActions}</div>
-          ) : (
-            <BibleTopbar
-              isExpanded={isTopbarExpanded}
-              selectedBook={selectedBook}
-              onToggle={() => setIsTopbarExpanded((prev: boolean) => !prev)}
-              headerActions={headerActions}
-            />
-          )}
-        </div>
-      </div>
+      {showTopSearch && renderSearchRow(
+        isTopbarExpanded,
+        () => setIsTopbarExpanded((prev: boolean) => !prev),
+        true,
+      )}
 
-      {isTopbarExpanded && (
+      {showTopSearch && isTopbarExpanded && (
         <div className="dock-bible-controls-panel">
           {browseControls}
         </div>
       )}
 
       {/* Main content area */}
-      {children}
+      {renderedChildren}
+
+      {typeof children === "function" ? null : bottomSearchPanel}
     </div>
   );
 });

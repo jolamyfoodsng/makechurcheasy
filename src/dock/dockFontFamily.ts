@@ -4,7 +4,7 @@ import {
   saveDockPreference,
   writeDockPreference,
 } from "../services/dockPreferenceStorage";
-import { readUserScopedStorage, writeUserScopedStorage } from "../services/userScopedStorage";
+import { readNativeDockSetting } from "../services/localDockSettings";
 
 export interface DockFontFamilyOption {
   id: string;
@@ -147,8 +147,8 @@ export function normalizeDockFontScale(value: unknown): number {
 
 function readLegacyTypographyPreferences(): DockTypographyPreferences {
   return {
-    fontFamily: normalizeDockFontFamily(readUserScopedStorage(DOCK_FONT_FAMILY_STORAGE_KEY)),
-    fontScale: normalizeDockFontScale(readUserScopedStorage(DOCK_FONT_SCALE_STORAGE_KEY)),
+    fontFamily: normalizeDockFontFamily(readNativeDockSetting<string>(DOCK_FONT_FAMILY_STORAGE_KEY)),
+    fontScale: normalizeDockFontScale(readNativeDockSetting<unknown>(DOCK_FONT_SCALE_STORAGE_KEY)),
   };
 }
 
@@ -179,11 +179,6 @@ function persistTypographyPreferences(value: Partial<DockTypographyPreferences>)
     updatedAt: new Date().toISOString(),
   });
 
-  // Keep the old raw keys alive for already-open overlay documents and older
-  // desktop builds, while the structured record is the durable source used on
-  // the next Dock bootstrap.
-  writeUserScopedStorage(DOCK_FONT_FAMILY_STORAGE_KEY, next.fontFamily);
-  writeUserScopedStorage(DOCK_FONT_SCALE_STORAGE_KEY, String(next.fontScale));
   writeDockPreference(DOCK_TYPOGRAPHY_STORAGE_KEY, next);
   void saveDockPreference(DOCK_TYPOGRAPHY_STORAGE_KEY, next);
 }

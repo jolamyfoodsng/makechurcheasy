@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship + Notes, and Media production controls inside OBS.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, useTransition, type CSSProperties, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -65,10 +65,20 @@ import {
   downloadDockSession,
   importDockSessionFromFile,
 } from "./dockSessionTransfer";
+import {
+  hydrateNativeDockSettings,
+  isNativeDockSettingsHydrated,
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "../services/localDockSettings";
 import "./dock.css";
 import "./dock-theme.css";
 import "../accessibility.css";
 import Icon from "./DockIcon";
+import {
+  normalizeDockSearchPlacement,
+  type DockSearchPlacement,
+} from "./dockSearchPlacement";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -97,6 +107,14 @@ const DOCK_TAB_PRELOADERS: Partial<Record<DockTab, () => Promise<unknown>>> = {
   ministry: loadDockMinistryTab,
 };
 
+const DOCK_TAB_SHORTCUTS = [
+  { key: "1", tab: "bible" as DockTab, labelKey: "page.shortcutTabBible" },
+  { key: "2", tab: "worship" as DockTab, labelKey: "page.shortcutTabWorship" },
+  { key: "3", tab: "media" as DockTab, labelKey: "page.shortcutTabMedia" },
+  { key: "4", tab: "ministry" as DockTab, labelKey: "page.shortcutTabMinistry" },
+  { key: "5", tab: "multiview" as DockTab, labelKey: "page.shortcutTabMultiview" },
+] as const;
+
 function preloadDockTab(tab: DockTab): void {
   void DOCK_TAB_PRELOADERS[tab]?.();
 }
@@ -107,6 +125,7 @@ const DOCK_STAGED_ITEM_KEY = "ocs-dock-staged-item";
 interface DockShellPreferences {
   activeTab?: DockTab | "live";
   disabledTabs?: DockTab[];
+  searchPlacement?: DockSearchPlacement;
 }
 
 import { loadProjectionSettings, saveProjectionSettings, type ProjectionSettings } from "./dockProjectionSettings";
@@ -120,28 +139,14 @@ function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
 }
 
 function loadDockStagedItem(): DockStagedItem | null {
-  try {
-    const raw = localStorage.getItem(DOCK_STAGED_ITEM_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as DockStagedItem | null;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (typeof parsed.type !== "string" || typeof parsed.label !== "string") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  const parsed = readNativeDockSetting<DockStagedItem | null>(DOCK_STAGED_ITEM_KEY);
+  if (!parsed || typeof parsed !== "object") return null;
+  if (typeof parsed.type !== "string" || typeof parsed.label !== "string") return null;
+  return parsed;
 }
 
 function saveDockStagedItem(item: DockStagedItem | null): void {
-  try {
-    if (!item) {
-      localStorage.removeItem(DOCK_STAGED_ITEM_KEY);
-      return;
-    }
-    localStorage.setItem(DOCK_STAGED_ITEM_KEY, JSON.stringify(item));
-  } catch {
-    // ignore OBS CEF storage failures
-  }
+  writeNativeDockSetting(DOCK_STAGED_ITEM_KEY, item);
 }
 
 function isDockProductionSettingsPayload(value: unknown): value is DockProductionSettingsPayload {
@@ -158,22 +163,12 @@ function isDockProductionSettingsPayload(value: unknown): value is DockProductio
 }
 
 function loadDockShellPreferences(): DockShellPreferences {
-  try {
-    const raw = localStorage.getItem(DOCK_SHELL_PREFS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as DockShellPreferences;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = readNativeDockSetting<DockShellPreferences>(DOCK_SHELL_PREFS_KEY);
+  return parsed && typeof parsed === "object" ? parsed : {};
 }
 
 function saveDockShellPreferences(next: DockShellPreferences): void {
-  try {
-    localStorage.setItem(DOCK_SHELL_PREFS_KEY, JSON.stringify(next));
-  } catch {
-    // ignore OBS CEF storage failures
-  }
+  writeNativeDockSetting(DOCK_SHELL_PREFS_KEY, next);
 }
 
 function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): string {
@@ -204,17 +199,7 @@ function formatDockObsError(message: string): string {
   return message;
 }
 
-export default function DockPage({
-  externalObsSession = false,
-  presentationBibleLmSplit = false,
-  presentationOutputTarget = "obs",
-  enablePresentationAssistantMicControls = false,
-  hideLowerThirdControls = false,
-  hideTickerControls = false,
-  hiddenTabs = [],
-  hideShellHeader = false,
-  onActiveTabChange,
-}: {
+interface DockPageProps {
   externalObsSession?: boolean;
   presentationBibleLmSplit?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
@@ -223,8 +208,22 @@ export default function DockPage({
   hideTickerControls?: boolean;
   hiddenTabs?: DockTab[];
   hideShellHeader?: boolean;
+  initialProductionSettings?: DockProductionSettingsPayload;
   onActiveTabChange?: (tab: DockTab) => void;
-} = {}) {
+}
+
+function DockPageContent({
+  externalObsSession = false,
+  presentationBibleLmSplit = false,
+  presentationOutputTarget = "obs",
+  enablePresentationAssistantMicControls = false,
+  hideLowerThirdControls = false,
+  hideTickerControls = false,
+  hiddenTabs = [],
+  hideShellHeader = false,
+  initialProductionSettings,
+  onActiveTabChange,
+}: DockPageProps = {}) {
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   // Synchronous config reader (reads from cache, falls back to defaults)
@@ -240,7 +239,11 @@ export default function DockPage({
     setAppearance,
   } = useAppTheme();
   const initialActiveTab = resolveDockTab(shellPreferences.activeTab);
+  const initialSearchPlacement = normalizeDockSearchPlacement(shellPreferences.searchPlacement);
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
+  const [searchPlacement, setSearchPlacement] = useState<DockSearchPlacement>(() => initialSearchPlacement);
+  const [renderedTab, setRenderedTab] = useState<DockTab>(() => initialActiveTab);
+  const [, startTransition] = useTransition();
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
     (shellPreferences.disabledTabs ?? []).filter((tab) => tab !== "notes"),
@@ -254,7 +257,7 @@ export default function DockPage({
   const [obsUrlInput, setObsUrlInput] = useState(getDefaultOBSUrl());
   const [obsPwInput, setObsPwInput] = useState("");
   const [productionSettings, setProductionSettings] = useState<DockProductionSettingsPayload>(
-    getDefaultDockProductionSettings(),
+    () => initialProductionSettings ?? getDefaultDockProductionSettings(),
   );
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
@@ -269,6 +272,16 @@ export default function DockPage({
     () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
     [disabledTabs, visibleDockTabs],
   );
+
+  // Keep the tab button and shell state responsive first. Heavy tab trees are
+  // rendered in a transition on the next task, so the click is painted before
+  // Bible/Worship/Media mount or rerender their larger panels.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      startTransition(() => setRenderedTab(activeTab));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, startTransition]);
 
   useEffect(() => {
     let cancelled = false;
@@ -443,8 +456,13 @@ export default function DockPage({
   }, [registerDropHandler, handleFiles]);
 
   useEffect(() => {
-    saveDockShellPreferences({ activeTab, disabledTabs });
-  }, [activeTab, disabledTabs]);
+    saveDockShellPreferences({
+      ...loadDockShellPreferences(),
+      activeTab,
+      disabledTabs,
+      searchPlacement,
+    });
+  }, [activeTab, disabledTabs, searchPlacement]);
 
   useEffect(() => {
     onActiveTabChange?.(activeTab);
@@ -469,17 +487,13 @@ export default function DockPage({
 
   const mountedDockTabs = useMemo(() => {
     const mounted = new Set(visitedTabs);
-    mounted.add(activeTab);
+    mounted.add(renderedTab);
     return mounted;
-  }, [activeTab, visitedTabs]);
+  }, [renderedTab, visitedTabs]);
 
   useEffect(() => {
     saveDockStagedItem(staged);
   }, [staged]);
-
-  useEffect(() => {
-    saveProjectionSettings(projectionSettings);
-  }, [projectionSettings]);
 
   useEffect(() => installDockTextShortcuts(), []);
 
@@ -737,12 +751,15 @@ export default function DockPage({
   }, []);
 
   const shortcuts: ShortcutDefinition[] = [
-    { key: "2", handler: () => setActiveTab("bible"), label: t('page.shortcutTabBible'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "3", handler: () => setActiveTab("worship"), label: t('page.shortcutTabWorship'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "4", handler: () => setActiveTab("media"), label: t('page.shortcutTabMedia'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "5", handler: () => setActiveTab("planner"), label: t('page.shortcutTabPlanner'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "6", handler: () => setActiveTab("multiview"), label: t('page.shortcutTabMultiview'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
-    { key: "7", handler: () => setActiveTab("ministry"), label: t('page.shortcutTabMinistry'), category: t('page.shortcutCategoryNavigation') as ShortcutCategory },
+    ...DOCK_TAB_SHORTCUTS
+      .filter(({ tab }) => navigableDockTabs.some((candidate) => candidate.id === tab))
+      .map(({ key, tab, labelKey }) => ({
+        key,
+        modifier: "primary" as const,
+        handler: () => setActiveTab(tab),
+        label: t(labelKey),
+        category: t('page.shortcutCategoryNavigation') as ShortcutCategory,
+      })),
     { key: "k", handler: () => openCommandPalette(""), label: t('page.shortcutCommandPalette'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
     { key: "t", handler: () => setTheme(nextTheme), label: themeToggleLabel, category: t('page.shortcutCategoryUtility') as ShortcutCategory },
     { key: "/", handler: () => setShowShortcutsHelp((v) => !v), label: t('page.shortcutsHelp'), category: t('page.shortcutCategoryUtility') as ShortcutCategory },
@@ -765,12 +782,13 @@ export default function DockPage({
   const [showTabVisibility, setShowTabVisibility] = useState(false);
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const handleHistoryClose = useCallback(() => setShowHistory(false), []);
   const [showClearScenesConfirm, setShowClearScenesConfirm] = useState(false);
   const [clearScenesLoading, setClearScenesLoading] = useState(false);
 
   // ── Language Selector ──
   const ALL_LANGUAGES: string[] = ["English", "French", "Spanish", "Portuguese", "Yoruba", "Igbo", "Hausa", "Ghanaian"];
-  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => localStorage.getItem("mce_interface_language") || "English");
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => readNativeDockSetting<string>("mce_interface_language") || "English");
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
 
@@ -849,7 +867,9 @@ export default function DockPage({
               key={tab.id}
               type="button"
               className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+              }}
               onPointerEnter={() => preloadDockTab(tab.id)}
               onPointerDown={() => preloadDockTab(tab.id)}
               onFocus={() => preloadDockTab(tab.id)}
@@ -1157,6 +1177,31 @@ export default function DockPage({
                 <div className="dock-sidebar__subpanel">
                   <div className="dock-sidebar__section-label">
                     {t('page.dockTypography', 'Dock interface')}
+                  </div>
+                  <div className="dock-sidebar__select-field">
+                    <span className="dock-sidebar__select-label">
+                      <Icon name="search" size={14} />
+                      <span>{t('page.searchPlacement', 'Search placement')}</span>
+                    </span>
+                    <div className="dock-appearance-mode" role="group" aria-label={t('page.searchPlacement', 'Search placement')}>
+                      {([
+                        ["top", t('page.searchPlacementTop', 'Top only')],
+                        ["bottom", t('page.searchPlacementBottom', 'Bottom only')],
+                      ] as const).map(([placement, label]) => (
+                        <button
+                          key={placement}
+                          type="button"
+                          className={`dock-appearance-mode__button${searchPlacement === placement ? " dock-appearance-mode__button--active" : ""}`}
+                          onClick={() => setSearchPlacement(placement)}
+                          aria-pressed={searchPlacement === placement}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dock-sidebar__hint">
+                      {t('page.searchPlacementDesc', 'Choose where the Bible, Worship, and Notes search card appears in the Dock.')}
+                    </div>
                   </div>
                   <label className="dock-sidebar__select-field">
                     <span className="dock-sidebar__select-label">
@@ -1595,7 +1640,7 @@ export default function DockPage({
           <div className="dock-content-main">
             <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
               {mountedDockTabs.has("planner") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "planner"}>
+                <div className="dock-tab-panel" hidden={renderedTab !== "planner"}>
                   <DockPlannerTab
                     staged={staged}
                     onStage={handleStage}
@@ -1604,7 +1649,7 @@ export default function DockPage({
                 </div>
               )}
               {mountedDockTabs.has("bible") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "bible"}>
+                <div className="dock-tab-panel" hidden={renderedTab !== "bible"}>
                   {presentationBibleLmSplit ? (
                     <div className="dock-presentation-bible-lm-split">
                       <section className="dock-presentation-bible-lm-pane" aria-label="Bible dock">
@@ -1614,11 +1659,11 @@ export default function DockPage({
                           onStage={handleStage}
                           productionDefaults={productionSettings.bible}
                           appConnected={appConnected}
-                          isActive={activeTab === "bible"}
                           presentationOutputTarget={presentationOutputTarget}
+                          searchPlacement={searchPlacement}
                           onSaveFeedback={showDockSaveFeedback}
                           showHistory={showHistory}
-                          onHistoryClose={() => setShowHistory(false)}
+                          onHistoryClose={handleHistoryClose}
                         />
                       </section>
                       <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
@@ -1635,24 +1680,24 @@ export default function DockPage({
                       onStage={handleStage}
                       productionDefaults={productionSettings.bible}
                       appConnected={appConnected}
-                      isActive={activeTab === "bible"}
                       presentationOutputTarget={presentationOutputTarget}
+                      searchPlacement={searchPlacement}
                       onSaveFeedback={showDockSaveFeedback}
                       fullscreenOnly={hideLowerThirdControls}
                       showHistory={showHistory}
-                      onHistoryClose={() => setShowHistory(false)}
+                      onHistoryClose={handleHistoryClose}
                     />
                   )}
                 </div>
               )}
               {mountedDockTabs.has("worship") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "worship"}>
+                <div className="dock-tab-panel" hidden={renderedTab !== "worship"}>
                   <DockWorshipTab
                     staged={staged}
                     onStage={handleStage}
                     productionDefaults={productionSettings.worship}
-                    isActive={activeTab === "worship"}
                     presentationOutputTarget={presentationOutputTarget}
+                    searchPlacement={searchPlacement}
                     fullscreenOnly={hideLowerThirdControls}
                     showSubtabs
                     compactVerticalNav={verticalTabs}
@@ -1661,22 +1706,21 @@ export default function DockPage({
                 </div>
               )}
               {mountedDockTabs.has("media") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "media"}>
+                <div className="dock-tab-panel" hidden={renderedTab !== "media"}>
                   <DockMediaTab
                     staged={staged}
                     onStage={handleStage}
-                    isActive={activeTab === "media"}
                     presentationOutputTarget={presentationOutputTarget}
                   />
                 </div>
               )}
               {mountedDockTabs.has("multiview") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "multiview"}>
-                  <DockMultiviewTab isActive={activeTab === "multiview"} />
+                <div className="dock-tab-panel" hidden={renderedTab !== "multiview"}>
+                  <DockMultiviewTab isActive={renderedTab === "multiview"} />
                 </div>
               )}
               {mountedDockTabs.has("ministry") && (
-                <div className="dock-tab-panel" hidden={activeTab !== "ministry"}>
+                <div className="dock-tab-panel" hidden={renderedTab !== "ministry"}>
                   <DockMinistryTab
                     staged={staged}
                     onStage={handleStage}
@@ -1699,7 +1743,9 @@ export default function DockPage({
               key={tab.id}
               type="button"
               className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+              }}
               onPointerEnter={() => preloadDockTab(tab.id)}
               onPointerDown={() => preloadDockTab(tab.id)}
               onFocus={() => preloadDockTab(tab.id)}
@@ -1755,17 +1801,12 @@ export default function DockPage({
               <div className="dock-shortcuts-section">
                 <div className="dock-shortcuts-section__label">{t('dock.navigation')}</div>
                 <div className="dock-shortcuts-list">
-                  {[
-                    { key: "2", label: t('page.shortcutTabBible') },
-                    { key: "3", label: t('page.shortcutTabWorship') },
-                    { key: "4", label: t('page.shortcutTabMedia') },
-                    { key: "5", label: t('page.shortcutTabPlanner') },
-                    { key: "6", label: t('page.shortcutTabMultiview') },
-                    { key: "7", label: t('page.shortcutTabMinistry') },
-                  ].map((s) => (
+                  {DOCK_TAB_SHORTCUTS
+                    .filter(({ tab }) => navigableDockTabs.some((candidate) => candidate.id === tab))
+                    .map((s) => (
                     <div key={s.key} className="dock-shortcuts-item">
-                      <span className="dock-shortcuts-item__key">{formatShortcut(s.key)}</span>
-                      <span className="dock-shortcuts-item__label">{s.label}</span>
+                      <span className="dock-shortcuts-item__key">{formatShortcut(s.key, "primary")}</span>
+                      <span className="dock-shortcuts-item__label">{t(s.labelKey)}</span>
                     </div>
                   ))}
                 </div>
@@ -1877,7 +1918,7 @@ export default function DockPage({
                     Yoruba: "yo", Igbo: "ig", Hausa: "ha", Ghanaian: "gh",
                   };
                   const code = langToCode[lang] || "en";
-                  localStorage.setItem("mce_interface_language", lang);
+                  writeNativeDockSetting("mce_interface_language", lang);
                   i18n.changeLanguage(code);
                   dockBridge.sendLanguageChanged(code);
                   setInterfaceLanguage(lang);
@@ -1893,4 +1934,57 @@ export default function DockPage({
       )}
     </div>
   );
+}
+
+/**
+ * The Dock must hydrate the native settings database before mounting the
+ * content component. Otherwise every useState initializer can briefly see a
+ * default value and another component can act on that value during startup.
+ */
+export default function DockPage(props: DockPageProps = {}) {
+  const [settingsReady, setSettingsReady] = useState(() => isNativeDockSettingsHydrated());
+  const [initialProductionSettings, setInitialProductionSettings] = useState<DockProductionSettingsPayload | null>(null);
+
+  useEffect(() => {
+    if (settingsReady && initialProductionSettings) return;
+
+    let cancelled = false;
+    let retryTimer: number | null = null;
+
+    const hydrate = async () => {
+      try {
+        await hydrateNativeDockSettings();
+        const productionSettings = await loadDockProductionSettings();
+        if (!cancelled) {
+          setInitialProductionSettings(productionSettings);
+          setSettingsReady(true);
+        }
+      } catch (error) {
+        console.warn("[Dock] Waiting for the local settings database:", error);
+        if (!cancelled) {
+          retryTimer = window.setTimeout(() => {
+            void hydrate();
+          }, 500);
+        }
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
+  }, [initialProductionSettings, settingsReady]);
+
+  if (!settingsReady || !initialProductionSettings) {
+    return (
+      <div className="dock-tab-loading" role="status" aria-live="polite">
+        Loading saved Dock settings…
+      </div>
+    );
+  }
+
+  // The equivalent `return <DockPageContent {...props} />` is intentionally
+  // held until the persisted startup snapshot is ready.
+  return <DockPageContent {...props} initialProductionSettings={initialProductionSettings} />;
 }

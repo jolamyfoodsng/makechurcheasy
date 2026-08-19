@@ -1,4 +1,8 @@
-import { getUserScopedKey } from "../services/userScopedStorage";
+import {
+  hydrateNativeDockSettings,
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "../services/localDockSettings";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import type { CountdownConfig } from "../countdowns/types";
 import type { Song } from "../worship/types";
@@ -255,32 +259,20 @@ function sanitizeJsonValue(value: unknown): JsonValue {
 }
 
 function readStorageEntry(definition: TransferKeyDefinition): DockSessionStorageEntry | null {
-  if (typeof localStorage === "undefined") return null;
-  const scopedKey = definition.scope === "user" ? getUserScopedKey(definition.baseKey) : definition.baseKey;
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(scopedKey);
-    if (raw === null && definition.scope === "user" && scopedKey !== definition.baseKey) {
-      raw = localStorage.getItem(definition.baseKey);
-    }
-  } catch {
-    return null;
-  }
-  if (raw === null) return null;
-
-  try {
-    return {
-      scope: definition.scope,
-      encoding: "json",
-      value: sanitizeJsonValue(JSON.parse(raw)),
-    };
-  } catch {
+  const value = readNativeDockSetting<unknown>(definition.baseKey);
+  if (value === undefined) return null;
+  if (typeof value === "string") {
     return {
       scope: definition.scope,
       encoding: "text",
-      value: raw,
+      value,
     };
   }
+  return {
+    scope: definition.scope,
+    encoding: "json",
+    value: sanitizeJsonValue(value),
+  };
 }
 
 function readJsonStorageValue(baseKey: string, scope: StorageScope): JsonValue | null {
@@ -371,6 +363,7 @@ async function collectCountdowns(): Promise<JsonValue[]> {
 }
 
 export async function createDockSessionExport(): Promise<DockSessionExport> {
+  await hydrateNativeDockSettings().catch(() => undefined);
   const sections = SECTION_DEFINITIONS.map(sectionSnapshot);
   const [mediaLibrary, worshipSongs, countdowns, multiview] = await Promise.all([
     collectMediaRecords(),
@@ -544,12 +537,10 @@ function prepareImportedValue(value: JsonValue): JsonValue {
 }
 
 function writeStorageEntry(baseKey: string, entry: DockSessionStorageEntry): void {
-  if (typeof localStorage === "undefined") return;
-  const key = entry.scope === "user" ? getUserScopedKey(baseKey) : baseKey;
   const value = entry.encoding === "json"
-    ? JSON.stringify(prepareImportedValue(entry.value as JsonValue))
+    ? prepareImportedValue(entry.value as JsonValue)
     : String(entry.value);
-  localStorage.setItem(key, value);
+  writeNativeDockSetting(baseKey, value);
 }
 
 function hasImportedStorageEntry(session: DockSessionExport, baseKey: string): boolean {
@@ -809,6 +800,7 @@ async function restoreRecords(
 }
 
 export async function applyDockSession(session: DockSessionExport): Promise<DockSessionImportResult> {
+  await hydrateNativeDockSettings().catch(() => undefined);
   const warnings = [...session.warnings];
   let storageEntryCount = restoreExplicitAppPreferences(session);
 

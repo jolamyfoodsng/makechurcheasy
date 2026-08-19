@@ -231,6 +231,9 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-projection-settings",
 
   // Misc user state
+  "mce-automation-macros-v1",
+  "mce-automation-rules-v1",
+  "mce-automation-logs-v1",
   "ocs-dock-spellcheck-dictionary",
   "ocs-dock-typography",
   "ocs-song-title-counter-v1",

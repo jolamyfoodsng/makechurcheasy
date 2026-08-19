@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadProjectionSettings, saveProjectionSettings } from "./dockProjectionSettings";
 import dockPageSource from "./DockPage.tsx?raw";
+import { removeNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
+
+const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
 
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -23,9 +26,11 @@ function createMemoryStorage(): Storage {
 describe("dock projection settings", () => {
   beforeEach(() => {
     vi.stubGlobal("localStorage", createMemoryStorage());
+    removeNativeDockSetting(PROJECTION_SETTINGS_KEY);
   });
 
   afterEach(() => {
+    removeNativeDockSetting(PROJECTION_SETTINGS_KEY);
     vi.unstubAllGlobals();
   });
 
@@ -39,13 +44,24 @@ describe("dock projection settings", () => {
   });
 
   it("migrates the removed Mirror Program mode to Program background on", () => {
-    localStorage.setItem("ocs-dock-projection-settings", JSON.stringify({ sceneMode: "reference" }));
+    writeNativeDockSetting(PROJECTION_SETTINGS_KEY, { sceneMode: "reference" });
 
     expect(loadProjectionSettings().sceneMode).toBe("auto-duplicate");
   });
 
   it("treats the old unversioned Program background on value as the old default", () => {
-    localStorage.setItem("ocs-dock-projection-settings", JSON.stringify({ sceneMode: "auto-duplicate" }));
+    writeNativeDockSetting(PROJECTION_SETTINGS_KEY, { sceneMode: "auto-duplicate" });
+
+    expect(loadProjectionSettings().sceneMode).toBe("no-clone");
+  });
+
+  it("ignores a stale browser copy once the native setting is present", () => {
+    localStorage.setItem(PROJECTION_SETTINGS_KEY, JSON.stringify({ sceneMode: "auto-duplicate" }));
+    writeNativeDockSetting(PROJECTION_SETTINGS_KEY, {
+      sceneMode: "no-clone",
+      settingsVersion: 3,
+      programBackgroundOptIn: false,
+    });
 
     expect(loadProjectionSettings().sceneMode).toBe("no-clone");
   });
@@ -108,5 +124,18 @@ describe("dock projection settings", () => {
     expect(routingPanel).not.toContain("Mirror Program");
     expect(routingPanel).not.toContain("page.mirrorProgram");
     expect(routingPanel).not.toContain("Direct Program");
+  });
+
+  it("does not persist the startup snapshot back over the native setting", () => {
+    expect(dockPageSource).not.toContain("saveProjectionSettings(projectionSettings)");
+    expect(dockPageSource).toContain("saveProjectionSettings(next)");
+  });
+
+  it("hydrates the native database before mounting DockPageContent", () => {
+    expect(dockPageSource.indexOf("function DockPageContent")).toBeLessThan(
+      dockPageSource.indexOf("export default function DockPage"),
+    );
+    expect(dockPageSource).toContain("Loading saved Dock settings…");
+    expect(dockPageSource).toContain("return <DockPageContent {...props} />");
   });
 });

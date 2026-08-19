@@ -6,7 +6,7 @@ describe("combined Worship and Notes Dock tab", () => {
   it("exposes one top-level tab while retaining the internal subtab switcher", () => {
     expect(DOCK_TABS.map((tab) => tab.id)).not.toContain("notes");
     expect(DOCK_TABS.find((tab) => tab.id === "worship")).toMatchObject({
-      label: "Text",
+      label: "Worship and Notes",
       icon: "text_fields",
     });
     expect(dockPageSource).toContain("showSubtabs");

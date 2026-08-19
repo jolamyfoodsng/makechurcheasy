@@ -38,7 +38,15 @@ import { isProUnlocked } from "../../services/proLicense";
 import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
+import { AutomationSettingsPanel } from "../components/AutomationSettingsPanel";
 import * as db from "../mvStore";
+import { copyTextToClipboard } from "../../dock/bibleClipboard";
+import {
+  buildMobilePairingPayload,
+  buildMobileWebUrl,
+  resolveMobilePairingPorts,
+  type MobilePairingInfo,
+} from "../../services/mobilePairing";
 import {
   DEFAULT_SETTINGS,
   type MVSettings as MVSettingsType,
@@ -80,6 +88,8 @@ import {
   Zap,
 } from "lucide-react";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import QRCode from "qrcode";
 
 import "./MVSettings.css";
 
@@ -88,7 +98,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
+type SettingsTab = "general" | "obs" | "mobile" | "automation" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
@@ -139,7 +149,7 @@ function formatUpdateBytes(bytes: number): string {
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "appearance", "branding", "bible", "usage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "automation", "appearance", "branding", "bible", "usage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
@@ -705,6 +715,7 @@ export function MVSettings() {
       case "general": return t("mvSettings.tabDesc.general");
       case "obs": return t("mvSettings.tabDesc.obs");
       case "mobile": return t("mvSettings.tabDesc.mobile");
+      case "automation": return "Create, run, and store desktop automations for OBS.";
       case "appearance": return t("mvSettings.tabDesc.appearance");
       case "branding": return t("mvSettings.tabDesc.branding");
       case "bible": return t("mvSettings.tabDesc.bible");
@@ -715,7 +726,11 @@ export function MVSettings() {
 
   /* ── Mobile Remote state & handlers ── */
   const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
-  const [mobilePairingInfo, setMobilePairingInfo] = useState<{ ip: string; port: number; pairingToken: string } | null>(null);
+  const [mobilePairingInfo, setMobilePairingInfo] = useState<MobilePairingInfo | null>(null);
+  const [mobilePairingQrDataUrl, setMobilePairingQrDataUrl] = useState("");
+  const [mobileStatusBusy, setMobileStatusBusy] = useState(false);
+  const [mobilePairingBusy, setMobilePairingBusy] = useState(false);
+  const [isPrintingMobileQr, setIsPrintingMobileQr] = useState(false);
   const [mobileConnectedDevices, _setMobileConnectedDevices] = useState(0);
   const [mobileApprovedDevices, setMobileApprovedDevices] = useState<{ id: string; name: string; lastConnected: string }[]>([]);
   const [mobileDeviceRequests, setMobileDeviceRequests] = useState<{ id: string; name: string; model: string }[]>([]);
@@ -728,53 +743,104 @@ export function MVSettings() {
 
   const mobilePairingPayload = useMemo(() => {
     if (!mobilePairingInfo) return "";
-    return JSON.stringify({
-      version: 1,
-      desktopName: settings.mobileDesktopName || "My Church",
-      ip: mobilePairingInfo.ip,
-      wsPort: mobilePairingInfo.port,
-      apiPort: 45678,
-      pairingToken: mobilePairingInfo.pairingToken,
-    });
+    return buildMobilePairingPayload(
+      mobilePairingInfo,
+      settings.mobileDesktopName || "My Church",
+    );
   }, [mobilePairingInfo, settings.mobileDesktopName]);
 
-  const handleMobileRestart = useCallback(async () => {
-    try {
-      await invoke("restart_mobile_companion");
-      triggerToast(t("mvSettings.toast.mobileServerStarted"), "success");
-    } catch {
-      triggerToast(t("mvSettings.toast.mobileServerFailed"), "accent");
-    }
-  }, [triggerToast, t]);
+  const mobilePairingPorts = useMemo(
+    () => (mobilePairingInfo ? resolveMobilePairingPorts(mobilePairingInfo) : null),
+    [mobilePairingInfo],
+  );
 
-  const handleMobileLogs = useCallback(() => {
-    // Placeholder: open logs panel
-    triggerToast(t("mvSettings.mobile.logsPanelSoon"), "accent");
-  }, [triggerToast, t]);
+  const mobileWebUrl = useMemo(() => {
+    return mobilePairingInfo ? buildMobileWebUrl(mobilePairingInfo) : "";
+  }, [mobilePairingInfo]);
+
+  const handleMobileRefreshStatus = useCallback(async () => {
+    setMobileStatusBusy(true);
+    try {
+      const [status, info] = await Promise.all([
+        invoke<{ running: boolean; port: number }>("get_mobile_server_status"),
+        invoke<MobilePairingInfo>("get_mobile_pairing_info"),
+      ]);
+      setMobileServerStatus(status);
+      setMobilePairingInfo(info);
+      triggerToast(
+        status.running
+          ? "Mobile connection is ready on this Wi-Fi."
+          : "Mobile connection is not running yet.",
+        status.running ? "success" : "accent",
+      );
+    } catch (error) {
+      console.error("[MVSettings] Could not refresh mobile status", error);
+      triggerToast("Could not refresh mobile connection status.", "accent");
+    } finally {
+      setMobileStatusBusy(false);
+    }
+  }, [triggerToast]);
 
   const handleMobileRefreshPairing = useCallback(async () => {
+    setMobilePairingBusy(true);
     try {
-      const info = await invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info");
+      const info = await invoke<MobilePairingInfo>("get_mobile_pairing_info");
       setMobilePairingInfo(info);
-    } catch { /* ignore */ }
-  }, []);
+      triggerToast("Pairing code refreshed.", "success");
+    } catch (error) {
+      console.error("[MVSettings] Could not refresh pairing code", error);
+      triggerToast("Could not refresh the pairing code.", "accent");
+    } finally {
+      setMobilePairingBusy(false);
+    }
+  }, [triggerToast]);
 
   const handleMobileCopyPayload = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(mobilePairingPayload);
+    if (!mobilePairingPayload) {
+      triggerToast("Pairing payload is not ready yet.", "accent");
+      return;
+    }
+    const copied = await copyTextToClipboard(mobilePairingPayload);
+    if (copied) {
       triggerToast(t("mvSettings.toast.mobileCopied"), "success");
-    } catch { /* ignore */ }
+    } else {
+      triggerToast("Could not copy the pairing payload.", "accent");
+    }
   }, [mobilePairingPayload, triggerToast, t]);
 
-  const handleMobilePrintQR = useCallback(() => {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mobilePairingPayload)}`;
-    const w = window.open("", "_blank", "width=400,height=500");
-    if (w) {
-      w.document.write(`<html><head><title>${t("mvSettings.mobile.qrPrintTitle")}</title><style>body{display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding:20px}img{margin:16px 0}p{font-size:12px;color:#666}</style></head><body><img src="${qrUrl}" width="300" height="300"/><p>${mobilePairingInfo?.pairingToken ?? ""}</p></body></html>`);
-      w.document.close();
-      w.print();
+  const handleMobileCopyWebUrl = useCallback(async () => {
+    if (!mobileWebUrl) {
+      triggerToast("Start Mobile Remote to generate a link.", "accent");
+      return;
     }
-  }, [mobilePairingPayload, mobilePairingInfo, t]);
+    const copied = await copyTextToClipboard(mobileWebUrl);
+    if (copied) {
+      triggerToast("iPhone link copied.", "success");
+    } else {
+      triggerToast("Could not copy the iPhone link.", "accent");
+    }
+  }, [mobileWebUrl, triggerToast]);
+
+  const handleMobilePrintQR = useCallback(() => {
+    if (!mobilePairingQrDataUrl) {
+      triggerToast("The QR code is still loading.", "accent");
+      return;
+    }
+    setIsPrintingMobileQr(true);
+  }, [mobilePairingQrDataUrl, triggerToast]);
+
+  const handleMobileOpenWebUrl = useCallback(async () => {
+    if (!mobileWebUrl) {
+      triggerToast("Start Mobile Remote to generate a link.", "accent");
+      return;
+    }
+    try {
+      await openUrl(mobileWebUrl);
+    } catch {
+      const opened = window.open(mobileWebUrl, "_blank", "noopener,noreferrer");
+      if (!opened) triggerToast("Could not open the iPhone link.", "accent");
+    }
+  }, [mobileWebUrl, triggerToast]);
 
   const handleMobileRenameDevice = useCallback(async (device: { id: string; name: string }) => {
     const newName = prompt(t("mvSettings.mobile.renamePrompt"), device.name);
@@ -809,33 +875,86 @@ export function MVSettings() {
     setMobilePermissions((prev) => prev.map((p) => p.key === key ? { ...p, enabled } : p));
   }, []);
 
-  /* Fetch pairing info once when remote is enabled */
+  /* Fetch pairing info whenever the Mobile settings tab is opened. */
   useEffect(() => {
-    if (!settings.mobileRemoteEnabled) return;
+    if (activeTab !== "mobile") return;
     let mounted = true;
-    invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info")
+    invoke<MobilePairingInfo>("get_mobile_pairing_info")
       .then((info) => { if (mounted) setMobilePairingInfo(info); })
       .catch(() => { });
     return () => { mounted = false; };
-  }, [settings.mobileRemoteEnabled]);
+  }, [activeTab]);
 
-  /* Poll server status every 3s when remote is enabled */
+  /* Poll server status every 3s while Mobile settings is open. */
   useEffect(() => {
-    if (!settings.mobileRemoteEnabled) return;
+    if (activeTab !== "mobile") return;
     let mounted = true;
     const poll = async () => {
       try {
-        const status = await invoke<{ running: boolean; port: number }>("get_mobile_server_status");
-        if (mounted) setMobileServerStatus(status);
+        const [status, info] = await Promise.all([
+          invoke<{ running: boolean; port: number }>("get_mobile_server_status"),
+          invoke<MobilePairingInfo>("get_mobile_pairing_info"),
+        ]);
+        if (mounted) {
+          setMobileServerStatus(status);
+          setMobilePairingInfo(info);
+        }
       } catch { /* backend not available */ }
     };
     poll();
     const id = setInterval(poll, 3000);
     return () => { mounted = false; clearInterval(id); };
-  }, [settings.mobileRemoteEnabled]);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!mobilePairingPayload) {
+      setMobilePairingQrDataUrl("");
+      return;
+    }
+    let mounted = true;
+    void QRCode.toDataURL(mobilePairingPayload, {
+      width: 240,
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0B1426", light: "#FFFFFF" },
+    }).then((dataUrl) => {
+      if (mounted) setMobilePairingQrDataUrl(dataUrl);
+    }).catch(() => {
+      if (mounted) setMobilePairingQrDataUrl("");
+    });
+    return () => { mounted = false; };
+  }, [mobilePairingPayload]);
+
+  useEffect(() => {
+    if (!isPrintingMobileQr) return;
+
+    const handleAfterPrint = () => setIsPrintingMobileQr(false);
+    window.addEventListener("afterprint", handleAfterPrint);
+    const printTimer = window.setTimeout(() => {
+      try {
+        window.print();
+      } catch (error) {
+        console.error("[MVSettings] Could not open QR print dialog", error);
+        setIsPrintingMobileQr(false);
+        triggerToast("Could not open the print dialog.", "accent");
+      }
+    }, 100);
+
+    return () => {
+      window.clearTimeout(printTimer);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [isPrintingMobileQr, triggerToast]);
 
   return (
     <div className="app-container">
+      {isPrintingMobileQr && mobilePairingQrDataUrl && (
+        <div className="mr-qr-print-view" aria-hidden="true">
+          <h1>MakeChurchEasy</h1>
+          <img src={mobilePairingQrDataUrl} alt="QR Pairing Code" />
+          <p>{t("mvSettings.mobile.qrCode")} {mobilePairingInfo?.pairingToken ?? ""}</p>
+        </div>
+      )}
       {/* Toast stack */}
       <div className="toast-container">
         {toasts.map((toast) => (
@@ -893,7 +1012,8 @@ export function MVSettings() {
             ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["usage", History, t("mvSettings.tabs.usage")],
             ["obs", Radio, t("mvSettings.tabs.obs")],
-            // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            ["automation", Zap, "Automations"],
             // ["audio", Mic, t("mvSettings.tabs.audio")],
             // ["full-access", ShieldCheck, "Full Access"],
             // ["developer", Key, "Developer"],
@@ -1162,179 +1282,255 @@ export function MVSettings() {
               {/* ══════════════ MOBILE REMOTE TAB ══════════════ */}
               {activeTab === "mobile" && (
                 hasMobileAccess ? (
-                  <div className="settings-section">
-                    {/* ── Section 1: Enable Mobile Remote ── */}
-                    <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <div className="switch-row">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
-                        </div>
-                        <label className="switch-toggle-label">
-                          <input
-                            type="checkbox"
-                            checked={settings.mobileRemoteEnabled}
-                            onChange={(e) => {
-                              const next = e.target.checked;
-                              db.updateSettings({ mobileRemoteEnabled: next });
-                              setSettings(db.getSettings());
-                            }}
-                          />
-                          <span className="switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* ── Section 2: Connection Status ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <div className="mr-status-grid">
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
-                          <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
-                            {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
-                          </span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
-                          <span className="mr-status-value">8765</span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
-                          <span className="mr-status-value">45678</span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
-                          <span className="mr-status-value">{mobileConnectedDevices}</span>
-                        </div>
-                      </div>
-                      <div className="mr-status-actions">
-                        <button className="action-btn secondary" onClick={handleMobileRestart}>
-                          <RefreshCw size={14} /> {t("mvSettings.mobile.statusRestart")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobileLogs}>
-                          <Monitor size={14} /> {t("mvSettings.mobile.statusLogs")}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* ── Section 3: QR Pairing ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
-                      <div className="mr-qr-container">
-                        <div className="mr-qr-box">
-                          {mobilePairingInfo ? (
-                            <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobilePairingPayload)}`}
-                              alt="QR Code"
-                              className="mr-qr-image"
-                              onError={(e) => {
-                                // Fallback: generate SVG locally
-                                const target = e.currentTarget;
-                                target.style.display = "none";
-                                const fallback = target.nextElementSibling as HTMLElement;
-                                if (fallback) fallback.style.display = "flex";
-                              }}
-                            />
-                          ) : null}
-                          <div className="mr-qr-fallback" style={{ display: mobilePairingInfo ? "none" : "flex" }}>
-                            <Smartphone size={48} />
+                  <div className="settings-section mr-mobile-settings-section">
+                    <div className="mr-mobile-primary-grid">
+                      <div className="mr-mobile-primary-stack">
+                        {/* ── Section 1: Enable Mobile Remote ── */}
+                        <div className="mr-mobile-primary-section">
+                          <div className="section-header">
+                            <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
+                          </div>
+                          <div className="settings-card">
+                            <div className="switch-row">
+                              <div className="switch-left">
+                                <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
+                                <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
+                              </div>
+                              <label className="switch-toggle-label">
+                                <input
+                                  type="checkbox"
+                                  checked={settings.mobileRemoteEnabled}
+                                  onChange={(e) => {
+                                    const next = e.target.checked;
+                                    db.updateSettings({ mobileRemoteEnabled: next });
+                                    setSettings(db.getSettings());
+                                  }}
+                                />
+                                <span className="switch-slider"></span>
+                              </label>
+                            </div>
                           </div>
                         </div>
-                        <div className="mr-qr-info">
-                          <div className="mr-qr-code-display">
-                            <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
-                            <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+
+                        {/* ── Section 2: Connection Status ── */}
+                        <div className="mr-mobile-primary-section">
+                          <div className="section-header">
+                            <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
+                          </div>
+                          <div className="settings-card">
+                            <div className="mr-status-grid">
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
+                                <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
+                                  {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
+                                </span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
+                                <span className="mr-status-value">
+                                  {mobilePairingPorts?.wsPort ?? mobileServerStatus?.port ?? "—"}
+                                </span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
+                                <span className="mr-status-value">{mobilePairingPorts?.apiPort ?? "—"}</span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
+                                <span className="mr-status-value">{mobileConnectedDevices}</span>
+                              </div>
+                            </div>
+                            <div className="mr-status-actions">
+                              <button
+                                type="button"
+                                className="action-btn secondary"
+                                onClick={handleMobileRefreshStatus}
+                                disabled={mobileStatusBusy}
+                              >
+                                <RefreshCw size={14} className={mobileStatusBusy ? "animate-spin" : ""} />
+                                {mobileStatusBusy ? "Refreshing..." : "Refresh status"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div className="mr-qr-actions">
-                        <button className="action-btn secondary" onClick={handleMobileRefreshPairing}>
-                          <RefreshCw size={14} /> {t("mvSettings.mobile.qrRefresh")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobileCopyPayload}>
-                          <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobilePrintQR}>
-                          <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
-                        </button>
+
+                      {/* ── Section 3: QR Pairing ── */}
+                      <div className="mr-mobile-primary-section mr-mobile-primary-section--qr">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
+                        </div>
+                        <div className="settings-card mr-mobile-qr-card">
+                          <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
+                          <div className="mr-qr-container">
+                            <div className="mr-qr-box">
+                              {mobilePairingQrDataUrl ? (
+                                <img
+                                  src={mobilePairingQrDataUrl}
+                                  alt="QR Code"
+                                  className="mr-qr-image"
+                                />
+                              ) : null}
+                              <div className="mr-qr-fallback" style={{ display: mobilePairingQrDataUrl ? "none" : "flex" }}>
+                                <Smartphone size={48} />
+                              </div>
+                            </div>
+                            <div className="mr-qr-info">
+                              <div className="mr-qr-code-display">
+                                <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
+                                <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mr-qr-actions">
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobileRefreshPairing}
+                              disabled={mobilePairingBusy}
+                            >
+                              <RefreshCw size={14} className={mobilePairingBusy ? "animate-spin" : ""} />
+                              {mobilePairingBusy ? "Refreshing..." : t("mvSettings.mobile.qrRefresh")}
+                            </button>
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobileCopyPayload}
+                              disabled={!mobilePairingPayload}
+                            >
+                              <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
+                            </button>
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobilePrintQR}
+                              disabled={!mobilePairingQrDataUrl || isPrintingMobileQr}
+                            >
+                              <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* ── Section 4: Approved Devices ── */}
+                    {/* ── Section 4: iPhone / iPad PWA ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
+                      <h3 className="section-title">iPhone / iPad Web App</h3>
                     </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
-                      {mobileApprovedDevices.length === 0 ? (
-                        <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
-                      ) : (
-                        <div className="mr-device-list">
-                          {mobileApprovedDevices.map((device) => (
-                            <div key={device.id} className="mr-device-item">
-                              <div className="mr-device-info">
-                                <Smartphone size={16} className="mr-device-icon" />
-                                <span className="mr-device-name">{device.name}</span>
-                                <span className="mr-device-last">{device.lastConnected}</span>
-                              </div>
-                              <div className="mr-device-actions">
-                                <button className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
-                                  {t("mvSettings.mobile.rename")}
-                                </button>
-                                <button className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
-                                  {t("mvSettings.mobile.disconnect")}
-                                </button>
-                                <button className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
-                                  {t("mvSettings.mobile.remove")}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    <div className="settings-card mr-pwa-card">
+                      <div className="mr-pwa-heading">
+                        <div className="mr-pwa-icon">
+                          <Smartphone size={18} />
                         </div>
-                      )}
+                        <div>
+                          <h4 className="mr-pwa-title">Use MakeChurchEasy in Safari</h4>
+                          <p className="section-desc">
+                            On the same Wi-Fi, paste this local link into Safari. Then use Share → Add to Home Screen.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mr-pwa-url-row">
+                        <input
+                          className="mr-pwa-url"
+                          value={mobileWebUrl || "Start Mobile Remote to generate a link"}
+                          readOnly
+                          onFocus={(event) => event.currentTarget.select()}
+                          aria-label="Local iPhone web app link"
+                        />
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={handleMobileCopyWebUrl}
+                          disabled={!mobileWebUrl}
+                        >
+                          <Copy size={14} /> Copy link
+                        </button>
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={handleMobileOpenWebUrl}
+                          disabled={!mobileWebUrl}
+                        >
+                          <ExternalLink size={14} /> Open
+                        </button>
+                      </div>
+                      <p className="mr-pwa-hint">
+                        This link is local to this desktop and includes the current pairing code. Keep both devices on the same Wi-Fi.
+                      </p>
                     </div>
 
-                    {/* ── Section 5: Device Requests ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
-                      {mobileDeviceRequests.length === 0 ? (
-                        <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
-                      ) : (
-                        <div className="mr-device-list">
-                          {mobileDeviceRequests.map((request) => (
-                            <div key={request.id} className="mr-device-item mr-device-pending">
-                              <div className="mr-device-info">
-                                <Bell size={16} className="mr-device-icon" />
-                                <span className="mr-device-name">{request.name}</span>
-                                <span className="mr-device-model">{request.model}</span>
-                              </div>
-                              <div className="mr-device-actions">
-                                <button className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
-                                  {t("mvSettings.mobile.approve")}
-                                </button>
-                                <button className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
-                                  {t("mvSettings.mobile.reject")}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    <div className="mr-device-panels">
+                      {/* ── Section 5: Approved Devices ── */}
+                      <div className="mr-device-panel">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
                         </div>
-                      )}
+                        <div className="settings-card">
+                          <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
+                          {mobileApprovedDevices.length === 0 ? (
+                            <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
+                          ) : (
+                            <div className="mr-device-list">
+                              {mobileApprovedDevices.map((device) => (
+                                <div key={device.id} className="mr-device-item">
+                                  <div className="mr-device-info">
+                                    <Smartphone size={16} className="mr-device-icon" />
+                                    <span className="mr-device-name">{device.name}</span>
+                                    <span className="mr-device-last">{device.lastConnected}</span>
+                                  </div>
+                                  <div className="mr-device-actions">
+                                    <button type="button" className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
+                                      {t("mvSettings.mobile.rename")}
+                                    </button>
+                                    <button type="button" className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
+                                      {t("mvSettings.mobile.disconnect")}
+                                    </button>
+                                    <button type="button" className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
+                                      {t("mvSettings.mobile.remove")}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Section 6: Device Requests ── */}
+                      <div className="mr-device-panel">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
+                        </div>
+                        <div className="settings-card">
+                          <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
+                          {mobileDeviceRequests.length === 0 ? (
+                            <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
+                          ) : (
+                            <div className="mr-device-list">
+                              {mobileDeviceRequests.map((request) => (
+                                <div key={request.id} className="mr-device-item mr-device-pending">
+                                  <div className="mr-device-info">
+                                    <Bell size={16} className="mr-device-icon" />
+                                    <span className="mr-device-name">{request.name}</span>
+                                    <span className="mr-device-model">{request.model}</span>
+                                  </div>
+                                  <div className="mr-device-actions">
+                                    <button type="button" className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
+                                      {t("mvSettings.mobile.approve")}
+                                    </button>
+                                    <button type="button" className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
+                                      {t("mvSettings.mobile.reject")}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* ── Section 6: Mobile Permissions ── */}
+                    {/* ── Section 7: Mobile Permissions ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
                       <h3 className="section-title">{t("mvSettings.mobile.permissions")}</h3>
                     </div>
@@ -1367,7 +1563,7 @@ export function MVSettings() {
                       </div>
                     </div>
 
-                    {/* ── Section 7: Security ── */}
+                    {/* ── Section 8: Security ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
                       <h3 className="section-title">{t("mvSettings.mobile.security")}</h3>
                     </div>
@@ -1468,6 +1664,9 @@ export function MVSettings() {
                   </div>
                 )
               )}
+
+              {/* ══════════════ AUTOMATION TAB ══════════════ */}
+              {activeTab === "automation" && <AutomationSettingsPanel />}
 
               {/* ══════════════ APPEARANCE TAB ══════════════ */}
               {activeTab === "appearance" && (

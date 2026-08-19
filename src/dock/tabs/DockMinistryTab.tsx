@@ -35,7 +35,8 @@ import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockCountdownsTab from "./DockCountdownsTab";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { checkEntitlementSync } from "../../services/entitlementClient";
-import { getUserScopedKey, readUserScopedStorage, writeUserScopedStorage } from "../../services/userScopedStorage";
+import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
@@ -237,9 +238,9 @@ function loadTickerColorOverrides(raw: unknown): TickerColorOverrides {
 
 function loadBibleLtColorOverrides(): BibleLtColorOverrideMap {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(BIBLE_LT_COLOR_OVERRIDES_KEY));
+    const raw = readNativeDockSetting<unknown>(BIBLE_LT_COLOR_OVERRIDES_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
     const next: BibleLtColorOverrideMap = {};
     for (const [themeId, value] of Object.entries(parsed)) {
       if (!value || typeof value !== "object") continue;
@@ -258,13 +259,11 @@ function loadBibleLtColorOverrides(): BibleLtColorOverrideMap {
 }
 
 function saveBibleLtColorOverrides(value: BibleLtColorOverrideMap) {
-  try {
-    localStorage.setItem(getUserScopedKey(BIBLE_LT_COLOR_OVERRIDES_KEY), JSON.stringify(value));
-  } catch { /* ignore */ }
+  writeNativeDockSetting(BIBLE_LT_COLOR_OVERRIDES_KEY, value);
 }
 
 function loadMinistryLtSize(): LTSize {
-  const saved = readUserScopedStorage(MINISTRY_LT_SIZE_STORAGE_KEY);
+  const saved = readNativeDockSetting<unknown>(MINISTRY_LT_SIZE_STORAGE_KEY);
   if (MINISTRY_LT_SIZE_OPTIONS.includes(saved as LTSize)) return saved as LTSize;
   return resolveMinistryLtSize(getSettings().defaultSpeakerSize);
 }
@@ -272,9 +271,9 @@ function loadMinistryLtSize(): LTSize {
 function loadSettings(): TickerSettings {
   const defaultTheme = DEFAULT_DOCK_TICKER_THEME_OPTION;
   try {
-    const raw = localStorage.getItem(getUserScopedKey(SETTINGS_KEY));
+    const raw = readNativeDockSetting<unknown>(SETTINGS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<TickerSettings>;
+      const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<TickerSettings>;
       const parsedTheme = resolveDockTickerThemeOption(parsed.themeId) ?? defaultTheme;
       return {
         speed: typeof parsed.speed === "number" ? parsed.speed : 50,
@@ -307,7 +306,7 @@ function loadSettings(): TickerSettings {
 }
 
 function saveSettings(s: TickerSettings) {
-  try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
+  writeNativeDockSetting(SETTINGS_KEY, s);
 }
 
 function loadInitialTickerBranding(): TickerBranding {
@@ -325,7 +324,7 @@ const MINISTRY_TAB_KEY = "dock-ministry-active-tab";
 
 function loadMinistryTab(): MinistrySubTab {
   try {
-    const raw = localStorage.getItem(MINISTRY_TAB_KEY);
+    const raw = readNativeDockSetting<unknown>(MINISTRY_TAB_KEY);
     if (raw === "ticker" || raw === "lower-thirds" || raw === "countdowns") return raw;
   } catch { /* ignore */ }
   return "ticker";
@@ -367,8 +366,8 @@ export default function DockMinistryTab({
   const showCountdownsTab = true;
   const [tickerSceneRoute, updateTickerSceneRoute] = useDockSceneRoute("ticker");
   const [lowerThirdSceneRoute, updateLowerThirdSceneRoute] = useDockSceneRoute("lower-third");
-  const hasTickerSceneRoute = tickerSceneRoute.enabled && Boolean(tickerSceneRoute.sceneName);
-  const hasLowerThirdSceneRoute = lowerThirdSceneRoute.enabled && Boolean(lowerThirdSceneRoute.sceneName);
+  const hasTickerSceneRoute = tickerSceneRoute.enabled && tickerSceneRoute.targets.length > 0;
+  const hasLowerThirdSceneRoute = lowerThirdSceneRoute.enabled && lowerThirdSceneRoute.targets.length > 0;
   const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
   const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const [tickerBranding, setTickerBranding] = useState<TickerBranding>(loadInitialTickerBranding);
@@ -418,7 +417,7 @@ export default function DockMinistryTab({
   useEffect(() => { saveMessages(messages); }, [messages]);
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => { saveBibleLtColorOverrides(bibleLtColorOverrides); }, [bibleLtColorOverrides]);
-  useEffect(() => { try { localStorage.setItem(MINISTRY_TAB_KEY, subTab); } catch { /* ignore */ } }, [subTab]);
+  useEffect(() => { writeNativeDockSetting(MINISTRY_TAB_KEY, subTab); }, [subTab]);
   useEffect(() => {
     const tabHidden =
       (subTab === "ticker" && !showTickerTab) ||
@@ -816,10 +815,10 @@ export default function DockMinistryTab({
       const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
       const targets = hasTickerSceneRoute
         ? [
-          {
-            sceneName: tickerSceneRoute.sceneName,
-            sourceName: dockObsClient.getSceneRouteSourceName("ticker", tickerSceneRoute.sceneName),
-          },
+          ...tickerSceneRoute.targets.map((target) => ({
+            sceneName: target.sceneName,
+            sourceName: dockObsClient.getSceneRouteSourceName("ticker", target.sceneName),
+          })),
           ...(tickerSceneRoute.syncPresentation
             ? [{ sceneName: presentationSceneName, sourceName: "MCE Ticker" }]
             : []),
@@ -911,7 +910,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [activeMessages, hasTickerSceneRoute, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
+  }, [activeMessages, hasTickerSceneRoute, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
@@ -960,7 +959,7 @@ export default function DockMinistryTab({
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
       const sourceNames = hasTickerSceneRoute
         ? [
-          dockObsClient.getSceneRouteSourceName("ticker", tickerSceneRoute.sceneName),
+          ...tickerSceneRoute.targets.map((target) => dockObsClient.getSceneRouteSourceName("ticker", target.sceneName)),
           ...(tickerSceneRoute.syncPresentation ? ["MCE Ticker"] : []),
         ]
         : ["MCE Ticker"];
@@ -977,7 +976,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [activeMessages, hasTickerSceneRoute, isPaused, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
+  }, [activeMessages, hasTickerSceneRoute, isPaused, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   // ── Clear ticker (hide in OBS) ──
   const handleClear = useCallback(async () => {
@@ -994,7 +993,9 @@ export default function DockMinistryTab({
       }
 
       if (hasTickerSceneRoute) {
-        await dockObsClient.clearSceneRouteSource("ticker", tickerSceneRoute.sceneName);
+        await Promise.all(tickerSceneRoute.targets.map((target) => (
+          dockObsClient.clearSceneRouteSource("ticker", target.sceneName)
+        )));
         if (!tickerSceneRoute.syncPresentation) {
           setRunning(false);
           setIsPaused(false);
@@ -1034,7 +1035,7 @@ export default function DockMinistryTab({
     } finally {
       setSending(false);
     }
-  }, [hasTickerSceneRoute, presentationLinkMode, t, tickerSceneRoute.sceneName, tickerSceneRoute.syncPresentation]);
+  }, [hasTickerSceneRoute, presentationLinkMode, t, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   return (
     <div className="dock-mv-tab">
@@ -1648,7 +1649,7 @@ export default function DockMinistryTab({
                     type="button"
                     onClick={() => {
                       setLtSize(s);
-                      writeUserScopedStorage(MINISTRY_LT_SIZE_STORAGE_KEY, s);
+                      writeNativeDockSetting(MINISTRY_LT_SIZE_STORAGE_KEY, s);
                     }}
                     style={{
                       flex: 1,
@@ -1695,11 +1696,9 @@ export default function DockMinistryTab({
                       sourceHeight: 1080,
                     };
                     if (hasLowerThirdSceneRoute) {
-                      await dockObsClient.pushLowerThirdOverlayUrlToScene(
-                        url,
-                        lowerThirdSceneRoute.sceneName,
-                        sourceSize,
-                      );
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName, sourceSize)
+                      )));
                       if (lowerThirdSceneRoute.syncPresentation) {
                         if (ltLive) {
                           const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
@@ -1731,9 +1730,13 @@ export default function DockMinistryTab({
                     await ensureObsConnected();
                     const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
                     if (hasLowerThirdSceneRoute) {
-                      await dockObsClient.pushLowerThirdOverlayUrlToScene(url, lowerThirdSceneRoute.sceneName);
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
+                      )));
                       await new Promise((resolve) => setTimeout(resolve, exitDuration));
-                      await dockObsClient.clearSceneRouteSource("lower-third", lowerThirdSceneRoute.sceneName);
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                      )));
                       if (lowerThirdSceneRoute.syncPresentation) {
                         await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                       }
@@ -1757,9 +1760,13 @@ export default function DockMinistryTab({
                     await ensureObsConnected();
                     const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
                     if (hasLowerThirdSceneRoute) {
-                      await dockObsClient.pushLowerThirdOverlayUrlToScene(url, lowerThirdSceneRoute.sceneName);
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
+                      )));
                       await new Promise((resolve) => setTimeout(resolve, exitDuration));
-                      await dockObsClient.clearSceneRouteSource("lower-third", lowerThirdSceneRoute.sceneName);
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                      )));
                       if (lowerThirdSceneRoute.syncPresentation) {
                         await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
                       }
@@ -1917,11 +1924,9 @@ export default function DockMinistryTab({
                           bibleThemeSettings: selectedBibleLtEffectiveSettings,
                         } as const;
                         if (hasLowerThirdSceneRoute) {
-                          await dockObsClient.pushBibleToScene(
-                            bibleLowerThirdData,
-                            lowerThirdSceneRoute.sceneName,
-                            "lower-third",
-                          );
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                          )));
                           if (lowerThirdSceneRoute.syncPresentation) {
                             await dockObsClient.pushBible(bibleLowerThirdData);
                           }
@@ -1966,11 +1971,9 @@ export default function DockMinistryTab({
                             bibleThemeSettings: selectedBibleLtEffectiveSettings,
                           } as const;
                           if (hasLowerThirdSceneRoute) {
-                            await dockObsClient.pushBibleToScene(
-                              bibleLowerThirdData,
-                              lowerThirdSceneRoute.sceneName,
-                              "lower-third",
-                            );
+                            await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                              dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                            )));
                             if (lowerThirdSceneRoute.syncPresentation) {
                               await dockObsClient.pushBible(bibleLowerThirdData);
                             }
@@ -1981,7 +1984,9 @@ export default function DockMinistryTab({
                           const animDuration = selectedBibleLtAnimationDuration;
                           await new Promise((r) => setTimeout(r, animDuration + 100));
                           if (hasLowerThirdSceneRoute) {
-                            await dockObsClient.clearSceneRouteSource("lower-third", lowerThirdSceneRoute.sceneName);
+                            await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                              dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                            )));
                             if (lowerThirdSceneRoute.syncPresentation) await dockObsClient.clearBible();
                           } else {
                             await dockObsClient.clearBible();
@@ -2029,11 +2034,9 @@ export default function DockMinistryTab({
                           bibleThemeSettings: selectedBibleLtEffectiveSettings,
                         } as const;
                         if (hasLowerThirdSceneRoute) {
-                          await dockObsClient.pushBibleToScene(
-                            bibleLowerThirdData,
-                            lowerThirdSceneRoute.sceneName,
-                            "lower-third",
-                          );
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                          )));
                           if (lowerThirdSceneRoute.syncPresentation) {
                             await dockObsClient.pushBible(bibleLowerThirdData);
                           }
@@ -2044,7 +2047,9 @@ export default function DockMinistryTab({
                         const animDuration = selectedBibleLtAnimationDuration;
                         await new Promise((r) => setTimeout(r, animDuration + 100));
                         if (hasLowerThirdSceneRoute) {
-                          await dockObsClient.clearSceneRouteSource("lower-third", lowerThirdSceneRoute.sceneName);
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                          )));
                           if (lowerThirdSceneRoute.syncPresentation) await dockObsClient.clearBible();
                         } else {
                           await dockObsClient.clearBible();

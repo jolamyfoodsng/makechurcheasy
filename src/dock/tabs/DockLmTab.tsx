@@ -12,6 +12,7 @@ import { parseScriptureReference } from "../../services/scriptureParser";
 import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getEnvConfig } from "../../services/envConfig";
@@ -160,9 +161,9 @@ function loadSettings(): LmDockSettings {
   const globalDefaults = getSettings();
   const fallbackOverlayMode = normalizeLmOverlayMode(globalDefaults.defaultBibleOverlayMode);
   try {
-    const raw = localStorage.getItem(getUserScopedKey(LM_DOCK_SETTINGS_KEY));
+    const raw = readNativeDockSetting<unknown>(LM_DOCK_SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
-    const parsed = JSON.parse(raw);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     const autoPushDedupWindow = Number(merged.autoPushDedupWindow);
     return {
@@ -181,23 +182,15 @@ function loadSettings(): LmDockSettings {
 }
 
 function saveSettings(settings: LmDockSettings): void {
-  try {
-    localStorage.setItem(getUserScopedKey(LM_DOCK_SETTINGS_KEY), JSON.stringify(settings));
-  } catch { }
+  writeNativeDockSetting(LM_DOCK_SETTINGS_KEY, settings);
 }
 
 function loadPreferredMicId(): string {
-  try {
-    return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY)) || "";
-  } catch {
-    return "";
-  }
+  return readNativeDockSetting<string>(PREFERRED_MIC_STORAGE_KEY) || "";
 }
 
 function savePreferredMicId(micId: string): void {
-  try {
-    localStorage.setItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY), micId);
-  } catch { }
+  writeNativeDockSetting(PREFERRED_MIC_STORAGE_KEY, micId);
 }
 
 function loadHistory(): string[] {
@@ -698,8 +691,11 @@ export default function DockLmTab({
       : dockObsClient.pushBible(stageData);
 
     const bibleSceneRoute = loadDockSceneRoute("bible");
-    if (bibleSceneRoute.enabled && bibleSceneRoute.sceneName) {
-      await dockObsClient.pushBibleToScene(stageData, bibleSceneRoute.sceneName);
+    if (bibleSceneRoute.enabled && bibleSceneRoute.targets.length > 0) {
+      await Promise.all(bibleSceneRoute.targets.map((target) => dockObsClient.pushBibleToScene(
+        target.mode === "inherit" ? stageData : { ...stageData, overlayMode: target.mode },
+        target.sceneName,
+      )));
       if (bibleSceneRoute.syncPresentation) await pushLive();
       return;
     }
@@ -803,8 +799,11 @@ export default function DockLmTab({
       }
 
       const notesSceneRoute = loadDockSceneRoute("notes");
-      if (notesSceneRoute.enabled && notesSceneRoute.sceneName) {
-        await dockObsClient.pushNotesToScene(obsData, notesSceneRoute.sceneName);
+      if (notesSceneRoute.enabled && notesSceneRoute.targets.length > 0) {
+        await Promise.all(notesSceneRoute.targets.map((target) => dockObsClient.pushNotesToScene(
+          target.mode === "inherit" ? obsData : { ...obsData, overlayMode: target.mode },
+          target.sceneName,
+        )));
         if (notesSceneRoute.syncPresentation) {
           if (notesSettings.overlayMode === "lower-third") {
             await dockObsClient.pushNotesOverlayFast(obsData);

@@ -16,7 +16,7 @@ import {
 } from "./dockConsoleTheme";
 import { loadDockCustomBibleThemes, loadDockFavoriteBibleThemes } from "./dockThemeData";
 import { buildLinkedLowerThirdQuickThemeSettings } from "./lowerThirdQuickSettings";
-import { readUserScopedStorage } from "../services/userScopedStorage";
+import { readNativeDockSetting } from "../services/localDockSettings";
 
 export type DockBibleOverlayMode = "fullscreen" | "lower-third";
 export type DockBibleReferenceFormat = "full" | "short" | "hidden";
@@ -43,8 +43,9 @@ export interface DockBibleResolvedOutputTheme {
 export const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const DEFAULT_BIBLE_REFERENCE_FORMAT: DockBibleReferenceFormat = "full";
 
-function safeJsonParse<T>(raw: string | null, fallback: T): T {
+function safeJsonParse<T>(raw: unknown, fallback: T): T {
   if (!raw) return fallback;
+  if (typeof raw !== "string") return raw as T;
   try {
     return JSON.parse(raw) as T;
   } catch {
@@ -59,7 +60,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function readScopedStorage(baseKey: string): string | null {
-  return readUserScopedStorage(baseKey);
+  const value = readNativeDockSetting<unknown>(baseKey);
+  return typeof value === "string" ? value : value ? JSON.stringify(value) : null;
 }
 
 function clampNumber(value: number, min: number, max: number): number {

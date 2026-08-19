@@ -17,7 +17,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatLyricsFromSections, generateSlides, parseWorshipLyricSections } from "../../worship/slideEngine";
 import { unicodeSearchNormalize } from "../../worship/unicodeUtils";
-import { archiveSong, getAllSongs, saveSong, syncSongsToDock } from "../../worship/worshipDb";
+import {
+  archiveSong,
+  getAllSongs,
+  saveSong,
+  syncSongsToDock,
+  WORSHIP_SONGS_UPDATED_EVENT,
+} from "../../worship/worshipDb";
 import { worshipObsService } from "../../worship/worshipObsService";
 import {
   formatOnlineLyricsSearchError,
@@ -680,6 +686,16 @@ export function WorshipModule({
     setSongs(dbSongs);
     return dbSongs;
   }, []);
+
+  // The Dock writes through the same worship database. Refresh this open
+  // screen when a song is created or edited there so both surfaces stay live.
+  useEffect(() => {
+    const handleSongsUpdated = () => {
+      void reloadSongs();
+    };
+    window.addEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
+    return () => window.removeEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
+  }, [reloadSongs]);
 
   const selectSongById = useCallback((songId: string) => {
     setSelectedSongId(songId);

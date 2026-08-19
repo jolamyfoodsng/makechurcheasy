@@ -9,6 +9,8 @@ export type DockOutputQuickTextSettings = Pick<
 
 export type DockOutputQuickSettingsPatch = Partial<DockFullscreenQuickThemeSettings>;
 
+export type DockOutputLineMode = "count" | "original";
+
 export type DockOutputQuickSizePreset = {
   id: string;
   label: string;
@@ -27,6 +29,7 @@ interface DockOutputQuickActionsProps {
   lineLabel: string;
   settings: DockOutputQuickTextSettings;
   lineCount: number;
+  lineMode?: DockOutputLineMode;
   maxLineCount: number;
   minFontSize: number;
   maxFontSize: number;
@@ -35,7 +38,12 @@ interface DockOutputQuickActionsProps {
   top: number;
   left: number | null;
   onPositionChange: (top: number, left: number | null) => void;
-  onCommit: (patch: DockOutputQuickSettingsPatch, lineCount?: number) => void;
+  onCommit: (
+    patch: DockOutputQuickSettingsPatch,
+    lineCount?: number,
+    lineMode?: DockOutputLineMode,
+  ) => void;
+  originalLineLabel?: string;
   sizePresets?: readonly DockOutputQuickSizePreset[];
   activeSizePreset?: string;
   getSizePresetPatch?: (id: string) => DockOutputQuickSettingsPatch | null;
@@ -125,6 +133,7 @@ export default function DockOutputQuickActions({
   lineLabel,
   settings,
   lineCount,
+  lineMode = "count",
   maxLineCount,
   minFontSize,
   maxFontSize,
@@ -134,6 +143,7 @@ export default function DockOutputQuickActions({
   left,
   onPositionChange,
   onCommit,
+  originalLineLabel = "Original",
   sizePresets,
   activeSizePreset,
   getSizePresetPatch,
@@ -142,6 +152,7 @@ export default function DockOutputQuickActions({
   const [open, setOpen] = useState(false);
   const [draftSettings, setDraftSettings] = useState<DockOutputQuickSettingsPatch | null>(null);
   const [draftLineCount, setDraftLineCount] = useState<number | null>(null);
+  const [draftLineMode, setDraftLineMode] = useState<DockOutputLineMode | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -153,11 +164,12 @@ export default function DockOutputQuickActions({
     ...(draftSettings ?? {}),
   };
   const displayedLineCount = draftLineCount ?? lineCount;
+  const displayedLineMode = draftLineMode ?? lineMode;
   const currentFontSize = typeof displayedSettings.fontSize === "number"
     ? displayedSettings.fontSize
     : minFontSize;
   const areManualFontSizesDisabled = displayedSettings.autoFontScale === true;
-  const hasPendingChanges = draftSettings !== null || draftLineCount !== null;
+  const hasPendingChanges = draftSettings !== null || draftLineCount !== null || draftLineMode !== null;
   const renderedTop = dragPosition?.top ?? top;
   const renderedLeft = dragPosition?.left ?? left;
   const menuOnRight = renderedLeft !== null && renderedLeft < 210;
@@ -214,27 +226,46 @@ export default function DockOutputQuickActions({
   const applyLineCount = useCallback((nextLineCount: number) => {
     const next = Math.min(Math.max(1, Math.trunc(nextLineCount)), maxLineCount);
     if (updateImmediately) {
-      onCommit({}, next);
+      onCommit({}, next, "count");
       return;
     }
     setDraftLineCount(next);
+    setDraftLineMode("count");
   }, [maxLineCount, onCommit, updateImmediately]);
+
+  const applyLineMode = useCallback((nextMode: DockOutputLineMode) => {
+    if (updateImmediately) {
+      onCommit({}, nextMode === "count" ? displayedLineCount : undefined, nextMode);
+      return;
+    }
+    setDraftLineMode(nextMode);
+  }, [displayedLineCount, onCommit, updateImmediately]);
 
   const handleSave = useCallback(() => {
     if (!hasPendingChanges) return;
-    onCommit(draftSettings ?? {}, draftLineCount ?? undefined);
+    onCommit(
+      draftSettings ?? {},
+      (draftLineMode ?? lineMode) === "original" ? undefined : draftLineCount ?? lineCount,
+      draftLineMode ?? undefined,
+    );
     setDraftSettings(null);
     setDraftLineCount(null);
-  }, [draftLineCount, draftSettings, hasPendingChanges, onCommit]);
+    setDraftLineMode(null);
+  }, [draftLineCount, draftLineMode, draftSettings, hasPendingChanges, lineCount, lineMode, onCommit]);
 
   const handleUpdateImmediatelyChange = useCallback((nextValue: boolean) => {
     if (nextValue && hasPendingChanges) {
-      onCommit(draftSettings ?? {}, draftLineCount ?? undefined);
+      onCommit(
+        draftSettings ?? {},
+        (draftLineMode ?? lineMode) === "original" ? undefined : draftLineCount ?? lineCount,
+        draftLineMode ?? undefined,
+      );
       setDraftSettings(null);
       setDraftLineCount(null);
+      setDraftLineMode(null);
     }
     onUpdateImmediatelyChange(nextValue);
-  }, [draftLineCount, draftSettings, hasPendingChanges, onCommit, onUpdateImmediatelyChange]);
+  }, [draftLineCount, draftLineMode, draftSettings, hasPendingChanges, lineCount, lineMode, onCommit, onUpdateImmediatelyChange]);
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
@@ -402,10 +433,17 @@ export default function DockOutputQuickActions({
             <span className="dock-bible-reader__font-size-field-label">{lineLabel}</span>
             <select
               className="dock-bible-reader__font-size-select"
-              value={displayedLineCount}
-              onChange={(event) => applyLineCount(Number(event.target.value))}
+              value={displayedLineMode === "original" ? "original" : displayedLineCount}
+              onChange={(event) => {
+                if (event.target.value === "original") {
+                  applyLineMode("original");
+                  return;
+                }
+                applyLineCount(Number(event.target.value));
+              }}
               aria-label={lineLabel}
             >
+              <option value="original">{originalLineLabel}</option>
               {Array.from({ length: maxLineCount }, (_, index) => index + 1).map((count) => (
                 <option key={`quick-lines-${count}`} value={count}>
                   {count} {count === 1 ? "line" : "lines"}

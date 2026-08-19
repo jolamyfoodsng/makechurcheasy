@@ -92,17 +92,14 @@ describe("DockBibleTab reference display", () => {
     expect(bottomToolbarSource).toContain("dock-btm-toolbar__center--collapsed");
   });
 
-  it("makes Bible keyboard navigation discoverable and supports book jumps", () => {
+  it("keeps Bible keyboard navigation functional without a visible shortcut cue", () => {
     expect(dockBibleTabSource).toContain("const BIBLE_BOOK_ORDER = [...OT_BOOKS, ...NT_BOOKS]");
     expect(dockBibleTabSource).toContain("const handleBookJump = useCallback");
     expect(dockBibleTabSource).toContain("event.shiftKey && event.key === \"ArrowRight\"");
     expect(dockBibleTabSource).toContain("event.shiftKey && event.key === \"ArrowLeft\"");
     expect(dockBibleTabSource).toContain("handleBookJump(1)");
     expect(dockBibleTabSource).toContain("handleBookJump(-1)");
-    expect(bibleDockUiSource).toContain("dock-bible-controls__keyboard-cue");
-    expect(bibleDockUiSource).toContain("bible.keyboardChapterCue");
-    expect(bibleDockUiSource).toContain("bible.keyboardVerseCue");
-    expect(bibleDockUiSource).toContain("bible.keyboardBookCue");
+    expect(bibleDockUiSource).not.toContain("dock-bible-controls__keyboard-cue");
   });
 
   it("persists the draggable Quick handle position", () => {

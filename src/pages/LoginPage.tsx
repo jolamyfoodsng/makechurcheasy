@@ -2,7 +2,9 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createPairingCode,
+  formatPairingCodeForDisplay,
   getDashboardBaseForAuth,
+  normalizePairingCode,
   redeemPairingCode,
   resetPairingApiBase,
   watchPairingStatus
@@ -30,13 +32,9 @@ export default function LoginPage() {
   const { setUser, user, authenticated } = useAuth();
   const [view, setView] = useState<View>("initial");
   const [code, setCode] = useState("");
-  const displayPairingCode = code.length === 8
-    ? `${code.slice(0, 4)}-${code.slice(4, 8)}`
-    : code;
+  const displayPairingCode = formatPairingCodeForDisplay(code);
   const [manualCode, setManualCode] = useState("");
-  const displayCode = manualCode.length > 4
-    ? `${manualCode.slice(0, 4)}-${manualCode.slice(4, 8)}`
-    : manualCode;
+  const displayCode = formatPairingCodeForDisplay(manualCode);
   const [countdown, setCountdown] = useState(300);
   const [error, setError] = useState("");
   const [welcomeBack, setWelcomeBack] = useState(false);
@@ -197,7 +195,8 @@ export default function LoginPage() {
 
 
   async function handleManualSubmit() {
-    if (!manualCode || manualCode.length !== 8) {
+    const normalizedCode = normalizePairingCode(manualCode);
+    if (normalizedCode.length !== 8) {
       setError("Please enter a valid pairing code");
       return;
     }
@@ -206,7 +205,7 @@ export default function LoginPage() {
     setRedeeming(true);
 
     try {
-      const result = await redeemPairingCode(manualCode);
+      const result = await redeemPairingCode(normalizedCode);
 
       if (result.success) {
         console.log("[LoginPage] handleManualSubmit success, setting user:", result.user.name);
@@ -686,7 +685,7 @@ export default function LoginPage() {
               type="text"
               value={displayCode}
               onChange={(e) => {
-                const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+                const raw = normalizePairingCode(e.target.value).slice(0, 8);
                 setManualCode(raw);
               }}
               placeholder="ABCD-1234"

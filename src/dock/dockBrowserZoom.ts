@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 
 const BASELINE_STORAGE_KEY = "mce-dock-browser-zoom-baseline-v1";
 const ZOOM_TOLERANCE = 1.05;
@@ -56,7 +57,8 @@ function getScreenKey(): string {
 
 function readBaseline(): DockBrowserZoomBaseline | null {
   try {
-    const raw = localStorage.getItem(BASELINE_STORAGE_KEY);
+    const stored = readNativeDockSetting<unknown>(BASELINE_STORAGE_KEY);
+    const raw = typeof stored === "string" ? stored : stored ? JSON.stringify(stored) : null;
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<DockBrowserZoomBaseline>;
     if (
@@ -74,11 +76,7 @@ function readBaseline(): DockBrowserZoomBaseline | null {
 }
 
 function saveBaseline(baseline: DockBrowserZoomBaseline): void {
-  try {
-    localStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(baseline));
-  } catch {
-    // OBS CEF storage can be unavailable; the live viewport signal still works.
-  }
+  writeNativeDockSetting(BASELINE_STORAGE_KEY, baseline);
 }
 
 function getSignals(baseline: DockBrowserZoomBaseline | null): DockBrowserZoomSignals {

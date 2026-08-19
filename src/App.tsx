@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import AuthGate from "./components/AuthGate";
@@ -56,6 +56,8 @@ import { getPresentationRemoteAccessInfo } from "./services/presentationRemote";
 import { dockBridge } from "./services/dockBridge";
 import { initDockCommandHandler } from "./services/dockCommandHandler";
 import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBridge";
+import { automationRunner } from "./services/automationRunner";
+import { safeTauriInvoke } from "./services/tauriSafe";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { lmDockService } from "./services/lmDockService";
 import { obsService } from "./services/obsService";
@@ -63,6 +65,7 @@ import { appStatusManager } from "./services/appStatusManager";
 import { serviceStore as svcStore } from "./services/serviceStore";
 import { getAllSongs, getSong, saveSong, syncSongsToDock } from "./worship/worshipDb";
 import { generateSlides } from "./worship/slideEngine";
+import { DEFAULT_WORSHIP_LINES_PER_SLIDE } from "./worship/slideLayout";
 import { checkEntitlementSync } from "./services/entitlementClient";
 import { getEffectivePlan } from "./services/licenseService";
 import type { Song } from "./worship/types";
@@ -102,6 +105,7 @@ import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveTool
 import { getCountdownSnapshot } from "./countdowns/countdownStore";
 import { STORES, putRecord } from "./services/db";
 import { MEDIA_FILE_ACCEPT, isSupportedLibraryImportFile, saveLibraryMediaFile } from "./library/MediaTab";
+import { getPendingReceiverFiles, type ReceiverFile } from "./services/receiverService";
 import {
   trackAppStarted,
   trackAppClosed,
@@ -140,7 +144,9 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
   const existing = await getSong(id);
   const now = new Date().toISOString();
   const autoSplit = payload.autoSplit ?? existing?.autoSplit ?? true;
-  const linesPerSlide = payload.linesPerSlide ?? existing?.linesPerSlide ?? 2;
+  const linesPerSlide = payload.linesPerSlide
+    ?? existing?.linesPerSlide
+    ?? DEFAULT_WORSHIP_LINES_PER_SLIDE;
   const themeId = payload.themeId ?? existing?.themeId;
   const song: Song = {
     id,
@@ -250,6 +256,65 @@ function PublicPresentationRoute() {
   );
 }
 
+function DesktopReceiverNotification() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [incomingFile, setIncomingFile] = useState<ReceiverFile | null>(null);
+  const knownIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const files = await getPendingReceiverFiles();
+        if (cancelled) return;
+        const knownIds = knownIdsRef.current;
+        if (knownIds) {
+          const incoming = files.find((file) => !knownIds.has(file.pendingId));
+          if (incoming) setIncomingFile(incoming);
+        }
+        knownIdsRef.current = new Set(files.map((file) => file.pendingId));
+        setIncomingFile((current) => current && files.some((file) => file.pendingId === current.pendingId) ? current : null);
+      } catch {
+        // The receiver is optional while the desktop overlay server starts.
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 1800);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const receiverIsOpen = location.pathname === "/resources"
+    && new URLSearchParams(location.search).get("tab") === "media"
+    && new URLSearchParams(location.search).get("receiver") === "1";
+  if (!incomingFile || receiverIsOpen) return null;
+
+  return (
+    <button
+      type="button"
+      className="app-receiver-notification"
+      onClick={() => {
+        setIncomingFile(null);
+        navigate("/resources?tab=media&receiver=1");
+      }}
+      aria-label={t("library.receiver.openNotification")}
+    >
+      <span className="app-receiver-notification__icon"><Icon name="move_to_inbox" size={19} /></span>
+      <span className="app-receiver-notification__copy">
+        <strong>{t("library.receiver.notificationTitle")}</strong>
+        <small>{incomingFile.fileName}</small>
+      </span>
+      <Icon name="chevron_right" size={17} />
+    </button>
+  );
+}
+
 function App() {
   const { t } = useTranslation();
   // ── Global theme (dark/light) ──
@@ -268,6 +333,29 @@ function App() {
   // closures inside useEffect([], []) handlers.
   const userRef = useRef(user);
   userRef.current = user;
+
+  // The desktop is the authority for local mobile access. Pairing tokens are
+  // never enough on their own: the authenticated plan is pushed into the
+  // companion server and checked again at the WebSocket handshake.
+  useEffect(() => {
+    const effectivePlan = getEffectivePlan(user);
+    const entitlement = checkEntitlementSync("mobileControl", effectivePlan);
+    void safeTauriInvoke("set_mobile_access_policy", {
+      allowed: entitlement.allowed,
+      plan: effectivePlan,
+      reason: entitlement.allowed
+        ? undefined
+        : `${entitlement.reason ?? "Mobile control is not available on this plan."} Open MakeChurchEasy on your desktop to upgrade.`,
+    }).catch((error) => {
+      console.warn("[MobileRemote] Could not sync access policy:", error);
+    });
+  }, [user]);
+
+  useEffect(() => {
+    automationRunner.start();
+    return () => automationRunner.stop();
+  }, []);
+
   const sendSongLimitToDock = useCallback(() => {
     const effectivePlan = getEffectivePlan(userRef.current);
     const { limit: songLimit } = checkEntitlementSync("songs", effectivePlan);
@@ -1414,7 +1502,7 @@ function App() {
                             <Route path="credits" element={<CreditsPage />} />
                             <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                             <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
-                            <Route path="library" element={<Navigate to="/resources" replace />} />
+                            <Route path="library" element={<Navigate to="/resources?tab=media" replace />} />
                             <Route path="templates" element={<Navigate to="/production/themes" replace />} />
                             <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
                             <Route path="hub" element={<Navigate to="/" replace />} />
@@ -1425,7 +1513,7 @@ function App() {
                             <Route path="broadcast" element={<Navigate to="/" replace />} />
                             <Route path="bible" element={<Navigate to="/settings" replace />} />
                             <Route path="bible/*" element={<Navigate to="/settings" replace />} />
-                            <Route path="worship" element={<Navigate to="/resources" replace />} />
+                            <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />
                             <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
                             <Route path="scenes" element={<Navigate to="/settings" replace />} />
                             <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
@@ -1450,6 +1538,8 @@ function App() {
           />
         </Routes>
       )}
+
+      {!splashVisible && user && <DesktopReceiverNotification />}
 
       {/* 5. Trial welcome modal — overlays app after auth */}
       {showTrialModal && user?.trial?.endsAt && (
