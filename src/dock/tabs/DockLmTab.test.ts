@@ -11,6 +11,7 @@ import dockLmTabSource from "./DockLmTab.tsx?raw";
 import speechToScripturePageSource from "../../pages/SpeechToScripturePage.tsx?raw";
 import lmDockServiceSource from "../../services/lmDockService.ts?raw";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
+import dockBibleTabSource from "./DockBibleTab.tsx?raw";
 
 function candidate(book: string, chapter: number, verse: number): VoiceBibleCandidate {
   return {
@@ -87,6 +88,15 @@ describe("DockLmTab settings helpers", () => {
   it("tracks actual pushed verses as the live card source", () => {
     expect(dockLmTabSource).toContain("setLiveVerse(candidate)");
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
+  });
+
+  it("takes clickable history references to Bible and requests an OBS preview push", () => {
+    expect(dockLmTabSource).toContain("onNavigateToBible?.()");
+    expect(dockLmTabSource).toContain("navigateBibleDock({");
+    expect(dockLmTabSource).toContain("pushToPreview: true");
+    expect(dockBibleTabSource).toContain("payload.pushToPreview");
+    expect(dockBibleTabSource).toContain('preparePlannerOutput("bible", false)');
+    expect(dockBibleTabSource).toContain("recordHistory: false");
   });
 
   it("renders the queue without guided target attributes", () => {

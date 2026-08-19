@@ -4400,18 +4400,39 @@ function DockBibleTab({
             chapter?: number;
             verse?: number;
             translation?: string;
+            pushToPreview?: boolean;
           };
           if (payload.book && payload.chapter) {
             focusReference(payload.book, payload.chapter, payload.verse ?? null);
-            void stageVerse(payload.book, payload.chapter, payload.verse ?? 1, {
-              translation: payload.translation,
-            });
+            void (async () => {
+              if (!payload.pushToPreview) {
+                await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+                  translation: payload.translation,
+                });
+                return;
+              }
+
+              try {
+                if (!presentationLinkMode) {
+                  await dockObsClient.preparePlannerOutput("bible", false);
+                }
+                await goLiveVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+                  translation: payload.translation,
+                  recordHistory: false,
+                });
+              } catch (error) {
+                console.warn("[DockBibleTab] LM history preview push failed; staging verse instead:", error);
+                await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+                  translation: payload.translation,
+                });
+              }
+            })();
           }
         }
       };
     } catch { /* BroadcastChannel not available */ }
     return () => { channel?.close(); };
-  }, [focusReference, stageVerse]);
+  }, [focusReference, goLiveVerse, presentationLinkMode, stageVerse]);
 
   useEffect(() => () => {
     voiceHeldRef.current = false;

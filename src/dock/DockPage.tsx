@@ -746,6 +746,10 @@ function DockPageContent({
     setShowCommandPalette(false);
   }, []);
 
+  const handleNavigateToBible = useCallback(() => {
+    setActiveTab("bible");
+  }, []);
+
   const handleCommandPaletteSelectTemplate = useCallback((_templateKind: "bible" | "lower-third", _themeId: string) => {
     setShowCommandPalette(false);
   }, []);
@@ -1671,6 +1675,7 @@ function DockPageContent({
                         <DockLmTab
                           presentationOutputTarget={presentationOutputTarget}
                           enablePresentationMicControls={enablePresentationAssistantMicControls}
+                          onNavigateToBible={handleNavigateToBible}
                         />
                       </section>
                     </div>

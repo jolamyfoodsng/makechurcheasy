@@ -60,6 +60,7 @@ async function loadLmDockService() {
 interface DockLmTabProps {
   presentationOutputTarget?: DockPresentationOutputTarget;
   enablePresentationMicControls?: boolean;
+  onNavigateToBible?: () => void;
 }
 
 interface FreshnessInfo {
@@ -233,6 +234,7 @@ function saveLiveVerse(candidate: VoiceBibleCandidate | null): void {
 export default function DockLmTab({
   presentationOutputTarget = "obs",
   enablePresentationMicControls = false,
+  onNavigateToBible,
 }: DockLmTabProps = {}) {
   const { t } = useTranslation();
   useAppTheme();
@@ -868,25 +870,18 @@ export default function DockLmTab({
     }).catch(() => { });
   }, []);
 
-  const navigateBibleDock = useCallback((candidate: VoiceBibleCandidate) => {
-    const cmd = {
-      type: "lm:navigate" as DockCommandType,
-      payload: {
-        book: candidate.book,
-        chapter: candidate.chapter,
-        verse: candidate.verse,
-        translation: settings.translation,
-      },
-      timestamp: Date.now(),
-    };
-    dockClient.sendCommand(cmd);
-    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cmd),
-      keepalive: true,
-    }).catch(() => { });
-  }, [settings.translation]);
+  const navigateBibleDock = useCallback((
+    reference: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">,
+    pushToPreview = false,
+  ) => {
+    sendLmCommand("lm:navigate", {
+      book: reference.book,
+      chapter: reference.chapter,
+      verse: reference.verse,
+      translation: settings.translation,
+      ...(pushToPreview ? { pushToPreview: true } : {}),
+    });
+  }, [sendLmCommand, settings.translation]);
 
   // ── Track tab bar width for responsive layout ──
   useEffect(() => {
@@ -1611,23 +1606,12 @@ export default function DockLmTab({
                   style={clickable ? S.historyItemClickable : S.historyItem}
                   onClick={() => {
                     if (!clickable || !parsed.book || !parsed.chapter || !parsed.verse) return;
-                    const cmd = {
-                      type: "lm:navigate" as DockCommandType,
-                      payload: {
-                        book: parsed.book,
-                        chapter: parsed.chapter,
-                        verse: parsed.verse,
-                        translation: settings.translation,
-                      },
-                      timestamp: Date.now(),
-                    };
-                    dockClient.sendCommand(cmd);
-                    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(cmd),
-                      keepalive: true,
-                    }).catch(() => { });
+                    onNavigateToBible?.();
+                    navigateBibleDock({
+                      book: parsed.book,
+                      chapter: parsed.chapter,
+                      verse: parsed.verse!,
+                    }, true);
                   }}
                   title={clickable ? t("lm.historyClickHint") : undefined}
                 >
