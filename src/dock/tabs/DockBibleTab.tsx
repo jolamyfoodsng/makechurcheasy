@@ -95,6 +95,8 @@ import {
   copyTextToClipboard,
 } from "../bibleClipboard";
 import { getDockBibleKeywordMatchOutputOptions } from "../dockKeywordMatch";
+import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
+import { getRecommendedPollingInterval } from "../../services/performanceManager";
 import {
   formatDockFavoriteBibleSearch,
   mergeFavoriteBibleSearches,
@@ -4387,52 +4389,117 @@ function DockBibleTab({
     };
   }, [appConnected, applyVoiceResult, voiceBible.status]);
 
-  // ── Listen for LM Dock navigate commands via raw BroadcastChannel ──
+  // ── Listen for LM Dock navigate commands ──
+  // BroadcastChannel handles localhost tabs in the same origin. The HTTP
+  // relay below handles an LM dock and Bible dock in separate OBS CEF
+  // processes, where BroadcastChannel cannot cross the process boundary.
+  const handledLmCommandIdsRef = useRef<Set<string>>(new Set());
+  const handleLmNavigateCommand = useCallback((cmd: {
+    type?: string;
+    commandId?: string;
+    payload?: unknown;
+  } | null) => {
+    if (cmd?.type !== "lm:navigate") return;
+    const commandId = String(cmd.commandId || "").trim();
+    if (commandId) {
+      if (handledLmCommandIdsRef.current.has(commandId)) return;
+      handledLmCommandIdsRef.current.add(commandId);
+      if (handledLmCommandIdsRef.current.size > 100) {
+        const oldest = handledLmCommandIdsRef.current.values().next().value;
+        if (oldest) handledLmCommandIdsRef.current.delete(oldest);
+      }
+    }
+
+    const payload = cmd.payload as {
+      book?: string;
+      chapter?: number;
+      verse?: number;
+      translation?: string;
+      pushToPreview?: boolean;
+    };
+    if (!payload.book || !payload.chapter) return;
+
+    focusReference(payload.book, payload.chapter, payload.verse ?? null);
+    void (async () => {
+      if (!payload.pushToPreview) {
+        await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+          translation: payload.translation,
+        });
+        return;
+      }
+
+      try {
+        if (!presentationLinkMode) {
+          await dockObsClient.preparePlannerOutput("bible", false);
+        }
+        await goLiveVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+          translation: payload.translation,
+          recordHistory: false,
+        });
+      } catch (error) {
+        console.warn("[DockBibleTab] LM history preview push failed; staging verse instead:", error);
+        await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
+          translation: payload.translation,
+        });
+      }
+    })();
+  }, [focusReference, goLiveVerse, presentationLinkMode, stageVerse]);
+
   useEffect(() => {
     let channel: BroadcastChannel | null = null;
     try {
       channel = new BroadcastChannel("ocs-dock-commands");
       channel.onmessage = (ev) => {
-        const cmd = ev.data as { type?: string; payload?: unknown } | null;
-        if (cmd?.type === "lm:navigate") {
-          const payload = cmd.payload as {
-            book?: string;
-            chapter?: number;
-            verse?: number;
-            translation?: string;
-            pushToPreview?: boolean;
-          };
-          if (payload.book && payload.chapter) {
-            focusReference(payload.book, payload.chapter, payload.verse ?? null);
-            void (async () => {
-              if (!payload.pushToPreview) {
-                await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
-                  translation: payload.translation,
-                });
-                return;
-              }
-
-              try {
-                if (!presentationLinkMode) {
-                  await dockObsClient.preparePlannerOutput("bible", false);
-                }
-                await goLiveVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
-                  translation: payload.translation,
-                  recordHistory: false,
-                });
-              } catch (error) {
-                console.warn("[DockBibleTab] LM history preview push failed; staging verse instead:", error);
-                await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
-                  translation: payload.translation,
-                });
-              }
-            })();
-          }
-        }
+        handleLmNavigateCommand(ev.data as {
+          type?: string;
+          commandId?: string;
+          payload?: unknown;
+        } | null);
       };
     } catch { /* BroadcastChannel not available */ }
     return () => { channel?.close(); };
-  }, [focusReference, goLiveVerse, presentationLinkMode, stageVerse]);
+  }, [handleLmNavigateCommand]);
+
+  useEffect(() => {
+    let disposed = false;
+    let inFlight = false;
+
+    const pollNavigationRelay = async () => {
+      if (disposed || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(
+          `${getOverlayBaseUrlSync()}/api/lm-bible-navigation?_=${Date.now()}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) return;
+        const raw = await response.json() as unknown;
+        if (!Array.isArray(raw)) return;
+        raw.forEach((item) => {
+          const command = typeof item === "string"
+            ? (() => {
+              try { return JSON.parse(item) as { type?: string; commandId?: string; payload?: unknown }; } catch { return null; }
+            })()
+            : item as { type?: string; commandId?: string; payload?: unknown };
+          handleLmNavigateCommand(command);
+        });
+      } catch {
+        // The relay is a cross-process fallback; local BroadcastChannel still works.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollNavigationRelay();
+    const timer = window.setInterval(
+      () => void pollNavigationRelay(),
+      getRecommendedPollingInterval(500),
+    );
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [handleLmNavigateCommand]);
 
   useEffect(() => () => {
     voiceHeldRef.current = false;
@@ -4642,7 +4709,10 @@ function DockBibleTab({
         );
         setVerseLineCount(impliedLineCount);
         focusReference(result.book, result.chapter, result.verse);
-        await stageVerse(result.book, result.chapter, result.verse, {
+        // A concrete Bible search result is an output action, not only a
+        // navigation action. Open the matching chapter/verse and send the
+        // selected passage through the same OBS path as a verse-row click.
+        await goLiveVerse(result.book, result.chapter, result.verse, {
           lineCount: impliedLineCount,
           rangeEndVerse: result.endVerse ?? null,
           translation: activeBibleSearchTranslation,

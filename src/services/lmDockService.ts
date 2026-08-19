@@ -361,11 +361,11 @@ class LmDockService {
         const res = await fetch(url);
         const raw = (await res.json()) as unknown;
         // Rust returns Vec<String> (raw JSON strings), not Vec<Value>
-        const commands: Array<{ type: string; payload?: unknown }> = Array.isArray(raw)
+        const commands: Array<{ type: string; commandId?: string; payload?: unknown }> = Array.isArray(raw)
           ? raw.map((item) =>
             typeof item === "string"
-              ? (JSON.parse(item) as { type: string; payload?: unknown })
-              : (item as { type: string; payload?: unknown }),
+              ? (JSON.parse(item) as { type: string; commandId?: string; payload?: unknown })
+              : (item as { type: string; commandId?: string; payload?: unknown }),
           )
           : [];
         for (const cmd of commands) {
@@ -376,7 +376,15 @@ class LmDockService {
           } else if (cmd.type === "lm:stop") {
             this.stopListening();
           } else if (cmd.type === "lm:navigate") {
-            // Forward to dockBridge for main app handlers
+            // The LM dock can run in a separate OBS CEF process. Re-broadcast
+            // the relayed command so the Bible dock can focus the reference
+            // and push it through its OBS output path.
+            dockBridge.sendCommand({
+              type: "lm:navigate",
+              commandId: cmd.commandId,
+              payload: cmd.payload,
+              timestamp: Date.now(),
+            });
             dockBridge.sendState({ type: "state:lm-status", payload: { ...this.snapshot }, timestamp: Date.now() });
           }
         }

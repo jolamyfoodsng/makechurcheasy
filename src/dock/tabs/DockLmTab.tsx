@@ -860,7 +860,12 @@ export default function DockLmTab({
   }, [allowLocalMicControls, isListening, mics.length, refreshPresentationMics, selectedMic]);
 
   const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
-    const cmd = { type, payload: payload ?? {}, timestamp: Date.now() };
+    const cmd = {
+      type,
+      payload: payload ?? {},
+      commandId: `lm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: Date.now(),
+    };
     dockClient.sendCommand(cmd);
     fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
       method: "POST",

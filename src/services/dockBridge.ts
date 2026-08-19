@@ -196,6 +196,15 @@ class DockBridge {
     return () => this.handlers.delete(handler);
   }
 
+  /** Forward a command from the main app to dock clients. */
+  sendCommand(cmd: DockCommand): void {
+    try {
+      this.commandChannel?.postMessage(cmd);
+    } catch {
+      // Channel might be closed during app shutdown.
+    }
+  }
+
   /** Send a state update to the dock */
   sendState(msg: DockStateMessage) {
     try {

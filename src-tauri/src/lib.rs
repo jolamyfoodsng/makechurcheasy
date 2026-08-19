@@ -301,6 +301,10 @@ mod app_nap {
 
 static LM_STATE: OnceLock<Mutex<String>> = OnceLock::new();
 static LM_COMMAND_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+/// Navigation commands have a second consumer: the Bible tab running in the
+/// OBS CEF process. Keep a copy separate from the main-app LM queue so the
+/// Tauri service cannot drain the command before the OBS dock sees it.
+static LM_BIBLE_NAVIGATION_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 pub(crate) static PRESENTATION_STATE: OnceLock<Mutex<BTreeMap<String, PresentationStateEnvelope>>> =
     OnceLock::new();
 pub(crate) static PRESENTATION_VIEWERS: OnceLock<Mutex<BTreeMap<String, BTreeMap<String, u64>>>> =
@@ -6376,6 +6380,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             // Used by the dock (OBS CEF) to send commands to the main app cross-process
             if clean == "api/lm-command" {
                 let queue = LM_COMMAND_QUEUE.get_or_init(|| Mutex::new(Vec::new()));
+                let bible_navigation_queue =
+                    LM_BIBLE_NAVIGATION_QUEUE.get_or_init(|| Mutex::new(Vec::new()));
                 let header = tiny_http::Header::from_bytes(
                     "Content-Type",
                     "application/json; charset=utf-8",
@@ -6413,6 +6419,23 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         let _ = request.respond(resp);
                         continue;
                     }
+                    let is_bible_navigation = serde_json::from_str::<serde_json::Value>(&body)
+                        .ok()
+                        .and_then(|value| {
+                            value
+                                .get("type")
+                                .and_then(|kind| kind.as_str())
+                                .map(|kind| kind == "lm:navigate")
+                        })
+                        .unwrap_or(false);
+                    if is_bible_navigation {
+                        if let Ok(mut q) = bible_navigation_queue.lock() {
+                            // Cap at 50 commands to prevent unbounded growth.
+                            if q.len() < 50 {
+                                q.push(body.clone());
+                            }
+                        }
+                    }
                     if let Ok(mut q) = queue.lock() {
                         // Cap at 50 commands to prevent unbounded growth
                         if q.len() < 50 {
@@ -6427,6 +6450,47 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 // GET — drain all pending commands
+                let json = if let Ok(mut q) = queue.lock() {
+                    let cmds: Vec<String> = q.drain(..).collect();
+                    serde_json::to_string(&cmds).unwrap_or_else(|_| "[]".to_string())
+                } else {
+                    "[]".to_string()
+                };
+                let resp = tiny_http::Response::from_string(json)
+                    .with_header(header)
+                    .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // API: Bible navigation relay — GET drains navigation commands for
+            // the Bible tab running in OBS CEF. The command is mirrored from
+            // /api/lm-command on POST, so the main-app LM service and the OBS
+            // dock can consume the same click independently.
+            if clean == "api/lm-bible-navigation" {
+                let queue = LM_BIBLE_NAVIGATION_QUEUE.get_or_init(|| Mutex::new(Vec::new()));
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
                 let json = if let Ok(mut q) = queue.lock() {
                     let cmds: Vec<String> = q.drain(..).collect();
                     serde_json::to_string(&cmds).unwrap_or_else(|_| "[]".to_string())
