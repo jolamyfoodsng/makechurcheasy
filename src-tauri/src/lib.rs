@@ -7108,6 +7108,84 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // YouTube requires an HTTP Referer (or equivalent app identity)
+            // for embedded playback. The desktop WebView uses Tauri's
+            // custom protocol, so serve a tiny local HTTP wrapper around the
+            // YouTube iframe. The wrapper's HTTP origin gives YouTube the
+            // required referrer while keeping the tutorial inside onboarding.
+            if clean == "youtube-tutorial" {
+                let query = url_path
+                    .split_once('?')
+                    .map(|(_, value)| value)
+                    .unwrap_or_default();
+                let mut video_id = String::new();
+                let mut start_at = 0u64;
+                for pair in query.split('&') {
+                    let Some((key, value)) = pair.split_once('=') else {
+                        continue;
+                    };
+                    let decoded = urlencoding::decode(value)
+                        .unwrap_or_default()
+                        .into_owned();
+                    match key {
+                        "video" => video_id = decoded,
+                        "start" => start_at = decoded.parse::<u64>().unwrap_or(0),
+                        _ => {}
+                    }
+                }
+
+                let valid_video_id = !video_id.is_empty()
+                    && video_id.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || character == '-' || character == '_'
+                    });
+                if !valid_video_id {
+                    let resp = tiny_http::Response::from_string("Invalid tutorial video")
+                        .with_status_code(400)
+                        .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let youtube_url = format!(
+                    "https://www.youtube-nocookie.com/embed/{}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&start={}",
+                    video_id, start_at
+                );
+                let body = format!(
+                    r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>MakeChurchEasy Tutorial</title>
+  <style>
+    html, body {{ width: 100%; height: 100%; margin: 0; background: #020617; overflow: hidden; }}
+    iframe {{ display: block; width: 100%; height: 100%; border: 0; }}
+  </style>
+</head>
+<body>
+  <iframe
+    src="{}"
+    title="MakeChurchEasy tutorial"
+    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+</body>
+</html>"#,
+                    youtube_url
+                );
+                let resp = tiny_http::Response::from_string(body)
+                    .with_header(overlay_header("Content-Type", "text/html; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Security-Policy",
+                        "default-src 'none'; style-src 'unsafe-inline'; frame-src https://www.youtube-nocookie.com https://www.youtube.com;",
+                    ))
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // Resolve file path — check uploads dir for /uploads/* requests,
             // otherwise serve from the resource dir (public/)
             let mut file_path = if clean == "mobile" || clean == "mobile/" {

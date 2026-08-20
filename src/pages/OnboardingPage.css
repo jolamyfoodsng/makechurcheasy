@@ -389,6 +389,31 @@
   line-height: 1.35;
 }
 
+.ob-tutorial-embed-fallback {
+  margin: -4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.ob-tutorial-embed-fallback button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ob-tutorial-embed-fallback button:hover {
+  text-decoration: underline;
+}
+
 .ob-card {
   width: 100%;
   max-width: 720px;

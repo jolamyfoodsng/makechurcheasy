@@ -32,7 +32,7 @@ import {
   Users,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
-import { getDockBaseUrl } from "../services/overlayUrl";
+import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
 import {
@@ -168,10 +168,18 @@ function fireMilestone(milestone: string) {
   }
 }
 
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && (
+    window.location.protocol === "tauri:" ||
+    "__TAURI_INTERNALS__" in window
+  );
+}
+
 function OnboardingTutorialPanel({ step }: { step: number }) {
   const tutorial = ONBOARDING_TUTORIALS[step] ?? ONBOARDING_TUTORIALS[2];
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [embedFailed, setEmbedFailed] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -185,6 +193,7 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
 
   useEffect(() => {
     setIsFullscreen(false);
+    setEmbedFailed(false);
   }, [tutorial.videoId]);
 
   const openTutorial = useCallback(() => {
@@ -209,11 +218,16 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
     }
   }, [openTutorial]);
 
-  const embedUrl =
+  const directEmbedUrl =
     `https://www.youtube-nocookie.com/embed/${tutorial.videoId}` +
     `?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1${
       tutorial.startAt ? `&start=${tutorial.startAt}` : ""
     }`;
+  const embedUrl = isTauriRuntime()
+    ? `${getOverlayBaseUrlSync()}/youtube-tutorial?video=${encodeURIComponent(tutorial.videoId)}${
+      tutorial.startAt ? `&start=${tutorial.startAt}` : ""
+    }`
+    : directEmbedUrl;
 
   return (
     <aside className="ob-tutorial-panel" aria-label={`Step ${step} tutorial`}>
@@ -250,9 +264,20 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
           src={embedUrl}
           title={tutorial.title}
           allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+          onError={() => setEmbedFailed(true)}
           allowFullScreen
         />
       </div>
+
+      {embedFailed && (
+        <p className="ob-tutorial-embed-fallback" role="status">
+          The embedded tutorial could not load here.{" "}
+          <button type="button" onClick={openTutorial}>
+            Open it on YouTube <ExternalLink size={12} />
+          </button>
+        </p>
+      )}
 
       <div className="ob-tutorial-footer">
         <span className="ob-tutorial-playing">
