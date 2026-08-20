@@ -11,7 +11,9 @@ import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
 import { toBackgroundAssetUrl } from "./BackgroundPickerCard";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
+import dockOutputQuickActionsSource from "./DockOutputQuickActions.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
+import dockNotesTabSource from "../tabs/DockNotesTab.tsx?raw";
 import dockBibleThemeResolutionSource from "../dockBibleThemeResolution.ts?raw";
 import dockWorshipTabSource from "../tabs/DockWorshipTab.tsx?raw";
 import dockThemeDataSource from "../dockThemeData.ts?raw";
@@ -27,6 +29,17 @@ describe("Bible save feedback", () => {
     expect(dockBibleTabSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleDisplaySaved\"");
     expect(dockThemeSettingsModalSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleSettingsSaved\"");
     expect(backgroundPickerSource).toContain("onSaveFeedback?.(t(\"dock.feedback.backgroundStyleSaved\"");
+  });
+});
+
+describe("Notes and Worship quick edits affordance", () => {
+  it("opens the full BackgroundPickerCard editor from the compact quick panel", () => {
+    expect(dockOutputQuickActionsSource).toContain("onOpenQuickEdits?: () => void;");
+    expect(dockOutputQuickActionsSource).toContain('Icon name="settings" size={14}');
+    expect(dockOutputQuickActionsSource).toContain("setOpen(false);");
+    expect(dockOutputQuickActionsSource).toContain("onOpenQuickEdits?.();");
+    expect(dockNotesTabSource).toContain("onOpenQuickEdits={() => setShowThemeSettings(true)}");
+    expect(dockWorshipTabSource).toContain("onOpenQuickEdits={() => setShowThemeSettings(true)}");
   });
 });
 

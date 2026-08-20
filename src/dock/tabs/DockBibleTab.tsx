@@ -497,10 +497,10 @@ function BibleOutputControlsMenu({
                 key={option.id}
                 type="button"
                 className={`dock-bible-reader__size-preset${
-                  settings.lowerThirdSize === option.id ? " dock-bible-reader__size-preset--active" : ""
+                  settings.lowerThirdSize === option.preset ? " dock-bible-reader__size-preset--active" : ""
                 }`}
                 onClick={() => onLowerThirdSizePresetChange(option)}
-                aria-pressed={settings.lowerThirdSize === option.id}
+                aria-pressed={settings.lowerThirdSize === option.preset}
               >
                 {t(option.labelKey, option.label)}
               </button>
@@ -1462,7 +1462,7 @@ function DockBibleTab({
     if (!hasSceneRoute) {
       return dockObsClient.pushBible(data, options);
     }
-    await Promise.all(sceneRoute.targets.map((target) => {
+    await dockObsClient.pushBibleToScenes(sceneRoute.targets.map((target) => {
       const outputMode = target.mode === "inherit"
         ? (data.overlayMode === "lower-third" ? "lower-third" : "fullscreen")
         : target.mode;
@@ -1478,13 +1478,16 @@ function DockBibleTab({
       const targetThemeId = isFullscreen
         ? (profile?.fullscreenThemeId ?? selectedBibleThemeRef.current.id)
         : (profile?.lowerThirdThemeId ?? selectedLowerThirdThemeRef.current.id);
-      return dockObsClient.pushBibleToScene({
-        ...data,
-        ...(target.mode === "inherit" ? {} : { overlayMode: target.mode }),
-        theme: targetThemeId,
-        bibleThemeSettings: targetThemeSettings as Record<string, unknown> | null | undefined,
-        liveOverrides: profileSettings ? null : (isFullscreen ? fullscreenLiveOverridesRef.current : null),
-      }, target.sceneName);
+      return {
+        data: {
+          ...data,
+          ...(target.mode === "inherit" ? {} : { overlayMode: target.mode }),
+          theme: targetThemeId,
+          bibleThemeSettings: targetThemeSettings as Record<string, unknown> | null | undefined,
+          liveOverrides: profileSettings ? null : (isFullscreen ? fullscreenLiveOverridesRef.current : null),
+        },
+        sceneName: target.sceneName,
+      };
     }));
     if (sceneRoute.syncPresentation) return dockObsClient.pushBible(data, options);
     return null;
@@ -4092,15 +4095,15 @@ function DockBibleTab({
   const handleLowerThirdSizePresetChange = useCallback((
     option: (typeof LOWER_THIRD_QUICK_SIZE_OPTIONS)[number],
   ) => {
-    const preset = LOWER_THIRD_SIZE_PRESETS[option.id];
+    const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
     const horizontalPadding = Math.round(preset.padding * 1.55);
     const nextVerseSize = clampNumber(
-      preset.fontSize,
+      option.fontSize,
       browserFontSizeMin,
       browserFontSizeMax,
     );
     const nextReferenceSize = clampNumber(
-      preset.refFontSize,
+      option.refFontSize,
       browserReferenceFontSizeMin,
       browserReferenceFontSizeMax,
     );
@@ -4109,7 +4112,7 @@ function DockBibleTab({
       refFontSize: nextReferenceSize,
       lineHeight: preset.lineHeight,
       refSpacing: preset.refSpacing,
-      lowerThirdSize: option.id,
+      lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
       lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
       lowerThirdBarMaxHeight: preset.maxHeight,

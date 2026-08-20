@@ -934,27 +934,28 @@ export default function DockNotesTab({
     const theme = overlayMode === "fullscreen"
       ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
       : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
-    return quickSettings?.lowerThirdSize ?? theme.settings.lowerThirdSize;
+    const currentPreset = quickSettings?.lowerThirdSize ?? theme.settings.lowerThirdSize;
+    return DOCK_QUICK_SIZE_OPTIONS.find((option) => option.preset === currentPreset)?.id;
   }, [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme]);
 
   const getNotesQuickSizePatch = useCallback((id: string): DockOutputQuickSettingsPatch | null => {
     const option = DOCK_QUICK_SIZE_OPTIONS.find((item) => item.id === id);
     if (!option) return null;
-    const preset = LOWER_THIRD_SIZE_PRESETS[option.id];
+    const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
     const minFontSize = overlayMode === "fullscreen" ? 28 : 14;
     const maxFontSize = overlayMode === "fullscreen" ? 180 : 100;
     const minRefFontSize = overlayMode === "fullscreen" ? 14 : 10;
     const maxRefFontSize = overlayMode === "fullscreen" ? 150 : 80;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const horizontalPadding = Math.round(preset.padding * 1.55);
-    const fontSize = clamp(preset.fontSize, minFontSize, maxFontSize);
-    const refFontSize = clamp(preset.refFontSize, minRefFontSize, maxRefFontSize);
+    const fontSize = clamp(option.fontSize, minFontSize, maxFontSize);
+    const refFontSize = clamp(option.refFontSize, minRefFontSize, maxRefFontSize);
     return {
       fontSize,
       refFontSize,
       lineHeight: preset.lineHeight,
       refSpacing: preset.refSpacing,
-      lowerThirdSize: option.id,
+      lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
       lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
       lowerThirdBarMaxHeight: preset.maxHeight,
@@ -1423,6 +1424,8 @@ export default function DockNotesTab({
               isLive={overlayVisible}
               top={quickActionsTop}
               left={quickActionsLeft}
+              onOpenQuickEdits={() => setShowThemeSettings(true)}
+              quickEditsLabel={t("worship.quickEdits", "Quick Edits")}
               onPositionChange={handleNotesQuickActionsPositionChange}
               onCommit={handleNotesQuickCommit}
               originalLineLabel={t("notes.original", "Original")}

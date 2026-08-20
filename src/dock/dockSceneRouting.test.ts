@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { dockObsClient, getMcePresentationVisibilityKeepSet } from "./dockObsClient";
 import routingSource from "./dockSceneRouting.ts?raw";
 import routingControlSource from "./components/DockSceneRoutingControl.tsx?raw";
@@ -156,6 +156,12 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain('this._ensureFullscreenScene("bible", mode, preserveExistingLiveBibleSource)');
   });
 
+  it("paints Worship from native and cached local state before background refresh", () => {
+    expect(worshipTabSource).toContain("useState<DockSong[]>(() => loadCachedSongs())");
+    expect(worshipTabSource).toContain("applyPreferences(loadDockWorshipPreferences(), BUILTIN_THEMES)");
+    expect(worshipTabSource).toContain("if (!preferencesHydrated || !prefsReadyRef.current) return;");
+  });
+
   it("verifies the live OBS browser source painted the new font", () => {
     const methodStart = obsClientSource.indexOf("async refreshOutputTypography(): Promise<void>");
     const methodEnd = obsClientSource.indexOf("\n  private extractOverlayPacketFromCss", methodStart);
@@ -221,6 +227,7 @@ describe("dock scene routing", () => {
 
   it("routes each tab through its independent sender before optionally syncing MCE Presentation", () => {
     expect(obsClientSource).toContain("async pushBibleToScene");
+    expect(obsClientSource).toContain("async pushBibleToScenes");
     expect(obsClientSource).toContain("async pushWorshipToScene");
     expect(obsClientSource).toContain("async pushNotesToScene");
     expect(obsClientSource).toContain("async pushTickerToScene");
@@ -228,6 +235,39 @@ describe("dock scene routing", () => {
     expect(countdownTabSource).toContain("getObsTargets(cd)");
     expect(ministryTabSource).toContain("tickerSceneRoute.syncPresentation");
     expect(ministryTabSource).toContain("lowerThirdSceneRoute.syncPresentation");
+  });
+
+  it("keeps every routed Bible target inside one latest-only mutation", async () => {
+    const client = dockObsClient as unknown as Record<string, any>;
+    const previousInternal = client.pushBibleToSceneInternal;
+    const previousTail = client._bibleMutationTail;
+    const previousCounter = client._bibleMutationCounter;
+    const sentScenes: string[] = [];
+
+    client._bibleMutationTail = Promise.resolve();
+    client._bibleMutationCounter = 0;
+    client.pushBibleToSceneInternal = vi.fn(async (_data: unknown, sceneName: string) => {
+      sentScenes.push(sceneName);
+    });
+
+    try {
+      await client.pushBibleToScenes([
+        {
+          sceneName: "General",
+          data: { book: "John", chapter: 3, verse: 16, translation: "KJV" },
+        },
+        {
+          sceneName: "Live Stream",
+          data: { book: "John", chapter: 3, verse: 16, translation: "KJV" },
+        },
+      ]);
+
+      expect(sentScenes).toEqual(["General", "Live Stream"]);
+    } finally {
+      client.pushBibleToSceneInternal = previousInternal;
+      client._bibleMutationTail = previousTail;
+      client._bibleMutationCounter = previousCounter;
+    }
   });
 
   it("keeps linked Bible presentation output aligned with two- and three-passage compare", () => {
@@ -250,6 +290,15 @@ describe("dock scene routing", () => {
     expect(bibleOverlaySource).toContain("--mce-output-font-family");
     expect(bibleOverlaySource).toContain("'--mce-output-font-family'");
     expect(presentationBridgeSource).toContain("loadDockOutputFontFamily");
+  });
+
+  it("re-fits Bible text responsively when the mobile viewport or line count changes", () => {
+    expect(bibleOverlaySource).toContain('width=device-width');
+    expect(bibleOverlaySource).toContain("document.addEventListener('DOMContentLoaded', fit");
+    expect(bibleOverlaySource).toContain("function getVisualScale");
+    expect(bibleOverlaySource).toContain("const absoluteFloor = Math.max(fallback, 16)");
+    expect(bibleTabSource).toContain("void handleSyncBibleBrowserSettings({}, safeLineCount);");
+    expect(bibleTabSource).toContain("Line count changes the actual passage layout");
   });
 
   it("publishes linked compare navigation to the active OBS or presentation route", () => {

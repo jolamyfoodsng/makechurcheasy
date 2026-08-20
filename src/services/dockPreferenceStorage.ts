@@ -66,7 +66,7 @@ export async function loadDockPreferenceList<T>(baseKey: string): Promise<T[] | 
 }
 
 export async function saveDockPreferenceList<T>(baseKey: string, items: T[]): Promise<void> {
-  writeNativeDockSetting(baseKey, {
+  await writeNativeDockSetting(baseKey, {
     items,
     updatedAt: new Date().toISOString(),
   });
@@ -88,8 +88,8 @@ export async function loadDockPreference<T extends PreferenceObject>(
       ...legacy,
       updatedAt: legacy.updatedAt ?? new Date().toISOString(),
     } as T;
-    writeNativeDockSetting(baseKey, migrated);
-    removeNativeDockSetting(legacyKey);
+    await writeNativeDockSetting(baseKey, migrated);
+    await removeNativeDockSetting(legacyKey);
     return migrated;
   }
 
@@ -105,6 +105,6 @@ export async function saveDockPreference<T extends PreferenceObject>(
     ...value,
     updatedAt: value.updatedAt ?? new Date().toISOString(),
   } as T;
-  writeNativeDockSetting(baseKey, next);
+  await writeNativeDockSetting(baseKey, next);
   return next;
 }

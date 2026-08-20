@@ -68,6 +68,19 @@ fn is_mode_change(text: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Check whether a packet contains the latest overlay content. Render ACKs
+/// are broadcast to the dock, but must not replace the retained content that
+/// a newly connected browser source needs to render.
+fn is_overlay_update(text: &str) -> bool {
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str().map(|s| s == "overlay-update"))
+        })
+        .unwrap_or(false)
+}
+
 pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
     let addr = format!("127.0.0.1:{}", port);
 
@@ -144,7 +157,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                                             if let Ok(mut store) = mode_store2.lock() {
                                                 store.insert(channel, text.to_string());
                                             }
-                                        } else {
+                                        } else if is_overlay_update(&text) {
                                             if let Ok(mut store) = overlay_store2.lock() {
                                                 store.insert(channel, text.to_string());
                                             }
@@ -173,5 +186,30 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                 eprintln!("[OverlayRelay] Accept error: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_mode_change, is_overlay_update};
+
+    #[test]
+    fn retains_only_overlay_updates_as_content() {
+        assert!(is_overlay_update(
+            r#"{"channel":"worship","type":"overlay-update","data":{}}"#
+        ));
+        assert!(!is_overlay_update(
+            r#"{"channel":"worship","type":"overlay-render-ack","effectiveFontSize":160}"#
+        ));
+    }
+
+    #[test]
+    fn keeps_mode_changes_separate() {
+        assert!(is_mode_change(
+            r#"{"channel":"worship","type":"mode-change","mode":"fullscreen"}"#
+        ));
+        assert!(!is_mode_change(
+            r#"{"channel":"worship","type":"overlay-update","data":{}}"#
+        ));
     }
 }

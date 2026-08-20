@@ -33,6 +33,7 @@ export interface EmbeddingSearchResult {
 // In-memory storage
 let verses: EmbeddedVerse[] = [];
 let hnswIndex: HnswIndex | null = null;
+let embeddingsLoadPromise: Promise<void> | null = null;
 
 // Query embedding cache (LRU)
 const queryCache = new Map<string, Float32Array>();
@@ -42,8 +43,20 @@ const QUERY_CACHE_MAX = 100;
  * Load pre-computed embeddings and build HNSW index.
  * Call once on app init — subsequent searches use the in-memory index.
  */
-export async function loadBibleEmbeddings(): Promise<void> {
-  if (hnswIndex) return;
+export function loadBibleEmbeddings(): Promise<void> {
+  if (hnswIndex) return Promise.resolve();
+  // A transcript can produce several quote searches at the same time. Share
+  // one load/build operation so concurrent searches never parse the 245 MB
+  // JSON asset more than once.
+  if (embeddingsLoadPromise) return embeddingsLoadPromise;
+
+  embeddingsLoadPromise = loadBibleEmbeddingsInternal().finally(() => {
+    embeddingsLoadPromise = null;
+  });
+  return embeddingsLoadPromise;
+}
+
+async function loadBibleEmbeddingsInternal(): Promise<void> {
 
   // Try loading pre-built HNSW index first (faster)
   try {

@@ -6520,7 +6520,34 @@ class DockObsClient {
     sceneName: string,
     sourceModule: "bible" | "lower-third" = "bible",
   ): Promise<void> {
+    return this.runSerializedBibleMutation(() => this.pushBibleToSceneInternal(data, sceneName, sourceModule));
+  }
+
+  /**
+   * Push routed Bible targets as one latest-only mutation. Calling
+   * pushBibleToScene once per target in parallel would make the shared
+   * latest-update queue discard every target except the last one.
+   */
+  async pushBibleToScenes(
+    targets: Array<{
+      data: DockBiblePushData;
+      sceneName: string;
+      sourceModule?: "bible" | "lower-third";
+    }>,
+  ): Promise<void> {
+    if (targets.length === 0) return;
     return this.runSerializedBibleMutation(async () => {
+      for (const target of targets) {
+        await this.pushBibleToSceneInternal(target.data, target.sceneName, target.sourceModule ?? "bible");
+      }
+    });
+  }
+
+  private async pushBibleToSceneInternal(
+    data: DockBiblePushData,
+    sceneName: string,
+    sourceModule: "bible" | "lower-third" = "bible",
+  ): Promise<void> {
       const mode = data.overlayMode ?? "fullscreen";
       const verseRange = data.verseRange ?? String(data.verse);
       const reference = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
@@ -6598,7 +6625,6 @@ class DockObsClient {
         css: this.buildCssOverlayDataCss(packet, css),
       });
       this.rememberCssOverlayTransport(sourceName, packet, baseUrl, css, "bible");
-    });
   }
 
   private async pushTabContentToScene(

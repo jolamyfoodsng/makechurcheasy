@@ -1119,7 +1119,7 @@ describe("live quote replacement", () => {
       "In Bible studies, in the book of Daniel.",
     ];
 
-    await engine.preload();
+    await engine.preload({ includeEmbeddings: true });
 
     for (let index = 0; index < pauses.length; index += 1) {
       if (index > 0) {

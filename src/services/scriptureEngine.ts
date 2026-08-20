@@ -490,19 +490,41 @@ export class ScriptureDetectionEngine {
   private allowBareVerseContinuation = false;
 
   /** Preload Bible data and embeddings to avoid first-call latency */
-  async preload(): Promise<void> {
-    if (this.bibleDataLoaded) return;
+  private bibleDataLoadPromise: Promise<void> | null = null;
+  private embeddingsLoadPromise: Promise<void> | null = null;
+
+  /**
+   * Warm the small, frequently-used Bible lookup data. The semantic index is
+   * intentionally opt-in because its raw KJV embedding asset is very large;
+   * loading it while the microphone starts creates a needless memory spike on
+   * lower-RAM laptops.
+   */
+  async preload(options: { includeEmbeddings?: boolean } = {}): Promise<void> {
     try {
-      const [{ getBibleCorpus, preloadTranslation }, { loadBibleEmbeddings }] = await Promise.all([
-        import("../bible/bibleData"),
-        import("../bible/bibleEmbeddings"),
-      ]);
-      await Promise.all([
-        preloadTranslation(this.translation as "KJV"),
-        getBibleCorpus(this.translation as "KJV", 3),
-        loadBibleEmbeddings(),
-      ]);
-      this.bibleDataLoaded = true;
+      if (!this.bibleDataLoaded) {
+        this.bibleDataLoadPromise ??= (async () => {
+          const { getBibleCorpus, preloadTranslation } = await loadBibleDataModule();
+          await Promise.all([
+            preloadTranslation(this.translation as "KJV"),
+            getBibleCorpus(this.translation as "KJV", 3),
+          ]);
+          this.bibleDataLoaded = true;
+        })().catch((error) => {
+          this.bibleDataLoadPromise = null;
+          throw error;
+        });
+        await this.bibleDataLoadPromise;
+      }
+
+      if (options.includeEmbeddings && !this.embeddingsLoadPromise) {
+        this.embeddingsLoadPromise = loadBibleEmbeddingsModule()
+          .then(({ loadBibleEmbeddings }) => loadBibleEmbeddings())
+          .catch((error) => {
+            this.embeddingsLoadPromise = null;
+            throw error;
+          });
+      }
+      if (this.embeddingsLoadPromise) await this.embeddingsLoadPromise;
     } catch (err) {
       console.warn("[ScriptureEngine] Preload failed:", err);
     }
@@ -1102,8 +1124,14 @@ export class ScriptureDetectionEngine {
     }
 
     try {
-      const { hasEmbeddings, searchByEmbedding } = await loadBibleEmbeddingsModule();
+      const { hasEmbeddings, loadBibleEmbeddings, searchByEmbedding } = await loadBibleEmbeddingsModule();
       const { rerankCandidates } = await loadScriptureRerankerModule();
+      if (signal.aborted) return [];
+
+      // Semantic search is the first operation that needs the large
+      // embedding index. Keep it out of microphone/startup preload, but load
+      // it once here when the operator actually asks for semantic matching.
+      if (!hasEmbeddings()) await loadBibleEmbeddings();
       if (signal.aborted) return [];
 
       const embeddingsReady = hasEmbeddings();

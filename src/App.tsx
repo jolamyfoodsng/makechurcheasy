@@ -11,7 +11,7 @@
  *   5. Main app is always accessible — updates never block workflow
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
@@ -21,8 +21,6 @@ import FeatureGuard from "./components/FeatureGuard";
 import { useAuth } from "./contexts/AuthContext";
 import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
-import { MVSettings } from "./multiview/pages/MVSettings";
-import { MVShell } from "./multiview/MVShell";
 import { BibleProvider } from "./bible/bibleStore";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
@@ -50,7 +48,6 @@ import { STARTER_TEMPLATES } from "./multiview/templates";
 import { applyBrandingSettingsToDom } from "./services/branding";
 import { useAppTheme } from "./hooks/useAppTheme";
 import { getAppTitle, getSplashImageSrc } from "./services/envConfig";
-import DevDashboard from "./pages/DevDashboard";
 import { getPresentationRemoteAccessInfo } from "./services/presentationRemote";
 
 import { dockBridge } from "./services/dockBridge";
@@ -59,7 +56,6 @@ import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBri
 import { automationRunner } from "./services/automationRunner";
 import { safeTauriInvoke } from "./services/tauriSafe";
 import { getUserScopedKey } from "./services/userScopedStorage";
-import { lmDockService } from "./services/lmDockService";
 import { obsService } from "./services/obsService";
 import { appStatusManager } from "./services/appStatusManager";
 import { serviceStore as svcStore } from "./services/serviceStore";
@@ -72,18 +68,6 @@ import type { Song } from "./worship/types";
 import type { MediaItem } from "./library/libraryTypes";
 import { deleteMedia, getAllMedia, saveMedia } from "./library/libraryDb";
 import { syncCustomThemesToDock, syncInstalledTranslationsToDock } from "./bible/bibleDb";
-import ResourcesPage from "./pages/ResourcesPage";
-import ProductionHomePage from "./pages/ProductionHomePage";
-import MultiViewGalleryPage from "./pages/MultiViewGalleryPage";
-import CountdownsPage from "./pages/CountdownsPage";
-import ProductionThemeSettingsPage from "./pages/ProductionThemeSettingsPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import PresentationSetupPage from "./pages/PresentationSetupPage";
-import ServicePlannerPage from "./pages/ServicePlannerPage";
-import SpeechToScripturePage from "./pages/SpeechToScripturePage";
-import TranscriptLibraryPage from "./pages/TranscriptLibraryPage";
-import TranscriptDetailPage from "./pages/TranscriptDetailPage";
-import CreditsPage from "./pages/CreditsPage";
 import CreditsGuard from "./components/CreditsGuard";
 import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
 import {
@@ -104,7 +88,6 @@ import type { DockNotesAppendCommand } from "./services/dockNotesInterop";
 import { getLiveToolsSnapshot, syncLiveToolsToDock } from "./live-tools/liveToolStore";
 import { getCountdownSnapshot } from "./countdowns/countdownStore";
 import { STORES, putRecord } from "./services/db";
-import { MEDIA_FILE_ACCEPT, isSupportedLibraryImportFile, saveLibraryMediaFile } from "./library/MediaTab";
 import { getPendingReceiverFiles, type ReceiverFile } from "./services/receiverService";
 import {
   trackAppStarted,
@@ -129,6 +112,42 @@ import { getRecommendedPollingInterval } from "./services/performanceManager";
 const UPDATE_POLL_INTERVAL_MS = 30_000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
+const MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv,.pdf,.docx,.pptx";
+
+// Keep large route trees and their optional dependencies out of the startup
+// graph. The first screen stays small; a page pays its loading cost only when
+// the operator opens that page.
+const MVSettings = lazy(() => import("./multiview/pages/MVSettings").then(({ MVSettings: Component }) => ({ default: Component })));
+const MVShell = lazy(() => import("./multiview/MVShell").then(({ MVShell: Component }) => ({ default: Component })));
+const DevDashboard = lazy(() => import("./pages/DevDashboard"));
+const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
+const ProductionHomePage = lazy(() => import("./pages/ProductionHomePage"));
+const MultiViewGalleryPage = lazy(() => import("./pages/MultiViewGalleryPage"));
+const CountdownsPage = lazy(() => import("./pages/CountdownsPage"));
+const ProductionThemeSettingsPage = lazy(() => import("./pages/ProductionThemeSettingsPage"));
+const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
+const PresentationSetupPage = lazy(() => import("./pages/PresentationSetupPage"));
+const ServicePlannerPage = lazy(() => import("./pages/ServicePlannerPage"));
+const SpeechToScripturePage = lazy(() => import("./pages/SpeechToScripturePage"));
+const TranscriptLibraryPage = lazy(() => import("./pages/TranscriptLibraryPage"));
+const TranscriptDetailPage = lazy(() => import("./pages/TranscriptDetailPage"));
+const CreditsPage = lazy(() => import("./pages/CreditsPage"));
+
+type LmDockService = typeof import("./services/lmDockService").lmDockService;
+let lmDockServicePromise: Promise<LmDockService> | null = null;
+
+function loadLmDockService(): Promise<LmDockService> {
+  lmDockServicePromise ??= import("./services/lmDockService").then(({ lmDockService }) => lmDockService);
+  return lmDockServicePromise;
+}
+
+function AppRouteFallback() {
+  return (
+    <div className="app-route-loading" role="status" aria-live="polite">
+      Loading…
+    </div>
+  );
+}
 
 async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayload): Promise<{
   song: Song;
@@ -442,11 +461,21 @@ function App() {
         console.warn("[MobileRemote] Command bridge unavailable:", error);
       });
 
-    // Wire up LM dock mic capture + AssemblyAI streaming
-    const unsubLmDock = lmDockService.init();
-
     // Dynamic app icon — updates macOS dock icon based on OBS + speech state
     const unsubAppStatus = appStatusManager.init();
+
+    // The LM service owns the speech engine and its large optional Bible
+    // retrieval path. Keep it out of startup; initialize it only when the
+    // speech page or an LM Dock command actually needs it.
+    let lmService: LmDockService | null = null;
+    let unsubLmDock: (() => void) | null = null;
+    const ensureLmService = async (): Promise<LmDockService> => {
+      if (!lmService) {
+        lmService = await loadLmDockService();
+        unsubLmDock = lmService.init();
+      }
+      return lmService;
+    };
 
     // Relay OBS connection status to the dock
     const unsubObs = obsService.onStatusChange((status) => {
@@ -674,22 +703,16 @@ function App() {
 
       // LM Dock: Start listening
       if (cmd.type === "lm:start") {
-        try {
-          const payload = cmd.payload as { micId?: string } | null;
-          const micId = payload?.micId;
-          void lmDockService.startListening(micId || undefined);
-        } catch (err) {
-          console.warn("[App] Failed to start LM listening:", err);
-        }
+        const payload = cmd.payload as { micId?: string } | null;
+        const micId = payload?.micId;
+        void ensureLmService()
+          .then((service) => service.startListening(micId || undefined))
+          .catch((err) => console.warn("[App] Failed to start LM listening:", err));
       }
 
       // LM Dock: Stop listening
       if (cmd.type === "lm:stop") {
-        try {
-          lmDockService.stopListening();
-        } catch (err) {
-          console.warn("[App] Failed to stop LM listening:", err);
-        }
+        lmService?.stopListening();
       }
     });
 
@@ -761,7 +784,7 @@ function App() {
       unsubCmd();
       unsubDockCmd();
       unsubMobileRemote?.();
-      unsubLmDock();
+      unsubLmDock?.();
       unsubAppStatus();
     };
   }, []);
@@ -1178,6 +1201,9 @@ function App() {
   }, [user, setUser]);
 
   const handleGlobalMediaUpload = useCallback(async (files: FileList | File[]) => {
+    // The media importer includes document conversion and preview helpers.
+    // Load it only when the user actually drops/imports a file.
+    const { isSupportedLibraryImportFile, saveLibraryMediaFile } = await import("./library/MediaTab");
     const queue = Array.from(files).filter(isSupportedLibraryImportFile);
     if (queue.length === 0) return;
     setGlobalMediaUploading(true);
@@ -1440,7 +1466,8 @@ function App() {
 
       {/* 4. Main app — always rendered after splash, but blocked by force update modal */}
       {!splashVisible && (
-        <Routes>
+        <Suspense fallback={<AppRouteFallback />}>
+          <Routes>
           <Route path="p/:sessionId" element={<PublicPresentationRoute />} />
           <Route
             path="*"
@@ -1536,7 +1563,8 @@ function App() {
               </AuthGate>
             }
           />
-        </Routes>
+          </Routes>
+        </Suspense>
       )}
 
       {!splashVisible && user && <DesktopReceiverNotification />}

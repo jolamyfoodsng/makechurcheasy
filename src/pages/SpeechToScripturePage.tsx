@@ -130,6 +130,13 @@ function savePreferredMicId(micId: string): void {
 export default function SpeechToScripturePage() {
   const { t } = useTranslation();
 
+  // The root app keeps the speech service demand-loaded. Initialize it here
+  // when this route is explicitly opened so direct page controls and Dock
+  // commands share the same managed service instance.
+  useEffect(() => {
+    lmDockService.init();
+  }, []);
+
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
   const effectivePlan = getEffectivePlan(user);

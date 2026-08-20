@@ -41,4 +41,45 @@ describe("Dock multiline text", () => {
     expect(cssBlock(noteOverlay, "#lt-verse-text")).toContain("overflow-wrap: anywhere;");
     expect(cssBlock(noteOverlay, ".compare-column__verse")).toContain("min-width: 0;");
   });
+
+  it("narrows fullscreen Worship text as the requested size grows", () => {
+    expect(cssBlock(worshipOverlay, "#verse-container")).toContain(
+      "max-width: var(--fullscreen-text-max-width, 100%);",
+    );
+    expect(worshipOverlay).toContain("function resolveFullscreenTextMaxWidth(fontSize)");
+    expect(worshipOverlay).toContain("if (size >= 144) return 1720;");
+    expect(worshipOverlay).toContain("if (size >= 112) return 1740;");
+    expect(worshipOverlay).toContain("if (size >= 80) return 1760;");
+    expect(worshipOverlay).toContain("if (size >= 48) return 1780;");
+    expect(worshipOverlay).toContain(
+      "root.style.setProperty('--fullscreen-text-max-width', resolveFullscreenTextMaxWidth(baseFontSize) + 'px');",
+    );
+  });
+
+  it("keeps Worship fit-to-frame output readable", () => {
+    expect(worshipOverlay).toContain("const AUTO_FIT_MIN_FONT_SIZE = 28;");
+    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;");
+    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;");
+    expect(worshipOverlay).toContain("function isFitVisible(node)");
+    expect(worshipOverlay).toContain("function getLayoutRect(node)");
+    expect(worshipOverlay).toContain("function getLayoutContentSize(node, rect)");
+    expect(worshipOverlay).not.toContain("function getVisualScale(node, rect)");
+    expect(worshipOverlay).not.toContain("stableLowerThirdTextSize");
+    expect(worshipOverlay).toContain(
+      "data.timestamp ?? data.revision ?? 0",
+    );
+    expect(worshipOverlay).toContain(
+      "const allowed = ['fade', 'reveal-bg-then-text'];",
+    );
+    expect(worshipOverlay).toContain(
+      "root.style.setProperty('--text-transition-duration', Math.min(180, ead) + 'ms');",
+    );
+    expect(worshipOverlay).not.toContain('await waitForOverlayAnimation');
+    expect(worshipOverlay).toContain(
+      "return isOverflowing(verseContainer, targetWidth, targetHeight);",
+    );
+    expect(worshipOverlay).toContain("const applyTextSize = (nextSize) =>");
+    expect(worshipOverlay).toContain("while (low <= high)");
+    expect(worshipOverlay).not.toContain("guard < 240");
+  });
 });

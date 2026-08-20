@@ -30,7 +30,11 @@ import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, f
 import { useDockDragDrop } from "./useDockDragDrop";
 import { useDockUpload } from "./useDockUpload";
 import { ensureObsConnected } from "./obsConnectionGuard";
-import { getRecommendedPollingInterval } from "../services/performanceManager";
+import {
+  getDeviceProfile,
+  getRecommendedPollingInterval,
+  onPerformanceTierChange,
+} from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
 import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
@@ -117,6 +121,10 @@ const DOCK_TAB_SHORTCUTS = [
 
 function preloadDockTab(tab: DockTab): void {
   void DOCK_TAB_PRELOADERS[tab]?.();
+}
+
+function isSubEightGbDevice(totalRAMMB: number): boolean {
+  return totalRAMMB > 0 && totalRAMMB < 8 * 1024;
 }
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
@@ -243,6 +251,9 @@ function DockPageContent({
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
   const [searchPlacement, setSearchPlacement] = useState<DockSearchPlacement>(() => initialSearchPlacement);
   const [renderedTab, setRenderedTab] = useState<DockTab>(() => initialActiveTab);
+  const [lowMemoryMode, setLowMemoryMode] = useState(() =>
+    isSubEightGbDevice(getDeviceProfile()?.hardware.totalRAMMB ?? 0),
+  );
   const [, startTransition] = useTransition();
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
@@ -347,12 +358,23 @@ function DockPageContent({
     registerUpgradeModal((msg) => setUpgradeModalMsg(msg));
     startPlanRefresh();
 
-    // Initialize device performance detection for dock (non-blocking)
-    import("../services/performanceManager").then((m) =>
-      m.init().catch((err) => {
+    // Initialize device performance detection for dock (non-blocking). On
+    // sub-8 GB systems the tab cache is bounded below so hidden production
+    // panels do not accumulate across a service.
+    let cancelled = false;
+    let unsubscribePerformance: (() => void) | null = null;
+    void import("../services/performanceManager").then(async (m) => {
+      if (cancelled) return;
+      unsubscribePerformance = onPerformanceTierChange((profile) => {
+        setLowMemoryMode(isSubEightGbDevice(profile.hardware.totalRAMMB));
+      });
+      try {
+        const profile = await m.init();
+        if (!cancelled) setLowMemoryMode(isSubEightGbDevice(profile.hardware.totalRAMMB));
+      } catch (err) {
         console.warn("[Dock] Performance manager init failed (non-critical):", err);
-      }),
-    );
+      }
+    });
 
     // Also listen for custom dock-upgrade events (from GrowthBadge, etc.)
     const handleUpgradeEvent = (e: Event) => {
@@ -360,7 +382,11 @@ function DockPageContent({
       if (detail?.message) setUpgradeModalMsg(detail.message);
     };
     window.addEventListener("dock-upgrade", handleUpgradeEvent);
-    return () => window.removeEventListener("dock-upgrade", handleUpgradeEvent);
+    return () => {
+      cancelled = true;
+      unsubscribePerformance?.();
+      window.removeEventListener("dock-upgrade", handleUpgradeEvent);
+    };
   }, []);
 
   // ── Force update check (dock runs in OBS CEF, no Tauri updater) ──
@@ -468,17 +494,25 @@ function DockPageContent({
     onActiveTabChange?.(activeTab);
   }, [activeTab, onActiveTabChange]);
 
-  // Keep a visited tab mounted when the operator moves around the dock. This
-  // preserves in-progress work in every dock page instead of resetting the
-  // page each time React switches the active tab.
+  // Keep visited tabs mounted when the operator moves around the dock so
+  // in-progress work is preserved. On sub-8 GB systems retain only the active
+  // tab and the most recently visited tab to keep the background tree bounded.
   useEffect(() => {
     setVisitedTabs((current) => {
-      if (current.has(activeTab)) return current;
+      if (!lowMemoryMode && current.has(activeTab)) return current;
       const next = new Set(current);
+      if (lowMemoryMode) next.delete(activeTab);
       next.add(activeTab);
+      if (lowMemoryMode) {
+        while (next.size > 2) {
+          const oldest = next.values().next().value;
+          if (!oldest || oldest === activeTab) break;
+          next.delete(oldest);
+        }
+      }
       return next;
     });
-  }, [activeTab]);
+  }, [activeTab, lowMemoryMode]);
 
   useEffect(() => {
     if (visibleDockTabs.some((tab) => tab.id === activeTab)) return;

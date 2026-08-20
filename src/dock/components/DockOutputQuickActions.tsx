@@ -14,6 +14,7 @@ export type DockOutputLineMode = "count" | "original";
 export type DockOutputQuickSizePreset = {
   id: string;
   label: string;
+  value?: string;
 };
 
 export const DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP = 96;
@@ -38,6 +39,8 @@ interface DockOutputQuickActionsProps {
   top: number;
   left: number | null;
   onPositionChange: (top: number, left: number | null) => void;
+  onOpenQuickEdits?: () => void;
+  quickEditsLabel?: string;
   onCommit: (
     patch: DockOutputQuickSettingsPatch,
     lineCount?: number,
@@ -142,6 +145,8 @@ export default function DockOutputQuickActions({
   top,
   left,
   onPositionChange,
+  onOpenQuickEdits,
+  quickEditsLabel = "Quick Edits",
   onCommit,
   originalLineLabel = "Original",
   sizePresets,
@@ -168,7 +173,7 @@ export default function DockOutputQuickActions({
   const currentFontSize = typeof displayedSettings.fontSize === "number"
     ? displayedSettings.fontSize
     : minFontSize;
-  const areManualFontSizesDisabled = true;
+  const areManualFontSizesDisabled = false;
   const hasPendingChanges = draftSettings !== null || draftLineCount !== null || draftLineMode !== null;
   const renderedTop = dragPosition?.top ?? top;
   const renderedLeft = dragPosition?.left ?? left;
@@ -214,8 +219,11 @@ export default function DockOutputQuickActions({
     }));
   }, [onCommit, settings, updateImmediately]);
 
-  const displayedSizePreset = typeof draftSettings?.lowerThirdSize === "string"
+  const draftSizeValue = typeof draftSettings?.lowerThirdSize === "string"
     ? draftSettings.lowerThirdSize
+    : null;
+  const displayedSizePreset = draftSizeValue
+    ? sizePresets?.find((preset) => (preset.value ?? preset.id) === draftSizeValue)?.id ?? activeSizePreset
     : activeSizePreset;
 
   const handleSizePresetChange = useCallback((id: string) => {
@@ -332,6 +340,11 @@ export default function DockOutputQuickActions({
     setOpen((current) => !current);
   }, []);
 
+  const handleOpenQuickEdits = useCallback(() => {
+    setOpen(false);
+    onOpenQuickEdits?.();
+  }, [onOpenQuickEdits]);
+
   return (
     <div
       ref={rootRef}
@@ -361,9 +374,23 @@ export default function DockOutputQuickActions({
         <div className="dock-bible-reader__font-size-menu" role="dialog" aria-label={`${textLabel} output controls`}>
           <div className="dock-bible-reader__font-size-menu-header">
             <span>{title}</span>
-            <span className={`dock-output-quick-actions__live${isLive ? "" : " dock-output-quick-actions__preview"}`}>
-              {isLive ? "LIVE" : "PREVIEW"}
-            </span>
+            <div className="dock-output-quick-actions__header-actions">
+              <span className={`dock-output-quick-actions__live${isLive ? "" : " dock-output-quick-actions__preview"}`}>
+                {isLive ? "LIVE" : "PREVIEW"}
+              </span>
+              {onOpenQuickEdits && (
+                <button
+                  type="button"
+                  className="dock-output-quick-actions__settings"
+                  onClick={handleOpenQuickEdits}
+                  aria-label={quickEditsLabel}
+                  title={quickEditsLabel}
+                  aria-haspopup="dialog"
+                >
+                  <Icon name="settings" size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           {sizePresets && sizePresets.length > 0 && getSizePresetPatch && (

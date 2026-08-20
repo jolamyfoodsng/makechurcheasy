@@ -437,19 +437,23 @@ export function readNativeDockSetting<T = unknown>(key: string): T | undefined {
   return settings[key] as T | undefined;
 }
 
-export function writeNativeDockSetting(key: string, value: unknown): void {
+export function writeNativeDockSetting(key: string, value: unknown): Promise<void> {
   settings[key] = value;
   dirtyKeys.add(key);
   // Capture the scope at the moment the operator changes a setting. If the
   // auth session changes while an earlier write is queued, that write must
   // not be redirected into the new user's scope.
-  void queueWrite(currentScope, key, value).catch(() => undefined);
+  const pending = queueWrite(currentScope, key, value);
+  // Keep fire-and-forget callers safe while allowing preference helpers to
+  // await the native write before reporting a save as complete.
+  void pending.catch(() => undefined);
+  return pending.catch(() => undefined);
 }
 
-export function removeNativeDockSetting(key: string): void {
+export function removeNativeDockSetting(key: string): Promise<void> {
   delete settings[key];
   dirtyKeys.add(key);
-  void deleteFromDesktop(currentScope, key).catch(() => undefined);
+  return deleteFromDesktop(currentScope, key).catch(() => undefined);
 }
 
 export function getNativeDockSettingsSnapshot(): SettingsMap {

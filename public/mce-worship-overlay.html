@@ -111,6 +111,7 @@
       --ref-spacing: 24px;
       --ref-text-align: center;
       --ref-width: 100%;
+      --fullscreen-text-max-width: 100%;
       --ref-bg-color: transparent;
       --ref-bg-padding: 0;
       --ref-bg-radius: 0;
@@ -123,6 +124,7 @@
       --padding: 60px;
       --safe-area: 40px;
       --anim-duration: 152ms;
+      --text-transition-duration: 160ms;
       --bg-enter-duration: 64ms;
       --text-enter-duration: 82ms;
       --text-enter-delay: 12ms;
@@ -224,9 +226,15 @@
       align-items: var(--text-align, center);
       justify-content: center;
       width: 100%;
+      max-width: var(--fullscreen-text-max-width, 100%);
     }
 
     #verse-text {
+      /* Keep measurement and wrapping inside the fullscreen frame. Without an
+         explicit width, the centered flex item can size itself to the lyric's
+         max-content width and make every large preset collapse to the same
+         minimum even when the wrapped text would fit vertically. */
+      width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -608,28 +616,28 @@
     }
 
     .mce-preview-text-exit {
-      animation: mce-preview-text-exit var(--anim-duration, 152ms) cubic-bezier(0.4, 0, 1, 1) both;
+      animation: mce-preview-text-exit var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.4, 0, 1, 1) both;
       will-change: opacity;
     }
 
     .mce-preview-text-enter--fade,
     .mce-preview-text-enter--reveal-bg-then-text {
-      animation: mce-preview-text-fade-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: mce-preview-text-fade-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
       will-change: opacity;
     }
 
     .mce-preview-text-enter--slide-up {
-      animation: mce-preview-text-slide-up-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: mce-preview-text-slide-up-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
       will-change: opacity, transform;
     }
 
     .mce-preview-text-enter--slide-left {
-      animation: mce-preview-text-slide-left-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: mce-preview-text-slide-left-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
       will-change: opacity, transform;
     }
 
     .mce-preview-text-enter--scale-in {
-      animation: mce-preview-text-scale-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: mce-preview-text-scale-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
       will-change: opacity, transform;
     }
 
@@ -863,6 +871,19 @@
         'full': { maxWidth: 1920, hMargin: 0 },
       };
 
+      // Large type gets a modestly narrower text column so the renderer can
+      // keep readable line lengths without making the frame feel cramped.
+      // The steps stay close to the 1920px canvas width: the fit loop still
+      // makes the final decision from the actual rendered bounds.
+      function resolveFullscreenTextMaxWidth(fontSize) {
+        const size = Math.max(0, Number(fontSize) || 0);
+        if (size >= 144) return 1720;
+        if (size >= 112) return 1740;
+        if (size >= 80) return 1760;
+        if (size >= 48) return 1780;
+        return WIDTH_PRESETS.xxl.maxWidth;
+      }
+
       function escapeHtml(s) { const d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
       function safeSupText(h) {
         if (typeof h !== 'string') return '';
@@ -978,6 +999,13 @@
       let baseBarPadding = 28;
       let barMaxHeight = 600;
       let autoFontScaleEnabled = true;
+      // Fit from the requested theme size on every render. The measured size
+      // is a temporary layout result for the current lyric, never a new user
+      // preference for the next lyric.
+      const AUTO_FIT_MIN_FONT_SIZE = 28;
+      const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
+      const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -1325,19 +1353,35 @@
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
 
-      function getVisualScale(node, rect) {
-        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect?.width || 1;
-        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect?.height || 1;
-        return {
-          x: rect?.width > 0 && layoutWidth > 0 ? rect.width / layoutWidth : 1,
-          y: rect?.height > 0 && layoutHeight > 0 ? rect.height / layoutHeight : 1,
-        };
+      // The overlay is rendered on a fixed 1920x1080 stage that may be CSS-
+      // scaled inside a browser preview. Normalize visual rectangles back to
+      // the stage's layout coordinates so a small preview viewport cannot make
+      // valid text look like it is outside the frame. `offsetParent` is not
+      // reliable here because the stage itself is transformed in the preview.
+      function getLayoutRect(node) {
+        if (!node) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        const visualRect = node.getBoundingClientRect();
+        const stageRect = overlayStage?.getBoundingClientRect?.();
+        const stageWidth = Math.max(Number(overlayStage?.offsetWidth) || 0, 1920);
+        const stageHeight = Math.max(Number(overlayStage?.offsetHeight) || 0, 1080);
+        const scaleX = stageRect?.width > 0 ? stageRect.width / stageWidth : 1;
+        const scaleY = stageRect?.height > 0 ? stageRect.height / stageHeight : 1;
+        const left = stageRect && scaleX > 0
+          ? (visualRect.left - stageRect.left) / scaleX
+          : Number(node.offsetLeft) || 0;
+        const top = stageRect && scaleY > 0
+          ? (visualRect.top - stageRect.top) / scaleY
+          : Number(node.offsetTop) || 0;
+        // offsetWidth/offsetHeight are the untransformed layout dimensions;
+        // the stage scale is already removed from the position above.
+        const width = Math.max(Number(node.offsetWidth) || 0, Number(node.clientWidth) || 0);
+        const height = Math.max(Number(node.offsetHeight) || 0, Number(node.clientHeight) || 0);
+        return { left, top, right: left + width, bottom: top + height, width, height };
       }
 
       function getFrameContentRect(frame) {
         if (!frame) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
-        const rect = frame.getBoundingClientRect();
-        const scale = getVisualScale(frame, rect);
+        const rect = getLayoutRect(frame);
         const style = getComputedStyle(frame);
         const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
         const paddingRight = Number.parseFloat(style.paddingRight) || 0;
@@ -1347,27 +1391,26 @@
         const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
         const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
         const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
-        const left = rect.left + (borderLeft + paddingLeft) * scale.x;
-        const top = rect.top + (borderTop + paddingTop) * scale.y;
-        const right = Math.max(left, rect.right - (borderRight + paddingRight) * scale.x);
-        const bottom = Math.max(top, rect.bottom - (borderBottom + paddingBottom) * scale.y);
+        const left = rect.left + borderLeft + paddingLeft;
+        const top = rect.top + borderTop + paddingTop;
+        const right = Math.max(left, rect.right - borderRight - paddingRight);
+        const bottom = Math.max(top, rect.bottom - borderBottom - paddingBottom);
         return { left, top, right, bottom, width: right - left, height: bottom - top };
       }
 
-      function getVisualContentSize(node, rect) {
-        const scale = getVisualScale(node, rect);
+      function getLayoutContentSize(node, rect) {
         const layoutWidth = node?.offsetWidth || node?.clientWidth || rect.width || 1;
         const layoutHeight = node?.offsetHeight || node?.clientHeight || rect.height || 1;
         return {
-          width: Math.max(rect.width, (node.scrollWidth || layoutWidth) * scale.x),
-          height: Math.max(rect.height, (node.scrollHeight || layoutHeight) * scale.y),
+          width: Math.max(rect.width, node.scrollWidth || layoutWidth),
+          height: Math.max(rect.height, node.scrollHeight || layoutHeight),
         };
       }
 
       function getRenderedBounds(node) {
         if (!node || getComputedStyle(node).display === 'none') return null;
-        const rect = node.getBoundingClientRect();
-        const content = getVisualContentSize(node, rect);
+        const rect = getLayoutRect(node);
+        const content = getLayoutContentSize(node, rect);
         return {
           left: rect.left,
           top: rect.top,
@@ -1396,17 +1439,28 @@
 
       function isOverflowing(node, width, height) {
         if (!node) return false;
-        const rect = node.getBoundingClientRect();
-        const content = getVisualContentSize(node, rect);
+        const rect = getLayoutRect(node);
+        const content = getLayoutContentSize(node, rect);
         return content.width > width + 1 || content.height > height + 1;
       }
 
-      function resolveAutoFontFloor(baseSize, fallback) {
-        const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
-        // Keep auto-scale readable instead of allowing long lyrics to land
-        // at the old 12px floor.
-        const fixedFloor = Math.max(fallback, 16);
-        return Math.min(base, fixedFloor);
+      function isFitVisible(node) {
+        if (!node || !String(node.textContent || '').trim()) return false;
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return false;
+        }
+        const rects = node.getClientRects();
+        if (!rects || rects.length === 0) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+
+      function getViewportSize() {
+        return {
+          width: Math.max(1, Math.round(document.body?.clientWidth || overlayStage?.clientWidth || window.innerWidth || 1920)),
+          height: Math.max(1, Math.round(document.body?.clientHeight || overlayStage?.clientHeight || window.innerHeight || 1080)),
+        };
       }
 
       /* ── Seamless video loop ── */
@@ -1479,10 +1533,9 @@
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseFontSize, 28);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const translationRatio = baseFontSize > 0 ? Math.max(0.42, Math.min(0.78, (baseRefFontSize * 1.15) / baseFontSize)) : 0.62;
-        let textSize = Math.max(textFloor, Math.round(baseFontSize));
+        let textSize = Math.max(AUTO_FIT_MIN_FONT_SIZE, Math.round(baseFontSize));
         let referenceSize = Math.max(10, Math.round(baseRefFontSize));
         let translationSize = Math.max(10, Math.round(textSize * translationRatio));
         const frameRect = getFrameContentRect(overlay);
@@ -1495,19 +1548,45 @@
           translationText.style.fontSize = `${translationSize}px`;
           translationText.style.lineHeight = '1.35';
         };
-        const overflowing = () => isContentOutsideFrame(
-          [verseText, reference, translationText],
-          overlay,
-        ) || isOverflowing(verseContainer, targetWidth, targetHeight);
-
-        apply();
-        let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 240) {
-          textSize -= 1;
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
           referenceSize = Math.max(10, Math.round(textSize * ratio));
           translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
-          guard += 1;
+        };
+        const overflowing = () => {
+          const fitNodes = [verseText, reference, translationText].filter((node) => isFitVisible(node));
+          if (!fitNodes.length) return false;
+          // Fullscreen is laid out on the fixed 1920x1080 stage. The stage is
+          // CSS-scaled in the Browser preview, so visual rectangles can report
+          // a transient transformed position during reload/animation and make
+          // a valid large font look like it is outside the frame. The
+          // container's untransformed scroll dimensions are the reliable fit
+          // signal here; they still shrink the requested size when the actual
+          // lyric/reference stack cannot fit in the stage content frame.
+          return isOverflowing(verseContainer, targetWidth, targetHeight);
+        };
+
+        [verseText, reference, translationText].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        apply();
+        if (overflowing() && textSize > AUTO_FIT_MIN_FONT_SIZE) {
+          let low = AUTO_FIT_MIN_FONT_SIZE;
+          let high = textSize - 1;
+          let best = AUTO_FIT_MIN_FONT_SIZE;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
         }
       }
 
@@ -1525,10 +1604,9 @@
 
         const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
         const cols = Array.from(compareLayout.querySelectorAll('.compare-column'));
-        const textFloor = resolveAutoFontFloor(baseCompareFontSize, 28);
         const referenceRatio = baseCompareFontSize > 0 ? Math.max(0.35, baseCompareRefFontSize / baseCompareFontSize) : 0.5;
         const translationRatio = baseCompareFontSize > 0 ? Math.max(0.25, (baseCompareRefFontSize * 0.62) / baseCompareFontSize) : 0.3;
-        let textSize = Math.max(textFloor, Math.round(baseCompareFontSize));
+        let textSize = Math.max(AUTO_FIT_MIN_FONT_SIZE, Math.round(baseCompareFontSize));
         let referenceSize = Math.max(10, Math.round(baseCompareRefFontSize));
         let translationSize = Math.max(10, Math.round(baseCompareFontSize * translationRatio));
         const safeArea = resolveSafeArea();
@@ -1543,19 +1621,37 @@
           rn.forEach((node) => { if (node) node.style.fontSize = `${referenceSize}px`; });
           trn.forEach((node) => { if (node) node.style.fontSize = `${translationSize}px`; });
         };
-        const overflowing = () => cols.some((column) => {
-          const columnRect = column.getBoundingClientRect();
-          return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
-        });
-
-        apply();
-        let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 260) {
-          textSize -= 1;
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
           referenceSize = Math.max(10, Math.round(textSize * referenceRatio));
           translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
-          guard += 1;
+        };
+        const overflowing = () => cols.some((column) => {
+          const columnRect = getLayoutRect(column);
+          return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
+        });
+
+        [...tn, ...rn, ...trn].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        apply();
+        if (overflowing() && textSize > AUTO_FIT_MIN_FONT_SIZE) {
+          let low = AUTO_FIT_MIN_FONT_SIZE;
+          let high = textSize - 1;
+          let best = AUTO_FIT_MIN_FONT_SIZE;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
         }
       }
 
@@ -1572,15 +1668,15 @@
           return;
         }
 
-        const textFloor = resolveAutoFontFloor(baseFontSize, 18);
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
+        const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
         let textSize = Math.max(textFloor, Math.round(baseFontSize));
-        let referenceSize = Math.max(10, Math.round(baseRefFontSize));
-        let translationSize = Math.max(10, Math.round(textSize * translationRatio));
-        const frameRect = getFrameContentRect(ltBar);
-        const targetWidth = Math.max(280, frameRect.width || document.body?.clientWidth || window.innerWidth || 1920);
-        const targetHeight = Math.max(100, frameRect.height || Math.min(barMaxHeight, document.body?.clientHeight || window.innerHeight || 1080));
+        let referenceSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize));
+        let translationSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(textSize * translationRatio));
+        const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+        const targetWidth = Math.max(280, viewportWidth);
+        const targetHeight = Math.max(100, Math.min(barMaxHeight, viewportHeight));
         const apply = () => {
           ltVerseText.style.fontSize = `${textSize}px`;
           ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
@@ -1588,19 +1684,51 @@
           ltTranslationText.style.fontSize = `${translationSize}px`;
           ltTranslationText.style.lineHeight = '1.3';
         };
-        const overflowing = () => isContentOutsideFrame(
-          [ltVerseText, ltRefText, ltTranslationText],
-          ltBar,
-        ) || isOverflowing(ltBar, targetWidth, targetHeight);
-
-        apply();
-        let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 180) {
-          textSize -= 1;
-          referenceSize = Math.max(10, Math.round(textSize * ratio));
-          translationSize = Math.max(10, Math.round(textSize * translationRatio));
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
+          referenceSize = Math.max(
+            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+            Math.round(textSize * ratio),
+          );
+          translationSize = Math.max(
+            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+            Math.round(textSize * translationRatio),
+          );
           apply();
-          guard += 1;
+        };
+        const overflowing = () => {
+          const fitNodes = [ltVerseText, ltRefText, ltTranslationText].filter((node) => isFitVisible(node));
+          if (!fitNodes.length) return false;
+          // The bar clips its contents by design, so scrollHeight is not a
+          // reliable fit signal. Measure the visible text against the bar's
+          // actual content frame instead.
+          if (isContentOutsideFrame(fitNodes, ltBar)) return true;
+          const frame = getFrameContentRect(ltBar);
+          const frameWidth = Math.max(1, frame.width || targetWidth);
+          const frameHeight = Math.max(1, frame.height || targetHeight);
+          return fitNodes.some((node) => isOverflowing(node, frameWidth, frameHeight));
+        };
+
+        [ltVerseText, ltRefText, ltTranslationText].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        apply();
+        if (overflowing() && textSize > textFloor) {
+          let low = textFloor;
+          let high = textSize - 1;
+          let best = textFloor;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
         }
       }
 
@@ -1759,6 +1887,7 @@
             : 400,
         )));
         root.style.setProperty('--anim-duration', ead + 'ms');
+        root.style.setProperty('--text-transition-duration', Math.min(180, ead) + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
         root.style.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
@@ -1772,6 +1901,7 @@
         applyThemeBase(s);
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
+        root.style.setProperty('--fullscreen-text-max-width', resolveFullscreenTextMaxWidth(baseFontSize) + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
         const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
         baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
@@ -1932,7 +2062,8 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKeyByMode[targetMode]) return;
+        const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode];
+        if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
         lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
@@ -1948,9 +2079,13 @@
 
       function getOverlayPacketKey(data) {
         const slide = data && data.slide && typeof data.slide === 'object' ? data.slide : {};
+        // The same packet can arrive through local storage/BroadcastChannel and
+        // the relay. The relay adds its own revision, so timestamp is the
+        // transport-independent identity that prevents a verse being rendered
+        // and animated twice.
         return [
           data.type || '',
-          data.revision ?? data.timestamp ?? 0,
+          data.timestamp ?? data.revision ?? 0,
           data.mode ?? '',
           typeof slide.text === 'string' ? slide.text.substring(0, 80) : '',
           typeof slide.translationText === 'string' ? slide.translationText.substring(0, 80) : '',
@@ -1980,7 +2115,12 @@
           || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
         const configuredAnimation = String(animation || '').trim();
         if (configuredAnimation === 'none') return 'none';
-        const allowed = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'];
+        // Worship lyrics stay vertically settled while the verse changes.
+        // Directional/scale transitions made the centered block visibly jump
+        // when the new lyric had a different number of lines. Keep the user's
+        // transition duration, but use an opacity-only transition for those
+        // motion styles.
+        const allowed = ['fade', 'reveal-bg-then-text'];
         return allowed.includes(configuredAnimation) ? configuredAnimation : 'fade';
       }
 
@@ -1994,20 +2134,6 @@
 
       function isOverlayAnimationEnabled(data) {
         return getOverlayAnimationName(data) !== 'none' && !prefersReducedMotion();
-      }
-
-      function getOverlayAnimationDurationMs(data) {
-        const theme = data && data.theme && typeof data.theme === 'object'
-          ? data.theme
-          : currentOverlayData && currentOverlayData.theme && typeof currentOverlayData.theme === 'object'
-            ? currentOverlayData.theme
-            : currentBibleState && currentBibleState.theme && typeof currentBibleState.theme === 'object'
-              ? currentBibleState.theme
-              : {};
-        const configured = Number(theme.animationDuration);
-        return Math.max(100, Math.min(1500, Math.round(
-          Number.isFinite(configured) && configured > 0 ? configured : 400,
-        )));
       }
 
       function getVerseAnimationTargets(mode) {
@@ -2032,24 +2158,12 @@
         targets.forEach((target) => target.classList.remove(...classes));
       }
 
-      function playVerseExitAnimation(mode) {
-        const targets = getVerseAnimationTargets(mode);
-        if (!targets.length) return;
-        clearVerseAnimationClasses(targets);
-        void targets[0].offsetWidth;
-        targets.forEach((target) => target.classList.add('mce-preview-text-exit'));
-      }
-
       function playVerseEnterAnimation(mode, animation) {
         const targets = getVerseAnimationTargets(mode);
         if (!targets.length || animation === 'none' || prefersReducedMotion()) return;
         clearVerseAnimationClasses(targets);
         void targets[0].offsetWidth;
         targets.forEach((target) => target.classList.add(`mce-preview-text-enter--${animation}`));
-      }
-
-      function waitForOverlayAnimation(duration) {
-        return new Promise((resolve) => window.setTimeout(resolve, duration));
       }
 
       function renderBothBibleLayers(state) {
@@ -2082,32 +2196,18 @@
         writeRenderAck(packet);
       }
 
-      async function runOverlayTransitionQueue() {
+      function runOverlayTransitionQueue() {
         if (overlayTransitionInFlight) return;
         overlayTransitionInFlight = true;
         try {
           while (pendingOverlayPacket) {
-            const firstPacket = pendingOverlayPacket;
-            pendingOverlayPacket = null;
-            const exitMode = activeMode || initialMode;
-            const exitPacket = currentOverlayData || currentBibleState || firstPacket;
-            const animateOut = hasShownOnce && isOverlayAnimationEnabled(exitPacket);
-            const exitDuration = getOverlayAnimationDurationMs(exitPacket);
-
-            if (animateOut) {
-              playVerseExitAnimation(exitMode);
-              await waitForOverlayAnimation(exitDuration);
-            }
-
-            // If another slide arrived during the exit, render only the newest one.
-            const packet = pendingOverlayPacket || firstPacket;
+            // Render immediately. Waiting for an exit or entry timer made a
+            // lyric trigger feel slow and caused rapid clicks to queue behind
+            // an older verse. The short CSS fade remains purely visual.
+            const packet = pendingOverlayPacket;
             pendingOverlayPacket = null;
             const animateIn = hasRenderableSlide(packet) && isOverlayAnimationEnabled(packet);
             commitOverlayPacket(packet, animateIn);
-
-            if (animateIn) {
-              await waitForOverlayAnimation(getOverlayAnimationDurationMs(packet));
-            }
           }
         } finally {
           overlayTransitionInFlight = false;

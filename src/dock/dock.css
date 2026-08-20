@@ -8169,6 +8169,37 @@
   text-transform: none;
 }
 
+.dock-output-quick-actions__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dock-output-quick-actions__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.dock-output-quick-actions__settings:hover,
+.dock-output-quick-actions__settings:focus-visible {
+  border-color: var(--dock-border);
+  background: var(--dock-surface-hover);
+  color: var(--dock-text);
+  outline: none;
+}
+
 .dock-output-quick-actions__live {
   color: var(--dock-success, #22c55e);
   font-size: 9px;
@@ -8235,7 +8266,7 @@
 
 .dock-bible-reader__size-presets {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   width: 100%;
 }
@@ -22459,45 +22490,6 @@
   border: 1px solid color-mix(in srgb, #16A34A 30%, transparent);
 }
 
-.dock-media-gallery-card__context-menu {
-  position: absolute;
-  top: 36px;
-  right: 8px;
-  min-width: 120px;
-  background: var(--dock-surface);
-  border: 1px solid var(--dock-border);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  z-index: 10;
-  overflow: hidden;
-}
-
-.dock-media-gallery-card__context-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  background: none;
-  color: var(--dock-text);
-  font-size: 12px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.dock-media-gallery-card__context-item:hover {
-  background: var(--dock-surface-hover);
-}
-
-.dock-media-gallery-card__context-item--danger {
-  color: var(--dock-red);
-}
-
-.dock-media-gallery-card__context-item--danger:hover {
-  background: color-mix(in srgb, var(--dock-red) 10%, var(--dock-surface-hover));
-}
-
 .dock-media-gallery-card__active-badge {
   position: absolute;
   top: 8px;
@@ -35751,19 +35743,6 @@ button.dock-btm-toolbar__clear--inline,
 .dock-media-console--micro .dock-media-gallery-card__type-badge,
 .dock-media-console--micro .dock-media-gallery-card__duration {
   font-size: 7px;
-}
-
-.dock-media-console--micro .dock-media-gallery-card__context-item,
-.dock-media-console--micro .dock-media-gallery-card__menu-btn {
-  font-size: 9px;
-  padding: 2px 4px;
-  height: 18px;
-}
-
-.dock-media-console--micro .dock-media-gallery-card__context-item svg,
-.dock-media-console--micro .dock-media-gallery-card__menu-btn svg {
-  width: 9px;
-  height: 9px;
 }
 
 .dock-media-console--micro .dock-media-tabs .dock-media-tabs__tab {

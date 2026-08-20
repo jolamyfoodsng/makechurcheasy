@@ -2714,62 +2714,18 @@ function DockMediaTab({
             ) : (
               <div className="dock-media-gallery-card__overlay">
                 {!canSelect && (
-                  <>
-                    <div className="dock-media-gallery-card__overlay-top">
-                      <button
-                        type="button"
-                        className="dock-media-gallery-card__menu-btn"
-                        aria-label={t('media.moreOptions')}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setMediaContextMenu(null);
-                          setOpenOptionsKey(openOptionsKey === entry.key ? null : entry.key);
-                        }}
-                        title={t('media.moreOptions')}>
-                        <Icon name="more_vert" size={14} />
-                      </button>
-                    </div>
-
-                  </>
+                  <div className="dock-media-gallery-card__overlay-top">
+                    <button
+                      type="button"
+                      className="dock-media-gallery-card__menu-btn"
+                      aria-label={t('media.moreOptions')}
+                      onClick={(event) => openMediaContextMenu(event, entry, isLocked)}
+                      title={t('media.moreOptions')}
+                    >
+                      <Icon name="more_vert" size={14} />
+                    </button>
+                  </div>
                 )}
-              </div>
-            )}
-            {!isLocked && openOptionsKey === entry.key && (
-              <div className="dock-media-gallery-card__context-menu" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  className="dock-media-gallery-card__context-item"
-                  onClick={() => beginEntryLabelEdit(entry)}
-                  title={t('common.rename')}>
-                  <Icon name="edit" size={13} />
-                  {t('common.rename')}
-                </button>
-                <button
-                  type="button"
-                  className="dock-media-gallery-card__context-item"
-                  onClick={() => { setPreviewEntry(entry); setOpenOptionsKey(null); }}
-                  title={t('common.preview')}>
-                  <Icon name="open_in_full" size={13} />
-                  {t('common.preview')}
-                </button>
-                {!presentationLinkMode && canSendEntryToScene(entry) && (
-                  <button
-                    type="button"
-                    className="dock-media-gallery-card__context-item"
-                    onClick={() => { void openSceneSendDialog(entry); }}
-                    title={t('media.sendToScene')}>
-                    <Icon name="send" size={13} />
-                    {t('media.sendToScene')}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="dock-media-gallery-card__context-item dock-media-gallery-card__context-item--danger"
-                  onClick={() => { void deleteEntry(entry); setOpenOptionsKey(null); }}
-                  title={entry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}>
-                  <Icon name="delete" size={13} />
-                  {entry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
-                </button>
               </div>
             )}
           </div>
@@ -2795,14 +2751,11 @@ function DockMediaTab({
     },
     [
       activeTargets.active,
-      beginEntryLabelEdit,
-      deleteEntry,
       getEntryPrefs,
       handleSendEntry,
       imageEntries.length,
       lockedKeys,
       openMediaContextMenu,
-      openOptionsKey,
       pausedTargets.active,
       selectionMode,
       selectedKeys,
