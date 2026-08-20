@@ -168,7 +168,7 @@ export default function DockOutputQuickActions({
   const currentFontSize = typeof displayedSettings.fontSize === "number"
     ? displayedSettings.fontSize
     : minFontSize;
-  const areManualFontSizesDisabled = displayedSettings.autoFontScale === true;
+  const areManualFontSizesDisabled = true;
   const hasPendingChanges = draftSettings !== null || draftLineCount !== null || draftLineMode !== null;
   const renderedTop = dragPosition?.top ?? top;
   const renderedLeft = dragPosition?.left ?? left;
@@ -203,13 +203,14 @@ export default function DockOutputQuickActions({
   }, [open]);
 
   const applySettingsPatch = useCallback((patch: DockOutputQuickSettingsPatch) => {
+    const normalizedPatch = { ...patch, autoFontScale: true };
     if (updateImmediately) {
-      onCommit(patch);
+      onCommit(normalizedPatch);
       return;
     }
     setDraftSettings((current) => ({
       ...(current ?? settings),
-      ...patch,
+      ...normalizedPatch,
     }));
   }, [onCommit, settings, updateImmediately]);
 
@@ -365,22 +366,7 @@ export default function DockOutputQuickActions({
             </span>
           </div>
 
-          <div className="dock-bible-reader__font-size-field">
-            <span className="dock-bible-reader__font-size-field-label">Fit text to frame</span>
-            <small>Shrinks text when it would overflow.</small>
-            <button
-              type="button"
-              className={`dtb-toggle${displayedSettings.autoFontScale ? " dtb-toggle--on" : ""}`}
-              onClick={() => applySettingsPatch({ autoFontScale: !displayedSettings.autoFontScale })}
-              role="switch"
-              aria-checked={displayedSettings.autoFontScale === true}
-              aria-label="Fit text to frame"
-            >
-              <span className="dtb-toggle__knob" />
-            </button>
-          </div>
-
-          {displayedSettings.autoFontScale && sizePresets && sizePresets.length > 0 && getSizePresetPatch && (
+          {sizePresets && sizePresets.length > 0 && getSizePresetPatch && (
             <div className="dock-bible-reader__font-size-field">
               <span className="dock-bible-reader__font-size-field-label">Text size</span>
               <small>Larger text uses a narrower frame.</small>

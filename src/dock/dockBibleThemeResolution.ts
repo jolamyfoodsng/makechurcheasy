@@ -257,7 +257,7 @@ export function extractFullscreenQuickThemeSettings(
   return {
     backgroundType,
     fontSize: clampNumber(settings.fontSize, 28, 200),
-    autoFontScale: settings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
+    autoFontScale: true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
     refFontSize: clampNumber(settings.refFontSize, 10, 150),
     refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
@@ -346,7 +346,7 @@ function normalizeQuickThemeSettings(
 
   return {
     fontSize: numberValue(source, "fontSize", base.fontSize, fontSizeMin, fontSizeMax),
-    autoFontScale: boolValue(source, "autoFontScale", base.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true),
+    autoFontScale: true,
     fontFamily: withScriptureFontFallback(stringValue(source, "fontFamily", base.fontFamily)),
     refFontSize: numberValue(source, "refFontSize", base.refFontSize, refFontSizeMin, refFontSizeMax),
     refFontWeight: oneOf(source, "refFontWeight", base.refFontWeight, ["light", "normal", "bold", "extrabold"] as const),
@@ -430,7 +430,7 @@ export function applyFullscreenQuickThemeSettings(
     settings: {
       ...theme.settings,
       fontSize: quickSettings.fontSize,
-      autoFontScale: quickSettings.autoFontScale ?? DEFAULT_THEME_SETTINGS.autoFontScale ?? true,
+      autoFontScale: true,
       fontFamily: quickSettings.fontFamily,
       refFontSize: quickSettings.refFontSize,
       fontColor: quickSettings.fontColor,

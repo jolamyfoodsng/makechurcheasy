@@ -499,7 +499,7 @@ async function getDockTextPresentationStyle(
   const themed = resolveThemeVariant(selectedTheme, mode);
   const quickKey = mode === "fullscreen" ? storage.fullscreenQuickKey : storage.lowerThirdQuickKey;
   const quickSettings = isRecord(prefs[quickKey]) ? prefs[quickKey] as Record<string, unknown> : {};
-  const settings = { ...themed.settings, ...quickSettings } as Record<string, unknown>;
+  const settings = { ...themed.settings, ...quickSettings, autoFontScale: true } as Record<string, unknown>;
   const lineMode = storage.lineModeKey && prefs[storage.lineModeKey] === false ? "original" : "count";
 
   return {
@@ -528,10 +528,10 @@ async function saveTextPresentationControls(
   const storage = getTextSurfaceStorage(command.surface);
   const prefs = readDockPreference<Record<string, unknown>>(storage.prefsKey) ?? {};
   const patch = isRecord(command.patch) ? command.patch : {};
-  const allowedPatch: Record<string, unknown> = {};
+  const allowedPatch: Record<string, unknown> = { autoFontScale: true };
   for (const key of ["autoFontScale", "fontSize", "refFontSize"]) {
     if (Object.prototype.hasOwnProperty.call(patch, key)) {
-      allowedPatch[key] = key === "autoFontScale" ? patch[key] === true : Number(patch[key]);
+      allowedPatch[key] = key === "autoFontScale" ? true : Number(patch[key]);
     }
   }
 

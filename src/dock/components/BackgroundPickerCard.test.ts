@@ -302,7 +302,8 @@ describe("Bible reader font-size quick actions", () => {
     expect(dockBibleTabSource).toContain('Icon name="add"');
     expect(dockBibleTabSource).toContain('field: "fontSize" | "refFontSize"');
     expect(dockBibleTabSource).toContain("handleSyncBibleBrowserSettings");
-    expect(dockBibleTabSource).toContain("onApplyPatch({ autoFontScale: !settings.autoFontScale })");
+    expect(dockBibleTabSource).not.toContain("onApplyPatch({ autoFontScale: !settings.autoFontScale })");
+    expect(dockBibleTabSource).toContain("autoFontScale: true");
     expect(dockBibleTabSource).toContain("nextLowerThirdSettings");
     expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("saveBrowserQuickSettings");
@@ -988,9 +989,10 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(dockBibleTabSource).toContain("fullscreenQuickThemeSettings: nextSavedSettings");
   });
 
-  it("uses linked lower-third size presets when fitting Bible text", () => {
-    expect(dockBibleTabSource).toContain('Fit text to frame');
-    expect(dockBibleTabSource).toContain('Shrinks the verse and reference when they would overflow.');
+  it("uses linked lower-third size presets with fitting always enabled", () => {
+    expect(dockBibleTabSource).not.toContain('Fit text to frame');
+    expect(dockBibleTabSource).not.toContain('Shrinks the verse and reference when they would overflow.');
+    expect(dockBibleTabSource).toContain('const isFitTextMode = true;');
     expect(dockBibleTabSource).toContain('LOWER_THIRD_QUICK_SIZE_OPTIONS');
     expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`');
     expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: preset.maxHeight');

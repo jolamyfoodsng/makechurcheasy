@@ -12,6 +12,12 @@ export interface DockThemeSettingsSaveContext {
   selectedTheme?: BibleTheme | null;
   referenceFormat?: BibleReferenceFormat;
   referenceVersionVisible?: boolean;
+  sceneProfileId?: string;
+}
+
+export interface DockThemeSceneProfile {
+  id: string;
+  label: string;
 }
 
 interface Props {
@@ -52,6 +58,10 @@ interface Props {
   storageScope?: "bible" | "worship" | "notes" | "global";
   /** When true and displayMode is "compare", BackgroundPickerCard shows only the Compare tab */
   hideBackgroundOnCompare?: boolean;
+  /** Optional scene-scoped Quick Edit profiles shown above the text/background editor. */
+  sceneProfiles?: DockThemeSceneProfile[];
+  activeSceneProfileId?: string;
+  onSceneProfileChange?: (profileId: string) => void;
 }
 
 type StudioView = "closed" | "settings";
@@ -117,6 +127,9 @@ export default function DockThemeSettingsModal({
   initialTab = "text",
   storageScope = "global",
   hideBackgroundOnCompare = false,
+  sceneProfiles,
+  activeSceneProfileId,
+  onSceneProfileChange,
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -144,6 +157,7 @@ export default function DockThemeSettingsModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
+  const previousSceneProfileIdRef = useRef(activeSceneProfileId);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -163,6 +177,19 @@ export default function DockThemeSettingsModal({
       pendingBackgroundPresetRef.current = null;
     }
   }, [referenceFormat, referenceVersionVisible, view, quickSettings, selectedThemeId]);
+
+  useEffect(() => {
+    if (previousSceneProfileIdRef.current === activeSceneProfileId) return;
+    previousSceneProfileIdRef.current = activeSceneProfileId;
+    if (view === "closed") return;
+    originalSettingsRef.current = quickSettings;
+    draftSettingsRef.current = quickSettings;
+    setDraftSettings(quickSettings);
+    setDraftSelectedThemeId(selectedThemeId);
+    draftSelectedThemeRef.current = null;
+    setDraftSelectedTheme(null);
+    pendingBackgroundPresetRef.current = null;
+  }, [activeSceneProfileId, quickSettings, selectedThemeId, view]);
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
@@ -257,6 +284,7 @@ export default function DockThemeSettingsModal({
         selectedTheme: nextTheme,
         referenceFormat: nextReferenceFormat,
         referenceVersionVisible: nextReferenceFormat ? nextReferenceVersionVisible : undefined,
+        sceneProfileId: activeSceneProfileId,
       }))
         .then(() => {
           onSaveFeedback?.(t("dock.feedback.bibleSettingsSaved", "Bible theme settings saved."));
@@ -269,7 +297,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onReferenceFormatChange, onReferenceSettingsSave, onReferenceVersionVisibleChange, onSaveFeedback, onSelect, referenceFormat, referenceVersionVisible, t]);
+  }, [activeSceneProfileId, draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onReferenceFormatChange, onReferenceSettingsSave, onReferenceVersionVisibleChange, onSaveFeedback, onSelect, referenceFormat, referenceVersionVisible, t]);
 
   const handleReset = useCallback(() => {
     const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
@@ -322,11 +350,36 @@ export default function DockThemeSettingsModal({
             {view === "settings" && (
               <div className="dtb-studio__settings-view dtb-studio__settings-view--picker">
 
+                {sceneProfiles && sceneProfiles.length > 0 && (
+                  <div className="dtb-studio__scene-profile-bar">
+                    <div className="dtb-studio__scene-profile-copy">
+                      <span className="dtb-studio__scene-profile-label">
+                        {t("dock.sceneProfile", "Output profile")}
+                      </span>
+                      <span className="dtb-studio__scene-profile-help">
+                        {t("dock.sceneProfileHelp", "Choose which scene receives these settings.")}
+                      </span>
+                    </div>
+                    <select
+                      className="dtb-studio__scene-profile-select"
+                      value={activeSceneProfileId ?? sceneProfiles[0].id}
+                      onChange={(event) => onSceneProfileChange?.(event.target.value)}
+                      aria-label={t("dock.sceneProfile", "Output profile")}
+                    >
+                      {sceneProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>{profile.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* ═══ Background Section ═══ */}
                 <BackgroundPickerCard
                   quickSettings={draftSettings}
                   onQuickSettingsChange={(updater) => updateDraft(updater)}
-                  onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
+                  onQuickSettingsSave={(settings) => onQuickSettingsSave(settings, {
+                    sceneProfileId: activeSceneProfileId,
+                  })}
                   onSaveFeedback={onSaveFeedback}
                   selectedThemeId={draftSelectedThemeId}
                   onThemeSelect={handleThemeSelect}

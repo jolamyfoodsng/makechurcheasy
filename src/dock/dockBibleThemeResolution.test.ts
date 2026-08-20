@@ -83,6 +83,21 @@ describe("dock Bible theme resolution", () => {
     expect(resolved.liveOverrides?.backgroundColor).toBe("#060812");
   });
 
+  it("migrates legacy saved settings to always-on text fitting", async () => {
+    const theme = firstThemeFor("fullscreen");
+    localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
+      fullscreenThemeId: theme.id,
+      fullscreenQuickThemeSettings: {
+        fontSize: 74,
+        autoFontScale: false,
+      },
+    }));
+
+    const resolved = await resolveDockBibleThemeForOverlayMode("fullscreen");
+
+    expect(resolved.themeSettings.autoFontScale).toBe(true);
+  });
+
   it("resolves lower-third quick settings into the same complete payload OBS expects", async () => {
     const theme = firstThemeFor("lower-third");
     localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({

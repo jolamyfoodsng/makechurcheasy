@@ -54,7 +54,8 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("preset.refFontSize");
     expect(dockBibleTabSource).toContain("lineHeight: preset.lineHeight");
     expect(dockBibleTabSource).toContain("refSpacing: preset.refSpacing");
-    expect(dockBibleTabSource).toContain("const isFitTextMode = areManualFontSizesDisabled");
+    expect(dockBibleTabSource).toContain("const isFitTextMode = true;");
+    expect(dockBibleTabSource).not.toContain("onClick={() => onApplyPatch({ autoFontScale: !settings.autoFontScale })}");
     expect(dockBibleTabSource).toContain("{isFitTextMode && (");
     expect(dockBibleTabSource).toContain("{!isFitTextMode && (");
     expect(dockBibleTabSource).toContain("Update Immediately");

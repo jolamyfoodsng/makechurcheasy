@@ -13,14 +13,13 @@ import { getEnvConfig } from "../services/envConfig";
 
 /**
  * Auth gate for the OBS Dock.
- * Reads the active device session from the local overlay server, with legacy
- * URL query params retained only for old OBS dock URLs.
+ * Reads the active device session handed off by the desktop app from the
+ * local overlay server. Standalone Dock URLs do not authenticate themselves.
  * The Tauri app syncs its auth session to the overlay server via POST /api/auth/session,
  * so the dock can verify locally without needing internet access.
  */
 
 const ENV_CONFIG = getEnvConfig();
-const ONLINE_API = ENV_CONFIG.authApiUrl;
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
 const DOCK_AUTH_USER_ID_KEY = "mce-dock-auth-user-id";
@@ -50,7 +49,8 @@ function storeDockAuthUserId(userId: unknown): void {
 
 /**
  * Check the local overlay server for an active auth session.
- * Returns true if the overlay server has a stored deviceId (set by the Tauri app).
+ * Returns true only if the overlay server has the same live deviceId that was
+ * handed off by the desktop app.
  * Also extracts the plan from the full session and stores it for entitlement checks.
  */
 async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus> {
@@ -62,14 +62,10 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
     const sessionDeviceId =
       data.deviceId != null ? String(data.deviceId).trim() : "";
     const hasMatchingDevice =
-      !expectedDeviceId || !sessionDeviceId || sessionDeviceId === expectedDeviceId;
-    const hasLocalSession = data.authenticated === true && Boolean(data.user);
+      Boolean(expectedDeviceId) && sessionDeviceId === expectedDeviceId;
+    const hasLocalSession = data.authenticated === true && Boolean(data.user) && hasMatchingDevice;
 
-    // Older overlay/session writers did not include deviceId in the status
-    // payload. The local server is already bound to this desktop, so a valid
-    // authenticated session is sufficient when that field is absent. A URL
-    // deviceId is still enforced whenever both sides provide one.
-    if (data.authenticated === false || !hasLocalSession || !hasMatchingDevice) {
+    if (data.authenticated === false || !hasLocalSession) {
       clearDockAuthCache();
       return "unauthenticated";
     }
@@ -101,46 +97,6 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
     // Overlay server not reachable
     return "unreachable";
   }
-}
-
-/**
- * Verify device against the online backend API (fallback).
- * Also fetches and stores the plan from the device profile.
- */
-async function checkDeviceOnline(deviceId: string): Promise<boolean> {
-  try {
-    const res = await fetch(
-      `${ONLINE_API}/api/device/bootstrap?deviceId=${encodeURIComponent(deviceId)}`,
-      { cache: "no-store" },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const profile = data?.account?.user;
-      if (profile?.plan) {
-        storeDockAuthUserId(profile.id);
-        const effectivePlan = normalizePlanId(
-          profile.effectivePlan || resolveCanonicalPlan(profile as any)
-        );
-        try {
-          localStorage.setItem(getUserScopedKey("ocs-dock-plan"), effectivePlan);
-        } catch { /* ignore */ }
-        if (profile?.entitlements) {
-          try {
-            localStorage.setItem(getUserScopedKey("ocs-dock-entitlements"), JSON.stringify(profile.entitlements));
-          } catch { /* ignore */ }
-        }
-        return true;
-      }
-    }
-  } catch {
-    // Network error — fail closed
-  }
-  return false;
-}
-
-function getDeviceIdFromUrl(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("deviceId");
 }
 
 /**
@@ -176,9 +132,9 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
       // important on Windows, where OBS can load the dock before the Tauri
       // webview has finished posting its restored session.
       for (let attempt = 0; attempt <= 3; attempt += 1) {
-        // Try the local session first (no URL parameter needed), then support
-        // legacy OBS dock URLs that still embed ?deviceId=.
-        const deviceId = (await getDeviceIdFromSession()) || getDeviceIdFromUrl() || "";
+        // The Dock is released only by the session handed off by the desktop
+        // app. A URL deviceId or an online lookup is not sufficient to open it.
+        const deviceId = (await getDeviceIdFromSession()) || "";
 
         // 1) Try the local overlay server first (works offline).
         const localStatus = await checkLocalAuth(deviceId);
@@ -198,27 +154,6 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
           setAuthed(true);
           setReady(true);
           return;
-        }
-
-        // 2) If a device id is available, verify it against the backend too.
-        // This recovers from a stale/missed local session without requiring a
-        // new pairing or asking the user to reinstall the dock.
-        if (!isTestEnv && deviceId) {
-        const onlineOk = await checkDeviceOnline(deviceId);
-        if (onlineOk) {
-          sessionConfirmed = true;
-          try {
-            await hydrateNativeDockSettings();
-          } catch (error) {
-            console.warn("[DockAuthGate] Waiting for native Dock settings:", error);
-            continue;
-          }
-          refreshAppAppearance();
-          refreshAppThemePreference();
-          setAuthed(true);
-          setReady(true);
-          return;
-          }
         }
 
         if (attempt < 3) {
@@ -273,14 +208,13 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     };
   }, [authed, ready, checkAuth]);
 
-  // Re-check auth every 30s while authenticated (detects logout from main app)
-  // Only checks locally — the online fallback is for initial auth when the
-  // overlay server is unreachable, not for re-auth after logout.
+  // Re-check auth every 30s while authenticated so logout from the main app
+  // immediately closes an already-open standalone Dock.
   useEffect(() => {
     if (!authed || !ready) return;
     const id = setInterval(async () => {
       const stillAuthed = await checkLocalAuth(
-        (await getDeviceIdFromSession()) || getDeviceIdFromUrl() || "",
+        (await getDeviceIdFromSession()) || "",
       );
       if (stillAuthed !== "authenticated") {
         void checkAuth();

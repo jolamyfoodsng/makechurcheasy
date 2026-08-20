@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>MCE Worship Overlay</title>
   <link href="/fonts/google/google-fonts.css" rel="stylesheet">
   <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
@@ -28,20 +28,28 @@
   <script>
     (function () {
       var W = 1920, H = 1080;
-      var stage = document.getElementById('overlay-stage');
-      if (!stage) return;
-      stage.style.width = W + 'px';
-      stage.style.height = H + 'px';
-      stage.style.transformOrigin = '0 0';
-      stage.style.position = 'absolute';
-      stage.style.top = '0';
-      stage.style.left = '0';
+      var stage = null;
       function fit() {
-        var s = Math.min(window.innerWidth / W, window.innerHeight / H);
-        stage.style.transform = 'scale(' + s + ')';
+        stage = stage || document.getElementById('overlay-stage');
+        if (!stage) return;
+        stage.style.width = W + 'px';
+        stage.style.height = H + 'px';
+        stage.style.transformOrigin = '0 0';
+        stage.style.position = 'absolute';
+        stage.style.top = '0';
+        stage.style.left = '0';
+        var viewportWidth = window.innerWidth || document.documentElement.clientWidth || W;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || H;
+        var s = Math.min(viewportWidth / W, viewportHeight / H);
+        stage.style.transform = 'scale(' + Math.max(0.01, s) + ')';
       }
-      fit();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fit, { once: true });
+      } else {
+        fit();
+      }
       window.addEventListener('resize', fit);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
     })();
   </script>
   <style>
@@ -947,6 +955,10 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
+      let overlayRelaySocket = null;
+      let latestRenderAck = null;
+      let lastRenderAckPacket = null;
+      let lastTargetSource = _routeSource;
       const lastAppliedThemeKeyByMode = {
         fullscreen: '',
         'lower-third': '',
@@ -1313,9 +1325,19 @@
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
 
+      function getVisualScale(node, rect) {
+        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect?.width || 1;
+        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect?.height || 1;
+        return {
+          x: rect?.width > 0 && layoutWidth > 0 ? rect.width / layoutWidth : 1,
+          y: rect?.height > 0 && layoutHeight > 0 ? rect.height / layoutHeight : 1,
+        };
+      }
+
       function getFrameContentRect(frame) {
         if (!frame) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
         const rect = frame.getBoundingClientRect();
+        const scale = getVisualScale(frame, rect);
         const style = getComputedStyle(frame);
         const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
         const paddingRight = Number.parseFloat(style.paddingRight) || 0;
@@ -1325,21 +1347,32 @@
         const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
         const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
         const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
-        const left = rect.left + borderLeft + paddingLeft;
-        const top = rect.top + borderTop + paddingTop;
-        const right = Math.max(left, rect.right - borderRight - paddingRight);
-        const bottom = Math.max(top, rect.bottom - borderBottom - paddingBottom);
+        const left = rect.left + (borderLeft + paddingLeft) * scale.x;
+        const top = rect.top + (borderTop + paddingTop) * scale.y;
+        const right = Math.max(left, rect.right - (borderRight + paddingRight) * scale.x);
+        const bottom = Math.max(top, rect.bottom - (borderBottom + paddingBottom) * scale.y);
         return { left, top, right, bottom, width: right - left, height: bottom - top };
+      }
+
+      function getVisualContentSize(node, rect) {
+        const scale = getVisualScale(node, rect);
+        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect.width || 1;
+        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect.height || 1;
+        return {
+          width: Math.max(rect.width, (node.scrollWidth || layoutWidth) * scale.x),
+          height: Math.max(rect.height, (node.scrollHeight || layoutHeight) * scale.y),
+        };
       }
 
       function getRenderedBounds(node) {
         if (!node || getComputedStyle(node).display === 'none') return null;
         const rect = node.getBoundingClientRect();
+        const content = getVisualContentSize(node, rect);
         return {
           left: rect.left,
           top: rect.top,
-          right: rect.left + Math.max(rect.width, node.scrollWidth || 0),
-          bottom: rect.top + Math.max(rect.height, node.scrollHeight || 0),
+          right: rect.left + content.width,
+          bottom: rect.top + content.height,
         };
       }
 
@@ -1364,8 +1397,8 @@
       function isOverflowing(node, width, height) {
         if (!node) return false;
         const rect = node.getBoundingClientRect();
-        return Math.max(node.scrollWidth, rect.width) > width + 1 ||
-          Math.max(node.scrollHeight, rect.height) > height + 1;
+        const content = getVisualContentSize(node, rect);
+        return content.width > width + 1 || content.height > height + 1;
       }
 
       function resolveAutoFontFloor(baseSize, fallback) {
@@ -1510,8 +1543,10 @@
           rn.forEach((node) => { if (node) node.style.fontSize = `${referenceSize}px`; });
           trn.forEach((node) => { if (node) node.style.fontSize = `${translationSize}px`; });
         };
-        const overflowing = () => cols.some((column) =>
-          isOverflowing(column, column.clientWidth || targetWidth, column.clientHeight || targetHeight));
+        const overflowing = () => cols.some((column) => {
+          const columnRect = column.getBoundingClientRect();
+          return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
+        });
 
         apply();
         let guard = 0;
@@ -1579,10 +1614,18 @@
 
       function requestAutoScaleAfterRender() {
         requestAutoScaleActiveContent();
+        const publishFinalFitAck = () => {
+          requestAutoScaleActiveContent();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (lastRenderAckPacket) writeRenderAck(lastRenderAckPacket, true);
+            });
+          });
+        };
         if (document.fonts?.ready) {
-          document.fonts.ready
-            .then(() => requestAutoScaleActiveContent())
-            .catch(() => { });
+          document.fonts.ready.then(publishFinalFitAck).catch(publishFinalFitAck);
+        } else {
+          publishFinalFitAck();
         }
       }
 
@@ -1624,15 +1667,52 @@
         if (_animateOutResolve) { _animateOutResolve(); _animateOutResolve = null; }
         try { const bc = new BroadcastChannel(_channelName); bc.postMessage({ type: 'lower-third-animation-complete' }); bc.close(); } catch { }
       }
-      function writeRenderAck(packet) {
+      function getEffectiveFontMeasurement() {
+        const readSize = (node) => {
+          if (!node) return undefined;
+          const value = Number.parseFloat(getComputedStyle(node).fontSize || node.style.fontSize || '');
+          return Number.isFinite(value) && value > 0 ? Math.round(value) : undefined;
+        };
+        if (activeMode === 'lower-third') {
+          return {
+            effectiveFontSize: readSize(ltVerseText),
+            effectiveRefFontSize: readSize(ltRefText),
+            effectiveTranslationFontSize: readSize(ltTranslationText),
+          };
+        }
+        if (compareLayout?.classList.contains('is-visible')) {
+          return {
+            effectiveFontSize: readSize(compareTextLeft),
+            effectiveRefFontSize: readSize(compareReferenceLeft),
+            effectiveTranslationFontSize: readSize(compareTranslationLeft),
+          };
+        }
+        return {
+          effectiveFontSize: readSize(verseText),
+          effectiveRefFontSize: readSize(reference),
+          effectiveTranslationFontSize: readSize(translationText),
+        };
+      }
+      function writeRenderAck(packet, fontFitReady = false) {
         try {
           const timestamp = Number(packet && packet.timestamp) || 0;
           if (!timestamp) return;
-          localStorage.setItem(_ackStorageKey, JSON.stringify({
+          lastRenderAckPacket = packet;
+          const ack = {
+            channel: _tabParam,
+            type: 'overlay-render-ack',
+            targetSource: lastTargetSource || '',
             timestamp,
             mode: packet.mode || activeMode,
             transitionId: packet.transitionId,
-          }));
+            fontFitReady,
+            ...getEffectiveFontMeasurement(),
+          };
+          latestRenderAck = ack;
+          localStorage.setItem(_ackStorageKey, JSON.stringify(ack));
+          if (overlayRelaySocket && overlayRelaySocket.readyState === WebSocket.OPEN) {
+            overlayRelaySocket.send(JSON.stringify(ack));
+          }
         } catch { }
       }
 
@@ -1640,7 +1720,7 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
-        autoFontScaleEnabled = s.autoFontScale !== false;
+        autoFontScaleEnabled = true;
         root.style.setProperty('--font-size', baseFontSize + 'px');
         root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
@@ -2051,6 +2131,7 @@
           overlay.classList.remove('hidden');
           ltBar.classList.remove('hidden');
           writeRenderAck(packet);
+          requestAutoScaleAfterRender();
           return;
         }
         if (!packet.slide && !packet.blanked) return;
@@ -2208,6 +2289,7 @@
           if (data.tab && data.tab !== _tabParam) return false;
           const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
           if (_routeSource && targetSource !== _routeSource) return false;
+          if (targetSource) lastTargetSource = targetSource;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           // Background images and SVG patterns may be represented by the
@@ -2225,6 +2307,7 @@
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
           if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
+          if (targetSource) lastTargetSource = targetSource;
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -2272,11 +2355,20 @@
           if (Date.now() < disabledUntil) return;
           try {
             var ws = new WebSocket('ws://127.0.0.1:17891');
-            ws.onopen = function () { attempts = 0; };
+            overlayRelaySocket = ws;
+            ws.onopen = function () {
+              attempts = 0;
+              if (latestRenderAck) {
+                try { ws.send(JSON.stringify(latestRenderAck)); } catch { }
+              }
+            };
             ws.onmessage = function (event) {
               try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
             };
-            ws.onclose = schedule;
+            ws.onclose = function () {
+              if (overlayRelaySocket === ws) overlayRelaySocket = null;
+              schedule();
+            };
             ws.onerror = function () {
               try { ws.close(); } catch { }
             };

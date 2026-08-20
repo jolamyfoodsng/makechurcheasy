@@ -4,7 +4,11 @@ import type { DockStagedItem } from "../dockTypes";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { DockSearchPlacement } from "../dockSearchPlacement";
-import { dockObsClient, type DockTabContentPushData } from "../dockObsClient";
+import {
+  dockObsClient,
+  type DockOverlayFitOptions,
+  type DockTabContentPushData,
+} from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { LOWER_THIRD_SIZE_PRESETS, type BibleTheme } from "../../bible/types";
 import {
@@ -32,6 +36,7 @@ import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  applyMeasuredFontFitSettings,
   normalizeLowerThirdFitSettings,
 } from "../lowerThirdQuickSettings";
 import {
@@ -258,13 +263,12 @@ function getNoteQuickSettings(
     ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
     : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
   const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
-  const autoFontScale = quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true;
   const fontSize = quickSettings?.fontSize ?? theme.settings.fontSize;
   return {
-    fontSize: overlayMode === "fullscreen" || !autoFontScale
+    fontSize: overlayMode === "fullscreen"
       ? fontSize
       : Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, fontSize),
-    autoFontScale,
+    autoFontScale: true,
   };
 }
 
@@ -322,10 +326,12 @@ export default function DockNotesTab({
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
 
-  const pushNotesToConfiguredOutput = useCallback(async (data: DockTabContentPushData) => {
+  const pushNotesToConfiguredOutput = useCallback(async (
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ) => {
     if (!hasSceneRoute) {
-      await dockObsClient.pushNotesLyrics(data);
-      return;
+      return dockObsClient.pushNotesLyrics(data, options);
     }
     await Promise.all(sceneRoute.targets.map((target) => {
       if (target.mode === "inherit") {
@@ -341,7 +347,8 @@ export default function DockNotesTab({
         bibleThemeSettings: targetThemeSettings,
       }, target.sceneName);
     }));
-    if (sceneRoute.syncPresentation) await dockObsClient.pushNotesLyrics(data);
+    if (sceneRoute.syncPresentation) return dockObsClient.pushNotesLyrics(data, options);
+    return null;
   }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
 
   const clearNotesFromConfiguredOutput = useCallback(async () => {
@@ -742,7 +749,7 @@ export default function DockNotesTab({
         ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
       const themeSettings = {
         ...(quickSettings ?? theme.settings),
-        autoFontScale: quickSettings?.autoFontScale ?? theme.settings.autoFontScale ?? true,
+        autoFontScale: true,
       };
       const slideText = normalizeDockMultilineText(slide.text);
       const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
@@ -782,7 +789,11 @@ export default function DockNotesTab({
   );
 
   const pushNoteSlide = useCallback(
-    (idx: number, quickSettingsOverride?: DockFullscreenQuickThemeSettings) => {
+    (
+      idx: number,
+      quickSettingsOverride?: DockFullscreenQuickThemeSettings,
+      fitOptions?: DockOverlayFitOptions,
+    ) => {
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
       setActionError("");
@@ -796,10 +807,21 @@ export default function DockNotesTab({
       }
 
       const pushLive = () => hasSceneRoute
-        ? pushNotesToConfiguredOutput(payload.obsData)
-        : payload.obsData.overlayMode === "lower-third"
-          ? dockObsClient.pushNotesOverlayFast(payload.obsData)
-          : pushNotesToConfiguredOutput(payload.obsData);
+        ? pushNotesToConfiguredOutput(payload.obsData, fitOptions)
+          : payload.obsData.overlayMode === "lower-third"
+          ? dockObsClient.pushNotesOverlayFast(payload.obsData, fitOptions)
+          : pushNotesToConfiguredOutput(payload.obsData, fitOptions);
+      if (fitOptions?.waitForFit) {
+        return pushLive()
+          .then((measurement) => {
+            setOverlayVisible(true);
+            return measurement;
+          })
+          .catch((err) => {
+            console.warn("[DockNotesTab] Save-time overlay measurement failed:", err);
+            return null;
+          });
+      }
       pushLive()
         .then(() => {
           setOverlayVisible(true);
@@ -867,7 +889,7 @@ export default function DockNotesTab({
         const settings = getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: settings.autoFontScale ?? true,
+          autoFontScale: true,
         };
       })();
     const lowerThirdBase = lowerThirdQuickSettings
@@ -875,10 +897,10 @@ export default function DockNotesTab({
         const settings = getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: settings.autoFontScale ?? true,
+          autoFontScale: true,
         };
       })();
-    const nextFullscreenSettings = { ...fullscreenBase, ...patch };
+    const nextFullscreenSettings = { ...fullscreenBase, ...patch, autoFontScale: true };
     const nextLowerThirdSettings = normalizeLowerThirdFitSettings({ ...lowerThirdBase, ...patch });
     setFullscreenQuickSettings(nextFullscreenSettings);
     setLowerThirdQuickSettings(nextLowerThirdSettings);
@@ -1488,13 +1510,13 @@ export default function DockNotesTab({
         quickSettings={overlayMode === "fullscreen"
           ? (fullscreenQuickSettings ?? getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings as unknown as DockFullscreenQuickThemeSettings)
           : (lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings)}
-        onQuickSettingsSave={(settings) => {
-          if (overlayMode === "fullscreen") setFullscreenQuickSettings(settings);
-          else setLowerThirdQuickSettings(settings);
-          if (overlayVisible && activeSlideIndex !== null) {
-            pendingQuickSettingsRefreshRef.current = true;
-            setQuickSettingsRefreshNonce((current) => current + 1);
-          }
+        onQuickSettingsSave={async (settings) => {
+          const measurement = overlayVisible && activeSlideIndex !== null
+            ? await pushNoteSlide(activeSlideIndex, settings, { waitForFit: true })
+            : null;
+          const fittedSettings = applyMeasuredFontFitSettings(settings, measurement);
+          if (overlayMode === "fullscreen") setFullscreenQuickSettings(fittedSettings);
+          else setLowerThirdQuickSettings(fittedSettings);
         }}
         title={t("notes.theme")}
         subtitle={t("notes.themeDescription")}

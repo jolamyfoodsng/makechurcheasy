@@ -52,13 +52,14 @@ import {
   readNativeDockSetting,
   writeNativeDockSetting,
 } from "../services/localDockSettings";
-import { overlayBridge } from "./dockOverlayBridge";
+import { overlayBridge, type BridgePacket } from "./dockOverlayBridge";
 import { buildDockFontFamilyCss } from "./dockFontFamily";
 import {
   applyDockOutputFontScale,
   loadDockOutputFontFamily,
   loadDockOutputFontScale,
 } from "./dockOutputTypography";
+import type { DockOverlayFontFitMeasurement } from "./lowerThirdQuickSettings";
 import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
 
@@ -366,6 +367,12 @@ type PrimeWorshipOverlayData = {
 };
 
 type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes" | "lower-third";
+
+export interface DockOverlayFitOptions {
+  /** Wait for the browser source to finish measuring the rendered text. */
+  waitForFit?: boolean;
+  timeoutMs?: number;
+}
 
 function readPersistedDockOverlayMode(
   tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
@@ -5592,14 +5599,15 @@ class DockObsClient {
       : "bible-overlay-render-ack";
   }
 
-  private async waitForOverlayRenderAck(
+  private async waitForOverlayRenderAckPacket(
     tabType: CssOverlayPacketTab,
     timestamp: number,
     mode: string,
     timeoutMs = 250,
     transitionId?: number,
     targetSource?: string,
-  ): Promise<boolean> {
+    requireFontFitReady = false,
+  ): Promise<BridgePacket | null> {
     const bridgeChannel = tabType === "notes"
       ? "notes"
       : tabType === "worship" || tabType === "announcements"
@@ -5613,9 +5621,10 @@ class DockObsClient {
         acknowledged &&
         Number(acknowledged.timestamp) >= timestamp &&
         acknowledged.mode === mode &&
-        (transitionId === undefined || acknowledged.transitionId === transitionId)
+        (transitionId === undefined || acknowledged.transitionId === transitionId) &&
+        (!requireFontFitReady || acknowledged.fontFitReady === true)
       ) {
-        return true;
+        return acknowledged;
       }
 
       let resolved = false;
@@ -5626,7 +5635,8 @@ class DockObsClient {
           packet.targetSource === targetSource &&
           Number(packet.timestamp) >= timestamp &&
           packet.mode === mode &&
-          (transitionId === undefined || packet.transitionId === transitionId)
+          (transitionId === undefined || packet.transitionId === transitionId) &&
+          (!requireFontFitReady || packet.fontFitReady === true)
         ) {
           resolved = true;
         }
@@ -5640,13 +5650,16 @@ class DockObsClient {
             acknowledged &&
             Number(acknowledged.timestamp) >= timestamp &&
             acknowledged.mode === mode &&
-            (transitionId === undefined || acknowledged.transitionId === transitionId)
+            (transitionId === undefined || acknowledged.transitionId === transitionId) &&
+            (!requireFontFitReady || acknowledged.fontFitReady === true)
           ) {
-            return true;
+            return acknowledged;
           }
           await this.sleep(16);
         }
-        return resolved;
+        return resolved
+          ? overlayBridge.getLatestRenderAck(bridgeChannel, targetSource)
+          : null;
       } finally {
         unsubscribe();
       }
@@ -5659,14 +5672,15 @@ class DockObsClient {
       try {
         const raw = localStorage.getItem(storageKey);
         if (raw) {
-          const parsed = JSON.parse(raw) as { timestamp?: number; mode?: string; transitionId?: number } | null;
+          const parsed = JSON.parse(raw) as BridgePacket | null;
           if (
             parsed &&
             Number(parsed.timestamp) >= timestamp &&
             parsed.mode === mode &&
-            (transitionId === undefined || parsed.transitionId === transitionId)
+            (transitionId === undefined || parsed.transitionId === transitionId) &&
+            (!requireFontFitReady || parsed.fontFitReady === true)
           ) {
-            return true;
+            return parsed;
           }
         }
       } catch { /* ignore */ }
@@ -5674,7 +5688,57 @@ class DockObsClient {
       await this.sleep(16);
     }
 
-    return false;
+    return null;
+  }
+
+  private async waitForOverlayRenderAck(
+    tabType: CssOverlayPacketTab,
+    timestamp: number,
+    mode: string,
+    timeoutMs = 250,
+    transitionId?: number,
+    targetSource?: string,
+  ): Promise<boolean> {
+    return Boolean(await this.waitForOverlayRenderAckPacket(
+      tabType,
+      timestamp,
+      mode,
+      timeoutMs,
+      transitionId,
+      targetSource,
+    ));
+  }
+
+  private async waitForOverlayRenderMeasurement(
+    tabType: CssOverlayPacketTab,
+    timestamp: number,
+    mode: "fullscreen" | "lower-third",
+    timeoutMs = 500,
+    targetSource?: string,
+  ): Promise<DockOverlayFontFitMeasurement | null> {
+    const ack = await this.waitForOverlayRenderAckPacket(
+      tabType,
+      timestamp,
+      mode,
+      timeoutMs,
+      undefined,
+      targetSource,
+      true,
+    );
+    if (!ack) return null;
+
+    const measurement: DockOverlayFontFitMeasurement = { mode };
+    const fontSize = Number(ack.effectiveFontSize);
+    const refFontSize = Number(ack.effectiveRefFontSize);
+    const translationFontSize = Number(ack.effectiveTranslationFontSize);
+    if (Number.isFinite(fontSize) && fontSize > 0) measurement.fontSize = fontSize;
+    if (Number.isFinite(refFontSize) && refFontSize > 0) measurement.refFontSize = refFontSize;
+    if (Number.isFinite(translationFontSize) && translationFontSize > 0) {
+      measurement.translationFontSize = translationFontSize;
+    }
+    return measurement.fontSize || measurement.refFontSize || measurement.translationFontSize
+      ? measurement
+      : null;
   }
 
   /**
@@ -6649,7 +6713,10 @@ class DockObsClient {
    * **Lower-third mode**: Uses a direct browser source in the user's
    * scene (lightweight, no background needed).
    */
-  async pushBible(data: DockBiblePushData): Promise<void> {
+  async pushBible(
+    data: DockBiblePushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     return this.runSerializedBibleMutation(async () => {
       const resources = getDockResources();
       if (await this.tryPushRestoredLiveBiblePacket(data)) return;
@@ -7223,16 +7290,30 @@ class DockObsClient {
         }
       }
 
-      if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
+      let renderMeasurement: DockOverlayFontFitMeasurement | null = null;
+      if (useCssOverlayTransport && cssOverlayPacket) {
         const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-        await this.waitForOverlayRenderAck(
-          "bible",
-          Number(cssOverlayPacket.timestamp) || Date.now(),
-          mode,
-          isFirstLowerThirdBootstrap ? 3500 : 500,
-          undefined,
-          browserSourceName,
-        ).catch(() => { });
+        const renderTimeout = mode === "lower-third"
+          ? (isFirstLowerThirdBootstrap ? 3500 : 500)
+          : (options?.timeoutMs ?? 700);
+        if (options?.waitForFit) {
+          renderMeasurement = await this.waitForOverlayRenderMeasurement(
+            "bible",
+            Number(cssOverlayPacket.timestamp) || Date.now(),
+            mode,
+            renderTimeout,
+            browserSourceName,
+          ).catch(() => null);
+        } else if (mode === "lower-third") {
+          await this.waitForOverlayRenderAck(
+            "bible",
+            Number(cssOverlayPacket.timestamp) || Date.now(),
+            mode,
+            renderTimeout,
+            undefined,
+            browserSourceName,
+          ).catch(() => { });
+        }
       }
 
       if (mode === "lower-third") {
@@ -7246,6 +7327,7 @@ class DockObsClient {
       }
 
       this._lastBiblePushSignature = pushSignature;
+      return renderMeasurement;
     });
   }
 
@@ -7258,7 +7340,8 @@ class DockObsClient {
    *
    * Falls back to the full `pushBible` if the source hasn't been bootstrapped yet.
    */
-  async pushBibleOverlayFast(data: {
+  async pushBibleOverlayFast(
+    data: {
     verseText?: string;
     referenceText?: string;
     verseRange?: string;
@@ -7271,7 +7354,9 @@ class DockObsClient {
     compare?: Record<string, unknown> | null;
     translationA?: string;
     translationB?: string;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
     const mode = "lower-third";
 
@@ -7310,7 +7395,7 @@ class DockObsClient {
         } : undefined,
         translationA: data.translationA,
         translationB: data.translationB,
-      });
+      }, options);
     }
 
     // Compare mode needs the full pushBible path — the fast path only handles single verses
@@ -7343,7 +7428,7 @@ class DockObsClient {
         },
         translationA: data.translationA,
         translationB: data.translationB,
-      });
+      }, options);
     }
 
     const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
@@ -7361,7 +7446,7 @@ class DockObsClient {
     // Keep fast lower-third updates on the same latest-update queue as the
     // full Bible path. Otherwise a quick verse/background change can finish
     // out of order and briefly repaint an older pattern after the new one.
-    await this.runSerializedBibleMutation(async () => {
+    return this.runSerializedBibleMutation(async () => {
       this._lastBibleMode = mode;
       const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
       const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
@@ -7407,10 +7492,22 @@ class DockObsClient {
       // the active MCE source. This prevents OBS from revealing the previous
       // verse during the visibility/focus mutation.
       await this.focusMcePresentationModule("bible").catch(() => { });
+
+      if (options?.waitForFit) {
+        return this.waitForOverlayRenderMeasurement(
+          "bible",
+          Number(packetWithMode.timestamp) || Date.now(),
+          mode,
+          options.timeoutMs ?? 700,
+          browserSourceName,
+        );
+      }
+      return null;
     });
   }
 
-  async pushWorshipOverlayFast(data: {
+  async pushWorshipOverlayFast(
+    data: {
     sectionText: string;
     translationText?: string;
     translationOrder?: DockTranslationOrder;
@@ -7420,7 +7517,9 @@ class DockObsClient {
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     backgroundOnly?: boolean;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const resources = getDockResources();
     const sourceName = resources.worshipSource;
     const mode = "lower-third";
@@ -7437,7 +7536,7 @@ class DockObsClient {
       return this.pushWorshipLyrics({
         ...data,
         overlayMode: mode,
-      });
+      }, options);
     }
 
     this._lastOverlayMode[sourceName] = mode;
@@ -7495,6 +7594,16 @@ class DockObsClient {
     );
     await this.focusMcePresentationModule("worship").catch(() => { });
     await this.promotePresentationScene("worship").catch(() => { });
+    if (options?.waitForFit) {
+      return this.waitForOverlayRenderMeasurement(
+        "worship",
+        Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+        options.timeoutMs ?? 700,
+        sourceName,
+      );
+    }
+    return null;
   }
 
   async bringNotesOverlayForward(_mode: DockOverlayMode = "lower-third"): Promise<void> {
@@ -7542,7 +7651,8 @@ class DockObsClient {
     await this.deliverCssOverlayPacket(sourceName, "notes", packet, baseUrl, themeCss).catch(() => { });
   }
 
-  async pushNotesOverlayFast(data: {
+  async pushNotesOverlayFast(
+    data: {
     sectionText: string;
     translationText?: string;
     translationOrder?: DockTranslationOrder;
@@ -7552,7 +7662,9 @@ class DockObsClient {
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     backgroundOnly?: boolean;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const resources = getDockResources();
     const sourceName = resources.notesSource;
     const mode = "lower-third";
@@ -7569,7 +7681,7 @@ class DockObsClient {
       return this.pushNotesLyrics({
         ...data,
         overlayMode: mode,
-      });
+      }, options);
     }
 
     this._lastOverlayMode[sourceName] = mode;
@@ -7625,6 +7737,16 @@ class DockObsClient {
     );
     await this.focusMcePresentationModule("notes").catch(() => { });
     await this.promotePresentationScene("notes").catch(() => { });
+    if (options?.waitForFit) {
+      return this.waitForOverlayRenderMeasurement(
+        "notes",
+        Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+        options.timeoutMs ?? 700,
+        sourceName,
+      );
+    }
+    return null;
   }
 
   /**
@@ -8355,23 +8477,33 @@ class DockObsClient {
    * Push worship lyrics to OBS as an overlay in the current scene.
    * Supports both fullscreen and lower-third overlay modes.
    */
-  async pushWorshipLyrics(data: DockTabContentPushData): Promise<void> {
-    return this._pushTabContent(data, "worship");
+  async pushWorshipLyrics(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "worship", options);
   }
 
-  async pushAnnouncement(data: DockTabContentPushData): Promise<void> {
-    return this._pushTabContent(data, "announcements");
+  async pushAnnouncement(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "announcements", options);
   }
 
-  async pushNotesLyrics(data: DockTabContentPushData): Promise<void> {
-    return this._pushTabContent(data, "notes");
+  async pushNotesLyrics(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "notes", options);
   }
 
   /** Shared tab-content push for worship, announcements, and notes */
   private async _pushTabContent(
     data: DockTabContentPushData,
     tab: "worship" | "announcements" | "notes",
-  ): Promise<void> {
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const isWorship = tab === "worship";
     const isNotes = tab === "notes";
     const stableCssOverlayTab = isWorship || isNotes;
@@ -8454,7 +8586,16 @@ class DockObsClient {
         }
         this._lastOverlayMode[sourceName] = mode;
         setLastPushSignature("");
-        return;
+        if (options?.waitForFit) {
+          return this.waitForOverlayRenderMeasurement(
+            tab,
+            Number(packet.timestamp) || Date.now(),
+            mode,
+            options.timeoutMs ?? 700,
+            sourceName,
+          );
+        }
+        return null;
       }
 
       if (modeChanged && !stableCssOverlayTab) {
@@ -8767,12 +8908,27 @@ class DockObsClient {
         }
       }
 
-      if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
-        await this.waitForOverlayRenderAck(
-          tab,
-          Number(cssOverlayPacket.timestamp) || Date.now(),
-          mode,
-        ).catch(() => { });
+      let renderMeasurement: DockOverlayFontFitMeasurement | null = null;
+      if (useCssOverlayTransport && cssOverlayPacket) {
+        const renderTimestamp = Number(cssOverlayPacket.timestamp) || Date.now();
+        if (options?.waitForFit) {
+          renderMeasurement = await this.waitForOverlayRenderMeasurement(
+            tab,
+            renderTimestamp,
+            mode,
+            options.timeoutMs ?? 700,
+            sourceName,
+          ).catch(() => null);
+        } else if (mode === "lower-third") {
+          await this.waitForOverlayRenderAck(
+            tab,
+            renderTimestamp,
+            mode,
+            500,
+            undefined,
+            sourceName,
+          ).catch(() => { });
+        }
       }
 
       if (mode === "lower-third") {
@@ -8787,6 +8943,7 @@ class DockObsClient {
       }
 
       setLastPushSignature(pushSignature);
+      return renderMeasurement;
     });
   }
 

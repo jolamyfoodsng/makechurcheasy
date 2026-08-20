@@ -7,6 +7,13 @@ import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscre
 export const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
 export const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
 
+export interface DockOverlayFontFitMeasurement {
+  mode?: "fullscreen" | "lower-third";
+  fontSize?: number;
+  refFontSize?: number;
+  translationFontSize?: number;
+}
+
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -14,16 +21,42 @@ function clampNumber(value: number, min: number, max: number): number {
 export function normalizeLowerThirdFitSettings(
   settings: DockFullscreenQuickThemeSettings,
 ): DockFullscreenQuickThemeSettings {
-  if (settings.autoFontScale !== true) return settings;
-
   return {
     ...settings,
+    // Lower thirds always use the bounded auto-fit path. Keep this invariant
+    // here so legacy saved settings cannot re-enable overflowing text.
+    autoFontScale: true,
     fontSize: Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, settings.fontSize),
     refFontSize: Math.max(
       LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
       settings.refFontSize,
     ),
   };
+}
+
+/**
+ * Persist the effective size reported by the rendered overlay. The browser
+ * source is the source of truth because it measures the real font, wrapping,
+ * padding, border, and viewport rather than estimating from character count.
+ */
+export function applyMeasuredFontFitSettings(
+  settings: DockFullscreenQuickThemeSettings,
+  measurement: DockOverlayFontFitMeasurement | null | undefined,
+): DockFullscreenQuickThemeSettings {
+  if (!measurement) return settings;
+
+  const next = { ...settings, autoFontScale: true };
+  const measuredFontSize = Number(measurement.fontSize);
+  const measuredRefFontSize = Number(measurement.refFontSize);
+
+  if (Number.isFinite(measuredFontSize) && measuredFontSize > 0) {
+    next.fontSize = Math.min(next.fontSize, Math.round(measuredFontSize));
+  }
+  if (Number.isFinite(measuredRefFontSize) && measuredRefFontSize > 0) {
+    next.refFontSize = Math.min(next.refFontSize, Math.round(measuredRefFontSize));
+  }
+
+  return next;
 }
 
 const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [

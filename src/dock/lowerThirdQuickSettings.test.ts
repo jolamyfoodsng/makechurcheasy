@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscreenThemeQuickSettings";
 import {
+  applyMeasuredFontFitSettings,
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
   mergeQuickThemeBackground,
@@ -70,15 +71,16 @@ describe("lowerThirdQuickSettings", () => {
     expect(normalized.refFontSize).toBe(16);
   });
 
-  it("does not change manually sized lower thirds", () => {
+  it("migrates legacy lower thirds into always-on fit mode", () => {
     const normalized = normalizeLowerThirdFitSettings(makeSettings({
       autoFontScale: false,
       fontSize: 32,
       refFontSize: 10,
     }));
 
-    expect(normalized.fontSize).toBe(32);
-    expect(normalized.refFontSize).toBe(10);
+    expect(normalized.autoFontScale).toBe(true);
+    expect(normalized.fontSize).toBe(45);
+    expect(normalized.refFontSize).toBe(16);
   });
 
   it("detects equivalent quick settings snapshots", () => {
@@ -88,6 +90,26 @@ describe("lowerThirdQuickSettings", () => {
 
     expect(areQuickThemeSettingsEquivalent(left, right)).toBe(true);
     expect(areQuickThemeSettingsEquivalent(left, different)).toBe(false);
+  });
+
+  it("persists the rendered text size without increasing the requested size", () => {
+    const fitted = applyMeasuredFontFitSettings(
+      makeSettings({ fontSize: 100, refFontSize: 42 }),
+      { mode: "lower-third", fontSize: 78, refFontSize: 30 },
+    );
+
+    expect(fitted.fontSize).toBe(78);
+    expect(fitted.refFontSize).toBe(30);
+  });
+
+  it("keeps the requested size when the rendered frame already fits", () => {
+    const fitted = applyMeasuredFontFitSettings(
+      makeSettings({ fontSize: 56, refFontSize: 24 }),
+      { mode: "fullscreen", fontSize: 64, refFontSize: 30 },
+    );
+
+    expect(fitted.fontSize).toBe(56);
+    expect(fitted.refFontSize).toBe(24);
   });
 
   it("inherits shared fullscreen styling while keeping lower-third layout settings", () => {

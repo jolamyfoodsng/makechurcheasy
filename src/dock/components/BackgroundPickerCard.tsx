@@ -337,7 +337,6 @@ export default function BackgroundPickerCard({
   const lowerThirdCardRadius = clampNumberValue(Number(quickSettings.lowerThirdCardRadius ?? 18), 0, 64);
   const lowerThirdTextDirection = quickSettings.lowerThirdTextDirection === "inverted" ? "inverted" : "normal";
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
-  const autoFontScaleEnabled = quickSettings.autoFontScale === true;
   const isBiblePicker = storageScope === "bible" && showReferences;
 
   useEffect(() => {
@@ -880,30 +879,6 @@ export default function BackgroundPickerCard({
                             step={0.01}
                             onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
                           />
-                        </div>
-
-                        <div className="dtb-toggle-field">
-                          <div className="dtb-toggle-field__copy">
-                            <span className="dtb-toggle-field__label">
-                              {t('bgPicker.fitTextToFrame', 'Fit text to frame')}
-                            </span>
-                            <p className="dtb-compare-section__description">
-                              {t('bgPicker.fitTextToFrameDescription', 'Shrinks the verse and reference when they would overflow.')}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            className={`dtb-toggle${autoFontScaleEnabled ? " dtb-toggle--on" : ""}`}
-                            onClick={() => onQuickSettingsChange((prev) => ({
-                              ...prev,
-                              autoFontScale: !prev.autoFontScale,
-                            }))}
-                            role="switch"
-                            aria-checked={autoFontScaleEnabled}
-                            aria-label={t('bgPicker.fitTextToFrame', 'Fit text to frame')}
-                          >
-                            <span className="dtb-toggle__knob" />
-                          </button>
                         </div>
 
                         <div className="dtb-typography-control-row dtb-typography-control-row--segmented">

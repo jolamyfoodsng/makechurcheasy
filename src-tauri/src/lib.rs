@@ -1055,14 +1055,26 @@ fn overlay_session_value() -> Option<serde_json::Value> {
     }?;
 
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    if let Some(expires_at) = value.get("expiresAt").and_then(|v| v.as_i64()) {
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        if now_ms >= expires_at {
-            return None;
-        }
+    let has_user = value
+        .get("user")
+        .and_then(|user| user.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .map(|id| !id.trim().is_empty())
+        .unwrap_or(false);
+    let has_device = value
+        .get("deviceId")
+        .and_then(serde_json::Value::as_str)
+        .map(|device_id| !device_id.trim().is_empty())
+        .unwrap_or(false);
+    let expires_at = value
+        .get("expiresAt")
+        .and_then(serde_json::Value::as_i64)?;
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    if !has_user || !has_device || now_ms >= expires_at {
+        return None;
     }
 
     Some(value)
@@ -1097,10 +1109,6 @@ fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
         clean_path,
         ""
             | "index.html"
-            | "dock"
-            | "dock.html"
-            | "lm-dock"
-            | "lm-dock.html"
             // OBS/projection renderers must load even before the dock auth
             // session is restored. They receive content through local overlay
             // packets; blocking their HTML turns browser sources into a 401.

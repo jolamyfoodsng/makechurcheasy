@@ -158,7 +158,7 @@ function applyQuickSettingsToNotesTheme(
     settings: {
       ...theme.settings,
       fontSize: quickSettings.fontSize ?? theme.settings.fontSize,
-      autoFontScale: quickSettings.autoFontScale ?? theme.settings.autoFontScale ?? true,
+      autoFontScale: true,
       fontFamily: quickSettings.fontFamily ?? theme.settings.fontFamily,
       refFontSize: quickSettings.refFontSize ?? theme.settings.refFontSize,
       refFontWeight: quickSettings.refFontWeight ?? theme.settings.refFontWeight,

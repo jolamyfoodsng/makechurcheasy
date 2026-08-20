@@ -16626,6 +16626,61 @@
   overflow: hidden;
 }
 
+/* Scene-scoped Quick Edit selector. Keep the target list compact; the
+   routing control remains the place where scenes are selected. */
+.dtb-studio__scene-profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
+  background: color-mix(in srgb, var(--dock-surface-alt) 42%, var(--dock-surface));
+  flex-shrink: 0;
+}
+
+.dtb-studio__scene-profile-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dtb-studio__scene-profile-label {
+  color: var(--dock-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dtb-studio__scene-profile-help {
+  overflow: hidden;
+  color: var(--dock-text-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtb-studio__scene-profile-select {
+  min-width: 148px;
+  max-width: 46%;
+  min-height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border-radius: 5px;
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.dtb-studio__scene-profile-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dock-accent) 75%, transparent);
+  outline-offset: 1px;
+}
+
 .dtb-studio__themes-view::-webkit-scrollbar,
 .dtb-studio__settings-view::-webkit-scrollbar {
   width: 4px;

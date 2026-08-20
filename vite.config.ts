@@ -53,10 +53,6 @@ const OVERLAY_SESSION_FILE = resolve(homedir(), "Documents", "MakeChurchEasy", "
 const ALLOWED_APP_DOCUMENTS = new Set([
   "/",
   "/index.html",
-  "/dock",
-  "/dock.html",
-  "/lm-dock",
-  "/lm-dock.html",
 ]);
 
 // ── Entitlement Server Config ─────────────────────────────────────────────────
@@ -81,19 +77,22 @@ function findRequiredPlan(feature: string, currentCount: number = 0): string {
 }
 
 function readStoredOverlaySession(): unknown | null {
-  if (!existsSync(SESSION_FILE)) {
-    return null;
+  for (const sessionFile of [SESSION_FILE, OVERLAY_SESSION_FILE]) {
+    if (!existsSync(sessionFile)) continue;
+
+    try {
+      const data = JSON.parse(readFileSync(sessionFile, "utf-8"));
+      const hasUser = Boolean(data?.user && typeof data.user.id === "string" && data.user.id.trim());
+      const hasDevice = typeof data?.deviceId === "string" && data.deviceId.trim();
+      const isLive = typeof data?.expiresAt === "number" && Date.now() < data.expiresAt;
+      if (hasUser && hasDevice && isLive) return data;
+    } catch {
+      // Try the other session store. A malformed or expired file must not
+      // make a standalone Dock document reachable.
+    }
   }
 
-  try {
-    const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
-    if (typeof data?.expiresAt === "number" && Date.now() >= data.expiresAt) {
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function hasStoredOverlaySession(): boolean {
@@ -248,20 +247,10 @@ function authSessionPlugin(): Plugin {
       server.middlewares.use("/api/auth/status", (_req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Access-Control-Allow-Origin", "*");
-        if (existsSync(SESSION_FILE)) {
-          try {
-            const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
-            if (data.expiresAt && Date.now() < data.expiresAt) {
-              res.end(JSON.stringify({ ...data, authenticated: true }));
-            } else {
-              res.end('{"authenticated":false,"deviceId":null}');
-            }
-          } catch {
-            res.end('{"authenticated":false,"deviceId":null}');
-          }
-        } else {
-          res.end('{"authenticated":false,"deviceId":null}');
-        }
+        const data = readStoredOverlaySession();
+        res.end(data
+          ? JSON.stringify({ ...data as Record<string, unknown>, authenticated: true })
+          : '{"authenticated":false,"deviceId":null}');
       });
 
       server.middlewares.use("/api/auth/session", (req, res) => {
