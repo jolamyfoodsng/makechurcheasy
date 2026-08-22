@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../hooks/useAppTheme", () => ({
+  useAppTheme: () => ({ appearance: { theme: "dark" }, setTheme: vi.fn() }),
+}));
 import {
   getLmCandidateKey,
   getSelectedTranscriptEntries,
   isLmAutoPushSuppressed,
+  isLmCompactHeight,
+  LM_COMPACT_HEIGHT_PX,
   mergeRetainedLmQueue,
   normalizeLmOverlayMode,
 } from "./DockLmTab";
@@ -27,6 +33,27 @@ function candidate(book: string, chapter: number, verse: number): VoiceBibleCand
 }
 
 describe("DockLmTab settings helpers", () => {
+  it("uses the requested short-height breakpoint for the vertical tab rail", () => {
+    expect(LM_COMPACT_HEIGHT_PX).toBe(250);
+    expect(isLmCompactHeight(249)).toBe(true);
+    expect(isLmCompactHeight(250)).toBe(false);
+    expect(isLmCompactHeight(0)).toBe(false);
+  });
+
+  it("uses icon-only vertical tabs and keeps overlay mode in settings", () => {
+    expect(dockLmTabSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
+    expect(dockLmTabSource).toContain('data-testid={`lm-tab-${tab}`}');
+    expect(dockLmTabSource).not.toContain("!presentationLinkMode && renderOverlayModeSwitch()");
+    expect(dockLmTabSource).toContain("{renderOverlayModeSwitch()}");
+  });
+
+  it("opens interaction instructions from the help icon instead of a permanent hint bar", () => {
+    expect(dockLmTabSource).toContain('data-testid="lm-interaction-help"');
+    expect(dockLmTabSource).toContain('data-testid="lm-interaction-help-modal"');
+    expect(dockLmTabSource).toContain('t("lm.interactionHelpCopy", "Click a transcript line to copy it.")');
+    expect(dockLmTabSource).not.toContain("style={S.hintBar}");
+  });
+
   it("normalizes overlay mode values", () => {
     expect(normalizeLmOverlayMode("lower-third")).toBe("lower-third");
     expect(normalizeLmOverlayMode("fullscreen")).toBe("fullscreen");

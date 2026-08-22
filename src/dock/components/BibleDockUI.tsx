@@ -313,6 +313,7 @@ interface BibleSearchRowProps {
   onToggle: () => void;
   headerActions?: BibleContextualActions;
   hideBrowseToggle?: boolean;
+  showHeaderActionsWhenBrowseHidden?: boolean;
 }
 
 export function BibleSearchRow({
@@ -327,6 +328,7 @@ export function BibleSearchRow({
   onToggle,
   headerActions,
   hideBrowseToggle = false,
+  showHeaderActionsWhenBrowseHidden = false,
 }: BibleSearchRowProps) {
   const renderedCompactActions = typeof compactActions === "function"
     ? compactActions(isExpanded, onToggle)
@@ -347,7 +349,9 @@ export function BibleSearchRow({
           onVersionChange={onVersionChange}
           disabled={compareEnabled}
         />
-        {!hideBrowseToggle && isCompact && renderedCompactActions ? (
+        {hideBrowseToggle && showHeaderActionsWhenBrowseHidden && renderedHeaderActions ? (
+          <div className="dock-bible-search-row__actions">{renderedHeaderActions}</div>
+        ) : !hideBrowseToggle && isCompact && renderedCompactActions ? (
           <div className="dock-bible-compact-actions">{renderedCompactActions}</div>
         ) : !hideBrowseToggle ? (
           <BibleTopbar
@@ -489,6 +493,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     expanded: boolean,
     onToggle: () => void,
     hideBrowseToggle = false,
+    showHeaderActionsWhenBrowseHidden = false,
   ) => (
     <BibleSearchRow
       searchSection={searchSection}
@@ -502,6 +507,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       onToggle={onToggle}
       headerActions={headerActions}
       hideBrowseToggle={hideBrowseToggle}
+      showHeaderActionsWhenBrowseHidden={showHeaderActionsWhenBrowseHidden}
     />
   );
 
@@ -531,12 +537,16 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     ? () => setIsBottomBrowseExpanded((current) => !current)
     : () => setIsTopbarExpanded((current) => !current);
   const bottomToolbarActions = isCompact
-    ? (typeof compactActions === "function"
-      ? compactActions(bottomBrowseExpanded, onBottomBrowseToggle)
-      : compactActions)
-    : (typeof headerActions === "function"
-      ? headerActions(bottomBrowseExpanded, onBottomBrowseToggle)
-      : headerActions);
+    ? (searchPlacement === "top"
+      ? null
+      : (typeof compactActions === "function"
+        ? compactActions(bottomBrowseExpanded, onBottomBrowseToggle)
+        : compactActions))
+    : (searchPlacement === "top"
+      ? null
+      : (typeof headerActions === "function"
+        ? headerActions(bottomBrowseExpanded, onBottomBrowseToggle)
+        : headerActions));
   const renderedChildren = typeof children === "function"
     ? children(bottomSearchPanel, bottomToolbarActions)
     : children;
@@ -546,6 +556,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       {showTopSearch && renderSearchRow(
         isTopbarExpanded,
         () => setIsTopbarExpanded((prev: boolean) => !prev),
+        true,
         true,
       )}
 

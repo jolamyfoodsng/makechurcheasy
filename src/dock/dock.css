@@ -8535,6 +8535,58 @@
   gap: 6px;
 }
 
+.dock-bible-header-actions--top {
+  gap: 4px;
+  min-width: 0;
+}
+
+.dock-bible-actions__top-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 5px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 74%, var(--dock-surface));
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.dock-bible-actions__top-btn:hover,
+.dock-bible-actions__top-btn[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--dock-accent) 42%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent-soft) 48%, var(--dock-surface));
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-bible-search-row__actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+@media (max-width: 420px) {
+  .dock-bible-actions__top-btn {
+    width: 28px;
+    padding: 0;
+    gap: 0;
+  }
+
+  .dock-bible-actions__top-btn span {
+    display: none;
+  }
+}
+
 .dock-bible-compare-trigger {
   position: relative;
   display: flex;
@@ -8584,6 +8636,7 @@
   z-index: 200;
   min-width: 240px;
   max-width: min(320px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 24px));
   padding: 10px;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
@@ -8592,6 +8645,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
 }
 
 .dock-bible-reference-popover {
@@ -8824,6 +8878,70 @@
   width: 100%;
 }
 
+.dock-compact-translation-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dock-compact-translation-select:focus-within {
+  border-color: var(--dock-accent, #1D4ED8);
+  outline: 2px solid color-mix(in srgb, var(--dock-accent, #1D4ED8) 28%, transparent);
+  outline-offset: 1px;
+}
+
+.dock-compact-translation-select--disabled {
+  opacity: 0.5;
+}
+
+.dock-compact-translation-select__value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dock-text, #F8FAFC);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-compact-translation-select > svg {
+  flex: 0 0 auto;
+  color: var(--dock-text-dim, #94A3B8);
+  pointer-events: none;
+}
+
+.dock-compact-translation-select__native {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.dock-compact-translation-select__native:disabled {
+  cursor: not-allowed;
+}
+
+.dock-compact-translation-select__native option {
+  background: var(--dock-surface, #111827);
+  color: var(--dock-text, #F8FAFC);
+}
+
 .dock-bible-compare-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8859,16 +8977,23 @@
 }
 
 .dock-bible-compare-popover__passages {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dock-bible-compare-popover__translation-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .dock-bible-compare-popover__passage {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 5px;
+  padding: 6px;
   border: 1px solid var(--dock-border, #334155);
   border-radius: 8px;
   background: color-mix(in srgb, var(--dock-surface-2, #1F2937) 72%, transparent);
@@ -8888,7 +9013,7 @@
 
 .dock-bible-compare-popover__input {
   width: 100%;
-  min-height: 38px;
+  min-height: 34px;
   box-sizing: border-box;
 }
 
@@ -36931,4 +37056,63 @@ button.dock-btm-toolbar__clear--inline,
   .dock-module--worship .dock-worship-summary__overflow-menu {
     min-width: 164px;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shared Dock layer behavior
+
+   The Dock has several independently-owned tabs and a few document-level
+   portals. These attributes are applied by dockLayerManager.ts so cards,
+   panels, popovers, and dialogs all expose the same bounded scroll viewport.
+   The active layer receives a monotonically increasing z-index on pointer or
+   focus, including its positioning ancestors, so a newly used surface rises
+   above an older one.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-dock-scroll-surface="true"] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-height: min(84vh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dock-border, #334155) transparent;
+}
+
+[data-dock-scroll-surface="true"][data-dock-layer-kind="card"] {
+  max-height: min(80vh, 520px);
+}
+
+[data-dock-layer-overlay="true"] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dock-border, #334155) transparent;
+}
+
+[data-dock-scroll-surface="true"]::-webkit-scrollbar,
+[data-dock-layer-overlay="true"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-dock-scroll-surface="true"]::-webkit-scrollbar-track,
+[data-dock-layer-overlay="true"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-dock-scroll-surface="true"]::-webkit-scrollbar-thumb,
+[data-dock-layer-overlay="true"]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--dock-border, #334155);
+}
+
+[data-dock-scroll-surface="true"]::-webkit-scrollbar-thumb:hover,
+[data-dock-layer-overlay="true"]::-webkit-scrollbar-thumb:hover {
+  background: var(--dock-border-active, #2563EB);
+}
+
+[data-dock-layer-active="true"] {
+  z-index: var(--dock-layer-z-index, 10000) !important;
 }

@@ -830,7 +830,7 @@ export interface LockScreenConfig {
   icon: string;
   title: string;
   description: string;
-  primaryAction: "retry" | "subscribe" | "contact_support";
+  primaryAction: "retry" | "subscribe" | "manage_devices" | "contact_support";
   primaryLabel: string;
 }
 
@@ -922,7 +922,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         title: "Device Limit Reached",
         description:
           "You have reached the maximum number of devices for your plan. Please remove a device or upgrade your plan.",
-        primaryAction: "subscribe",
+        primaryAction: "manage_devices",
         primaryLabel: "Manage Devices",
       };
 

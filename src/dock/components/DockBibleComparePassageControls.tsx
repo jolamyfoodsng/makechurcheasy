@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { ComparePassageDraft, ComparePassageNavigation, ComparePassagePreview } from "../bibleMultiPassage";
 import Icon from "../DockIcon";
+import DockCompactTranslationSelect from "./DockCompactTranslationSelect";
 
 interface TranslationOption {
   value: string;
@@ -19,7 +20,6 @@ interface Props {
   onDraftTranslationChange: (id: string, value: string) => void;
   onActiveIndexChange: (index: number) => void;
   onNavigationModeChange: (mode: ComparePassageNavigation) => void;
-  onAddPassage: () => void;
   onRemovePassage: (id: string) => void;
   onSendToObs: () => void;
 }
@@ -36,7 +36,6 @@ export default function DockBibleComparePassageControls({
   onDraftTranslationChange,
   onActiveIndexChange,
   onNavigationModeChange,
-  onAddPassage,
   onRemovePassage,
   onSendToObs,
 }: Props) {
@@ -142,17 +141,13 @@ export default function DockBibleComparePassageControls({
                 aria-label={t("dock.compare.referenceInput", "Passage {{number}} reference", { number: index + 1 })}
                 disabled={!compareEnabled}
               />
-              <select
-                className="dock-select dock-bible-compare-popover__select"
+              <DockCompactTranslationSelect
                 value={draft.translation}
-                onChange={(event) => onDraftTranslationChange(draft.id, event.target.value)}
+                options={availableTranslations}
+                onChange={(value) => onDraftTranslationChange(draft.id, value)}
                 disabled={!compareEnabled}
-                aria-label={t("dock.compare.passageTranslation", "Passage {{number}} translation", { number: index + 1 })}
-              >
-                {availableTranslations.map((translation) => (
-                  <option key={translation.value} value={translation.value}>{translation.label}</option>
-                ))}
-              </select>
+                ariaLabel={t("dock.compare.passageTranslation", "Passage {{number}} translation", { number: index + 1 })}
+              />
               {hasInvalidReference && (
                 <div className="dock-bible-compare-popover__field-error">
                   {t("dock.compare.invalidReference", "Enter a reference like John 3:16.")}
@@ -167,20 +162,6 @@ export default function DockBibleComparePassageControls({
             </div>
           );
         })}
-      </div>
-
-      <button
-        type="button"
-        className="dock-bible-compare-popover__add"
-        onClick={onAddPassage}
-        disabled={!compareEnabled || drafts.length >= 3}
-      >
-        <Icon name="add" size={13} />
-        {t("dock.compare.addPassage", "Add passage")}
-      </button>
-
-      <div className="dock-bible-compare-popover__hint dock-bible-compare-popover__hint--block">
-        {t("dock.compare.passageSendToObsHint", "Use the active passage selector in the Bible reader, then Send to OBS to send all passages.")}
       </div>
 
       <button

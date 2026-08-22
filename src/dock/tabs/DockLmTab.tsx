@@ -51,6 +51,11 @@ const SUGGESTION_COOLDOWN_MS = 60_000;
 // performanceManager still applies a device-specific minimum interval.
 const LM_RELAY_POLL_MS = 500;
 const LM_RELAY_HIDDEN_POLL_MS = 2_000;
+export const LM_COMPACT_HEIGHT_PX = 250;
+
+export function isLmCompactHeight(height: number): boolean {
+  return Number.isFinite(height) && height > 0 && height < LM_COMPACT_HEIGHT_PX;
+}
 
 async function loadLmDockService() {
   const module = await import("../../services/lmDockService");
@@ -253,6 +258,7 @@ export default function DockLmTab({
 
   const [settings, setSettings] = useState<LmDockSettings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const updateSetting = useCallback(<K extends keyof LmDockSettings>(key: K, value: LmDockSettings[K]) => {
     setSettings((prev) => {
@@ -461,7 +467,11 @@ export default function DockLmTab({
   const rootRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const [tabBarWidth, setTabBarWidth] = useState(0);
+  const [rootHeight, setRootHeight] = useState(() => (
+    typeof window === "undefined" ? 0 : window.innerHeight
+  ));
   const [now, setNow] = useState(Date.now());
+  const isCompactHeight = isLmCompactHeight(rootHeight);
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
@@ -901,6 +911,28 @@ export default function DockLmTab({
     return () => ro.disconnect();
   }, []);
 
+  // The LM dock can be resized independently of the main Dock. Measure its
+  // actual container so the short-height layout also works inside OBS and
+  // presentation browser sources, not only when the window is resized.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const updateHeight = () => setRootHeight(el.getBoundingClientRect().height);
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateHeight);
+      return () => window.removeEventListener("resize", updateHeight);
+    }
+
+    const ro = new ResizeObserver(([entry]) => {
+      setRootHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // ── Auto-navigate inside the dock only ──
   useEffect(() => {
     if (!settings.autoNavigate) return;
@@ -1179,7 +1211,7 @@ export default function DockLmTab({
   const lastSelectedEntryId = selectedEntries.length > 0
     ? selectedEntries[selectedEntries.length - 1].id
     : null;
-  const renderOverlayModeSwitch = useCallback((variant: "bar" | "settings" = "bar") => {
+  const renderOverlayModeSwitch = useCallback(() => {
     const options: Array<{ mode: LmOverlayMode; label: string; ariaLabel: string; title: string }> = [
       {
         mode: "fullscreen",
@@ -1197,15 +1229,15 @@ export default function DockLmTab({
 
     return (
       <div
-        style={variant === "settings" ? S.modeSwitchPanel : S.modeSwitchBar}
+        style={S.modeSwitchPanel}
         data-testid="lm-overlay-mode-switch"
       >
-        <div style={variant === "settings" ? S.modeSwitchLabelWide : S.modeSwitchLabel}>
-          <Icon name="slideshow" size={variant === "settings" ? 13 : 12} />
+        <div style={S.modeSwitchLabelWide}>
+          <Icon name="slideshow" size={13} />
           <span>{t("lm.overlayMode")}</span>
         </div>
         <div
-          style={variant === "settings" ? S.modeSegmentedWide : S.modeSegmented}
+          style={S.modeSegmentedWide}
           role="group"
           aria-label={t("lm.overlayMode")}
         >
@@ -1217,7 +1249,7 @@ export default function DockLmTab({
                 type="button"
                 style={{
                   ...S.modeSegmentButton,
-                  ...(variant === "settings" ? S.modeSegmentButtonWide : undefined),
+                  ...S.modeSegmentButtonWide,
                   ...(active ? S.modeSegmentButtonActive : undefined),
                 }}
                 onClick={() => updateOverlayMode(option.mode)}
@@ -1299,6 +1331,18 @@ export default function DockLmTab({
             </span>
           )}
           <button
+            type="button"
+            style={S.helpBtn}
+            onClick={() => setShowHelp(true)}
+            title={t("lm.interactionHelp", "Interaction help")}
+            aria-label={t("lm.interactionHelp", "Interaction help")}
+            aria-expanded={showHelp}
+            data-testid="lm-interaction-help"
+          >
+            <Icon name="help_outline" size={14} />
+          </button>
+          <button
+            type="button"
             style={S.gearBtn}
             onClick={() => setShowSettings(!showSettings)}
             title={t("lm.settings")}
@@ -1309,21 +1353,36 @@ export default function DockLmTab({
         </div>
       </div>
 
-      {!presentationLinkMode && renderOverlayModeSwitch()}
-
-      <div style={S.tabBar} ref={tabBarRef}>
+      <div style={isCompactHeight ? S.mainAreaCompact : S.mainArea} data-compact-height={isCompactHeight}>
+      <div
+        style={{ ...S.tabBar, ...(isCompactHeight ? S.tabBarCompact : undefined) }}
+        ref={tabBarRef}
+        role="tablist"
+        aria-orientation={isCompactHeight ? "vertical" : "horizontal"}
+        aria-label={t("lm.tabs", "Speech assistant views")}
+      >
         {(["up-next", "transcript", "history"] as const).map((tab) => (
           <button
             key={tab}
-            style={{ ...S.tab, ...(activeTab === tab ? S.tabActive : undefined) }}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            style={{
+              ...S.tab,
+              ...(isCompactHeight ? S.tabCompact : undefined),
+              ...(activeTab === tab ? S.tabActive : undefined),
+              ...(isCompactHeight && activeTab === tab ? S.tabActiveCompact : undefined),
+            }}
             onClick={() => setActiveTab(tab)}
             title={tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}
+            aria-label={tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}
+            data-testid={`lm-tab-${tab}`}
           >
             <Icon
               name={tab === "up-next" ? "queue" : tab === "transcript" ? "subtitles" : "history"}
               size={12}
             />
-            {tabBarWidth >= 200 && (
+            {!isCompactHeight && tabBarWidth >= 200 && (
               <span>{tab === "up-next" ? t("lm.tabUpNext") : tab === "transcript" ? t("lm.tabTranscript") : t("lm.tabHistory")}</span>
             )}
           </button>
@@ -1489,7 +1548,6 @@ export default function DockLmTab({
                       ...(showActionBar ? { paddingBottom: 0 } : {}),
                       ...(isLive ? S.transcriptItemLive : {}),
                     }}
-                    title={`Click to copy · Double-click to select · Save in Notes or ${transcriptPushLabel} once selected`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('[data-action-bar]')) return;
                       if ((e.target as HTMLElement).tagName.toLowerCase() === "input") return;
@@ -1629,6 +1687,8 @@ export default function DockLmTab({
         </div>
       )}
 
+      </div>
+
       {pushSuccess && (
         <div style={S.toast}>
           <Icon name="check_circle" size={14} />
@@ -1677,6 +1737,57 @@ export default function DockLmTab({
         </div>
       )}
 
+      {showHelp && (
+        <div
+          style={S.modalOverlay}
+          onClick={() => setShowHelp(false)}
+          role="presentation"
+        >
+          <div
+            style={{ ...S.modal, ...S.helpModal }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lm-help-title"
+            data-testid="lm-interaction-help-modal"
+          >
+            <div style={S.modalHeader}>
+              <h3 id="lm-help-title" style={S.modalTitle}>
+                <Icon name="help_outline" size={15} />
+                {t("lm.interactionHelpTitle", "LM transcript help")}
+              </h3>
+              <button
+                type="button"
+                style={S.settingsClose}
+                onClick={() => setShowHelp(false)}
+                aria-label={t("common.close", "Close")}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div style={S.helpList}>
+              <div style={S.helpItem}>
+                <Icon name="content_copy" size={14} />
+                <span>{t("lm.interactionHelpCopy", "Click a transcript line to copy it.")}</span>
+              </div>
+              <div style={S.helpItem}>
+                <Icon name="select_all" size={14} />
+                <span>{t("lm.interactionHelpSelect", "Double-click a line to select it for actions.")}</span>
+              </div>
+              <div style={S.helpItem}>
+                <Icon name="send" size={14} />
+                <span>{t("lm.interactionHelpActions", "Use the action buttons to save in Notes or send to OBS.")}</span>
+              </div>
+            </div>
+            <div style={S.modalFooter}>
+              <button type="button" style={S.btnSecondary} onClick={() => setShowHelp(false)}>
+                {t("common.done", "Done")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isListening && entries.length === 0 && candidates.length === 0 && retainedQueue.length === 0 && suggestions.length === 0 && (
         <div style={S.emptyState}>
           <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
@@ -1693,10 +1804,6 @@ export default function DockLmTab({
           <span style={{ color: "#FCA5A5", fontSize: 11 }}>{error}</span>
         </div>
       )}
-
-      <div style={S.hintBar}>
-        <span style={S.hintText}>Click to copy a line · Double-click to select · Save in Notes or {transcriptPushLabel}</span>
-      </div>
 
       {contextMenu.visible && (
         <div
@@ -1825,7 +1932,7 @@ export default function DockLmTab({
               {!presentationLinkMode && (
                 <div style={S.settingsGroup}>
                   <div style={S.settingsGroupLabel}>{t("lm.overlayMode")}</div>
-                  {renderOverlayModeSwitch("settings")}
+                  {renderOverlayModeSwitch()}
                   <span style={S.settingHint}>{t("lm.overlayModeHint", "Choose how detected scriptures and transcript notes appear when pushed.")}</span>
                 </div>
               )}
@@ -2078,6 +2185,22 @@ const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     transition: "all 0.15s",
   },
+  mainArea: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  mainAreaCompact: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "row",
+    overflow: "hidden",
+  },
   helpBtn: {
     display: "flex",
     alignItems: "center",
@@ -2180,6 +2303,16 @@ const S: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     background: "var(--dock-bg, #0f172a)",
   },
+  tabBarCompact: {
+    flexDirection: "column",
+    width: 40,
+    borderBottom: "none",
+    borderRight: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+    overflowY: "auto",
+    overflowX: "hidden",
+    padding: "4px 0",
+    gap: 0,
+  },
   tab: {
     flex: 1,
     display: "flex",
@@ -2197,10 +2330,25 @@ const S: Record<string, React.CSSProperties> = {
     transition: "all 0.15s",
     fontFamily: "inherit",
   },
+  tabCompact: {
+    flex: "0 0 40px",
+    width: 40,
+    minHeight: 40,
+    padding: 0,
+    borderBottom: "none",
+    borderLeft: "2px solid transparent",
+    borderRadius: 0,
+  },
   tabActive: {
     color: "#3B82F6",
     borderBottom: "2px solid #3B82F6",
     background: "rgba(59,130,246,0.06)",
+  },
+  tabActiveCompact: {
+    color: "#FFFFFF",
+    borderBottom: "none",
+    borderLeftColor: "#3B82F6",
+    background: "rgba(59,130,246,0.16)",
   },
   tabContent: {
     flex: 1,
@@ -2826,6 +2974,10 @@ const S: Record<string, React.CSSProperties> = {
     border: "1px solid var(--dock-border, rgba(255,255,255,0.1))",
     overflow: "hidden",
   },
+  helpModal: {
+    width: "min(88%, 340px)",
+    maxWidth: 340,
+  },
   modalHeader: {
     padding: "12px 16px 0",
   },
@@ -2842,6 +2994,20 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "var(--dock-text-dim, #94A3B8)",
     margin: 0,
+  },
+  helpList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: "4px 16px 14px",
+  },
+  helpItem: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    color: "var(--dock-text-dim, #CBD5E1)",
+    fontSize: 12,
+    lineHeight: 1.4,
   },
   modalFooter: {
     display: "flex",

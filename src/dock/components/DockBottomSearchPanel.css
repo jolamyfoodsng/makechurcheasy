@@ -65,10 +65,18 @@
   margin: 0;
 }
 
-.dock-bottom-search-panel .dock-bible-actions__menu,
+.dock-bottom-search-panel .dock-bible-actions__menu {
+  position: absolute;
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 4px);
+}
+
 .dock-bottom-search-panel .dock-bible-compare-popover {
   top: auto;
-  bottom: calc(100% + 4px);
+  right: 0;
+  bottom: calc(100% + 6px);
+  margin: 0;
 }
 
 .dock-bottom-search-panel .bible-version-library__panel {

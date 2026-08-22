@@ -69,6 +69,13 @@ describe("dock shared styles", () => {
     expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__overflow-wrap");
   });
 
+  it("gives every registered Dock surface a scroll viewport and active-layer hook", () => {
+    expect(dockCss).toContain('[data-dock-scroll-surface="true"]');
+    expect(dockCss).toContain("overflow-y: auto;");
+    expect(dockCss).toContain('[data-dock-layer-active="true"]');
+    expect(dockCss).toContain("z-index: var(--dock-layer-z-index, 10000) !important;");
+  });
+
   it("anchors Worship/Notes tabs to the left instead of stretching them", () => {
     const tabs = cssBlock(".dock-worship-subtab-bar {");
     const tab = cssBlock(".dock-worship-subtab {");

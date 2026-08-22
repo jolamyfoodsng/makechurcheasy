@@ -110,6 +110,7 @@ import {
   type DockFavoriteBibleSearch,
 } from "../bibleSearchSuggestions";
 import DockBibleComparePassageControls from "../components/DockBibleComparePassageControls";
+import DockCompactTranslationSelect from "../components/DockCompactTranslationSelect";
 import {
   buildInstalledTranslationOptions,
   DEFAULT_INSTALLED_TRANSLATION_OPTION,
@@ -3059,21 +3060,6 @@ function DockBibleTab({
     verseCount,
     verseLineCount,
   ]);
-
-  const handleAddComparePassage = useCallback(() => {
-    setComparePassageDrafts((current) => {
-      if (current.length >= MAX_COMPARE_PASSAGES) return current;
-      const index = current.length;
-      return [
-        ...current,
-        {
-          id: `compare-passage-${Date.now()}`,
-          reference: "",
-          translation: (index === 0 ? translationA : translationB).toUpperCase(),
-        },
-      ];
-    });
-  }, [translationA, translationB]);
 
   const handleRemoveComparePassage = useCallback((id: string) => {
     setComparePassageDrafts((current) => {
@@ -6294,31 +6280,27 @@ function DockBibleTab({
                     <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
                   </select>
                 </div>
-                <div className="dock-bible-compare-popover__row">
-                  <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={translationA}
-                    onChange={(e) => handleTranslationAChange(e.target.value)}
-                    disabled={!translationsLoaded}
-                  >
-                    {availableTranslations.map((tr) => (
-                      <option key={tr.value} value={tr.value}>{tr.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="dock-bible-compare-popover__row">
-                  <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={translationB}
-                    onChange={(e) => handleTranslationBChange(e.target.value)}
-                    disabled={!translationsLoaded}
-                  >
-                    {availableTranslations.map((tr) => (
-                      <option key={tr.value} value={tr.value}>{tr.label}</option>
-                    ))}
-                  </select>
+                <div className="dock-bible-compare-popover__translation-pair">
+                  <div className="dock-bible-compare-popover__row">
+                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
+                    <DockCompactTranslationSelect
+                      value={translationA}
+                      options={availableTranslations}
+                      onChange={handleTranslationAChange}
+                      disabled={!translationsLoaded}
+                      ariaLabel={t("dock.compare.translationA", "Translation A")}
+                    />
+                  </div>
+                  <div className="dock-bible-compare-popover__row">
+                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
+                    <DockCompactTranslationSelect
+                      value={translationB}
+                      options={availableTranslations}
+                      onChange={handleTranslationBChange}
+                      disabled={!translationsLoaded}
+                      ariaLabel={t("dock.compare.translationB", "Translation B")}
+                    />
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -6344,7 +6326,6 @@ function DockBibleTab({
                     onDraftTranslationChange={handleComparePassageTranslationChange}
                     onActiveIndexChange={activateComparePassage}
                     onNavigationModeChange={setComparePassageNavigation}
-                    onAddPassage={handleAddComparePassage}
                     onRemovePassage={handleRemoveComparePassage}
                     onSendToObs={() => void handleSendComparePassagesToObs()}
                   />
@@ -6356,20 +6337,53 @@ function DockBibleTab({
       }
       headerActions={
         (browseExpanded, onBrowseToggle) => (
-        <div className="dock-bible-header-actions">
+        <div className={`dock-bible-header-actions${searchPlacement === "top" ? " dock-bible-header-actions--top" : ""}`}>
+          {searchPlacement === "top" && (
+            <button
+              type="button"
+              className="dock-bible-actions__top-btn"
+              onClick={() => {
+                setShowBibleActionsMenu(false);
+                setShowComparePopover(false);
+                setShowReferencePopover(false);
+                onBrowseToggle();
+              }}
+              aria-expanded={browseExpanded}
+              aria-label={browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+              title={browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
+            >
+              <Icon name="menu_book" size={14} />
+              <span>{browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}</span>
+            </button>
+          )}
           <div className="dock-bible-compare-trigger" ref={comparePopoverRef}>
             <button
               type="button"
-              className="dock-bible-actions__overflow"
-              onClick={() => setShowBibleActionsMenu((prev) => !prev)}
-              aria-label={t("common.moreActions", "More actions")}
-              aria-expanded={showBibleActionsMenu}
-              aria-haspopup="menu"
-              title={t("common.moreActions", "More actions")}
+              className={searchPlacement === "top" ? "dock-bible-actions__top-btn" : "dock-bible-actions__overflow"}
+              onClick={() => {
+                if (searchPlacement === "top") {
+                  setShowBibleActionsMenu(false);
+                  setShowReferencePopover(false);
+                  setShowComparePopover((prev) => !prev);
+                  return;
+                }
+                setShowBibleActionsMenu((prev) => !prev);
+              }}
+              aria-label={searchPlacement === "top"
+                ? t("dock.compare.toggle", "Compare Translations")
+                : t("common.moreActions", "More actions")}
+              aria-expanded={searchPlacement === "top" ? showComparePopover : showBibleActionsMenu}
+              aria-haspopup={searchPlacement === "top" ? "dialog" : "menu"}
+              title={searchPlacement === "top"
+                ? t("dock.compare.toggle", "Compare Translations")
+                : t("common.moreActions", "More actions")}
             >
-              <Icon name="more_vert" size={15} />
+              <Icon name={searchPlacement === "top" ? "swap_horiz" : "more_vert"} size={15} />
+              {searchPlacement === "top" && (
+                <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+              )}
             </button>
-            {showBibleActionsMenu && (
+            {searchPlacement !== "top" && showBibleActionsMenu && (
               <div className="dock-bible-actions__menu" role="menu">
                 <button
                   type="button"
@@ -6474,31 +6488,27 @@ function DockBibleTab({
                     <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
                   </select>
                 </div>
-                <div className="dock-bible-compare-popover__row">
-                  <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={translationA}
-                    onChange={(e) => handleTranslationAChange(e.target.value)}
-                    disabled={!translationsLoaded}
-                  >
-                    {availableTranslations.map((tr) => (
-                      <option key={tr.value} value={tr.value}>{tr.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="dock-bible-compare-popover__row">
-                  <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={translationB}
-                    onChange={(e) => handleTranslationBChange(e.target.value)}
-                    disabled={!translationsLoaded}
-                  >
-                    {availableTranslations.map((tr) => (
-                      <option key={tr.value} value={tr.value}>{tr.label}</option>
-                    ))}
-                  </select>
+                <div className="dock-bible-compare-popover__translation-pair">
+                  <div className="dock-bible-compare-popover__row">
+                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
+                    <DockCompactTranslationSelect
+                      value={translationA}
+                      options={availableTranslations}
+                      onChange={handleTranslationAChange}
+                      disabled={!translationsLoaded}
+                      ariaLabel={t("dock.compare.translationA", "Translation A")}
+                    />
+                  </div>
+                  <div className="dock-bible-compare-popover__row">
+                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
+                    <DockCompactTranslationSelect
+                      value={translationB}
+                      options={availableTranslations}
+                      onChange={handleTranslationBChange}
+                      disabled={!translationsLoaded}
+                      ariaLabel={t("dock.compare.translationB", "Translation B")}
+                    />
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -6524,7 +6534,6 @@ function DockBibleTab({
                     onDraftTranslationChange={handleComparePassageTranslationChange}
                     onActiveIndexChange={activateComparePassage}
                     onNavigationModeChange={setComparePassageNavigation}
-                    onAddPassage={handleAddComparePassage}
                     onRemovePassage={handleRemoveComparePassage}
                     onSendToObs={() => void handleSendComparePassagesToObs()}
                   />

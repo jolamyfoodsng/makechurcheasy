@@ -511,12 +511,10 @@
 }
 
 .dock-btm-overflow__menu .dock-btm-overflow__children .dock-bible-compare-popover {
-  position: static;
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  margin: 4px 0 0;
-  box-sizing: border-box;
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  margin: 0;
 }
 
 .dock-btm-overflow__menu-item,
@@ -714,10 +712,13 @@
 }
 
 .dock-btm-overflow__menu .dock-bible-reference-trigger--bottom .dock-bible-reference-popover {
-  position: static;
+  position: absolute;
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
   width: 250px;
   max-width: min(250px, calc(100vw - 24px));
-  margin: 4px 0 0;
+  margin: 0;
 }
 
 .dock-btm-overflow__menu .dock-line-popover__menu {

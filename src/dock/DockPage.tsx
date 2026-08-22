@@ -83,6 +83,11 @@ import {
   normalizeDockSearchPlacement,
   type DockSearchPlacement,
 } from "./dockSearchPlacement";
+import {
+  markDockLayerElement,
+  markDockLayerSubtree,
+  raiseDockLayerAtTarget,
+} from "./dockLayerManager";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -238,6 +243,7 @@ function DockPageContent({
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
 
   const dockRootRef = useRef<HTMLDivElement>(null);
+  const dockLayerOrderRef = useRef(10_000);
   const shellPreferences = loadDockShellPreferences();
   const {
     effective,
@@ -542,6 +548,69 @@ function DockPageContent({
     });
     observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+
+  // Dock popovers use both normal descendants and document-level portals. Keep
+  // one shared surface registry so every card/menu/modal gets the same scroll
+  // treatment, and bring the complete active layer above its siblings when it
+  // receives a pointer or keyboard focus.
+  useEffect(() => {
+    const root = dockRootRef.current;
+    if (!root || typeof document === "undefined") return;
+
+    markDockLayerSubtree(root);
+    markDockLayerSubtree(document.body);
+
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") {
+          markDockLayerElement(record.target as Element);
+          const nextZIndex = dockLayerOrderRef.current + 1;
+          if (raiseDockLayerAtTarget(record.target, nextZIndex)) {
+            dockLayerOrderRef.current = nextZIndex;
+          }
+        }
+        for (const node of record.addedNodes) {
+          markDockLayerSubtree(node);
+          const nextZIndex = dockLayerOrderRef.current + 1;
+          if (raiseDockLayerAtTarget(node, nextZIndex)) {
+            dockLayerOrderRef.current = nextZIndex;
+          }
+
+          // A portal can add a neutral wrapper around its actual dialog/menu.
+          // Raise the first registered descendant so the new surface starts in
+          // front even when it is not an ancestor of the clicked trigger.
+          if (node instanceof Element) {
+            const nestedLayer = node.querySelector('[data-dock-layer-surface="true"]');
+            if (nestedLayer && raiseDockLayerAtTarget(nestedLayer, nextZIndex)) {
+              dockLayerOrderRef.current = nextZIndex;
+            }
+          }
+        }
+      }
+    });
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["aria-expanded", "class", "hidden", "role"],
+      childList: true,
+      subtree: true,
+    });
+
+    const raiseActiveLayer = (event: Event) => {
+      const nextZIndex = dockLayerOrderRef.current + 1;
+      if (raiseDockLayerAtTarget(event.target, nextZIndex)) {
+        dockLayerOrderRef.current = nextZIndex;
+      }
+    };
+
+    document.addEventListener("pointerdown", raiseActiveLayer, true);
+    document.addEventListener("focusin", raiseActiveLayer, true);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("pointerdown", raiseActiveLayer, true);
+      document.removeEventListener("focusin", raiseActiveLayer, true);
+    };
   }, []);
 
   useEffect(() => {
