@@ -1,45 +1,45 @@
-# MakeChurchEasy screenshot library
+# MakeChurchEasy function screenshot library
 
-Captured from the locally running MakeChurchEasy desktop app, the live OBS dock, and OBS Studio on 22 August 2026.
+This library is organized by what the user is doing, not by which screen is open.
 
-## Folders
+Each verified function has:
 
-- `raw/` — original screenshots, including runtime states and temporary loading/duplicate frames.
-- `curated/` — 34 reusable screenshots with a consistent MakeChurchEasy presentation frame and brand mark.
+- an `*-obs.png` capture of the full OBS Studio window after the output was sent;
+- a `*-dock-popover.png` (or `*-dock.png`) capture showing the matching dock mode, settings, or popover before projection.
 
-## Curated capture groups
+## Verified function captures
 
-### Main app
+### Bible
 
-- Dashboard
-- Themes
-- Bible, Worship, Media, and Multi View libraries
-- Presentation output
-- Credits and usage
-- General, Branding, Appearance, OBS, Mobile Remote, and Automations settings
+- `01-bible-full`: Full Bible reading output with Quick Settings visible.
+- `02-bible-compare-translations`: KJV/NIV comparison output with comparison controls visible.
+- `03-bible-compare-passages`: Two-passage comparison output with the passage controls visible.
+- `04-bible-lower-third`: Scripture lower-third output with Bible LT mode visible.
 
-### OBS dock
+### Worship and Notes
 
-- Media uploads, animations, patterns, text overlays, video filter, and image filter
-- Bible reader and Bible browser
-- Compare Translations
-- Compare Passages
-- Bible Lower Third
-- Worship slides
-- Worship Notes
-- Worship Lower Third
-- Worship Translation
-- Ministry Ticker
-- Ministry Lower Thirds
-- Ministry Countdowns
-- Dock Multi View
+- `05-worship-slide`: Worship slide output with worship settings visible.
+- `06-notes-slide`: Notes slide output with notes settings visible.
 
-### OBS Studio
+### Media
 
-- OBS Studio workspace with the MakeChurchEasy dock visible
+- `07-media-image`: Uploaded image output with the image display popover visible.
+- `08-media-video`: Uploaded video output with video display controls visible.
+- `09-media-pattern`: Pattern output with the pattern browser visible.
+- `10-media-text`: Text overlay output with the text editor visible.
 
-## Runtime notes
+### Ministry
 
-The raw folder also keeps the Verse AI and Transcripts credit-check states that appeared in the local build during capture. They are retained for product reference but intentionally excluded from the polished marketing set.
+- `11-ministry-countdown`: Running Pre-Service countdown with countdown actions visible.
+- `12-ministry-ticker`: Ticker output with the ticker color popover visible.
+- `13-ministry-lower-third`: Speaker lower-third output with appearance controls visible.
 
-No source code, scenes, media, or user content was changed during this screenshot pass.
+### Multi-View
+
+- `14-multiview`: Multi-View frame/settings controls visible, with the configured `MV: Multiview 1` OBS scene shown as the output proof.
+
+## Empty state captured
+
+- `15-media-animations-empty-dock.png`: Media → Animations empty state. The local library currently reports `0` animations, so there is no honest OBS projection pair for this item yet.
+
+All files are intentionally kept at the capture window size so they can be reused for product documentation, SEO pages, and feature walkthroughs without losing the OBS context.
