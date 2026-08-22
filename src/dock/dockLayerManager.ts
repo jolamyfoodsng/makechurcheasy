@@ -27,7 +27,15 @@ const DOCK_PROMOTABLE_OWNER_CLASS_NAMES = new Set([
   "dock-bible-topbar",
 ]);
 
-const DOCK_SURFACE_CLASS = /(?:^|[-_])(?:modal|popover|dropdown|menu|dialog|panel|quick-actions|quick|pane)(?:$|--|-(?:list|wrap|content|panel))/;
+// Keep structural panels out of the transient scroll layer. Generic names
+// such as "panel" and "pane" are used throughout the Dock for layout
+// containers, while these names identify surfaces that may extend over cards.
+const DOCK_SURFACE_CLASS = /(?:^|[-_])(?:modal|popover|dropdown|menu|dialog)(?:$|--|-(?:list|wrap|content|panel))/;
+const DOCK_SURFACE_CLASS_NAMES = new Set([
+  // This surface uses role="region" because it is also embedded in the
+  // toolbar, so it needs an explicit transient classification.
+  "dock-translation__panel",
+]);
 const DOCK_OVERLAY_CLASS = /(?:^|[-_])(?:overlay|backdrop)(?:$|--)/;
 const DOCK_CARD_CLASS = /(?:^|[-_])card(?:$|--)/;
 
@@ -61,7 +69,10 @@ export function getDockLayerKind(element: Element): DockLayerKind | null {
     return "overlay";
   }
 
-  if (hasDockRole(element) || hasDockNamedClass(element, (className) => DOCK_SURFACE_CLASS.test(className))) {
+  if (
+    hasDockRole(element)
+    || hasDockNamedClass(element, (className) => DOCK_SURFACE_CLASS_NAMES.has(className) || DOCK_SURFACE_CLASS.test(className))
+  ) {
     return "surface";
   }
 

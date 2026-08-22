@@ -71,7 +71,7 @@ describe("dock shared styles", () => {
   });
 
   it("keeps cards out of the transient overlay layer", () => {
-    expect(dockCss).toContain('[data-dock-scroll-surface="true"]');
+    expect(dockCss).toContain('[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"]');
     expect(dockCss).toContain("overflow-y: auto;");
     expect(dockCss).toContain('[data-dock-layer-active="true"]');
     expect(dockCss).toContain("z-index: var(--dock-layer-z-index, 10000) !important;");

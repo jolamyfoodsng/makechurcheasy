@@ -37191,17 +37191,15 @@ button.dock-btm-toolbar__clear--inline,
 
    The Dock has several independently-owned tabs and a few document-level
    portals. These attributes are applied by dockLayerManager.ts so transient
-   panels, popovers, and dialogs all expose the same bounded scroll viewport.
-   Main cards remain structural. The active transient layer receives a
+   modal, popover, menu, and dialog surfaces all expose the same bounded scroll
+   viewport. Main cards and structural Dock panels remain unconstrained. The active transient layer receives a
    monotonically increasing z-index on pointer or focus, including transient
    positioning ancestors, so a newly used surface rises above older content.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-[data-dock-scroll-surface="true"] {
+[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"] {
   box-sizing: border-box;
-  max-height: 700px;
-  min-height: 400px;
-  max-height: 100%;
+  max-height: min(100vh, 760px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -37216,24 +37214,24 @@ button.dock-btm-toolbar__clear--inline,
   scrollbar-color: var(--dock-border, #334155) transparent;
 }
 
-[data-dock-scroll-surface="true"]::-webkit-scrollbar,
+[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"]::-webkit-scrollbar,
 [data-dock-layer-overlay="true"]::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-[data-dock-scroll-surface="true"]::-webkit-scrollbar-track,
+[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"]::-webkit-scrollbar-track,
 [data-dock-layer-overlay="true"]::-webkit-scrollbar-track {
   background: transparent;
 }
 
-[data-dock-scroll-surface="true"]::-webkit-scrollbar-thumb,
+[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"]::-webkit-scrollbar-thumb,
 [data-dock-layer-overlay="true"]::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: var(--dock-border, #334155);
 }
 
-[data-dock-scroll-surface="true"]::-webkit-scrollbar-thumb:hover,
+[data-dock-scroll-surface="true"][data-dock-layer-kind="surface"]::-webkit-scrollbar-thumb:hover,
 [data-dock-layer-overlay="true"]::-webkit-scrollbar-thumb:hover {
   background: var(--dock-border-active, #2563EB);
 }
