@@ -23,6 +23,7 @@ import {
   LayoutGrid,
   Tv,
   Zap,
+  GraduationCap,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
@@ -127,6 +128,7 @@ export default function DashboardSidebar({
 
       <div className="sidebar-section-bottom">
         <div className="sidebar-nav-list sidebar-nav-list--bottom">
+          {navItem("/tutorials", GraduationCap, "Tutorials")}
           {navItem("/credits", Zap, t("sidebar.credits", { defaultValue: "Credits" }))}
           {navItem("/settings", Settings, t("sidebar.settings"))}
         </div>

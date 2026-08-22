@@ -22,8 +22,11 @@ import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { track } from "../../services/analytics";
 import { trackMediaPresented } from "../../services/tracking";
 import {
+  downloadTemplatePictureToLibrary,
   downloadTemplateVideoToLibrary,
+  fetchTemplatePictures,
   fetchTemplateVideos,
+  type TemplatePictureAsset,
   type TemplateVideoAsset,
 } from "../../services/templateVideos";
 import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
@@ -60,6 +63,7 @@ type DockMediaFilter = "all" | DockMediaKind | "document";
 type DockMediaViewMode = "uploaded" | "recent";
 type DockMediaBrowserTab = "uploads" | "animations" | "patterns" | "text";
 type DockAddMediaTab = "background" | "template-videos";
+type DockAnimationCatalogTab = "videos" | "pictures";
 type DockTextAlign = "left" | "center" | "right";
 type DockTextVerticalPos = "top" | "center" | "bottom";
 type DockTextAnimation = "none" | "fade" | "fade-up" | "slide-up" | "slide-down" | "zoom";
@@ -439,7 +443,7 @@ function dedupeMediaItems(items: MediaItem[]): MediaItem[] {
 }
 
 function isAnimationMediaItem(item: MediaItem): boolean {
-  return item.type === "video" && (
+  return (item.type === "video" || item.type === "image") && (
     item.source === "template-cloudflare" ||
     Boolean(item.sourceAssetId) ||
     Boolean(item.cloudflareKey)
@@ -648,6 +652,7 @@ function DockMediaTab({
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [templateVideoOnlyModal, setTemplateVideoOnlyModal] = useState(false);
   const [addMediaTab, setAddMediaTab] = useState<DockAddMediaTab>("background");
+  const [animationCatalogTab, setAnimationCatalogTab] = useState<DockAnimationCatalogTab>("videos");
   const [templateVideoSearch, setTemplateVideoSearch] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [uploadsLoading, setUploadsLoading] = useState(false);
@@ -699,7 +704,12 @@ function DockMediaTab({
   const [templateVideosLoading, setTemplateVideosLoading] = useState(false);
   const [templateVideosError, setTemplateVideosError] = useState<string | null>(null);
   const [templateVideoProgress, setTemplateVideoProgress] = useState<Record<string, number | null>>({});
+  const [templatePictures, setTemplatePictures] = useState<TemplatePictureAsset[]>([]);
+  const [templatePicturesLoading, setTemplatePicturesLoading] = useState(false);
+  const [templatePicturesError, setTemplatePicturesError] = useState<string | null>(null);
+  const [templatePictureProgress, setTemplatePictureProgress] = useState<Record<string, number | null>>({});
   const mountedRef = useRef(true);
+  const templatePicturesLoadAttemptedRef = useRef(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaPollBusyRef = useRef(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -986,6 +996,25 @@ function DockMediaTab({
     }
   }, [animationsLocked, t]);
 
+  const loadTemplatePictures = useCallback(async () => {
+    if (animationsLocked) return;
+    setTemplatePicturesLoading(true);
+    setTemplatePicturesError(null);
+    try {
+      const items = await fetchTemplatePictures();
+      if (!mountedRef.current) return;
+      setTemplatePictures(items);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setTemplatePicturesError(err instanceof Error ? err.message : t('media.unableToLoadTemplates'));
+      setTemplatePictures([]);
+    } finally {
+      if (mountedRef.current) {
+        setTemplatePicturesLoading(false);
+      }
+    }
+  }, [animationsLocked, t]);
+
   const openAddMediaModal = useCallback(async (tab: DockAddMediaTab = "background") => {
     if (tab === "template-videos" && !(await requireEntitlement("slideshow", 0))) return;
     setAddMediaTab(tab);
@@ -1118,11 +1147,19 @@ function DockMediaTab({
   }, [localLibrary]);
 
   useEffect(() => {
-    if (animationsLocked || !showAddMediaModal || addMediaTab !== "template-videos" || templateVideos.length > 0 || templateVideosLoading) {
+    if (animationsLocked || templateVideos.length > 0 || templateVideosLoading) {
       return;
     }
     void loadTemplateVideos();
-  }, [addMediaTab, animationsLocked, loadTemplateVideos, showAddMediaModal, templateVideos.length, templateVideosLoading]);
+  }, [animationsLocked, loadTemplateVideos, templateVideos.length, templateVideosLoading]);
+
+  useEffect(() => {
+    if (animationsLocked || templatePicturesLoadAttemptedRef.current || templatePictures.length > 0 || templatePicturesLoading) {
+      return;
+    }
+    templatePicturesLoadAttemptedRef.current = true;
+    void loadTemplatePictures();
+  }, [animationsLocked, loadTemplatePictures, templatePictures.length, templatePicturesLoading]);
 
   // ── Play uploaded media via OBS — send to Preview or Send to OBS ──
 
@@ -1737,13 +1774,32 @@ function DockMediaTab({
     const folderEntries = activeFolder === "all"
       ? animationEntries
       : animationEntries.filter((entry) => mediaPrefs[entry.prefKey]?.folder === activeFolder);
-    if (!query) return folderEntries;
-    return folderEntries.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
-  }, [activeFolder, animationEntries, animationsLocked, assetSearch, mediaPrefs]);
+    const requestedKind = animationCatalogTab === "videos" ? "video" : "image";
+    const kindEntries = folderEntries.filter((entry) => entry.kind === requestedKind);
+    if (!query) return kindEntries;
+    return kindEntries.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
+  }, [activeFolder, animationCatalogTab, animationEntries, animationsLocked, assetSearch, mediaPrefs]);
   const filteredTemplateVideos = useMemo(() => {
     const query = templateVideoSearch.trim().toLowerCase();
     return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
   }, [templateVideoSearch, templateVideos]);
+  const filteredAnimationTemplateVideos = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
+  }, [assetSearch, templateVideos]);
+  const filteredAnimationTemplatePictures = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    return templatePictures.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
+  }, [assetSearch, templatePictures]);
+  // The Animations tab represents the shared template catalog. Downloaded
+  // items are still used for local playback, but the count comes from the
+  // same remote list used by the template picker.
+  const templateCatalogCount = templateVideos.length + templatePictures.length;
+  const animationCatalogCount: number | string = (templateVideosLoading || templatePicturesLoading) && templateCatalogCount === 0
+    ? "…"
+    : templateVideosError && templatePicturesError && templateCatalogCount === 0
+      ? animationEntries.length
+      : templateCatalogCount;
   const managedEntries = useMemo(
     () => [...mediaEntries, ...animationEntries],
     [animationEntries, mediaEntries],
@@ -2443,6 +2499,16 @@ function DockMediaTab({
     ))
   ), [mergedLibraryItems]);
 
+  const findDownloadedTemplatePicture = useCallback((asset: TemplatePictureAsset) => (
+    mergedLibraryItems.find((item) => (
+      item.type === "image" &&
+      Boolean(item.filePath) &&
+      (item.sourceAssetId === asset.id ||
+        item.cloudflareKey === asset.cloudflareKey ||
+        (item.source === "template-cloudflare" && item.name === asset.fileName))
+    ))
+  ), [mergedLibraryItems]);
+
   const handleDownloadTemplateVideo = useCallback(async (asset: TemplateVideoAsset) => {
     const videoCount = libraryMedia.filter((m) => m.type === "video").length;
     if (!(await requireEntitlement("videos", videoCount))) return;
@@ -2473,7 +2539,36 @@ function DockMediaTab({
     t,
   ]);
 
+  const handleDownloadTemplatePicture = useCallback(async (asset: TemplatePictureAsset) => {
+    const imageCount = libraryMedia.filter((item) => item.type === "image").length;
+    if (!(await requireEntitlement("images", imageCount))) return;
+    setSendingFile(`template:${asset.id}`);
+    try {
+      const item = await downloadTemplatePictureToLibrary(asset, (fraction) => {
+        setTemplatePictureProgress((current) => ({ ...current, [asset.id]: fraction }));
+      });
+
+      setLibraryMedia((current) => dedupeMediaItems([item, ...current]));
+      persistLocalLibrary((current) => dedupeMediaItems([item, ...current]));
+      dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+    } catch (err) {
+      console.warn("[DockMediaTab] Template picture download failed:", err);
+      setTemplatePicturesError(err instanceof Error ? err.message : t('media.unableToDownload', { fileName: asset.fileName }));
+    } finally {
+      setTemplatePictureProgress((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      setSendingFile(null);
+    }
+  }, [libraryMedia, persistLocalLibrary, t]);
+
   const playDownloadedTemplateVideo = useCallback((item: MediaItem) => {
+    void handleSendEntry(createLibraryEntry(item, overlayBaseUrl, t('media.animation')));
+  }, [handleSendEntry, overlayBaseUrl, t]);
+
+  const playDownloadedTemplatePicture = useCallback((item: MediaItem) => {
     void handleSendEntry(createLibraryEntry(item, overlayBaseUrl, t('media.animation')));
   }, [handleSendEntry, overlayBaseUrl, t]);
 
@@ -2841,6 +2936,147 @@ function DockMediaTab({
     [activeTargets.active, deleteDocumentDeck, documentEntries.length, isFreePlan, lockedKeys, openDocumentDeck, t],
   );
 
+  const renderTemplatePictureTile = (asset: TemplatePictureAsset) => {
+    const downloadedItem = findDownloadedTemplatePicture(asset);
+    const downloading = templatePictureProgress[asset.id] !== undefined;
+    const progressLabel = templatePictureProgress[asset.id] == null
+      ? t('media.preparing')
+      : `${Math.round((templatePictureProgress[asset.id] || 0) * 100)}%`;
+
+    return (
+      <div
+        key={asset.id}
+        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
+      >
+        {downloadedItem ? (
+          <div
+            className="dock-animation-tile__thumb dock-animation-tile__thumb--playable"
+            role="button"
+            tabIndex={0}
+            aria-label={`${t('common.play')}: ${asset.fileName}`}
+            title={`${t('common.play')}: ${asset.fileName}`}
+            onClick={() => playDownloadedTemplatePicture(downloadedItem)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                playDownloadedTemplatePicture(downloadedItem);
+              }
+            }}
+          >
+            <img src={getMediaPreviewUrl(downloadedItem, overlayBaseUrl)} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+            <div className="dock-animation-tile__play-hint">
+              <Icon name="play_arrow" size={22} />
+            </div>
+            <div className="dock-animation-tile__gradient" />
+            <div className="dock-animation-tile__info">
+              <span className="dock-animation-tile__name">{asset.fileName}</span>
+              <span className="dock-animation-tile__meta">{formatFileSize(asset.size)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="dock-animation-tile__thumb">
+            {asset.imageUrl ? (
+              <img src={asset.imageUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+            ) : (
+              <div className="dock-animation-tile__placeholder"><Icon name="image" size={20} /></div>
+            )}
+            <div className="dock-animation-tile__gradient" />
+            <div className="dock-animation-tile__info">
+              <span className="dock-animation-tile__name">{asset.fileName}</span>
+              <span className="dock-animation-tile__meta">{formatFileSize(asset.size) || t('media.templatePictures', 'Picture')}</span>
+            </div>
+          </div>
+        )}
+        {downloadedItem && (
+          <span className="dock-animation-tile__downloaded-label" role="status">
+            <Icon name="check_circle" size={10} />
+            {t('media.downloaded')}
+          </span>
+        )}
+        <button
+          type="button"
+          className="dock-animation-tile__dl-btn"
+          aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
+          title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplatePicture', 'Download picture')}
+          disabled={downloading || Boolean(downloadedItem)}
+          onClick={() => void handleDownloadTemplatePicture(asset)}
+        >
+          <Icon
+            name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
+            size={13}
+            style={{ animation: downloading ? "spin 1s linear infinite" : undefined }}
+          />
+        </button>
+      </div>
+    );
+  };
+
+  const renderTemplateVideoTile = (asset: TemplateVideoAsset) => {
+    const downloadedItem = findDownloadedTemplateVideo(asset);
+    const downloading = templateVideoProgress[asset.id] !== undefined;
+    const progressLabel = templateVideoProgress[asset.id] == null
+      ? t('media.preparing')
+      : `${Math.round((templateVideoProgress[asset.id] || 0) * 100)}%`;
+
+    return (
+      <div
+        key={asset.id}
+        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
+      >
+        {downloadedItem ? (
+          <div
+            className="dock-animation-tile__thumb dock-animation-tile__thumb--playable"
+            role="button"
+            tabIndex={0}
+            aria-label={`${t('common.play')}: ${asset.fileName}`}
+            title={`${t('common.play')}: ${asset.fileName}`}
+            onClick={() => playDownloadedTemplateVideo(downloadedItem)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                playDownloadedTemplateVideo(downloadedItem);
+              }
+            }}
+          >
+            {downloadedItem.thumbnailUrl ? (
+              <img src={downloadedItem.thumbnailUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
+            ) : (
+              <video src={getMediaPreviewUrl(downloadedItem, overlayBaseUrl)} className="dock-animation-tile__img" muted playsInline preload="metadata" />
+            )}
+            <div className="dock-animation-tile__play-hint"><Icon name="play_arrow" size={22} /></div>
+            <div className="dock-animation-tile__gradient" />
+            <div className="dock-animation-tile__info">
+              <span className="dock-animation-tile__name">{asset.fileName}</span>
+              <span className="dock-animation-tile__meta">{downloadedItem.durationSec ? fmtDuration(downloadedItem.durationSec) : formatFileSize(asset.size)}</span>
+            </div>
+          </div>
+        ) : (
+          <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
+        )}
+        {downloadedItem && (
+          <span className="dock-animation-tile__downloaded-label" role="status">
+            <Icon name="check_circle" size={10} />
+            {t('media.downloaded')}
+          </span>
+        )}
+        <button
+          type="button"
+          className="dock-animation-tile__dl-btn"
+          aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
+          title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
+          disabled={downloading || Boolean(downloadedItem)}
+          onClick={() => void handleDownloadTemplateVideo(asset)}
+        >
+          <Icon
+            name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
+            size={13}
+            style={{ animation: downloading ? "spin 1s linear infinite" : undefined }}
+          />
+        </button>
+      </div>
+    );
+  };
+
   const searchPlaceholder = browserTab === "animations"
     ? t('media.searchAnimations')
     : browserTab === "patterns"
@@ -3190,7 +3426,7 @@ function DockMediaTab({
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
           >
             {useCompactMediaTabs ? <Icon name={animationsLocked ? "lock" : "animation"} size={12} /> : t('media.tabAnimations')}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationEntries.length}</span>}
+            {!useCompactMediaTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount}</span>}
           </button>
           <button
             type="button"
@@ -3281,11 +3517,30 @@ function DockMediaTab({
                 </div>
                 <div className="dock-media-empty__title">{t('media.noUploads')}</div>
                 <div className="dock-media-empty__text">
-                  Add images, videos, PDFs, DOCX, or PPTX documents.
+                  {t('media.getStartedByDownloadingPictures', 'Get started by downloading these pictures and projecting them, or add your own media.')}
                 </div>
+                {templatePictures.length > 0 && (
+                  <div className="dock-animation-grid dock-media-empty__starter-grid">
+                    {templatePictures.slice(0, 4).map(renderTemplatePictureTile)}
+                  </div>
+                )}
+                {templatePicturesLoading && templatePictures.length === 0 && (
+                  <div className="dock-empty__text">{t('media.loadingTemplatePictures', 'Loading template pictures…')}</div>
+                )}
                 <button
                   type="button"
                   className="dock-btn dock-btn--primary dock-btn--compact"
+                  onClick={() => {
+                    setBrowserTab("animations");
+                    setAnimationCatalogTab("pictures");
+                  }}
+                  title={t('media.templatePictures', 'Template pictures')}>
+                  <Icon name="image" size={12} />
+                  {t('media.browseTemplatePictures', 'Browse template pictures')}
+                </button>
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--compact"
                   onClick={() => openAddMediaModal("background")}
                   title={t('media.addMedia')}>
                   <Icon name="add" size={12} />
@@ -3742,76 +3997,142 @@ function DockMediaTab({
                 </button>
               </div>
             ) : (
-            <>
-              {filteredAnimationEntries.length === 0 ? (
-                <div className="dock-media-empty">
-                  <div className="dock-media-empty__icon">
-                    <Icon name="movie" size={24} />
-                  </div>
-                  <div className="dock-media-empty__title">{t('media.downloadedAnimations')}</div>
-                  <div className="dock-media-empty__text">{t('media.browseTemplatesDesc')}</div>
+              <>
+                <div className="dock-animation-catalog-tabs" role="tablist" aria-label={t('media.animationCatalog', 'Animation templates')}>
                   <button
                     type="button"
-                    className="dock-btn dock-btn--preview dock-btn--compact"
-                    onClick={() => openAddMediaModal("template-videos")}
-                    title={t('common.add')}>
-                    <Icon name="add" size={12} />
-                    {t('common.add')}
+                    role="tab"
+                    aria-selected={animationCatalogTab === "videos"}
+                    className={`dock-animation-catalog-tabs__item${animationCatalogTab === "videos" ? " dock-animation-catalog-tabs__item--active" : ""}`}
+                    onClick={() => setAnimationCatalogTab("videos")}
+                  >
+                    <Icon name="movie" size={13} />
+                    {t('media.templateVideos', 'Videos')}
+                    <span>{templateVideos.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={animationCatalogTab === "pictures"}
+                    className={`dock-animation-catalog-tabs__item${animationCatalogTab === "pictures" ? " dock-animation-catalog-tabs__item--active" : ""}`}
+                    onClick={() => setAnimationCatalogTab("pictures")}
+                  >
+                    <Icon name="image" size={13} />
+                    {t('media.templatePictures', 'Pictures')}
+                    <span>{templatePictures.length}</span>
                   </button>
                 </div>
-              ) : (
-                <div className="dock-animation-grid">
-                  {filteredAnimationEntries.map((entry) => {
-                    const isActiveTarget = activeTargets.active?.key === entry.key;
-                    const prefs = getEntryPrefs(entry);
-                    const displayName = prefs.label?.trim() || entry.name;
-                    const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
 
-                    return (
-                      <div
-                        key={entry.key}
-                        className={`dock-animation-tile${isActiveTarget ? " dock-animation-tile--active" : ""}${prefs.pinned ? " dock-animation-tile--pinned" : ""}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => { void handleSendEntry(entry); }}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void handleSendEntry(entry); } }}
-                        onContextMenu={(event) => openMediaContextMenu(event, entry, false)}
-                      >
-                        <div className="dock-animation-tile__thumb">
-                          {thumbUrl ? (
-                            <img src={thumbUrl} alt={displayName} loading="lazy" className="dock-animation-tile__img" />
-                          ) : entry.previewUrl && entry.kind === "video" ? (
-                            <video src={entry.previewUrl} className="dock-animation-tile__img" muted playsInline preload="metadata" />
-                          ) : (
-                            <div className="dock-animation-tile__placeholder">
-                              <Icon name="movie" size={20} />
-                            </div>
-                          )}
-                          <div className="dock-animation-tile__play-hint">
-                            <Icon name="play_arrow" size={22} />
-                          </div>
-                          <div className="dock-animation-tile__gradient" />
-                          {prefs.pinned && (
-                            <span className="dock-animation-tile__pin-badge" title={t('media.pinned', 'Pinned')}>
-                              <Icon name="push_pin" size={11} />
-                            </span>
-                          )}
-                          <div className="dock-animation-tile__info">
-                            <span className="dock-animation-tile__name">{displayName}</span>
-                            <span className="dock-animation-tile__meta">
-                              {entry.durationSec ? fmtDuration(entry.durationSec) : t('media.animation').toUpperCase()}
-                            </span>
-                          </div>
-                          <span className="dock-animation-tile__dl-badge">
-                            <Icon name="check_circle" size={11} />
-                          </span>
-                        </div>
+                <section className="dock-media-section dock-animation-catalog" aria-label={animationCatalogTab === "videos" ? t('media.templateVideos', 'Template videos') : t('media.templatePictures', 'Template pictures')}>
+                  <div className="dock-media-section__header">
+                    <div>
+                      <div className="dock-media-section__title">
+                        {animationCatalogTab === "videos" ? t('media.templateVideos', 'Template videos') : t('media.templatePictures', 'Template pictures')}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
+                      <div className="dock-media-section__meta">
+                        {animationCatalogTab === "videos"
+                          ? t('media.templateVideosMeta', 'Download a video and project it in OBS.')
+                          : t('media.templatePicturesMeta', 'Get started by downloading these pictures and projecting them.')}
+                      </div>
+                    </div>
+                    <div className="dock-media-section__actions">
+                      <span className="dock-media-section__count">
+                        {animationCatalogTab === "videos" ? filteredAnimationTemplateVideos.length : filteredAnimationTemplatePictures.length}
+                      </span>
+                      <button
+                        type="button"
+                        className="dock-shell-icon-btn"
+                        onClick={() => void (animationCatalogTab === "videos" ? loadTemplateVideos() : loadTemplatePictures())}
+                        disabled={animationCatalogTab === "videos" ? templateVideosLoading : templatePicturesLoading}
+                        aria-label={t('media.refreshTemplateVideos', 'Refresh templates')}
+                        title={t('media.refreshTemplateVideos', 'Refresh templates')}
+                      >
+                        <Icon
+                          name="refresh"
+                          size={12}
+                          style={{ animation: (animationCatalogTab === "videos" ? templateVideosLoading : templatePicturesLoading) ? "spin 1s linear infinite" : undefined }}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {animationCatalogTab === "videos" ? (
+                    templateVideosError ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{templateVideosError}</div></div>
+                    ) : templateVideosLoading && filteredAnimationTemplateVideos.length === 0 ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.loadingTemplateVideos')}</div></div>
+                    ) : filteredAnimationTemplateVideos.length === 0 ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div></div>
+                    ) : (
+                      <div className="dock-animation-grid">{filteredAnimationTemplateVideos.map(renderTemplateVideoTile)}</div>
+                    )
+                  ) : (
+                    templatePicturesError ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{templatePicturesError}</div></div>
+                    ) : templatePicturesLoading && filteredAnimationTemplatePictures.length === 0 ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.loadingTemplatePictures', 'Loading template pictures…')}</div></div>
+                    ) : filteredAnimationTemplatePictures.length === 0 ? (
+                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.noTemplatePicturesMatch', 'No template pictures match your search.')}</div></div>
+                    ) : (
+                      <div className="dock-animation-grid">{filteredAnimationTemplatePictures.map(renderTemplatePictureTile)}</div>
+                    )
+                  )}
+                </section>
+
+                {filteredAnimationEntries.length > 0 && (
+                  <section className="dock-media-section dock-animation-downloaded" aria-label={animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}>
+                    <div className="dock-media-section__header">
+                      <div>
+                        <div className="dock-media-section__title">{animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}</div>
+                        <div className="dock-media-section__meta">{t('media.clickToProject', 'Click a downloaded item to project it.')}</div>
+                      </div>
+                      <span className="dock-media-section__count">{filteredAnimationEntries.length}</span>
+                    </div>
+                    <div className="dock-animation-grid">
+                      {filteredAnimationEntries.map((entry) => {
+                        const isActiveTarget = activeTargets.active?.key === entry.key;
+                        const prefs = getEntryPrefs(entry);
+                        const displayName = prefs.label?.trim() || entry.name;
+                        const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
+
+                        return (
+                          <div
+                            key={entry.key}
+                            className={`dock-animation-tile${isActiveTarget ? " dock-animation-tile--active" : ""}${prefs.pinned ? " dock-animation-tile--pinned" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => { void handleSendEntry(entry); }}
+                            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void handleSendEntry(entry); } }}
+                            onContextMenu={(event) => openMediaContextMenu(event, entry, false)}
+                          >
+                            <div className="dock-animation-tile__thumb">
+                              {thumbUrl ? (
+                                <img src={thumbUrl} alt={displayName} loading="lazy" className="dock-animation-tile__img" />
+                              ) : entry.previewUrl && entry.kind === "video" ? (
+                                <video src={entry.previewUrl} className="dock-animation-tile__img" muted playsInline preload="metadata" />
+                              ) : (
+                                <div className="dock-animation-tile__placeholder">
+                                  <Icon name={entry.kind === "image" ? "image" : "movie"} size={20} />
+                                </div>
+                              )}
+                              <div className="dock-animation-tile__play-hint"><Icon name="play_arrow" size={22} /></div>
+                              <div className="dock-animation-tile__gradient" />
+                              {prefs.pinned && (
+                                <span className="dock-animation-tile__pin-badge" title={t('media.pinned', 'Pinned')}><Icon name="push_pin" size={11} /></span>
+                              )}
+                              <div className="dock-animation-tile__info">
+                                <span className="dock-animation-tile__name">{displayName}</span>
+                                <span className="dock-animation-tile__meta">{entry.durationSec ? fmtDuration(entry.durationSec) : t('media.animation').toUpperCase()}</span>
+                              </div>
+                              <span className="dock-animation-tile__dl-badge"><Icon name="check_circle" size={11} /></span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+              </>
             )}
           </>
         )}

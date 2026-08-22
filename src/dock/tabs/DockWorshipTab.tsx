@@ -69,6 +69,10 @@ import { requireEntitlement } from "../dockEntitlement";
 import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
+  LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+  LOWER_THIRD_FONT_SIZE_MAX,
+  LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
   mergeQuickThemeBackground,
   normalizeLowerThirdFitSettings,
 } from "../lowerThirdQuickSettings";
@@ -820,6 +824,7 @@ function buildDefaultLowerThirdQuickThemeSettings(
 
 function sanitizeQuickThemeSettings(
   value: unknown,
+  mode: OverlayMode = "fullscreen",
 ): DockFullscreenQuickThemeSettings | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<DockFullscreenQuickThemeSettings>;
@@ -853,15 +858,19 @@ function sanitizeQuickThemeSettings(
     // Preserve style fields introduced by newer builds instead of silently
     // dropping them the next time the dock hydrates and saves preferences.
     ...source,
-    fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
+    fontSize: clampNumber(
+      Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
+      mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
+    ),
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(
       typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
     ),
     refFontSize: clampNumber(
       Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize),
-      14,
-      150,
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
+      mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
     ),
     refFontWeight: (source.refFontWeight as BibleThemeSettings["refFontWeight"]) || DEFAULT_THEME_SETTINGS.refFontWeight,
     fontColor: sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor),
@@ -1275,6 +1284,9 @@ function DockWorshipTab({
   const deletedSectionsPopoverRef = useRef<HTMLDivElement>(null);
   const deletedSectionsTriggerRef = useRef<HTMLButtonElement>(null);
   const compactSummaryActionsRef = useRef<HTMLDivElement>(null);
+  const handleCompactSummaryChildClose = useCallback(() => {
+    setShowCompactSummaryActions(false);
+  }, []);
   const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const prefsReadyRef = useRef(false);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
@@ -1444,6 +1456,7 @@ function DockWorshipTab({
       setLineLayoutOverrideAutoSplit(null);
       const candidateFullscreenQuickSettings = sanitizeQuickThemeSettings(
         prefs.fullscreenQuickThemeSettings,
+        "fullscreen",
       );
       // Older Worship builds persisted the browser source's measured fit back
       // into the user's requested typography. That left many installations
@@ -1457,6 +1470,7 @@ function DockWorshipTab({
           : null;
       const rawStoredLowerThirdQuickSettings = sanitizeQuickThemeSettings(
         prefs.lowerThirdQuickThemeSettings,
+        "lower-third",
       );
       const storedLowerThirdQuickSettings =
         areQuickThemeSettingsEquivalent(storedFullscreenQuickSettings, rawStoredLowerThirdQuickSettings)
@@ -1683,7 +1697,10 @@ function DockWorshipTab({
   }, [loadSongs]);
 
   useEffect(() => {
-    const handler = (event: MouseEvent) => {
+    const handler = (event: PointerEvent) => {
+      const target = event.target;
+      const targetElement = target instanceof Element ? target : null;
+      const keepSummaryOpen = targetElement?.closest("[data-dock-keep-overflow-open='true']");
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowRecentSearches(false);
       }
@@ -1698,15 +1715,17 @@ function DockWorshipTab({
         setShowDeletedSectionsPopover(false);
       }
       if (
+        !keepSummaryOpen &&
         showCompactSummaryActions &&
         compactSummaryActionsRef.current &&
-        !compactSummaryActionsRef.current.contains(event.target as Node)
+        target instanceof Node &&
+        !compactSummaryActionsRef.current.contains(target)
       ) {
         setShowCompactSummaryActions(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, [showCompactSummaryActions, showDeletedSectionsPopover]);
 
   const handleToggleDeletedSectionsPopover = useCallback(() => {
@@ -1891,10 +1910,11 @@ function DockWorshipTab({
     const option = DOCK_QUICK_SIZE_OPTIONS.find((item) => item.id === id);
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const minFontSize = fullscreenOnlyMode || overlayMode === "fullscreen" ? 28 : 14;
-    const maxFontSize = fullscreenOnlyMode || overlayMode === "fullscreen" ? 200 : 180;
-    const minRefFontSize = fullscreenOnlyMode || overlayMode === "fullscreen" ? 14 : 10;
-    const maxRefFontSize = fullscreenOnlyMode || overlayMode === "fullscreen" ? 150 : 80;
+    const isFullscreen = fullscreenOnlyMode || overlayMode === "fullscreen";
+    const minFontSize = isFullscreen ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+    const maxFontSize = isFullscreen ? 200 : LOWER_THIRD_FONT_SIZE_MAX;
+    const minRefFontSize = isFullscreen ? 14 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+    const maxRefFontSize = isFullscreen ? 150 : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const horizontalPadding = Math.round(preset.padding * 1.55);
     return {
@@ -3381,27 +3401,6 @@ function DockWorshipTab({
                     </div>
                   </div>}
                   <div className="dock-worship-summary__actions">
-                    <div className="dock-worship-summary__primary-actions">
-                      <DockTranslationControls
-                        compact
-                        sections={selectedSongSections.map((section) => ({ id: section.id, text: section.text }))}
-                        value={effectiveWorshipTranslation}
-                        onChange={(next) => {
-                          worshipTranslationChangeRef.current = true;
-                          setWorshipTranslation(next);
-                        }}
-                      />
-                      <DockAutoAdvanceControl
-                        items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
-                        selectedIndex={selectedSongAutoAdvanceIndex}
-                        onSelectIndex={handleAutoAdvanceSongSelection}
-                        onAdvance={handleAutoAdvanceSongStep}
-                        onStart={handleAutoAdvanceStart}
-                        onActiveChange={setAutoAdvanceActive}
-                        itemKind="song"
-                        storageScope="worship"
-                      />
-                    </div>
                     <button
                       type="button"
                       className="dock-shell-icon-btn"
@@ -3423,12 +3422,12 @@ function DockWorshipTab({
                       >
                         <Icon name="more_vert" size={14} />
                       </button>
-                      <div
-                        className="dock-worship-summary__overflow-menu"
-                        role="menu"
-                        aria-label={t('common.moreActions', 'More actions')}
-                        hidden={!showCompactSummaryActions}
-                      >
+                      {showCompactSummaryActions && (
+                        <div
+                          className="dock-worship-summary__overflow-menu"
+                          role="menu"
+                          aria-label={t('common.moreActions', 'More actions')}
+                        >
                           <div className="dock-worship-summary__overflow-item">
                             <DockTranslationControls
                               compact
@@ -3439,6 +3438,7 @@ function DockWorshipTab({
                                 worshipTranslationChangeRef.current = true;
                                 setWorshipTranslation(next);
                               }}
+                              onClose={handleCompactSummaryChildClose}
                             />
                           </div>
                           <div className="dock-worship-summary__overflow-item">
@@ -3446,6 +3446,7 @@ function DockWorshipTab({
                               items={[{ id: selectedSong.id, label: selectedSongDisplayTitle }]}
                               selectedIndex={selectedSongAutoAdvanceIndex}
                               onSelectIndex={handleAutoAdvanceSongSelection}
+                              onClose={handleCompactSummaryChildClose}
                               onAdvance={handleAutoAdvanceSongStep}
                               onStart={handleAutoAdvanceStart}
                               onActiveChange={setAutoAdvanceActive}
@@ -3454,7 +3455,8 @@ function DockWorshipTab({
                               compactLabel
                             />
                           </div>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3571,8 +3573,8 @@ function DockWorshipTab({
                   lineCount={effectiveLinesPerSlide}
                   lineMode={effectiveAutoSplit ? "count" : "original"}
                   maxLineCount={MAX_LINES_PER_SLIDE}
-                  minFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 28 : 14}
-                  maxFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 200 : 180}
+                  minFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
+                  maxFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 200 : LOWER_THIRD_FONT_SIZE_MAX}
                   updateImmediately={quickUpdateImmediately}
                   isLive={worshipOverlayVisible}
                   top={quickActionsTop}

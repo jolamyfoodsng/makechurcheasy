@@ -624,10 +624,11 @@
 
 .dock-worship-subtab-bar {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
   width: max-content;
   max-width: calc(100% - 16px);
-  margin: 8px 8px 6px;
+  margin: 12px 8px 6px;
   padding: 4px;
   border: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.55));
   border-radius: 8px;
@@ -18311,12 +18312,12 @@
 }
 
 .dock-worship-summary__primary-actions {
-  display: contents;
+  display: none;
 }
 
 .dock-worship-summary__overflow-wrap {
   position: relative;
-  display: none;
+  display: inline-flex;
   flex-shrink: 0;
 }
 
@@ -35473,6 +35474,69 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 /* ── Animation video preview grid ── */
+
+.dock-animation-catalog-tabs {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 10px;
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  background: var(--dock-surface);
+  overflow: hidden;
+}
+
+.dock-animation-catalog-tabs__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--dock-border);
+  background: transparent;
+  color: var(--dock-text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dock-animation-catalog-tabs__item:last-child {
+  border-right: 0;
+}
+
+.dock-animation-catalog-tabs__item:hover {
+  background: var(--dock-surface-hover);
+  color: var(--dock-text);
+}
+
+.dock-animation-catalog-tabs__item--active {
+  background: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-animation-catalog-tabs__item span {
+  min-width: 16px;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+}
+
+.dock-animation-catalog,
+.dock-animation-downloaded {
+  margin-bottom: 12px;
+}
+
+.dock-media-empty__starter-grid {
+  width: 100%;
+  max-width: 520px;
+  margin: 4px 0 2px;
+}
 
 .dock-animation-grid {
   display: grid;

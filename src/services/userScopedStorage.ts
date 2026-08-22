@@ -193,6 +193,9 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-lt-duration-configs",
   "dock-lt-saved",
 
+  // Tutorials
+  "ocs-tutorial-progress-v1",
+
   // Service state
   "ocs-service-state",
   "ocs-scene-mapping",

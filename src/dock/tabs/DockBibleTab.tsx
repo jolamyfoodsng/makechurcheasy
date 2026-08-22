@@ -64,6 +64,8 @@ import {
   normalizeLowerThirdFitSettings,
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
   LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+  LOWER_THIRD_FONT_SIZE_MAX,
+  LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
   type DockOverlayFontFitMeasurement,
 } from "../lowerThirdQuickSettings";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
@@ -425,6 +427,7 @@ interface BibleOutputControlsMenuProps {
   settings: DockFullscreenQuickThemeSettings;
   lineCount: number;
   isFitTextMode: boolean;
+  showManualFontControls: boolean;
   areManualFontSizesDisabled: boolean;
   browserFontSizeMin: number;
   browserFontSizeMax: number;
@@ -449,6 +452,7 @@ function BibleOutputControlsMenu({
   settings,
   lineCount,
   isFitTextMode,
+  showManualFontControls,
   areManualFontSizesDisabled,
   browserFontSizeMin,
   browserFontSizeMax,
@@ -508,7 +512,7 @@ function BibleOutputControlsMenu({
           </div>
         </div>
       )}
-      {!isFitTextMode && (
+      {(!isFitTextMode || showManualFontControls) && (
         <div className="dock-bible-reader__font-size-field-row">
           <div className="dock-bible-reader__font-size-field">
             <span className="dock-bible-reader__font-size-field-label">{t("bible.bibleVerse", "Bible verse")}</span>
@@ -842,8 +846,12 @@ function extractLowerThirdQuickThemeSettings(
     LOWER_THIRD_SIZE_PRESETS.medium;
   return {
     ...extractFullscreenQuickThemeSettings(settings, backgroundType),
-    fontSize: clampNumber(settings.fontSize, 14, 100),
-    refFontSize: clampNumber(settings.refFontSize, 10, 80),
+    fontSize: clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX),
+    refFontSize: clampNumber(
+      settings.refFontSize,
+      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+      LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
+    ),
     lowerThirdBarMaxHeight: clampNumber(Number(settings.lowerThirdBarMaxHeight ?? sizePreset.maxHeight), 120, 900),
   };
 }
@@ -897,6 +905,7 @@ function sanitizeColor(value: unknown, fallback: string): string {
 
 function sanitizeFullscreenQuickThemeSettings(
   value: unknown,
+  mode: OverlayMode = "fullscreen",
 ): DockFullscreenQuickThemeSettings | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<DockFullscreenQuickThemeSettings>;
@@ -930,15 +939,19 @@ function sanitizeFullscreenQuickThemeSettings(
     // Keep newly added style fields intact across an app update. Known fields
     // below are still normalized and validated before they reach OBS.
     ...source,
-    fontSize: clampNumber(Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize), 28, 200),
+    fontSize: clampNumber(
+      Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
+      mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
+    ),
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(
       typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
     ),
     refFontSize: clampNumber(
       Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize),
-      14,
-      150,
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
+      mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
     ),
     refFontWeight: (source.refFontWeight as BibleThemeSettings["refFontWeight"]) || DEFAULT_THEME_SETTINGS.refFontWeight,
     fontColor: sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor),
@@ -1066,7 +1079,7 @@ function sanitizeSceneQuickThemeSettings(value: unknown): DockSceneQuickThemeSet
     if (!sceneName.trim() || !rawProfile || typeof rawProfile !== "object" || Array.isArray(rawProfile)) continue;
     const source = rawProfile as Record<string, unknown>;
     const fullscreen = sanitizeFullscreenQuickThemeSettings(source.fullscreen);
-    const lowerThird = sanitizeFullscreenQuickThemeSettings(source.lowerThird);
+    const lowerThird = sanitizeFullscreenQuickThemeSettings(source.lowerThird, "lower-third");
     const profile: DockSceneQuickThemeProfile = {};
     if (fullscreen) profile.fullscreen = fullscreen;
     if (lowerThird) profile.lowerThird = lowerThird;
@@ -1528,6 +1541,7 @@ function DockBibleTab({
   );
   const initialRawLowerThirdQuickThemeSettings = sanitizeFullscreenQuickThemeSettings(
     initialPrefs.lowerThirdQuickThemeSettings,
+    "lower-third",
   );
   const initialLowerThirdQuickThemeSettings =
     areQuickThemeSettingsEquivalent(initialFullscreenQuickThemeSettings, initialRawLowerThirdQuickThemeSettings)
@@ -2031,6 +2045,7 @@ function DockBibleTab({
       );
       const rawStoredLowerThirdQuickSettings = sanitizeFullscreenQuickThemeSettings(
         prefs.lowerThirdQuickThemeSettings,
+        "lower-third",
       );
       const storedLowerThirdQuickSettings =
         areQuickThemeSettingsEquivalent(storedQuickSettings, rawStoredLowerThirdQuickSettings)
@@ -4004,17 +4019,24 @@ function DockBibleTab({
     ? activeFullscreenQuickThemeSettings
     : activeLowerThirdQuickThemeSettings;
   const browserFontMode = fullscreenOnlyMode || overlayMode === "fullscreen" ? "fullscreen" : "lower-third";
-  const browserFontSizeMin = browserFontMode === "fullscreen" ? 28 : 14;
-  const browserFontSizeMax = browserFontMode === "fullscreen" ? 200 : 100;
-  const browserReferenceFontSizeMin = 10;
-  const browserReferenceFontSizeMax = browserFontMode === "fullscreen" ? 150 : 80;
+  const browserFontSizeMin = browserFontMode === "fullscreen"
+    ? 28
+    : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+  const browserFontSizeMax = browserFontMode === "fullscreen" ? 200 : LOWER_THIRD_FONT_SIZE_MAX;
+  const browserReferenceFontSizeMin = browserFontMode === "fullscreen"
+    ? 14
+    : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+  const browserReferenceFontSizeMax = browserFontMode === "fullscreen"
+    ? 150
+    : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
   const displayedBrowserFontSettings = {
     ...(draftBrowserQuickThemeSettings ?? activeBrowserFontSettings),
     autoFontScale: true as const,
   };
   const displayedBrowserVerseLineCount = draftBrowserVerseLineCount ?? verseLineCount;
-  const areManualFontSizesDisabled = true;
+  const areManualFontSizesDisabled = false;
   const isFitTextMode = true;
+  const showManualFontControls = browserFontMode === "lower-third";
   const hasPendingBrowserQuickChanges =
     draftBrowserQuickThemeSettings !== null || draftBrowserVerseLineCount !== null;
 
@@ -4062,12 +4084,20 @@ function DockBibleTab({
     const patch: BibleBrowserQuickSettingsPatch = { [field]: nextValue };
 
     if (field === "fontSize") {
-      const nextCompareSize = clampNumber(nextValue, 18, 120);
+      const nextCompareSize = clampNumber(
+        nextValue,
+        browserFontMode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 18,
+        browserFontMode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 120,
+      );
       patch.compareVerseFontSizeLeft = nextCompareSize;
       patch.compareVerseFontSizeRight = nextCompareSize;
       patch.compareAutoFitMaxFontSize = nextCompareSize;
     } else {
-      const nextCompareRefSize = clampNumber(nextValue, 10, 48);
+      const nextCompareRefSize = clampNumber(
+        nextValue,
+        browserFontMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10,
+        browserFontMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 48,
+      );
       patch.compareReferenceFontSizeLeft = nextCompareRefSize;
       patch.compareReferenceFontSizeRight = nextCompareRefSize;
     }
@@ -4075,6 +4105,7 @@ function DockBibleTab({
     applyBrowserQuickSettingsPatch(patch);
   }, [
     applyBrowserQuickSettingsPatch,
+    browserFontMode,
     browserFontSizeMax,
     browserFontSizeMin,
     browserReferenceFontSizeMax,
@@ -6963,6 +6994,7 @@ function DockBibleTab({
             settings={displayedBrowserFontSettings}
             lineCount={displayedBrowserVerseLineCount}
             isFitTextMode={isFitTextMode}
+            showManualFontControls={showManualFontControls}
             areManualFontSizesDisabled={areManualFontSizesDisabled}
             browserFontSizeMin={browserFontSizeMin}
             browserFontSizeMax={browserFontSizeMax}

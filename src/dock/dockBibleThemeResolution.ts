@@ -15,7 +15,13 @@ import {
   type DockBackgroundPreset,
 } from "./dockConsoleTheme";
 import { loadDockCustomBibleThemes, loadDockFavoriteBibleThemes } from "./dockThemeData";
-import { buildLinkedLowerThirdQuickThemeSettings } from "./lowerThirdQuickSettings";
+import {
+  buildLinkedLowerThirdQuickThemeSettings,
+  LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+  LOWER_THIRD_FONT_SIZE_MAX,
+  LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
+} from "./lowerThirdQuickSettings";
 import { readNativeDockSetting } from "../services/localDockSettings";
 
 export type DockBibleOverlayMode = "fullscreen" | "lower-third";
@@ -339,10 +345,10 @@ function normalizeQuickThemeSettings(
   const source = asRecord(value);
   if (!source) return null;
   const compareSettings = normalizeCompareThemeSettings(source);
-  const fontSizeMin = mode === "lower-third" ? 14 : 28;
-  const fontSizeMax = mode === "lower-third" ? 100 : 200;
-  const refFontSizeMin = mode === "lower-third" ? 10 : 14;
-  const refFontSizeMax = mode === "lower-third" ? 80 : 150;
+  const fontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28;
+  const fontSizeMax = mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200;
+  const refFontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14;
+  const refFontSizeMax = mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150;
 
   return {
     fontSize: numberValue(source, "fontSize", base.fontSize, fontSizeMin, fontSizeMax),

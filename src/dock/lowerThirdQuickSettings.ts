@@ -6,6 +6,13 @@ import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscre
  */
 export const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
 export const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+/**
+ * Lower-third typography is intentionally independent from fullscreen sizing.
+ * Keep this high enough for the 2XL/3XL quick presets (128px/160px), while
+ * still preventing malformed preferences from creating an unusable payload.
+ */
+export const LOWER_THIRD_FONT_SIZE_MAX = 320;
+export const LOWER_THIRD_REFERENCE_FONT_SIZE_MAX = 160;
 
 export interface DockOverlayFontFitMeasurement {
   mode?: "fullscreen" | "lower-third";
@@ -26,24 +33,34 @@ export function normalizeLowerThirdFitSettings(
     // Lower thirds always use the bounded auto-fit path. Keep this invariant
     // here so legacy saved settings cannot re-enable overflowing text.
     autoFontScale: true,
-    fontSize: Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, settings.fontSize),
-    refFontSize: Math.max(
-      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+    fontSize: clampNumber(
+      settings.fontSize,
+      LOWER_THIRD_FIT_MIN_FONT_SIZE,
+      LOWER_THIRD_FONT_SIZE_MAX,
+    ),
+    refFontSize: clampNumber(
       settings.refFontSize,
+      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+      LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
     ),
   };
 }
 
 /**
- * Persist the effective size reported by the rendered overlay. The browser
- * source is the source of truth because it measures the real font, wrapping,
- * padding, border, and viewport rather than estimating from character count.
+ * Apply a fullscreen fit measurement without changing the operator's lower-
+ * third preset. Lower-thirds fit the current slide in the browser source, but
+ * that temporary result must not turn a selected 2XL/3XL size into a
+ * permanently smaller preference.
  */
 export function applyMeasuredFontFitSettings(
   settings: DockFullscreenQuickThemeSettings,
   measurement: DockOverlayFontFitMeasurement | null | undefined,
 ): DockFullscreenQuickThemeSettings {
   if (!measurement) return settings;
+
+  if (measurement.mode === "lower-third") {
+    return { ...settings, autoFontScale: true };
+  }
 
   const next = { ...settings, autoFontScale: true };
   const measuredFontSize = Number(measurement.fontSize);
@@ -178,12 +195,21 @@ export function buildLinkedLowerThirdQuickThemeSettings(
     }
   }
 
-  // Clamp font sizes to lower-third-safe ranges
+  // Keep linked lower-thirds within the shared, flexible range. The overlay
+  // still fits the current text to the frame at render time.
   if (typeof assignableNext.fontSize === "number") {
-    assignableNext.fontSize = clampNumber(assignableNext.fontSize, 14, 100);
+    assignableNext.fontSize = clampNumber(
+      assignableNext.fontSize,
+      LOWER_THIRD_FIT_MIN_FONT_SIZE,
+      LOWER_THIRD_FONT_SIZE_MAX,
+    );
   }
   if (typeof assignableNext.refFontSize === "number") {
-    assignableNext.refFontSize = clampNumber(assignableNext.refFontSize, 10, 80);
+    assignableNext.refFontSize = clampNumber(
+      assignableNext.refFontSize,
+      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+      LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
+    );
   }
 
   return normalizeLowerThirdFitSettings(next);

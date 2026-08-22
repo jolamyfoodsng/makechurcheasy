@@ -103,8 +103,8 @@ describe("dock Bible theme resolution", () => {
     localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
       lowerThirdThemeId: theme.id,
       lowerThirdQuickThemeSettings: {
-        fontSize: 44,
-        refFontSize: 18,
+        fontSize: 160,
+        refFontSize: 80,
         lowerThirdSize: "biggest",
         backgroundType: "color",
         backgroundColor: "#102030",
@@ -115,8 +115,8 @@ describe("dock Bible theme resolution", () => {
     const resolved = await resolveDockBibleThemeForOverlayMode("lower-third");
 
     expect(resolved.themeId).toBe(theme.id);
-    expect(resolved.themeSettings.fontSize).toBe(44);
-    expect(resolved.themeSettings.refFontSize).toBe(18);
+    expect(resolved.themeSettings.fontSize).toBe(160);
+    expect(resolved.themeSettings.refFontSize).toBe(80);
     expect(resolved.themeSettings.lowerThirdSize).toBe("biggest");
     expect(resolved.themeSettings.backgroundColor).toBe("#102030");
     expect(resolved.themeSettings.padding).toBe(LOWER_THIRD_SIZE_PRESETS.biggest.padding);

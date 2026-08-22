@@ -38,6 +38,11 @@ import {
 } from "../services/receiverService";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { MediaShareTab } from "./MediaShareTab";
+import {
+  downloadTemplatePictureToLibrary,
+  fetchTemplatePictures,
+  type TemplatePictureAsset,
+} from "../services/templateVideos";
 
 type FilterType = "all" | "image" | "video";
 type AddMediaCategory = "image" | "video" | "document";
@@ -315,9 +320,13 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [showMediaLimitModal, setShowMediaLimitModal] = useState(false);
   const [mediaView, setMediaView] = useState<MediaView>("library");
+  const [starterPictures, setStarterPictures] = useState<TemplatePictureAsset[]>([]);
+  const [starterPicturesLoading, setStarterPicturesLoading] = useState(false);
+  const [starterPictureDownloading, setStarterPictureDownloading] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+  const starterPicturesAttemptedRef = useRef(false);
   const autoOpenedMediaIdRef = useRef<string | null>(null);
   const renameSubmittingRef = useRef(false);
 
@@ -358,6 +367,24 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   useEffect(() => {
     return reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (loading || items.length > 0 || starterPicturesAttemptedRef.current || starterPicturesLoading || starterPictures.length > 0) return;
+    starterPicturesAttemptedRef.current = true;
+    let cancelled = false;
+    setStarterPicturesLoading(true);
+    void fetchTemplatePictures()
+      .then((pictures) => {
+        if (!cancelled) setStarterPictures(pictures.slice(0, 4));
+      })
+      .catch(() => {
+        if (!cancelled) setStarterPictures([]);
+      })
+      .finally(() => {
+        if (!cancelled) setStarterPicturesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [items.length, loading, starterPictures.length, starterPicturesLoading]);
 
   useEffect(() => {
     if (!focusMediaId) {
@@ -420,6 +447,8 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
     });
   }, [items, filter, search]);
 
+  const isFreshMediaLibrary = items.length === 0 && !search.trim() && filter === "all";
+
   /* ---- actions ---- */
 
   const handleDelete = useCallback(
@@ -453,6 +482,25 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
     reload();
     setShowAddModal(false);
   }, [reload]);
+
+  const handleDownloadStarterPicture = useCallback(async (asset: TemplatePictureAsset) => {
+    const entitlement = checkEntitlementSync("images", effectivePlan);
+    if (!entitlement.allowed) {
+      setShowMediaLimitModal(true);
+      return;
+    }
+
+    setStarterPictureDownloading(asset.id);
+    try {
+      const item = await downloadTemplatePictureToLibrary(asset);
+      setItems((current) => [item, ...current.filter((candidate) => candidate.id !== item.id)]);
+    } catch (error) {
+      console.error("[MediaTab] Failed to download starter picture:", error);
+      alert(t("library.mediaTab.failedToSaveMultiple"));
+    } finally {
+      setStarterPictureDownloading(null);
+    }
+  }, [effectivePlan, t]);
 
   const handleDirectUpload = useCallback(async (files: FileList | File[]) => {
     const allFiles = Array.from(files);
@@ -697,17 +745,58 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
       ) : (
         <div className="lib-media-grid">
           {visible.length === 0 && (
-            <div className="lib-empty">
-              <Icon name="perm_media" size={48} style={{ opacity: 0.3 }} />
-              <p>{t("library.mediaTab.noMediaFound")}</p>
-              <button className="lib-add-btn" onClick={() => {
-                // Always open file picker — per-file quota is enforced after file selection
-                fileInputRef.current?.click();
-              }} title={t("library.mediaTab.addMedia")}>
-                <Icon name="add" size={20} />
-                {t("library.mediaTab.addMedia")}
-              </button>
-            </div>
+            isFreshMediaLibrary ? (
+              <div className="lib-empty lib-empty--rich">
+                <Icon name="image" size={48} style={{ opacity: 0.3 }} />
+                <p className="lib-empty-title">{t("library.mediaTab.getStarted", "Get started with worship pictures")}</p>
+                <p className="lib-empty-copy">{t("library.mediaTab.getStartedDescription", "Download these pictures and project them, or add your own media to the library.")}</p>
+                {starterPicturesLoading && <p className="lib-empty-copy">{t("library.mediaTab.loadingTemplates", "Loading starter pictures…")}</p>}
+                {starterPictures.length > 0 && (
+                  <div className="lib-template-starter-grid">
+                    {starterPictures.map((asset) => {
+                      const downloading = starterPictureDownloading === asset.id;
+                      return (
+                        <article key={asset.id} className="lib-template-starter-card">
+                          <img src={asset.imageUrl} alt={asset.fileName} loading="lazy" />
+                          <div className="lib-template-starter-card__footer">
+                            <span title={asset.fileName}>{asset.fileName}</span>
+                            <button
+                              type="button"
+                              className="lib-template-starter-card__download"
+                              onClick={() => void handleDownloadStarterPicture(asset)}
+                              disabled={downloading}
+                              title={t("library.mediaTab.downloadTemplate", "Download and add")}
+                              aria-label={`${t("library.mediaTab.downloadTemplate", "Download and add")}: ${asset.fileName}`}
+                            >
+                              <Icon name={downloading ? "sync" : "download"} size={16} className={downloading ? "spin" : undefined} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="lib-empty-actions">
+                  <button className="lib-add-btn" onClick={() => {
+                    fileInputRef.current?.click();
+                  }} title={t("library.mediaTab.addMedia")}>
+                    <Icon name="add" size={20} />
+                    {t("library.mediaTab.addMedia")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="lib-empty">
+                <Icon name="perm_media" size={48} style={{ opacity: 0.3 }} />
+                <p>{t("library.mediaTab.noMediaFound")}</p>
+                <button className="lib-add-btn" onClick={() => {
+                  fileInputRef.current?.click();
+                }} title={t("library.mediaTab.addMedia")}>
+                  <Icon name="add" size={20} />
+                  {t("library.mediaTab.addMedia")}
+                </button>
+              </div>
+            )
           )}
 
           {visible.map((m) => (

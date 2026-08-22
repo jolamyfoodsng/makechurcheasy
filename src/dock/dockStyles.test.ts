@@ -61,7 +61,9 @@ describe("dock shared styles", () => {
     expect(dockCss).toContain(".dock-module--worship .dock-worship-lyrics-search .dock-media-search__input {");
   });
 
-  it("moves the selected song controls into the compact row at 600px height", () => {
+  it("keeps selected song controls behind the overflow menu", () => {
+    expect(cssBlock(".dock-worship-summary__primary-actions {")).toContain("display: none;");
+    expect(cssBlock(".dock-worship-summary__overflow-wrap {")).toContain("display: inline-flex;");
     expect(dockCss).toContain("@media screen and (max-height: 600px)");
     expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__compact-search");
     expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__overflow-wrap");
@@ -71,8 +73,10 @@ describe("dock shared styles", () => {
     const tabs = cssBlock(".dock-worship-subtab-bar {");
     const tab = cssBlock(".dock-worship-subtab {");
 
+    expect(tabs).toContain("flex: 0 0 auto;");
     expect(tabs).toContain("width: max-content;");
     expect(tabs).toContain("max-width: calc(100% - 16px);");
+    expect(tabs).toContain("margin: 12px 8px 6px;");
     expect(tabs).toContain("justify-content: flex-start;");
     expect(tab).toContain("flex: 0 0 auto;");
     expect(tab).toContain("justify-content: flex-start;");

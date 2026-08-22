@@ -28,6 +28,12 @@ import {
 } from "../compareThemeConfig";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
+import {
+  LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+  LOWER_THIRD_FONT_SIZE_MAX,
+  LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
+} from "../lowerThirdQuickSettings";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
 /* ── Types ── */
@@ -865,8 +871,8 @@ export default function BackgroundPickerCard({
                           <SliderNumberField
                             label={t('bgPicker.fontSize')}
                             value={quickSettings.fontSize}
-                            min={overlayMode === "lower-third" ? 14 : 28}
-                            max={overlayMode === "lower-third" ? 100 : 200}
+                            min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28}
+                            max={overlayMode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200}
                             step={1}
                             onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: value }))}
                           />
@@ -2212,8 +2218,8 @@ function ReferenceSection({
           <SliderNumberField
             label={t('bgPicker.fontSize')}
             value={refFontSize}
-            min={10}
-            max={80}
+            min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10}
+            max={overlayMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 80}
             step={1}
             onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: value }))}
           />

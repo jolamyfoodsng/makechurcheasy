@@ -36,6 +36,9 @@ import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
+  LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+  LOWER_THIRD_FONT_SIZE_MAX,
+  LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
   applyMeasuredFontFitSettings,
   normalizeLowerThirdFitSettings,
 } from "../lowerThirdQuickSettings";
@@ -411,6 +414,9 @@ export default function DockNotesTab({
   const pendingQuickSettingsRefreshRef = useRef(false);
   const notesTranslationChangeRef = useRef(false);
   const compactSummaryActionsRef = useRef<HTMLDivElement>(null);
+  const handleCompactSummaryChildClose = useCallback(() => {
+    setShowCompactSummaryActions(false);
+  }, []);
   const liveFullscreenThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
   const liveLowerThirdThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
 
@@ -476,14 +482,16 @@ export default function DockNotesTab({
   useEffect(() => {
     if (!showCompactSummaryActions) return;
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (compactSummaryActionsRef.current && !compactSummaryActionsRef.current.contains(event.target as Node)) {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-dock-keep-overflow-open='true']")) return;
+      if (compactSummaryActionsRef.current && target instanceof Node && !compactSummaryActionsRef.current.contains(target)) {
         setShowCompactSummaryActions(false);
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showCompactSummaryActions]);
 
   useEffect(() => {
@@ -942,10 +950,14 @@ export default function DockNotesTab({
     const option = DOCK_QUICK_SIZE_OPTIONS.find((item) => item.id === id);
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const minFontSize = overlayMode === "fullscreen" ? 28 : 14;
-    const maxFontSize = overlayMode === "fullscreen" ? 180 : 100;
-    const minRefFontSize = overlayMode === "fullscreen" ? 14 : 10;
-    const maxRefFontSize = overlayMode === "fullscreen" ? 150 : 80;
+    const minFontSize = overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+    const maxFontSize = overlayMode === "fullscreen" ? 180 : LOWER_THIRD_FONT_SIZE_MAX;
+    const minRefFontSize = overlayMode === "fullscreen"
+      ? 14
+      : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+    const maxRefFontSize = overlayMode === "fullscreen"
+      ? 150
+      : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const horizontalPadding = Math.round(preset.padding * 1.55);
     const fontSize = clamp(option.fontSize, minFontSize, maxFontSize);
@@ -1264,24 +1276,6 @@ export default function DockNotesTab({
                   </div>
                 </div>}
                 <div className="dock-worship-summary__actions">
-                  <div className="dock-worship-summary__primary-actions">
-                    <DockTranslationControls
-                      compact
-                      sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
-                      value={effectiveNotesTranslation}
-                      onChange={handleNotesTranslationChange}
-                    />
-                    <DockAutoAdvanceControl
-                      items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
-                      selectedIndex={selectedNoteAutoAdvanceIndex}
-                      onSelectIndex={handleAutoAdvanceNoteSelection}
-                      onAdvance={handleAutoAdvanceNoteStep}
-                      onStart={handleAutoAdvanceStart}
-                      onActiveChange={setAutoAdvanceActive}
-                      itemKind="note"
-                      storageScope="notes"
-                    />
-                  </div>
                   <button type="button" className="dock-shell-icon-btn" onClick={() => openEditNote(selectedNote)} title={t("notes.editNote")} aria-label={t("notes.editNote")}>
                     <Icon name="edit" size={16} />
                   </button>
@@ -1297,12 +1291,12 @@ export default function DockNotesTab({
                     >
                       <Icon name="more_vert" size={14} />
                     </button>
-                    <div
-                      className="dock-worship-summary__overflow-menu"
-                      role="menu"
-                      aria-label={t("common.moreActions", "More actions")}
-                      hidden={!showCompactSummaryActions}
-                    >
+                    {showCompactSummaryActions && (
+                      <div
+                        className="dock-worship-summary__overflow-menu"
+                        role="menu"
+                        aria-label={t("common.moreActions", "More actions")}
+                      >
                         <div className="dock-worship-summary__overflow-item">
                           <DockTranslationControls
                             compact
@@ -1310,6 +1304,7 @@ export default function DockNotesTab({
                             sections={selectedNoteSlides.map((slide) => ({ id: slide.id, text: slide.text }))}
                             value={effectiveNotesTranslation}
                             onChange={handleNotesTranslationChange}
+                            onClose={handleCompactSummaryChildClose}
                           />
                         </div>
                         <div className="dock-worship-summary__overflow-item">
@@ -1317,6 +1312,7 @@ export default function DockNotesTab({
                             items={[{ id: selectedNote.id, label: selectedNoteDisplayTitle }]}
                             selectedIndex={selectedNoteAutoAdvanceIndex}
                             onSelectIndex={handleAutoAdvanceNoteSelection}
+                            onClose={handleCompactSummaryChildClose}
                             onAdvance={handleAutoAdvanceNoteStep}
                             onStart={handleAutoAdvanceStart}
                             onActiveChange={setAutoAdvanceActive}
@@ -1325,7 +1321,8 @@ export default function DockNotesTab({
                             compactLabel
                           />
                         </div>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1418,8 +1415,8 @@ export default function DockNotesTab({
               lineCount={notesLinesPerSlide}
               lineMode={notesAutoSplit ? "count" : "original"}
               maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
-              minFontSize={overlayMode === "fullscreen" ? 28 : 14}
-              maxFontSize={overlayMode === "fullscreen" ? 180 : 100}
+              minFontSize={overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
+              maxFontSize={overlayMode === "fullscreen" ? 180 : LOWER_THIRD_FONT_SIZE_MAX}
               updateImmediately={quickUpdateImmediately}
               isLive={overlayVisible}
               top={quickActionsTop}

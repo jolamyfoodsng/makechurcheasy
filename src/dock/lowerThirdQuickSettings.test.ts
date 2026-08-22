@@ -92,14 +92,14 @@ describe("lowerThirdQuickSettings", () => {
     expect(areQuickThemeSettingsEquivalent(left, different)).toBe(false);
   });
 
-  it("persists the rendered text size without increasing the requested size", () => {
+  it("keeps the selected lower-third size when the browser fits a long slide", () => {
     const fitted = applyMeasuredFontFitSettings(
-      makeSettings({ fontSize: 100, refFontSize: 42 }),
+      makeSettings({ fontSize: 160, refFontSize: 80 }),
       { mode: "lower-third", fontSize: 78, refFontSize: 30 },
     );
 
-    expect(fitted.fontSize).toBe(78);
-    expect(fitted.refFontSize).toBe(30);
+    expect(fitted.fontSize).toBe(160);
+    expect(fitted.refFontSize).toBe(80);
   });
 
   it("keeps the requested size when the rendered frame already fits", () => {

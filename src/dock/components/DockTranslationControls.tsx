@@ -35,6 +35,7 @@ interface Props {
   sections: DockTranslationSection[];
   value?: DockTranslationValue | null;
   onChange: (value: DockTranslationValue | null) => void;
+  onClose?: () => void;
   compact?: boolean;
   compactLabel?: boolean;
 }
@@ -43,6 +44,7 @@ export default function DockTranslationControls({
   sections,
   value,
   onChange,
+  onClose,
   compact = false,
   compactLabel = false,
 }: Props) {
@@ -249,6 +251,7 @@ export default function DockTranslationControls({
     <div
       ref={languageMenuRef}
       className={`dock-translation__language-menu${compact ? " dock-translation__language-menu--portal" : ""}`}
+      data-dock-keep-overflow-open={compact ? "true" : undefined}
       style={compact && compactLanguageMenuPosition ? {
         position: "fixed",
         top: compactLanguageMenuPosition.top,
@@ -326,7 +329,10 @@ export default function DockTranslationControls({
             <button
               type="button"
               className="dock-translation__close"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                onClose?.();
+              }}
               aria-label={t("common.close", { defaultValue: "Close" })}
               title={t("common.close", { defaultValue: "Close" })}
             >

@@ -132,6 +132,7 @@ const SpeechToScripturePage = lazy(() => import("./pages/SpeechToScripturePage")
 const TranscriptLibraryPage = lazy(() => import("./pages/TranscriptLibraryPage"));
 const TranscriptDetailPage = lazy(() => import("./pages/TranscriptDetailPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
+const TutorialsPage = lazy(() => import("./pages/TutorialsPage"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -1526,6 +1527,7 @@ function App() {
                             <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                             <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                             <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />
+                            <Route path="tutorials" element={<TutorialsPage />} />
                             <Route path="credits" element={<CreditsPage />} />
                             <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                             <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />

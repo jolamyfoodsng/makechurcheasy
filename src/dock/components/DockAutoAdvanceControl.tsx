@@ -39,6 +39,7 @@ interface DockAutoAdvanceControlProps {
   items: readonly DockAutoAdvanceItem[];
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
+  onClose?: () => void;
   onAdvance?: DockAutoAdvanceHandler;
   onStart?: (startIndex: number) => void;
   onActiveChange?: (active: boolean) => void;
@@ -183,6 +184,7 @@ export default function DockAutoAdvanceControl({
   items,
   selectedIndex,
   onSelectIndex,
+  onClose,
   onAdvance,
   onStart,
   onActiveChange,
@@ -365,7 +367,10 @@ export default function DockAutoAdvanceControl({
       if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setIsOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        onClose?.();
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -373,7 +378,7 @@ export default function DockAutoAdvanceControl({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -486,7 +491,10 @@ export default function DockAutoAdvanceControl({
             <button
               type="button"
               className="dock-auto-advance__close"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                onClose?.();
+              }}
               aria-label={t("common.close")}
               title={t("common.close")}
             >
