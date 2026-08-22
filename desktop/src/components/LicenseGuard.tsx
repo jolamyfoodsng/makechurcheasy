@@ -24,6 +24,7 @@ import {
   markDowngradeNotified,
   type LockReason,
 } from "@/services/licenseGuard";
+import { getDashboardBaseForAuth } from "@/services/authService";
 import Icon from "./Icon";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
@@ -134,6 +135,16 @@ function LicenseLockScreen({
       await openUrl(`${API_BASE}/support`);
     } catch {
       window.open(`${API_BASE}/support`, "_blank");
+    }
+  };
+
+  const handleManageDevices = async () => {
+    const url = `${getDashboardBaseForAuth()}/devices`;
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -252,6 +263,17 @@ function LicenseLockScreen({
                 onClick={handleManageSubscription}
               >
                 <Icon name="open_in_new" size={18} />
+                {config.primaryLabel}
+              </button>
+            )}
+
+            {config.primaryAction === "manage_devices" && (
+              <button
+                type="button"
+                className="license-guard-button license-guard-button--primary"
+                onClick={handleManageDevices}
+              >
+                <Icon name="devices" size={18} />
                 {config.primaryLabel}
               </button>
             )}
