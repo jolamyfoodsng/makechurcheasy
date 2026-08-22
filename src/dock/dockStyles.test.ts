@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const dockCss = readFileSync(new URL("./dock.css", import.meta.url), "utf8");
+const dockLayerManager = readFileSync(new URL("./dockLayerManager.ts", import.meta.url), "utf8");
 
 function cssBlock(selector: string): string {
   const start = dockCss.indexOf(selector);
@@ -69,11 +70,20 @@ describe("dock shared styles", () => {
     expect(dockCss).toContain(".dock-module--worship .dock-worship-summary__overflow-wrap");
   });
 
-  it("gives every registered Dock surface a scroll viewport and active-layer hook", () => {
+  it("keeps cards out of the transient overlay layer", () => {
     expect(dockCss).toContain('[data-dock-scroll-surface="true"]');
     expect(dockCss).toContain("overflow-y: auto;");
     expect(dockCss).toContain('[data-dock-layer-active="true"]');
     expect(dockCss).toContain("z-index: var(--dock-layer-z-index, 10000) !important;");
+    expect(dockCss).not.toContain('[data-dock-scroll-surface="true"][data-dock-layer-kind="card"]');
+    expect(dockLayerManager).toContain('if (layer.kind !== "owner" && layer.kind !== "overlay" && layer.kind !== "surface") continue;');
+    expect(dockLayerManager).toContain("Main cards and their structural owners are not transient layers");
+  });
+
+  it("promotes the Bible search stacking context with its open popovers", () => {
+    expect(dockLayerManager).toContain('"dock-bible-search-row"');
+    expect(dockLayerManager).toContain("DOCK_PROMOTABLE_OWNER_CLASS_NAMES");
+    expect(dockCss).toContain("z-index: 10003;");
   });
 
   it("anchors Worship/Notes tabs to the left instead of stretching them", () => {

@@ -199,8 +199,8 @@
 }
 
 .dock-media-context-menu__label,
-.dock-media-context-menu__item > span,
-.dock-media-context-menu__folder > span {
+.dock-media-context-menu__item>span,
+.dock-media-context-menu__folder>span {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -209,7 +209,7 @@
   text-align: left;
 }
 
-.dock-media-context-menu__item > svg:last-child {
+.dock-media-context-menu__item>svg:last-child {
   flex: 0 0 auto;
   margin-left: auto;
 }
@@ -351,7 +351,7 @@
   appearance: none;
 }
 
-.dock-root :where(div, label, form):has(> svg + input) > svg:first-child {
+.dock-root :where(div, label, form):has(> svg + input)>svg:first-child {
   display: none;
 }
 
@@ -390,27 +390,22 @@
 /* ── Optional Dock personality effects ──────────────────────────────────── */
 .dock-root.dock-root--radial-glow {
   background-color: var(--dock-bg);
-  background-image: radial-gradient(
-    circle at 100% 0%,
-    color-mix(in srgb, var(--dock-accent) 14%, transparent),
-    transparent 42%
-  );
+  background-image: radial-gradient(circle at 100% 0%,
+      color-mix(in srgb, var(--dock-accent) 14%, transparent),
+      transparent 42%);
 }
 
 .dock-root.dock-root--radial-glow .dock-content-main {
-  background-image: radial-gradient(
-    circle at 100% 0%,
-    color-mix(in srgb, var(--dock-accent) 8%, transparent),
-    transparent 48%
-  );
+  background-image: radial-gradient(circle at 100% 0%,
+      color-mix(in srgb, var(--dock-accent) 8%, transparent),
+      transparent 48%);
 }
 
 .dock-root.dock-root--glass .dock-inline-header {
   background: var(--dock-surface);
 }
 
-.dock-root.dock-root--glass :is(
-  .dock-shell-header,
+.dock-root.dock-root--glass :is(.dock-shell-header,
   .dock-status-bar,
   .dock-tabs,
   .dock-subtabs,
@@ -436,14 +431,12 @@
   .dtb-studio-card,
   .dock-theme-quick__modal,
   .dock-mv-content-picker,
-  .dock-mv-framing-editor
-) {
+  .dock-mv-framing-editor) {
   -webkit-backdrop-filter: blur(14px) saturate(1.08);
   backdrop-filter: blur(14px) saturate(1.08);
 }
 
-.dock-root.dock-root--soft-shadow :is(
-  .dock-inline-header,
+.dock-root.dock-root--soft-shadow :is(.dock-inline-header,
   .dock-shell-header,
   .dock-status-bar,
   .dock-tabs,
@@ -469,8 +462,7 @@
   .dtb-studio-card,
   .dock-theme-quick__modal,
   .dock-mv-content-picker,
-  .dock-mv-framing-editor
-) {
+  .dock-mv-framing-editor) {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
 }
 
@@ -511,6 +503,7 @@
 
 /* Respect the operating system's reduced-motion preference in the standalone Dock. */
 @media (prefers-reduced-motion: reduce) {
+
   .dock-root *,
   .dock-root *::before,
   .dock-root *::after {
@@ -5419,7 +5412,7 @@
   animation: dock-browser-zoom-warning-flash 1.1s steps(2, end) infinite;
 }
 
-.dock-browser-zoom-warning > svg {
+.dock-browser-zoom-warning>svg {
   flex: 0 0 auto;
   margin-top: 1px;
   color: var(--dock-red, #EF4444);
@@ -5455,6 +5448,7 @@
 }
 
 @keyframes dock-browser-zoom-warning-flash {
+
   0%,
   44% {
     background: color-mix(in srgb, var(--dock-red, #EF4444) 14%, var(--dock-surface));
@@ -5965,7 +5959,7 @@
   white-space: nowrap;
 }
 
-.dock-appearance-palette > svg {
+.dock-appearance-palette>svg {
   flex: 0 0 auto;
   margin-top: 1px;
   padding: 2px;
@@ -6099,17 +6093,17 @@
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
-.dock-appearance-toggle input:checked + .dock-appearance-toggle__track {
+.dock-appearance-toggle input:checked+.dock-appearance-toggle__track {
   border-color: color-mix(in srgb, var(--dock-accent) 68%, var(--dock-border));
   background: var(--dock-accent);
 }
 
-.dock-appearance-toggle input:checked + .dock-appearance-toggle__track .dock-appearance-toggle__thumb {
+.dock-appearance-toggle input:checked+.dock-appearance-toggle__track .dock-appearance-toggle__thumb {
   background: #FFFFFF;
   transform: translateX(12px);
 }
 
-.dock-appearance-toggle input:focus-visible + .dock-appearance-toggle__track {
+.dock-appearance-toggle input:focus-visible+.dock-appearance-toggle__track {
   outline: 2px solid color-mix(in srgb, var(--dock-accent) 75%, transparent);
   outline-offset: 2px;
 }
@@ -6701,23 +6695,23 @@
   align-items: center;
 }
 
-.dock-notes-browser-toolbar > .dock-search {
+.dock-notes-browser-toolbar>.dock-search {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.dock-notes-browser-toolbar > .dock-search .dock-input {
+.dock-notes-browser-toolbar>.dock-search .dock-input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
 
-.dock-notes-browser-toolbar > .dock-console-actions {
+.dock-notes-browser-toolbar>.dock-console-actions {
   flex: 0 0 auto;
   min-width: max-content;
 }
 
-.dock-notes-browser-toolbar > .dock-console-actions--song-browser {
+.dock-notes-browser-toolbar>.dock-console-actions--song-browser {
   padding: 0;
   border-bottom: 0;
 }
@@ -6766,14 +6760,14 @@
   display: contents;
 }
 
-.dock-worship-song-browser > .dock-search {
+.dock-worship-song-browser>.dock-search {
   grid-column: 1;
   grid-row: 1;
   width: 100%;
   min-width: 0;
 }
 
-.dock-worship-song-browser > .dock-search .dock-input {
+.dock-worship-song-browser>.dock-search .dock-input {
   width: 100% !important;
   min-width: 0;
   box-sizing: border-box;
@@ -8575,7 +8569,7 @@
   flex: 0 1 auto;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 399px) {
   .dock-bible-actions__top-btn {
     width: 28px;
     padding: 0;
@@ -8914,7 +8908,7 @@
   white-space: nowrap;
 }
 
-.dock-compact-translation-select > svg {
+.dock-compact-translation-select>svg {
   flex: 0 0 auto;
   color: var(--dock-text-dim, #94A3B8);
   pointer-events: none;
@@ -15238,7 +15232,7 @@
   white-space: nowrap;
 }
 
-.dock-bible-controls__keyboard-cue-group > span:last-child {
+.dock-bible-controls__keyboard-cue-group>span:last-child {
   color: var(--dock-text-secondary);
   font-weight: 600;
 }
@@ -16423,6 +16417,14 @@
   z-index: 70;
 }
 
+.dock-bible-search-row:has(.dock-bible-compare-popover,
+  .dock-bible-reference-popover,
+  .dock-bible-actions__menu) {
+  /* Keep the containing stacking context above an already-active reader
+     surface when the layer manager has not observed the click yet. */
+  z-index: 10003;
+}
+
 .dock-bible-search-row__input {
   flex: 1;
   min-width: 0;
@@ -16679,22 +16681,14 @@
 .dtb-studio__modal {
   /* Keep the picker tall on short-width windows. Width should constrain the
      card horizontally without shrinking its viewport-driven height. */
-  --dtb-studio-height: min(
-    calc(80vh / var(--dock-font-scale, 1)),
-    calc((100vh - 32px) / var(--dock-font-scale, 1))
-  );
-  --dtb-studio-height: min(
-    calc(80dvh / var(--dock-font-scale, 1)),
-    calc((100dvh - 32px) / var(--dock-font-scale, 1))
-  );
-  --dtb-studio-width: min(
-    var(--dtb-studio-height),
-    calc((100vw - 32px) / var(--dock-font-scale, 1))
-  );
-  --dtb-studio-width: min(
-    var(--dtb-studio-height),
-    calc((100dvw - 32px) / var(--dock-font-scale, 1))
-  );
+  --dtb-studio-height: min(calc(80vh / var(--dock-font-scale, 1)),
+      calc((100vh - 32px) / var(--dock-font-scale, 1)));
+  --dtb-studio-height: min(calc(80dvh / var(--dock-font-scale, 1)),
+      calc((100dvh - 32px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(var(--dtb-studio-height),
+      calc((100vw - 32px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(var(--dtb-studio-height),
+      calc((100dvw - 32px) / var(--dock-font-scale, 1)));
   width: var(--dtb-studio-width);
   max-width: none;
   height: var(--dtb-studio-height);
@@ -16707,6 +16701,16 @@
   border-radius: 8px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+}
+
+/* Quick Edit / Background Picker opens at 90% of the browser width. Keep the
+   small-screen guard so the modal still fits beside the backdrop padding. */
+.dtb-studio__modal--picker {
+  --dtb-studio-width: min(calc(90vw / var(--dock-font-scale, 1)),
+      calc((100vw - 24px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(calc(90dvw / var(--dock-font-scale, 1)),
+      calc((100dvw - 24px) / var(--dock-font-scale, 1)));
+  width: var(--dtb-studio-width);
 }
 
 /* Header — fixed at top */
@@ -17047,6 +17051,9 @@
 .dtb-studio-card--picker {
   display: flex;
   flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -17102,7 +17109,7 @@
   gap: 12px;
 }
 
-.dtb-studio-card--picker > .dtb-studio-card__body {
+.dtb-studio-card--picker>.dtb-studio-card__body {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -18581,7 +18588,7 @@
   gap: 8px;
 }
 
-.dock-auto-advance__header > :first-child {
+.dock-auto-advance__header> :first-child {
   min-width: 0;
 }
 
@@ -26549,16 +26556,19 @@
   font-weight: 600;
 }
 
-.dock-receiver-notification > svg {
+.dock-receiver-notification>svg {
   color: var(--dock-text-dim);
   flex: 0 0 auto;
 }
 
 @keyframes dock-receiver-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .dock-receiver__spinner,
   .dock-receiver-notification {
     animation: none;
@@ -26598,6 +26608,111 @@
   gap: 8px;
 }
 
+.dtb-bg-picker__layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dtb-bg-picker__panel {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dtb-bg-picker__layout--compact {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
+  flex: 0 0 40px;
+  align-self: stretch;
+  width: 40px;
+  min-width: 40px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0;
+  border: 0;
+  border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  border-radius: 0;
+  background: var(--dock-surface);
+  overflow: hidden;
+}
+
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tab {
+  flex: 1 1 0;
+  width: 40px;
+  min-width: 40px;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  gap: 0;
+  border-left: 2px solid transparent;
+  border-bottom: 0;
+  border-radius: 0;
+  font-size: 0;
+}
+
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tab span,
+.dtb-bg-picker__panel--compact-subtabs .dtb-bg-picker__subtab span {
+  display: none;
+}
+
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tab--active {
+  border-left-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 18%, transparent);
+}
+
+.dtb-bg-picker__panel--compact-subtabs {
+  flex-direction: row;
+  gap: 4px;
+}
+
+.dtb-bg-picker__panel--compact-subtabs>.dtb-bg-picker__subtabs {
+  flex: 0 0 40px;
+  align-self: stretch;
+  width: 40px;
+  min-width: 40px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0;
+  border: 0;
+  border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  border-radius: 0;
+  background: var(--dock-surface);
+  overflow: hidden;
+}
+
+.dtb-bg-picker__panel--compact-subtabs>.dtb-bg-picker__subtabs .dtb-bg-picker__subtab {
+  flex: 1 1 0;
+  width: 40px;
+  min-width: 40px;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  gap: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  font-size: 0;
+}
+
+.dtb-bg-picker__panel--compact-subtabs>.dtb-bg-picker__subtabs .dtb-bg-picker__subtab--active {
+  border-left-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 18%, transparent);
+}
+
 .dtb-bg-picker--compare-only .dtb-compare-settings>.dtb-bg-picker__settings:first-child {
   border-top: 0;
   padding-top: 0;
@@ -26626,6 +26741,10 @@
 }
 
 .dtb-bg-picker__subtab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
   min-height: 26px;
   padding: 0 10px;
@@ -26654,6 +26773,7 @@
 .dtb-bg-picker__scroll {
   display: flex;
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   gap: 12px;
@@ -29068,7 +29188,7 @@
   align-content: start;
 }
 
-.dock-mv-tab__list--ticker > .dock-mv-tab__section {
+.dock-mv-tab__list--ticker>.dock-mv-tab__section {
   min-width: 0;
   margin-bottom: 0;
 }
@@ -29093,7 +29213,7 @@
     gap: 0;
   }
 
-  .dock-mv-tab__list--ticker > .dock-mv-tab__section {
+  .dock-mv-tab__list--ticker>.dock-mv-tab__section {
     margin-bottom: 12px;
   }
 }
@@ -32060,7 +32180,7 @@
   font-size: 12px;
 }
 
-.dock-mv-framing-editor__custom-hint > span:last-child {
+.dock-mv-framing-editor__custom-hint>span:last-child {
   color: var(--dock-text-dim);
   font-size: 10px;
 }
@@ -34650,6 +34770,7 @@ button.dock-btm-toolbar__clear--inline,
 
 /* ── Ultra-short Bible Dock: the shell arrow hides the search controls ── */
 @media screen and (max-height: 300px) {
+
   .dock-root--header-collapsed .dock-module--bible .dock-bible-search-row,
   .dock-root--header-collapsed .dock-module--bible .dock-bible-controls-panel {
     display: none;
@@ -35981,7 +36102,7 @@ button.dock-btm-toolbar__clear--inline,
   min-width: 0;
 }
 
-.dock-media-search-row > .dock-media-search {
+.dock-media-search-row>.dock-media-search {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -36616,6 +36737,13 @@ button.dock-btm-toolbar__clear--inline,
   flex-shrink: 0;
 }
 
+.dock-bible-compact-actions--narrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+}
+
 .dock-bible-actions__overflow {
   display: inline-flex;
   align-items: center;
@@ -37041,8 +37169,8 @@ button.dock-btm-toolbar__clear--inline,
     padding: 0;
   }
 
-  .dock-module--worship .dock-worship-summary__overflow-item > .dock-translation--compact-label,
-  .dock-module--worship .dock-worship-summary__overflow-item > .dock-auto-advance--labeled {
+  .dock-module--worship .dock-worship-summary__overflow-item>.dock-translation--compact-label,
+  .dock-module--worship .dock-worship-summary__overflow-item>.dock-auto-advance--labeled {
     flex: 1 1 auto;
     min-width: 0;
   }
@@ -37062,26 +37190,23 @@ button.dock-btm-toolbar__clear--inline,
    Shared Dock layer behavior
 
    The Dock has several independently-owned tabs and a few document-level
-   portals. These attributes are applied by dockLayerManager.ts so cards,
+   portals. These attributes are applied by dockLayerManager.ts so transient
    panels, popovers, and dialogs all expose the same bounded scroll viewport.
-   The active layer receives a monotonically increasing z-index on pointer or
-   focus, including its positioning ancestors, so a newly used surface rises
-   above an older one.
+   Main cards remain structural. The active transient layer receives a
+   monotonically increasing z-index on pointer or focus, including transient
+   positioning ancestors, so a newly used surface rises above older content.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 [data-dock-scroll-surface="true"] {
   box-sizing: border-box;
-  min-width: 0;
-  max-height: min(84vh, 760px);
+  max-height: 700px;
+  min-height: 400px;
+  max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--dock-border, #334155) transparent;
-}
-
-[data-dock-scroll-surface="true"][data-dock-layer-kind="card"] {
-  max-height: min(80vh, 520px);
 }
 
 [data-dock-layer-overlay="true"] {

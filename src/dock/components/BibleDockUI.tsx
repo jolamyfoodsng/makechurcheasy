@@ -308,6 +308,7 @@ interface BibleSearchRowProps {
   onVersionChange: (version: string) => void;
   compareEnabled: boolean;
   isCompact: boolean;
+  isNarrowWidth?: boolean;
   compactActions?: BibleContextualActions;
   isExpanded: boolean;
   onToggle: () => void;
@@ -323,6 +324,7 @@ export function BibleSearchRow({
   onVersionChange,
   compareEnabled,
   isCompact,
+  isNarrowWidth = false,
   compactActions,
   isExpanded,
   onToggle,
@@ -336,6 +338,7 @@ export function BibleSearchRow({
   const renderedHeaderActions = typeof headerActions === "function"
     ? headerActions(isExpanded, onToggle)
     : headerActions;
+  const shouldUseNarrowOverflowActions = isNarrowWidth && Boolean(renderedCompactActions);
 
   return (
     <div className="dock-bible-search-row">
@@ -349,7 +352,11 @@ export function BibleSearchRow({
           onVersionChange={onVersionChange}
           disabled={compareEnabled}
         />
-        {hideBrowseToggle && showHeaderActionsWhenBrowseHidden && renderedHeaderActions ? (
+        {shouldUseNarrowOverflowActions ? (
+          <div className="dock-bible-compact-actions dock-bible-compact-actions--narrow">
+            {renderedCompactActions}
+          </div>
+        ) : hideBrowseToggle && showHeaderActionsWhenBrowseHidden && renderedHeaderActions ? (
           <div className="dock-bible-search-row__actions">{renderedHeaderActions}</div>
         ) : !hideBrowseToggle && isCompact && renderedCompactActions ? (
           <div className="dock-bible-compact-actions">{renderedCompactActions}</div>
@@ -502,6 +509,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       onVersionChange={onVersionChange}
       compareEnabled={compareEnabled}
       isCompact={isCompact}
+      isNarrowWidth={isNarrowWidth}
       compactActions={compactActions}
       isExpanded={expanded}
       onToggle={onToggle}

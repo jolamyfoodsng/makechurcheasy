@@ -1773,7 +1773,7 @@ function DockBibleTab({
     const syncLayout = (target: Element, height: number, width: number) => {
       if (target === element) {
         setIsShortHeight(height <= 520);
-        setIsNarrowWidth(width <= 300);
+        setIsNarrowWidth(width < 400);
         return;
       }
 
@@ -1802,7 +1802,7 @@ function DockBibleTab({
     observer.observe(element);
     observer.observe(quickActionsContainer);
     return () => observer.disconnect();
-  }, []);
+  }, [preferencesHydrated, translationsLoaded]);
 
   useEffect(() => {
     if (!isNarrowWidth) {
@@ -6162,7 +6162,7 @@ function DockBibleTab({
       abbreviateBook={abbreviateBibleBook}
       BOOK_CHAPTERS={BOOK_CHAPTERS}
       compactActions={
-        isShortHeight ? ((browseExpanded, onBrowseToggle) => (
+        isShortHeight || isNarrowWidth ? ((browseExpanded, onBrowseToggle) => (
           <div className="dock-bible-actions__compare-group" ref={comparePopoverRef}>
               <button
                 type="button"
