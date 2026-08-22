@@ -32,4 +32,10 @@ describe("Dock bottom toolbar narrow actions", () => {
     expect(toolbarCss).toContain(".dock-btm-overflow__narrow-actions > * svg");
     expect(toolbarCss).toContain(".dock-btm-overflow__children > * > button > svg");
   });
+
+  it("anchors overflow cards above the full bottom deck when search is expanded", () => {
+    expect(toolbarCss).toContain(".dock-btm-toolbar:has(> .dock-bottom-search-panel)");
+    expect(toolbarCss).toContain(".dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow {\n  position: static;");
+    expect(toolbarCss).toContain(".dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow__menu");
+  });
 });

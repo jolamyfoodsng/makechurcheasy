@@ -5,7 +5,8 @@
  * Resolves straight into a fast chapter reader with stage / live actions per verse.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { SearchResult as BibleKeywordResult } from "../../bible/bibleData";
 import { addFavorite, getFavorites, removeFavorite } from "../../bible/bibleDb";
@@ -1672,9 +1673,16 @@ function DockBibleTab({
   const searchRef = useRef<HTMLDivElement>(null);
   const verseGridRef = useRef<HTMLDivElement>(null);
   const comparePopoverRef = useRef<HTMLDivElement>(null);
+  const comparePopoverPanelRef = useRef<HTMLDivElement>(null);
   const referencePopoverRef = useRef<HTMLDivElement>(null);
   const browserFontSizePopoverRef = useRef<HTMLDivElement>(null);
   const [showComparePopover, setShowComparePopover] = useState(false);
+  const [comparePopoverPosition, setComparePopoverPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [showReferencePopover, setShowReferencePopover] = useState(false);
   const [showBrowserFontSizePopover, setShowBrowserFontSizePopover] = useState(false);
   const [quickActionsTop, setQuickActionsTop] = useState(() =>
@@ -1810,6 +1818,90 @@ function DockBibleTab({
     }
   }, [isNarrowWidth]);
 
+  // The bottom-search layout nests Compare inside the toolbar overflow menu.
+  // Position the open card against the full toolbar instead of the tiny menu
+  // row so it stays visible above the Bible reader and below the viewport edge.
+  useLayoutEffect(() => {
+    if (!showComparePopover) {
+      setComparePopoverPosition(null);
+      return;
+    }
+
+    const owner = comparePopoverRef.current;
+    const toolbar = owner?.closest<HTMLElement>(".dock-btm-toolbar");
+    const panel = comparePopoverPanelRef.current;
+    const trigger = owner?.querySelector<HTMLButtonElement>("button");
+    if (!panel || (!toolbar && !trigger)) return;
+
+    let frame = 0;
+    const updatePosition = () => {
+
+      const anchorRect = (toolbar ?? trigger)?.getBoundingClientRect();
+      if (!anchorRect) return;
+      const panelRect = panel.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 320;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 480;
+      const viewportPadding = 8;
+      const gap = 8;
+      const width = Math.min(320, Math.max(240, viewportWidth - viewportPadding * 2));
+      const openAbove = Boolean(toolbar)
+        || (viewportHeight - anchorRect.bottom - viewportPadding < (panelRect.height || 420) + gap
+          && anchorRect.top - viewportPadding > viewportHeight - anchorRect.bottom - viewportPadding);
+      const availableAbove = Math.max(120, anchorRect.top - gap - viewportPadding);
+      const maxHeight = Math.max(
+        120,
+        Math.min(640, viewportHeight - viewportPadding * 2, availableAbove),
+      );
+      const height = Math.min(panelRect.height || 420, maxHeight);
+      const preferredTop = openAbove
+        ? anchorRect.top - gap - height
+        : anchorRect.bottom + gap;
+      const top = Math.max(
+        viewportPadding,
+        Math.min(preferredTop, viewportHeight - viewportPadding - height),
+      );
+      const left = Math.max(
+        viewportPadding,
+        Math.min(anchorRect.right - width, viewportWidth - width - viewportPadding),
+      );
+
+      setComparePopoverPosition((current) => (
+        current?.top === top
+        && current.left === left
+        && current.width === width
+        && current.maxHeight === maxHeight
+          ? current
+          : { top, left, width, maxHeight }
+      ));
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updatePosition);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
+    window.visualViewport?.addEventListener("resize", scheduleUpdate);
+    const resizeObserver = typeof ResizeObserver !== "undefined" && comparePopoverRef.current
+      ? new ResizeObserver(scheduleUpdate)
+      : null;
+    if (resizeObserver) {
+      if (toolbar) resizeObserver.observe(toolbar);
+      if (trigger) resizeObserver.observe(trigger);
+      if (panel) resizeObserver.observe(panel);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      window.visualViewport?.removeEventListener("resize", scheduleUpdate);
+      resizeObserver?.disconnect();
+    };
+  }, [compareEnabled, compareMode, searchPlacement, showComparePopover]);
+
   useEffect(() => () => {
     if (copyFeedbackTimerRef.current !== null) {
       window.clearTimeout(copyFeedbackTimerRef.current);
@@ -1910,7 +2002,9 @@ function DockBibleTab({
       setIsBookDropdownOpen(false);
       setIsChapterDropdownOpen(false);
       setIsVerseDropdownOpen(false);
-      if (comparePopoverRef.current && !comparePopoverRef.current.contains(event.target as Node)) {
+      const insideComparePopover = comparePopoverRef.current?.contains(event.target as Node)
+        || comparePopoverPanelRef.current?.contains(event.target as Node);
+      if (!insideComparePopover) {
         setShowComparePopover(false);
         setShowBibleActionsMenu(false);
       }
@@ -6049,6 +6143,19 @@ function DockBibleTab({
     refreshCurrentReferenceDisplay(format, versionVisible);
   }, [persistDockBiblePreferencesNow, refreshCurrentReferenceDisplay]);
 
+  const comparePopoverStyle = {
+    position: "fixed" as const,
+    top: comparePopoverPosition?.top ?? 0,
+    left: comparePopoverPosition?.left ?? 0,
+    right: "auto",
+    bottom: "auto",
+    width: comparePopoverPosition?.width ?? 320,
+    boxSizing: "border-box" as const,
+    maxHeight: comparePopoverPosition?.maxHeight,
+    zIndex: 10000,
+    visibility: comparePopoverPosition ? "visible" as const : "hidden" as const,
+  };
+
   const referenceSettingsPopover = (
     <div className="dock-bible-reference-popover" role="dialog" aria-label={t("bible.referenceSettings", "Reference display settings")}>
       <div className="dock-bible-reference-popover__header">
@@ -6209,8 +6316,13 @@ function DockBibleTab({
                   </button>
                 </div>
               )}
-            {showComparePopover && (
-              <div className="dock-bible-compare-popover dock-bible-compact-actions__popover">
+            {showComparePopover && typeof document !== "undefined" && createPortal(
+              <div
+                ref={comparePopoverPanelRef}
+                className="dock-bible-compare-popover dock-bible-compact-actions__popover"
+                data-dock-keep-overflow-open="true"
+                style={comparePopoverStyle}
+              >
                 <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
                 <div className="dock-bible-compare-tabs" role="tablist" aria-label={t("dock.compare.modes", "Compare modes")}>
                   <button
@@ -6330,7 +6442,8 @@ function DockBibleTab({
                     onSendToObs={() => void handleSendComparePassagesToObs()}
                   />
                 )}
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         )) : undefined
@@ -6417,8 +6530,13 @@ function DockBibleTab({
                 </button>
               </div>
             )}
-            {showComparePopover && (
-              <div className="dock-bible-compare-popover">
+            {showComparePopover && typeof document !== "undefined" && createPortal(
+              <div
+                ref={comparePopoverPanelRef}
+                className="dock-bible-compare-popover"
+                data-dock-keep-overflow-open="true"
+                style={comparePopoverStyle}
+              >
                 <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
                 <div className="dock-bible-compare-tabs" role="tablist" aria-label={t("dock.compare.modes", "Compare modes")}>
                   <button
@@ -6538,7 +6656,8 @@ function DockBibleTab({
                     onSendToObs={() => void handleSendComparePassagesToObs()}
                   />
                 )}
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         </div>

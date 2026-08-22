@@ -395,6 +395,21 @@
   display: inline-flex;
 }
 
+/* The Bible toolbar can own an expanded search card above its action row.
+   Anchor the overflow card to the whole deck in that layout, otherwise its
+   "above the row" placement covers the search input. */
+.dock-btm-toolbar:has(> .dock-bottom-search-panel) {
+  position: relative;
+}
+
+.dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow {
+  position: static;
+}
+
+.dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow__menu {
+  right: 10px;
+}
+
 /* ── Overflow dropdown ── */
 .dock-btm-overflow__menu {
   position: absolute;
