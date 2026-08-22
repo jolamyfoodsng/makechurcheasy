@@ -338,7 +338,9 @@ export function BibleSearchRow({
   const renderedHeaderActions = typeof headerActions === "function"
     ? headerActions(isExpanded, onToggle)
     : headerActions;
-  const shouldUseNarrowOverflowActions = isNarrowWidth && Boolean(renderedCompactActions);
+  const shouldUseNarrowOverflowActions = isNarrowWidth
+    && Boolean(renderedCompactActions)
+    && (!hideBrowseToggle || showHeaderActionsWhenBrowseHidden);
 
   return (
     <div className="dock-bible-search-row">

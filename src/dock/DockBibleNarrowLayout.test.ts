@@ -16,7 +16,7 @@ describe("Dock Bible narrow layout", () => {
     expect(dockBibleTabSource).toContain("setIsNarrowWidth(width < 400);");
     expect(dockBibleTabSource).toContain("}, [preferencesHydrated, translationsLoaded]);");
     expect(dockBibleTabSource).toContain("isShortHeight || isNarrowWidth ? ((browseExpanded, onBrowseToggle) => (");
-    expect(bibleDockUiSource).toContain("const shouldUseNarrowOverflowActions = isNarrowWidth && Boolean(renderedCompactActions);");
+    expect(bibleDockUiSource).toContain("const shouldUseNarrowOverflowActions = isNarrowWidth\n    && Boolean(renderedCompactActions)\n    && (!hideBrowseToggle || showHeaderActionsWhenBrowseHidden);");
     expect(bibleDockUiSource).toContain("dock-bible-compact-actions--narrow");
     expect(dockCssSource).toContain("@media (max-width: 399px)");
     expect(dockCssSource).toContain(".dock-bible-search-row:has(");
