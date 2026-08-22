@@ -43,6 +43,8 @@ describe("DockLmTab settings helpers", () => {
   it("uses icon-only vertical tabs and keeps overlay mode in settings", () => {
     expect(dockLmTabSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
     expect(dockLmTabSource).toContain('data-testid={`lm-tab-${tab}`}');
+    expect(dockLmTabSource).toMatch(/tabBarCompact:\s*\{[\s\S]*?height: "100%"[\s\S]*?overflow: "hidden"/);
+    expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "1 1 0"/);
     expect(dockLmTabSource).not.toContain("!presentationLinkMode && renderOverlayModeSwitch()");
     expect(dockLmTabSource).toContain("{renderOverlayModeSwitch()}");
   });
