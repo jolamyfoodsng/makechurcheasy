@@ -895,6 +895,9 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("root.style.setProperty('--lt-max-width', isLowerThird ? 'none'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px')");
     expect(overlayHtml).toContain("max-width: var(--lt-text-max-width, 100%)");
+    expect(overlayHtml).toContain("width: calc(100% - var(--lt-h-margin, 120px));");
+    expect(overlayHtml).toContain("#lt-bar.lt-edge-bottom #lt-verse-text,");
+    expect(overlayHtml).toContain("max-width: none;");
   });
 
   it("orders scripture reference above or below the verse without DOM reshuffling", () => {

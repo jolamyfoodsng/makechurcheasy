@@ -674,7 +674,7 @@
       bottom: 0;
       transform: translateX(-50%);
       z-index: 3;
-      width: calc(100vw - var(--lt-h-margin, 120px));
+      width: calc(100% - var(--lt-h-margin, 120px));
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
       padding: var(--lt-card-padding, 28px 48px);
@@ -693,7 +693,7 @@
       bottom: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: calc(100vw - var(--lt-h-margin, 120px));
+      width: calc(100% - var(--lt-h-margin, 120px));
       height: auto;
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
@@ -705,7 +705,7 @@
       bottom: auto;
       left: 50%;
       transform: translateX(-50%);
-      width: calc(100vw - var(--lt-h-margin, 120px));
+      width: calc(100% - var(--lt-h-margin, 120px));
       height: auto;
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
@@ -869,6 +869,14 @@
       word-wrap: break-word;
       overflow-wrap: break-word;
       transform-origin: center;
+    }
+
+    /* Horizontal lower-thirds use the full fixed overlay stage. Do not let a
+       legacy width preset cap the verse inside that full-width card. */
+    #lt-bar.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-edge-top #lt-verse-text {
+      width: 100%;
+      max-width: none;
     }
 
     #lt-bar.lt-edge-left #lt-verse-text,
