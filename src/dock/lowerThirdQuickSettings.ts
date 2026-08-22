@@ -89,6 +89,7 @@ const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSet
   "refOpacity",
   "refTextAlign",
   "refSpacing",
+  "lineHeight",
   "referenceBackgroundEnabled",
   "referenceBackgroundColor",
   "referenceBackgroundStyle",

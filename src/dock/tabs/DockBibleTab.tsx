@@ -502,9 +502,8 @@ function BibleOutputControlsMenu({
               <button
                 key={option.id}
                 type="button"
-                className={`dock-bible-reader__size-preset${
-                  settings.lowerThirdSize === option.preset ? " dock-bible-reader__size-preset--active" : ""
-                }`}
+                className={`dock-bible-reader__size-preset${settings.lowerThirdSize === option.preset ? " dock-bible-reader__size-preset--active" : ""
+                  }`}
                 onClick={() => onLowerThirdSizePresetChange(option)}
                 aria-pressed={settings.lowerThirdSize === option.preset}
               >
@@ -678,20 +677,6 @@ function sanitizeLowerThirdCardRadius(value: unknown): number {
 
 function sanitizeLowerThirdTextDirection(value: unknown): BibleThemeSettings["lowerThirdTextDirection"] {
   return value === "inverted" ? "inverted" : "normal";
-}
-
-function abbreviateBibleBook(book: string): string {
-  const canonical = BOOK_ABBREVS[book]?.[0]?.trim();
-  if (!canonical) {
-    return book
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => (/^\d+$/.test(part) ? part : part.slice(0, 3)))
-      .join("")
-      .toLowerCase();
-  }
-
-  return canonical.replace(/\s+/g, "").toLowerCase();
 }
 
 function sanitizeBibleReferenceFormat(value: unknown): BibleReferenceFormat {
@@ -1458,7 +1443,7 @@ function DockBibleTab({
   initialVoiceBible,
   appConnected,
   presentationOutputTarget = "obs",
-    searchPlacement = "top",
+  searchPlacement = "top",
   fullscreenOnly = false,
   showHistory,
   onHistoryClose,
@@ -1744,9 +1729,6 @@ function DockBibleTab({
   const quickActionsNeedsInitialCenterRef = useRef(
     typeof initialUiPrefs.quickActionsTop !== "number" || !Number.isFinite(initialUiPrefs.quickActionsTop),
   );
-  const [isBookDropdownOpen, setIsBookDropdownOpen] = useState(false);
-  const [isChapterDropdownOpen, setIsChapterDropdownOpen] = useState(false);
-  const [isVerseDropdownOpen, setIsVerseDropdownOpen] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [themeSettingsInitialTab, setThemeSettingsInitialTab] = useState<ThemeSettingsTab>("text");
   const [activeSceneProfileId, setActiveSceneProfileId] = useState(GENERAL_SCENE_PROFILE_ID);
@@ -1867,9 +1849,9 @@ function DockBibleTab({
 
       setComparePopoverPosition((current) => (
         current?.top === top
-        && current.left === left
-        && current.width === width
-        && current.maxHeight === maxHeight
+          && current.left === left
+          && current.width === width
+          && current.maxHeight === maxHeight
           ? current
           : { top, left, width, maxHeight }
       ));
@@ -1925,7 +1907,6 @@ function DockBibleTab({
   }, [overlayMode]);
 
   const [showSearchBar, _setShowSearchBar] = useState(true);
-  const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
   const activeColumnIndex = Math.min(Math.max(selectedColumn, 0), QUICK_SELECT_VERSION_COUNT - 1);
   const activeTranslation = columnTranslations[activeColumnIndex] ?? columnTranslations[0];
   const activeBibleSearchTranslation = compareEnabled && compareMode === "passages"
@@ -1993,15 +1974,6 @@ function DockBibleTab({
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      const isPicker = target?.closest(
-        ".dock-bible-browser__book-picker, .dock-bible-browser__chapter-picker, .dock-bible-browser__verse-picker, .dock-bible-version-bar__slot, .dock-bible-controls__book-card, .dock-bible-controls__chapter-picker, .dock-bible-controls__verse-picker",
-      );
-      if (isPicker) return;
-
-      setIsBookDropdownOpen(false);
-      setIsChapterDropdownOpen(false);
-      setIsVerseDropdownOpen(false);
       const insideComparePopover = comparePopoverRef.current?.contains(event.target as Node)
         || comparePopoverPanelRef.current?.contains(event.target as Node);
       if (!insideComparePopover) {
@@ -3658,7 +3630,7 @@ function DockBibleTab({
       const fitOptions = options?.awaitFontFit ? { waitForFit: true } : undefined;
       const pushLive = () => hasSceneRoute
         ? pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions)
-          : liveOverlayMode === "lower-third"
+        : liveOverlayMode === "lower-third"
           ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload, fitOptions)
           : pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions);
 
@@ -4927,18 +4899,18 @@ function DockBibleTab({
   const searchResults = useMemo<DockBibleSearchOption[]>(() => {
     const keywordMatches = keywordResultsQuery === debouncedSearchQuery.trim()
       ? keywordResults.map((result) => ({
-      kind: "keyword" as const,
-      book: result.book,
-      chapter: result.chapter,
-      verse: result.verse,
-      endVerse: result.endVerse,
-      label: `${result.book} ${result.chapter}:${result.endVerse && result.endVerse > result.verse
-        ? `${result.verse}-${result.endVerse}`
-        : result.verse} — ${activeBibleSearchTranslation}`,
-      snippet: result.snippet,
-      text: result.text,
-      query: debouncedSearchQuery,
-        }))
+        kind: "keyword" as const,
+        book: result.book,
+        chapter: result.chapter,
+        verse: result.verse,
+        endVerse: result.endVerse,
+        label: `${result.book} ${result.chapter}:${result.endVerse && result.endVerse > result.verse
+          ? `${result.verse}-${result.endVerse}`
+          : result.verse} — ${activeBibleSearchTranslation}`,
+        snippet: result.snippet,
+        text: result.text,
+        query: debouncedSearchQuery,
+      }))
       : [];
 
     // Priority: reference > keyword > concept
@@ -5136,8 +5108,8 @@ function DockBibleTab({
       const mode = fullscreenOnlyMode
         ? "fullscreen"
         : data?.overlayMode === "lower-third" || data?.overlayMode === "fullscreen"
-        ? data.overlayMode
-        : overlayModeRef.current;
+          ? data.overlayMode
+          : overlayModeRef.current;
 
       if (!hasSceneRoute) {
         await dockObsClient.bringBibleOverlayForward(mode).catch(() => { });
@@ -5639,17 +5611,11 @@ function DockBibleTab({
       next[columnIndex] = nextValue;
       return next;
     });
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
   }, []);
 
   const handleBookSelect = useCallback((book: string) => {
     if (!BOOK_CHAPTERS[book]) return;
     manualReferenceSelectionRef.current = true;
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
     const nextChapter = Math.min(selectedChapter ?? 1, BOOK_CHAPTERS[book] ?? 1);
     setSelectedBook(book);
     selectedChapterRef.current = nextChapter;
@@ -5668,64 +5634,6 @@ function DockBibleTab({
     if (!nextBook) return;
     handleBookSelect(nextBook);
   }, [handleBookSelect, selectedBook]);
-
-  const handleBookToggle = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (!selectedBook) return;
-
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-    setIsBookDropdownOpen((current) => !current);
-  }, [selectedBook]);
-  const handleChapterToggle = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!selectedBook || !selectedChapter) return;
-    setIsBookDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-    setIsChapterDropdownOpen((current) => !current);
-  }, [selectedBook, selectedChapter]);
-
-  const handleChapterSelect = useCallback((chapter: number) => {
-    if (!selectedBook) return;
-    manualReferenceSelectionRef.current = true;
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-    if (chapter === selectedChapter) return;
-    selectedChapterRef.current = chapter;
-    setSelectedChapter(chapter);
-    setSelectedVerse(null);
-    setHighlightVerse(null);
-    setActionError("");
-    pendingScrollVerseRef.current = null;
-  }, [selectedBook, selectedChapter]);
-
-  const handleVerseToggle = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!selectedBook || !selectedChapter || verseCount <= 0) return;
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen((current) => !current);
-  }, [selectedBook, selectedChapter, verseCount]);
-
-  const handleVerseSelect = useCallback((verse: number) => {
-    if (!selectedBook || !selectedChapter) return;
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-    setSelectedVerse(verse);
-    setHighlightVerse(verse);
-    setActionError("");
-    pendingScrollVerseRef.current = verse;
-    void stageVerse(selectedBook, selectedChapter, verse, {
-      translation: activeTranslation,
-      columnIndex: activeColumnIndex,
-    });
-  }, [activeColumnIndex, activeTranslation, selectedBook, selectedChapter, stageVerse]);
 
   const handleSelectFullscreenTheme = useCallback((theme: BibleTheme) => {
     manualThemeSettingsSelectionRef.current = true;
@@ -5780,18 +5688,18 @@ function DockBibleTab({
         templateType: quickEditOverlayMode,
       }
       : fullscreenOnlyMode || overlayMode === "fullscreen"
-      ? {
-        selectedThemeId: selectedBibleTheme.id,
-        onSelect: handleSelectFullscreenTheme,
-        label: t("bible.fullscreenTheme"),
-        templateType: "fullscreen" as const,
-      }
-      : {
-        selectedThemeId: selectedLowerThirdTheme.id,
-        onSelect: handleSelectLowerThirdTheme,
-        label: t("bible.lowerThirdTheme"),
-        templateType: "lower-third" as const,
-      };
+        ? {
+          selectedThemeId: selectedBibleTheme.id,
+          onSelect: handleSelectFullscreenTheme,
+          label: t("bible.fullscreenTheme"),
+          templateType: "fullscreen" as const,
+        }
+        : {
+          selectedThemeId: selectedLowerThirdTheme.id,
+          onSelect: handleSelectLowerThirdTheme,
+          label: t("bible.lowerThirdTheme"),
+          templateType: "lower-third" as const,
+        };
   const resolveThemeQuickSettings = useCallback((theme: BibleTheme): DockFullscreenQuickThemeSettings => {
     const effectiveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
     return extractThemeQuickSettingsForOverlayMode(theme, effectiveOverlayMode);
@@ -5874,27 +5782,6 @@ function DockBibleTab({
     });
   }, [activeColumnIndex, activeTranslation, selectedBook, selectedChapter, selectedVerse, stageVerse]);
 
-  const handleGoToChapter = useCallback(() => {
-    if (!selectedBook || !selectedChapter) return;
-    setSelectedVerse(1);
-    pendingScrollVerseRef.current = 1;
-    window.setTimeout(() => {
-      const verseRow = verseGridRef.current?.querySelector<HTMLElement>(
-        `[data-verse-row="1"]`,
-      );
-      if (verseRow) {
-        const container = verseGridRef.current;
-        if (container) {
-          const verseRect = verseRow.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          const targetScrollTop = container.scrollTop + (verseRect.top - containerRect.top) - containerRect.height * 0.1;
-          container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
-        }
-      }
-      pendingScrollVerseRef.current = null;
-    }, 150);
-  }, [selectedBook, selectedChapter]);
-
   const handleChapterJump = useCallback((delta: -1 | 1) => {
     if (!selectedBook) return;
     const currentChapter = selectedChapterRef.current ?? selectedChapter;
@@ -5903,9 +5790,6 @@ function DockBibleTab({
     const nextChapter = currentChapter + delta;
     if (nextChapter < 1 || nextChapter > maxChapter) return;
 
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
     manualReferenceSelectionRef.current = true;
     selectedChapterRef.current = nextChapter;
     setSelectedChapter(nextChapter);
@@ -5975,7 +5859,6 @@ function DockBibleTab({
         if (targetElement?.closest(".dtb-modal")) return;
         event.preventDefault();
         setShowDropdown(false);
-        setIsVerseDropdownOpen(false);
         handleClearVerse();
         return;
       }
@@ -6039,8 +5922,8 @@ function DockBibleTab({
   const readerError = isComparePassageMode
     ? (comparePassagePreviews.find((preview) => Boolean(preview.error))?.error ?? "")
     : compareEnabled
-    ? (compareChapterErrors.find((message) => Boolean(message)) ?? "")
-    : activeChapterError;
+      ? (compareChapterErrors.find((message) => Boolean(message)) ?? "")
+      : activeChapterError;
   const hasReaderVerses = isComparePassageMode
     ? comparePassagePreviews.some((preview) => Boolean(preview.text))
     : compareVerseRows.length > 0;
@@ -6054,14 +5937,14 @@ function DockBibleTab({
     : selectedVerse ?? activePassage?.verses[0]?.verse ?? null;
   const currentReferenceLabel = isComparePassageMode
     ? activeComparePassagePreview?.referenceLabel
-      ?? comparePassageDrafts[activeComparePassageIndex]?.reference
-      ?? t("dock.compare.passagesLabel", "Compare Passages")
+    ?? comparePassageDrafts[activeComparePassageIndex]?.reference
+    ?? t("dock.compare.passagesLabel", "Compare Passages")
     : selectedBook && selectedChapter
-    ? `${selectedBook} ${selectedChapter}${currentVerseNumber ? `:${currentVerseNumber}` : ""}${verseLineCount > 1 && currentVerseNumber
-      ? `–${Math.min(currentVerseNumber + verseLineCount - 1, verseCount)}`
-      : ""
-    }`
-    : t("bible.defaultTitle");
+      ? `${selectedBook} ${selectedChapter}${currentVerseNumber ? `:${currentVerseNumber}` : ""}${verseLineCount > 1 && currentVerseNumber
+        ? `–${Math.min(currentVerseNumber + verseLineCount - 1, verseCount)}`
+        : ""
+      }`
+      : t("bible.defaultTitle");
   const _selectedReferenceLabel = selectedPassageForFavorite?.reference
     ?? (selectedBook && selectedChapter && selectedVerse
       ? `${selectedBook} ${selectedChapter}:${selectedVerse}`
@@ -6240,82 +6123,42 @@ function DockBibleTab({
       ref={containerRef}
       isCompact={isShortHeight}
       isNarrowWidth={isNarrowWidth}
-      isTopbarExpanded={isTopbarExpanded}
-      setIsTopbarExpanded={setIsTopbarExpanded}
       searchPlacement={searchPlacement}
-      selectedBook={selectedBook}
-      selectedChapter={selectedChapter}
-      selectedVerse={selectedVerse}
       activeTranslation={activeTranslation}
       compareEnabled={compareEnabled}
-      chapterCount={chapterCount}
-      verseCount={verseCount}
-      isBookDropdownOpen={isBookDropdownOpen}
-      isChapterDropdownOpen={isChapterDropdownOpen}
-      isVerseDropdownOpen={isVerseDropdownOpen}
       availableTranslations={availableTranslations}
-      onBookToggle={handleBookToggle}
-      onBookSelect={handleBookSelect}
-      onChapterToggle={handleChapterToggle}
-      onChapterSelect={handleChapterSelect}
-      onVerseToggle={handleVerseToggle}
-      onVerseSelect={handleVerseSelect}
-      canGoPreviousChapter={canGoPreviousChapter}
-      canGoNextChapter={canGoNextChapter}
-      onPreviousChapter={() => handleChapterJump(-1)}
-      onNextChapter={() => handleChapterJump(1)}
       onVersionChange={(version) => handleQuickVersionChange(activeColumnIndex, version)}
-      onGoToChapter={handleGoToChapter}
-      abbreviateBook={abbreviateBibleBook}
-      BOOK_CHAPTERS={BOOK_CHAPTERS}
       compactActions={
-        isShortHeight || isNarrowWidth ? ((browseExpanded, onBrowseToggle) => (
+        isShortHeight || isNarrowWidth ? (() => (
           <div className="dock-bible-actions__compare-group" ref={comparePopoverRef}>
-              <button
-                type="button"
-                className="dock-bible-actions__overflow"
-                onClick={() => setShowBibleActionsMenu((prev) => !prev)}
-                aria-label={t("common.moreActions", "More actions")}
-                aria-expanded={showBibleActionsMenu}
-                aria-haspopup="menu"
-                title={t("common.moreActions", "More actions")}
-              >
-                <Icon name="more_vert" size={15} />
-              </button>
+            <button
+              type="button"
+              className="dock-bible-actions__overflow"
+              onClick={() => setShowBibleActionsMenu((prev) => !prev)}
+              aria-label={t("common.moreActions", "More actions")}
+              aria-expanded={showBibleActionsMenu}
+              aria-haspopup="menu"
+              title={t("common.moreActions", "More actions")}
+            >
+              <Icon name="more_vert" size={15} />
+            </button>
               {showBibleActionsMenu && (
                 <div className="dock-bible-actions__menu" role="menu">
                   <button
-                    type="button"
-                    className="dock-bible-actions__menu-item"
-                    role="menuitem"
-                    data-dock-close-overflow="true"
-                    onClick={() => {
-                      setShowBibleActionsMenu(false);
-                      setShowComparePopover(false);
-                      setShowReferencePopover(false);
-                      onBrowseToggle();
-                    }}
-                  >
-                    <Icon name="menu_book" size={14} />
-                    <span>
-                      {browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-bible-actions__menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowBibleActionsMenu(false);
-                      setShowReferencePopover(false);
-                      setShowComparePopover(true);
-                    }}
-                  >
-                    <Icon name="swap_horiz" size={14} />
-                    <span>{t("dock.compare.toggle", "Compare Translations")}</span>
-                  </button>
-                </div>
-              )}
+                  type="button"
+                  className="dock-bible-actions__menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowBibleActionsMenu(false);
+                    setShowReferencePopover(false);
+                    setShowComparePopover(true);
+                  }}
+                >
+                  <Icon name="swap_horiz" size={14} />
+                  <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+                </button>
+              </div>
+            )}
             {showComparePopover && typeof document !== "undefined" && createPortal(
               <div
                 ref={comparePopoverPanelRef}
@@ -6345,86 +6188,86 @@ function DockBibleTab({
                   </button>
                 </div>
                 {compareMode === "translations" ? (
-                <>
-                <div className="dock-bible-compare-popover__section">
-                  <div className="dock-bible-compare-popover__toggle-row">
-                    <div className="dock-bible-compare-popover__toggle-copy">
-                      <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
+                  <>
+                    <div className="dock-bible-compare-popover__section">
+                      <div className="dock-bible-compare-popover__toggle-row">
+                        <div className="dock-bible-compare-popover__toggle-copy">
+                          <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className={`dtb-toggle${compareEnabled ? " dtb-toggle--on" : ""}`}
+                          onClick={() => handleCompareEnabledChange(!compareEnabled)}
+                          role="switch"
+                          aria-checked={compareEnabled}
+                          aria-label={t("dock.compare.enable", "Enable Compare Translations")}
+                          title={compareEnabled ? t("dock.compare.disableCompare", "Disable compare mode") : t("dock.compare.enableCompare", "Enable compare mode")}
+                        >
+                          <span className="dtb-toggle__knob" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="dock-bible-compare-popover__section">
+                      <div className="dock-bible-compare-popover__label-row">
+                        <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
+                        <button
+                          type="button"
+                          className="dock-bible-compare-popover__settings"
+                          onClick={() => openThemeSettings("compare")}
+                          disabled={!compareEnabled}
+                          aria-label={t("dock.compare.openCompareSettings", "Open compare design settings")}
+                          title={
+                            compareEnabled
+                              ? t("dock.compare.openCompareSettings", "Open compare design settings")
+                              : t("dock.compare.enableCompareFirst", "Enable compare mode first")
+                          }
+                        >
+                          <Icon name="settings" size={12} />
+                        </button>
+                      </div>
+                      <select
+                        className="dock-select dock-bible-compare-popover__select"
+                        value={compareLayout}
+                        onChange={(e) => setCompareLayout(e.target.value as CompareLayout)}
+                        disabled={!compareEnabled}
+                      >
+                        <option value="line-by-line">{t("dock.compare.lineByLine", "Line By Line")}</option>
+                        <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
+                      </select>
+                    </div>
+                    <div className="dock-bible-compare-popover__translation-pair">
+                      <div className="dock-bible-compare-popover__row">
+                        <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
+                        <DockCompactTranslationSelect
+                          value={translationA}
+                          options={availableTranslations}
+                          onChange={handleTranslationAChange}
+                          disabled={!translationsLoaded}
+                          ariaLabel={t("dock.compare.translationA", "Translation A")}
+                        />
+                      </div>
+                      <div className="dock-bible-compare-popover__row">
+                        <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
+                        <DockCompactTranslationSelect
+                          value={translationB}
+                          options={availableTranslations}
+                          onChange={handleTranslationBChange}
+                          disabled={!translationsLoaded}
+                          ariaLabel={t("dock.compare.translationB", "Translation B")}
+                        />
+                      </div>
                     </div>
                     <button
                       type="button"
-                      className={`dtb-toggle${compareEnabled ? " dtb-toggle--on" : ""}`}
-                      onClick={() => handleCompareEnabledChange(!compareEnabled)}
-                      role="switch"
-                      aria-checked={compareEnabled}
-                      aria-label={t("dock.compare.enable", "Enable Compare Translations")}
-                      title={compareEnabled ? t("dock.compare.disableCompare", "Disable compare mode") : t("dock.compare.enableCompare", "Enable compare mode")}
+                      className="dock-bible-compare-popover__send"
+                      onClick={() => void handleSendCompareToObs()}
+                      disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
+                      title={t("common.sendToObs", "Send to OBS")}
                     >
-                      <span className="dtb-toggle__knob" />
+                      <Icon name="cast" size={13} />
+                      {t("common.sendToObs", "Send to OBS")}
                     </button>
-                  </div>
-                </div>
-                <div className="dock-bible-compare-popover__section">
-                  <div className="dock-bible-compare-popover__label-row">
-                    <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
-                    <button
-                      type="button"
-                      className="dock-bible-compare-popover__settings"
-                      onClick={() => openThemeSettings("compare")}
-                      disabled={!compareEnabled}
-                      aria-label={t("dock.compare.openCompareSettings", "Open compare design settings")}
-                      title={
-                        compareEnabled
-                          ? t("dock.compare.openCompareSettings", "Open compare design settings")
-                          : t("dock.compare.enableCompareFirst", "Enable compare mode first")
-                      }
-                    >
-                      <Icon name="settings" size={12} />
-                    </button>
-                  </div>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={compareLayout}
-                    onChange={(e) => setCompareLayout(e.target.value as CompareLayout)}
-                    disabled={!compareEnabled}
-                  >
-                    <option value="line-by-line">{t("dock.compare.lineByLine", "Line By Line")}</option>
-                    <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
-                  </select>
-                </div>
-                <div className="dock-bible-compare-popover__translation-pair">
-                  <div className="dock-bible-compare-popover__row">
-                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
-                    <DockCompactTranslationSelect
-                      value={translationA}
-                      options={availableTranslations}
-                      onChange={handleTranslationAChange}
-                      disabled={!translationsLoaded}
-                      ariaLabel={t("dock.compare.translationA", "Translation A")}
-                    />
-                  </div>
-                  <div className="dock-bible-compare-popover__row">
-                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
-                    <DockCompactTranslationSelect
-                      value={translationB}
-                      options={availableTranslations}
-                      onChange={handleTranslationBChange}
-                      disabled={!translationsLoaded}
-                      ariaLabel={t("dock.compare.translationB", "Translation B")}
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="dock-bible-compare-popover__send"
-                  onClick={() => void handleSendCompareToObs()}
-                  disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                  title={t("common.sendToObs", "Send to OBS")}
-                >
-                  <Icon name="cast" size={13} />
-                  {t("common.sendToObs", "Send to OBS")}
-                </button>
-                </>
+                  </>
                 ) : (
                   <DockBibleComparePassageControls
                     compareEnabled={compareEnabled}
@@ -6449,218 +6292,183 @@ function DockBibleTab({
         )) : undefined
       }
       headerActions={
-        (browseExpanded, onBrowseToggle) => (
-        <div className={`dock-bible-header-actions${searchPlacement === "top" ? " dock-bible-header-actions--top" : ""}`}>
-          {searchPlacement === "top" && (
-            <button
-              type="button"
-              className="dock-bible-actions__top-btn"
-              onClick={() => {
-                setShowBibleActionsMenu(false);
-                setShowComparePopover(false);
-                setShowReferencePopover(false);
-                onBrowseToggle();
-              }}
-              aria-expanded={browseExpanded}
-              aria-label={browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
-              title={browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
-            >
-              <Icon name="menu_book" size={14} />
-              <span>{browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}</span>
-            </button>
-          )}
-          <div className="dock-bible-compare-trigger" ref={comparePopoverRef}>
-            <button
-              type="button"
-              className={searchPlacement === "top" ? "dock-bible-actions__top-btn" : "dock-bible-actions__overflow"}
-              onClick={() => {
-                if (searchPlacement === "top") {
-                  setShowBibleActionsMenu(false);
-                  setShowReferencePopover(false);
-                  setShowComparePopover((prev) => !prev);
-                  return;
-                }
-                setShowBibleActionsMenu((prev) => !prev);
-              }}
-              aria-label={searchPlacement === "top"
-                ? t("dock.compare.toggle", "Compare Translations")
-                : t("common.moreActions", "More actions")}
-              aria-expanded={searchPlacement === "top" ? showComparePopover : showBibleActionsMenu}
-              aria-haspopup={searchPlacement === "top" ? "dialog" : "menu"}
-              title={searchPlacement === "top"
-                ? t("dock.compare.toggle", "Compare Translations")
-                : t("common.moreActions", "More actions")}
-            >
-              <Icon name={searchPlacement === "top" ? "swap_horiz" : "more_vert"} size={15} />
-              {searchPlacement === "top" && (
-                <span>{t("dock.compare.toggle", "Compare Translations")}</span>
-              )}
-            </button>
-            {searchPlacement !== "top" && showBibleActionsMenu && (
-              <div className="dock-bible-actions__menu" role="menu">
-                <button
-                  type="button"
-                  className="dock-bible-actions__menu-item"
-                  role="menuitem"
-                  data-dock-close-overflow="true"
-                  onClick={() => {
-                    setShowBibleActionsMenu(false);
-                    setShowComparePopover(false);
-                    setShowReferencePopover(false);
-                    onBrowseToggle();
-                  }}
-                >
-                  <Icon name="menu_book" size={14} />
-                  <span>
-                    {browseExpanded ? t("bible.closeBibleBrowser") : t("bible.browseBible")}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-actions__menu-item"
-                  role="menuitem"
-                  onClick={() => {
+        () => (
+          <div className={`dock-bible-header-actions${searchPlacement === "top" ? " dock-bible-header-actions--top" : ""}`}>
+            <div className="dock-bible-compare-trigger" ref={comparePopoverRef}>
+              <button
+                type="button"
+                className={searchPlacement === "top" ? "dock-bible-actions__top-btn" : "dock-bible-actions__overflow"}
+                onClick={() => {
+                  if (searchPlacement === "top") {
                     setShowBibleActionsMenu(false);
                     setShowReferencePopover(false);
-                    setShowComparePopover(true);
-                  }}
-                >
-                  <Icon name="swap_horiz" size={14} />
-                  <span>{t("dock.compare.toggle", "Compare Translations")}</span>
-                </button>
-              </div>
-            )}
-            {showComparePopover && typeof document !== "undefined" && createPortal(
-              <div
-                ref={comparePopoverPanelRef}
-                className="dock-bible-compare-popover"
-                data-dock-keep-overflow-open="true"
-                style={comparePopoverStyle}
+                    setShowComparePopover((prev) => !prev);
+                    return;
+                  }
+                  setShowBibleActionsMenu((prev) => !prev);
+                }}
+                aria-label={searchPlacement === "top"
+                  ? t("dock.compare.toggle", "Compare Translations")
+                  : t("common.moreActions", "More actions")}
+                aria-expanded={searchPlacement === "top" ? showComparePopover : showBibleActionsMenu}
+                aria-haspopup={searchPlacement === "top" ? "dialog" : "menu"}
+                title={searchPlacement === "top"
+                  ? t("dock.compare.toggle", "Compare Translations")
+                  : t("common.moreActions", "More actions")}
               >
-                <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
-                <div className="dock-bible-compare-tabs" role="tablist" aria-label={t("dock.compare.modes", "Compare modes")}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={compareMode === "translations"}
-                    className={`dock-bible-compare-tabs__tab${compareMode === "translations" ? " dock-bible-compare-tabs__tab--active" : ""}`}
-                    onClick={() => handleCompareModeChange("translations")}
-                  >
-                    {t("dock.compare.translationsTab", "Translations")}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={compareMode === "passages"}
-                    className={`dock-bible-compare-tabs__tab${compareMode === "passages" ? " dock-bible-compare-tabs__tab--active" : ""}`}
-                    onClick={() => handleCompareModeChange("passages")}
-                  >
-                    {t("dock.compare.passagesTab", "Passages")}
-                  </button>
-                </div>
-                {compareMode === "translations" ? (
-                <>
-                <div className="dock-bible-compare-popover__section">
-                  <div className="dock-bible-compare-popover__toggle-row">
-                    <div className="dock-bible-compare-popover__toggle-copy">
-                      <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`dtb-toggle${compareEnabled ? " dtb-toggle--on" : ""}`}
-                      onClick={() => handleCompareEnabledChange(!compareEnabled)}
-                      role="switch"
-                      aria-checked={compareEnabled}
-                      aria-label={t("dock.compare.enable", "Enable Compare Translations")}
-                      title={compareEnabled ? t("dock.compare.disableCompare", "Disable compare mode") : t("dock.compare.enableCompare", "Enable compare mode")}
-                    >
-                      <span className="dtb-toggle__knob" />
-                    </button>
-                  </div>
-                </div>
-                <div className="dock-bible-compare-popover__section">
-                  <div className="dock-bible-compare-popover__label-row">
-                    <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
-                    <button
-                      type="button"
-                      className="dock-bible-compare-popover__settings"
-                      onClick={() => openThemeSettings("compare")}
-                      disabled={!compareEnabled}
-                      aria-label={t("dock.compare.openCompareSettings", "Open compare design settings")}
-                      title={
-                        compareEnabled
-                          ? t("dock.compare.openCompareSettings", "Open compare design settings")
-                          : t("dock.compare.enableCompareFirst", "Enable compare mode first")
-                      }
-                    >
-                      <Icon name="settings" size={12} />
-                    </button>
-                  </div>
-                  <select
-                    className="dock-select dock-bible-compare-popover__select"
-                    value={compareLayout}
-                    onChange={(e) => setCompareLayout(e.target.value as CompareLayout)}
-                    disabled={!compareEnabled}
-                  >
-                    <option value="line-by-line">{t("dock.compare.lineByLine", "Line By Line")}</option>
-                    <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
-                  </select>
-                </div>
-                <div className="dock-bible-compare-popover__translation-pair">
-                  <div className="dock-bible-compare-popover__row">
-                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
-                    <DockCompactTranslationSelect
-                      value={translationA}
-                      options={availableTranslations}
-                      onChange={handleTranslationAChange}
-                      disabled={!translationsLoaded}
-                      ariaLabel={t("dock.compare.translationA", "Translation A")}
-                    />
-                  </div>
-                  <div className="dock-bible-compare-popover__row">
-                    <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
-                    <DockCompactTranslationSelect
-                      value={translationB}
-                      options={availableTranslations}
-                      onChange={handleTranslationBChange}
-                      disabled={!translationsLoaded}
-                      ariaLabel={t("dock.compare.translationB", "Translation B")}
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="dock-bible-compare-popover__send"
-                  onClick={() => void handleSendCompareToObs()}
-                  disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                  title={t("common.sendToObs", "Send to OBS")}
-                >
-                  <Icon name="cast" size={13} />
-                  {t("common.sendToObs", "Send to OBS")}
-                </button>
-                </>
-                ) : (
-                  <DockBibleComparePassageControls
-                    compareEnabled={compareEnabled}
-                    drafts={comparePassageDrafts}
-                    previews={comparePassagePreviews}
-                    activeIndex={activeComparePassageIndex}
-                    navigationMode={comparePassageNavigation}
-                    availableTranslations={availableTranslations}
-                    onToggleCompare={handleCompareEnabledChange}
-                    onDraftReferenceChange={handleComparePassageReferenceChange}
-                    onDraftTranslationChange={handleComparePassageTranslationChange}
-                    onActiveIndexChange={activateComparePassage}
-                    onNavigationModeChange={setComparePassageNavigation}
-                    onRemovePassage={handleRemoveComparePassage}
-                    onSendToObs={() => void handleSendComparePassagesToObs()}
-                  />
+                <Icon name={searchPlacement === "top" ? "swap_horiz" : "more_vert"} size={15} />
+                {searchPlacement === "top" && (
+                  <span>{t("dock.compare.toggle", "Compare Translations")}</span>
                 )}
-              </div>,
-              document.body,
-            )}
+              </button>
+              {searchPlacement !== "top" && showBibleActionsMenu && (
+                <div className="dock-bible-actions__menu" role="menu">
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBibleActionsMenu(false);
+                      setShowReferencePopover(false);
+                      setShowComparePopover(true);
+                    }}
+                  >
+                    <Icon name="swap_horiz" size={14} />
+                    <span>{t("dock.compare.toggle", "Compare Translations")}</span>
+                  </button>
+                </div>
+              )}
+              {showComparePopover && typeof document !== "undefined" && createPortal(
+                <div
+                  ref={comparePopoverPanelRef}
+                  className="dock-bible-compare-popover"
+                  data-dock-keep-overflow-open="true"
+                  style={comparePopoverStyle}
+                >
+                  <div className="dock-bible-compare-popover__header">{t("dock.compare.title", "Compare Translations")}</div>
+                  <div className="dock-bible-compare-tabs" role="tablist" aria-label={t("dock.compare.modes", "Compare modes")}>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={compareMode === "translations"}
+                      className={`dock-bible-compare-tabs__tab${compareMode === "translations" ? " dock-bible-compare-tabs__tab--active" : ""}`}
+                      onClick={() => handleCompareModeChange("translations")}
+                    >
+                      {t("dock.compare.translationsTab", "Translations")}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={compareMode === "passages"}
+                      className={`dock-bible-compare-tabs__tab${compareMode === "passages" ? " dock-bible-compare-tabs__tab--active" : ""}`}
+                      onClick={() => handleCompareModeChange("passages")}
+                    >
+                      {t("dock.compare.passagesTab", "Passages")}
+                    </button>
+                  </div>
+                  {compareMode === "translations" ? (
+                    <div>
+                      <div className="dock-bible-compare-popover__section">
+                        <div className="dock-bible-compare-popover__toggle-row">
+                          <div className="dock-bible-compare-popover__toggle-copy">
+                            <div className="dock-bible-compare-popover__label">{t("dock.compare.enable", "Enable Compare Translations")}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className={`dtb-toggle${compareEnabled ? " dtb-toggle--on" : ""}`}
+                            onClick={() => handleCompareEnabledChange(!compareEnabled)}
+                            role="switch"
+                            aria-checked={compareEnabled}
+                            aria-label={t("dock.compare.enable", "Enable Compare Translations")}
+                            title={compareEnabled ? t("dock.compare.disableCompare", "Disable compare mode") : t("dock.compare.enableCompare", "Enable compare mode")}
+                          >
+                            <span className="dtb-toggle__knob" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="dock-bible-compare-popover__section">
+                        <div className="dock-bible-compare-popover__label-row">
+                          <div className="dock-bible-compare-popover__label">{t("dock.compare.layout", "Layout")}</div>
+                          <button
+                            type="button"
+                            className="dock-bible-compare-popover__settings"
+                            onClick={() => openThemeSettings("compare")}
+                            disabled={!compareEnabled}
+                            aria-label={t("dock.compare.openCompareSettings", "Open compare design settings")}
+                            title={
+                              compareEnabled
+                                ? t("dock.compare.openCompareSettings", "Open compare design settings")
+                                : t("dock.compare.enableCompareFirst", "Enable compare mode first")
+                            }
+                          >
+                            <Icon name="settings" size={12} />
+                          </button>
+                        </div>
+                        <select
+                          className="dock-select dock-bible-compare-popover__select"
+                          value={compareLayout}
+                          onChange={(e) => setCompareLayout(e.target.value as CompareLayout)}
+                          disabled={!compareEnabled}
+                        >
+                          <option value="line-by-line">{t("dock.compare.lineByLine", "Line By Line")}</option>
+                          <option value="side-by-side">{t("dock.compare.sideBySide", "Side By Side")}</option>
+                        </select>
+                      </div>
+                      <div className="dock-bible-compare-popover__translation-pair">
+                        <div className="dock-bible-compare-popover__row">
+                          <label className="dock-bible-compare-popover__label">{t("dock.compare.translationA", "Translation A")}</label>
+                          <DockCompactTranslationSelect
+                            value={translationA}
+                            options={availableTranslations}
+                            onChange={handleTranslationAChange}
+                            disabled={!translationsLoaded}
+                            ariaLabel={t("dock.compare.translationA", "Translation A")}
+                          />
+                        </div>
+                        <div className="dock-bible-compare-popover__row">
+                          <label className="dock-bible-compare-popover__label">{t("dock.compare.translationB", "Translation B")}</label>
+                          <DockCompactTranslationSelect
+                            value={translationB}
+                            options={availableTranslations}
+                            onChange={handleTranslationBChange}
+                            disabled={!translationsLoaded}
+                            ariaLabel={t("dock.compare.translationB", "Translation B")}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="dock-bible-compare-popover__send"
+                        onClick={() => void handleSendCompareToObs()}
+                        disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
+                        title={t("common.sendToObs", "Send to OBS")}
+                      >
+                        <Icon name="cast" size={13} />
+                        {t("common.sendToObs", "Send to OBS")}
+                      </button>
+                    </div>
+                  ) : (
+                    <DockBibleComparePassageControls
+                      compareEnabled={compareEnabled}
+                      drafts={comparePassageDrafts}
+                      previews={comparePassagePreviews}
+                      activeIndex={activeComparePassageIndex}
+                      navigationMode={comparePassageNavigation}
+                      availableTranslations={availableTranslations}
+                      onToggleCompare={handleCompareEnabledChange}
+                      onDraftReferenceChange={handleComparePassageReferenceChange}
+                      onDraftTranslationChange={handleComparePassageTranslationChange}
+                      onActiveIndexChange={activateComparePassage}
+                      onNavigationModeChange={setComparePassageNavigation}
+                      onRemovePassage={handleRemoveComparePassage}
+                      onSendToObs={() => void handleSendComparePassagesToObs()}
+                    />
+                  )}
+                </div>,
+                document.body,
+              )}
+            </div>
           </div>
-        </div>
         )
       }
       searchSection={
@@ -6808,629 +6616,629 @@ function DockBibleTab({
       }
       children={(bottomSearchPanel, bottomToolbarActions) => (
         <>
-      <section
-        ref={quickActionsContainerRef}
-        className="dock-console-panel dock-console-panel--workspace"
-        data-toolbar-collapsed={toolbarCollapsed || undefined}
-      >
-        <div
-          className="dock-bible-reader"
-          ref={verseGridRef}
-          onClick={handleVerseRowDelegated}
-          onKeyDown={handleVerseRowDelegated}
-        >
-          {hasReaderVerses && (
-            <div className="dock-bible-reader__ref-header">
-              <div className="dock-bible-reader__ref-header-start">
-                <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
-              </div>
-              <span className="dock-bible-reader__ref-header-reference">{currentReferenceLabel}</span>
-              {compareEnabled ? (
-                <span className="dock-bible-reader__ref-header-translation dock-bible-reader__ref-header-translation--compare">
-                  {compareDisplayLabel}
-                </span>
-              ) : (
-                <span className="dock-bible-reader__ref-header-translation">{activeTranslation}</span>
+          <section
+            ref={quickActionsContainerRef}
+            className="dock-console-panel dock-console-panel--workspace"
+            data-toolbar-collapsed={toolbarCollapsed || undefined}
+          >
+            <div
+              className="dock-bible-reader"
+              ref={verseGridRef}
+              onClick={handleVerseRowDelegated}
+              onKeyDown={handleVerseRowDelegated}
+            >
+              {hasReaderVerses && (
+                <div className="dock-bible-reader__ref-header">
+                  <div className="dock-bible-reader__ref-header-start">
+                    <span className="dock-bible-reader__ref-header-label">{t("bible.reading")}</span>
+                  </div>
+                  <span className="dock-bible-reader__ref-header-reference">{currentReferenceLabel}</span>
+                  {compareEnabled ? (
+                    <span className="dock-bible-reader__ref-header-translation dock-bible-reader__ref-header-translation--compare">
+                      {compareDisplayLabel}
+                    </span>
+                  ) : (
+                    <span className="dock-bible-reader__ref-header-translation">{activeTranslation}</span>
+                  )}
+                  <div className="dock-bible-reader__ref-header-actions">
+                    <button
+                      type="button"
+                      className={`dock-favorites dock-bible-reader__ref-header-fav${isCurrentPassageFavorite ? " dock-bible-reader__ref-header-fav--active" : ""}`}
+                      onClick={handleToggleFavoritePassage}
+                      disabled={!selectedPassageForFavorite}
+                      title={isCurrentPassageFavorite ? t("bible.favRemove") : t("bible.favAdd")}
+                    >
+                      <Icon name={isCurrentPassageFavorite ? "star" : "star_border"} size={12} />
+                    </button>
+                    <div className="dock-bible-reader__ref-header-history" ref={historyPopoverRef}>
+                      <button
+                        type="button"
+                        className="dock-bible-reader__ref-header-history-btn"
+                        onClick={openHistoryDropdown}
+                        title={t("bible.history", "History")}
+                      >
+                        <Icon name="history" size={12} />
+                      </button>
+                      {showHistoryDropdown && historyItems.length > 0 && (
+                        <div className="dock-bible-reader__history-dropdown">
+                          {historyItems.map((item) => (
+                            <div
+                              key={item.id}
+                              className="dock-bible-reader__history-item"
+                            >
+                              <button
+                                type="button"
+                                className="dock-bible-reader__history-view"
+                                onClick={() => handleHistoryClick(item)}
+                                aria-label={`${item.reference}: ${t("bible.view", "View")}`}
+                                title={`${item.reference} — ${t("bible.view", "View")}`}
+                              >
+                                <span className="dock-bible-reader__history-copy">
+                                  <span className="dock-bible-reader__history-ref">{item.reference}</span>
+                                  <span className="dock-bible-reader__history-text">{getHistoryVersePreview(item.verseText)}</span>
+                                </span>
+                              </button>
+                              <div className="dock-bible-reader__history-actions">
+                                <button
+                                  type="button"
+                                  className="dock-btn dock-btn--ghost dock-btn--compact dock-bible-reader__history-action"
+                                  onClick={() => handleHistoryPreview(item)}
+                                  aria-label={`${t("common.preview", "Preview")} ${item.reference}`}
+                                  title={t("common.preview", "Preview")}
+                                >
+                                  {t("common.preview", "Preview")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="dock-btn dock-btn--primary dock-btn--compact dock-bible-reader__history-action"
+                                  onClick={() => handleHistorySendToObs(item)}
+                                  aria-label={`${t("common.sendToObs", "Send to OBS")} ${item.reference}`}
+                                  title={t("common.sendToObs", "Send to OBS")}
+                                >
+                                  {t("common.sendToObs", "Send to OBS")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
-              <div className="dock-bible-reader__ref-header-actions">
-                <button
-                  type="button"
-                  className={`dock-favorites dock-bible-reader__ref-header-fav${isCurrentPassageFavorite ? " dock-bible-reader__ref-header-fav--active" : ""}`}
-                  onClick={handleToggleFavoritePassage}
-                  disabled={!selectedPassageForFavorite}
-                  title={isCurrentPassageFavorite ? t("bible.favRemove") : t("bible.favAdd")}
-                >
-                  <Icon name={isCurrentPassageFavorite ? "star" : "star_border"} size={12} />
-                </button>
-                <div className="dock-bible-reader__ref-header-history" ref={historyPopoverRef}>
-                  <button
-                    type="button"
-                    className="dock-bible-reader__ref-header-history-btn"
-                    onClick={openHistoryDropdown}
-                    title={t("bible.history", "History")}
-                  >
-                    <Icon name="history" size={12} />
-                  </button>
-                  {showHistoryDropdown && historyItems.length > 0 && (
-                    <div className="dock-bible-reader__history-dropdown">
-                      {historyItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="dock-bible-reader__history-item"
-                        >
-                          <button
-                            type="button"
-                            className="dock-bible-reader__history-view"
-                            onClick={() => handleHistoryClick(item)}
-                            aria-label={`${item.reference}: ${t("bible.view", "View")}`}
-                            title={`${item.reference} — ${t("bible.view", "View")}`}
-                          >
-                            <span className="dock-bible-reader__history-copy">
-                              <span className="dock-bible-reader__history-ref">{item.reference}</span>
-                              <span className="dock-bible-reader__history-text">{getHistoryVersePreview(item.verseText)}</span>
-                            </span>
-                          </button>
-                          <div className="dock-bible-reader__history-actions">
+              {readerLoading && !hasReaderVerses && (
+                <div className="dock-console-placeholder">
+                  {t("common.loading")} {isComparePassageMode ? t("dock.compare.passagesLabel", "Compare Passages") : `${currentChapterLabel}...`}
+                </div>
+              )}
+
+              {readerLoading && readerError && !hasReaderVerses && (
+                <div className="dock-action-error dock-action-error--console">
+                  <Icon name="warning" size={14} />
+                  <span style={{ flex: 1 }}>{readerError}</span>
+                </div>
+              )}
+
+              {!readerLoading && !hasReaderVerses && !readerError && (
+                <div className="dock-console-placeholder">
+                  {isComparePassageMode
+                    ? t("dock.compare.addTwoPassages", "Add two valid passages in Compare Passages to preview them here.")
+                    : t("bible.noVersesAvailable")}
+                </div>
+              )}
+
+              {isComparePassageMode ? (
+                <div className="dock-bible-passage-reader">
+                  <div className="dock-bible-passage-reader__toolbar">
+                    <button
+                      type="button"
+                      className="dock-bible-reader__chapter-nav-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleComparePassageNavigation(-1);
+                      }}
+                      disabled={!comparePassagePreviews.some((preview) => Boolean(preview.parsed))}
+                      title={t("bible.previousVerse", "Previous verse")}
+                      aria-label={t("bible.previousVerse", "Previous verse")}
+                    >
+                      <Icon name="chevron_left" size={14} />
+                    </button>
+                    <span className="dock-bible-passage-reader__toolbar-label">
+                      {comparePassageNavigation === "linked"
+                        ? t("dock.compare.linkedNavigationShort", "Linked navigation")
+                        : t("dock.compare.independentNavigationShort", "Active passage only")}
+                    </span>
+                    <button
+                      type="button"
+                      className="dock-bible-reader__chapter-nav-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleComparePassageNavigation(1);
+                      }}
+                      disabled={!comparePassagePreviews.some((preview) => Boolean(preview.parsed))}
+                      title={t("bible.nextVerse", "Next verse")}
+                      aria-label={t("bible.nextVerse", "Next verse")}
+                    >
+                      <Icon name="chevron_right" size={14} />
+                    </button>
+                  </div>
+                  <div className="dock-bible-passage-reader__grid">
+                    {comparePassagePreviews.map((preview, index) => (
+                      <article
+                        key={preview.draft.id}
+                        className={`dock-bible-passage-reader__card${activeComparePassageIndex === index ? " dock-bible-passage-reader__card--active" : ""}`}
+                        onClick={() => activateComparePassage(index)}
+                      >
+                        <div className="dock-bible-passage-reader__card-header">
+                          <span className="dock-bible-passage-reader__card-number">
+                            {t("dock.compare.passageNumber", "Passage {{number}}", { number: index + 1 })}
+                          </span>
+                          <span className="translation-badge">{preview.draft.translation}</span>
+                        </div>
+                        <div className="dock-bible-passage-reader__card-reference-row">
+                          <span className="dock-bible-passage-reader__card-reference">
+                            {preview.referenceLabel || preview.draft.reference || t("dock.compare.referencePlaceholder", "Enter a reference")}
+                          </span>
+                          <div className="dock-bible-passage-reader__card-actions">
                             <button
                               type="button"
-                              className="dock-btn dock-btn--ghost dock-btn--compact dock-bible-reader__history-action"
-                              onClick={() => handleHistoryPreview(item)}
-                              aria-label={`${t("common.preview", "Preview")} ${item.reference}`}
-                              title={t("common.preview", "Preview")}
+                              className="dock-bible-reader__chapter-nav-btn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                activateComparePassage(index);
+                                handleComparePassageNavigation(-1, index);
+                              }}
+                              disabled={!preview.parsed}
+                              aria-label={t("bible.previousVerse", "Previous verse")}
+                              title={t("bible.previousVerse", "Previous verse")}
                             >
-                              {t("common.preview", "Preview")}
+                              <Icon name="chevron_left" size={12} />
                             </button>
                             <button
                               type="button"
-                              className="dock-btn dock-btn--primary dock-btn--compact dock-bible-reader__history-action"
-                              onClick={() => handleHistorySendToObs(item)}
-                              aria-label={`${t("common.sendToObs", "Send to OBS")} ${item.reference}`}
-                              title={t("common.sendToObs", "Send to OBS")}
+                              className="dock-bible-reader__chapter-nav-btn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                activateComparePassage(index);
+                                handleComparePassageNavigation(1, index);
+                              }}
+                              disabled={!preview.parsed}
+                              aria-label={t("bible.nextVerse", "Next verse")}
+                              title={t("bible.nextVerse", "Next verse")}
                             >
-                              {t("common.sendToObs", "Send to OBS")}
+                              <Icon name="chevron_right" size={12} />
                             </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {readerLoading && !hasReaderVerses && (
-            <div className="dock-console-placeholder">
-              {t("common.loading")} {isComparePassageMode ? t("dock.compare.passagesLabel", "Compare Passages") : `${currentChapterLabel}...`}
-            </div>
-          )}
-
-          {readerLoading && readerError && !hasReaderVerses && (
-            <div className="dock-action-error dock-action-error--console">
-              <Icon name="warning" size={14} />
-              <span style={{ flex: 1 }}>{readerError}</span>
-            </div>
-          )}
-
-          {!readerLoading && !hasReaderVerses && !readerError && (
-            <div className="dock-console-placeholder">
-              {isComparePassageMode
-                ? t("dock.compare.addTwoPassages", "Add two valid passages in Compare Passages to preview them here.")
-                : t("bible.noVersesAvailable")}
-            </div>
-          )}
-
-          {isComparePassageMode ? (
-            <div className="dock-bible-passage-reader">
-              <div className="dock-bible-passage-reader__toolbar">
-                <button
-                  type="button"
-                  className="dock-bible-reader__chapter-nav-btn"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleComparePassageNavigation(-1);
-                  }}
-                  disabled={!comparePassagePreviews.some((preview) => Boolean(preview.parsed))}
-                  title={t("bible.previousVerse", "Previous verse")}
-                  aria-label={t("bible.previousVerse", "Previous verse")}
-                >
-                  <Icon name="chevron_left" size={14} />
-                </button>
-                <span className="dock-bible-passage-reader__toolbar-label">
-                  {comparePassageNavigation === "linked"
-                    ? t("dock.compare.linkedNavigationShort", "Linked navigation")
-                    : t("dock.compare.independentNavigationShort", "Active passage only")}
-                </span>
-                <button
-                  type="button"
-                  className="dock-bible-reader__chapter-nav-btn"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleComparePassageNavigation(1);
-                  }}
-                  disabled={!comparePassagePreviews.some((preview) => Boolean(preview.parsed))}
-                  title={t("bible.nextVerse", "Next verse")}
-                  aria-label={t("bible.nextVerse", "Next verse")}
-                >
-                  <Icon name="chevron_right" size={14} />
-                </button>
-              </div>
-              <div className="dock-bible-passage-reader__grid">
-                {comparePassagePreviews.map((preview, index) => (
-                  <article
-                    key={preview.draft.id}
-                    className={`dock-bible-passage-reader__card${activeComparePassageIndex === index ? " dock-bible-passage-reader__card--active" : ""}`}
-                    onClick={() => activateComparePassage(index)}
-                  >
-                    <div className="dock-bible-passage-reader__card-header">
-                      <span className="dock-bible-passage-reader__card-number">
-                        {t("dock.compare.passageNumber", "Passage {{number}}", { number: index + 1 })}
-                      </span>
-                      <span className="translation-badge">{preview.draft.translation}</span>
-                    </div>
-                    <div className="dock-bible-passage-reader__card-reference-row">
-                      <span className="dock-bible-passage-reader__card-reference">
-                        {preview.referenceLabel || preview.draft.reference || t("dock.compare.referencePlaceholder", "Enter a reference")}
-                      </span>
-                      <div className="dock-bible-passage-reader__card-actions">
-                        <button
-                          type="button"
-                          className="dock-bible-reader__chapter-nav-btn"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            activateComparePassage(index);
-                            handleComparePassageNavigation(-1, index);
-                          }}
-                          disabled={!preview.parsed}
-                          aria-label={t("bible.previousVerse", "Previous verse")}
-                          title={t("bible.previousVerse", "Previous verse")}
-                        >
-                          <Icon name="chevron_left" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="dock-bible-reader__chapter-nav-btn"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            activateComparePassage(index);
-                            handleComparePassageNavigation(1, index);
-                          }}
-                          disabled={!preview.parsed}
-                          aria-label={t("bible.nextVerse", "Next verse")}
-                          title={t("bible.nextVerse", "Next verse")}
-                        >
-                          <Icon name="chevron_right" size={12} />
-                        </button>
-                      </div>
-                    </div>
-                    {preview.loading && (
-                      <div className="dock-bible-passage-reader__status">{t("common.loading")}</div>
-                    )}
-                    {preview.error && (
-                      <div className="dock-action-error dock-action-error--console">
-                        <Icon name="warning" size={13} />
-                        <span>{preview.error}</span>
-                      </div>
-                    )}
-                    {!preview.loading && !preview.error && preview.text && (
-                      <div className="dock-bible-passage-reader__text">{preview.text}</div>
-                    )}
-                  </article>
-                ))}
-              </div>
-            </div>
-          ) : (
-          compareVerseRows.map((verse) => {
-            const verseA = comparePassageA?.verses.find((entry) => entry.verse === verse.verse) ?? verse;
-            const verseB = comparePassageB?.verses.find((entry) => entry.verse === verse.verse) ?? verseA;
-            const isSelected = selectedVerse === verse.verse;
-            const isHighlighted = highlightVerse === verse.verse;
-            const rowClassName = [
-              "dock-bible-verse-row",
-              compareEnabled ? "dock-bible-verse-row--compare" : "",
-              isSelected ? "dock-bible-verse-row--selected" : "",
-              isHighlighted ? "dock-bible-verse-row--highlighted" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-
-            return (
-              <div
-                key={verse.verse}
-                data-verse-row={verse.verse}
-                className={rowClassName}
-                onDoubleClick={(event) => void handleVerseDoubleClick(
-                  event,
-                  verse.verse,
-                  verseA.text,
-                  compareEnabled ? verseB.text : undefined,
-                )}
-                tabIndex={0}
-                role="button"
-                aria-current={isSelected ? "true" : undefined}
-                aria-label={
-                  compareEnabled
-                    ? `${selectedBook} ${selectedChapter}:${verse.verse} ${translationA} ${verseA.text} ${translationB} ${verseB.text}`
-                    : t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })
-                }
-                title={
-                  compareEnabled
-                    ? `${selectedBook} ${selectedChapter}:${verse.verse} — ${translationA} / ${translationB}`
-                    : `${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse} — ${presentationLinkMode ? "Click to show on presentation screen" : "Click to view in OBS"}`
-                }
-              >
-                <div className="dock-bible-verse-row__num">{verse.verse}</div>
-                {compareEnabled ? (
-                  compareLayout === "side-by-side" ? (
-                    <div className="dock-bible-compare-grid">
-                      <div className="dock-bible-compare-card">
-                        <span className="translation-badge">{translationA}</span>
-                        <div className="dock-bible-compare-card__text">{verseA.text}</div>
-                      </div>
-                      <div className="dock-bible-compare-card">
-                        <span className="translation-badge">{translationB}</span>
-                        <div className="dock-bible-compare-card__text">{verseB.text}</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="dock-bible-compare-stack">
-                      <div className="dock-bible-compare-block">
-                        <span className="translation-badge">{translationA}</span>
-                        <div className="dock-bible-compare-block__text">{verseA.text}</div>
-                      </div>
-                      <div className="dock-bible-compare-block">
-                        <span className="translation-badge">{translationB}</span>
-                        <div className="dock-bible-compare-block__text">{verseB.text}</div>
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <div className="dock-bible-verse-row__main">
-                    <span className="dock-bible-verse-row__text">{verse.text}</span>
+                        {preview.loading && (
+                          <div className="dock-bible-passage-reader__status">{t("common.loading")}</div>
+                        )}
+                        {preview.error && (
+                          <div className="dock-action-error dock-action-error--console">
+                            <Icon name="warning" size={13} />
+                            <span>{preview.error}</span>
+                          </div>
+                        )}
+                        {!preview.loading && !preview.error && preview.text && (
+                          <div className="dock-bible-passage-reader__text">{preview.text}</div>
+                        )}
+                      </article>
+                    ))}
                   </div>
-                )}
-              </div>
-            );
-          })
-          )}
-        </div>
-
-        <div
-          className={`dock-bible-reader__quick-actions${quickActionsLeft !== null && quickActionsLeft < 210 ? " dock-bible-reader__quick-actions--menu-right" : ""}`}
-          ref={browserFontSizePopoverRef}
-          style={{
-            top: `${quickActionsTop}px`,
-            ...(quickActionsLeft !== null ? { left: `${quickActionsLeft}px`, right: "auto" } : {}),
-          }}
-        >
-          <button
-            type="button"
-            className={`dock-bible-reader__quick-actions-trigger${showBrowserFontSizePopover ? " dock-bible-reader__quick-actions-trigger--active" : ""}${isQuickActionsDragging ? " dock-bible-reader__quick-actions-trigger--dragging" : ""}`}
-            onClick={handleQuickActionsClick}
-            onPointerDown={handleQuickActionsPointerDown}
-            onPointerMove={handleQuickActionsPointerMove}
-            onPointerUp={finishQuickActionsDrag}
-            onPointerCancel={finishQuickActionsDrag}
-            aria-haspopup="dialog"
-            aria-expanded={showBrowserFontSizePopover}
-            aria-label={t("bible.obsQuickActions", "Bible OBS quick actions. Drag up or down.")}
-            title={t("bible.obsQuickActions", "Bible OBS quick actions. Drag up or down.")}
-          >
-            <span className="dock-bible-reader__quick-actions-label">{t("bible.quickActions", "Quick")}</span>
-          </button>
-          <BibleOutputControlsMenu
-            open={showBrowserFontSizePopover}
-            settings={displayedBrowserFontSettings}
-            lineCount={displayedBrowserVerseLineCount}
-            isFitTextMode={isFitTextMode}
-            showManualFontControls={showManualFontControls}
-            areManualFontSizesDisabled={areManualFontSizesDisabled}
-            browserFontSizeMin={browserFontSizeMin}
-            browserFontSizeMax={browserFontSizeMax}
-            browserReferenceFontSizeMin={browserReferenceFontSizeMin}
-            browserReferenceFontSizeMax={browserReferenceFontSizeMax}
-            browserQuickUpdateImmediately={browserQuickUpdateImmediately}
-            hasPendingBrowserQuickChanges={hasPendingBrowserQuickChanges}
-            onClose={() => setShowBrowserFontSizePopover(false)}
-            onFontSizeChange={handleBrowserFontSizeChange}
-            onFontSizeValueChange={handleBrowserFontSizeValueChange}
-            onLowerThirdSizePresetChange={handleLowerThirdSizePresetChange}
-            onReferenceBackgroundChange={handleBrowserReferenceBackgroundChange}
-            onLineCountChange={handleBrowserVerseLineCountChange}
-            onUpdateImmediatelyChange={handleBrowserQuickUpdateImmediatelyChange}
-            keywordMatchPushDirectlyToObs={keywordMatchPushDirectlyToObs}
-            onKeywordMatchPushDirectlyToObsChange={handleKeywordMatchPushDirectlyToObsChange}
-            onSave={saveBrowserQuickSettings}
-          />
-        </div>
-
-        {actionError && (
-          <div className="dock-action-error dock-action-error--console">
-            <Icon name="warning" size={14} />
-            <span style={{ flex: 1 }}>{actionError}</span>
-            <button
-              type="button"
-              onClick={() => setActionError("")}
-              style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
-              title={t("common.close")}>
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* ── Toolbar ── */}
-        <DockBottomToolbar
-          overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
-          onModeChange={handleOverlayModeChange}
-          displayMode={displayMode}
-          onDisplayModeChange={handleDisplayModeChange}
-          centerAction={
-            <div
-              className="dock-bible-reader__chapter-nav dock-bible-reader__chapter-nav--toolbar"
-              aria-label={t("bible.chapterNavigation", "Chapter navigation")}
-            >
-              <button
-                type="button"
-                className="dock-bible-reader__chapter-nav-btn"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleChapterJump(-1);
-                }}
-                disabled={!canGoPreviousChapter}
-                title={t("bible.previousChapter", "Previous chapter")}
-                aria-label={t("bible.previousChapter", "Previous chapter")}
-              >
-                <Icon name="chevron_left" size={14} />
-              </button>
-              <button
-                type="button"
-                className="dock-bible-reader__chapter-nav-btn"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleChapterJump(1);
-                }}
-                disabled={!canGoNextChapter}
-                title={t("bible.nextChapter", "Next chapter")}
-                aria-label={t("bible.nextChapter", "Next chapter")}
-              >
-                <Icon name="chevron_right" size={14} />
-              </button>
-            </div>
-          }
-          morphing={modeMorphing}
-          hideOverlayModeToggle={fullscreenOnlyMode}
-          clearLabel={bibleOverlayVisible
-            ? t("dock.bottomToolbar.hideBible")
-            : t("dock.bottomToolbar.showBible", { defaultValue: "Show Bible" })}
-          onClear={handleToggleBibleVisibility}
-          clearDisabled={false}
-          sourceVisible={bibleOverlayVisible}
-          collapsed={toolbarCollapsed}
-          onCollapseChange={setToolbarCollapsed}
-          bottomPanel={bottomSearchPanel}
-          onOverflowChange={setShowBibleActionsMenu}
-          inlineAction={
-            <button
-              type="button"
-              className="dock-btm-toolbar__icon-btn"
-              onClick={() => openThemeSettings("text")}
-              title={t("worship.quickEdits", "Quick Edits")}
-              aria-label={t("worship.quickEdits", "Quick Edits")}
-            >
-              <Icon name="tune" size={14} />
-            </button>
-          }
-          narrowOverflowActions={
-            <button
-              type="button"
-              className="dock-btm-overflow__menu-item"
-              data-dock-close-overflow="true"
-              onClick={() => openThemeSettings("text")}
-            >
-              <span>{t("worship.quickEdits", "Quick Edits")}</span>
-            </button>
-          }
-          children={
-            <>
-              <div className="dock-bible-bottom-overflow-actions">
-                {bottomToolbarActions}
-              </div>
-              <DockSceneRoutingControl
-                module="bible"
-                route={sceneRoute}
-                onRouteChange={updateSceneRoute}
-                disabled={presentationLinkMode}
-                title={t("sceneRouting.bible", "Output")}
-                placement="above"
-                showLabel
-                iconName="cast"
-              />
-              {referenceDisplayTrigger}
-            </>
-          }
-        />
-
-        {/* ── Footer actions ── */}
-
-      </section>
-
-      {
-        keywordActionResult && (
-          <div
-            className="dock-dialog-backdrop"
-            role="presentation"
-            onClick={() => setKeywordActionResult(null)}
-          >
-            <div
-              className="dock-dialog dock-dialog--compact"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="dock-bible-keyword-action-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="dock-dialog__header">
-                <div>
-                  <div className="dock-dialog__eyebrow">{t("bible.keywordMatch")}</div>
-                  <h2 id="dock-bible-keyword-action-title" className="dock-dialog__title">
-                    {keywordActionResult.label}
-                  </h2>
                 </div>
+              ) : (
+                compareVerseRows.map((verse) => {
+                  const verseA = comparePassageA?.verses.find((entry) => entry.verse === verse.verse) ?? verse;
+                  const verseB = comparePassageB?.verses.find((entry) => entry.verse === verse.verse) ?? verseA;
+                  const isSelected = selectedVerse === verse.verse;
+                  const isHighlighted = highlightVerse === verse.verse;
+                  const rowClassName = [
+                    "dock-bible-verse-row",
+                    compareEnabled ? "dock-bible-verse-row--compare" : "",
+                    isSelected ? "dock-bible-verse-row--selected" : "",
+                    isHighlighted ? "dock-bible-verse-row--highlighted" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+
+                  return (
+                    <div
+                      key={verse.verse}
+                      data-verse-row={verse.verse}
+                      className={rowClassName}
+                      onDoubleClick={(event) => void handleVerseDoubleClick(
+                        event,
+                        verse.verse,
+                        verseA.text,
+                        compareEnabled ? verseB.text : undefined,
+                      )}
+                      tabIndex={0}
+                      role="button"
+                      aria-current={isSelected ? "true" : undefined}
+                      aria-label={
+                        compareEnabled
+                          ? `${selectedBook} ${selectedChapter}:${verse.verse} ${translationA} ${verseA.text} ${translationB} ${verseB.text}`
+                          : t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })
+                      }
+                      title={
+                        compareEnabled
+                          ? `${selectedBook} ${selectedChapter}:${verse.verse} — ${translationA} / ${translationB}`
+                          : `${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse} — ${presentationLinkMode ? "Click to show on presentation screen" : "Click to view in OBS"}`
+                      }
+                    >
+                      <div className="dock-bible-verse-row__num">{verse.verse}</div>
+                      {compareEnabled ? (
+                        compareLayout === "side-by-side" ? (
+                          <div className="dock-bible-compare-grid">
+                            <div className="dock-bible-compare-card">
+                              <span className="translation-badge">{translationA}</span>
+                              <div className="dock-bible-compare-card__text">{verseA.text}</div>
+                            </div>
+                            <div className="dock-bible-compare-card">
+                              <span className="translation-badge">{translationB}</span>
+                              <div className="dock-bible-compare-card__text">{verseB.text}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="dock-bible-compare-stack">
+                            <div className="dock-bible-compare-block">
+                              <span className="translation-badge">{translationA}</span>
+                              <div className="dock-bible-compare-block__text">{verseA.text}</div>
+                            </div>
+                            <div className="dock-bible-compare-block">
+                              <span className="translation-badge">{translationB}</span>
+                              <div className="dock-bible-compare-block__text">{verseB.text}</div>
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <div className="dock-bible-verse-row__main">
+                          <span className="dock-bible-verse-row__text">{verse.text}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div
+              className={`dock-bible-reader__quick-actions${quickActionsLeft !== null && quickActionsLeft < 210 ? " dock-bible-reader__quick-actions--menu-right" : ""}`}
+              ref={browserFontSizePopoverRef}
+              style={{
+                top: `${quickActionsTop}px`,
+                ...(quickActionsLeft !== null ? { left: `${quickActionsLeft}px`, right: "auto" } : {}),
+              }}
+            >
+              <button
+                type="button"
+                className={`dock-bible-reader__quick-actions-trigger${showBrowserFontSizePopover ? " dock-bible-reader__quick-actions-trigger--active" : ""}${isQuickActionsDragging ? " dock-bible-reader__quick-actions-trigger--dragging" : ""}`}
+                onClick={handleQuickActionsClick}
+                onPointerDown={handleQuickActionsPointerDown}
+                onPointerMove={handleQuickActionsPointerMove}
+                onPointerUp={finishQuickActionsDrag}
+                onPointerCancel={finishQuickActionsDrag}
+                aria-haspopup="dialog"
+                aria-expanded={showBrowserFontSizePopover}
+                aria-label={t("bible.obsQuickActions", "Bible OBS quick actions. Drag up or down.")}
+                title={t("bible.obsQuickActions", "Bible OBS quick actions. Drag up or down.")}
+              >
+                <span className="dock-bible-reader__quick-actions-label">{t("bible.quickActions", "Quick")}</span>
+              </button>
+              <BibleOutputControlsMenu
+                open={showBrowserFontSizePopover}
+                settings={displayedBrowserFontSettings}
+                lineCount={displayedBrowserVerseLineCount}
+                isFitTextMode={isFitTextMode}
+                showManualFontControls={showManualFontControls}
+                areManualFontSizesDisabled={areManualFontSizesDisabled}
+                browserFontSizeMin={browserFontSizeMin}
+                browserFontSizeMax={browserFontSizeMax}
+                browserReferenceFontSizeMin={browserReferenceFontSizeMin}
+                browserReferenceFontSizeMax={browserReferenceFontSizeMax}
+                browserQuickUpdateImmediately={browserQuickUpdateImmediately}
+                hasPendingBrowserQuickChanges={hasPendingBrowserQuickChanges}
+                onClose={() => setShowBrowserFontSizePopover(false)}
+                onFontSizeChange={handleBrowserFontSizeChange}
+                onFontSizeValueChange={handleBrowserFontSizeValueChange}
+                onLowerThirdSizePresetChange={handleLowerThirdSizePresetChange}
+                onReferenceBackgroundChange={handleBrowserReferenceBackgroundChange}
+                onLineCountChange={handleBrowserVerseLineCountChange}
+                onUpdateImmediatelyChange={handleBrowserQuickUpdateImmediatelyChange}
+                keywordMatchPushDirectlyToObs={keywordMatchPushDirectlyToObs}
+                onKeywordMatchPushDirectlyToObsChange={handleKeywordMatchPushDirectlyToObsChange}
+                onSave={saveBrowserQuickSettings}
+              />
+            </div>
+
+            {actionError && (
+              <div className="dock-action-error dock-action-error--console">
+                <Icon name="warning" size={14} />
+                <span style={{ flex: 1 }}>{actionError}</span>
                 <button
                   type="button"
-                  className="dock-dialog__close"
-                  onClick={() => setKeywordActionResult(null)}
-                  aria-label={t("bible.closeKeywordActionDialog")}
+                  onClick={() => setActionError("")}
+                  style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
                   title={t("common.close")}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
-              <div className="dock-dialog__body">
-                <div className="dock-bible-keyword-modal__text">
-                  {renderHighlightedKeywordText(keywordActionResult.text, keywordActionResult.query)}
+            )}
+
+            {/* ── Toolbar ── */}
+            <DockBottomToolbar
+              overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
+              onModeChange={handleOverlayModeChange}
+              displayMode={displayMode}
+              onDisplayModeChange={handleDisplayModeChange}
+              centerAction={
+                <div
+                  className="dock-bible-reader__chapter-nav dock-bible-reader__chapter-nav--toolbar"
+                  aria-label={t("bible.chapterNavigation", "Chapter navigation")}
+                >
+                  <button
+                    type="button"
+                    className="dock-bible-reader__chapter-nav-btn"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleChapterJump(-1);
+                    }}
+                    disabled={!canGoPreviousChapter}
+                    title={t("bible.previousChapter", "Previous chapter")}
+                    aria-label={t("bible.previousChapter", "Previous chapter")}
+                  >
+                    <Icon name="chevron_left" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-reader__chapter-nav-btn"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleChapterJump(1);
+                    }}
+                    disabled={!canGoNextChapter}
+                    title={t("bible.nextChapter", "Next chapter")}
+                    aria-label={t("bible.nextChapter", "Next chapter")}
+                  >
+                    <Icon name="chevron_right" size={14} />
+                  </button>
                 </div>
-                <label className="dock-bible-keyword-modal__direct-push">
-                  <input
-                    type="checkbox"
-                    checked={keywordMatchPushDirectlyToObs}
-                    onChange={(event) => handleKeywordMatchPushDirectlyToObsChange(event.target.checked)}
-                    aria-describedby="dock-bible-keyword-direct-push-description"
+              }
+              morphing={modeMorphing}
+              hideOverlayModeToggle={fullscreenOnlyMode}
+              clearLabel={bibleOverlayVisible
+                ? t("dock.bottomToolbar.hideBible")
+                : t("dock.bottomToolbar.showBible", { defaultValue: "Show Bible" })}
+              onClear={handleToggleBibleVisibility}
+              clearDisabled={false}
+              sourceVisible={bibleOverlayVisible}
+              collapsed={toolbarCollapsed}
+              onCollapseChange={setToolbarCollapsed}
+              bottomPanel={bottomSearchPanel}
+              onOverflowChange={setShowBibleActionsMenu}
+              inlineAction={
+                <button
+                  type="button"
+                  className="dock-btm-toolbar__icon-btn"
+                  onClick={() => openThemeSettings("text")}
+                  title={t("worship.quickEdits", "Quick Edits")}
+                  aria-label={t("worship.quickEdits", "Quick Edits")}
+                >
+                  <Icon name="tune" size={14} />
+                </button>
+              }
+              narrowOverflowActions={
+                <button
+                  type="button"
+                  className="dock-btm-overflow__menu-item"
+                  data-dock-close-overflow="true"
+                  onClick={() => openThemeSettings("text")}
+                >
+                  <span>{t("worship.quickEdits", "Quick Edits")}</span>
+                </button>
+              }
+              children={
+                <>
+                  <div className="dock-bible-bottom-overflow-actions">
+                    {bottomToolbarActions}
+                  </div>
+                  <DockSceneRoutingControl
+                    module="bible"
+                    route={sceneRoute}
+                    onRouteChange={updateSceneRoute}
+                    disabled={presentationLinkMode}
+                    title={t("sceneRouting.bible", "Output")}
+                    placement="above"
+                    showLabel
+                    iconName="cast"
                   />
-                  <span className="dock-bible-keyword-modal__direct-push-copy">
-                    <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
-                    <small id="dock-bible-keyword-direct-push-description">
-                      {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
-                    </small>
-                  </span>
-                </label>
+                  {referenceDisplayTrigger}
+                </>
+              }
+            />
+
+            {/* ── Footer actions ── */}
+
+          </section>
+
+          {
+            keywordActionResult && (
+              <div
+                className="dock-dialog-backdrop"
+                role="presentation"
+                onClick={() => setKeywordActionResult(null)}
+              >
+                <div
+                  className="dock-dialog dock-dialog--compact"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="dock-bible-keyword-action-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="dock-dialog__header">
+                    <div>
+                      <div className="dock-dialog__eyebrow">{t("bible.keywordMatch")}</div>
+                      <h2 id="dock-bible-keyword-action-title" className="dock-dialog__title">
+                        {keywordActionResult.label}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="dock-dialog__close"
+                      onClick={() => setKeywordActionResult(null)}
+                      aria-label={t("bible.closeKeywordActionDialog")}
+                      title={t("common.close")}>
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                  <div className="dock-dialog__body">
+                    <div className="dock-bible-keyword-modal__text">
+                      {renderHighlightedKeywordText(keywordActionResult.text, keywordActionResult.query)}
+                    </div>
+                    <label className="dock-bible-keyword-modal__direct-push">
+                      <input
+                        type="checkbox"
+                        checked={keywordMatchPushDirectlyToObs}
+                        onChange={(event) => handleKeywordMatchPushDirectlyToObsChange(event.target.checked)}
+                        aria-describedby="dock-bible-keyword-direct-push-description"
+                      />
+                      <span className="dock-bible-keyword-modal__direct-push-copy">
+                        <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
+                        <small id="dock-bible-keyword-direct-push-description">
+                          {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
+                        </small>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="dock-dialog__footer dock-bible-keyword-modal__footer">
+                    <button
+                      type="button"
+                      className="dock-btn dock-btn--ghost dock-btn--compact"
+                      onClick={() => {
+                        const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
+                        setVerseLineCount(keywordOutputOptions.lineCount);
+                        focusReference(keywordActionResult.book, keywordActionResult.chapter, keywordActionResult.verse);
+                        setKeywordActionResult(null);
+                        window.setTimeout(() => {
+                          const verseRow = verseGridRef.current?.querySelector<HTMLElement>(
+                            `[data-verse-row="${keywordActionResult.verse}"]`,
+                          );
+                          if (verseRow) {
+                            const container = verseGridRef.current;
+                            if (container) {
+                              const verseRect = verseRow.getBoundingClientRect();
+                              const containerRect = container.getBoundingClientRect();
+                              const targetScrollTop = container.scrollTop + (verseRect.top - containerRect.top) - containerRect.height * 0.1;
+                              container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+                            }
+                          }
+                        }, 150);
+                      }}
+                      title={t("bible.goToChapter")}>
+                      <Icon name="menu_book" size={14} />
+                      {t("bible.goToChapter")}
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-btn dock-btn--primary dock-btn--compact"
+                      onClick={() => {
+                        const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
+                        void goLiveVerse(
+                          keywordActionResult.book,
+                          keywordActionResult.chapter,
+                          keywordActionResult.verse,
+                          {
+                            translation: activeBibleSearchTranslation,
+                            lineCount: keywordOutputOptions.lineCount,
+                            rangeEndVerse: keywordOutputOptions.rangeEndVerse,
+                            pushComparePassages: true,
+                          },
+                        );
+                        setKeywordActionResult(null);
+                      }}
+                      title={t("common.sendToObs", "Send to OBS")}>
+                      <Icon name="cast" size={14} />
+                      {t("common.sendToObs", "Send to OBS")}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="dock-dialog__footer dock-bible-keyword-modal__footer">
-                <button
-                  type="button"
-                  className="dock-btn dock-btn--ghost dock-btn--compact"
-                  onClick={() => {
-                    const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
-                    setVerseLineCount(keywordOutputOptions.lineCount);
-                    focusReference(keywordActionResult.book, keywordActionResult.chapter, keywordActionResult.verse);
-                    setKeywordActionResult(null);
-                    window.setTimeout(() => {
-                      const verseRow = verseGridRef.current?.querySelector<HTMLElement>(
-                        `[data-verse-row="${keywordActionResult.verse}"]`,
-                      );
-                      if (verseRow) {
-                        const container = verseGridRef.current;
-                        if (container) {
-                          const verseRect = verseRow.getBoundingClientRect();
-                          const containerRect = container.getBoundingClientRect();
-                          const targetScrollTop = container.scrollTop + (verseRect.top - containerRect.top) - containerRect.height * 0.1;
-                          container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
-                        }
-                      }
-                    }, 150);
-                  }}
-                  title={t("bible.goToChapter")}>
-                  <Icon name="menu_book" size={14} />
-                  {t("bible.goToChapter")}
-                </button>
-                <button
-                  type="button"
-                  className="dock-btn dock-btn--primary dock-btn--compact"
-                  onClick={() => {
-                    const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
-                    void goLiveVerse(
-                      keywordActionResult.book,
-                      keywordActionResult.chapter,
-                      keywordActionResult.verse,
-                      {
-                        translation: activeBibleSearchTranslation,
-                        lineCount: keywordOutputOptions.lineCount,
-                        rangeEndVerse: keywordOutputOptions.rangeEndVerse,
-                        pushComparePassages: true,
-                      },
-                    );
-                    setKeywordActionResult(null);
-                  }}
-                  title={t("common.sendToObs", "Send to OBS")}>
-                  <Icon name="cast" size={14} />
-                  {t("common.sendToObs", "Send to OBS")}
-                </button>
-              </div>
+            )
+          }
+
+          {/* ── Standalone Theme Settings Modal ── */}
+          <DockThemeSettingsModal
+            selectedThemeId={activeThemePickerProps.selectedThemeId}
+            onSelect={activeThemePickerProps.onSelect}
+            allowedCategories={["bible", "general"]}
+            quickSettings={activeQuickEditSettings}
+            defaultQuickSettings={
+              quickEditOverlayMode === "fullscreen"
+                ? defaultFullscreenQuickThemeSettings
+                : defaultLowerThirdQuickThemeSettings
+            }
+            onQuickSettingsSave={
+              quickEditOverlayMode === "fullscreen"
+                ? handleSaveFullscreenQuickThemeSettings
+                : handleSaveLowerThirdQuickThemeSettings
+            }
+            resolveThemeQuickSettings={resolveThemeQuickSettings}
+            displayMode={displayMode}
+            title={t("bible.quickSettings")}
+            subtitle={t("bible.quickSettingsSubtitle")}
+            isOpen={showThemeSettings}
+            onClose={() => setShowThemeSettings(false)}
+            onBackgroundPresetChange={isSceneProfileActive ? undefined : handleBackgroundPresetChange}
+            onSaveFeedback={onSaveFeedback}
+            referenceFormat={referenceFormat}
+            referenceVersionVisible={referenceVersionVisible}
+            referenceTranslation={activeTranslation}
+            onReferenceFormatChange={handleReferenceFormatChange}
+            onReferenceVersionVisibleChange={handleReferenceVersionVisibleChange}
+            onReferenceSettingsSave={handleReferenceSettingsSave}
+            overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
+            initialTab={themeSettingsInitialTab}
+            storageScope="bible"
+            hideBackgroundOnCompare={displayMode === "compare"}
+            sceneProfiles={sceneProfileOptions}
+            activeSceneProfileId={activeSceneProfileId}
+            onSceneProfileChange={setActiveSceneProfileId}
+          />
+
+          {copyFeedback && (
+            <div
+              className={`dock-bible-copy-feedback dock-bible-copy-feedback--${copyFeedback}`}
+              role="status"
+              aria-live="polite"
+            >
+              <Icon name={copyFeedback === "success" ? "check_circle" : "warning"} size={14} />
+              <span>
+                {copyFeedback === "success"
+                  ? t("common.copiedToClipboard")
+                  : t("common.copyFailed", { defaultValue: "Could not copy to clipboard" })}
+              </span>
             </div>
-          </div>
-        )
-      }
+          )}
 
-      {/* ── Standalone Theme Settings Modal ── */}
-      <DockThemeSettingsModal
-        selectedThemeId={activeThemePickerProps.selectedThemeId}
-        onSelect={activeThemePickerProps.onSelect}
-        allowedCategories={["bible", "general"]}
-        quickSettings={activeQuickEditSettings}
-        defaultQuickSettings={
-          quickEditOverlayMode === "fullscreen"
-            ? defaultFullscreenQuickThemeSettings
-            : defaultLowerThirdQuickThemeSettings
-        }
-        onQuickSettingsSave={
-          quickEditOverlayMode === "fullscreen"
-            ? handleSaveFullscreenQuickThemeSettings
-            : handleSaveLowerThirdQuickThemeSettings
-        }
-        resolveThemeQuickSettings={resolveThemeQuickSettings}
-        displayMode={displayMode}
-        title={t("bible.quickSettings")}
-        subtitle={t("bible.quickSettingsSubtitle")}
-        isOpen={showThemeSettings}
-        onClose={() => setShowThemeSettings(false)}
-        onBackgroundPresetChange={isSceneProfileActive ? undefined : handleBackgroundPresetChange}
-        onSaveFeedback={onSaveFeedback}
-        referenceFormat={referenceFormat}
-        referenceVersionVisible={referenceVersionVisible}
-        referenceTranslation={activeTranslation}
-        onReferenceFormatChange={handleReferenceFormatChange}
-        onReferenceVersionVisibleChange={handleReferenceVersionVisibleChange}
-        onReferenceSettingsSave={handleReferenceSettingsSave}
-        overlayMode={fullscreenOnlyMode ? "fullscreen" : overlayMode}
-        initialTab={themeSettingsInitialTab}
-        storageScope="bible"
-        hideBackgroundOnCompare={displayMode === "compare"}
-        sceneProfiles={sceneProfileOptions}
-        activeSceneProfileId={activeSceneProfileId}
-        onSceneProfileChange={setActiveSceneProfileId}
-      />
-
-      {copyFeedback && (
-        <div
-          className={`dock-bible-copy-feedback dock-bible-copy-feedback--${copyFeedback}`}
-          role="status"
-          aria-live="polite"
-        >
-          <Icon name={copyFeedback === "success" ? "check_circle" : "warning"} size={14} />
-          <span>
-            {copyFeedback === "success"
-              ? t("common.copiedToClipboard")
-              : t("common.copyFailed", { defaultValue: "Could not copy to clipboard" })}
-          </span>
-        </div>
-      )}
-
-      {showBibleHistory && (
-        <BibleHistoryScreen
-          onBack={() => {
-            refreshFavoriteHistorySearches();
-            setShowBibleHistory(false);
-            onHistoryClose?.();
-          }}
-          onNavigateToVerse={(book, chapter, verse) => {
-            refreshFavoriteHistorySearches();
-            setSelectedBook(book);
-            setSelectedChapter(chapter);
-            setHighlightVerse(verse);
-            setShowBibleHistory(false);
-            onHistoryClose?.();
-          }}
-        />
-      )}
+          {showBibleHistory && (
+            <BibleHistoryScreen
+              onBack={() => {
+                refreshFavoriteHistorySearches();
+                setShowBibleHistory(false);
+                onHistoryClose?.();
+              }}
+              onNavigateToVerse={(book, chapter, verse) => {
+                refreshFavoriteHistorySearches();
+                setSelectedBook(book);
+                setSelectedChapter(chapter);
+                setHighlightVerse(verse);
+                setShowBibleHistory(false);
+                onHistoryClose?.();
+              }}
+            />
+          )}
         </>
       )}
     />

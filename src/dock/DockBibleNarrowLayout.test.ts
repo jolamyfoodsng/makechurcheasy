@@ -7,16 +7,18 @@ import bibleDockUiSource from "./components/BibleDockUI.tsx?raw";
 const dockCssSource = readFileSync(fileURLToPath(new URL("./dock.css", import.meta.url)), "utf8");
 
 describe("Dock Bible narrow layout", () => {
-  it("keeps Compare Translations available from both narrow overflow menus", () => {
-    expect((dockBibleTabSource.match(/className=\"dock-bible-actions__menu-item\"/g) ?? []).length).toBe(4);
+  it("removes Browse Bible while keeping Compare Translations in both overflow menus", () => {
+    expect((dockBibleTabSource.match(/className=\"dock-bible-actions__menu-item\"/g) ?? []).length).toBe(2);
     expect((dockBibleTabSource.match(/setShowComparePopover\(true\);/g) ?? []).length).toBe(2);
+    expect(dockBibleTabSource).not.toContain("bible.browseBible");
+    expect(dockBibleTabSource).not.toContain("closeBibleBrowser");
   });
 
-  it("moves Browse Bible and Compare Translation into three dots below 400px", () => {
+  it("keeps the narrow Compare overflow available below 400px", () => {
     expect(dockBibleTabSource).toContain("setIsNarrowWidth(width < 400);");
     expect(dockBibleTabSource).toContain("}, [preferencesHydrated, translationsLoaded]);");
-    expect(dockBibleTabSource).toContain("isShortHeight || isNarrowWidth ? ((browseExpanded, onBrowseToggle) => (");
-    expect(bibleDockUiSource).toContain("const shouldUseNarrowOverflowActions = isNarrowWidth\n    && Boolean(renderedCompactActions)\n    && (!hideBrowseToggle || showHeaderActionsWhenBrowseHidden);");
+    expect(dockBibleTabSource).toContain("isShortHeight || isNarrowWidth ? (() => (");
+    expect(bibleDockUiSource).toContain("const shouldUseNarrowOverflowActions = showActions\n    && isNarrowWidth\n    && Boolean(renderedCompactActions);");
     expect(bibleDockUiSource).toContain("dock-bible-compact-actions--narrow");
     expect(dockCssSource).toContain("@media (max-width: 399px)");
     expect(dockCssSource).toContain(".dock-bible-search-row:has(");

@@ -203,17 +203,39 @@ describe("Background picker layout", () => {
     expect(dockCssSource).toContain('overflow-y: auto;');
   });
 
-  it("switches the picker and Bible subtabs to full-height left rails on short cards", () => {
+  it("keeps Bible and Reference subtabs horizontal on short cards", () => {
     expect(BACKGROUND_PICKER_COMPACT_HEIGHT).toBe(520);
     expect(backgroundPickerSource).toContain('data-compact-height={isCompactHeight || undefined}');
     expect(backgroundPickerSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
     expect(backgroundPickerSource).toContain('dtb-bg-picker__layout--compact');
-    expect(backgroundPickerSource).toContain('dtb-bg-picker__panel--compact-subtabs');
+    expect(backgroundPickerSource).toContain('className="dtb-bg-picker__subtabs"');
+    expect(backgroundPickerSource).not.toContain('dtb-bg-picker__panel--compact-subtabs');
     expect(dockThemeSettingsModalSource).toContain('dtb-studio__modal${view === "settings" ? " dtb-studio__modal--picker" : ""}');
     expect(dockCssSource).toContain('.dtb-studio__modal--picker');
     expect(dockCssSource).toContain('.dtb-bg-picker__layout--compact .dtb-bg-picker__tabs');
-    expect(dockCssSource).toContain('.dtb-bg-picker__panel--compact-subtabs > .dtb-bg-picker__subtabs');
-    expect(dockCssSource).toContain('overflow: hidden;');
+    expect(dockCssSource).toContain('.dtb-bg-picker__subtabs {\n  display: flex;');
+    expect(dockCssSource).not.toContain('.dtb-bg-picker__panel--compact-subtabs');
+  });
+
+  it("uses a visible background type select and keeps saved styles behind the overflow menu", () => {
+    expect(backgroundPickerSource).toContain('className="dtb-bg-picker__type-select"');
+    expect(backgroundPickerSource).toContain('value={bgType}');
+    expect(backgroundPickerSource).toContain('className="dtb-local-styles__menu-label"');
+    expect(backgroundPickerSource).not.toContain('className="dtb-bg-dropdown__trigger');
+    expect(dockCssSource).toContain('.dtb-bg-picker__background-controls {');
+    expect(dockCssSource).toContain('.dtb-bg-picker__type-select {');
+  });
+
+  it("puts Text appearance before Reference display in the reference settings", () => {
+    const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
+    const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart);
+    const textAppearanceIndex = referenceSectionSource.indexOf("{t('bgPicker.textAppearance', 'Text appearance')}");
+    const referenceDisplayIndex = referenceSectionSource.indexOf("<ReferenceDisplaySection");
+
+    expect(referenceSectionStart).toBeGreaterThan(-1);
+    expect(textAppearanceIndex).toBeGreaterThan(-1);
+    expect(referenceDisplayIndex).toBeGreaterThan(-1);
+    expect(textAppearanceIndex).toBeLessThan(referenceDisplayIndex);
   });
 });
 
@@ -315,8 +337,8 @@ describe("Bible stable auto-fit", () => {
     expect(overlayHtml).toContain("stableLowerThirdTextSize");
     expect(overlayHtml).toContain("Math.min(baseTextSize, stableFullscreenTextSize)");
     expect(overlayHtml).toContain("Math.min(baseTextSize, stableLowerThirdTextSize)");
-    expect(overlayHtml).toContain("const proportionalFloor = Math.round(base * 0.64)");
-    expect(overlayHtml).toContain("Math.max(fallback, proportionalFloor)");
+    expect(overlayHtml).toContain("function resolveAutoFontFloor(baseSize, fallback)");
+    expect(overlayHtml).toContain("const absoluteFloor = Math.max(fallback, 16)");
     expect(overlayHtml).toContain("if (themeChanged) resetStableAutoFitSizes();");
   });
 });
@@ -859,19 +881,19 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("const rects = node.getClientRects()");
     expect(overlayHtml).toContain("compareTextLeft?.querySelector('.compare-line-list')");
     expect(overlayHtml).toContain("isContentOutsideFrame(fitNodes, compareLayout) || isContentOutsideFrame(fitNodes, overlay)");
-    expect(overlayHtml).toContain("Math.min(column.clientHeight || frameHeight, frameHeight)");
+    expect(overlayHtml).toContain("Math.min(columnRect.height || frameHeight, frameHeight)");
     expect(overlayHtml).toContain("#compare-layout.is-line-by-line .compare-column");
     expect(overlayHtml).toContain("max-height: 100%");
   });
 
   it("auto-scales lower-third Bible content against the visible card bounds", () => {
-    expect(overlayHtml).toContain("const textFloor = resolveAutoFontFloor(baseFontSize, 24)");
+    expect(overlayHtml).toContain("const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE");
     expect(overlayHtml).toContain("const fitNodes = [ltVerseText, ltRefText].filter((node) => isFitVisible(node))");
     expect(overlayHtml).toContain("if (isContentOutsideFrame(fitNodes, ltBar)) return true");
     expect(overlayHtml).toContain("Because the card has");
     expect(overlayHtml).toContain("const wp2 = s.lowerThirdWidthPreset || 'md'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-max-width', isLowerThird ? 'none'");
-    expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', wpr.maxWidth + 'px')");
+    expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px')");
     expect(overlayHtml).toContain("max-width: var(--lt-text-max-width, 100%)");
   });
 

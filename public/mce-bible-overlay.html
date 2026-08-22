@@ -2618,7 +2618,10 @@
         const isLowerThird = targetMode === 'lower-third';
         root.style.setProperty('--lt-max-width', isLowerThird ? 'none' : (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
         root.style.setProperty('--lt-h-margin', isLowerThird ? '0px' : (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
-        root.style.setProperty('--lt-text-max-width', wpr.maxWidth + 'px');
+        // The active lower-third card already spans the full canvas. Keep its
+        // verse and reference content on that same usable width instead of
+        // applying the legacy inset preset as a hidden text max-width.
+        root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px');
         if (s.referenceBackgroundEnabled !== true) {
           root.style.setProperty('--ref-width', 'var(--lt-text-max-width, 100%)');
         }

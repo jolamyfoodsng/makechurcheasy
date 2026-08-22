@@ -43,21 +43,13 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("dock-bible-reader__font-size-field-row");
     expect((dockBibleTabSource.match(/dock-bible-reader__font-size-field-row/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(dockBibleTabSource).toContain("QuickFontSizeInput");
-    expect(dockBibleTabSource).toContain("bible.sizeLg");
-    expect(dockBibleTabSource).toContain("bible.sizeXl");
-    expect(dockBibleTabSource).toContain("bible.sizeXxl");
-    expect(dockBibleTabSource).toContain('width: "xxl"');
-    expect(dockBibleTabSource).toContain('width: "xl"');
-    expect(dockBibleTabSource).toContain('width: "lg"');
-    expect(dockBibleTabSource).toContain("Larger text and reference; narrower text area.");
-    expect(dockBibleTabSource).toContain("preset.fontSize");
-    expect(dockBibleTabSource).toContain("preset.refFontSize");
+    expect(dockBibleTabSource).toContain("LOWER_THIRD_QUICK_SIZE_OPTIONS");
+    expect(dockBibleTabSource).toContain("handleLowerThirdSizePresetChange");
     expect(dockBibleTabSource).toContain("lineHeight: preset.lineHeight");
     expect(dockBibleTabSource).toContain("refSpacing: preset.refSpacing");
     expect(dockBibleTabSource).toContain("const isFitTextMode = true;");
     expect(dockBibleTabSource).not.toContain("onClick={() => onApplyPatch({ autoFontScale: !settings.autoFontScale })}");
     expect(dockBibleTabSource).toContain("{isFitTextMode && (");
-    expect(dockBibleTabSource).toContain("{!isFitTextMode && (");
     expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("hasPendingBrowserQuickChanges");
     expect(dockBibleTabSource).toContain("patch.compareVerseFontSizeLeft = nextCompareSize");
@@ -87,9 +79,8 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain('} else if (event.key === "ArrowUp")');
     expect(dockBibleTabSource).toContain('title={t("bible.previousChapter", "Previous chapter")}');
     expect(dockBibleTabSource).toContain('title={t("bible.nextChapter", "Next chapter")}');
-    expect(bibleDockUiSource).toContain("dock-bible-controls__chapter-nav");
-    expect(bibleDockUiSource).toContain("onPreviousChapter");
-    expect(bibleDockUiSource).toContain("onNextChapter");
+    expect(dockBibleTabSource).toContain("dock-bible-reader__chapter-nav-btn");
+    expect(bibleDockUiSource).not.toContain("BibleControls");
     expect(bottomToolbarSource).toContain("dock-btm-toolbar__center--collapsed");
   });
 

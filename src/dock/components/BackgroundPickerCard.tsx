@@ -301,6 +301,7 @@ export default function BackgroundPickerCard({
   onSaveFeedback,
 }: Props) {
   const { t } = useTranslation();
+  const backgroundTypeSelectId = useId();
   const localStylesSelectId = useId();
   const storageKeys = useMemo(() => {
     const scopeKey = `${storageScope}:${overlayMode}`;
@@ -321,7 +322,6 @@ export default function BackgroundPickerCard({
     return inferBgTypeFromSettings(quickSettings);
   });
 
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [textSubTab, setTextSubTab] = useState<BibleTextSubTab>("bible");
   const [layoutSubTab, setLayoutSubTab] = useState<BibleLayoutSubTab>("text");
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
@@ -331,7 +331,6 @@ export default function BackgroundPickerCard({
   const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
   const [localStyleStatus, setLocalStyleStatus] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const [pickerHeight, setPickerHeight] = useState(0);
   const prevStorageKeysRef = useRef(storageKeys);
@@ -348,7 +347,6 @@ export default function BackgroundPickerCard({
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
   const isBiblePicker = storageScope === "bible" && showReferences;
   const isCompactHeight = pickerHeight > 0 && pickerHeight <= BACKGROUND_PICKER_COMPACT_HEIGHT;
-  const hasBibleSubTabs = isBiblePicker && (activeTab === "text" || activeTab === "layout");
 
   useEffect(() => {
     const element = pickerRef.current;
@@ -434,7 +432,6 @@ export default function BackgroundPickerCard({
 
   const handleTypeChange = useCallback((type: BackgroundType) => {
     setBgType(type);
-    setDropdownOpen(false);
     writeNativeDockSetting(storageKeys.bgType, type);
 
     // Build the updater for the given type
@@ -565,6 +562,7 @@ export default function BackgroundPickerCard({
     writeNativeDockSetting(storageKeys.bgType, style.backgroundType);
     onQuickSettingsChange(() => cloneQuickSettings(style.settings));
     setLocalStyleStatus(`Applied ${style.name}`);
+    setStyleMenuOpen(false);
   }, [onQuickSettingsChange, savedStyles, storageKeys.bgType]);
 
   const handleDeleteSelectedLocalStyle = useCallback(() => {
@@ -577,45 +575,20 @@ export default function BackgroundPickerCard({
 
   // Close dropdown on outside click
   useEffect(() => {
-    if (!dropdownOpen && !styleMenuOpen) return;
+    if (!styleMenuOpen) return;
     const handle = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
       if (styleMenuRef.current && !styleMenuRef.current.contains(e.target as Node)) {
         setStyleMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
-  }, [dropdownOpen, styleMenuOpen]);
+  }, [styleMenuOpen]);
 
-  const selectedOption = BG_OPTIONS.find((o) => o.id === bgType) ?? BG_OPTIONS[0];
   const compareOnlyMode = hideBackgroundOnCompare && displayMode === "compare";
   const localStylesControl = (
     <>
       <div className="dtb-local-styles">
-        <label className="dtb-local-styles__label" htmlFor={localStylesSelectId}>
-          Saved Styles
-        </label>
-        <select
-          id={localStylesSelectId}
-          className="dtb-local-styles__select"
-          value={selectedLocalStyleId}
-          onChange={(event) => handleApplyLocalStyle(event.target.value)}
-          disabled={savedStyles.length === 0}
-          aria-label="Saved Styles"
-          title="Saved Styles"
-        >
-          <option value="">
-            {savedStyles.length === 0 ? "No saved styles yet" : "Choose a saved style"}
-          </option>
-          {savedStyles.map((style) => (
-            <option key={style.id} value={style.id}>
-              {style.name}
-            </option>
-          ))}
-        </select>
         <div className="dtb-local-styles__menu-wrap" ref={styleMenuRef}>
           <button
             type="button"
@@ -630,6 +603,25 @@ export default function BackgroundPickerCard({
           </button>
           {styleMenuOpen && (
             <div className="dtb-local-styles__menu" role="menu">
+              <div className="dtb-local-styles__menu-label">Saved styles</div>
+              <select
+                id={localStylesSelectId}
+                className="dtb-local-styles__select"
+                value={selectedLocalStyleId}
+                onChange={(event) => handleApplyLocalStyle(event.target.value)}
+                disabled={savedStyles.length === 0}
+                aria-label="Saved Styles"
+                title="Saved Styles"
+              >
+                <option value="">
+                  {savedStyles.length === 0 ? "No saved styles yet" : "Choose a saved style"}
+                </option>
+                {savedStyles.map((style) => (
+                  <option key={style.id} value={style.id}>
+                    {style.name}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="dtb-local-styles__menu-item"
@@ -737,7 +729,7 @@ export default function BackgroundPickerCard({
             </div>
           )}
 
-          <div className={`dtb-bg-picker__panel${isCompactHeight && hasBibleSubTabs ? " dtb-bg-picker__panel--compact-subtabs" : ""}`}>
+          <div className="dtb-bg-picker__panel">
             {isBiblePicker && activeTab === "text" && (
               <div className="dtb-bg-picker__subtabs" role="tablist" aria-label={t("bible.textSettings", "Bible text settings")}>
                 <button
@@ -802,43 +794,27 @@ export default function BackgroundPickerCard({
             <>
               <p className="dtb-bg-picker__subtitle">{t('bgPicker.chooseBackground')}</p>
 
-              {/* Dropdown Selector */}
-              <div className="dtb-bg-dropdown" ref={dropdownRef}>
-                <button
-                  type="button"
-                  className={`dtb-bg-dropdown__trigger${dropdownOpen ? " dtb-bg-dropdown__trigger--open" : ""}`}
-                  onClick={() => setDropdownOpen((v) => !v)}
-                  aria-expanded={dropdownOpen}
-                  aria-haspopup="listbox"
-                  title={t('bgPicker.background')}>
-                  <Icon name={selectedOption.icon} size={15} className="dtb-bg-dropdown__icon" />
-                  <span className="dtb-bg-dropdown__label">{t(selectedOption.label)}</span>
-                  <Icon name={dropdownOpen ? "expand_less" : "expand_more"} size={16} className="dtb-bg-dropdown__chevron" />
-                </button>
-
-                {dropdownOpen && (
-                  <div className="dtb-bg-dropdown__menu" role="listbox">
+              <div className="dtb-bg-picker__background-controls">
+                <div className="dtb-bg-picker__type-field">
+                  <label className="dtb-bg-picker__type-label" htmlFor={backgroundTypeSelectId}>
+                    {t('bgPicker.background', 'Background type')}
+                  </label>
+                  <select
+                    id={backgroundTypeSelectId}
+                    className="dtb-bg-picker__type-select"
+                    value={bgType}
+                    onChange={(event) => handleTypeChange(event.target.value as BackgroundType)}
+                    aria-label={t('bgPicker.background', 'Background type')}
+                  >
                     {BG_OPTIONS.map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className={`dtb-bg-dropdown__item${bgType === option.id ? " dtb-bg-dropdown__item--selected" : ""}`}
-                        role="option"
-                        aria-selected={bgType === option.id}
-                        onClick={() => handleTypeChange(option.id)}
-                        title={t('common.confirm')}>
-                        <Icon name={option.icon} size={14} className="dtb-bg-dropdown__item-icon" />
-                        <span className="dtb-bg-dropdown__item-label">{t(option.label)}</span>
-                        {bgType === option.id && (
-                          <Icon name="check" size={14} className="dtb-bg-dropdown__check" />
-                        )}
-                      </button>
+                      <option key={option.id} value={option.id}>
+                        {t(option.label)}
+                      </option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </div>
+                {localStylesControl}
               </div>
-
-              {localStylesControl}
 
 
               {/* Content based on type */}
@@ -2256,17 +2232,6 @@ function ReferenceSection({
           </p>
         </div>
       )}
-      {referenceFormat && onReferenceFormatChange && onReferenceVersionVisibleChange && (
-        <ReferenceDisplaySection
-          sampleReference={sampleReference}
-          referenceFormat={referenceFormat}
-          referenceVersionVisible={referenceVersionVisible}
-          referenceTranslation={referenceTranslation}
-          onReferenceFormatChange={onReferenceFormatChange}
-          onReferenceVersionVisibleChange={onReferenceVersionVisibleChange}
-        />
-      )}
-
       <div className="dtb-control-section">
         <div className="dtb-control-section__head">
           <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
@@ -2305,6 +2270,17 @@ function ReferenceSection({
 
         </div>
       </div>
+
+      {referenceFormat && onReferenceFormatChange && onReferenceVersionVisibleChange && (
+        <ReferenceDisplaySection
+          sampleReference={sampleReference}
+          referenceFormat={referenceFormat}
+          referenceVersionVisible={referenceVersionVisible}
+          referenceTranslation={referenceTranslation}
+          onReferenceFormatChange={onReferenceFormatChange}
+          onReferenceVersionVisibleChange={onReferenceVersionVisibleChange}
+        />
+      )}
 
       {overlayMode !== "lower-third" && (
         <ReferenceBackgroundSection
@@ -2457,32 +2433,38 @@ function ReferenceBackgroundSection({
 
   return (
     <div className="dtb-colors__section">
-      <div className="dtb-colors__toggle-row">
-        <span className="dtb-colors__label">{t('bgPicker.referenceBackground')}</span>
-        <button
-          type="button"
-          className={`dtb-toggle${refBgEnabled ? " dtb-toggle--on" : ""}`}
-          onClick={() =>
-            onQuickSettingsChange((prev) => ({
-              ...prev,
-              referenceBackgroundEnabled: !prev.referenceBackgroundEnabled,
-            }))
-          }
-          role="switch"
-          aria-checked={refBgEnabled}
-          aria-label={t('bgPicker.enableReferenceBackground')}
-          title="dtb-toggle__knob">
-          <span className="dtb-toggle__knob" />
-        </button>
+      <div className="dtb-colors__ref-bg-header">
+        <div className="dtb-colors__toggle-row">
+          <span className="dtb-colors__label">{t('bgPicker.referenceBackground')}</span>
+          <button
+            type="button"
+            className={`dtb-toggle${refBgEnabled ? " dtb-toggle--on" : ""}`}
+            onClick={() =>
+              onQuickSettingsChange((prev) => ({
+                ...prev,
+                referenceBackgroundEnabled: !prev.referenceBackgroundEnabled,
+              }))
+            }
+            role="switch"
+            aria-checked={refBgEnabled}
+            aria-label={t('bgPicker.enableReferenceBackground')}
+            title="dtb-toggle__knob">
+            <span className="dtb-toggle__knob" />
+          </button>
+        </div>
+        {refBgEnabled && (
+          <div className="dtb-color-field dtb-colors__ref-bg-color">
+            <span className="dtb-color-field__label">{t('common.color')}</span>
+            <InlineColorPicker
+              value={quickSettings.referenceBackgroundColor}
+              onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
+            />
+          </div>
+        )}
       </div>
 
       {refBgEnabled && (
         <div className="dtb-colors__ref-bg-controls">
-          <InlineColorPicker
-            value={quickSettings.referenceBackgroundColor}
-            onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
-          />
-
           <button
             type="button"
             className="dtb-colors__collapsible-header dtb-colors__collapsible-header--sub"
