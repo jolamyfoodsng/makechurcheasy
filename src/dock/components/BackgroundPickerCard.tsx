@@ -91,6 +91,7 @@ const ACTIVE_TAB_KEY = "dtb-bg-picker-tab";
 const LOCAL_STYLES_KEY = "dtb-bg-picker-local-styles";
 const LOCAL_STYLE_LIMIT = 12;
 const LOWER_THIRD_TEXT_PADDING_MAX = 250;
+export const BACKGROUND_PICKER_COMPACT_HEIGHT = 520;
 
 const BG_OPTIONS: Array<{ id: BackgroundType; label: string; icon: string }> = [
   { id: "off", label: "bgPicker.off", icon: "block" },
@@ -329,8 +330,10 @@ export default function BackgroundPickerCard({
   });
   const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
   const [localStyleStatus, setLocalStyleStatus] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
+  const [pickerHeight, setPickerHeight] = useState(0);
   const prevStorageKeysRef = useRef(storageKeys);
   const compareBackdropValue: BackgroundType = bgType;
   const lowerThirdPadding = parseLowerThirdPadding(quickSettings.lowerThirdCardPadding);
@@ -344,6 +347,27 @@ export default function BackgroundPickerCard({
   const lowerThirdTextDirection = quickSettings.lowerThirdTextDirection === "inverted" ? "inverted" : "normal";
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
   const isBiblePicker = storageScope === "bible" && showReferences;
+  const isCompactHeight = pickerHeight > 0 && pickerHeight <= BACKGROUND_PICKER_COMPACT_HEIGHT;
+  const hasBibleSubTabs = isBiblePicker && (activeTab === "text" || activeTab === "layout");
+
+  useEffect(() => {
+    const element = pickerRef.current;
+    if (!element) return;
+
+    const updateHeight = () => setPickerHeight(element.clientHeight);
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateHeight);
+      return () => window.removeEventListener("resize", updateHeight);
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setPickerHeight(entry.contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -638,102 +662,141 @@ export default function BackgroundPickerCard({
   );
 
   return (
-    <div className="dtb-studio-card dtb-studio-card--picker">
+    <div
+      ref={pickerRef}
+      className={`dtb-studio-card dtb-studio-card--picker${isCompactHeight ? " dtb-studio-card--compact-height" : ""}`}
+      data-compact-height={isCompactHeight || undefined}
+    >
 
       <div className={`dtb-studio-card__body dtb-bg-picker${compareOnlyMode ? " dtb-bg-picker--compare-only" : ""}`}>
-        {/* Tab Navigation */}
-        {!compareOnlyMode && (
-          <div className="dtb-bg-picker__tabs">
-            {displayMode !== "compare" && (
-              <>
+        <div className={`dtb-bg-picker__layout${isCompactHeight ? " dtb-bg-picker__layout--compact" : ""}`}>
+          {/* Tab Navigation */}
+          {!compareOnlyMode && (
+            <div
+              className="dtb-bg-picker__tabs"
+              role="tablist"
+              aria-orientation={isCompactHeight ? "vertical" : "horizontal"}
+              aria-label={t("bgPicker.settingsTabs", "Background settings")}
+            >
+              {displayMode !== "compare" && (
+                <>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "text"}
+                    aria-label={t('bgPicker.text')}
+                    title={t('bgPicker.text')}
+                    className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
+                    onClick={() => setActiveTab("text")}
+                  >
+                    <Icon name="text_fields" size={13} />
+                    <span>{t('bgPicker.text')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "layout"}
+                    aria-label={t('bgPicker.layout', 'Layout')}
+                    title={t('bgPicker.layout', 'Layout')}
+                    className={`dtb-bg-picker__tab${activeTab === "layout" ? " dtb-bg-picker__tab--active" : ""}`}
+                    onClick={() => setActiveTab("layout")}
+                  >
+                    <Icon name="view_quilt" size={13} />
+                    <span>{t('bgPicker.layout', 'Layout')}</span>
+                  </button>
+                </>
+              )}
+              {(!hideBackgroundOnCompare || displayMode !== "compare") && (
                 <button
                   type="button"
-                  className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
-                  onClick={() => setActiveTab("text")}
+                  role="tab"
+                  aria-selected={activeTab === "background"}
+                  aria-label={t("bgPicker.bg", "BG")}
+                  title={t("bgPicker.bg", "BG")}
+                  className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
+                  onClick={() => setActiveTab("background")}
+                >
+                  <Icon name="wallpaper" size={13} />
+                  <span>{t("bgPicker.bg", "BG")}</span>
+                </button>
+              )}
+              {displayMode === "compare" && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "compare"}
+                  aria-label={t("bgPicker.compare", "Compare")}
+                  title={t("bgPicker.compare", "Compare")}
+                  className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
+                  onClick={() => setActiveTab("compare")}
+                >
+                  <Icon name="compare_arrows" size={13} />
+                  <span>{t("bgPicker.compare", "Compare")}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className={`dtb-bg-picker__panel${isCompactHeight && hasBibleSubTabs ? " dtb-bg-picker__panel--compact-subtabs" : ""}`}>
+            {isBiblePicker && activeTab === "text" && (
+              <div className="dtb-bg-picker__subtabs" role="tablist" aria-label={t("bible.textSettings", "Bible text settings")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={textSubTab === "bible"}
+                  aria-label={t("bible.bible", "Bible")}
+                  title={t("bible.bible", "Bible")}
+                  className={`dtb-bg-picker__subtab${textSubTab === "bible" ? " dtb-bg-picker__subtab--active" : ""}`}
+                  onClick={() => setTextSubTab("bible")}
+                >
+                  <Icon name="menu_book" size={13} />
+                  <span>{t("bible.bible", "Bible")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={textSubTab === "reference"}
+                  aria-label={t("bible.reference", "Reference")}
+                  title={t("bible.reference", "Reference")}
+                  className={`dtb-bg-picker__subtab${textSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
+                  onClick={() => setTextSubTab("reference")}
+                >
+                  <Icon name="format_quote" size={13} />
+                  <span>{t("bible.reference", "Reference")}</span>
+                </button>
+              </div>
+            )}
+
+            {isBiblePicker && activeTab === "layout" && (
+              <div className="dtb-bg-picker__subtabs" role="tablist" aria-label={t("bible.layoutSettings", "Bible layout settings")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={layoutSubTab === "text"}
+                  aria-label={t("common.text", "Text")}
+                  title={t("common.text", "Text")}
+                  className={`dtb-bg-picker__subtab${layoutSubTab === "text" ? " dtb-bg-picker__subtab--active" : ""}`}
+                  onClick={() => setLayoutSubTab("text")}
                 >
                   <Icon name="text_fields" size={13} />
-                  <span>{t('bgPicker.text')}</span>
+                  <span>{t("common.text", "Text")}</span>
                 </button>
                 <button
                   type="button"
-                  className={`dtb-bg-picker__tab${activeTab === "layout" ? " dtb-bg-picker__tab--active" : ""}`}
-                  onClick={() => setActiveTab("layout")}
+                  role="tab"
+                  aria-selected={layoutSubTab === "reference"}
+                  aria-label={t("bible.reference", "Reference")}
+                  title={t("bible.reference", "Reference")}
+                  className={`dtb-bg-picker__subtab${layoutSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
+                  onClick={() => setLayoutSubTab("reference")}
                 >
-                  <Icon name="view_quilt" size={13} />
-                  <span>{t('bgPicker.layout', 'Layout')}</span>
+                  <Icon name="format_quote" size={13} />
+                  <span>{t("bible.reference", "Reference")}</span>
                 </button>
-              </>
+              </div>
             )}
-            {(!hideBackgroundOnCompare || displayMode !== "compare") && (
-              <button
-                type="button"
-                className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
-                onClick={() => setActiveTab("background")}
-              >
-                <Icon name="wallpaper" size={13} />
-                <span>{t("bgPicker.bg", "BG")}</span>
-              </button>
-            )}
-            {displayMode === "compare" && (
-              <button
-                type="button"
-                className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
-                onClick={() => setActiveTab("compare")}
-              >
-                <Icon name="compare_arrows" size={13} />
-                <span>{t("bgPicker.compare", "Compare")}</span>
-              </button>
-            )}
-          </div>
-        )}
 
-        {isBiblePicker && activeTab === "text" && (
-          <div className="dtb-bg-picker__subtabs" role="tablist" aria-label={t("bible.textSettings", "Bible text settings")}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={textSubTab === "bible"}
-              className={`dtb-bg-picker__subtab${textSubTab === "bible" ? " dtb-bg-picker__subtab--active" : ""}`}
-              onClick={() => setTextSubTab("bible")}
-            >
-              {t("bible.bible", "Bible")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={textSubTab === "reference"}
-              className={`dtb-bg-picker__subtab${textSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
-              onClick={() => setTextSubTab("reference")}
-            >
-              {t("bible.reference", "Reference")}
-            </button>
-          </div>
-        )}
-
-        {isBiblePicker && activeTab === "layout" && (
-          <div className="dtb-bg-picker__subtabs" role="tablist" aria-label={t("bible.layoutSettings", "Bible layout settings")}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={layoutSubTab === "text"}
-              className={`dtb-bg-picker__subtab${layoutSubTab === "text" ? " dtb-bg-picker__subtab--active" : ""}`}
-              onClick={() => setLayoutSubTab("text")}
-            >
-              {t("common.text", "Text")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={layoutSubTab === "reference"}
-              className={`dtb-bg-picker__subtab${layoutSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
-              onClick={() => setLayoutSubTab("reference")}
-            >
-              {t("bible.reference", "Reference")}
-            </button>
-          </div>
-        )}
-
-        <div className="dtb-bg-picker__scroll">
+            <div className="dtb-bg-picker__scroll">
           {/* Background Tab */}
           {activeTab === "background" && (
             <>
@@ -1164,6 +1227,8 @@ export default function BackgroundPickerCard({
               overlayMode={overlayMode}
             />
           )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

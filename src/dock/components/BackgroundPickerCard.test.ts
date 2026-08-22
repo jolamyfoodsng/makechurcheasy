@@ -9,7 +9,7 @@ import worshipOverlayHtml from "../../../public/mce-worship-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
-import { toBackgroundAssetUrl } from "./BackgroundPickerCard";
+import { BACKGROUND_PICKER_COMPACT_HEIGHT, toBackgroundAssetUrl } from "./BackgroundPickerCard";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockOutputQuickActionsSource from "./DockOutputQuickActions.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
@@ -182,7 +182,7 @@ describe("Background picker layout", () => {
     const tabsIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__tabs"');
     const scrollIndex = backgroundPickerSource.indexOf('className="dtb-bg-picker__scroll"');
 
-    expect(backgroundPickerSource).toContain('className="dtb-studio-card dtb-studio-card--picker"');
+    expect(backgroundPickerSource).toContain('dtb-studio-card dtb-studio-card--picker${isCompactHeight ?');
     expect(tabsIndex).toBeGreaterThan(-1);
     expect(scrollIndex).toBeGreaterThan(tabsIndex);
     expect(dockThemeSettingsModalSource).toContain('dtb-studio__settings-view dtb-studio__settings-view--picker');
@@ -195,12 +195,25 @@ describe("Background picker layout", () => {
     expect(dockCssSource).toContain('--dtb-studio-width: min(');
     expect(dockCssSource).toContain('width: var(--dtb-studio-width);\n  max-width: none;\n  height: var(--dtb-studio-height);');
     expect(dockCssSource).not.toMatch(/(?:^|\n)\s*height:\s*50vh;/);
-    expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n}');
+    expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  width: 100%;\n  max-width: 100%;\n  min-width: 0;\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: hidden;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__theme-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}');
     expect(dockCssSource).not.toContain('max-height: 560px;\n  max-height: min(560px');
     expect(dockCssSource).toContain('overflow-y: auto;');
+  });
+
+  it("switches the picker and Bible subtabs to full-height left rails on short cards", () => {
+    expect(BACKGROUND_PICKER_COMPACT_HEIGHT).toBe(520);
+    expect(backgroundPickerSource).toContain('data-compact-height={isCompactHeight || undefined}');
+    expect(backgroundPickerSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
+    expect(backgroundPickerSource).toContain('dtb-bg-picker__layout--compact');
+    expect(backgroundPickerSource).toContain('dtb-bg-picker__panel--compact-subtabs');
+    expect(dockThemeSettingsModalSource).toContain('dtb-studio__modal${view === "settings" ? " dtb-studio__modal--picker" : ""}');
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker');
+    expect(dockCssSource).toContain('.dtb-bg-picker__layout--compact .dtb-bg-picker__tabs');
+    expect(dockCssSource).toContain('.dtb-bg-picker__panel--compact-subtabs > .dtb-bg-picker__subtabs');
+    expect(dockCssSource).toContain('overflow: hidden;');
   });
 });
 

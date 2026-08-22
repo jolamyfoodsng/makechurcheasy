@@ -326,7 +326,7 @@ export default function DockThemeSettingsModal({
       {view !== "closed" && (
         <div className="dtb-studio__backdrop" onClick={() => setView("closed")} role="presentation">
           <div
-            className="dtb-studio__modal"
+            className={`dtb-studio__modal${view === "settings" ? " dtb-studio__modal--picker" : ""}`}
             ref={modalRef}
             role="dialog"
             aria-modal="true"
@@ -342,7 +342,7 @@ export default function DockThemeSettingsModal({
                 onClick={() => setView("closed")}
                 aria-label={t('common.close')}
                 title={t('common.close')}>
-                <Icon name="close" size={18} />
+                <Icon name="close" size={14} />
               </button>
             </div>
 
@@ -402,7 +402,7 @@ export default function DockThemeSettingsModal({
                   hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
                 {/* Spacer for sticky footer */}
-                <div className="dtb-studio__spacer" />
+
               </div>
             )}
 

@@ -551,9 +551,9 @@ function DockPageContent({
   }, []);
 
   // Dock popovers use both normal descendants and document-level portals. Keep
-  // one shared surface registry so every card/menu/modal gets the same scroll
-  // treatment, and bring the complete active layer above its siblings when it
-  // receives a pointer or keyboard focus.
+  // one shared registry for transient menus/modals/popovers, while leaving the
+  // main cards structural. Bring the active transient layer above its siblings
+  // when it receives a pointer or keyboard focus.
   useEffect(() => {
     const root = dockRootRef.current;
     if (!root || typeof document === "undefined") return;

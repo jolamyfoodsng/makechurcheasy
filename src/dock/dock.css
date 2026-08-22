@@ -16719,11 +16719,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 4px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
   flex-shrink: 0;
   background: color-mix(in srgb, var(--dock-surface-alt) 50%, var(--dock-surface));
-  min-height: 44px;
+  min-height: 24px;
 }
 
 .dtb-studio__back,
@@ -16731,8 +16731,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 4px;
@@ -16744,8 +16744,8 @@
 }
 
 .dtb-studio__close--strong {
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
   background: color-mix(in srgb, var(--dock-surface-hover) 62%, transparent);
   color: var(--dock-text);
@@ -16760,7 +16760,7 @@
 .dtb-studio__header-label {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
+  font-size: 8px;
   font-weight: 650;
   color: var(--dock-text);
   line-height: 1.25;
@@ -18081,7 +18081,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 30px;
   padding: 0 14px;
   border-radius: 4px;
   font: inherit;
@@ -26776,7 +26776,7 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 0px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
