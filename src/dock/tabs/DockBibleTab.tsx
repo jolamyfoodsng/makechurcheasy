@@ -6454,7 +6454,7 @@ function DockBibleTab({
           </section>
         ) : null
       }
-      children={(bottomSearchPanel, bottomToolbarActions) => (
+      children={(bottomSearchPanel, bottomToolbarActions, bottomPanelToggle) => (
         <>
           <section
             ref={quickActionsContainerRef}
@@ -6846,6 +6846,7 @@ function DockBibleTab({
               collapsed={toolbarCollapsed}
               onCollapseChange={setToolbarCollapsed}
               bottomPanel={bottomSearchPanel}
+              bottomPanelToggle={bottomPanelToggle}
               onOverflowChange={setShowBibleActionsMenu}
               inlineAction={
                 <button

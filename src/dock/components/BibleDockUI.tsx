@@ -87,7 +87,7 @@ interface BibleDockContainerProps {
   searchPlacement?: DockSearchPlacement;
   headerActions?: BibleContextualActions;
   compactActions?: BibleContextualActions;
-  children: React.ReactNode | ((bottomPanel: React.ReactNode, bottomToolbarActions: React.ReactNode) => React.ReactNode);
+  children: React.ReactNode | ((bottomPanel: React.ReactNode, bottomToolbarActions: React.ReactNode, bottomPanelToggle?: { expanded: boolean; onToggle: () => void }) => React.ReactNode);
   isCompact?: boolean;
   isNarrowWidth?: boolean;
 }
@@ -134,10 +134,17 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     <DockBottomSearchPanel
       expanded={isBottomSearchExpanded}
       onToggle={() => setIsBottomSearchExpanded((current) => !current)}
+      toggleInToolbar
     >
       {renderSearchRow(false)}
     </DockBottomSearchPanel>
   ) : null;
+  const bottomPanelToggle = showBottomSearch
+    ? {
+      expanded: isBottomSearchExpanded,
+      onToggle: () => setIsBottomSearchExpanded((current) => !current),
+    }
+    : undefined;
   const bottomToolbarActions = searchPlacement === "top"
     ? null
     : (isCompact ? compactActions : headerActions);
@@ -145,7 +152,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     ? bottomToolbarActions()
     : bottomToolbarActions;
   const renderedChildren = typeof children === "function"
-    ? children(bottomSearchPanel, renderedBottomToolbarActions)
+    ? children(bottomSearchPanel, renderedBottomToolbarActions, bottomPanelToggle)
     : children;
 
   return (

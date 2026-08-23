@@ -1448,10 +1448,15 @@ export default function DockNotesTab({
                   <DockBottomSearchPanel
                     expanded={bottomSearchExpanded}
                     onToggle={() => setBottomSearchExpanded((current) => !current)}
+                    toggleInToolbar
                   >
                     {renderNoteSlidesSearchPanel()}
                   </DockBottomSearchPanel>
                 ) : undefined}
+                bottomPanelToggle={searchPlacement !== "top" ? {
+                  expanded: bottomSearchExpanded,
+                  onToggle: () => setBottomSearchExpanded((current) => !current),
+                } : undefined}
                 inlineAction={
                   <button
                     type="button"

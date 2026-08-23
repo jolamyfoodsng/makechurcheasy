@@ -342,7 +342,7 @@ export default function DockThemeSettingsModal({
                 onClick={() => setView("closed")}
                 aria-label={t('common.close')}
                 title={t('common.close')}>
-                <Icon name="close" size={14} />
+                <Icon name="close" size={18} />
               </button>
             </div>
 
@@ -402,7 +402,7 @@ export default function DockThemeSettingsModal({
                   hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
                 {/* Spacer for sticky footer */}
-
+                <div className="dtb-studio__spacer" />
               </div>
             )}
 

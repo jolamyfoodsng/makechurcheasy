@@ -3671,10 +3671,15 @@ function DockWorshipTab({
                         <DockBottomSearchPanel
                           expanded={bottomSearchExpanded}
                           onToggle={() => setBottomSearchExpanded((current) => !current)}
+                          toggleInToolbar
                         >
                           {renderLyricsSearchPanel()}
                         </DockBottomSearchPanel>
                       ) : undefined}
+                      bottomPanelToggle={searchPlacement !== "top" ? {
+                        expanded: bottomSearchExpanded,
+                        onToggle: () => setBottomSearchExpanded((current) => !current),
+                      } : undefined}
                       inlineAction={
                         <button
                           type="button"

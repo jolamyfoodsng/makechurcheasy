@@ -2,7 +2,7 @@
  * DockBottomToolbar.css
  *
  * Compact layout with a two-row fallback for ultra-narrow docks.
- * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
+ * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ] [ panel toggle ]
  */
 
 /* ── Container ── */
@@ -255,7 +255,7 @@
 
 /* ══════════════════════════════════════════════════
    Compact mode (always-on layout)
-   Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ]
+   Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ] [ panel toggle ]
    ══════════════════════════════════════════════════ */
 .dock-btm-toolbar--compact {
   padding: 8px 10px;
@@ -393,6 +393,10 @@
 
 .dock-btm-toolbar--compact .dock-btm-overflow {
   display: inline-flex;
+}
+
+.dock-btm-toolbar__bottom-panel-toggle {
+  margin-left: 0;
 }
 
 /* The Bible toolbar can own an expanded search card above its action row.
@@ -845,8 +849,9 @@
 }
 
 .dock_bottom_bar {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-
+  min-width: 0;
 }

@@ -12,6 +12,10 @@ import "./DockBottomToolbar.css";
 
 type OverlayMode = "fullscreen" | "lower-third";
 type DisplayMode = "single" | "compare";
+interface BottomPanelToggle {
+  expanded: boolean;
+  onToggle: () => void;
+}
 const DISPLAY_MODES = [
   { id: "single" as const, labelKey: "dock.bottomToolbar.singleTranslation" },
   { id: "compare" as const, labelKey: "dock.bottomToolbar.compareTranslations" },
@@ -52,6 +56,8 @@ interface Props {
   centerAction?: React.ReactNode;
   /** Optional search/control card rendered inside the lower-third toolbar */
   bottomPanel?: React.ReactNode;
+  /** Optional search/control toggle rendered after the overflow button */
+  bottomPanelToggle?: BottomPanelToggle;
   /** Notify consumers when the shared lower-toolbar overflow opens or closes */
   onOverflowChange?: (open: boolean) => void;
   /** Whether the toolbar is collapsed (controlled) */
@@ -78,6 +84,7 @@ export default function DockBottomToolbar({
   narrowOverflowActions,
   centerAction,
   bottomPanel,
+  bottomPanelToggle,
   onOverflowChange,
   collapsed = false,
   onCollapseChange,
@@ -315,7 +322,7 @@ export default function DockBottomToolbar({
                       {narrowOverflowActions}
                     </div>
                   )}
-                  {children && (
+              {children && (
                     <div
                       className="dock-btm-overflow__children"
                       onClick={(event) => {
@@ -329,6 +336,18 @@ export default function DockBottomToolbar({
                     </div>
                   )}
                 </div>
+              )}
+              {bottomPanelToggle && (
+                <button
+                  type="button"
+                  className={`dock-btm-toolbar__icon-btn dock-btm-toolbar__bottom-panel-toggle${bottomPanelToggle.expanded ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                  onClick={bottomPanelToggle.onToggle}
+                  aria-expanded={bottomPanelToggle.expanded}
+                  aria-label={bottomPanelToggle.expanded ? t("dock.collapseSearchPanel", "Collapse search panel") : t("dock.expandSearchPanel", "Expand search panel")}
+                  title={bottomPanelToggle.expanded ? t("dock.collapseSearchPanel", "Collapse search panel") : t("dock.expandSearchPanel", "Expand search panel")}
+                >
+                  <Icon name={bottomPanelToggle.expanded ? "expand_more" : "expand_less"} size={15} />
+                </button>
               )}
             </div>
           )}

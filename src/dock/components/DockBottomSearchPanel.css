@@ -24,6 +24,12 @@
   text-transform: uppercase;
 }
 
+/* Keep the compact header identifiable by icon without spending toolbar
+   width on a label that is already available through the accessible name. */
+.dock-bottom-search-panel__label {
+  display: none;
+}
+
 .dock-bottom-search-panel__title svg {
   color: var(--dock-accent, #1D4ED8);
 }
