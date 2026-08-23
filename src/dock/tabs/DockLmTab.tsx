@@ -51,7 +51,7 @@ const SUGGESTION_COOLDOWN_MS = 60_000;
 // performanceManager still applies a device-specific minimum interval.
 const LM_RELAY_POLL_MS = 500;
 const LM_RELAY_HIDDEN_POLL_MS = 2_000;
-export const LM_COMPACT_HEIGHT_PX = 250;
+export const LM_COMPACT_HEIGHT_PX = 400;
 
 export function isLmCompactHeight(height: number): boolean {
   return Number.isFinite(height) && height > 0 && height < LM_COMPACT_HEIGHT_PX;
@@ -1426,6 +1426,7 @@ export default function DockLmTab({
             <div style={S.queueScroll}>
               {queueVerses.length === 0 && pinnedVerses.length === 0 && (
                 <div style={S.sectionEmpty}>
+                  <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
                   <span style={S.sectionEmptyText}>
                     {appConnected ? t("lm.waitingForDetection") : openAppToStartText}
                   </span>
@@ -1788,16 +1789,6 @@ export default function DockLmTab({
         </div>
       )}
 
-      {!isListening && entries.length === 0 && candidates.length === 0 && retainedQueue.length === 0 && suggestions.length === 0 && (
-        <div style={S.emptyState}>
-          <Icon name="mic" size={32} style={{ opacity: 0.15 }} />
-          <span style={S.emptyText}>
-            {openAppToStartText}
-          </span>
-
-        </div>
-      )}
-
       {error && (
         <div style={S.errorBanner}>
           <Icon name="warning" size={12} style={{ color: "#EF4444" }} />
@@ -2122,6 +2113,8 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     height: "100%",
+    minHeight: 0,
+    minWidth: 0,
     overflow: "hidden",
     background: "var(--dock-bg, #0f172a)",
     color: "var(--dock-text, #E2E8F0)",
@@ -2308,6 +2301,7 @@ const S: Record<string, React.CSSProperties> = {
     flex: "0 0 40px",
     width: 40,
     height: "100%",
+    boxSizing: "border-box",
     minHeight: 0,
     alignSelf: "stretch",
     borderBottom: "none",
@@ -2530,8 +2524,10 @@ const S: Record<string, React.CSSProperties> = {
   sectionEmpty: {
     flex: 1,
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
     padding: 16,
   },
   sectionEmptyText: {
@@ -3040,22 +3036,6 @@ const S: Record<string, React.CSSProperties> = {
     background: "#DC2626",
     color: "#fff",
     cursor: "pointer",
-  },
-
-  // ── Empty state ──
-  emptyState: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 11,
-    color: "var(--dock-text-dim, #64748B)",
-    textAlign: "center",
-    lineHeight: "1.4",
   },
 
   // ── Settings side panel ──

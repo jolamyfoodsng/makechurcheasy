@@ -34,17 +34,18 @@ function candidate(book: string, chapter: number, verse: number): VoiceBibleCand
 
 describe("DockLmTab settings helpers", () => {
   it("uses the requested short-height breakpoint for the vertical tab rail", () => {
-    expect(LM_COMPACT_HEIGHT_PX).toBe(250);
-    expect(isLmCompactHeight(249)).toBe(true);
-    expect(isLmCompactHeight(250)).toBe(false);
+    expect(LM_COMPACT_HEIGHT_PX).toBe(400);
+    expect(isLmCompactHeight(399)).toBe(true);
+    expect(isLmCompactHeight(400)).toBe(false);
     expect(isLmCompactHeight(0)).toBe(false);
   });
 
   it("uses icon-only vertical tabs and keeps overlay mode in settings", () => {
     expect(dockLmTabSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
     expect(dockLmTabSource).toContain('data-testid={`lm-tab-${tab}`}');
-    expect(dockLmTabSource).toMatch(/tabBarCompact:\s*\{[\s\S]*?height: "100%"[\s\S]*?overflow: "hidden"/);
+    expect(dockLmTabSource).toMatch(/tabBarCompact:\s*\{[\s\S]*?height: "100%"[\s\S]*?boxSizing: "border-box"[\s\S]*?overflow: "hidden"/);
     expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "1 1 0"/);
+    expect(dockLmTabSource).not.toContain("style={S.emptyState}");
     expect(dockLmTabSource).not.toContain("!presentationLinkMode && renderOverlayModeSwitch()");
     expect(dockLmTabSource).toContain("{renderOverlayModeSwitch()}");
   });
