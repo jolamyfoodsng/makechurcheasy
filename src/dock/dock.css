@@ -27577,6 +27577,17 @@
   color: var(--dock-text-secondary, #94A3B8);
 }
 
+.dtb-reference-color-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.dtb-reference-color-row > .dtb-color-field {
+  min-width: 0;
+}
+
 .dtb-color-input {
   width: 28px;
   height: 28px;
@@ -27866,6 +27877,10 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(150px, 0.85fr);
   align-items: center;
   gap: 12px;
+}
+
+.dtb-colors__ref-bg-header--toggle-only {
+  grid-template-columns: 1fr;
 }
 
 .dtb-colors__ref-bg-header .dtb-colors__toggle-row {

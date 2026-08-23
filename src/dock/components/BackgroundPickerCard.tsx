@@ -2237,12 +2237,24 @@ function ReferenceSection({
           <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
         </div>
         <div className="dtb-control-section__body">
-          <div className="dtb-color-field">
-            <span className="dtb-color-field__label">{t('common.color')}</span>
-            <InlineColorPicker
-              value={quickSettings.refFontColor ?? "#cccccc"}
-              onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
-            />
+          <div className="dtb-reference-color-row">
+            <div className="dtb-color-field">
+              <span className="dtb-color-field__label">{t('common.color')}</span>
+              <InlineColorPicker
+                value={quickSettings.refFontColor ?? "#cccccc"}
+                onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
+              />
+            </div>
+
+            {overlayMode !== "lower-third" && (
+              <div className="dtb-color-field">
+                <span className="dtb-color-field__label">{t('bgPicker.background', 'Background')}</span>
+                <InlineColorPicker
+                  value={quickSettings.referenceBackgroundColor}
+                  onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
+                />
+              </div>
+            )}
           </div>
 
           <SliderNumberField
@@ -2286,6 +2298,7 @@ function ReferenceSection({
         <ReferenceBackgroundSection
           quickSettings={quickSettings}
           onQuickSettingsChange={onQuickSettingsChange}
+          showColorPicker={false}
         />
       )}
 
@@ -2423,9 +2436,11 @@ function ReferenceLayoutSection({
 function ReferenceBackgroundSection({
   quickSettings,
   onQuickSettingsChange,
+  showColorPicker = true,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  showColorPicker?: boolean;
 }) {
   const { t } = useTranslation();
   const refBgEnabled = quickSettings.referenceBackgroundEnabled;
@@ -2433,7 +2448,7 @@ function ReferenceBackgroundSection({
 
   return (
     <div className="dtb-colors__section">
-      <div className="dtb-colors__ref-bg-header">
+      <div className={`dtb-colors__ref-bg-header${showColorPicker ? "" : " dtb-colors__ref-bg-header--toggle-only"}`}>
         <div className="dtb-colors__toggle-row">
           <span className="dtb-colors__label">{t('bgPicker.referenceBackground')}</span>
           <button
@@ -2452,7 +2467,7 @@ function ReferenceBackgroundSection({
             <span className="dtb-toggle__knob" />
           </button>
         </div>
-        {refBgEnabled && (
+        {refBgEnabled && showColorPicker && (
           <div className="dtb-color-field dtb-colors__ref-bg-color">
             <span className="dtb-color-field__label">{t('common.color')}</span>
             <InlineColorPicker

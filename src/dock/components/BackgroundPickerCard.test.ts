@@ -853,6 +853,18 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(referenceLayoutSource).toContain('"bottom-edge"');
   });
 
+  it("places reference text and background colors side by side", () => {
+    const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
+    const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
+    const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
+
+    expect(referenceSectionSource).toContain('className="dtb-reference-color-row"');
+    expect(referenceSectionSource).toContain("referenceBackgroundColor");
+    expect(referenceSectionSource).toContain('showColorPicker={false}');
+    expect(dockCssSource).toContain('.dtb-reference-color-row {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(dockCssSource).toContain('.dtb-colors__ref-bg-header--toggle-only {\n  grid-template-columns: 1fr;');
+  });
+
   it("centers Bible compare content by default while keeping edge-aware lower-third placement", () => {
     expect(overlayHtml).toContain("#compare-layout");
     expect(overlayHtml).toContain("align-content: center");
