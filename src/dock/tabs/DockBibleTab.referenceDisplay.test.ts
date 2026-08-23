@@ -30,19 +30,23 @@ describe("DockBibleTab reference display", () => {
     expect(backgroundPickerSource).toContain("bible.showBibleVersion");
   });
 
-  it("groups Bible and reference size controls and supports manual save mode", () => {
+  it("keeps operational quick actions separate from reference appearance settings", () => {
+    const quickMenuStart = dockBibleTabSource.indexOf("function BibleOutputControlsMenu");
+    const quickMenuEnd = dockBibleTabSource.indexOf("function sanitizeCssPadding", quickMenuStart);
+    const quickMenuSource = dockBibleTabSource.slice(quickMenuStart, quickMenuEnd);
+
     expect(dockBibleTabSource).toContain("displayedBrowserFontSettings");
     expect(dockBibleTabSource).toContain("browserQuickUpdateImmediately");
     expect(dockBibleTabSource).toContain("saveBrowserQuickSettings");
-    expect(dockBibleTabSource).toContain("referenceBackgroundEnabled");
     expect(dockBibleTabSource).toContain("handleBrowserVerseLineCountChange");
     expect(dockBibleTabSource).toContain("Bible output controls");
-    expect(dockBibleTabSource).toContain("Bible verse");
-    expect(dockBibleTabSource).toContain("Reference background");
-    expect(dockBibleTabSource).toContain("Lines per verse");
-    expect(dockBibleTabSource).toContain("dock-bible-reader__font-size-field-row");
-    expect((dockBibleTabSource.match(/dock-bible-reader__font-size-field-row/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(dockBibleTabSource).toContain("QuickFontSizeInput");
+    expect(quickMenuSource).toContain("Lines per verse");
+    expect(quickMenuSource).toContain("Update Immediately");
+    expect(quickMenuSource).not.toContain("bible.bibleVerse");
+    expect(quickMenuSource).not.toContain("bible.reference");
+    expect(quickMenuSource).not.toContain("referenceBackgroundEnabled");
+    expect(quickMenuSource).not.toContain("keywordMatchDirectPush");
+    expect(quickMenuSource).not.toContain("QuickFontSizeInput");
     expect(dockBibleTabSource).toContain("LOWER_THIRD_QUICK_SIZE_OPTIONS");
     expect(dockBibleTabSource).toContain("handleLowerThirdSizePresetChange");
     expect(dockBibleTabSource).toContain("lineHeight: preset.lineHeight");
@@ -52,11 +56,10 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("{isFitTextMode && (");
     expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("hasPendingBrowserQuickChanges");
-    expect(dockBibleTabSource).toContain("patch.compareVerseFontSizeLeft = nextCompareSize");
-    expect(dockBibleTabSource).toContain("patch.compareVerseFontSizeRight = nextCompareSize");
-    expect(dockBibleTabSource).toContain("patch.compareAutoFitMaxFontSize = nextCompareSize");
-    expect(dockBibleTabSource).toContain("patch.compareReferenceFontSizeLeft = nextCompareRefSize");
-    expect(dockBibleTabSource).toContain("patch.compareReferenceFontSizeRight = nextCompareRefSize");
+    expect(dockBibleTabSource).toContain("compareVerseFontSizeLeft: nextVerseSize");
+    expect(dockBibleTabSource).toContain("compareVerseFontSizeRight: nextVerseSize");
+    expect(dockBibleTabSource).toContain("compareReferenceFontSizeLeft: nextReferenceSize");
+    expect(dockBibleTabSource).toContain("compareReferenceFontSizeRight: nextReferenceSize");
   });
 
   it("carries the selected quick settings into every verse navigation path", () => {

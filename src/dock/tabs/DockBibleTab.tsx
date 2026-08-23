@@ -71,6 +71,10 @@ import {
 } from "../lowerThirdQuickSettings";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 import { resolveInitialDockBibleCompareEnabled } from "../dockBibleComparePreferences";
+import {
+  DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT,
+  DOCK_BIBLE_PREFS_KEY,
+} from "../dockBibleKeywordPreference";
 import { DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
@@ -205,7 +209,6 @@ interface BibleThemeOutputOverride {
   settings: BibleThemeSettings;
   liveOverrides?: Record<string, unknown> | null;
 }
-const DOCK_BIBLE_PREFS_KEY = "ocs-dock-bible-preferences";
 const DOCK_BIBLE_UI_PREFS_KEY = "ocs-dock-bible-ui-preferences";
 const MAX_VERSE_LINES = 4;
 const DEFAULT_VERSE_LINES = 1;
@@ -368,84 +371,17 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function QuickFontSizeInput({
-  value,
-  min,
-  max,
-  label,
-  disabled = false,
-  onCommit,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  label: string;
-  disabled?: boolean;
-  onCommit: (value: number) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [draftValue, setDraftValue] = useState(String(value));
-
-  useEffect(() => {
-    if (inputRef.current !== document.activeElement) setDraftValue(String(value));
-  }, [value]);
-
-  const commit = () => {
-    const parsed = Number(draftValue);
-    const nextValue = Number.isFinite(parsed) ? clampNumber(parsed, min, max) : value;
-    setDraftValue(String(nextValue));
-    if (nextValue !== value) onCommit(nextValue);
-  };
-
-  return (
-    <input
-      ref={inputRef}
-      type="number"
-      className="dock-bible-reader__font-size-input"
-      value={draftValue}
-      min={min}
-      max={max}
-      disabled={disabled}
-      step={1}
-      inputMode="numeric"
-      onChange={(event) => setDraftValue(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          commit();
-          inputRef.current?.blur();
-        } else if (event.key === "Escape") {
-          setDraftValue(String(value));
-          inputRef.current?.blur();
-        }
-      }}
-      aria-label={label}
-    />
-  );
-}
-
 interface BibleOutputControlsMenuProps {
   open: boolean;
   settings: DockFullscreenQuickThemeSettings;
   lineCount: number;
   isFitTextMode: boolean;
-  showManualFontControls: boolean;
-  areManualFontSizesDisabled: boolean;
-  browserFontSizeMin: number;
-  browserFontSizeMax: number;
-  browserReferenceFontSizeMin: number;
-  browserReferenceFontSizeMax: number;
   browserQuickUpdateImmediately: boolean;
   hasPendingBrowserQuickChanges: boolean;
   onClose: () => void;
-  onFontSizeChange: (field: "fontSize" | "refFontSize", delta: number) => void;
-  onFontSizeValueChange: (field: "fontSize" | "refFontSize", value: number) => void;
   onLowerThirdSizePresetChange: (option: (typeof LOWER_THIRD_QUICK_SIZE_OPTIONS)[number]) => void;
-  onReferenceBackgroundChange: (enabled: boolean) => void;
   onLineCountChange: (lineCount: number) => void;
   onUpdateImmediatelyChange: (checked: boolean) => void;
-  keywordMatchPushDirectlyToObs: boolean;
-  onKeywordMatchPushDirectlyToObsChange: (checked: boolean) => void;
   onSave: () => void | Promise<void>;
 }
 
@@ -454,23 +390,12 @@ function BibleOutputControlsMenu({
   settings,
   lineCount,
   isFitTextMode,
-  showManualFontControls,
-  areManualFontSizesDisabled,
-  browserFontSizeMin,
-  browserFontSizeMax,
-  browserReferenceFontSizeMin,
-  browserReferenceFontSizeMax,
   browserQuickUpdateImmediately,
   hasPendingBrowserQuickChanges,
   onClose,
-  onFontSizeChange,
-  onFontSizeValueChange,
   onLowerThirdSizePresetChange,
-  onReferenceBackgroundChange,
   onLineCountChange,
   onUpdateImmediatelyChange,
-  keywordMatchPushDirectlyToObs,
-  onKeywordMatchPushDirectlyToObsChange,
   onSave,
 }: BibleOutputControlsMenuProps) {
   const { t } = useTranslation();
@@ -513,90 +438,7 @@ function BibleOutputControlsMenu({
           </div>
         </div>
       )}
-      {(!isFitTextMode || showManualFontControls) && (
-        <div className="dock-bible-reader__font-size-field-row">
-          <div className="dock-bible-reader__font-size-field">
-            <span className="dock-bible-reader__font-size-field-label">{t("bible.bibleVerse", "Bible verse")}</span>
-            <div className="dock-bible-reader__font-size-controls">
-              <button
-                type="button"
-                className="dock-bible-reader__font-size-btn"
-                onClick={() => onFontSizeChange("fontSize", -4)}
-                disabled={areManualFontSizesDisabled || settings.fontSize <= browserFontSizeMin}
-                aria-label={t("bible.decreaseVerseTextSize", "Decrease verse text size")}
-                title={t("bible.decreaseVerseTextSize", "Decrease verse text size")}
-              >
-                <Icon name="remove" size={11} />
-              </button>
-              <QuickFontSizeInput
-                value={settings.fontSize}
-                min={browserFontSizeMin}
-                max={browserFontSizeMax}
-                label={t("bible.bibleVerse", "Bible verse")}
-                disabled={areManualFontSizesDisabled}
-                onCommit={(value) => onFontSizeValueChange("fontSize", value)}
-              />
-              <button
-                type="button"
-                className="dock-bible-reader__font-size-btn"
-                onClick={() => onFontSizeChange("fontSize", 4)}
-                disabled={areManualFontSizesDisabled || settings.fontSize >= browserFontSizeMax}
-                aria-label={t("bible.increaseVerseTextSize", "Increase verse text size")}
-                title={t("bible.increaseVerseTextSize", "Increase verse text size")}
-              >
-                <Icon name="add" size={11} />
-              </button>
-            </div>
-          </div>
-          <div className="dock-bible-reader__font-size-field">
-            <span className="dock-bible-reader__font-size-field-label">{t("bible.reference", "Reference")}</span>
-            <div className="dock-bible-reader__font-size-controls">
-              <button
-                type="button"
-                className="dock-bible-reader__font-size-btn"
-                onClick={() => onFontSizeChange("refFontSize", -2)}
-                disabled={areManualFontSizesDisabled || settings.refFontSize <= browserReferenceFontSizeMin}
-                aria-label={t("bible.decreaseReferenceTextSize", "Decrease reference text size")}
-                title={t("bible.decreaseReferenceTextSize", "Decrease reference text size")}
-              >
-                <Icon name="remove" size={11} />
-              </button>
-              <QuickFontSizeInput
-                value={settings.refFontSize}
-                min={browserReferenceFontSizeMin}
-                max={browserReferenceFontSizeMax}
-                label={t("bible.reference", "Reference")}
-                disabled={areManualFontSizesDisabled}
-                onCommit={(value) => onFontSizeValueChange("refFontSize", value)}
-              />
-              <button
-                type="button"
-                className="dock-bible-reader__font-size-btn"
-                onClick={() => onFontSizeChange("refFontSize", 2)}
-                disabled={areManualFontSizesDisabled || settings.refFontSize >= browserReferenceFontSizeMax}
-                aria-label={t("bible.increaseReferenceTextSize", "Increase reference text size")}
-                title={t("bible.increaseReferenceTextSize", "Increase reference text size")}
-              >
-                <Icon name="add" size={11} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="dock-bible-reader__font-size-field-row">
-        <div className="dock-bible-reader__font-size-field dock-bible-reader__font-size-field--compact">
-          <span className="dock-bible-reader__font-size-field-label">{t("bible.referenceBackground", "Reference background")}</span>
-          <button
-            type="button"
-            className={`dtb-toggle${settings.referenceBackgroundEnabled ? " dtb-toggle--on" : ""}`}
-            onClick={() => onReferenceBackgroundChange(!settings.referenceBackgroundEnabled)}
-            role="switch"
-            aria-checked={settings.referenceBackgroundEnabled === true}
-            aria-label={t("bible.referenceBackground", "Reference background")}
-          >
-            <span className="dtb-toggle__knob" />
-          </button>
-        </div>
         <label className="dock-bible-reader__font-size-field dock-bible-reader__font-size-field--compact">
           <span className="dock-bible-reader__font-size-field-label">{t("bible.linesPerVerse", "Lines per verse")}</span>
           <select
@@ -622,20 +464,6 @@ function BibleOutputControlsMenu({
               onChange={(event) => onUpdateImmediatelyChange(event.target.checked)}
             />
             <span>{t("bible.updateImmediately", "Update Immediately")}</span>
-          </label>
-          <label className="dock-bible-reader__font-size-checkbox dock-bible-reader__font-size-checkbox--stacked">
-            <input
-              type="checkbox"
-              checked={keywordMatchPushDirectlyToObs}
-              onChange={(event) => onKeywordMatchPushDirectlyToObsChange(event.target.checked)}
-              aria-describedby="bible-keyword-match-direct-push-description"
-            />
-            <span className="dock-bible-reader__font-size-checkbox-copy">
-              <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
-              <small id="bible-keyword-match-direct-push-description">
-                {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
-              </small>
-            </span>
           </label>
         </div>
         {!browserQuickUpdateImmediately && (
@@ -1595,6 +1423,19 @@ function DockBibleTab({
   const [keywordMatchPushDirectlyToObs, setKeywordMatchPushDirectlyToObs] = useState(
     () => initialPrefs.keywordMatchPushDirectlyToObs === true,
   );
+
+  useEffect(() => {
+    const handleKeywordMatchPreferenceChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: unknown }>).detail;
+      if (typeof detail?.enabled === "boolean") {
+        setKeywordMatchPushDirectlyToObs(detail.enabled);
+      }
+    };
+
+    window.addEventListener(DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT, handleKeywordMatchPreferenceChange);
+    return () => window.removeEventListener(DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT, handleKeywordMatchPreferenceChange);
+  }, []);
+
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentBibleSearches());
   const [activeIdx, setActiveIdx] = useState(-1);
   const [keywordResults, setKeywordResults] = useState<BibleKeywordResult[]>([]);
@@ -4141,9 +3982,7 @@ function DockBibleTab({
     autoFontScale: true as const,
   };
   const displayedBrowserVerseLineCount = draftBrowserVerseLineCount ?? verseLineCount;
-  const areManualFontSizesDisabled = false;
   const isFitTextMode = true;
-  const showManualFontControls = browserFontMode === "lower-third";
   const hasPendingBrowserQuickChanges =
     draftBrowserQuickThemeSettings !== null || draftBrowserVerseLineCount !== null;
 
@@ -4180,55 +4019,6 @@ function DockBibleTab({
     browserQuickUpdateImmediately,
     handleSyncBibleBrowserSettings,
   ]);
-
-  const handleBrowserFontSizeValueChange = useCallback((
-    field: "fontSize" | "refFontSize",
-    value: number,
-  ) => {
-    const min = field === "fontSize" ? browserFontSizeMin : browserReferenceFontSizeMin;
-    const max = field === "fontSize" ? browserFontSizeMax : browserReferenceFontSizeMax;
-    const nextValue = clampNumber(value, min, max);
-    const patch: BibleBrowserQuickSettingsPatch = { [field]: nextValue };
-
-    if (field === "fontSize") {
-      const nextCompareSize = clampNumber(
-        nextValue,
-        browserFontMode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 18,
-        browserFontMode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 120,
-      );
-      patch.compareVerseFontSizeLeft = nextCompareSize;
-      patch.compareVerseFontSizeRight = nextCompareSize;
-      patch.compareAutoFitMaxFontSize = nextCompareSize;
-    } else {
-      const nextCompareRefSize = clampNumber(
-        nextValue,
-        browserFontMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10,
-        browserFontMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 48,
-      );
-      patch.compareReferenceFontSizeLeft = nextCompareRefSize;
-      patch.compareReferenceFontSizeRight = nextCompareRefSize;
-    }
-
-    applyBrowserQuickSettingsPatch(patch);
-  }, [
-    applyBrowserQuickSettingsPatch,
-    browserFontMode,
-    browserFontSizeMax,
-    browserFontSizeMin,
-    browserReferenceFontSizeMax,
-    browserReferenceFontSizeMin,
-  ]);
-
-  const handleBrowserFontSizeChange = useCallback((
-    field: "fontSize" | "refFontSize",
-    delta: number,
-  ) => {
-    handleBrowserFontSizeValueChange(field, Number(displayedBrowserFontSettings[field]) + delta);
-  }, [displayedBrowserFontSettings, handleBrowserFontSizeValueChange]);
-
-  const handleBrowserReferenceBackgroundChange = useCallback((enabled: boolean) => {
-    applyBrowserQuickSettingsPatch({ referenceBackgroundEnabled: enabled });
-  }, [applyBrowserQuickSettingsPatch]);
 
   const handleLowerThirdSizePresetChange = useCallback((
     option: (typeof LOWER_THIRD_QUICK_SIZE_OPTIONS)[number],
@@ -4320,11 +4110,6 @@ function DockBibleTab({
       void saveBrowserQuickSettings();
     }
   }, [hasPendingBrowserQuickChanges, saveBrowserQuickSettings]);
-
-  const handleKeywordMatchPushDirectlyToObsChange = useCallback((checked: boolean) => {
-    setKeywordMatchPushDirectlyToObs(checked);
-    persistDockBiblePreferencesNow({ keywordMatchPushDirectlyToObs: checked });
-  }, [persistDockBiblePreferencesNow]);
 
   const persistQuickActionsPosition = useCallback((top: number, left: number | null) => {
     const nextKey = `${Math.round(top)}:${left === null ? "right" : Math.round(left)}`;
@@ -6985,23 +6770,12 @@ function DockBibleTab({
                 settings={displayedBrowserFontSettings}
                 lineCount={displayedBrowserVerseLineCount}
                 isFitTextMode={isFitTextMode}
-                showManualFontControls={showManualFontControls}
-                areManualFontSizesDisabled={areManualFontSizesDisabled}
-                browserFontSizeMin={browserFontSizeMin}
-                browserFontSizeMax={browserFontSizeMax}
-                browserReferenceFontSizeMin={browserReferenceFontSizeMin}
-                browserReferenceFontSizeMax={browserReferenceFontSizeMax}
                 browserQuickUpdateImmediately={browserQuickUpdateImmediately}
                 hasPendingBrowserQuickChanges={hasPendingBrowserQuickChanges}
                 onClose={() => setShowBrowserFontSizePopover(false)}
-                onFontSizeChange={handleBrowserFontSizeChange}
-                onFontSizeValueChange={handleBrowserFontSizeValueChange}
                 onLowerThirdSizePresetChange={handleLowerThirdSizePresetChange}
-                onReferenceBackgroundChange={handleBrowserReferenceBackgroundChange}
                 onLineCountChange={handleBrowserVerseLineCountChange}
                 onUpdateImmediatelyChange={handleBrowserQuickUpdateImmediatelyChange}
-                keywordMatchPushDirectlyToObs={keywordMatchPushDirectlyToObs}
-                onKeywordMatchPushDirectlyToObsChange={handleKeywordMatchPushDirectlyToObsChange}
                 onSave={saveBrowserQuickSettings}
               />
             </div>
@@ -7152,20 +6926,6 @@ function DockBibleTab({
                     <div className="dock-bible-keyword-modal__text">
                       {renderHighlightedKeywordText(keywordActionResult.text, keywordActionResult.query)}
                     </div>
-                    <label className="dock-bible-keyword-modal__direct-push">
-                      <input
-                        type="checkbox"
-                        checked={keywordMatchPushDirectlyToObs}
-                        onChange={(event) => handleKeywordMatchPushDirectlyToObsChange(event.target.checked)}
-                        aria-describedby="dock-bible-keyword-direct-push-description"
-                      />
-                      <span className="dock-bible-keyword-modal__direct-push-copy">
-                        <span>{t("bible.keywordMatchDirectPush", "Send keyword matches directly to OBS")}</span>
-                        <small id="dock-bible-keyword-direct-push-description">
-                          {t("bible.keywordMatchDirectPushDescription", "Skip the confirmation modal next time.")}
-                        </small>
-                      </span>
-                    </label>
                   </div>
                   <div className="dock-dialog__footer dock-bible-keyword-modal__footer">
                     <button

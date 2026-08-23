@@ -88,6 +88,10 @@ import {
   markDockLayerSubtree,
   raiseDockLayerAtTarget,
 } from "./dockLayerManager";
+import {
+  readDockBibleKeywordMatchPreference,
+  updateDockBibleKeywordMatchPreference,
+} from "./dockBibleKeywordPreference";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -278,6 +282,9 @@ function DockPageContent({
   );
   const [servicePlanner, setServicePlanner] = useState<ServicePlannerSnapshot | null>(null);
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadProjectionSettings());
+  const [keywordMatchPushDirectlyToObs, setKeywordMatchPushDirectlyToObs] = useState(
+    () => readDockBibleKeywordMatchPreference(),
+  );
   const [dockFontFamily, setDockFontFamily] = useState<string>(() => loadDockFontFamily());
   const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
   const typographyHydrationGenerationRef = useRef(0);
@@ -334,6 +341,11 @@ function DockPageContent({
       console.warn("[Dock] Failed to apply OBS output routing:", error);
     });
   }, [updateProjectionSettings]);
+
+  const updateKeywordMatchDirectPush = useCallback((enabled: boolean) => {
+    setKeywordMatchPushDirectlyToObs(enabled);
+    updateDockBibleKeywordMatchPreference(enabled);
+  }, []);
 
   const updateDockFontFamily = useCallback((value: string) => {
     typographyHydrationGenerationRef.current += 1;
@@ -1420,6 +1432,23 @@ function DockPageContent({
                     </div>
                   );
                 })()}
+
+                <div className="dock-sidebar__divider" />
+
+                <div className="dock-sidebar__subpanel">
+                  <div className="dock-sidebar__section-label">{t('page.bibleSearch', 'Bible search')}</div>
+                  <label className="dock-sidebar__check dock-sidebar__check--stacked">
+                    <input
+                      type="checkbox"
+                      checked={keywordMatchPushDirectlyToObs}
+                      onChange={(event) => updateKeywordMatchDirectPush(event.target.checked)}
+                    />
+                    <span className="dock-sidebar__check-copy">
+                      <span>{t('page.keywordMatchDirectPush', 'Auto-send keyword matches')}</span>
+                      <small>{t('page.keywordMatchDirectPushDesc', 'Send a matched verse to OBS right away.')}</small>
+                    </span>
+                  </label>
+                </div>
 
                 {!presentationLinkMode && (
                   <>

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import dockBibleTabSource from "./DockBibleTab.tsx?raw";
+import dockPageSource from "../DockPage.tsx?raw";
+import keywordPreferenceSource from "../dockBibleKeywordPreference.ts?raw";
 
 describe("DockBibleTab keyword-match direct output", () => {
-  it("uses one persisted preference for the modal and the sidebar settings", () => {
+  it("uses one persisted preference from the Dock sidebar", () => {
     expect(dockBibleTabSource).toContain("keywordMatchPushDirectlyToObs?: boolean");
     expect(dockBibleTabSource).toContain("setKeywordMatchPushDirectlyToObs(prefs.keywordMatchPushDirectlyToObs === true)");
-    expect(dockBibleTabSource).toContain("onKeywordMatchPushDirectlyToObsChange");
-    expect(dockBibleTabSource).toContain("dock-bible-keyword-modal__direct-push");
-    expect(dockBibleTabSource).toContain("bible-keyword-match-direct-push-description");
+    expect(dockBibleTabSource).toContain("DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT");
+    expect(dockBibleTabSource).not.toContain("onKeywordMatchPushDirectlyToObsChange");
+    expect(dockBibleTabSource).not.toContain("dock-bible-keyword-modal__direct-push");
+    expect(dockPageSource).toContain("Auto-send keyword matches");
+    expect(dockPageSource).toContain("updateKeywordMatchDirectPush");
+    expect(keywordPreferenceSource).toContain("updateDockBibleKeywordMatchPreference");
   });
 
   it("pushes keyword and concept matches directly when the preference is enabled", () => {

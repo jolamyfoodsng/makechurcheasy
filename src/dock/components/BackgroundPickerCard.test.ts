@@ -344,16 +344,17 @@ describe("Bible stable auto-fit", () => {
 });
 
 describe("Bible reader font-size quick actions", () => {
-  it("provides OBS live text and reference size controls in the reading header", () => {
-    expect(dockBibleTabSource).toContain("handleBrowserFontSizeChange");
-    expect(dockBibleTabSource).toContain('Icon name="remove"');
-    expect(dockBibleTabSource).toContain('Icon name="add"');
-    expect(dockBibleTabSource).toContain('field: "fontSize" | "refFontSize"');
+  it("keeps verse and reference appearance controls in the theme picker", () => {
+    const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
+    const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
+    const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
+
+    expect(referenceSectionSource).toContain("refFontSize");
+    expect(referenceSectionSource).toContain("SliderNumberField");
+    expect(referenceSectionSource).toContain("referenceBackgroundColor");
     expect(dockBibleTabSource).toContain("handleSyncBibleBrowserSettings");
-    expect(dockBibleTabSource).not.toContain("onApplyPatch({ autoFontScale: !settings.autoFontScale })");
     expect(dockBibleTabSource).toContain("autoFontScale: true");
     expect(dockBibleTabSource).toContain("nextLowerThirdSettings");
-    expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("saveBrowserQuickSettings");
     expect(dockBibleTabSource).toContain("refreshCurrentBibleOutputAfterThemeSave");
   });
@@ -1066,8 +1067,8 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(dockBibleTabSource).toContain('LOWER_THIRD_QUICK_SIZE_OPTIONS');
     expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`');
     expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: preset.maxHeight');
-    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || settings.fontSize <= browserFontSizeMin}');
-    expect(dockBibleTabSource).toContain('disabled={areManualFontSizesDisabled || settings.refFontSize <= browserReferenceFontSizeMin}');
+    expect(dockBibleTabSource).not.toContain('areManualFontSizesDisabled');
+    expect(dockBibleTabSource).not.toContain('QuickFontSizeInput');
   });
 
   it("pairs dual-variant Bible theme selection so later lower-third uses the same theme", () => {
