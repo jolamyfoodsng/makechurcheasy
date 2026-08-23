@@ -17,8 +17,9 @@ describe("combined Worship and Notes Dock tab", () => {
   });
 
   it("keeps sidebar settings grouped in collapsible, full-height sections", () => {
-    expect(dockPageSource).toContain("showDockInterface");
-    expect(dockPageSource).toContain('aria-controls="dock-interface-panel"');
+    expect(dockPageSource).not.toContain("showDockInterface");
+    expect(dockPageSource).toContain('aria-controls="appearance-panel"');
+    expect(dockPageSource).toContain('id="appearance-panel"');
     expect(dockPageSource).toContain('id="dock-interface-panel"');
     expect(dockPageSource).toContain("showBibleSearch");
     expect(dockPageSource).toContain('aria-controls="bible-search-panel"');
