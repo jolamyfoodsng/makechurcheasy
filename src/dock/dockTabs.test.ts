@@ -16,11 +16,13 @@ describe("combined Worship and Notes Dock tab", () => {
     expect(dockPageSource).not.toContain('mountedDockTabs.has("notes")');
   });
 
-  it("keeps sidebar settings grouped in collapsible, full-height sections", () => {
+  it("keeps the dock interface standalone above collapsible settings sections", () => {
     expect(dockPageSource).not.toContain("showDockInterface");
+    expect(dockPageSource).toContain('className="dock-sidebar__standalone-section"');
     expect(dockPageSource).toContain('aria-controls="appearance-panel"');
     expect(dockPageSource).toContain('id="appearance-panel"');
     expect(dockPageSource).toContain('id="dock-interface-panel"');
+    expect(dockPageSource.indexOf('className="dock-sidebar__standalone-section"')).toBeLessThan(dockPageSource.indexOf("{/* Appearance */}"));
     expect(dockPageSource).toContain("showBibleSearch");
     expect(dockPageSource).toContain('aria-controls="bible-search-panel"');
     expect(dockPageSource).toContain('id="bible-search-panel"');

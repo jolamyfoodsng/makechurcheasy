@@ -46,6 +46,7 @@ describe("Dock bottom toolbar narrow actions", () => {
     expect(toolbarSource).toContain("dock-btm-toolbar__bottom-panel-toggle");
     expect(toolbarCss).toContain(".dock_bottom_bar {\n  display: flex;");
     expect(bottomPanelSource).toContain("toggleInToolbar");
+    expect(bottomPanelSource).toContain("if (!expanded && toggleInToolbar) return null;");
     expect(bottomPanelCss).toContain(".dock-bottom-search-panel__label {\n  display: none;");
   });
 });

@@ -5851,6 +5851,15 @@
   gap: 8px;
 }
 
+.dock-sidebar__standalone-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 2px 2px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
+}
+
 .dock-sidebar__dock-interface-panel {
   display: flex;
   flex-direction: column;

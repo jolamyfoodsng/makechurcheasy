@@ -1142,6 +1142,95 @@ function DockPageContent({
               </div>
 
               <div className="dock-sidebar__content">
+                {/* Dock interface */}
+                <div className="dock-sidebar__standalone-section">
+                  <div className="dock-sidebar__section-label">{t('page.dockTypography', 'Dock interface')}</div>
+                  <div id="dock-interface-panel" className="dock-sidebar__dock-interface-panel">
+                    <div className="dock-sidebar__select-field">
+                      <span className="dock-sidebar__select-label">
+                        <Icon name="search" size={14} />
+                        <span>{t('page.searchPlacement', 'Search placement')}</span>
+                      </span>
+                      <div className="dock-appearance-mode" role="group" aria-label={t('page.searchPlacement', 'Search placement')}>
+                        {([
+                          ["top", t('page.searchPlacementTop', 'Top only')],
+                          ["bottom", t('page.searchPlacementBottom', 'Bottom only')],
+                        ] as const).map(([placement, label]) => (
+                          <button
+                            key={placement}
+                            type="button"
+                            className={`dock-appearance-mode__button${searchPlacement === placement ? " dock-appearance-mode__button--active" : ""}`}
+                            onClick={() => setSearchPlacement(placement)}
+                            aria-pressed={searchPlacement === placement}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="dock-sidebar__hint">
+                        {t('page.searchPlacementDesc', 'Choose where the Bible, Worship, and Notes search card appears in the Dock.')}
+                      </div>
+                    </div>
+                    <label className="dock-sidebar__select-field">
+                      <span className="dock-sidebar__select-label">
+                        <Icon name="font_download" size={14} />
+                        <span>{t('page.dockFontFamily', 'Dock font family')}</span>
+                      </span>
+                      <select
+                        className="dock-sidebar__select"
+                        value={dockFontFamily}
+                        onChange={(event) => updateDockFontFamily(event.target.value)}
+                        aria-label={t('page.dockFontFamily', 'Dock font family')}
+                      >
+                        <option value="">{t('page.dockFontFamilySourceDefault', 'Use app default')}</option>
+                        {DOCK_FONT_FAMILY_GROUPS.map((group) => (
+                          <optgroup key={group} label={group}>
+                            {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
+                              <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="dock-sidebar__select-field">
+                      <span className="dock-sidebar__select-label">
+                        <Icon name="text_fields" size={14} />
+                        <span>{t('page.dockFontSize', 'Dock font size')}</span>
+                        <output className="dock-sidebar__value" htmlFor="dock-font-scale">
+                          {Math.round(dockFontScale * 100)}%
+                        </output>
+                      </span>
+                      <select
+                        id="dock-font-scale"
+                        className="dock-sidebar__select"
+                        value={String(dockFontScale)}
+                        onChange={(event) => updateDockFontScale(event.target.value)}
+                        aria-label={t('page.dockFontSize', 'Dock font size')}
+                      >
+                        {DOCK_FONT_SCALE_OPTIONS.map((option) => (
+                          <option key={option.id} value={String(option.value)}>
+                            {t(`page.fontSize.${option.id}`, option.label)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="dock-sidebar__hint">
+                      {t('page.dockTypographyDesc', 'Changes the Dock interface only. OBS text uses CMG Sans by default.')}
+                    </div>
+                    <button
+                      type="button"
+                      className="dock-sidebar__reset"
+                      onClick={resetDockTypography}
+                      disabled={dockFontFamily === DEFAULT_DOCK_FONT_FAMILY && dockFontScale === DEFAULT_DOCK_FONT_SCALE}
+                    >
+                      <Icon name="restart_alt" size={13} />
+                      <span>{t('page.resetTypography', 'Reset typography')}</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Appearance */}
                 <button
                   type="button"
@@ -1265,93 +1354,6 @@ function DockPageContent({
                       <span>{t('page.resetDockStyle', 'Reset Dock style')}</span>
                     </button>
 
-                    <div className="dock-sidebar__section-label dock-sidebar__section-label--spaced">
-                      {t('page.dockTypography', 'Dock interface')}
-                    </div>
-                    <div id="dock-interface-panel" className="dock-sidebar__dock-interface-panel">
-                      <div className="dock-sidebar__select-field">
-                        <span className="dock-sidebar__select-label">
-                          <Icon name="search" size={14} />
-                          <span>{t('page.searchPlacement', 'Search placement')}</span>
-                        </span>
-                        <div className="dock-appearance-mode" role="group" aria-label={t('page.searchPlacement', 'Search placement')}>
-                          {([
-                            ["top", t('page.searchPlacementTop', 'Top only')],
-                            ["bottom", t('page.searchPlacementBottom', 'Bottom only')],
-                          ] as const).map(([placement, label]) => (
-                            <button
-                              key={placement}
-                              type="button"
-                              className={`dock-appearance-mode__button${searchPlacement === placement ? " dock-appearance-mode__button--active" : ""}`}
-                              onClick={() => setSearchPlacement(placement)}
-                              aria-pressed={searchPlacement === placement}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="dock-sidebar__hint">
-                          {t('page.searchPlacementDesc', 'Choose where the Bible, Worship, and Notes search card appears in the Dock.')}
-                        </div>
-                      </div>
-                      <label className="dock-sidebar__select-field">
-                        <span className="dock-sidebar__select-label">
-                          <Icon name="font_download" size={14} />
-                          <span>{t('page.dockFontFamily', 'Dock font family')}</span>
-                        </span>
-                        <select
-                          className="dock-sidebar__select"
-                          value={dockFontFamily}
-                          onChange={(event) => updateDockFontFamily(event.target.value)}
-                          aria-label={t('page.dockFontFamily', 'Dock font family')}
-                        >
-                          <option value="">{t('page.dockFontFamilySourceDefault', 'Use app default')}</option>
-                          {DOCK_FONT_FAMILY_GROUPS.map((group) => (
-                            <optgroup key={group} label={group}>
-                              {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
-                                <option key={option.id} value={option.family} style={{ fontFamily: option.family }}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="dock-sidebar__select-field">
-                        <span className="dock-sidebar__select-label">
-                          <Icon name="text_fields" size={14} />
-                          <span>{t('page.dockFontSize', 'Dock font size')}</span>
-                          <output className="dock-sidebar__value" htmlFor="dock-font-scale">
-                            {Math.round(dockFontScale * 100)}%
-                          </output>
-                        </span>
-                        <select
-                          id="dock-font-scale"
-                          className="dock-sidebar__select"
-                          value={String(dockFontScale)}
-                          onChange={(event) => updateDockFontScale(event.target.value)}
-                          aria-label={t('page.dockFontSize', 'Dock font size')}
-                        >
-                          {DOCK_FONT_SCALE_OPTIONS.map((option) => (
-                            <option key={option.id} value={String(option.value)}>
-                              {t(`page.fontSize.${option.id}`, option.label)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="dock-sidebar__hint">
-                        {t('page.dockTypographyDesc', 'Changes the Dock interface only. OBS text uses CMG Sans by default.')}
-                      </div>
-                      <button
-                        type="button"
-                        className="dock-sidebar__reset"
-                        onClick={resetDockTypography}
-                        disabled={dockFontFamily === DEFAULT_DOCK_FONT_FAMILY && dockFontScale === DEFAULT_DOCK_FONT_SCALE}
-                      >
-                        <Icon name="restart_alt" size={13} />
-                        <span>{t('page.resetTypography', 'Reset typography')}</span>
-                      </button>
-                    </div>
                   </div>
                 )}
 

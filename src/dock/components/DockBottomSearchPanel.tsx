@@ -18,26 +18,13 @@ export default function DockBottomSearchPanel({ expanded, onToggle, children, to
     ? t("dock.collapseSearchPanel", "Collapse search panel")
     : t("dock.expandSearchPanel", "Expand search panel");
 
+  // When the toolbar owns the toggle, keep the closed state completely hidden.
+  // The toolbar button remains the standalone affordance for reopening it.
+  if (!expanded && toggleInToolbar) return null;
+
   return (
     <section className={`dock-bottom-search-panel${expanded ? " dock-bottom-search-panel--expanded" : ""}`}>
-      <div className="dock-bottom-search-panel__header">
-        <div className="dock-bottom-search-panel__title" aria-label={label} title={label}>
-          <Icon name="search" size={13} />
-          <span className="dock-bottom-search-panel__label">{label}</span>
-        </div>
-        {!toggleInToolbar && (
-          <button
-            type="button"
-            className="dock-bottom-search-panel__toggle"
-            onClick={onToggle}
-            aria-expanded={expanded}
-            aria-label={toggleLabel}
-            title={toggleLabel}
-          >
-            <Icon name={expanded ? "expand_more" : "expand_less"} size={15} />
-          </button>
-        )}
-      </div>
+
       {expanded && <div className="dock-bottom-search-panel__body">{children}</div>}
     </section>
   );
