@@ -149,6 +149,7 @@ describe("dockObsClient background reflection stress", () => {
       call: client.call,
       obs: client.obs,
       getCanvasSize: client.getCanvasSize,
+      prepareBrowserThemeAssets: client.prepareBrowserThemeAssets,
       getSceneItemListCached: client.getSceneItemListCached,
       invalidateSceneItemListCache: client.invalidateSceneItemListCache,
       buildOverlayHtmlUrl: client.buildOverlayHtmlUrl,
@@ -198,6 +199,7 @@ describe("dockObsClient background reflection stress", () => {
     client._status = "connected";
 
     client.getCanvasSize = vi.fn(async () => ({ width: 1920, height: 1080 }));
+    client.prepareBrowserThemeAssets = vi.fn(async (settings: Record<string, unknown> | null) => settings);
     client.sleep = vi.fn(async () => {});
     client.buildOverlayHtmlUrl = vi.fn((file: string) => `http://overlay.test/${file}`);
     client.invalidateSceneItemListCache = vi.fn();
@@ -351,6 +353,43 @@ describe("dockObsClient background reflection stress", () => {
       variant.assertInput(activeInput!);
       expect(client._activeFullscreenBgSignature["bible"]).not.toBe("__hidden__");
     }
+  });
+
+  it("drops a superseded Bible prime packet before it can repaint an older pattern", async () => {
+    const deliveredPatterns: string[] = [];
+    client.publishFullscreenOverlayPacket = vi.fn((packet: { theme?: Record<string, unknown> | null }) => {
+      deliveredPatterns.push(String(packet.theme?.backgroundPattern ?? ""));
+    });
+    client.deliverCssOverlayPacket = vi.fn(async (
+      _sourceName: string,
+      _tab: string,
+      packet: { theme?: Record<string, unknown> | null },
+    ) => {
+      deliveredPatterns.push(String(packet.theme?.backgroundPattern ?? ""));
+    });
+
+    const oldPrime = client.primeBibleOverlay({
+      book: "John",
+      chapter: 3,
+      verse: 16,
+      translation: "KJV",
+      verseText: "Old verse",
+      overlayMode: "lower-third",
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "old-pattern" }),
+    });
+    const newPrime = client.primeBibleOverlay({
+      book: "John",
+      chapter: 3,
+      verse: 17,
+      translation: "KJV",
+      verseText: "New verse",
+      overlayMode: "lower-third",
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "new-pattern" }),
+    });
+
+    await Promise.all([oldPrime, newPrime]);
+
+    expect(deliveredPatterns).toEqual(["new-pattern", "new-pattern"]);
   });
 
   it("removes legacy Bible background slots for the unified browser source", async () => {

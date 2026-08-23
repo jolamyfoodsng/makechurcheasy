@@ -3889,19 +3889,40 @@ function DockBibleTab({
   ) => {
     if (saveSceneProfileQuickThemeSettings("fullscreen", nextSettings, context)) return;
     manualThemeSettingsSelectionRef.current = true;
-    const measurement = await refreshCurrentBibleOutputAfterThemeSave("fullscreen", nextSettings, context);
-    const nextSavedSettings = applyMeasuredFontFitSettings(nextSettings, measurement);
+
+    // Commit the requested settings synchronously before waiting for OBS to
+    // report its optional font-fit measurement.  The save-time repaint uses
+    // an explicit theme override, but a verse navigation can happen while
+    // that measurement is pending; it must read the newly selected pattern,
+    // not the previous theme snapshot.
     const nextFullscreenTheme = resolveThemeForOverlayMode(
       context?.selectedTheme ?? selectedBibleThemeRef.current,
       "fullscreen",
     );
     liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
       nextFullscreenTheme,
-      nextSavedSettings,
+      nextSettings,
     ).settings;
     const nextLowerThirdQuickSettings = lowerThirdQuickThemeSettingsLinkedToFullscreen
       ? null
       : savedLowerThirdQuickThemeSettings;
+    setFullscreenQuickThemeSettings(nextSettings);
+    setSavedFullscreenQuickThemeSettings(nextSettings);
+    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
+      setLowerThirdQuickThemeSettings(null);
+      setSavedLowerThirdQuickThemeSettings(null);
+    }
+    persistDockBiblePreferencesNow({
+      fullscreenQuickThemeSettings: nextSettings,
+      lowerThirdQuickThemeSettings: nextLowerThirdQuickSettings,
+    });
+
+    const measurement = await refreshCurrentBibleOutputAfterThemeSave("fullscreen", nextSettings, context);
+    const nextSavedSettings = applyMeasuredFontFitSettings(nextSettings, measurement);
+    liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+      nextFullscreenTheme,
+      nextSavedSettings,
+    ).settings;
     setFullscreenQuickThemeSettings(nextSavedSettings);
     setSavedFullscreenQuickThemeSettings(nextSavedSettings);
     if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
@@ -3927,17 +3948,32 @@ function DockBibleTab({
   ) => {
     if (saveSceneProfileQuickThemeSettings("lower-third", nextSettings, context)) return;
     manualThemeSettingsSelectionRef.current = true;
-    const measurement = await refreshCurrentBibleOutputAfterThemeSave("lower-third", nextSettings, context);
-    const nextSavedSettings = applyMeasuredFontFitSettings(nextSettings, measurement);
+
+    // Make the selected background the live lower-third source immediately;
+    // the save-time render may still be waiting for measurement when the
+    // operator advances to another verse.
     const nextLowerThirdTheme = resolveThemeForOverlayMode(
       context?.selectedTheme ?? selectedLowerThirdThemeRef.current,
       "lower-third",
     );
     liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
       nextLowerThirdTheme,
-      nextSavedSettings,
+      nextSettings,
     ).settings;
     setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+    setLowerThirdQuickThemeSettings(nextSettings);
+    setSavedLowerThirdQuickThemeSettings(nextSettings);
+    persistDockBiblePreferencesNow({
+      lowerThirdQuickThemeSettings: nextSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen: false,
+    });
+
+    const measurement = await refreshCurrentBibleOutputAfterThemeSave("lower-third", nextSettings, context);
+    const nextSavedSettings = applyMeasuredFontFitSettings(nextSettings, measurement);
+    liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+      nextLowerThirdTheme,
+      nextSavedSettings,
+    ).settings;
     setLowerThirdQuickThemeSettings(nextSavedSettings);
     setSavedLowerThirdQuickThemeSettings(nextSavedSettings);
     persistDockBiblePreferencesNow({
@@ -4003,6 +4039,25 @@ function DockBibleTab({
         ...patch,
       };
 
+    }
+
+    // Keep navigation on the just-clicked settings while OBS performs an
+    // optional fit measurement.  React state can commit after the next verse
+    // click, so update both live snapshots before awaiting the renderer.
+    if (hasSettingsPatch) {
+      liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+        baseFullscreenTheme,
+        nextFullscreenSettings,
+      ).settings;
+      liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+        baseLowerThirdTheme,
+        nextLowerThirdSettings,
+      ).settings;
+      setFullscreenQuickThemeSettings(nextFullscreenSettings);
+      setSavedFullscreenQuickThemeSettings(nextFullscreenSettings);
+      setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+      setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+      setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
     }
 
     const liveMode: OverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;

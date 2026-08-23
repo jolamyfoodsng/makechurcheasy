@@ -990,6 +990,13 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).not.toContain("styleEl.textContent = cssText");
   });
 
+  it("lets an explicit newer URL packet replace a cached background", () => {
+    expect(overlayHtml).toContain("URL packets are explicit updates.");
+    expect(worshipOverlayHtml).toContain("URL packets are explicit updates.");
+    expect(overlayHtml).not.toContain("function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return;");
+    expect(worshipOverlayHtml).not.toContain("function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return;");
+  });
+
   it("keeps notes lower-third pattern background behavior aligned with worship", () => {
     expect(noteOverlayHtml).toContain("function applyThemeLowerThird");
     expect(noteOverlayHtml).toContain("const bgPattern = String(s.backgroundPattern || '').trim()");

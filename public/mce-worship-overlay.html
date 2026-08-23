@@ -2360,8 +2360,12 @@
         return false;
       }
       function readModeFromCssVar() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { setActiveLayer(raw); } } catch { } }
-      function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return; try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
-      function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
+      // URL packets are explicit updates. Let a newer hash/search packet
+      // replace a cached packet that was read earlier; processOverlayUpdate
+      // still rejects older revisions, so a stale URL can never roll the
+      // overlay backwards.
+      function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
+      function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
       function applyObsBrowserEventCss(cssText) {
         if (typeof cssText !== 'string') return false;

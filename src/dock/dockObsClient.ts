@@ -6157,6 +6157,10 @@ class DockObsClient {
   }
 
   async primeBibleOverlay(data: PrimeBibleOverlayData): Promise<void> {
+    return this.runSerializedBibleMutation(() => this.primeBibleOverlayInternal(data));
+  }
+
+  private async primeBibleOverlayInternal(data: PrimeBibleOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const verseRange = data.verseRange ?? String(data.verse);
     const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
@@ -6338,6 +6342,10 @@ class DockObsClient {
   }
 
   async primeWorshipOverlay(data: PrimeWorshipOverlayData): Promise<void> {
+    return this.runSerializedWorshipMutation(() => this.primeWorshipOverlayInternal(data));
+  }
+
+  private async primeWorshipOverlayInternal(data: PrimeWorshipOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const backgroundOnly = Boolean(data.backgroundOnly);
     const sectionText = backgroundOnly ? "" : data.sectionText;
