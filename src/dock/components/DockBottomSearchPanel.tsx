@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import Icon from "../DockIcon";
 import "./DockBottomSearchPanel.css";
 
 interface Props {
@@ -11,12 +9,10 @@ interface Props {
   toggleInToolbar?: boolean;
 }
 
-export default function DockBottomSearchPanel({ expanded, onToggle, children, toggleInToolbar = false }: Props) {
-  const { t } = useTranslation();
-  const label = t("dock.searchPanel", "Search panel");
-  const toggleLabel = expanded
-    ? t("dock.collapseSearchPanel", "Collapse search panel")
-    : t("dock.expandSearchPanel", "Expand search panel");
+export default function DockBottomSearchPanel({ expanded, children, toggleInToolbar = false }: Props) {
+
+
+
 
   // When the toolbar owns the toggle, keep the closed state completely hidden.
   // The toolbar button remains the standalone affordance for reopening it.
