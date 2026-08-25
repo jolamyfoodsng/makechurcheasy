@@ -20,4 +20,12 @@ describe("DockBibleTab keyword-match direct output", () => {
     expect(dockBibleTabSource).toContain("await goLiveVerse(result.book, result.chapter, result.verse");
     expect(dockBibleTabSource).toContain("setKeywordActionResult(result)");
   });
+
+  it("waits for a settled query before running expensive keyword search", () => {
+    expect(dockBibleTabSource).toContain("const MIN_DOCK_KEYWORD_SEARCH_LENGTH = 3;");
+    expect(dockBibleTabSource).toContain("const DOCK_SEARCH_DEBOUNCE_MS = 600;");
+    expect(dockBibleTabSource).toContain("const debouncedSearchQuery = useDebouncedValue(searchQuery, DOCK_SEARCH_DEBOUNCE_MS);");
+    expect(dockBibleTabSource).toContain("const matches = await searchBible(trimmed, activeBibleSearchTranslation, DOCK_KEYWORD_SEARCH_LIMIT);");
+    expect(dockBibleTabSource).not.toContain("}, 350);");
+  });
 });

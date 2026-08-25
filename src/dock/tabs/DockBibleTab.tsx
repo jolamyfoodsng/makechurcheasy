@@ -222,9 +222,9 @@ const DEFAULT_BIBLE_REFERENCE_FORMAT: BibleReferenceFormat = "full";
 const QUICK_SELECT_VERSION_COUNT = 2;
 const MIN_COMPARE_PASSAGES = 2;
 const MAX_COMPARE_PASSAGES = 3;
-const MIN_DOCK_KEYWORD_SEARCH_LENGTH = 2;
+const MIN_DOCK_KEYWORD_SEARCH_LENGTH = 3;
 const DOCK_KEYWORD_SEARCH_LIMIT = 24;
-const DOCK_SEARCH_DEBOUNCE_MS = 300;
+const DOCK_SEARCH_DEBOUNCE_MS = 600;
 const BIBLE_RECENT_SEARCHES_KEY = "ocs-dock-bible-recent-searches-v1";
 const BIBLE_RECENT_SEARCH_LIMIT = 4;
 const HISTORY_PREVIEW_MAX_CHARS = 28;
@@ -4708,8 +4708,8 @@ function DockBibleTab({
     }
 
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      setIsKeywordSearching(true);
+    setIsKeywordSearching(true);
+    void (async () => {
       try {
         const { searchBible } = await import("../../bible/bibleData");
         const matches = await searchBible(trimmed, activeBibleSearchTranslation, DOCK_KEYWORD_SEARCH_LIMIT);
@@ -4727,11 +4727,10 @@ function DockBibleTab({
           setIsKeywordSearching(false);
         }
       }
-    }, 350);
+    })();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
   }, [activeBibleSearchTranslation, debouncedSearchQuery, referenceResults.length]);
 
