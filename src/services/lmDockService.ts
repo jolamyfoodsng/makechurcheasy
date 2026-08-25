@@ -163,12 +163,21 @@ class LmDockService {
   private lastSpeechTime = 0;
   private pauseCheckTimer: ReturnType<typeof setInterval> | null = null;
   private commandPollTimer: ReturnType<typeof setInterval> | null = null;
-  /** Async queue for matching — ensures chunks are processed in order */
-  private matchingQueue: Promise<void> = Promise.resolve();
+  /** Serialized final chunks plus one latest-wins interim chunk. */
+  private matchingQueueRunning = false;
+  private pendingFinalChunks: Array<{ text: string; isFinal: true }> = [];
+  private pendingInterimChunk: string | null = null;
   /** Throttled live quote search state */
   private liveQuoteSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private liveQuoteSearchPendingText = "";
   private lastLiveQuoteSearchAt = 0;
+  /** Quote searches are latest-wins so slow semantic work cannot backlog speech. */
+  private quoteSearchInFlight = false;
+  private pendingQuoteSearch: {
+    text: string;
+    timestamp: number;
+    options: QueueQuoteSearchOptions;
+  } | null = null;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
   /** The relay only needs the newest snapshot; serialize writes to prevent stale posts winning. */
@@ -286,6 +295,7 @@ class LmDockService {
   }
 
   private queueQuoteSearch(text: string, options: QueueQuoteSearchOptions = {}): void {
+    if (this.snapshot.status !== "listening") return;
     const trimmed = text.trim();
     if (trimmed.length < 10) return;
 
@@ -299,9 +309,37 @@ class LmDockService {
 
     this.lastQueuedQuoteSearchKey = key;
     this.lastQueuedQuoteSearchAt = now;
-    this.matchingQueue = this.matchingQueue.then(() =>
-      this.runQuoteSearchWithText(trimmed, now, { mode }),
-    );
+    this.pendingQuoteSearch = {
+      text: trimmed,
+      timestamp: now,
+      options: { mode },
+    };
+
+    // Abort the current search as soon as newer speech arrives. The drain
+    // below will process only the newest pending query after the abort settles.
+    if (this.quoteSearchInFlight) {
+      this.scriptureEngine.cancelQuoteSearchPublic();
+      return;
+    }
+
+    this.quoteSearchInFlight = true;
+    void this.drainQuoteSearches();
+  }
+
+  private async drainQuoteSearches(): Promise<void> {
+    try {
+      while (this.pendingQuoteSearch && this.snapshot.status === "listening") {
+        const job = this.pendingQuoteSearch;
+        this.pendingQuoteSearch = null;
+        await this.runQuoteSearchWithText(job.text, job.timestamp, job.options);
+      }
+    } finally {
+      this.quoteSearchInFlight = false;
+      if (this.pendingQuoteSearch && this.snapshot.status === "listening") {
+        this.quoteSearchInFlight = true;
+        void this.drainQuoteSearches();
+      }
+    }
   }
 
   init(): () => void {
@@ -556,27 +594,57 @@ class LmDockService {
   // ── Bible matching (incremental) ────────────────────────────────────────
 
   /**
-   * Process a transcript chunk through the Scripture Detection Engine.
-   * Uses async queue — chunks are processed in order, but never block transcript.
+   * Process transcript chunks through the Scripture Detection Engine. Final
+   * chunks stay ordered; interim revisions are coalesced to the newest value
+   * so matching work cannot grow faster than speech.
    */
-  private async processChunk(text: string, isFinal: boolean): Promise<void> {
+  private processChunk(text: string, isFinal: boolean): void {
     if (!text.trim()) return;
-    if (this.snapshot.status === "idle") return;
+    if (this.snapshot.status !== "listening") return;
 
-    // Queue the chunk behind any in-flight processing
-    this.matchingQueue = this.matchingQueue.then(async () => {
-      // Re-check idle inside the queue — status may have changed since enqueue
-      const s: LmServiceStatus = this.snapshot.status;
-      if (s === "idle") return;
-      try {
-        const result = await this.scriptureEngine.processChunk(text, isFinal);
-        // Re-check — stop may have been called while awaiting
-        if (this.snapshot.status === "idle") return;
-        this.handleMatchResult(result);
-      } catch (err) {
-        console.warn("[LmDockService] processChunk error:", err);
+    if (isFinal) {
+      // A final ASR result supersedes the currently pending interim revision.
+      this.pendingInterimChunk = null;
+      this.pendingFinalChunks.push({ text, isFinal: true });
+    } else {
+      this.pendingInterimChunk = text;
+    }
+
+    void this.drainMatchingChunks();
+  }
+
+  private async drainMatchingChunks(): Promise<void> {
+    if (this.matchingQueueRunning) return;
+    this.matchingQueueRunning = true;
+
+    try {
+      while (this.snapshot.status === "listening") {
+        const nextFinal = this.pendingFinalChunks.shift();
+        const next = nextFinal ?? (
+          this.pendingInterimChunk
+            ? { text: this.pendingInterimChunk, isFinal: false as const }
+            : null
+        );
+        if (!next) break;
+        if (!next.isFinal) this.pendingInterimChunk = null;
+
+        try {
+          const result = await this.scriptureEngine.processChunk(next.text, next.isFinal);
+          if (this.snapshot.status !== "listening") return;
+          this.handleMatchResult(result);
+        } catch (err) {
+          console.warn("[LmDockService] processChunk error:", err);
+        }
       }
-    });
+    } finally {
+      this.matchingQueueRunning = false;
+      if (
+        this.snapshot.status === "listening" &&
+        (this.pendingFinalChunks.length > 0 || this.pendingInterimChunk)
+      ) {
+        void this.drainMatchingChunks();
+      }
+    }
   }
 
   private handleMatchResult(
@@ -702,8 +770,8 @@ class LmDockService {
 
   /**
    * Called when a sentence is complete (boundary detected or pause timeout).
-   * Queues the search through matchingQueue so concurrent calls don't cancel
-   * each other — each sentence gets its own independent search.
+   * Queues the latest sentence search without allowing slow matching work to
+   * accumulate behind newer speech.
    */
   private onSentenceComplete(sentence: string): void {
     const trimmed = sentence.trim();
@@ -901,6 +969,9 @@ class LmDockService {
     this.scriptureSpeechState = createScriptureSpeechState();
     this.lastQueuedQuoteSearchKey = "";
     this.lastQueuedQuoteSearchAt = 0;
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
     this.pushStatus();
 
     let nativeStartCompleted = false;
@@ -1183,6 +1254,10 @@ class LmDockService {
     this.lastInterimSearched = "";
     this.lastQueuedQuoteSearchKey = "";
     this.lastQueuedQuoteSearchAt = 0;
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
+    this.scriptureEngine.cancelQuoteSearchPublic();
     this.latestSearchId++;
     this.liveQuoteSearchPendingText = "";
     this.lastLevelNotifyAt = 0;
@@ -1234,6 +1309,10 @@ class LmDockService {
       clearTimeout(this.interimSearchTimer);
       this.interimSearchTimer = null;
     }
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
+    this.scriptureEngine.cancelQuoteSearchPublic();
 
     // Remove focus/visibility handlers
     if (this.visibilityHandler) {

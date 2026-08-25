@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::{interval, timeout, MissedTickBehavior};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
@@ -41,6 +42,11 @@ const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
 const REALTIME_MODEL: &str = "universal-3-5-pro";
 const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
+const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -405,8 +411,9 @@ async fn run_realtime_transcriber(
         .map_err(|e| format!("Invalid AssemblyAI API key header: {e}"))?;
     request.headers_mut().insert("Authorization", auth);
 
-    let (ws_stream, _) = connect_async(request)
+    let (ws_stream, _) = timeout(WS_CONNECT_TIMEOUT, connect_async(request))
         .await
+        .map_err(|_| "Realtime WebSocket connection timed out".to_string())?
         .map_err(|e| format!("Realtime WebSocket connection failed: {e}"))?;
     let (mut write, mut read) = ws_stream.split();
 
@@ -421,38 +428,69 @@ async fn run_realtime_transcriber(
     let mut profile = initial_profile;
     let mut forced_turn_order: Option<u64> = None;
     let mut last_force_endpoint_at: Option<Instant> = None;
+    let mut last_server_activity = Instant::now();
+    let mut heartbeat = interval(WS_HEARTBEAT_INTERVAL);
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    // `interval` fires immediately on its first tick; consume that tick so
+    // the first heartbeat is sent after the connection has had time to settle.
+    heartbeat.tick().await;
 
     loop {
         tokio::select! {
             _ = &mut shutdown_rx => {
                 println!("[AssemblyAI Realtime] Shutdown signal received");
                 let terminate = serde_json::json!({ "type": "Terminate" }).to_string();
-                let _ = write.send(Message::Text(terminate.into())).await;
-                let _ = write.close().await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.send(Message::Text(terminate.into()))).await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.close()).await;
                 break;
             }
             maybe_pcm = audio_rx.recv() => {
                 let Some(pcm_bytes) = maybe_pcm else {
                     break;
                 };
-                write
-                    .send(Message::Binary(pcm_bytes.into()))
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Binary(pcm_bytes.into())),
+                )
                     .await
+                    .map_err(|_| "Realtime WebSocket audio send timed out".to_string())?
                     .map_err(|e| format!("Failed to send realtime audio: {e}"))?;
             }
             maybe_profile = profile_rx.recv() => {
                 if let Some(next_profile) = maybe_profile {
-                    send_realtime_profile_update(&mut write, &next_profile).await?;
+                    timeout(
+                        WS_WRITE_TIMEOUT,
+                        send_realtime_profile_update(&mut write, &next_profile),
+                    )
+                        .await
+                        .map_err(|_| "Realtime WebSocket profile update timed out".to_string())??;
                     profile = next_profile;
                     forced_turn_order = None;
                     last_force_endpoint_at = None;
                     println!("[AssemblyAI Realtime] Profile updated to {}", profile.label);
                 }
             }
+            _ = heartbeat.tick() => {
+                if last_server_activity.elapsed() > WS_IDLE_TIMEOUT {
+                    return Err(format!(
+                        "Realtime WebSocket stalled: no server response for {} seconds",
+                        WS_IDLE_TIMEOUT.as_secs(),
+                    ));
+                }
+
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Ping(Vec::new().into())),
+                )
+                    .await
+                    .map_err(|_| "Realtime WebSocket heartbeat timed out".to_string())?
+                    .map_err(|e| format!("Failed to send realtime heartbeat: {e}"))?;
+            }
             maybe_message = read.next() => {
                 let Some(message) = maybe_message else {
                     break;
                 };
+                last_server_activity = Instant::now();
                 match message {
                     Ok(Message::Text(text)) => {
                         if let Some(turn) = handle_realtime_message(&app, text.as_ref())? {
@@ -481,7 +519,10 @@ async fn run_realtime_transcriber(
                         }
                     }
                     Ok(Message::Ping(payload)) => {
-                        let _ = write.send(Message::Pong(payload)).await;
+                        timeout(WS_WRITE_TIMEOUT, write.send(Message::Pong(payload)))
+                            .await
+                            .map_err(|_| "Realtime WebSocket pong timed out".to_string())?
+                            .map_err(|e| format!("Failed to send realtime pong: {e}"))?;
                     }
                     Ok(Message::Close(frame)) => {
                         if let Some(frame) = frame {
