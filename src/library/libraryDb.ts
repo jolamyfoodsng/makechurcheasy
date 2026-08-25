@@ -34,17 +34,67 @@ function isInternalUploadFile(fileName: string): boolean {
     || INTERNAL_UPLOAD_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
+function normalizeManagedUploadFileName(fileName: string | undefined): string | null {
+  const candidate = String(fileName || "").trim();
+  if (!candidate || candidate === "." || candidate === "..") return null;
+  if (candidate.includes("/") || candidate.includes("\\") || candidate.includes("\0")) return null;
+  if (isInternalUploadFile(candidate)) return null;
+  return candidate;
+}
+
+/**
+ * Return the exact basename for a user-uploaded file managed by MCE.
+ * Only files in the root uploads folder are eligible here; generated template
+ * assets and arbitrary local paths must never be removed by a media delete.
+ */
+export function getManagedUploadFileName(
+  item: Pick<MediaItem, "diskFileName" | "filePath" | "source">,
+): string | null {
+  if (item.source === "template-cloudflare") return null;
+
+  if (item.diskFileName?.trim()) {
+    return normalizeManagedUploadFileName(item.diskFileName);
+  }
+
+  const normalizedPath = String(item.filePath || "").trim().replace(/\\/g, "/");
+  const match = normalizedPath.match(/(?:^|\/)uploads\/([^/]+)$/i);
+  return normalizeManagedUploadFileName(match?.[1]);
+}
+
+/** Delete a user-uploaded media file from the shared uploads folder. */
+export async function deleteUploadedMediaFile(fileName: string): Promise<void> {
+  const safeName = normalizeManagedUploadFileName(fileName);
+  if (!safeName) return;
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("delete_upload_file", { fileName: safeName });
+    return;
+  } catch {
+    // The OBS dock runs outside Tauri. Use the shared overlay server there.
+  }
+
+  const baseUrl = await getOverlayBaseUrl();
+  const response = await fetch(
+    `${baseUrl}/api/delete-upload?fileName=${encodeURIComponent(safeName)}`,
+    { method: "DELETE", cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Could not delete uploaded media (${response.status})`);
+  }
+}
+
 function getUploadDisplayName(fileName: string): string {
   return fileName.replace(/^media_\d{10,13}_/, "");
 }
 
-function getUploadCreatedAt(fileName: string): string {
+function getUploadCreatedAt(fileName: string, fallback: string): string {
   const match = fileName.match(/^media_(\d{10,13})_/);
-  if (!match) return new Date().toISOString();
+  if (!match) return fallback;
   const raw = Number(match[1]);
   const timestamp = match[1].length <= 10 ? raw * 1000 : raw;
   const date = new Date(timestamp);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
+  return Number.isFinite(date.getTime()) ? date.toISOString() : fallback;
 }
 
 /**
@@ -53,17 +103,22 @@ function getUploadCreatedAt(fileName: string): string {
  * folder is the shared physical source of truth; discover its media files so
  * every surface can reconcile the same library.
  */
-async function discoverUploadedMedia(): Promise<MediaItem[]> {
+interface UploadedMediaDiscovery {
+  items: MediaItem[];
+  listingAvailable: boolean;
+}
+
+async function discoverUploadedMedia(): Promise<UploadedMediaDiscovery> {
   try {
     const baseUrl = await getOverlayBaseUrl();
     const [uploadsResponse, directoryResponse] = await Promise.all([
       fetch(`${baseUrl}/api/uploads`, { cache: "no-store" }),
       fetch(`${baseUrl}/api/uploads-dir`, { cache: "no-store" }),
     ]);
-    if (!uploadsResponse.ok) return [];
+    if (!uploadsResponse.ok) return { items: [], listingAvailable: false };
 
     const files = await uploadsResponse.json();
-    if (!Array.isArray(files)) return [];
+    if (!Array.isArray(files)) return { items: [], listingAvailable: false };
     const directoryPayload = directoryResponse.ok
       ? await directoryResponse.json() as { path?: string }
       : {};
@@ -72,11 +127,13 @@ async function discoverUploadedMedia(): Promise<MediaItem[]> {
       : "";
     const separator = directory.includes("\\") ? "\\" : "/";
 
-    return files
+    const discoveredAt = Date.now();
+    const items = files
       .filter((value): value is string => typeof value === "string")
       .filter((fileName) => Boolean(getUploadMediaType(fileName)) && !isInternalUploadFile(fileName))
-      .map((fileName) => {
+      .map((fileName, index) => {
         const type = getUploadMediaType(fileName)!;
+        const fallbackCreatedAt = new Date(discoveredAt - index).toISOString();
         return {
           id: `upload:${fileName}`,
           name: getUploadDisplayName(fileName),
@@ -84,20 +141,33 @@ async function discoverUploadedMedia(): Promise<MediaItem[]> {
           url: `${baseUrl}/uploads/${encodeURIComponent(fileName)}`,
           ...(directory ? { filePath: `${directory}${separator}${fileName}` } : {}),
           diskFileName: fileName,
-          createdAt: getUploadCreatedAt(fileName),
+          createdAt: getUploadCreatedAt(fileName, fallbackCreatedAt),
           source: "local" as const,
         } satisfies MediaItem;
       });
+    return { items, listingAvailable: true };
   } catch (error) {
     console.warn("[libraryDb] Failed to discover shared uploads:", error);
-    return [];
+    return { items: [], listingAvailable: false };
   }
 }
 
-function mergeMediaItems(stored: MediaItem[], discovered: MediaItem[]): MediaItem[] {
+function mergeMediaItems(
+  stored: MediaItem[],
+  discovered: MediaItem[],
+  listingAvailable: boolean,
+): MediaItem[] {
   const result: MediaItem[] = [];
   const seen = new Set<string>();
-  for (const item of [...stored, ...discovered]) {
+  const discoveredFileNames = new Set(discovered.map((item) => item.diskFileName).filter(Boolean));
+  const reconciledStored = listingAvailable
+    ? stored.filter((item) => (
+      !item.diskFileName
+      || !getManagedUploadFileName(item)
+      || discoveredFileNames.has(item.diskFileName)
+    ))
+    : stored;
+  for (const item of [...reconciledStored, ...discovered]) {
     const key = item.diskFileName || item.filePath || item.id;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -237,8 +307,8 @@ export async function getAllMedia(): Promise<MediaItem[]> {
   // do not necessarily have an IndexedDB record in this window. Reconcile the
   // shared uploads folder on every read so the desktop library, Dock, and
   // mobile companion all see the same media inventory.
-  const discoveredItems = await discoverUploadedMedia();
-  return mergeMediaItems(storedItems, discoveredItems);
+  const discovered = await discoverUploadedMedia();
+  return mergeMediaItems(storedItems, discovered.items, discovered.listingAvailable);
 }
 
 /** Save (create or update) a media item — auto-injects userId */
@@ -260,6 +330,17 @@ export async function saveMedia(item: MediaItem): Promise<void> {
 
 /** Delete a media item by id */
 export async function deleteMedia(id: string): Promise<void> {
+  const items = await getAllMedia();
+  const target = items.find((item) => item.id === id);
+  const uploadFileName = target
+    ? getManagedUploadFileName(target)
+    : id.startsWith("upload:")
+      ? normalizeManagedUploadFileName(id.slice("upload:".length))
+      : null;
+  if (uploadFileName) {
+    await deleteUploadedMediaFile(uploadFileName);
+  }
+
   await withStore("readwrite", (store) => store.delete(id));
 
   // Sync to dock (fire-and-forget, non-blocking)
@@ -309,6 +390,14 @@ export async function syncMediaToDock(): Promise<void> {
 
 /** Clear all media items for the current user (scoped by userId) */
 export async function clearAllMedia(): Promise<void> {
+  const items = await getAllMedia();
+  await Promise.all(
+    items.flatMap((item) => {
+      const fileName = getManagedUploadFileName(item);
+      return fileName ? [deleteUploadedMediaFile(fileName)] : [];
+    }),
+  );
+
   const db = await openDb();
   const uid = getCurrentUserId();
   await new Promise<void>((resolve, reject) => {

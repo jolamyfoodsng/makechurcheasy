@@ -9,7 +9,7 @@
 import type { MediaItem } from "../library/libraryTypes";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { dockClient } from "../services/dockBridge";
-import { isSupportedMediaFile } from "../services/mediaValidation";
+import { getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { isInternalDockMediaItem } from "./internalMediaAssets";
 
@@ -250,7 +250,13 @@ export async function uploadFileToDock(
     console.warn("[UPLOAD] uploadFileToDock: unsupported file type", file.type);
     return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
   }
-  const category = file.type.startsWith("video/") ? "video" : "image";
+  // File.type is empty or incorrect for some native/Tauri picker results.
+  // Resolve the kind from MIME first, then fall back to the file extension so
+  // a video cannot be saved as an image and disappear from the Videos filter.
+  const category = getMediaKind(file);
+  if (!category) {
+    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
+  }
 
   const safeName = `media_${Date.now()}_${getSafeFileName(file.name)}`;
   const overlayBaseUrl = getOverlayBaseUrlSync();

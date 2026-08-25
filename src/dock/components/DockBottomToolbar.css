@@ -2,7 +2,7 @@
  * DockBottomToolbar.css
  *
  * Compact layout with a two-row fallback for ultra-narrow docks.
- * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ] [ panel toggle ]
+ * [ Full | LT ] [ centered action ] ... [ visibility ] [ ⋯ ] [ panel toggle ]
  */
 
 /* ── Container ── */
@@ -255,7 +255,7 @@
 
 /* ══════════════════════════════════════════════════
    Compact mode (always-on layout)
-   Layout: [ Full | LT ] ... [ visibility ] [ inline action ] [ ⋯ ] [ panel toggle ]
+   Layout: [ Full | LT ] ... [ visibility ] [ ⋯ ] [ panel toggle ]
    ══════════════════════════════════════════════════ */
 .dock-btm-toolbar--compact {
   padding: 8px 10px;
@@ -372,19 +372,6 @@
   cursor: not-allowed;
 }
 
-/* Inline actions can move into the overflow menu at very narrow widths. */
-.dock-btm-toolbar__inline-action {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-/* At 350px and below, Quick Edit moves into the existing ⋯ menu. */
-.dock-btm-toolbar--narrow .dock-btm-toolbar__inline-action {
-  display: none;
-}
-
 /* ── Overflow menu container ── */
 .dock-btm-overflow {
   position: relative;
@@ -419,7 +406,9 @@
   position: absolute;
   bottom: calc(100% + 6px);
   right: 0;
-  min-width: 44px;
+  min-width: 104px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
   padding: 4px;
   border: 1px solid var(--dock-border, #334155);
   border-radius: 8px;
@@ -442,16 +431,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.dock-btm-overflow__narrow-actions {
-  display: none;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.dock-btm-toolbar--narrow .dock-btm-overflow__narrow-actions {
-  display: flex;
 }
 
 /* At 239px and below, keep Bible navigation above the remaining controls. */
@@ -494,13 +473,25 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: fit-content;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
 }
 
 /* Bible Browse/Compare share the toolbar's existing overflow menu. Keep the
    original action tree mounted so its compare controls and state stay in one
    place, but hide its duplicate trigger and render the menu inline here. */
 .dock-btm-overflow__children .dock-bible-bottom-overflow-actions {
-  width: min(280px, calc(100vw - 24px));
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The compare action is rendered directly in this menu. Keep the responsive
+   action group mounted as a state/portal host without showing its duplicate
+   trigger or menu item. */
+.dock-btm-overflow__children .dock-bible-bottom-overflow-actions--state-host {
+  display: none;
 }
 
 .dock-btm-overflow__children .dock-bible-header-actions,
@@ -554,6 +545,7 @@
   font-size: 11px;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -747,12 +739,10 @@
 }
 
 /* Overflow actions stay readable at narrow widths: labels only, no duplicate icons. */
-.dock-btm-overflow__narrow-actions > * svg,
 .dock-btm-overflow__children > * > button > svg {
   display: none;
 }
 
-.dock-btm-overflow__narrow-actions > *,
 .dock-btm-overflow__children > * > button {
   gap: 0;
 }

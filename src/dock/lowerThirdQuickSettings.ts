@@ -25,6 +25,32 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+/**
+ * Notes uses the font size selected by the operator as the source of truth.
+ * It still needs a safe lower bound, but it must not be reduced to the shared
+ * lower-third fit range before it reaches the browser overlay.
+ */
+export function normalizeExplicitOutputFontSettings(
+  settings: DockFullscreenQuickThemeSettings,
+  mode: "fullscreen" | "lower-third",
+): DockFullscreenQuickThemeSettings {
+  const minFontSize = mode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+  const minRefFontSize = mode === "fullscreen" ? 14 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+  const requestedFontSize = Number(settings.fontSize);
+  const requestedRefFontSize = Number(settings.refFontSize);
+
+  return {
+    ...settings,
+    autoFontScale: false,
+    fontSize: Number.isFinite(requestedFontSize)
+      ? Math.max(minFontSize, Math.round(requestedFontSize))
+      : minFontSize,
+    refFontSize: Number.isFinite(requestedRefFontSize)
+      ? Math.max(minRefFontSize, Math.round(requestedRefFontSize))
+      : minRefFontSize,
+  };
+}
+
 export function normalizeLowerThirdFitSettings(
   settings: DockFullscreenQuickThemeSettings,
 ): DockFullscreenQuickThemeSettings {

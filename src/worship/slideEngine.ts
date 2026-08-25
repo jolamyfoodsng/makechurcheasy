@@ -4,6 +4,17 @@
 
 import type { LyricSection, Slide } from "./types";
 
+/**
+ * Remove only whitespace around a slide's content before it reaches a preview
+ * or output surface. Internal line breaks remain part of the lyric layout.
+ */
+export function normalizeWorshipDisplayText(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+}
+
 type SectionLabel = {
   label: string;
   shortLabel: string;
@@ -284,7 +295,12 @@ export function getSectionTypeTone(type: Slide["type"]): string {
  * Single newlines inside a block are preserved as line breaks within
  * the same slide.
  */
-export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: number): LyricSection[] {
+export function parseWorshipLyricSections(
+  rawLyrics: string,
+  linesPerSlide: number,
+  autoSplit = true,
+  continuousLineCount = false,
+): LyricSection[] {
   const normalizedLyrics = extractStructuredTextTitle(rawLyrics).body.trim();
   if (!normalizedLyrics) return [];
 
@@ -305,11 +321,23 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
   const sections: LyricSection[] = [];
   let verseCount = 0;
   let slideCursor = 0;
+  let previousSectionWasExplicit = false;
 
   const pushSection = (baseSection: SectionLabel, content: string) => {
     const cleanLines = content.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0);
     if (cleanLines.length === 0) return;
-    const slideCount = Math.max(1, Math.ceil(cleanLines.length / Math.max(1, linesPerSlide)));
+    const previous = continuousLineCount ? sections[sections.length - 1] : undefined;
+    if (previous && previous.label === baseSection.label) {
+      previous.lines.push(...cleanLines);
+      previous.slideCount = autoSplit
+        ? Math.max(1, Math.ceil(previous.lines.length / Math.max(1, linesPerSlide)))
+        : 1;
+      slideCursor = previous.startSlideIndex + previous.slideCount;
+      return;
+    }
+    const slideCount = autoSplit
+      ? Math.max(1, Math.ceil(cleanLines.length / Math.max(1, linesPerSlide)))
+      : 1;
     const idBase = `${baseSection.shortLabel || baseSection.label}-${sections.length}`
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
@@ -338,7 +366,9 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
         ...stanzaLines.slice(1).filter((l) => l.length > 0),
       ];
     } else {
-      verseCount += 1;
+      if (!continuousLineCount || previousSectionWasExplicit || sections.length === 0) {
+        verseCount += 1;
+      }
       label = {
         section: { label: `Verse ${verseCount}`, shortLabel: `V${verseCount}`, type: "verse" },
         rest: "",
@@ -365,6 +395,7 @@ export function parseWorshipLyricSections(rawLyrics: string, linesPerSlide: numb
     for (const s of inlineSections) {
       pushSection(s.section, s.lines.join("\n"));
     }
+    previousSectionWasExplicit = Boolean(parseSectionLabelLine(stanzaLines[0]));
   }
 
   return sections;
@@ -402,7 +433,8 @@ export function formatLyricsFromSections(sections: Array<Pick<LyricSection, "lab
  *  • Continuation labels (cont) only appear when a single stanza is
  *    genuinely split because it exceeds linesPerSlide.
  *  • The explicit continuousLineCount option lets the dock carry unlabelled
- *    blocks forward when the operator chooses a line count manually.
+ *    blocks forward and coalesce repeated section labels when the operator
+ *    chooses a line count manually.
  */
 export interface GenerateSlidesOptions {
   /**
@@ -456,6 +488,11 @@ export function generateSlides(
           ...stanzaLines.slice(1),
         ];
         if (contentLines.length > 0) {
+          const previous = sections[sections.length - 1];
+          if (previous?.explicit && previous.label.label === detectedLabel.section.label) {
+            previous.lines.push(...contentLines);
+            continue;
+          }
           sections.push({
             label: detectedLabel.section,
             lines: contentLines,

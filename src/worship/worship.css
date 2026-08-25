@@ -13,6 +13,7 @@
   color: var(--b-text-1, #E0E0E0);
   font-family: var(--font-body, "Open Sans", system-ui, sans-serif);
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .worship-home :where(h1, h2, h3, h4, h5, h6),
@@ -100,6 +101,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .worship-main--loading {
@@ -299,6 +301,7 @@ button.worship-online-action.at-limit {
 .worship-sidebar-list {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px 0;
 }
 
@@ -632,6 +635,7 @@ button.worship-online-action.at-limit {
 .worship-slides-list {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
@@ -791,6 +795,7 @@ button.worship-online-action.at-limit {
   background: var(--b-surface, #1E1E1E);
   border-left: 1px solid var(--b-border, #2C2C2C);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .worship-right-section {

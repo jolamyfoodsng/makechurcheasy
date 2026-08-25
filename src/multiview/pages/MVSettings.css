@@ -1,6 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-:root {
+/*
+ * Settings is rendered inside the normal application shell. Keep this
+ * legacy page stylesheet inside its own scope so it cannot reset the shell
+ * or overwrite the app's shared theme tokens after the Settings chunk loads.
+ */
+@scope (.settings-page) {
+
+:scope {
     /* Fonts */
     --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-serif: 'Noto Serif', Georgia, serif;
@@ -50,15 +57,15 @@
     --transition-speed: 0.2s;
 }
 
-/* Base resets — scoped to settings page container only */
-.app-container * {
+/* Base resets — scoped to Settings only */
+:scope * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
 /* Handle system layouts and custom properties */
-:root[data-theme="dark"] {
+:scope[data-theme="dark"] {
     --bg-app: #0A0A0A;
     --bg-sidebar: #0A0A0A;
     --bg-header: #0A0A0A;
@@ -93,7 +100,7 @@
     --shadow-toast: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
 }
 
-:root[data-theme="light"] {
+:scope[data-theme="light"] {
     --bg-app: #f8fafc;
     --bg-sidebar: #ffffff;
     --bg-header: #f8fafc;
@@ -131,47 +138,47 @@
     --shadow-toast: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
-:root[data-contrast="high"] {
+:scope[data-contrast="high"] {
     --text-secondary: var(--text-primary);
     --border-color: var(--text-primary);
     --border-width-multiplier: 1.5;
 }
 
-:root[data-reduced-motion="true"] {
+:scope[data-reduced-motion="true"] {
     --transition-speed: 0s !important;
 }
 
 /* Spacing variations depending on class modifiers loaded dynamically */
-.density-comfortable {
+:scope.density-comfortable {
     --dense-gap: 24px;
     --dense-padding: 24px;
 }
 
-.density-balanced {
+:scope.density-balanced {
     --dense-gap: 16px;
     --dense-padding: 16px;
 }
 
-.density-compact {
+:scope.density-compact {
     --dense-gap: 12px;
     --dense-padding: 12px;
 }
 
 /* Adjust application global scaling factor classes */
-.font-scale-small {
+:scope.font-scale-small {
     --base-size: 12px;
 }
 
-.font-scale-medium {
+:scope.font-scale-medium {
     --base-size: 14px;
 }
 
-.font-scale-large {
+:scope.font-scale-large {
     --base-size: 16px;
 }
 
-/* Settings page font & color applied via app-container, not body */
-.app-container {
+/* Settings page font & color stay on the Settings surface, not the shell */
+:scope {
     font-family: var(--font-sans);
     background-color: var(--bg-app);
     color: var(--text-primary);
@@ -2774,6 +2781,8 @@
     display: none;
 }
 
+}
+
 @media print {
     @page {
         margin: 0.5in;
@@ -2818,6 +2827,7 @@
 }
 
 /* ── Responsive adjustments ── */
+@scope (.settings-page) {
 @media (max-width: 640px) {
     .mr-mobile-primary-grid {
         gap: 20px;
@@ -2842,4 +2852,5 @@
     .mr-pwa-url-row .action-btn {
         width: 100%;
     }
+}
 }

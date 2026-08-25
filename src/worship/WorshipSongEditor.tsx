@@ -127,7 +127,10 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const [title, setTitle] = useState(() => song?.metadata.title ?? nextAutoSongTitle());
   const [artist, setArtist] = useState(song?.metadata.artist ?? "");
   const [lyrics, setLyrics] = useState(song?.lyrics ?? "");
-  const [autoSplit, setAutoSplit] = useState(song?.autoSplit ?? false);
+  // Open every editor in the authored/original layout. Users can still choose
+  // a counted layout explicitly, but the editor should never reformat lyrics
+  // just because a saved song used a previous split setting.
+  const [autoSplit, setAutoSplit] = useState(false);
   const [linesPerSlide, setLinesPerSlide] = useState(
     song?.linesPerSlide ?? DEFAULT_WORSHIP_LINES_PER_SLIDE,
   );
@@ -162,9 +165,55 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // The editor is a viewport-level surface. Lock every app-level scroll
+  // container while it is open so wheel/touch input cannot move the Worship
+  // page underneath the editor or create a nested-scroll bounce.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const scrollTargets = Array.from(document.querySelectorAll<HTMLElement>(
+      ".app-main, .app-content, .app-page, .resources-content, .lib-page, .worship-home",
+    ));
+    const previousTargets = scrollTargets.map((target) => ({
+      target,
+      overflow: target.style.overflow,
+      overscrollBehavior: target.style.overscrollBehavior,
+    }));
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverscrollBehavior = html.style.overscrollBehavior;
+    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
+
+    html.classList.add("ws-modal-open");
+    body.classList.add("ws-modal-open");
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    for (const target of scrollTargets) {
+      target.style.overflow = "hidden";
+      target.style.overscrollBehavior = "none";
+    }
+
+    return () => {
+      html.classList.remove("ws-modal-open");
+      body.classList.remove("ws-modal-open");
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      html.style.overscrollBehavior = previousHtmlOverscrollBehavior;
+      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+      for (const { target, overflow, overscrollBehavior } of previousTargets) {
+        target.style.overflow = overflow;
+        target.style.overscrollBehavior = overscrollBehavior;
+      }
+    };
+  }, []);
+
   /* ── Live slide generation ── */
   const slides: Slide[] = useMemo(
-    () => (lyrics.trim() ? generateSlides(lyrics, linesPerSlide, autoSplit) : []),
+    () => (lyrics.trim()
+      ? generateSlides(lyrics, linesPerSlide, autoSplit, { continuousLineCount: autoSplit })
+      : []),
     [lyrics, linesPerSlide, autoSplit],
   );
 
@@ -302,7 +351,9 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
         slides,
         createdAt: song?.createdAt ?? now,
         updatedAt: now,
-        themeId: selectedThemeId || undefined,
+        // The editor only previews a theme; it does not let the user choose a
+        // song theme. Never replace the Worship/Dock theme while saving lyrics.
+        themeId: song?.themeId,
         autoSplit,
         linesPerSlide,
       };
@@ -314,7 +365,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
     } finally {
       setSaving(false);
     }
-  }, [title, artist, lyrics, slides, song, onSave, selectedThemeId, autoSplit, linesPerSlide]);
+  }, [title, artist, lyrics, slides, song, onSave, autoSplit, linesPerSlide]);
 
   const isEdit = !!song;
 
@@ -327,7 +378,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
       }}
     >
       <div
-        className="ws-modal"
+        className="ws-modal ws-modal--fullscreen"
         role="dialog"
         aria-modal="true"
         aria-label={isEdit ? "Edit Song" : "Add Song"}
@@ -466,18 +517,20 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                   <span>Undo</span>
                 </button>
               </div>
-              <textarea
-                ref={lyricsTextareaRef}
-                className="ws-lyrics-textarea"
-                style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace' }}
-                placeholder={"Verse 1:\nLine 1\nLine 2\n\nChorus:\nChorus line 1\nChorus line 2"}
-                value={lyrics}
-                onChange={(e) => handleLyricsChange(e.target.value)}
-                onSelect={syncSelectionRange}
-                onKeyUp={syncSelectionRange}
-                onMouseUp={syncSelectionRange}
-                onFocus={syncSelectionRange}
-              />
+              <div className="ws-lyrics-editor-frame">
+                <textarea
+                  ref={lyricsTextareaRef}
+                  className="ws-lyrics-textarea"
+                  style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace' }}
+                  placeholder={"Verse 1:\nLine 1\nLine 2\n\nChorus:\nChorus line 1\nChorus line 2"}
+                  value={lyrics}
+                  onChange={(e) => handleLyricsChange(e.target.value)}
+                  onSelect={syncSelectionRange}
+                  onKeyUp={syncSelectionRange}
+                  onMouseUp={syncSelectionRange}
+                  onFocus={syncSelectionRange}
+                />
+              </div>
             </div>
 
             <div className="ws-left-footer">

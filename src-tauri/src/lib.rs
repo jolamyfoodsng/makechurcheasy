@@ -2,6 +2,7 @@
 // Commands:
 //   save_bg_image      — persist background image to disk (for OBS image_source)
 //   save_upload_file   — persist uploaded logo to disk
+//   delete_upload_file — remove a user-uploaded media file from managed storage
 //   save_countdown_asset — save countdown background asset to managed storage
 //   delete_countdown_asset — delete countdown background asset by assetId
 //   cleanup_unused_countdown_assets — remove orphaned countdown assets
@@ -474,6 +475,27 @@ fn sanitize_filename_for_storage(file_name: &str) -> Result<String, String> {
         return Err("Invalid file name".to_string());
     }
 
+    Ok(trimmed.to_string())
+}
+
+/// Validate an existing upload basename without rewriting it. Legacy uploads
+/// may contain spaces, so deletion must target the exact stored filename.
+fn validate_upload_basename(file_name: &str) -> Result<String, String> {
+    let trimmed = file_name.trim();
+    let base = Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Invalid upload file name")?;
+    if trimmed.is_empty()
+        || trimmed == "."
+        || trimmed == ".."
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains('\0')
+        || base != trimmed
+    {
+        return Err("Invalid upload file name".to_string());
+    }
     Ok(trimmed.to_string())
 }
 
@@ -1436,6 +1458,24 @@ fn save_upload_file(file_name: String, file_data: Vec<u8>) -> Result<String, Str
         file_data.len()
     );
     Ok(abs_path)
+}
+
+/// Delete a user-uploaded file from ~/Documents/MakeChurchEasy/uploads/.
+/// Missing files are treated as success so repeated delete requests are safe.
+#[tauri::command]
+fn delete_upload_file(file_name: String) -> Result<(), String> {
+    let uploads_dir = app_dir()?.join("uploads");
+    let safe_file_name = validate_upload_basename(&file_name)?;
+    let file_path = uploads_dir.join(&safe_file_name);
+    if file_path.exists() {
+        if !file_path.is_file() {
+            return Err("The selected upload is not a file".to_string());
+        }
+        fs::remove_file(&file_path)
+            .map_err(|e| format!("Failed to delete upload '{}': {}", safe_file_name, e))?;
+    }
+    println!("[Tauri] Deleted upload: {}", file_path.display());
+    Ok(())
 }
 
 /// Save a browser drag-and-drop selection to a temporary local path so the
@@ -5810,9 +5850,71 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: delete one exact user-uploaded file from the shared uploads
+            // folder. The OBS Dock cannot call Tauri directly, so this is the
+            // HTTP fallback used by the same media deletion path.
+            if clean == "api/delete-upload" {
+                let cors = || overlay_header("Access-Control-Allow-Origin", "*");
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(cors())
+                        .with_header(overlay_header(
+                            "Access-Control-Allow-Methods",
+                            "DELETE, OPTIONS",
+                        ))
+                        .with_header(overlay_header("Access-Control-Allow-Headers", "Content-Type"));
+                    let _ = request.respond(resp);
+                    continue;
+                }
+                if request.method() != &tiny_http::Method::Delete {
+                    let resp = tiny_http::Response::from_string("Method not allowed")
+                        .with_status_code(405)
+                        .with_header(cors());
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let response = match local_send_query_value(&url_path, "fileName")
+                    .ok_or_else(|| "fileName is required".to_string())
+                    .and_then(|file_name| validate_upload_basename(&file_name))
+                {
+                    Ok(file_name) => match uploads_dir.as_ref() {
+                        Some(directory) => {
+                            let path = directory.join(&file_name);
+                            if path.exists() && !path.is_file() {
+                                Err("The selected upload is not a file".to_string())
+                            } else if path.exists() {
+                                fs::remove_file(&path)
+                                    .map(|_| serde_json::json!({ "ok": true, "deleted": true }))
+                                    .map_err(|error| format!("Failed to delete upload: {error}"))
+                            } else {
+                                Ok(serde_json::json!({ "ok": true, "deleted": false }))
+                            }
+                        }
+                        None => Err("Uploads directory is unavailable".to_string()),
+                    },
+                    Err(error) => Err(error),
+                };
+
+                let (status, body) = match response {
+                    Ok(payload) => (200, payload),
+                    Err(error) => (400, serde_json::json!({ "error": error })),
+                };
+                let resp = tiny_http::Response::from_string(body.to_string())
+                    .with_status_code(status)
+                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(cors())
+                    .with_header(overlay_header(
+                        "Cache-Control",
+                        "no-store, no-cache, must-revalidate, max-age=0",
+                    ));
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // API: list uploaded files as JSON array
             if clean == "api/uploads" {
-                let mut files: Vec<String> = Vec::new();
+                let mut files: Vec<(String, Duration)> = Vec::new();
                 if let Some(ref udir) = uploads_dir {
                     if udir.exists() {
                         if let Ok(entries) = fs::read_dir(udir) {
@@ -5827,7 +5929,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                                             {
                                                 continue;
                                             }
-                                            files.push(name.to_string());
+                                            let modified = entry
+                                                .metadata()
+                                                .and_then(|metadata| metadata.modified())
+                                                .ok()
+                                                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                                                .unwrap_or_default();
+                                            files.push((name.to_string(), modified));
                                         }
                                     }
                                 }
@@ -5835,7 +5943,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         }
                     }
                 }
-                files.sort();
+                // Keep the endpoint useful for the Dock's Newly Uploaded
+                // view even for legacy files whose names do not contain a
+                // generated timestamp.
+                files.sort_by(|(a_name, a_time), (b_name, b_time)| {
+                    b_time.cmp(a_time).then_with(|| a_name.cmp(b_name))
+                });
+                let files: Vec<String> = files.into_iter().map(|(name, _)| name).collect();
                 let json = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
                 let header = tiny_http::Header::from_bytes(
                     "Content-Type",
@@ -5846,7 +5960,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
                 let resp = tiny_http::Response::from_string(json)
                     .with_header(header)
-                    .with_header(cors);
+                    .with_header(cors)
+                    .with_header(overlay_header(
+                        "Cache-Control",
+                        "no-store, no-cache, must-revalidate, max-age=0",
+                    ))
+                    .with_header(overlay_header("Pragma", "no-cache"))
+                    .with_header(overlay_header("Expires", "0"));
                 let _ = request.respond(resp);
                 continue;
             }
@@ -5868,7 +5988,13 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
                 let resp = tiny_http::Response::from_string(json)
                     .with_header(header)
-                    .with_header(cors);
+                    .with_header(cors)
+                    .with_header(overlay_header(
+                        "Cache-Control",
+                        "no-store, no-cache, must-revalidate, max-age=0",
+                    ))
+                    .with_header(overlay_header("Pragma", "no-cache"))
+                    .with_header(overlay_header("Expires", "0"));
                 let _ = request.respond(resp);
                 continue;
             }
@@ -7935,6 +8061,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_bg_image,
             save_upload_file,
+            delete_upload_file,
             save_share_temp_file,
             get_local_share_file_metadata,
             discover_local_share_devices,

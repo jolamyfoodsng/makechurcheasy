@@ -80,6 +80,7 @@
 
   display: flex;
   flex-direction: column;
+  position: relative;
   /* CSS zoom already expands the layout viewport for the scaled content.
      Compensating the width here applies the scale twice and pushes the
      right-side controls outside the OBS dock. */
@@ -96,6 +97,28 @@
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
+}
+
+html.dock-modal-open,
+body.dock-modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.dock-root--modal-open .dock-content-main {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.dock-modal-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 12000;
+  pointer-events: none;
+}
+
+.dock-modal-layer > * {
+  pointer-events: auto;
 }
 
 /* ── Media card organization ── */
@@ -7192,7 +7215,7 @@
   border-radius: 4px;
   background: transparent;
   color: var(--dock-text-dim);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -7211,7 +7234,7 @@
 }
 
 .dock-media-pill__count {
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 500;
   opacity: 0.65;
 }
@@ -9838,29 +9861,6 @@
   line-height: 1;
 }
 
-.dock-line-popover--toolbar {
-  min-width: 0;
-}
-
-.dock-line-popover__trigger--toolbar {
-  min-height: 30px;
-  padding: 0 10px;
-  border-color: color-mix(in srgb, var(--dock-border) 78%, transparent);
-  background: color-mix(in srgb, var(--dock-surface-alt) 62%, transparent);
-  color: var(--dock-text);
-}
-
-.dock-line-popover__trigger--toolbar:hover,
-.dock-line-popover__trigger--toolbar.dock-line-popover__trigger--active {
-  border-color: color-mix(in srgb, var(--dock-accent) 24%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-surface-hover) 70%, var(--dock-surface));
-}
-
-.dock-line-popover__value--toolbar {
-  min-width: 0;
-  white-space: nowrap;
-}
-
 .dock-line-popover__menu {
   position: absolute;
   right: 0;
@@ -9942,6 +9942,51 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.dock-worship-lines-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface, #111827);
+  color: var(--dock-text-secondary, #CBD5E1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dock-worship-lines-control:focus-within {
+  border-color: var(--dock-accent, #1D4ED8);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-worship-lines-control__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-worship-lines-control__select {
+  min-width: 58px;
+  min-height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dock-worship-lines-control__select:focus {
+  outline: 1px solid var(--dock-accent, #1D4ED8);
+  outline-offset: 1px;
 }
 
 /* ── Base button ── */
@@ -10354,6 +10399,18 @@
   justify-content: center;
   padding: 8px;
   background: rgba(0, 0, 0, 0.56);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.dock-dialog-backdrop--fullscreen {
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+}
+
+.dock-dialog-backdrop--fullscreen[data-dock-layer-overlay="true"] {
+  overflow: hidden;
 }
 
 .dock-dialog {
@@ -10375,6 +10432,48 @@
 
 .dock-dialog--online-lyrics {
   width: min(460px, 100%);
+}
+
+.dock-dialog--song-editor {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dock-dialog--song-editor[data-dock-scroll-surface="true"] {
+  overflow: hidden;
+}
+
+.dock-dialog--song-editor .dock-dialog__body {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.dock-dialog--song-editor .dock-dialog__row--two {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.dock-dialog--song-editor .dock-dialog-field--lyrics {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.dock-dialog--song-editor .dock-dialog-textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  height: auto;
+  flex: 1 1 auto;
+  resize: none;
 }
 
 .dock-dialog__header,
@@ -10502,7 +10601,7 @@
 }
 
 .dock-dialog-field--lyrics {
-  width: 95%;
+  width: 100%;
 }
 
 .dock-dialog .dock-input {
@@ -10519,171 +10618,6 @@
 
 .dock-dialog-textarea--short {
   min-height: 140px;
-}
-
-.dock-spellcheck {
-  width: 100%;
-  min-width: 0;
-}
-
-.dock-spellcheck__editor {
-  position: relative;
-  min-width: 0;
-}
-
-.dock-spellcheck__textarea,
-.dock-spellcheck__mirror {
-  box-sizing: border-box;
-  width: 100%;
-  font: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.dock-spellcheck__textarea {
-  position: relative;
-  z-index: 1;
-  font-weight: inherit;
-}
-
-.dock-spellcheck__mirror {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: auto;
-  padding: 8px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 1.45;
-  font-family: var(--dock-font-body);
-  color: transparent;
-  pointer-events: none;
-  scrollbar-width: none;
-}
-
-.dock-spellcheck__mirror::-webkit-scrollbar {
-  display: none;
-}
-
-.dock-spellcheck__mirror mark {
-  color: transparent;
-  background: color-mix(in srgb, var(--dock-red) 18%, transparent);
-  border-bottom: 1px wavy var(--dock-red);
-  border-radius: 2px;
-}
-
-.dock-spellcheck__toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 22px;
-  margin-top: 4px;
-  color: var(--dock-text-dim);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: none;
-}
-
-.dock-spellcheck__toolbar--errors .dock-spellcheck__status {
-  color: var(--dock-red);
-}
-
-.dock-spellcheck__status {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.dock-spellcheck__action,
-.dock-spellcheck__suggestion-btn,
-.dock-spellcheck__ignore {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid var(--dock-border);
-  border-radius: 4px;
-  background: var(--dock-surface-alt);
-  color: var(--dock-text);
-  cursor: pointer;
-  font: inherit;
-}
-
-.dock-spellcheck__action {
-  min-height: 24px;
-  padding: 3px 7px;
-}
-
-.dock-spellcheck__action--primary {
-  border-color: color-mix(in srgb, var(--dock-accent) 62%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-accent) 18%, var(--dock-surface-alt));
-  color: var(--dock-accent);
-}
-
-.dock-spellcheck__action:hover,
-.dock-spellcheck__suggestion-btn:hover,
-.dock-spellcheck__ignore:hover {
-  border-color: var(--dock-accent);
-  color: var(--dock-accent);
-}
-
-.dock-spellcheck__action:focus-visible,
-.dock-spellcheck__suggestion-btn:focus-visible,
-.dock-spellcheck__ignore:focus-visible {
-  outline: 2px solid var(--dock-accent);
-  outline-offset: 1px;
-}
-
-.dock-spellcheck__suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 3px;
-}
-
-.dock-spellcheck__suggestion {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 23px;
-  padding: 2px 3px 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--dock-red) 34%, var(--dock-border));
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--dock-red) 7%, var(--dock-surface));
-  color: var(--dock-text);
-  font-size: 11px;
-  text-transform: none;
-}
-
-.dock-spellcheck__word {
-  color: var(--dock-red);
-}
-
-.dock-spellcheck__suggestion-btn {
-  min-height: 19px;
-  padding: 1px 5px;
-  border-color: color-mix(in srgb, var(--dock-accent) 55%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface-alt));
-  color: var(--dock-accent);
-}
-
-.dock-spellcheck__ignore {
-  min-height: 19px;
-  padding: 1px 4px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--dock-text-dim);
-}
-
-.dock-spellcheck__no-suggestion,
-.dock-spellcheck__more {
-  color: var(--dock-text-dim);
-  font-size: 10px;
-  text-transform: none;
 }
 
 .dock-dialog__error {
@@ -17359,7 +17293,7 @@
   align-items: end;
 }
 
-.dtb-typography-control-row > .dtb-slider-field {
+.dtb-typography-control-row>.dtb-slider-field {
   min-width: 0;
 }
 
@@ -27612,7 +27546,7 @@
   align-items: start;
 }
 
-.dtb-reference-color-row > .dtb-color-field {
+.dtb-reference-color-row>.dtb-color-field {
   min-width: 0;
 }
 
@@ -37306,4 +37240,12 @@ button.dock-btm-toolbar__clear--inline,
 
 [data-dock-layer-active="true"] {
   z-index: var(--dock-layer-z-index, 10000) !important;
+}
+
+/* Full-screen song editing is intentionally not a scroll surface. The
+   editor body owns its textarea scroll instead of the dialog or backdrop. */
+.dock-dialog-backdrop--fullscreen[data-dock-layer-overlay="true"],
+.dock-dialog--song-editor[data-dock-scroll-surface="true"] {
+  overflow: hidden;
+  overscroll-behavior: none;
 }

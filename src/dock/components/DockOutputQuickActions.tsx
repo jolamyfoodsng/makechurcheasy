@@ -33,14 +33,12 @@ interface DockOutputQuickActionsProps {
   lineMode?: DockOutputLineMode;
   maxLineCount: number;
   minFontSize: number;
-  maxFontSize: number;
+  maxFontSize?: number;
   updateImmediately: boolean;
   isLive: boolean;
   top: number;
   left: number | null;
   onPositionChange: (top: number, left: number | null) => void;
-  onOpenQuickEdits?: () => void;
-  quickEditsLabel?: string;
   onCommit: (
     patch: DockOutputQuickSettingsPatch,
     lineCount?: number,
@@ -145,8 +143,6 @@ export default function DockOutputQuickActions({
   top,
   left,
   onPositionChange,
-  onOpenQuickEdits,
-  quickEditsLabel = "Quick Edits",
   onCommit,
   originalLineLabel = "Original",
   sizePresets,
@@ -173,6 +169,9 @@ export default function DockOutputQuickActions({
   const currentFontSize = typeof displayedSettings.fontSize === "number"
     ? displayedSettings.fontSize
     : minFontSize;
+  const fontSizeUpperBound = Number.isFinite(maxFontSize)
+    ? maxFontSize as number
+    : Number.POSITIVE_INFINITY;
   const areManualFontSizesDisabled = false;
   const hasPendingChanges = draftSettings !== null || draftLineCount !== null || draftLineMode !== null;
   const renderedTop = dragPosition?.top ?? top;
@@ -340,11 +339,6 @@ export default function DockOutputQuickActions({
     setOpen((current) => !current);
   }, []);
 
-  const handleOpenQuickEdits = useCallback(() => {
-    setOpen(false);
-    onOpenQuickEdits?.();
-  }, [onOpenQuickEdits]);
-
   return (
     <div
       ref={rootRef}
@@ -378,18 +372,6 @@ export default function DockOutputQuickActions({
               <span className={`dock-output-quick-actions__live${isLive ? "" : " dock-output-quick-actions__preview"}`}>
                 {isLive ? "LIVE" : "PREVIEW"}
               </span>
-              {onOpenQuickEdits && (
-                <button
-                  type="button"
-                  className="dock-output-quick-actions__settings"
-                  onClick={handleOpenQuickEdits}
-                  aria-label={quickEditsLabel}
-                  title={quickEditsLabel}
-                  aria-haspopup="dialog"
-                >
-                  <Icon name="settings" size={14} />
-                </button>
-              )}
             </div>
           </div>
 
@@ -432,8 +414,8 @@ export default function DockOutputQuickActions({
               <button
                 type="button"
                 className="dock-bible-reader__font-size-btn"
-                onClick={() => applySettingsPatch({ fontSize: Math.min(maxFontSize, currentFontSize + 4) })}
-                disabled={areManualFontSizesDisabled || currentFontSize >= maxFontSize}
+                onClick={() => applySettingsPatch({ fontSize: Math.min(fontSizeUpperBound, currentFontSize + 4) })}
+                disabled={areManualFontSizesDisabled || currentFontSize >= fontSizeUpperBound}
                 aria-label={`Increase ${textLabel.toLowerCase()} size`}
                 title={`Increase ${textLabel.toLowerCase()} size`}
               >

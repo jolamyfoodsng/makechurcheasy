@@ -5,6 +5,7 @@ import {
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
   mergeQuickThemeBackground,
+  normalizeExplicitOutputFontSettings,
   normalizeLowerThirdFitSettings,
 } from "./lowerThirdQuickSettings";
 
@@ -81,6 +82,18 @@ describe("lowerThirdQuickSettings", () => {
     expect(normalized.autoFontScale).toBe(true);
     expect(normalized.fontSize).toBe(45);
     expect(normalized.refFontSize).toBe(16);
+  });
+
+  it("preserves an explicitly selected Notes font size without an upper cap", () => {
+    const normalized = normalizeExplicitOutputFontSettings(makeSettings({
+      autoFontScale: true,
+      fontSize: 520,
+      refFontSize: 220,
+    }), "lower-third");
+
+    expect(normalized.autoFontScale).toBe(false);
+    expect(normalized.fontSize).toBe(520);
+    expect(normalized.refFontSize).toBe(220);
   });
 
   it("detects equivalent quick settings snapshots", () => {

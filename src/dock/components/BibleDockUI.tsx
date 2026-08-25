@@ -145,9 +145,11 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       onToggle: () => setIsBottomSearchExpanded((current) => !current),
     }
     : undefined;
-  const bottomToolbarActions = searchPlacement === "top"
-    ? null
-    : (isCompact ? compactActions : headerActions);
+  // Keep Compare available in the bottom overflow even when the search row is
+  // positioned at the top. The toolbar is the compact action home, so hiding
+  // this branch when the search panel moves leaves Compare unexpectedly absent
+  // after the toolbar is expanded.
+  const bottomToolbarActions = isCompact ? compactActions : headerActions;
   const renderedBottomToolbarActions = typeof bottomToolbarActions === "function"
     ? bottomToolbarActions()
     : bottomToolbarActions;

@@ -947,7 +947,13 @@ export function MVSettings() {
   }, [isPrintingMobileQr, triggerToast]);
 
   return (
-    <div className="app-container">
+    <div
+      className={`settings-page density-${density} font-scale-${fontSizeRange === 1 ? "small" : fontSizeRange === 2 ? "medium" : "large"}`}
+      data-theme={effectiveTheme}
+      data-contrast={highContrastUI ? "high" : "standard"}
+      data-reduced-motion={reduceMotion ? "true" : "false"}
+      data-roundness={roundedCorners ? "standard" : "none"}
+    >
       {isPrintingMobileQr && mobilePairingQrDataUrl && (
         <div className="mr-qr-print-view" aria-hidden="true">
           <h1>MakeChurchEasy</h1>

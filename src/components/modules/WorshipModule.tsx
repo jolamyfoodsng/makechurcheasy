@@ -15,7 +15,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatLyricsFromSections, generateSlides, parseWorshipLyricSections } from "../../worship/slideEngine";
+import {
+  formatLyricsFromSections,
+  generateSlides,
+  normalizeWorshipDisplayText,
+  parseWorshipLyricSections,
+} from "../../worship/slideEngine";
+import { DEFAULT_WORSHIP_LINES_PER_SLIDE } from "../../worship/slideLayout";
 import { unicodeSearchNormalize } from "../../worship/unicodeUtils";
 import {
   archiveSong,
@@ -99,6 +105,19 @@ function isGenericVerseLabel(label: string): boolean {
 function normalizeWorshipObsLabel(label: string): string {
   const trimmed = label.trim();
   return trimmed && !isGenericVerseLabel(trimmed) ? trimmed : "";
+}
+
+type WorshipSceneSummary = { sceneName: string; sceneIndex: number };
+
+function areSameStringList(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function areSameSceneList(left: WorshipSceneSummary[], right: WorshipSceneSummary[]): boolean {
+  return left.length === right.length && left.every((scene, index) => {
+    const next = right[index];
+    return scene.sceneName === next?.sceneName && scene.sceneIndex === next?.sceneIndex;
+  });
 }
 
 const DEFAULT_WORSHIP_THEME_ID = WORSHIP_THEME_OPTIONS[0]?.id ?? "";
@@ -445,16 +464,26 @@ export function WorshipModule({
       const scenes = await obsService.getSceneList();
       const visibleScenes = scenes.filter((scene) => isUserSelectableObsScene(scene.sceneName));
       const names = visibleScenes.map((scene) => scene.sceneName);
-      setLtScenes(visibleScenes.map((scene) => ({ sceneName: scene.sceneName, sceneIndex: scene.sceneIndex })));
-      setFullLiveScenes((prev) => prev.filter((sceneName) => names.includes(sceneName)));
-      setLtLiveScenes((prev) => prev.filter((sceneName) => names.includes(sceneName)));
+      const nextLtScenes = visibleScenes.map((scene) => ({
+        sceneName: scene.sceneName,
+        sceneIndex: scene.sceneIndex,
+      }));
+      setLtScenes((prev) => (areSameSceneList(prev, nextLtScenes) ? prev : nextLtScenes));
+      setFullLiveScenes((prev) => {
+        const next = prev.filter((sceneName) => names.includes(sceneName));
+        return areSameStringList(prev, next) ? prev : next;
+      });
+      setLtLiveScenes((prev) => {
+        const next = prev.filter((sceneName) => names.includes(sceneName));
+        return areSameStringList(prev, next) ? prev : next;
+      });
       const program = await obsService.getCurrentProgramScene();
       const normalizedProgram = normalizeDockStageBaseScene(program);
-      setLtProgramScene(
+      const nextProgramScene =
         names.includes(program)
           ? program
-          : (names.includes(normalizedProgram) ? normalizedProgram : ""),
-      );
+          : (names.includes(normalizedProgram) ? normalizedProgram : "");
+      setLtProgramScene((prev) => (prev === nextProgramScene ? prev : nextProgramScene));
     } catch (err) {
       console.warn("[Worship] Failed to fetch OBS scenes:", err);
     }
@@ -499,16 +528,20 @@ export function WorshipModule({
     [accessibleSongs, selectedSongId]
   );
 
-  // Auto-select the song's saved theme when a song is loaded
-  useEffect(() => {
-    if (selectedSong?.themeId && themes.some((t) => t.id === selectedSong.themeId)) {
-      setActiveThemeId(selectedSong.themeId);
-    }
-  }, [selectedSong?.themeId, themes]);
+  const selectedSongLinesPerSlide = selectedSong?.linesPerSlide
+    ?? DEFAULT_WORSHIP_LINES_PER_SLIDE;
+  const selectedSongAutoSplit = selectedSong?.autoSplit ?? false;
 
   const songSlides: Slide[] = useMemo(
-    () => (selectedSong ? generateSlides(selectedSong.lyrics, 2, false) : []),
-    [selectedSong]
+    () => (selectedSong
+      ? generateSlides(
+        selectedSong.lyrics,
+        selectedSongLinesPerSlide,
+        selectedSongAutoSplit,
+        { continuousLineCount: selectedSongAutoSplit },
+      )
+      : []),
+    [selectedSong, selectedSongAutoSplit, selectedSongLinesPerSlide]
   );
 
   useEffect(() => {
@@ -521,14 +554,21 @@ export function WorshipModule({
     if (!slide) return;
     onPresentToScreen?.({
       song: selectedSong,
-      slide,
+      slide: { ...slide, content: normalizeWorshipDisplayText(slide.content) },
       slideIndex: liveSlideIndex,
     });
   }, [presentationMode, isActive, selectedSong, songSlides, liveSlideIndex, onPresentToScreen]);
 
   const songLyricSections = useMemo(
-    () => (selectedSong ? parseWorshipLyricSections(selectedSong.lyrics, 2) : []),
-    [selectedSong]
+    () => (selectedSong
+      ? parseWorshipLyricSections(
+        selectedSong.lyrics,
+        selectedSongLinesPerSlide,
+        selectedSongAutoSplit,
+        selectedSongAutoSplit,
+      )
+      : []),
+    [selectedSong, selectedSongAutoSplit, selectedSongLinesPerSlide]
   );
 
   // Import preview slides
@@ -709,7 +749,7 @@ export function WorshipModule({
     const slide = songSlides[liveSlideIndex];
     if (!slide) return;
     await worshipObsService.pushSlide(
-      slide.content,
+      normalizeWorshipDisplayText(slide.content),
       "",
       theme,
       true,
@@ -721,7 +761,7 @@ export function WorshipModule({
     const values: Record<string, string> = {};
     for (const v of theme.variables) values[v.key] = v.defaultValue;
 
-    const slideText = (songSlides[liveSlideIndex]?.content ?? "").trim();
+    const slideText = normalizeWorshipDisplayText(songSlides[liveSlideIndex]?.content ?? "");
     const lines = slideText
       .split(/\r?\n+/)
       .map((line) => line.trim())
@@ -826,7 +866,7 @@ export function WorshipModule({
 
     await ensureDockObsClientConnected();
     await dockObsClient.pushWorshipLyrics({
-      sectionText: slide?.content ?? "",
+      sectionText: normalizeWorshipDisplayText(slide?.content ?? ""),
       sectionLabel: normalizeWorshipObsLabel(slide?.label ?? ""),
       songTitle: selectedSong?.metadata.title ?? "",
       artist: selectedSong?.metadata.artist ?? "",
@@ -854,7 +894,7 @@ export function WorshipModule({
     if (!obsConnected) return;
     if (!checkServiceActive("send worship full overlay to OBS")) return;
     const slide = songSlides[liveSlideIndex];
-    const text = slide?.content ?? null;
+    const text = slide ? normalizeWorshipDisplayText(slide.content) || null : null;
     const ref = "";
     const wasLive = isLive;
 
@@ -936,7 +976,7 @@ export function WorshipModule({
       const slide = songSlides[slideIdx];
       if (!slide && live) return;
       if (layoutMode === "fullscreen") {
-        const text = blanked || !slide ? null : slide.content;
+        const text = blanked || !slide ? null : normalizeWorshipDisplayText(slide.content) || null;
         const ref = "";
         const targetScenes = getDefaultFullScenes();
         if (targetScenes.length > 0) {
@@ -1146,10 +1186,15 @@ export function WorshipModule({
 
       const localSlideIndex = editingSlideIdx - section.startSlideIndex;
       const nextLines = [...section.lines];
-      const startLine = localSlideIndex * 2;
+      const linesInGeneratedSlide = selectedSongAutoSplit
+        ? selectedSongLinesPerSlide
+        : section.lines.length;
+      const startLine = localSlideIndex * linesInGeneratedSlide;
       nextLines.splice(
         startLine,
-        2,
+        selectedSongAutoSplit
+          ? Math.min(linesInGeneratedSlide, Math.max(0, nextLines.length - startLine))
+          : nextLines.length,
         ...editText
           .split(/\r?\n/)
           .map((line) => line.trim())
@@ -1166,7 +1211,15 @@ export function WorshipModule({
     await saveSong(updated);
     await reloadSongs();
     setEditingSlideIdx(null);
-  }, [editingSlideIdx, editText, selectedSong, songLyricSections, reloadSongs]);
+  }, [
+    editingSlideIdx,
+    editText,
+    reloadSongs,
+    selectedSong,
+    selectedSongAutoSplit,
+    selectedSongLinesPerSlide,
+    songLyricSections,
+  ]);
 
   // ── Archive song ──
   const handleArchiveSong = useCallback(
@@ -1493,7 +1546,7 @@ export function WorshipModule({
                     </span>
                   </div>
                   <div className="worship-slide-card-body">
-                    <p>{slide.content}</p>
+                    <p>{normalizeWorshipDisplayText(slide.content)}</p>
                   </div>
                 </div>
               ))}
@@ -1830,7 +1883,7 @@ export function WorshipModule({
                                 autoFocus
                               />
                             ) : (
-                              <p>{slide.content}</p>
+                              <p>{normalizeWorshipDisplayText(slide.content)}</p>
                             )}
                           </div>
                         </div>
@@ -1857,7 +1910,7 @@ export function WorshipModule({
                 )}
               </div>
               <div className="worship-preview-box preview" style={previewBackgroundStyle}>
-                <p>{songSlides[liveSlideIndex + 1]?.content ?? "End of song"}</p>
+                <p>{songSlides[liveSlideIndex + 1] ? normalizeWorshipDisplayText(songSlides[liveSlideIndex + 1].content) : "End of song"}</p>
               </div>
             </div>
 
@@ -2103,7 +2156,7 @@ export function WorshipModule({
                     }}
                     title={`Slide ${index + 1}`}
                   >
-                    <span className="worship-live-strip-slide-text">{slide.content}</span>
+                    <span className="worship-live-strip-slide-text">{normalizeWorshipDisplayText(slide.content)}</span>
                   </button>
                 );
               })}

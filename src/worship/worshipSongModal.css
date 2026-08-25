@@ -10,23 +10,42 @@
   z-index: 9999;
   background: rgba(0, 0, 0, 0.56);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
+  padding: 10vh 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.ws-modal-open,
+body.ws-modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ── Dialog shell ── */
 .ws-modal {
-  width: min(1100px, calc(100vw - 32px));
-  height: min(720px, calc(100vh - 32px));
+  width: 80vw;
+  max-width: 80vw;
+  height: 80vh;
+  max-height: 80vh;
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 8px);
+  border: 0;
+  border-radius: 0;
   background: var(--surface-dark);
   color: var(--text-primary);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  box-shadow: none;
   overflow: hidden;
+}
+
+.ws-modal--fullscreen {
+  width: 80vw;
+  height: 80vh;
 }
 
 /* ── Header ── */
@@ -89,6 +108,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -98,6 +118,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--surface-dark);
 }
@@ -179,6 +200,16 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.ws-lyrics-editor-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 0 5% 10px;
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
 }
 
 .ws-lyrics-toolbar {
@@ -294,6 +325,7 @@
   line-height: 1.7;
   color: var(--text-primary);
   box-sizing: border-box;
+  overflow-y: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -319,13 +351,16 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--bg-dark);
 }
 
 /* ── Slide preview grid ── */
 .ws-preview-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
 }
 
@@ -631,6 +666,11 @@ html.mv-theme-light .ws-modal-backdrop {
 :root.light .ws-modal,
 html.mv-theme-light .ws-modal {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.15);
+}
+
+:root.light .ws-modal--fullscreen,
+html.mv-theme-light .ws-modal--fullscreen {
+  box-shadow: none;
 }
 
 :root.light .ws-modal-header-icon,

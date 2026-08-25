@@ -37,10 +37,8 @@ import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
   LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
-  LOWER_THIRD_FONT_SIZE_MAX,
   LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
-  applyMeasuredFontFitSettings,
-  normalizeLowerThirdFitSettings,
+  normalizeExplicitOutputFontSettings,
 } from "../lowerThirdQuickSettings";
 import {
   getDockTranslationSourceSignature,
@@ -271,7 +269,7 @@ function getNoteQuickSettings(
     fontSize: overlayMode === "fullscreen"
       ? fontSize
       : Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, fontSize),
-    autoFontScale: true,
+    autoFontScale: false,
   };
 }
 
@@ -755,10 +753,10 @@ export default function DockNotesTab({
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = quickSettingsOverride
         ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
-      const themeSettings = {
-        ...(quickSettings ?? theme.settings),
-        autoFontScale: true,
-      };
+      const themeSettings = normalizeExplicitOutputFontSettings(
+        { ...(quickSettings ?? theme.settings) } as unknown as DockFullscreenQuickThemeSettings,
+        overlayMode,
+      );
       const slideText = normalizeDockMultilineText(slide.text);
       const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
       const showBoth = Boolean(effectiveNotesTranslation?.showBoth && translatedText);
@@ -897,7 +895,7 @@ export default function DockNotesTab({
         const settings = getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: true,
+          autoFontScale: false,
         };
       })();
     const lowerThirdBase = lowerThirdQuickSettings
@@ -905,11 +903,17 @@ export default function DockNotesTab({
         const settings = getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: true,
+          autoFontScale: false,
         };
       })();
-    const nextFullscreenSettings = { ...fullscreenBase, ...patch, autoFontScale: true };
-    const nextLowerThirdSettings = normalizeLowerThirdFitSettings({ ...lowerThirdBase, ...patch });
+    const nextFullscreenSettings = normalizeExplicitOutputFontSettings(
+      { ...fullscreenBase, ...patch, autoFontScale: false },
+      "fullscreen",
+    );
+    const nextLowerThirdSettings = normalizeExplicitOutputFontSettings(
+      { ...lowerThirdBase, ...patch, autoFontScale: false },
+      "lower-third",
+    );
     setFullscreenQuickSettings(nextFullscreenSettings);
     setLowerThirdQuickSettings(nextLowerThirdSettings);
     if (nextLineMode !== undefined) {
@@ -951,16 +955,15 @@ export default function DockNotesTab({
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
     const minFontSize = overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
-    const maxFontSize = overlayMode === "fullscreen" ? 180 : LOWER_THIRD_FONT_SIZE_MAX;
     const minRefFontSize = overlayMode === "fullscreen"
       ? 14
       : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
     const maxRefFontSize = overlayMode === "fullscreen"
       ? 150
       : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const horizontalPadding = Math.round(preset.padding * 1.55);
-    const fontSize = clamp(option.fontSize, minFontSize, maxFontSize);
+    const fontSize = Math.max(minFontSize, option.fontSize);
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const refFontSize = clamp(option.refFontSize, minRefFontSize, maxRefFontSize);
     return {
       fontSize,
@@ -1416,13 +1419,10 @@ export default function DockNotesTab({
               lineMode={notesAutoSplit ? "count" : "original"}
               maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
               minFontSize={overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
-              maxFontSize={overlayMode === "fullscreen" ? 180 : LOWER_THIRD_FONT_SIZE_MAX}
               updateImmediately={quickUpdateImmediately}
               isLive={overlayVisible}
               top={quickActionsTop}
               left={quickActionsLeft}
-              onOpenQuickEdits={() => setShowThemeSettings(true)}
-              quickEditsLabel={t("worship.quickEdits", "Quick Edits")}
               onPositionChange={handleNotesQuickActionsPositionChange}
               onCommit={handleNotesQuickCommit}
               originalLineLabel={t("notes.original", "Original")}
@@ -1457,38 +1457,32 @@ export default function DockNotesTab({
                   expanded: bottomSearchExpanded,
                   onToggle: () => setBottomSearchExpanded((current) => !current),
                 } : undefined}
-                inlineAction={
-                  <button
-                    type="button"
-                    className="dock-btm-toolbar__icon-btn"
-                    onClick={() => setShowThemeSettings(true)}
-                    title={t("worship.quickEdits", "Quick Edits")}
-                    aria-label={t("worship.quickEdits", "Quick Edits")}
-                  >
-                    <Icon name="tune" size={14} />
-                  </button>
-                }
-                narrowOverflowActions={
-                  <button
-                    type="button"
-                    className="dock-btm-overflow__menu-item"
-                    data-dock-close-overflow="true"
-                    onClick={() => setShowThemeSettings(true)}
-                  >
-                    <span>{t("worship.quickEdits", "Quick Edits")}</span>
-                  </button>
-                }
-                children={!presentationLinkMode ? (
-                  <DockSceneRoutingControl
-                    module="notes"
-                    route={sceneRoute}
-                    onRouteChange={updateSceneRoute}
-                    title={t("sceneRouting.bible", "Output")}
-                    placement="above"
-                    showLabel
-                    iconName="cast"
-                  />
-                ) : undefined}
+                children={(
+                  <>
+                    <button
+                      type="button"
+                      className="dock-btm-overflow__menu-item"
+                      data-dock-close-overflow="true"
+                      onClick={() => setShowThemeSettings(true)}
+                      title={t("worship.quickEdits", "Quick Edits")}
+                      aria-label={t("worship.quickEdits", "Quick Edits")}
+                    >
+                      <Icon name="edit" size={14} />
+                      <span>{t("worship.quickEdits", "Quick Edits")}</span>
+                    </button>
+                    {!presentationLinkMode && (
+                      <DockSceneRoutingControl
+                        module="notes"
+                        route={sceneRoute}
+                        onRouteChange={updateSceneRoute}
+                        title={t("sceneRouting.bible", "Output")}
+                        placement="above"
+                        showLabel
+                        iconName="cast"
+                      />
+                    )}
+                  </>
+                )}
               />
             </div>
           </section>
@@ -1516,12 +1510,12 @@ export default function DockNotesTab({
           ? (fullscreenQuickSettings ?? getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings as unknown as DockFullscreenQuickThemeSettings)
           : (lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings)}
         onQuickSettingsSave={async (settings) => {
-          const measurement = overlayVisible && activeSlideIndex !== null
-            ? await pushNoteSlide(activeSlideIndex, settings, { waitForFit: true })
-            : null;
-          const fittedSettings = applyMeasuredFontFitSettings(settings, measurement);
-          if (overlayMode === "fullscreen") setFullscreenQuickSettings(fittedSettings);
-          else setLowerThirdQuickSettings(fittedSettings);
+          const nextSettings = normalizeExplicitOutputFontSettings(settings, overlayMode);
+          if (overlayVisible && activeSlideIndex !== null) {
+            await pushNoteSlide(activeSlideIndex, nextSettings);
+          }
+          if (overlayMode === "fullscreen") setFullscreenQuickSettings(nextSettings);
+          else setLowerThirdQuickSettings(nextSettings);
         }}
         title={t("notes.theme")}
         subtitle={t("notes.themeDescription")}

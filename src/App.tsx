@@ -21,7 +21,6 @@ import FeatureGuard from "./components/FeatureGuard";
 import { useAuth } from "./contexts/AuthContext";
 import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
-import { BibleProvider } from "./bible/bibleStore";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
 import UpdateNotification from "./components/UpdateNotification";
@@ -66,7 +65,7 @@ import { checkEntitlementSync } from "./services/entitlementClient";
 import { getEffectivePlan } from "./services/licenseService";
 import type { Song } from "./worship/types";
 import type { MediaItem } from "./library/libraryTypes";
-import { deleteMedia, getAllMedia, saveMedia } from "./library/libraryDb";
+import { deleteMedia, deleteUploadedMediaFile, getAllMedia, saveMedia } from "./library/libraryDb";
 import { syncCustomThemesToDock, syncInstalledTranslationsToDock } from "./bible/bibleDb";
 import CreditsGuard from "./components/CreditsGuard";
 import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
@@ -175,7 +174,7 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
       artist: payload.artist?.trim() ?? "",
     },
     lyrics,
-    slides: generateSlides(lyrics, linesPerSlide, autoSplit),
+    slides: generateSlides(lyrics, linesPerSlide, autoSplit, { continuousLineCount: autoSplit }),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     importSourceName: payload.importSourceName ?? existing?.importSourceName,
@@ -578,7 +577,7 @@ function App() {
       if (cmd.type === "request-library-data") {
         try {
           const allSongs = await getAllSongs();
-          const media = getAllMedia();
+          const media = await getAllMedia();
           sendSongLimitToDock();
           const { limit: songLimit } = checkEntitlementSync("songs", getEffectivePlan(userRef.current));
           const songs = (songLimit > 0 && songLimit < 9999) ? allSongs.slice(0, songLimit) : allSongs;
@@ -604,10 +603,10 @@ function App() {
           if (!item?.id || !item?.name || !item?.type || !item?.url || !item?.createdAt) {
             throw new Error("Invalid media payload.");
           }
-          saveMedia(item);
+          await saveMedia(item);
           dockBridge.sendState({
             type: "state:media-data",
-            payload: getAllMedia(),
+            payload: await getAllMedia(),
             timestamp: Date.now(),
           });
         } catch (err) {
@@ -617,12 +616,14 @@ function App() {
 
       if (cmd.type === "media:delete") {
         try {
-          const payload = cmd.payload as { id?: string } | null;
+          const payload = cmd.payload as { id?: string; fileName?: string } | null;
           const id = payload?.id?.trim();
-          if (!id) {
+          const fileName = payload?.fileName?.trim();
+          if (!id && !fileName) {
             throw new Error("Invalid media delete payload.");
           }
-          await deleteMedia(id);
+          if (id) await deleteMedia(id);
+          if (fileName) await deleteUploadedMediaFile(fileName);
           const updated = await getAllMedia();
           dockBridge.sendState({
             type: "state:media-data",
@@ -1214,7 +1215,7 @@ function App() {
       }
       dockBridge.sendState({
         type: "state:media-data",
-        payload: getAllMedia(),
+        payload: await getAllMedia(),
         timestamp: Date.now(),
       });
     } catch (error) {
@@ -1516,14 +1517,14 @@ function App() {
                             <Route path="live-tools" element={<Navigate to="/" replace />} />
                             <Route path="live" element={<Navigate to="/" replace />} />
                             <Route path="service" element={<Navigate to="/" replace />} />
-                            <Route path="resources" element={<BibleProvider><ResourcesPage /></BibleProvider>} />
+                            <Route path="resources" element={<ResourcesPage />} />
                             <Route path="service-planner" element={<ServicePlannerPage />} />
 
                             <Route path="songs" element={<Navigate to="/resources?tab=worship" replace />} />
                             <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
                             <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
                             <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
-                            <Route path="settings" element={<BibleProvider><MVSettings /></BibleProvider>} />
+                            <Route path="settings" element={<MVSettings />} />
                             <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                             <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                             <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />

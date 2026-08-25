@@ -56,7 +56,6 @@ const LEGACY_SETTING_KEYS = [
   "dock-bible-lt-color-overrides",
   "dock-ministry-lower-third-size",
   "dock-scene-routing-v1",
-  "ocs-dock-spellcheck-dictionary",
   "ocs-dock-auto-advance-worship",
   "ocs-dock-auto-advance-notes",
   "ocs-dock-auto-advance-bible",

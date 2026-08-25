@@ -2,7 +2,7 @@
  * DockBottomToolbar.tsx — Shared bottom toolbar for Bible & Worship tabs
  *
  * Compact layout with a two-row fallback for ultra-narrow docks.
- * [ Full | LT ] [ centered action ] ... [ visibility ] [ inline action ] [ ⋯ ]
+ * [ Full | LT ] [ centered action ] ... [ visibility ] [ ⋯ ]
  */
 
 import { useCallback, useRef, useEffect, useState } from "react";
@@ -48,10 +48,6 @@ interface Props {
   sourceVisible?: boolean;
   /** Move the clear/visibility action into the overflow menu */
   clearInOverflow?: boolean;
-  /** Action that stays visible outside the overflow menu */
-  inlineAction?: React.ReactNode;
-  /** Actions moved into the overflow menu at very narrow dock widths */
-  narrowOverflowActions?: React.ReactNode;
   /** Optional action centered between the overlay mode and toolbar actions */
   centerAction?: React.ReactNode;
   /** Optional search/control card rendered inside the lower-third toolbar */
@@ -80,8 +76,6 @@ export default function DockBottomToolbar({
   clearDisabled = false,
   sourceVisible = true,
   clearInOverflow = false,
-  inlineAction,
-  narrowOverflowActions,
   centerAction,
   bottomPanel,
   bottomPanelToggle,
@@ -203,7 +197,6 @@ export default function DockBottomToolbar({
             {centerAction}
           </div>
         )}
-        {inlineAction}
         <button
           type="button"
           className="dock-btm-toolbar__icon-btn"
@@ -288,14 +281,8 @@ export default function DockBottomToolbar({
             renderVisibilityButton("dock-btm-toolbar__clear--inline")
           )}
 
-          {inlineAction && (
-            <div className="dock-btm-toolbar__inline-action">
-              {inlineAction}
-            </div>
-          )}
-
           {/* ⋯ Overflow menu for hidden actions */}
-          {(children || narrowOverflowActions || (onClear && clearInOverflow)) && (
+          {(children || (onClear && clearInOverflow)) && (
             <div className="dock-btm-overflow" ref={overflowRef}>
               <button
                 type="button"
@@ -309,20 +296,7 @@ export default function DockBottomToolbar({
               {showOverflow && (
                 <div className="dock-btm-overflow__menu" role="menu">
                   {onClear && clearInOverflow && renderVisibilityButton("dock-btm-toolbar__icon-btn")}
-                  {narrowOverflowActions && (
-                    <div
-                      className="dock-btm-overflow__narrow-actions"
-                      onClick={(event) => {
-                        const target = event.target as Element | null;
-                        if (target?.closest("[data-dock-close-overflow='true']")) {
-                          closeOverflow();
-                        }
-                      }}
-                    >
-                      {narrowOverflowActions}
-                    </div>
-                  )}
-              {children && (
+                  {children && (
                     <div
                       className="dock-btm-overflow__children"
                       onClick={(event) => {

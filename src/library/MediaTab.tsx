@@ -21,7 +21,7 @@ import Icon from "../components/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
-import { isSupportedMediaFile } from "../services/mediaValidation";
+import { getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
   isSupportedDocumentFile,
@@ -229,7 +229,10 @@ export async function saveLibraryMediaItem(
         pageNumber: documentPage.pageNumber,
       })
     : (overrideName ?? file.name).trim();
-  const category = file.type.startsWith("video") ? "video" : "image";
+  const category = getMediaKind(file);
+  if (!category) {
+    throw new Error(`Unsupported file type. Only image and video files are allowed.`);
+  }
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -452,11 +455,14 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   /* ---- actions ---- */
 
   const handleDelete = useCallback(
-    (id: string) => {
-      deleteMedia(id);
-      reload();
-      setDeleteConfirmId(null);
-      setMenuOpenId(null);
+    async (id: string) => {
+      try {
+        await deleteMedia(id);
+        await reload();
+      } finally {
+        setDeleteConfirmId(null);
+        setMenuOpenId(null);
+      }
     },
     [reload]
   );
@@ -539,8 +545,9 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
 
     // Pre-count incoming files by type
     for (const { file } of queueItems) {
-      if (file.type.startsWith("image/")) imagesToUpload++;
-      else if (file.type.startsWith("video/")) videosToUpload++;
+      const kind = getMediaKind(file);
+      if (kind === "image") imagesToUpload++;
+      else if (kind === "video") videosToUpload++;
     }
 
     // Check if each type exceeds quota
@@ -559,8 +566,9 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
       let videosUploaded = 0;
       for (const queueItem of queueItems) {
         const { file } = queueItem;
-        const isImage = file.type.startsWith("image/");
-        const isVideo = file.type.startsWith("video/");
+        const kind = getMediaKind(file);
+        const isImage = kind === "image";
+        const isVideo = kind === "video";
 
         // Check per-file quota — skip over-limit files, continue with valid ones
         if (isImage && liveImageLimit !== -1 && currentImageCount + imagesUploaded >= liveImageLimit) {
@@ -1465,7 +1473,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
     }
     setFile(f);
     setFileName(f.name);
-    setCategory(isSupportedDocumentFile(f) ? "document" : f.type.startsWith("video") ? "video" : "image");
+    setCategory(isSupportedDocumentFile(f) ? "document" : getMediaKind(f) ?? "image");
   }, [t]);
 
   const handleDrop = useCallback(
@@ -1484,8 +1492,8 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
     setSaving(true);
     try {
       const queueItems = await expandLibraryMediaImportFiles([file]);
-      const imagesToSave = queueItems.filter((item) => item.file.type.startsWith("image/")).length;
-      const videosToSave = queueItems.filter((item) => item.file.type.startsWith("video/")).length;
+      const imagesToSave = queueItems.filter((item) => getMediaKind(item.file) === "image").length;
+      const videosToSave = queueItems.filter((item) => getMediaKind(item.file) === "video").length;
       const { limit: imgLimit } = checkEntitlementSync("images", effectivePlan);
       const { limit: vidLimit } = checkEntitlementSync("videos", effectivePlan);
       const currentItems = await getAllMedia();

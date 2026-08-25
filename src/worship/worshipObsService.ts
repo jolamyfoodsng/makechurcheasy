@@ -11,6 +11,7 @@
 
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { buildVersionedOverlayUrl } from "../services/overlayVersion";
 import {
   registerInput,
   registerSceneItem,
@@ -303,7 +304,7 @@ class WorshipObsService {
     await presentationSceneManager.ensurePresentationScene();
 
     // ── 2. Update the browser source URL ──
-    const overlayUrl = `${getOverlayBaseUrlSync()}/mce-worship-overlay.html`;
+    const overlayUrl = buildVersionedOverlayUrl(getOverlayBaseUrlSync(), "mce-worship-overlay.html");
 
     let currentSourceName: string = WORSHIP_SOURCE_NAME;
     const regInput = await getInputBySlot(SLOT_INPUT);
@@ -775,7 +776,7 @@ class WorshipObsService {
 
       const packet = { slide, theme: themeForHash, live, blanked, timestamp: Date.now() };
       const base = getOverlayBaseUrlSync();
-      const baseUrl = `${base}/mce-worship-overlay.html`;
+      const baseUrl = buildVersionedOverlayUrl(base, "mce-worship-overlay.html");
       const overlayCss = this.buildOverlayDataCss(
         packet as unknown as Record<string, unknown>,
         customCss || "",

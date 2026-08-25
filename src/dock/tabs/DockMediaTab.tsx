@@ -32,7 +32,7 @@ import {
 import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { isInternalDockMediaItem, isInternalDockUploadFile } from "../internalMediaAssets";
 import { getDockPlan, requireEntitlement, showUpgradeModal } from "../dockEntitlement";
-import { isSupportedMediaFile } from "../../services/mediaValidation";
+import { getMediaKind, isSupportedMediaFile } from "../../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
   getDocumentTypeLabel,
@@ -179,7 +179,7 @@ interface DockMediaSessionState {
   textOverlayTargets: { active: boolean };
 }
 
-const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "avi", "mkv", "wmv", "flv"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"]);
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"]);
 const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
 const MEDIA_FOLDERS_STORAGE_KEY = "ocs-dock-media-folders-v1";
@@ -655,6 +655,10 @@ function DockMediaTab({
   const [animationCatalogTab, setAnimationCatalogTab] = useState<DockAnimationCatalogTab>("videos");
   const [templateVideoSearch, setTemplateVideoSearch] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  // Legacy uploads do not always contain the generated media timestamp in
+  // their filename. Keep a timestamp for those files so Newly Uploaded is a
+  // real ordering, not an empty-timestamp bucket at the end of the list.
+  const uploadedFileTimestampsRef = useRef(new Map<string, string>());
   const [uploadsLoading, setUploadsLoading] = useState(false);
   const [sendingFile, setSendingFile] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -898,7 +902,7 @@ function DockMediaTab({
     async function fetchDir(retries = 5) {
       for (let i = 0; i < retries; i++) {
         try {
-          const res = await fetch("/api/uploads-dir");
+          const res = await fetch("/api/uploads-dir", { cache: "no-store" });
           if (res.ok) {
             const data = await res.json();
             if (data.path && !cancelled) {
@@ -946,7 +950,7 @@ function DockMediaTab({
 
       // Strategy 2: fetch from overlay server (works when dock runs in OBS CEF)
       try {
-        const res = await fetch("/uploads/dock-media-library.json");
+        const res = await fetch("/uploads/dock-media-library.json", { cache: "no-store" });
         if (!res.ok) {
           // File doesn't exist yet — create it with an empty array so subsequent requests work
           if (res.status === 404) {
@@ -1067,11 +1071,30 @@ function DockMediaTab({
   const fetchUploads = useCallback(async () => {
     setUploadsLoading(true);
     try {
-      const resp = await fetch("/api/uploads");
+      const resp = await fetch("/api/uploads", { cache: "no-store" });
       if (resp.ok) {
         const files: string[] = await resp.json();
         if (mountedRef.current) {
-          setUploadedFiles(files.filter((file) => isMediaFile(file) && !isInternalUploadFile(file)));
+          const mediaFiles = files.filter((file) => isMediaFile(file) && !isInternalUploadFile(file));
+          const fetchedAt = Date.now();
+          const mediaFileSet = new Set(mediaFiles);
+          for (const file of uploadedFileTimestampsRef.current.keys()) {
+            if (!mediaFileSet.has(file)) uploadedFileTimestampsRef.current.delete(file);
+          }
+          mediaFiles.forEach((file, index) => {
+            const parsedTimestamp = extractUploadTimestamp(file);
+            if (parsedTimestamp) {
+              uploadedFileTimestampsRef.current.set(file, parsedTimestamp);
+            } else if (!uploadedFileTimestampsRef.current.has(file)) {
+              // The local uploads endpoint returns newest files first. The
+              // index fallback also keeps older filename formats sortable.
+              uploadedFileTimestampsRef.current.set(
+                file,
+                new Date(fetchedAt - index).toISOString(),
+              );
+            }
+          });
+          setUploadedFiles(mediaFiles);
         }
       }
     } catch {
@@ -1524,7 +1547,7 @@ function DockMediaTab({
         prefKey,
         name: getUploadDisplayName(file),
         kind,
-        createdAt: extractUploadTimestamp(file),
+        createdAt: extractUploadTimestamp(file) || uploadedFileTimestampsRef.current.get(file) || "",
         originLabel: t('media.uploads'),
         mimeLabel: file.split(".").pop()?.toUpperCase(),
         uploadFile: file,
@@ -2100,12 +2123,13 @@ function DockMediaTab({
     setOpenOptionsKey(null);
   }, []);
 
-  const removeMediaFromAppLibrary = useCallback((id: string) => {
+  const removeMediaFromAppLibrary = useCallback((id?: string, fileName?: string) => {
+    if (!id && !fileName) return;
     dockClient.sendCommand({
       type: "media:delete",
-      payload: { id },
+      payload: { ...(id ? { id } : {}), ...(fileName ? { fileName } : {}) },
       timestamp: Date.now(),
-      commandId: `dock-media-delete-${id}`,
+      commandId: `dock-media-delete-${id || fileName}`,
     });
     dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
   }, []);
@@ -2190,8 +2214,8 @@ function DockMediaTab({
     const currentVideos = currentMediaItems.filter((m) => m.type === "video").length;
 
     // Count incoming files per type
-    const incomingImages = queue.filter((f) => f.type.startsWith("image/")).length;
-    const incomingVideos = queue.filter((f) => f.type.startsWith("video/")).length;
+    const incomingImages = queue.filter((f) => getMediaKind(f) === "image").length;
+    const incomingVideos = queue.filter((f) => getMediaKind(f) === "video").length;
 
     // Check if each type would exceed quota
     const imageQuotaExceeded = imageLimit >= 0 && (currentImages + incomingImages) > imageLimit;
@@ -2207,8 +2231,8 @@ function DockMediaTab({
 
     // Filter queue to only allow files whose type is within quota
     const allowedQueueItems = queueItems.filter(({ file }) => {
-      if (file.type.startsWith("image/") && imageQuotaExceeded) return false;
-      if (file.type.startsWith("video/") && videoQuotaExceeded) return false;
+      if (getMediaKind(file) === "image" && imageQuotaExceeded) return false;
+      if (getMediaKind(file) === "video" && videoQuotaExceeded) return false;
       return true;
     });
     const allowedQueue = allowedQueueItems.map((item) => item.file);
@@ -2294,18 +2318,38 @@ function DockMediaTab({
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
+      const { getManagedUploadFileName, deleteUploadedMediaFile } = await import("../../library/libraryDb");
+      const fileName = entry.uploadFile || (entry.libraryItem ? getManagedUploadFileName(entry.libraryItem) : null);
+      try {
+        if (fileName) await deleteUploadedMediaFile(fileName);
+      } catch (error) {
+        console.warn("[DockMediaTab] Could not delete the uploaded media file:", error);
+        return;
+      }
+
       updateMediaPreference(entry.prefKey, { hidden: true });
       if (entry.libraryItem?.id) {
         removeMediaFromAppLibrary(entry.libraryItem.id);
         await deleteFromIndexedDb(entry.libraryItem.id);
-        setLibraryMedia((current) => current.filter((item) => item.id !== entry.libraryItem?.id));
-        persistLocalLibrary((current) => current.filter((item) => item.id !== entry.libraryItem?.id));
+      } else if (fileName) {
+        removeMediaFromAppLibrary(undefined, fileName);
       }
+
+      const itemId = entry.libraryItem?.id;
+      const matchesDeletedItem = (item: MediaItem) => (
+        item.id === itemId
+        || Boolean(fileName && getManagedUploadFileName(item) === fileName)
+      );
+      setUploadedFiles((current) => (fileName ? current.filter((file) => file !== fileName) : current));
+      setLibraryMedia((current) => current.filter((item) => !matchesDeletedItem(item)));
+      persistLocalLibrary((current) => current.filter((item) => !matchesDeletedItem(item)));
+      await refreshMedia();
+      dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
       if (activeTargets.active?.key === entry.key) {
         setOpenOptionsKey(null);
       }
     },
-    [activeTargets.active, deleteFromIndexedDb, persistLocalLibrary, removeMediaFromAppLibrary, updateMediaPreference],
+    [activeTargets.active, deleteFromIndexedDb, persistLocalLibrary, refreshMedia, removeMediaFromAppLibrary, updateMediaPreference],
   );
 
   const handleSendEntry = useCallback(
@@ -2702,7 +2746,7 @@ function DockMediaTab({
     }
   }, [presentationLinkMode]);
 
-  const clearAllMedia = useCallback(() => {
+  const clearAllMedia = useCallback(async () => {
     // Hide all entries via preferences
     setMediaPrefs((prev) => {
       const next = { ...prev };
@@ -2711,20 +2755,13 @@ function DockMediaTab({
       }
       return next;
     });
-    // Remove all library items
-    const libraryIds = mediaEntries
-      .filter((entry) => entry.libraryItem?.id)
-      .map((entry) => entry.libraryItem!.id);
-    if (libraryIds.length > 0) {
-      setLibraryMedia((current) => current.filter((item) => !libraryIds.includes(item.id)));
-      persistLocalLibrary((current) => current.filter((item) => !libraryIds.includes(item.id)));
-      for (const id of libraryIds) {
-        removeMediaFromAppLibrary(id);
-        void deleteFromIndexedDb(id);
-      }
+    // Delete the physical files as well as their library records so they are
+    // not rediscovered by the Background picker later.
+    for (const entry of mediaEntries) {
+      await deleteEntry(entry);
     }
     setShowClearAllConfirm(false);
-  }, [mediaEntries, deleteFromIndexedDb, persistLocalLibrary, removeMediaFromAppLibrary]);
+  }, [deleteEntry, mediaEntries]);
 
   const renderMediaCard = useCallback(
     (entry: DockMediaEntry) => {

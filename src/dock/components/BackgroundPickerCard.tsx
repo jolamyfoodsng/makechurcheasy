@@ -18,6 +18,7 @@ import {
 } from "../../services/dockPreferenceStorage";
 import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import Icon from "../DockIcon";
+import { dockClient } from "../../services/dockBridge";
 import {
   COMPARE_GAP_PRESETS,
   COMPARE_LAYOUT_PRESETS,
@@ -1229,7 +1230,7 @@ function ImageTab({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadMedia = async () => {
       setLoading(true);
       try {
         try {
@@ -1273,8 +1274,17 @@ function ImageTab({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void loadMedia();
+    const unsubscribe = dockClient.onState((message) => {
+      if (message.type === "state:media-data" || message.type === "state:library-updated") {
+        void loadMedia();
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -1430,7 +1440,7 @@ function VideoTab({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadMedia = async () => {
       setLoading(true);
       try {
         try {
@@ -1474,8 +1484,17 @@ function VideoTab({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void loadMedia();
+    const unsubscribe = dockClient.onState((message) => {
+      if (message.type === "state:media-data" || message.type === "state:library-updated") {
+        void loadMedia();
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const filtered = useMemo(() => {

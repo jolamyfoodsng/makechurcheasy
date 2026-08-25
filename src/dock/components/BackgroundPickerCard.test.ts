@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import type { BibleThemeSettings } from "../../bible/types";
 import { DEFAULT_THEME_SETTINGS } from "../../bible/types";
+import { getManagedUploadFileName } from "../../library/libraryDb";
 import overlayHtml from "../../../public/mce-bible-overlay.html?raw";
 import worshipOverlayHtml from "../../../public/mce-worship-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
@@ -23,6 +24,9 @@ import productionSettingsSource from "../../services/productionSettings.ts?raw";
 import bibleDbSource from "../../bible/bibleDb.ts?raw";
 
 const dockCssSource = readFileSync(fileURLToPath(new URL("../dock.css", import.meta.url)), "utf8");
+const libraryDbSource = readFileSync(fileURLToPath(new URL("../../library/libraryDb.ts", import.meta.url)), "utf8");
+const dockMediaTabSource = readFileSync(fileURLToPath(new URL("../tabs/DockMediaTab.tsx", import.meta.url)), "utf8");
+const appSource = readFileSync(fileURLToPath(new URL("../../App.tsx", import.meta.url)), "utf8");
 
 describe("Bible save feedback", () => {
   it("wires the explicit Bible save actions to the shared feedback toast", () => {
@@ -32,14 +36,15 @@ describe("Bible save feedback", () => {
   });
 });
 
-describe("Notes and Worship quick edits affordance", () => {
-  it("opens the full BackgroundPickerCard editor from the compact quick panel", () => {
-    expect(dockOutputQuickActionsSource).toContain("onOpenQuickEdits?: () => void;");
-    expect(dockOutputQuickActionsSource).toContain('Icon name="settings" size={14}');
-    expect(dockOutputQuickActionsSource).toContain("setOpen(false);");
-    expect(dockOutputQuickActionsSource).toContain("onOpenQuickEdits?.();");
-    expect(dockNotesTabSource).toContain("onOpenQuickEdits={() => setShowThemeSettings(true)}");
-    expect(dockWorshipTabSource).toContain("onOpenQuickEdits={() => setShowThemeSettings(true)}");
+describe("Quick edits affordance", () => {
+  it("opens the shared editor from the bottom overflow text action", () => {
+    expect(dockOutputQuickActionsSource).not.toContain("onOpenQuickEdits");
+    expect(dockBibleTabSource).toContain('onClick={() => openThemeSettings("text")}');
+    expect(dockNotesTabSource).toContain("onClick={() => setShowThemeSettings(true)}");
+    expect(dockWorshipTabSource).toContain("onClick={() => setShowThemeSettings(true)}");
+    expect(dockBibleTabSource).toContain("data-dock-close-overflow=\"true\"");
+    expect(dockNotesTabSource).toContain("data-dock-close-overflow=\"true\"");
+    expect(dockWorshipTabSource).toContain("data-dock-close-overflow=\"true\"");
   });
 });
 
@@ -293,6 +298,38 @@ describe("Background picker media URLs", () => {
       filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/live-video.mp4",
       diskFileName: "live-video.mp4",
     })).toBe("/uploads/live-video.mp4");
+  });
+});
+
+describe("Deleted media propagation", () => {
+  it("only resolves exact root uploads for physical deletion", () => {
+    expect(getManagedUploadFileName({
+      diskFileName: "deleted-image.png",
+      filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/deleted-image.png",
+      source: "local",
+    })).toBe("deleted-image.png");
+    expect(getManagedUploadFileName({
+      diskFileName: "../outside.png",
+      filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/outside.png",
+      source: "local",
+    })).toBeNull();
+    expect(getManagedUploadFileName({
+      diskFileName: "template.png",
+      filePath: "/Users/pc/Documents/MakeChurchEasy/uploads/backgrounds/template.png",
+      source: "template-cloudflare",
+    })).toBeNull();
+  });
+
+  it("removes the shared file and refreshes every picker copy after deletion", () => {
+    expect(libraryDbSource).toContain('invoke("delete_upload_file"');
+    expect(libraryDbSource).toContain("/api/delete-upload?fileName=");
+    expect(libraryDbSource).toContain("listingAvailable");
+    expect(dockMediaTabSource).toContain("deleteUploadedMediaFile");
+    expect(dockMediaTabSource).toContain("setUploadedFiles((current)");
+    expect(dockMediaTabSource).toContain("await refreshMedia()");
+    expect(backgroundPickerSource).toContain('message.type === "state:media-data"');
+    expect(backgroundPickerSource).toContain('message.type === "state:library-updated"');
+    expect(appSource).toContain("deleteUploadedMediaFile(fileName)");
   });
 });
 

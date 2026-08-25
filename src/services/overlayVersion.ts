@@ -2,9 +2,9 @@
 // document whenever the bundled overlay HTML changes. The fallback keeps the
 // module usable in tooling that does not load the Vite config.
 export const OVERLAY_HTML_VERSION =
-  typeof __MCE_OVERLAY_HTML_VERSION__ !== "undefined"
+  `${typeof __MCE_OVERLAY_HTML_VERSION__ !== "undefined"
     ? __MCE_OVERLAY_HTML_VERSION__
-    : `dev-${typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "overlay"}`;
+    : `dev-${typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "overlay"}`}-verse-markers-v5-pinned-to-text`;
 
 export function buildVersionedOverlayUrl(
   baseUrl: string,

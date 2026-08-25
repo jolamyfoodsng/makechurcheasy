@@ -198,7 +198,8 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-container">
+    <BibleProvider>
+      <div className="app-container">
       <a className="mce-skip-link" href="#app-main-content">
         {t("mvShell.skipToContent")}
       </a>
@@ -354,8 +355,7 @@ export function AppShell() {
         </div>
       )}
 
-      {/* ── Global Command Palette ── */}
-      <BibleProvider>
+        {/* ── Global Command Palette ── */}
         <BibleCommandPalette
           open={showCommandPalette}
           initialQuery=""
@@ -364,7 +364,7 @@ export function AppShell() {
           onSelectTemplate={handleCommandPaletteSelectTemplate}
           onNavigate={navigate}
         />
-      </BibleProvider>
-    </div>
+      </div>
+    </BibleProvider>
   );
 }
