@@ -251,6 +251,49 @@
       overflow-wrap: break-word;
     }
 
+    #verse-text .verse-text__line,
+    #lt-verse-text .verse-text__line,
+    .compare-column__verse .verse-text__line,
+    .lt-compare-col .verse-text__line {
+      display: block;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+    }
+
+    #verse-text .verse-text__number,
+    #lt-verse-text .verse-text__number,
+    .compare-column__verse .verse-text__number,
+    .lt-compare-col .verse-text__number {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1.5em;
+      font-size: 0.5em;
+      line-height: 1.15;
+      font-weight: 700;
+      text-align: right;
+      opacity: 0.82;
+      -webkit-text-stroke: 0 transparent;
+    }
+
+    #verse-text .verse-text__body,
+    #lt-verse-text .verse-text__body,
+    .compare-column__verse .verse-text__body,
+    .lt-compare-col .verse-text__body {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    #verse-text .verse-text__line + .verse-text__line,
+    #lt-verse-text .verse-text__line + .verse-text__line,
+    .compare-column__verse .verse-text__line + .verse-text__line,
+    .lt-compare-col .verse-text__line + .verse-text__line {
+      margin-top: 0.18em;
+    }
+
     #translation-text {
       display: none;
       width: 100%;
@@ -901,6 +944,66 @@
         return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
+      function renderVerseLines(text, lineCount) {
+        if (typeof text !== 'string') return '';
+        const hideVerseNumbers = Number(lineCount) === 1;
+        return text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const match = line.match(/^(?:\[(\d+)\]|(\d+)[.)])\s+([\s\S]+)$/);
+            if (!match || hideVerseNumbers) return `<span class="verse-text__line"><span class="verse-text__body">${safeSupText(match ? match[3] : line)}</span></span>`;
+            const number = match[1] || match[2];
+            return `<span class="verse-text__line"><span class="verse-text__number" aria-hidden="true">${safeSupText(number)}</span><span class="verse-text__body">${safeSupText(match[3])}</span></span>`;
+          })
+          .join('');
+      }
+
+      function positionVerseNumbers(rootNode) {
+        if (!rootNode) return;
+        const stage = document.getElementById('overlay-stage');
+        const stageRect = stage?.getBoundingClientRect();
+        const stageWidth = stage?.offsetWidth || 1920;
+        const stageHeight = stage?.offsetHeight || 1080;
+        const scaleX = stageRect?.width > 0 ? stageRect.width / stageWidth : 1;
+        const scaleY = stageRect?.height > 0 ? stageRect.height / stageHeight : 1;
+        const rootFontSize = Number.parseFloat(getComputedStyle(rootNode).fontSize) || 48;
+        const gap = Math.max(3, rootFontSize * 0.12);
+
+        rootNode.querySelectorAll('.verse-text__line').forEach((line) => {
+          const marker = line.querySelector('.verse-text__number');
+          const body = line.querySelector('.verse-text__body');
+          if (!marker || !body) return;
+
+          const range = document.createRange();
+          range.selectNodeContents(body);
+          const firstTextRect = Array.from(range.getClientRects())
+            .find((rect) => rect.width > 0 && rect.height > 0);
+          if (!firstTextRect) return;
+
+          marker.style.left = '0px';
+          marker.style.top = '0px';
+          const lineRect = line.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
+          const markerHeight = marker.offsetHeight || markerRect.height / scaleY;
+          const firstTextLeft = (firstTextRect.left - lineRect.left) / scaleX;
+          const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
+          const firstTextHeight = firstTextRect.height / scaleY;
+
+          // Pin the marker to the actual first rendered letter, not to the
+          // full-width text container. This survives auto-fit and wrapping.
+          marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
+        });
+      }
+
+      function positionAllVerseNumbers() {
+        [verseText, ltVerseText, compareTextLeft, compareTextRight]
+          .forEach(positionVerseNumbers);
+      }
+
       const PATTERN_CSS = {
         'dots': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'2\' cy=\'2\' r=\'1.5\' fill=\'rgba(255,255,255,0.15)\'/%3E%3C/svg%3E")',
         'lines': 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cline x1=\'0\' y1=\'20\' x2=\'40\' y2=\'20\' stroke=\'rgba(255,255,255,0.08)\' stroke-width=\'1\'/%3E%3C/svg%3E")',
@@ -1063,12 +1166,18 @@
         }
       }
 
+      function normalizeSlideDisplayText(text) {
+        return typeof text === 'string'
+          ? text.replace(/<br\s*\/?>/gi, '\n').replace(/\r\n?/g, '\n').trim()
+          : '';
+      }
+
       function getSlideTranslationText(slide) {
-        return typeof slide?.translationText === 'string' ? slide.translationText.trim() : '';
+        return normalizeSlideDisplayText(slide?.translationText);
       }
 
       function getSlideDisplayText(slide) {
-        const original = typeof slide?.text === 'string' ? slide.text : '';
+        const original = normalizeSlideDisplayText(slide?.text);
         const translation = getSlideTranslationText(slide);
         if (!translation || slide?.translationOrder !== 'translation-first') {
           return { primary: original, secondary: translation };
@@ -1748,6 +1857,7 @@
           if (activeMode === 'lower-third') autoScaleLowerThirdContent();
           else if (compareLayout.classList.contains('is-visible')) autoScaleCompareContent();
           else autoScaleContent();
+          positionAllVerseNumbers();
         });
       }
 
@@ -2280,8 +2390,8 @@
           compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
           compareTranslationLeft.textContent = '';
           compareTranslationRight.textContent = '';
-          compareTextLeft.innerHTML = safeSupText(applyDisplayTextTransform(l.text, data.theme && data.theme.textTransform));
-          compareTextRight.innerHTML = safeSupText(applyDisplayTextTransform(r.text, data.theme && data.theme.textTransform));
+          compareTextLeft.innerHTML = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(l.text), data.theme && data.theme.textTransform), sl.lineCount);
+          compareTextRight.innerHTML = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(r.text), data.theme && data.theme.textTransform), sl.lineCount);
           const clMode = sl.compareLayout || 'line-by-line';
           currentCompareLayout = clMode;
           if (clMode === 'line-by-line') {
@@ -2295,7 +2405,7 @@
           verseContainer.classList.remove('is-hidden');
           const textTransform = data.theme && data.theme.textTransform;
           const displayText = getSlideDisplayText(sl);
-          verseText.innerHTML = safeSupText(applyDisplayTextTransform(displayText.primary, textTransform));
+          verseText.innerHTML = renderVerseLines(applyDisplayTextTransform(displayText.primary, textTransform), sl.lineCount);
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
@@ -2321,8 +2431,8 @@
           const [l, r] = cc;
           const layoutMode = sl.compareLayout || 'line-by-line';
           const textTransform = data.theme && data.theme.textTransform;
-          const lText = safeSupText(applyDisplayTextTransform(l.text || '', textTransform));
-          const rText = safeSupText(applyDisplayTextTransform(r.text || '', textTransform));
+          const lText = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(l.text), textTransform), sl.lineCount);
+          const rText = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(r.text), textTransform), sl.lineCount);
           const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
           const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
           if (layoutMode === 'side-by-side') {
@@ -2335,7 +2445,7 @@
         } else {
           const textTransform = data.theme && data.theme.textTransform;
           const displayText = getSlideDisplayText(sl);
-          ltVerseText.innerHTML = safeSupText(applyDisplayTextTransform(displayText.primary, textTransform)); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          ltVerseText.innerHTML = renderVerseLines(applyDisplayTextTransform(displayText.primary, textTransform), sl.lineCount); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
           renderTranslationBlock(ltTranslationText, displayText.secondary, textTransform);
         }
 

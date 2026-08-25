@@ -87,6 +87,7 @@ export interface DockBiblePushData {
   book: string;
   chapter: number;
   verse: number;
+  lineCount?: number;
   verseEnd?: number;
   verseRange?: string;
   rawReferenceLabel?: string;
@@ -319,6 +320,7 @@ type PrimeBibleOverlayData = {
   book: string;
   chapter: number;
   verse: number;
+  lineCount?: number;
   verseEnd?: number;
   verseRange?: string;
   rawReferenceLabel?: string;
@@ -1737,6 +1739,7 @@ class DockObsClient {
       book: string;
       chapter: number;
       verse: number;
+      lineCount?: number;
       verseEnd?: number;
       verseRange?: string;
       referenceLabel?: string;
@@ -1775,6 +1778,7 @@ class DockObsClient {
       book: data.book,
       chapter: data.chapter,
       verse: data.verse,
+      lineCount: data.lineCount ?? null,
       verseEnd: data.verseEnd ?? null,
       verseRange: data.verseRange ?? "",
       referenceLabel: data.referenceLabel ?? "",
@@ -6121,6 +6125,7 @@ class DockObsClient {
     verseRange = "",
     translationText = "",
     translationOrder: DockTranslationOrder = "original-first",
+    lineCount?: number,
   ): Record<string, unknown> {
     const slide: Record<string, unknown> = {
       id: "dock-bible-slide",
@@ -6130,6 +6135,9 @@ class DockObsClient {
       index: 0,
       total: 1,
     };
+    if (Number.isFinite(lineCount) && Number(lineCount) > 0) {
+      slide.lineCount = Math.round(Number(lineCount));
+    }
     const cleanTranslation = translationText.trim();
     if (cleanTranslation) {
       slide.translationText = cleanTranslation;
@@ -6201,6 +6209,7 @@ class DockObsClient {
         verseRange: displayVerseRange,
         index: 0,
         total: 1,
+        lineCount: data.lineCount,
         translationA: data.translationA ?? compareColumns[0].translation,
         translationB: data.translationB ?? compareColumns[1].translation,
         columns: compareColumns.map((column) => ({
@@ -6214,7 +6223,7 @@ class DockObsClient {
           verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
         })),
       }
-      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
     const packet: Record<string, unknown> = {
       slide,
       theme: cleanSettings ?? null,
@@ -6297,6 +6306,7 @@ class DockObsClient {
         verseRange: displayVerseRange,
         index: 0,
         total: 1,
+        lineCount: data.lineCount,
         translationA: data.translationA ?? compareColumns[0].translation,
         translationB: data.translationB ?? compareColumns[1].translation,
         columns: compareColumns.map((column) => ({
@@ -6310,7 +6320,7 @@ class DockObsClient {
           verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
         })),
       }
-      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
     const packet: Record<string, unknown> = {
       slide,
       theme: cleanSettings ?? null,
@@ -6596,6 +6606,7 @@ class DockObsClient {
           verseRange: backgroundOnly ? "" : verseRange,
           index: 0,
           total: 1,
+          lineCount: data.lineCount,
           translationA: data.translationA ?? compareColumns[0].translation,
           translationB: data.translationB ?? compareColumns[1].translation,
           columns: compareColumns.map((column) => ({
@@ -6609,7 +6620,7 @@ class DockObsClient {
             verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
           })),
         }
-        : this.buildBibleSlide(text, referenceText, backgroundOnly ? "" : verseRange);
+        : this.buildBibleSlide(text, referenceText, backgroundOnly ? "" : verseRange, "", "original-first", data.lineCount);
       const packet: Record<string, unknown> = {
         slide,
         theme: cleanSettings ?? null,
@@ -7002,7 +7013,7 @@ class DockObsClient {
 
           const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
           themeCss = css;
-          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
           cssOverlayPacket = {
             slide,
             theme: ltClean ?? null,
@@ -7023,7 +7034,7 @@ class DockObsClient {
             await this.ensureTickerAboveSource(sceneName, browserSourceName);
           }
 
-          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
           cssOverlayPacket = {
             slide,
             theme: null,
@@ -7073,6 +7084,7 @@ class DockObsClient {
             verseRange: displayVerseRange,
             index: 0,
             total: 1,
+            lineCount: data.lineCount,
             translationA: data.translationA ?? compareColumns[0].translation,
             translationB: data.translationB ?? compareColumns[1].translation,
             columns: compareColumns.map((column) => ({
@@ -7093,6 +7105,7 @@ class DockObsClient {
             verseRange: displayVerseRange,
             index: 0,
             total: 1,
+            lineCount: data.lineCount,
           };
         const packet = {
           slide,
@@ -7376,6 +7389,7 @@ class DockObsClient {
    */
   async pushBibleOverlayFast(
     data: {
+    lineCount?: number;
     verseText?: string;
     referenceText?: string;
     verseRange?: string;
@@ -7407,6 +7421,7 @@ class DockObsClient {
         book: "",
         chapter: 1,
         verse: 1,
+        lineCount: data.lineCount,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
         displayReferenceLabel: refText,
@@ -7440,6 +7455,7 @@ class DockObsClient {
         book: "",
         chapter: 1,
         verse: 1,
+        lineCount: data.lineCount,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
         displayReferenceLabel: refText,
@@ -7490,6 +7506,9 @@ class DockObsClient {
         data.verseText ?? "",
         data.referenceText ?? "",
         data.verseRange ?? "",
+        "",
+        "original-first",
+        data.lineCount,
       );
 
       const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);

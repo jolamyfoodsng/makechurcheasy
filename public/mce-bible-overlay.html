@@ -256,6 +256,35 @@
     .compare-column__verse .verse-text__line,
     .lt-compare-col .verse-text__line {
       display: block;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+    }
+
+    #verse-text .verse-text__number,
+    #lt-verse-text .verse-text__number,
+    .compare-column__verse .verse-text__number,
+    .lt-compare-col .verse-text__number {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1.5em;
+      font-size: 0.5em;
+      line-height: 1.15;
+      font-weight: 700;
+      text-align: right;
+      opacity: 0.82;
+      -webkit-text-stroke: 0 transparent;
+    }
+
+    #verse-text .verse-text__body,
+    #lt-verse-text .verse-text__body,
+    .compare-column__verse .verse-text__body,
+    .lt-compare-col .verse-text__body {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }
 
     #verse-text .verse-text__line + .verse-text__line,
@@ -1094,14 +1123,64 @@
         if (typeof h !== 'string') return '';
         return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
-      function renderVerseLines(text) {
+      function renderVerseLines(text, lineCount) {
         if (typeof text !== 'string') return '';
+        const hideVerseNumbers = Number(lineCount) === 1;
         return text
           .split(/\r?\n/)
           .map((line) => line.trim())
           .filter(Boolean)
-          .map((line) => `<span class="verse-text__line">${safeSupText(line)}</span>`)
+          .map((line) => {
+            const match = line.match(/^(?:\[(\d+)\]|(\d+)[.)])\s+([\s\S]+)$/);
+            if (!match || hideVerseNumbers) return `<span class="verse-text__line"><span class="verse-text__body">${safeSupText(match ? match[3] : line)}</span></span>`;
+            const number = match[1] || match[2];
+            return `<span class="verse-text__line"><span class="verse-text__number" aria-hidden="true">${safeSupText(number)}</span><span class="verse-text__body">${safeSupText(match[3])}</span></span>`;
+          })
           .join('');
+      }
+
+      function positionVerseNumbers(rootNode) {
+        if (!rootNode) return;
+        const stage = document.getElementById('overlay-stage');
+        const stageRect = stage?.getBoundingClientRect();
+        const stageWidth = stage?.offsetWidth || 1920;
+        const stageHeight = stage?.offsetHeight || 1080;
+        const scaleX = stageRect?.width > 0 ? stageRect.width / stageWidth : 1;
+        const scaleY = stageRect?.height > 0 ? stageRect.height / stageHeight : 1;
+        const rootFontSize = Number.parseFloat(getComputedStyle(rootNode).fontSize) || 48;
+        const gap = Math.max(3, rootFontSize * 0.12);
+
+        rootNode.querySelectorAll('.verse-text__line').forEach((line) => {
+          const marker = line.querySelector('.verse-text__number');
+          const body = line.querySelector('.verse-text__body');
+          if (!marker || !body) return;
+
+          const range = document.createRange();
+          range.selectNodeContents(body);
+          const firstTextRect = Array.from(range.getClientRects())
+            .find((rect) => rect.width > 0 && rect.height > 0);
+          if (!firstTextRect) return;
+
+          marker.style.left = '0px';
+          marker.style.top = '0px';
+          const lineRect = line.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
+          const markerHeight = marker.offsetHeight || markerRect.height / scaleY;
+          const firstTextLeft = (firstTextRect.left - lineRect.left) / scaleX;
+          const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
+          const firstTextHeight = firstTextRect.height / scaleY;
+
+          // Pin the marker to the actual first rendered letter, not to the
+          // full-width text container. This survives auto-fit and wrapping.
+          marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
+        });
+      }
+
+      function positionAllVerseNumbers() {
+        [verseText, ltVerseText, compareTextLeft, compareTextRight, compareTextThird]
+          .forEach(positionVerseNumbers);
       }
 
       const PATTERN_CSS = {
@@ -1413,9 +1492,9 @@
         return ref;
       }
 
-      function renderCompareLineUnit(column) {
+      function renderCompareLineUnit(column, lineCount) {
         const translation = String(column?.translation || '').trim().toUpperCase();
-        const text = renderVerseLines(String(column?.text || ''));
+        const text = renderVerseLines(String(column?.text || ''), lineCount);
         if (!translation && !text) return '';
         const label = translation
           ? `<span class="compare-line-unit__translation">${escapeHtml(translation)}</span>`
@@ -1426,8 +1505,8 @@
         return `<div class="compare-line-unit">${label}${body}</div>`;
       }
 
-      function renderCompareLineByLineContent(leftColumn, rightColumn) {
-        return `<div class="compare-line-list">${renderCompareLineUnit(leftColumn)}${renderCompareLineUnit(rightColumn)}</div>`;
+      function renderCompareLineByLineContent(leftColumn, rightColumn, lineCount) {
+        return `<div class="compare-line-list">${renderCompareLineUnit(leftColumn, lineCount)}${renderCompareLineUnit(rightColumn, lineCount)}</div>`;
       }
 
       function isTransparentBackgroundColor(color) {
@@ -2272,6 +2351,7 @@
         fitRafId = requestAnimationFrame(() => {
           fitRafId = 0;
           autoScaleActiveContent();
+          positionAllVerseNumbers();
         });
       }
 
@@ -2971,7 +3051,7 @@
             compareReferenceLeft.textContent = formatUnifiedCompareReference(l, r);
             compareReferenceRight.textContent = '';
             compareReferenceThird.textContent = '';
-            compareTextLeft.innerHTML = renderCompareLineByLineContent(l, r);
+            compareTextLeft.innerHTML = renderCompareLineByLineContent(l, r, sl.lineCount);
             compareTextRight.innerHTML = '';
             compareTextThird.innerHTML = '';
           } else {
@@ -2984,7 +3064,7 @@
               if (!textNode || !referenceNode) return;
               const value = column || {};
               referenceNode.textContent = formatCompareReference(value.reference, value.translation);
-              textNode.innerHTML = renderVerseLines(value.text);
+              textNode.innerHTML = renderVerseLines(value.text, sl.lineCount);
             });
           }
         }
@@ -2996,7 +3076,7 @@
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
-          verseText.innerHTML = renderVerseLines(sl.text);
+          verseText.innerHTML = renderVerseLines(sl.text, sl.lineCount);
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
@@ -3026,7 +3106,7 @@
           const layoutMode = compareMode === 'passages' ? 'side-by-side' : resolveCompareLayoutMode(data, sl);
           ltVerseText.classList.toggle('is-multi-passage', compareMode === 'passages');
           const blocks = cc.map((column) => {
-            const text = renderVerseLines(column.text || '');
+            const text = renderVerseLines(column.text || '', sl.lineCount);
             const refText = formatCompareReference(column.reference, column.translation);
             const ref = refText ? `<span class="lt-compare-ref">${escapeHtml(refText)}</span>` : '';
             return `<div class="lt-compare-unit">${ref}${text ? `<div class="lt-compare-col">${text}</div>` : ''}</div>`;
@@ -3040,7 +3120,7 @@
           ltRefText.style.display = 'none';
         } else {
           ltVerseText.classList.remove('is-multi-passage');
-          ltVerseText.innerHTML = renderVerseLines(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
+          ltVerseText.innerHTML = renderVerseLines(sl.text, sl.lineCount); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt; ltRefText.style.display = rt ? '' : 'none';
         }
 
         try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-bible-overlay lower-third theme error', error); }
