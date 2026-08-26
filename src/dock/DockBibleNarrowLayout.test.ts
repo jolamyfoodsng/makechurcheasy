@@ -31,4 +31,10 @@ describe("Dock Bible narrow layout", () => {
     expect(dockCssSource).toContain("@media (max-width: 250px) {\n  .dock-bible-search-row {");
     expect(dockCssSource).toContain("flex-wrap: nowrap;");
   });
+
+  it("keeps the Bible search control at a shallow toolbar height", () => {
+    expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row {\n  min-height: 0;\n  padding-block: 4px;");
+    expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row__input .dock_search__input {\n  height: 24px;\n  min-height: 24px;");
+    expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,");
+  });
 });

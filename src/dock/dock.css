@@ -37028,6 +37028,31 @@ button.dock-btm-toolbar__clear--inline,
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Keep the Bible search control shallow so it does not consume the reader's
+   vertical space when the search row is docked at the top or bottom. */
+.dock-module--bible .dock-bible-search-row {
+  min-height: 0;
+  padding-block: 4px;
+}
+
+.dock-module--bible .dock-bible-search-row__input .dock-bible-search-bar {
+  min-height: 24px;
+  padding-block: 0;
+}
+
+.dock-module--bible .dock-bible-search-row__input .dock_search__input {
+  height: 24px;
+  min-height: 24px;
+  padding-block: 2px;
+  line-height: 18px;
+}
+
+.dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,
+.dock-module--bible .dock-bible-search-row__translation .dock-bible-controls__translation-select {
+  height: 24px;
+  min-height: 24px;
+}
+
 @media (max-width: 520px) {
   .dock-bible-passage-reader__grid {
     grid-template-columns: minmax(0, 1fr);
