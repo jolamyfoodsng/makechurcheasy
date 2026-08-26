@@ -17,6 +17,13 @@ import type { DockStagedItem } from "../dockTypes";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { MediaItem } from "../../library/libraryTypes";
+import {
+  compareMediaItemsNewest,
+  getMediaSortTimestamp,
+  getMediaStableKey,
+  getUploadTimestampFromFileName,
+  type MediaOrderMetadata,
+} from "../../library/mediaOrdering";
 import { BACKGROUND_PATTERNS, type BackgroundPattern } from "../../library/backgroundAssets";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { track } from "../../services/analytics";
@@ -24,6 +31,7 @@ import { trackMediaPresented } from "../../services/tracking";
 import {
   downloadTemplatePictureToLibrary,
   downloadTemplateVideoToLibrary,
+  compareTemplateAssetsNewest,
   fetchTemplatePictures,
   fetchTemplateVideos,
   type TemplatePictureAsset,
@@ -107,6 +115,7 @@ interface DockMediaEntry {
   name: string;
   kind: DockMediaKind;
   createdAt: string;
+  uploadedAt?: string;
   originLabel: string;
   mimeLabel?: string;
   thumbnailUrl?: string;
@@ -263,13 +272,7 @@ function isInternalUploadFile(name: string): boolean {
 
 /** Extract createdAt ISO string from "media_<timestamp>_<safeName>" filename. */
 function extractUploadTimestamp(filename: string): string {
-  const match = filename.match(/^media_(\d{10,13})_/);
-  if (!match) return "";
-  const ts = Number(match[1]);
-  // Accept both seconds (10 digits) and milliseconds (13 digits)
-  const ms = match[1].length <= 10 ? ts * 1000 : ts;
-  const d = new Date(ms);
-  return Number.isFinite(d.getTime()) ? d.toISOString() : "";
+  return getUploadTimestampFromFileName(filename);
 }
 
 /** Show the user-facing filename instead of the generated disk-storage prefix. */
@@ -433,9 +436,9 @@ function dedupeMediaItems(items: MediaItem[]): MediaItem[] {
   const seen = new Set<string>();
   return items
     .slice()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort(compareMediaItemsNewest)
     .filter((item) => {
-      const key = `${item.filePath || ""}|${item.diskFileName || ""}|${item.name}|${item.type}`;
+      const key = getMediaStableKey(item);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -517,6 +520,7 @@ function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel
       : item.name,
     kind: item.type,
     createdAt: item.createdAt,
+    uploadedAt: item.uploadedAt,
     originLabel: isDocumentPage ? "Document" : originLabel,
     mimeLabel: isDocumentPage
       ? `Page ${item.documentPageNumber}${item.documentPageCount ? `/${item.documentPageCount}` : ""}`
@@ -527,6 +531,19 @@ function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel
     durationSec: item.durationSec,
     fileSize: item.fileSize,
     playingKey: `library:${item.id}`,
+  };
+}
+
+function getDockMediaOrderMetadata(entry: DockMediaEntry): MediaOrderMetadata {
+  return {
+    createdAt: entry.createdAt,
+    uploadedAt: entry.uploadedAt || entry.libraryItem?.uploadedAt,
+    downloadedAt: entry.libraryItem?.downloadedAt,
+    diskFileName: entry.uploadFile || entry.libraryItem?.diskFileName,
+    filePath: entry.libraryItem?.filePath,
+    id: entry.libraryItem?.id || entry.key,
+    name: entry.name,
+    type: entry.kind,
   };
 }
 
@@ -716,6 +733,9 @@ function DockMediaTab({
   const templatePicturesLoadAttemptedRef = useRef(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaPollBusyRef = useRef(false);
+  const libraryLoadRequestRef = useRef(0);
+  const uploadListRequestRef = useRef(0);
+  const pendingMediaItemsRef = useRef(new Map<string, MediaItem>());
   const [previewPlaying, setPreviewPlaying] = useState(false);
 
   const animationEntitlement = useMemo(
@@ -929,24 +949,56 @@ function DockMediaTab({
   const [libraryMedia, setLibraryMedia] = useState<MediaItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
 
+  const rememberPendingMedia = useCallback((items: MediaItem[]) => {
+    for (const item of items) {
+      pendingMediaItemsRef.current.set(getMediaStableKey(item), item);
+    }
+  }, []);
+
+  const applyLibraryMediaSnapshot = useCallback((items: MediaItem[]) => {
+    const filteredItems = items.filter((item) => !isInternalDockMediaItem(item));
+    const incomingKeys = new Set(filteredItems.map((item) => getMediaStableKey(item)));
+    const stillPending: MediaItem[] = [];
+
+    for (const [key, item] of pendingMediaItemsRef.current) {
+      if (incomingKeys.has(key)) {
+        // The authoritative snapshot has caught up with this upload.
+        pendingMediaItemsRef.current.delete(key);
+      } else {
+        // Keep a just-uploaded item visible if this snapshot was produced
+        // before the save finished.
+        stillPending.push(item);
+      }
+    }
+
+    setLibraryMedia(dedupeMediaItems([...filteredItems, ...stillPending]));
+  }, []);
+
   const loadLibraryMedia = useCallback(async () => {
-    console.log("[UPLOAD] loadLibraryMedia: start");
+    const requestId = ++libraryLoadRequestRef.current;
+    const isCurrentRequest = () => mountedRef.current && requestId === libraryLoadRequestRef.current;
+    if (!mountedRef.current) return;
+
+    console.log("[UPLOAD] loadLibraryMedia: start", { requestId });
     setLibraryLoading(true);
     try {
       // Strategy 1: try IndexedDB (async)
       try {
         const { getAllMedia } = await import("../../library/libraryDb");
         const all = await getAllMedia();
-        console.log("[UPLOAD] loadLibraryMedia: IndexedDB returned", all.length, "items");
+        console.log("[UPLOAD] loadLibraryMedia: IndexedDB returned", all.length, "items", { requestId });
+        if (!isCurrentRequest()) return;
         if (all.length > 0) {
-          setLibraryMedia(all.filter((item) => !isInternalDockMediaItem(item)));
-          console.log("[UPLOAD] loadLibraryMedia: set libraryMedia from IndexedDB (overwrites current state)");
+          applyLibraryMediaSnapshot(all);
+          console.log("[UPLOAD] loadLibraryMedia: applied current IndexedDB snapshot", { requestId });
           return;
         }
       } catch (err) {
         console.log("[UPLOAD] loadLibraryMedia: IndexedDB unavailable →", err);
         // IndexedDB not available, fall through to JSON fetch.
       }
+
+      if (!isCurrentRequest()) return;
 
       // Strategy 2: fetch from overlay server (works when dock runs in OBS CEF)
       try {
@@ -965,10 +1017,11 @@ function DockMediaTab({
           throw new Error(`HTTP ${res.status}`);
         }
         const all = await res.json();
-        console.log("[UPLOAD] loadLibraryMedia: JSON fetch returned", Array.isArray(all) ? all.length : 0, "items");
+        console.log("[UPLOAD] loadLibraryMedia: JSON fetch returned", Array.isArray(all) ? all.length : 0, "items", { requestId });
+        if (!isCurrentRequest()) return;
         if (Array.isArray(all) && all.length > 0) {
-          setLibraryMedia((all as MediaItem[]).filter((item) => !isInternalDockMediaItem(item)));
-          console.log("[UPLOAD] loadLibraryMedia: set libraryMedia from JSON");
+          applyLibraryMediaSnapshot(all as MediaItem[]);
+          console.log("[UPLOAD] loadLibraryMedia: applied current JSON snapshot", { requestId });
           return;
         }
       } catch (err) {
@@ -977,9 +1030,9 @@ function DockMediaTab({
       }
       console.log("[UPLOAD] loadLibraryMedia: no data found, keeping current state");
     } finally {
-      setLibraryLoading(false);
+      if (isCurrentRequest()) setLibraryLoading(false);
     }
-  }, []);
+  }, [applyLibraryMediaSnapshot]);
 
   const loadTemplateVideos = useCallback(async () => {
     if (animationsLocked) return;
@@ -1019,6 +1072,15 @@ function DockMediaTab({
     }
   }, [animationsLocked, t]);
 
+  const openAnimationsTab = useCallback(() => {
+    if (animationsLocked) return;
+    setBrowserTab("animations");
+    // Refresh when the tab is opened so a newly added template is immediately
+    // available and is placed at the top by the catalog sort.
+    void loadTemplateVideos();
+    void loadTemplatePictures();
+  }, [animationsLocked, loadTemplatePictures, loadTemplateVideos]);
+
   const openAddMediaModal = useCallback(async (tab: DockAddMediaTab = "background") => {
     if (tab === "template-videos" && !(await requireEntitlement("slideshow", 0))) return;
     setAddMediaTab(tab);
@@ -1045,7 +1107,12 @@ function DockMediaTab({
   useEffect(() => {
     const unsub = dockClient.onState((msg) => {
       if (msg.type === "state:media-data" && Array.isArray(msg.payload)) {
-        setLibraryMedia((msg.payload as MediaItem[]).filter((item) => !isInternalDockMediaItem(item)));
+        // A bridge snapshot is the authoritative result of the app's latest
+        // library read. Do not let an older IndexedDB/HTTP read finish after
+        // it and replace the snapshot with stale ordering or data.
+        libraryLoadRequestRef.current += 1;
+        applyLibraryMediaSnapshot(msg.payload as MediaItem[]);
+        setLibraryLoading(false);
         return;
       }
       if (msg.type === "state:library-updated") {
@@ -1053,7 +1120,7 @@ function DockMediaTab({
       }
     });
     return unsub;
-  }, [loadLibraryMedia]);
+  }, [applyLibraryMediaSnapshot, loadLibraryMedia]);
 
   // Fallback polling: refresh media every 30s in case event-based sync fails
   useEffect(() => {
@@ -1069,12 +1136,16 @@ function DockMediaTab({
   // ── Fetch uploaded files from overlay server ──
 
   const fetchUploads = useCallback(async () => {
+    const requestId = ++uploadListRequestRef.current;
+    const isCurrentRequest = () => mountedRef.current && requestId === uploadListRequestRef.current;
+    if (!mountedRef.current) return;
+
     setUploadsLoading(true);
     try {
       const resp = await fetch("/api/uploads", { cache: "no-store" });
       if (resp.ok) {
         const files: string[] = await resp.json();
-        if (mountedRef.current) {
+        if (isCurrentRequest()) {
           const mediaFiles = files.filter((file) => isMediaFile(file) && !isInternalUploadFile(file));
           const fetchedAt = Date.now();
           const mediaFileSet = new Set(mediaFiles);
@@ -1100,7 +1171,7 @@ function DockMediaTab({
     } catch {
       // Silently fail — uploads listing is optional
     } finally {
-      if (mountedRef.current) setUploadsLoading(false);
+      if (isCurrentRequest()) setUploadsLoading(false);
     }
   }, []);
 
@@ -1542,12 +1613,14 @@ function DockMediaTab({
       if (!kind || representedUploadNames.has(file)) return entries;
       const prefKey = `media:${file}`;
       if (mediaPrefs[prefKey]?.hidden) return entries;
+      const uploadedAt = extractUploadTimestamp(file) || uploadedFileTimestampsRef.current.get(file) || "";
       entries.push({
         key: prefKey,
         prefKey,
         name: getUploadDisplayName(file),
         kind,
-        createdAt: extractUploadTimestamp(file) || uploadedFileTimestampsRef.current.get(file) || "",
+        createdAt: uploadedAt,
+        uploadedAt,
         originLabel: t('media.uploads'),
         mimeLabel: file.split(".").pop()?.toUpperCase(),
         uploadFile: file,
@@ -1579,7 +1652,11 @@ function DockMediaTab({
       .sort((a, b) => {
         const aPinned = Boolean(mediaPrefs[a.prefKey]?.pinned);
         const bPinned = Boolean(mediaPrefs[b.prefKey]?.pinned);
-        return aPinned === bPinned ? 0 : aPinned ? -1 : 1;
+        if (aPinned !== bPinned) return aPinned ? -1 : 1;
+        return compareMediaItemsNewest(
+          getDockMediaOrderMetadata(a),
+          getDockMediaOrderMetadata(b),
+        );
       }),
     [mediaPrefs, mergedLibraryItems, overlayBaseUrl],
   );
@@ -1590,6 +1667,9 @@ function DockMediaTab({
       const bPinned = Boolean(mediaPrefs[b.prefKey]?.pinned);
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
 
+      const aOrder = getDockMediaOrderMetadata(a);
+      const bOrder = getDockMediaOrderMetadata(b);
+
       if (viewMode === "recent") {
         // Recently Used: sort by lastUsedAt DESC, items without usage go to bottom
         const aUsed = mediaPrefs[a.prefKey]?.lastUsedAt || "";
@@ -1597,25 +1677,18 @@ function DockMediaTab({
         if (aUsed && !bUsed) return -1;
         if (!aUsed && bUsed) return 1;
         if (aUsed && bUsed) return bUsed.localeCompare(aUsed);
-        // Both unused — fall back to createdAt DESC
-        const aCreatedAt = a.createdAt ?? "";
-        const bCreatedAt = b.createdAt ?? "";
-        if (aCreatedAt === "" && bCreatedAt !== "") return 1;
-        if (aCreatedAt !== "" && bCreatedAt === "") return -1;
-        return bCreatedAt.localeCompare(aCreatedAt);
+        // Both unused — fall back to the same stable upload ordering.
+        return compareMediaItemsNewest(aOrder, bOrder);
       }
-      // Newly Uploaded (default): sort by createdAt DESC, lastUsedAt as tiebreaker
-      const aCreatedAt = a.createdAt ?? "";
-      const bCreatedAt = b.createdAt ?? "";
-      // Items without timestamps go to the bottom
-      if (aCreatedAt === "" && bCreatedAt !== "") return 1;
-      if (aCreatedAt !== "" && bCreatedAt === "") return -1;
-      if (aCreatedAt !== bCreatedAt) {
-        return bCreatedAt.localeCompare(aCreatedAt);
-      }
+      // Newly Uploaded (default): use the explicit upload marker, then the
+      // generated disk-name timestamp, then the legacy createdAt value.
+      const aCreatedAt = getMediaSortTimestamp(aOrder);
+      const bCreatedAt = getMediaSortTimestamp(bOrder);
+      if (aCreatedAt !== bCreatedAt) return bCreatedAt - aCreatedAt;
       const aUsed = mediaPrefs[a.prefKey]?.lastUsedAt || "";
       const bUsed = mediaPrefs[b.prefKey]?.lastUsedAt || "";
-      return bUsed.localeCompare(aUsed);
+      const usedComparison = bUsed.localeCompare(aUsed);
+      return usedComparison || compareMediaItemsNewest(aOrder, bOrder);
     }),
     [libraryEntries, mediaPrefs, uploadedEntries, viewMode],
   );
@@ -1804,15 +1877,21 @@ function DockMediaTab({
   }, [activeFolder, animationCatalogTab, animationEntries, animationsLocked, assetSearch, mediaPrefs]);
   const filteredTemplateVideos = useMemo(() => {
     const query = templateVideoSearch.trim().toLowerCase();
-    return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
+    return templateVideos
+      .filter((asset) => !query || asset.fileName.toLowerCase().includes(query))
+      .sort(compareTemplateAssetsNewest);
   }, [templateVideoSearch, templateVideos]);
   const filteredAnimationTemplateVideos = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
-    return templateVideos.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
+    return templateVideos
+      .filter((asset) => !query || asset.fileName.toLowerCase().includes(query))
+      .sort(compareTemplateAssetsNewest);
   }, [assetSearch, templateVideos]);
   const filteredAnimationTemplatePictures = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
-    return templatePictures.filter((asset) => !query || asset.fileName.toLowerCase().includes(query));
+    return templatePictures
+      .filter((asset) => !query || asset.fileName.toLowerCase().includes(query))
+      .sort(compareTemplateAssetsNewest);
   }, [assetSearch, templatePictures]);
   // The Animations tab represents the shared template catalog. Downloaded
   // items are still used for local playback, but the count comes from the
@@ -2293,6 +2372,7 @@ function DockMediaTab({
       if (nextItems.length > 0) {
         // Keep the timestamp returned by the upload service. Newly uploaded
         // items must remain visible in the Uploaded/Newly Updated view.
+        rememberPendingMedia(nextItems);
         persistLocalLibrary((current) => [...nextItems, ...current]);
         setLibraryMedia((current) => dedupeMediaItems([...nextItems, ...current]));
         console.log("[UPLOAD] About to refreshMedia. Library size:", mergedLibraryItems.length, "Local:", localLibrary.length);
@@ -2314,12 +2394,13 @@ function DockMediaTab({
       setUploadStatus("");
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
-  }, [libraryMedia, localLibrary, persistLocalLibrary, refreshMedia, t, updateMediaPreference]);
+  }, [libraryMedia, localLibrary, persistLocalLibrary, refreshMedia, rememberPendingMedia, t, updateMediaPreference]);
 
   const deleteEntry = useCallback(
     async (entry: DockMediaEntry) => {
       const { getManagedUploadFileName, deleteUploadedMediaFile } = await import("../../library/libraryDb");
       const fileName = entry.uploadFile || (entry.libraryItem ? getManagedUploadFileName(entry.libraryItem) : null);
+      pendingMediaItemsRef.current.delete(getMediaStableKey(getDockMediaOrderMetadata(entry)));
       try {
         if (fileName) await deleteUploadedMediaFile(fileName);
       } catch (error) {
@@ -2562,6 +2643,7 @@ function DockMediaTab({
         setTemplateVideoProgress((current) => ({ ...current, [asset.id]: fraction }));
       });
 
+      rememberPendingMedia([item]);
       setLibraryMedia((current) => dedupeMediaItems([item, ...current]));
       persistLocalLibrary((current) => dedupeMediaItems([item, ...current]));
       dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
@@ -2580,6 +2662,7 @@ function DockMediaTab({
     dockClient,
     libraryMedia,
     persistLocalLibrary,
+    rememberPendingMedia,
     t,
   ]);
 
@@ -2592,6 +2675,7 @@ function DockMediaTab({
         setTemplatePictureProgress((current) => ({ ...current, [asset.id]: fraction }));
       });
 
+      rememberPendingMedia([item]);
       setLibraryMedia((current) => dedupeMediaItems([item, ...current]));
       persistLocalLibrary((current) => dedupeMediaItems([item, ...current]));
       dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
@@ -2606,7 +2690,7 @@ function DockMediaTab({
       });
       setSendingFile(null);
     }
-  }, [libraryMedia, persistLocalLibrary, t]);
+  }, [libraryMedia, persistLocalLibrary, rememberPendingMedia, t]);
 
   const playDownloadedTemplateVideo = useCallback((item: MediaItem) => {
     void handleSendEntry(createLibraryEntry(item, overlayBaseUrl, t('media.animation')));
@@ -3398,27 +3482,6 @@ function DockMediaTab({
         </div>
       )}
 
-      {selectionMode && (
-        <section className="dock-media-slideshow-guide" aria-label={t("media.slideshowGuideTitle", "How the slideshow works")}>
-          <div className="dock-media-slideshow-guide__intro">
-            <span className="dock-media-slideshow-guide__icon" aria-hidden="true">
-              <Icon name="slideshow" size={14} />
-            </span>
-            <div>
-              <h2 className="dock-media-slideshow-guide__title">{t("media.slideshowGuideTitle", "How the slideshow works")}</h2>
-              <p className="dock-media-slideshow-guide__description">
-                {t("media.slideshowGuideDescription", "Select the media you want to play, configure it, then send it to OBS as one slideshow.")}
-              </p>
-            </div>
-          </div>
-          <ol className="dock-media-slideshow-guide__steps">
-            <li>{t("media.slideshowGuideStepSelect", "Select images and videos")}</li>
-            <li>{t("media.slideshowGuideStepConfigure", "Choose playback options")}</li>
-            <li>{t("media.slideshowGuideStepCreate", "Create the OBS slideshow")}</li>
-          </ol>
-        </section>
-      )}
-
       <input
         ref={uploadInputRef}
         type="file"
@@ -3456,9 +3519,7 @@ function DockMediaTab({
             role="tab"
             aria-selected={browserTab === "animations"}
             className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
-            onClick={() => {
-              if (!animationsLocked) setBrowserTab("animations");
-            }}
+            onClick={openAnimationsTab}
             disabled={animationsLocked}
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
           >
@@ -3568,7 +3629,7 @@ function DockMediaTab({
                   type="button"
                   className="dock-btn dock-btn--primary dock-btn--compact"
                   onClick={() => {
-                    setBrowserTab("animations");
+                    openAnimationsTab();
                     setAnimationCatalogTab("pictures");
                   }}
                   title={t('media.templatePictures', 'Template pictures')}>

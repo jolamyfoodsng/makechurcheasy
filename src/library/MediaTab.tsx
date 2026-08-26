@@ -236,7 +236,9 @@ export async function saveLibraryMediaItem(
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const safeName = `media_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const uploadStartedAt = Date.now();
+    const uploadedAt = new Date(uploadStartedAt).toISOString();
+    const safeName = `media_${uploadStartedAt}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const diskPath = await invoke<string>("save_upload_file", {
       fileName: safeName,
       fileData: Array.from(bytes),
@@ -276,8 +278,9 @@ export async function saveLibraryMediaItem(
       durationSec: durationSec ? Math.round(durationSec) : undefined,
       fileSize: file.size,
       mimeType: file.type,
-      createdAt: new Date().toISOString(),
-      source: documentPage ? "document-conversion" : undefined,
+      createdAt: uploadedAt,
+      uploadedAt,
+      source: documentPage ? "document-conversion" : "local",
       documentSourceName: documentPage ? (overrideName || documentPage.sourceName) : undefined,
       documentId: documentPage?.documentId,
       documentPageNumber: documentPage?.pageNumber,

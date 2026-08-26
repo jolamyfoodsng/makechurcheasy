@@ -1037,7 +1037,7 @@ input[type="radio"] {
 
 .app-content {
   flex: 1;
-  min-height: 0;
+
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -7888,7 +7888,7 @@ input[type="radio"] {
   line-height: 1.45;
 }
 
-.update-notification__note-bullet > span:first-child {
+.update-notification__note-bullet>span:first-child {
   font-weight: 700;
   text-align: center;
 }
@@ -20630,7 +20630,7 @@ html.mv-theme-light .tc-editor .canvas-area {
   margin-bottom: 12px;
 }
 
-.tc-inspector .slider-wrapper > span {
+.tc-inspector .slider-wrapper>span {
   flex: 0 0 88px;
   max-width: 88px;
   line-height: 1.15;

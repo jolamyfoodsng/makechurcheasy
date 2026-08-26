@@ -10,6 +10,7 @@ import type { MediaItem } from "./libraryTypes";
 import { getCurrentUserId } from "../services/db";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
 import { isInternalDockUploadFile } from "../dock/internalMediaAssets";
+import { compareMediaItemsNewest, getUploadTimestampFromFileName } from "./mediaOrdering";
 
 const DB_NAME = "obs-church-studio-media-library";
 const STORE_NAME = "media";
@@ -89,12 +90,7 @@ function getUploadDisplayName(fileName: string): string {
 }
 
 function getUploadCreatedAt(fileName: string, fallback: string): string {
-  const match = fileName.match(/^media_(\d{10,13})_/);
-  if (!match) return fallback;
-  const raw = Number(match[1]);
-  const timestamp = match[1].length <= 10 ? raw * 1000 : raw;
-  const date = new Date(timestamp);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : fallback;
+  return getUploadTimestampFromFileName(fileName) || fallback;
 }
 
 /**
@@ -134,6 +130,7 @@ async function discoverUploadedMedia(): Promise<UploadedMediaDiscovery> {
       .map((fileName, index) => {
         const type = getUploadMediaType(fileName)!;
         const fallbackCreatedAt = new Date(discoveredAt - index).toISOString();
+        const uploadedAt = getUploadCreatedAt(fileName, fallbackCreatedAt);
         return {
           id: `upload:${fileName}`,
           name: getUploadDisplayName(fileName),
@@ -141,7 +138,8 @@ async function discoverUploadedMedia(): Promise<UploadedMediaDiscovery> {
           url: `${baseUrl}/uploads/${encodeURIComponent(fileName)}`,
           ...(directory ? { filePath: `${directory}${separator}${fileName}` } : {}),
           diskFileName: fileName,
-          createdAt: getUploadCreatedAt(fileName, fallbackCreatedAt),
+          createdAt: uploadedAt,
+          uploadedAt,
           source: "local" as const,
         } satisfies MediaItem;
       });
@@ -157,8 +155,7 @@ function mergeMediaItems(
   discovered: MediaItem[],
   listingAvailable: boolean,
 ): MediaItem[] {
-  const result: MediaItem[] = [];
-  const seen = new Set<string>();
+  const result = new Map<string, MediaItem>();
   const discoveredFileNames = new Set(discovered.map((item) => item.diskFileName).filter(Boolean));
   const reconciledStored = listingAvailable
     ? stored.filter((item) => (
@@ -169,13 +166,15 @@ function mergeMediaItems(
     : stored;
   for (const item of [...reconciledStored, ...discovered]) {
     const key = item.diskFileName || item.filePath || item.id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(item);
+    const existing = result.get(key);
+    // A record may arrive from both IndexedDB and the shared uploads folder.
+    // Keep the one with the real upload marker/date instead of whichever
+    // async source happened to be processed first.
+    if (!existing || compareMediaItemsNewest(item, existing) < 0) {
+      result.set(key, item);
+    }
   }
-  return result.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  return Array.from(result.values()).sort(compareMediaItemsNewest);
 }
 
 // ---------------------------------------------------------------------------

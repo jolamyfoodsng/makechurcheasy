@@ -41,6 +41,8 @@ export interface MediaItem {
   mimeType?: string;
   /** ISO date string */
   createdAt: string;
+  /** ISO date string captured when the file was uploaded by a user */
+  uploadedAt?: string;
   /** ISO date string for when a remote-backed asset was saved locally */
   downloadedAt?: string;
   /** Optional origin marker for remote-backed/generated assets saved locally */

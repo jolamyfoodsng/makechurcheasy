@@ -109,4 +109,31 @@ describe("Bible keyword search", () => {
     const results = await searchBibleRanked(query, "KJV", 5);
     expect(results[0]).toMatchObject({ book, chapter, verse });
   });
+
+  it.each([
+    "favor in the sight of men",
+    "favour in the sight of men",
+  ])("matches British and American spelling variants: %s", async (query) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results.some((result) =>
+      result.book === "Proverbs" &&
+      result.chapter === 3 &&
+      result.verse === 4,
+    )).toBe(true);
+  });
+
+  it.each(["30", "30%", "3"])("keeps numeric searches searchable: %s", async (query) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.some(
+        (result) =>
+          /thirty/i.test(result.text) ||
+          result.chapter === Number(query.replace(/%/g, "")) ||
+          result.verse === Number(query.replace(/%/g, "")),
+      ),
+    ).toBe(true);
+  });
 });

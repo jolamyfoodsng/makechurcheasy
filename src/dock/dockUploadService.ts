@@ -12,6 +12,7 @@ import { dockClient } from "../services/dockBridge";
 import { getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { isInternalDockMediaItem } from "./internalMediaAssets";
+import { compareMediaItemsNewest, getMediaStableKey } from "../library/mediaOrdering";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -202,11 +203,14 @@ export function saveLocalLibrary(items: MediaItem[]): void {
 
 export function dedupeMediaItems(items: MediaItem[]): MediaItem[] {
   const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
+  return items
+    .filter((item) => {
+      const key = getMediaStableKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort(compareMediaItemsNewest);
 }
 
 /* ── Sync to main app ────────────────────────────────────────────────────── */
@@ -258,7 +262,9 @@ export async function uploadFileToDock(
     return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
   }
 
-  const safeName = `media_${Date.now()}_${getSafeFileName(file.name)}`;
+  const uploadStartedAt = Date.now();
+  const uploadedAt = new Date(uploadStartedAt).toISOString();
+  const safeName = `media_${uploadStartedAt}_${getSafeFileName(file.name)}`;
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const previewUrl = `${overlayBaseUrl}/uploads/${encodeURIComponent(safeName)}`;
   const objectUrl = URL.createObjectURL(file);
@@ -295,7 +301,9 @@ export async function uploadFileToDock(
     durationSec: durationSec ? Math.round(durationSec) : undefined,
     fileSize: file.size,
     mimeType: file.type,
-    createdAt: new Date().toISOString(),
+    createdAt: uploadedAt,
+    uploadedAt,
+    source: "local",
   };
 
   console.log("[UPLOAD] uploadFileToDisk: returning item", { id: item.id, name: item.name, filePath: item.filePath });

@@ -112,7 +112,7 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain("The packet is now current.");
     expect(obsClientSource).toContain("Only after that do we isolate this tab's");
     expect(obsClientSource).toContain("focusMcePresentationModule(\"media\")");
-    expect(mediaTabSource).toContain("How the slideshow works");
+    expect(mediaTabSource).not.toContain("How the slideshow works");
     expect(mediaTabSource).toContain('useState("MC slideshow")');
     expect(mediaTabSource).toContain('const sourceName = playlistName.trim() || "MC slideshow"');
   });

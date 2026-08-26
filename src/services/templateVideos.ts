@@ -27,6 +27,28 @@ export type TemplatePictureAsset = {
   modified?: string;
 };
 
+type TemplateAssetWithDate = {
+  fileName: string;
+  modified?: string;
+};
+
+function getTemplateAssetModifiedAt(asset: TemplateAssetWithDate): number {
+  const timestamp = Date.parse(asset.modified || "");
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+/** Keep every template catalog newest-first, regardless of API response order. */
+export function compareTemplateAssetsNewest(
+  left: TemplateAssetWithDate,
+  right: TemplateAssetWithDate,
+): number {
+  const modifiedComparison = getTemplateAssetModifiedAt(right) - getTemplateAssetModifiedAt(left);
+  return modifiedComparison || left.fileName.localeCompare(right.fileName, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 type SaveBackgroundVideoResult = {
   filePath: string;
   relativeUrl: string;
@@ -292,10 +314,7 @@ export async function fetchTemplateVideos(): Promise<TemplateVideoAsset[]> {
         throw new Error("Template videos response was not an array.");
       }
 
-      return data.slice().sort((left, right) => (
-        (new Date(right.modified || 0).getTime() || 0) - (new Date(left.modified || 0).getTime() || 0)
-          || left.fileName.localeCompare(right.fileName)
-      ));
+      return data.slice().sort(compareTemplateAssetsNewest);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -329,10 +348,7 @@ export async function fetchTemplatePictures(): Promise<TemplatePictureAsset[]> {
         throw new Error("Template pictures response was not an array.");
       }
 
-      return data.slice().sort((left, right) => (
-        (new Date(right.modified || 0).getTime() || 0) - (new Date(left.modified || 0).getTime() || 0)
-          || left.fileName.localeCompare(right.fileName)
-      ));
+      return data.slice().sort(compareTemplateAssetsNewest);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }

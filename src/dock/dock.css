@@ -117,7 +117,7 @@ body.dock-modal-open {
   pointer-events: none;
 }
 
-.dock-modal-layer > * {
+.dock-modal-layer>* {
   pointer-events: auto;
 }
 
@@ -2785,7 +2785,7 @@ body.dock-modal-open {
   position: absolute;
   top: 100%;
   left: 0;
-  min-width: 140%;
+  min-width: 120%;
   right: 0;
   margin-top: 4px;
   background: var(--dock-surface);
@@ -25903,67 +25903,6 @@ body.dock-modal-open {
 
 .dock-media-selection-tray__actions .dock-btn {
   white-space: nowrap;
-}
-
-/* ── Slideshow guide ── */
-.dock-media-slideshow-guide {
-  display: grid;
-  gap: 10px;
-  margin: 8px 0;
-  padding: 10px 12px;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  background: #1F2937;
-  color: var(--dock-text, #F8FAFC);
-}
-
-.dock-media-slideshow-guide__intro {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-}
-
-.dock-media-slideshow-guide__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  color: #93C5FD;
-  background: rgba(29, 78, 216, 0.24);
-}
-
-.dock-media-slideshow-guide__title {
-  margin: 0;
-  color: var(--dock-text, #F8FAFC);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.dock-media-slideshow-guide__description {
-  margin: 3px 0 0;
-  color: var(--dock-text-secondary, #CBD5E1);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.dock-media-slideshow-guide__steps {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 6px 14px;
-  margin: 0;
-  padding: 0 0 0 24px;
-  color: var(--dock-text-secondary, #CBD5E1);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.dock-media-slideshow-guide__steps li::marker {
-  color: #93C5FD;
-  font-weight: 700;
 }
 
 /* ── Playlist Modal ── */

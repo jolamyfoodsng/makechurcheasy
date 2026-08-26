@@ -1159,11 +1159,21 @@ function extractTranscriptWordTail(previousWords: string[], nextWords: string[])
 function isReferenceLikeBibleQuery(query: string): boolean {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return false;
+
+  // A number by itself is a keyword search (for example, "30%"), not a
+  // Scripture reference. Let the Bible search service find it in verse text
+  // or in chapter/verse numbers.
+  if (/^\d+(?:\s*%)?$/.test(trimmed)) return false;
+
   return (
-    /\d/.test(trimmed) ||
-    /[:.-]/.test(trimmed) ||
+    (/\d/.test(trimmed) && /[a-z]/i.test(trimmed)) ||
+    (/\d/.test(trimmed) && /[:.-]/.test(trimmed)) ||
     /\b(vs|verse|verses|chapter|chap)\b/.test(trimmed)
   );
+}
+
+function isNumericOnlyBibleQuery(query: string): boolean {
+  return /^\d+(?:\s*%)?$/.test(query.trim());
 }
 
 type DockBibleSearchOption =
@@ -4695,13 +4705,20 @@ function DockBibleTab({
     setKeywordResults([]);
     setKeywordResultsQuery("");
 
-    if (!trimmed || trimmed.length < MIN_DOCK_KEYWORD_SEARCH_LENGTH) {
+    if (
+      !trimmed ||
+      (trimmed.length < MIN_DOCK_KEYWORD_SEARCH_LENGTH && !isNumericOnlyBibleQuery(trimmed))
+    ) {
       setKeywordResults([]);
       setIsKeywordSearching(false);
       return;
     }
 
-    if (isReferenceLikeBibleQuery(trimmed) && referenceResults.length > 0) {
+    if (
+      isReferenceLikeBibleQuery(trimmed) &&
+      referenceResults.length > 0 &&
+      !isNumericOnlyBibleQuery(trimmed)
+    ) {
       setKeywordResults([]);
       setIsKeywordSearching(false);
       return;

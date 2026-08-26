@@ -413,6 +413,63 @@ const COMMON_SEARCH_TOKEN_ALIASES = new Map<string, string>([
   ["must", "should"],
 ]);
 
+// Treat common British and American spellings as the same search term. The
+// corpus can come from different translations, so normalizing both the query
+// and the verse tokens keeps searches portable across translations.
+const SEARCH_SPELLING_VARIANTS = new Map<string, string>([
+  ["favour", "favor"],
+  ["favours", "favors"],
+  ["favourite", "favorite"],
+  ["favourites", "favorites"],
+  ["colour", "color"],
+  ["colours", "colors"],
+  ["honour", "honor"],
+  ["honours", "honors"],
+  ["honoured", "honored"],
+  ["honouring", "honoring"],
+  ["labour", "labor"],
+  ["labours", "labors"],
+  ["neighbour", "neighbor"],
+  ["neighbours", "neighbors"],
+  ["behaviour", "behavior"],
+  ["behaviours", "behaviors"],
+  ["saviour", "savior"],
+  ["saviours", "saviors"],
+  ["valour", "valor"],
+  ["centre", "center"],
+  ["centres", "centers"],
+  ["theatre", "theater"],
+  ["theatres", "theaters"],
+  ["metre", "meter"],
+  ["metres", "meters"],
+  ["litre", "liter"],
+  ["litres", "liters"],
+  ["fibre", "fiber"],
+  ["fibres", "fibers"],
+  ["organise", "organize"],
+  ["organised", "organized"],
+  ["organising", "organizing"],
+  ["recognise", "recognize"],
+  ["recognised", "recognized"],
+  ["recognising", "recognizing"],
+  ["realise", "realize"],
+  ["realised", "realized"],
+  ["realising", "realizing"],
+  ["apologise", "apologize"],
+  ["authorise", "authorize"],
+  ["emphasise", "emphasize"],
+  ["baptise", "baptize"],
+  ["evangelise", "evangelize"],
+  ["programme", "program"],
+  ["programmes", "programs"],
+  ["judgement", "judgment"],
+  ["fulfil", "fulfill"],
+  ["fulfilment", "fulfillment"],
+  ["travelling", "traveling"],
+  ["labelled", "labeled"],
+  ["cancelled", "canceled"],
+]);
+
 const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["hath", "has"],
   ["hast", "has"],
@@ -455,7 +512,60 @@ const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["speaketh", "speak"],
   ["worketh", "work"],
   ["leaveth", "leave"],
+  // Common irregular forms used in natural-language searches.
+  ["men", "man"],
+  ["women", "woman"],
+  ["children", "child"],
 ]);
+
+const SEARCH_NUMBER_UNDER_TWENTY = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
+] as const;
+
+const SEARCH_NUMBER_TENS = new Map<number, string>([
+  [20, "twenty"],
+  [30, "thirty"],
+  [40, "forty"],
+  [50, "fifty"],
+  [60, "sixty"],
+  [70, "seventy"],
+  [80, "eighty"],
+  [90, "ninety"],
+]);
+
+function numberSearchWord(token: string): string | null {
+  if (!/^\d+$/.test(token)) return null;
+
+  const value = Number(token);
+  if (!Number.isSafeInteger(value) || value < 0) return null;
+  if (value < SEARCH_NUMBER_UNDER_TWENTY.length) {
+    return SEARCH_NUMBER_UNDER_TWENTY[value];
+  }
+  return SEARCH_NUMBER_TENS.get(value) ?? null;
+}
+
+function canonicalizeSearchSpelling(token: string): string {
+  return SEARCH_SPELLING_VARIANTS.get(token) ?? token;
+}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -473,43 +583,55 @@ function tokenizeSearch(value: string): string[] {
     .filter(Boolean);
 
   const filtered = tokens.filter(
-    (token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token),
+    (token) =>
+      (token.length > 1 || /^\d+$/.test(token)) &&
+      !SEARCH_STOP_WORDS.has(token),
   );
 
-  return filtered.length > 0 ? filtered : tokens.filter((token) => token.length > 1);
+  return filtered.length > 0
+    ? filtered
+    : tokens.filter((token) => token.length > 1 || /^\d+$/.test(token));
 }
 
 function normalizeSearchToken(token: string): string {
-  const direct = SEARCH_TOKEN_NORMALIZATIONS.get(token);
-  if (direct) return direct;
+  const numericWord = numberSearchWord(token);
+  if (numericWord) return numericWord;
 
-  if (token.length <= 4) return token;
+  const spellingNormalized = canonicalizeSearchSpelling(token);
+  const direct = SEARCH_TOKEN_NORMALIZATIONS.get(spellingNormalized);
+  if (direct) return canonicalizeSearchSpelling(direct);
 
-  if (token.endsWith("eth") && token.length > 5) {
-    const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized);
+  if (spellingNormalized.length <= 4) return spellingNormalized;
+
+  if (spellingNormalized.endsWith("eth") && spellingNormalized.length > 5) {
+    const normalized = spellingNormalized.slice(0, -3);
+    return canonicalizeSearchSpelling(
+      SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized),
+    );
   }
-  if (token.endsWith("est") && token.length > 5) {
-    const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized);
+  if (spellingNormalized.endsWith("est") && spellingNormalized.length > 5) {
+    const normalized = spellingNormalized.slice(0, -3);
+    return canonicalizeSearchSpelling(
+      SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized),
+    );
   }
-  if (token.endsWith("ing") && token.length > 6) {
-    return token.slice(0, -3);
+  if (spellingNormalized.endsWith("ing") && spellingNormalized.length > 6) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -3));
   }
-  if (token.endsWith("ed") && token.length > 5) {
-    return token.slice(0, -2);
+  if (spellingNormalized.endsWith("ed") && spellingNormalized.length > 5) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -2));
   }
-  if (token.endsWith("es") && token.length > 5) {
-    return token.slice(0, -2);
+  if (spellingNormalized.endsWith("es") && spellingNormalized.length > 5) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -2));
   }
-  if (token.endsWith("s") && token.length > 4) {
-    return token.slice(0, -1);
+  if (spellingNormalized.endsWith("s") && spellingNormalized.length > 4) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -1));
   }
-  if (token.endsWith("e") && token.length > 6) {
-    return token.slice(0, -1);
+  if (spellingNormalized.endsWith("e") && spellingNormalized.length > 6) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -1));
   }
 
-  return token;
+  return spellingNormalized;
 }
 
 /**
@@ -773,6 +895,24 @@ function contentPhraseCoverage(queryContent: string[], textContent: string[]): n
   return bestRun / queryContent.length;
 }
 
+function numericReferenceCoverage(queryTokens: string[], entry: BibleCorpusEntry): number {
+  const numericTokens = Array.from(
+    new Set(queryTokens.filter((token) => /^\d+$/.test(token))),
+  );
+  if (numericTokens.length === 0) return 0;
+
+  const entryEndVerse = Math.max(entry.verse, entry.endVerse);
+  const matchedTokens = numericTokens.filter((token) => {
+    const value = Number(token);
+    return (
+      Number.isSafeInteger(value) &&
+      (entry.chapter === value || (entry.verse <= value && value <= entryEndVerse))
+    );
+  });
+
+  return matchedTokens.length / numericTokens.length;
+}
+
 function denseContentCoverageBonus(queryContent: string[], textContent: string[]): number {
   if (queryContent.length < 4 || textContent.length === 0) return 0;
   if (!queryContent.some((token) => token.length >= 6)) return 0;
@@ -842,7 +982,8 @@ function scoreVerseMatch(
 
   const textTokenSet = entry.searchTokenSet ?? new Set(textTokens);
   const tokenMatches = normalizedQueryTokens.filter((token) => textTokenSet.has(token)).length;
-  if (tokenMatches === 0) return 0;
+  const numericReferenceMatch = numericReferenceCoverage(queryTokens, entry);
+  if (tokenMatches === 0 && numericReferenceMatch === 0) return 0;
 
   const tokenCoverage = weightedTokenCoverage(normalizedQueryTokens, textTokenSet, queryTokenWeights);
   const orderedCoverage = weightedOrderedTokenCoverage(normalizedQueryTokens, textTokens, queryTokenWeights);
@@ -854,7 +995,7 @@ function scoreVerseMatch(
     queryTokens.length > 0 && normalizedText.startsWith(queryTokens[0]) ? 0.06 : 0;
   const strongStartBonus = firstStrongTokenBonus(queryContent, textContent);
 
-  return Math.min(
+  const textMatchScore = Math.min(
     1,
     tokenCoverage * 0.42 +
     orderedCoverage * 0.22 +
@@ -864,6 +1005,11 @@ function scoreVerseMatch(
     prefixBonus +
     strongStartBonus,
   );
+
+  // A number is also useful as a chapter/verse search. This keeps inputs such
+  // as "30" or "30%" searchable even when the translation spells the number
+  // out in the verse text instead of storing it as digits.
+  return Math.min(1, Math.max(textMatchScore, numericReferenceMatch * 0.78));
 }
 
 async function searchBibleInTranslation(

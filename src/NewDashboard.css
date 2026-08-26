@@ -89,6 +89,7 @@
 .app-content {
     max-width: 100%;
     min-width: 0;
+    min-height: 650px;
     margin-left: auto;
     margin-right: auto;
     opacity: 0;
@@ -951,7 +952,7 @@
     min-width: 0;
 }
 
-.status-item > div {
+.status-item>div {
     min-width: 0;
 }
 
@@ -2012,8 +2013,8 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .status-panel > .btn-primary,
-    .status-panel > .btn-secondary {
+    .status-panel>.btn-primary,
+    .status-panel>.btn-secondary {
         grid-column: 1 / -1;
     }
 
@@ -2054,8 +2055,8 @@
         grid-template-columns: 1fr;
     }
 
-    .status-panel > .btn-primary,
-    .status-panel > .btn-secondary {
+    .status-panel>.btn-primary,
+    .status-panel>.btn-secondary {
         grid-column: auto;
     }
 
@@ -2341,72 +2342,72 @@
 /* ── Plan Upgrade Banner ── */
 
 .plan-upgrade-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  margin-bottom: 16px;
-  border: 1px solid rgba(var(--primary-rgb, 124, 131, 255), 0.2);
-  border-radius: 6px;
-  background: rgba(var(--primary-rgb, 124, 131, 255), 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(var(--primary-rgb, 124, 131, 255), 0.2);
+    border-radius: 6px;
+    background: rgba(var(--primary-rgb, 124, 131, 255), 0.05);
 }
 
 .plan-upgrade-banner--trial {
-  border-color: rgba(var(--warning-rgb, 245, 158, 11), 0.3);
-  background: rgba(var(--warning-rgb, 245, 158, 11), 0.06);
+    border-color: rgba(var(--warning-rgb, 245, 158, 11), 0.3);
+    background: rgba(var(--warning-rgb, 245, 158, 11), 0.06);
 }
 
 .plan-upgrade-banner-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary, #e8e8e8);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary, #e8e8e8);
 }
 
 .plan-upgrade-banner-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .plan-upgrade-banner-promo {
-  font-size: 11px;
-  color: var(--text-secondary, #a7b0c0);
-  font-weight: 600;
+    font-size: 11px;
+    color: var(--text-secondary, #a7b0c0);
+    font-weight: 600;
 }
 
 .plan-upgrade-banner-icon {
-  flex-shrink: 0;
-  opacity: 0.7;
+    flex-shrink: 0;
+    opacity: 0.7;
 }
 
 .plan-upgrade-banner-btn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border: none;
-  border-radius: 4px;
-  background: var(--primary, #7c83ff);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity 0.15s;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: none;
+    border-radius: 4px;
+    background: var(--primary, #7c83ff);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
 }
 
 .plan-upgrade-banner-btn:hover {
-  opacity: 0.85;
+    opacity: 0.85;
 }
 
 .plan-upgrade-banner--trial .plan-upgrade-banner-btn {
-  background: var(--warning, #f59e0b);
-  color: #000;
+    background: var(--warning, #f59e0b);
+    color: #000;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
