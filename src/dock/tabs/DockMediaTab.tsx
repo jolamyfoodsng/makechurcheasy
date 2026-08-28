@@ -1738,33 +1738,26 @@ function DockMediaTab({
       });
     }
 
-    return Array.from(groups.values())
-      .map((group) => {
-        const pages = [...group.pages].sort((a, b) => (
-          (a.libraryItem?.documentPageNumber ?? 0) - (b.libraryItem?.documentPageNumber ?? 0)
-        ));
-        return {
-          key: `document:${group.documentId}`,
-          documentId: group.documentId,
-          name: group.name,
-          mimeLabel: group.mimeLabel,
-          pages,
-          pageCount: Math.max(group.pageCount, pages.length),
-          createdAt: group.createdAt,
-          coverPage: pages.find((page) => page.libraryItem?.documentPageNumber === 1) || pages[0],
-        };
-      })
-      .sort((a, b) => {
-        const getSortValue = (deck: DockDocumentDeck): string => {
-          if (viewMode !== "recent") return deck.createdAt || "";
-          return deck.pages.reduce((latest, page) => {
-            const usedAt = mediaPrefs[page.prefKey]?.lastUsedAt || "";
-            return usedAt > latest ? usedAt : latest;
-          }, deck.createdAt || "");
-        };
-        return getSortValue(b).localeCompare(getSortValue(a));
-      });
-  }, [documentEntries, mediaPrefs, viewMode]);
+    // documentEntries already has the ordering selected by the Newly Uploaded
+    // control. Map insertion order preserves the first page encountered for
+    // each document deck, so grouping cannot introduce a second, conflicting
+    // sort order.
+    return Array.from(groups.values()).map((group) => {
+      const pages = [...group.pages].sort((a, b) => (
+        (a.libraryItem?.documentPageNumber ?? 0) - (b.libraryItem?.documentPageNumber ?? 0)
+      ));
+      return {
+        key: `document:${group.documentId}`,
+        documentId: group.documentId,
+        name: group.name,
+        mimeLabel: group.mimeLabel,
+        pages,
+        pageCount: Math.max(group.pageCount, pages.length),
+        createdAt: group.createdAt,
+        coverPage: pages.find((page) => page.libraryItem?.documentPageNumber === 1) || pages[0],
+      };
+    });
+  }, [documentEntries]);
 
   const nonDocumentMediaEntries = useMemo(
     () => mediaEntries.filter((entry) => entry.libraryItem?.source !== "document-conversion"),
