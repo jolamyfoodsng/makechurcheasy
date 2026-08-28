@@ -132,6 +132,7 @@ const TranscriptLibraryPage = lazy(() => import("./pages/TranscriptLibraryPage")
 const TranscriptDetailPage = lazy(() => import("./pages/TranscriptDetailPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
 const TutorialsPage = lazy(() => import("./pages/TutorialsPage"));
+const TemplatesPage = lazy(() => import("./pages/TemplatesPage"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -1533,8 +1534,7 @@ function App() {
                             <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
                             <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
                             <Route path="library" element={<Navigate to="/resources?tab=media" replace />} />
-                            <Route path="templates" element={<Navigate to="/production/themes" replace />} />
-                            <Route path="templates/*" element={<Navigate to="/production/themes" replace />} />
+                            <Route path="templates/*" element={<TemplatesPage />} />
                             <Route path="hub" element={<Navigate to="/" replace />} />
                             <Route path="hub/*" element={<Navigate to="/" replace />} />
                             <Route path="service-hub" element={<Navigate to="/" replace />} />

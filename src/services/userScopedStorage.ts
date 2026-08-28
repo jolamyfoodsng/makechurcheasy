@@ -212,6 +212,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "mv-onboarding-complete",
   "mce-presentation-text-slides",
   "mce-presentation-tickers",
+  "mce-editable-template-overrides-v1",
 
   // Theme
   "ocs-app-appearance",
