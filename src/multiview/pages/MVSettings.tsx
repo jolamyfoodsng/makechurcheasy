@@ -12,6 +12,7 @@ import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from ".
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
 import { AppLogo } from "../../components/AppLogo";
+import { AccountSummaryCards } from "../../components/AccountSummaryCards";
 import { UpgradeModal } from "../../components/UpgradeModal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -1032,6 +1033,7 @@ export function MVSettings() {
 
         {/* Scrollable content */}
         <div className="main-scroll-pane">
+          <AccountSummaryCards className="settings-summary-cards" />
           <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
             {/* Left: main form column */}
             <div className="settings-form-column">
