@@ -28,7 +28,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
-import { AccountSummaryCards } from "../components/AccountSummaryCards";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppTheme } from "../hooks/useAppTheme";
 import { useCountryPricing } from "../hooks/useCountryPricing";
@@ -1025,7 +1024,6 @@ export default function ProductionHomePage() {
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
       />
-      <AccountSummaryCards hideInTest />
       <PlanUpgradeBanner />
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
