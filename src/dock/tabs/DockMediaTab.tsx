@@ -736,6 +736,8 @@ function DockMediaTab({
   const libraryLoadRequestRef = useRef(0);
   const uploadListRequestRef = useRef(0);
   const pendingMediaItemsRef = useRef(new Map<string, MediaItem>());
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const inspectorPreviewVideoRef = useRef<HTMLVideoElement | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
 
   const animationEntitlement = useMemo(
@@ -1907,6 +1909,51 @@ function DockMediaTab({
     () => managedEntries.find((entry) => entry.key === openOptionsKey) ?? null,
     [managedEntries, openOptionsKey],
   );
+
+  // Chromium/CEF can ignore autoPlay when a preview is mounted dynamically.
+  // Explicitly start clicked previews after their media element is ready.
+  useEffect(() => {
+    if (!previewEntry || previewEntry.kind !== "video") return;
+    const video = previewVideoRef.current;
+    if (!video) return;
+
+    const startPlayback = () => {
+      video.muted = true;
+      void video.play().catch((playError) => {
+        console.warn("[DockMediaTab] Could not start video preview:", playError);
+      });
+    };
+
+    if (video.readyState >= 2) {
+      startPlayback();
+      return;
+    }
+
+    video.addEventListener("canplay", startPlayback, { once: true });
+    return () => video.removeEventListener("canplay", startPlayback);
+  }, [previewEntry]);
+
+  useEffect(() => {
+    if (!previewPlaying || activeOptionsEntry?.kind !== "video") return;
+    const video = inspectorPreviewVideoRef.current;
+    if (!video) return;
+
+    const startPlayback = () => {
+      video.muted = true;
+      void video.play().catch((playError) => {
+        console.warn("[DockMediaTab] Could not start inspector video preview:", playError);
+      });
+    };
+
+    if (video.readyState >= 2) {
+      startPlayback();
+      return;
+    }
+
+    video.addEventListener("canplay", startPlayback, { once: true });
+    return () => video.removeEventListener("canplay", startPlayback);
+  }, [activeOptionsEntry?.key, previewPlaying]);
+
   useEffect(() => {
     if (presentationLinkMode || !activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
       setSceneSendChoices([]);
@@ -5095,7 +5142,15 @@ function DockMediaTab({
               {entry.kind === "video" && entry.previewUrl ? (
                 <div className="dock-media-inspector__preview">
                   {previewPlaying ? (
-                    <video className="dock-media-inspector__preview-media" src={entry.previewUrl} controls preload="metadata" autoPlay />
+                    <video
+                      ref={inspectorPreviewVideoRef}
+                      className="dock-media-inspector__preview-media"
+                      src={entry.previewUrl}
+                      controls
+                      preload="metadata"
+                      autoPlay
+                      muted
+                    />
                   ) : (
                     <>
                       {thumbUrl ? (
@@ -5451,6 +5506,7 @@ function DockMediaTab({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 12, minHeight: 200 }}>
                 {previewEntry.kind === "video" ? (
                   <video
+                    ref={previewVideoRef}
                     src={previewEntry.previewUrl}
                     controls
                     autoPlay

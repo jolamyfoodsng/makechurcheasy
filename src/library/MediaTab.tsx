@@ -1387,6 +1387,30 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
     };
   }, [resolvedUrl]);
 
+  // Chromium/CEF can ignore the autoPlay attribute even for muted previews.
+  // Start playback explicitly after the blob has loaded so clicking View
+  // consistently opens a playing video in the desktop app and the browser.
+  useEffect(() => {
+    if (item.type !== "video" || !mediaSrc) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const startPlayback = () => {
+      video.muted = true;
+      void video.play().catch((playError) => {
+        console.warn("[MediaPreview] Could not start video playback:", playError);
+      });
+    };
+
+    if (video.readyState >= 2) {
+      startPlayback();
+      return;
+    }
+
+    video.addEventListener("canplay", startPlayback, { once: true });
+    return () => video.removeEventListener("canplay", startPlayback);
+  }, [item.type, mediaSrc]);
+
   return (
     <div className="lib-preview-backdrop" onClick={onClose}>
       <div className="lib-preview-modal" onClick={(e) => e.stopPropagation()}>
