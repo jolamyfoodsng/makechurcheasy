@@ -26,7 +26,9 @@ import {
 import {
   EDITABLE_TEMPLATE_BROADCAST_CHANNEL,
   EDITABLE_TEMPLATE_STORAGE_EVENT,
+  getSavedEditableTemplatesUpdatedAt,
   loadSavedEditableTemplates,
+  loadSavedEditableTemplatesFromDockData,
 } from "../../templates/editableTemplateStorage";
 import {
   compareMediaItemsNewest,
@@ -673,6 +675,7 @@ function DockMediaTab({
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
   const [savedTemplates, setSavedTemplates] = useState<EditableTemplate[]>(() => loadSavedEditableTemplates());
+  const savedTemplatesUpdatedAtRef = useRef(getSavedEditableTemplatesUpdatedAt());
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
@@ -781,7 +784,18 @@ function DockMediaTab({
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
   const refreshSavedTemplates = useCallback(() => {
-    setSavedTemplates(loadSavedEditableTemplates());
+    const localTemplates = loadSavedEditableTemplates();
+    const localUpdatedAt = getSavedEditableTemplatesUpdatedAt();
+    if (localUpdatedAt >= savedTemplatesUpdatedAtRef.current) {
+      savedTemplatesUpdatedAtRef.current = localUpdatedAt;
+      setSavedTemplates(localTemplates);
+    }
+
+    void loadSavedEditableTemplatesFromDockData().then((remote) => {
+      if (!remote || remote.updatedAt < savedTemplatesUpdatedAtRef.current) return;
+      savedTemplatesUpdatedAtRef.current = remote.updatedAt;
+      setSavedTemplates(remote.templates);
+    });
   }, []);
 
   useEffect(() => {
@@ -809,6 +823,12 @@ function DockMediaTab({
       window.removeEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refreshSavedTemplates);
       templateChannel?.close();
     };
+  }, [browserTab, refreshSavedTemplates]);
+
+  useEffect(() => {
+    if (browserTab !== "templates") return;
+    const interval = window.setInterval(refreshSavedTemplates, 1500);
+    return () => window.clearInterval(interval);
   }, [browserTab, refreshSavedTemplates]);
 
   // Keep the animation lock in sync when the desktop app refreshes or upgrades
