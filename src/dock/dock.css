@@ -37213,3 +37213,174 @@ button.dock-btm-toolbar__clear--inline,
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+/* ── Saved MCE template cards ── */
+.dock-template-library {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dock-template-library__header,
+.dock-template-library__header-actions,
+.dock-template-card__title-row,
+.dock-template-card__actions {
+  display: flex;
+  align-items: center;
+}
+
+.dock-template-library__header {
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.dock-template-library__header-actions {
+  gap: 7px;
+}
+
+.dock-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.dock-template-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--dock-border-soft);
+  border-radius: 6px;
+  background: var(--dock-surface);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dock-template-card:hover,
+.dock-template-card--active {
+  border-color: var(--dock-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 35%, transparent), 0 8px 18px rgba(0, 0, 0, 0.2);
+}
+
+.dock-template-card__preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 0;
+  background: var(--dock-surface-alt);
+  cursor: pointer;
+}
+
+.dock-template-card__preview .templates-canvas-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.dock-template-card__preview .templates-canvas-shell > div {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.dock-template-card__preview canvas {
+  display: block;
+}
+
+.dock-template-card__preview::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.04), rgba(2, 6, 23, 0.64));
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.dock-template-card__preview:hover::after,
+.dock-template-card__preview:focus-visible::after {
+  opacity: 1;
+}
+
+.dock-template-card__preview-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 16px);
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: var(--dock-text);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.dock-template-card__preview:hover .dock-template-card__preview-badge,
+.dock-template-card__preview:focus-visible .dock-template-card__preview-badge,
+.dock-template-card--active .dock-template-card__preview-badge {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dock-template-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 10px;
+}
+
+.dock-template-card__title-row {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-template-card__title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dock-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-template-card__title-row > span {
+  flex: 0 0 auto;
+  color: var(--dock-accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.dock-template-card__meta {
+  overflow: hidden;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-template-card__actions {
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.dock-template-card__actions .dock-btn:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-template-card__actions .dock-btn:last-child {
+  flex: 0 0 auto;
+}
+
+.dock-template-library__empty {
+  margin: 0;
+}

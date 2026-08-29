@@ -7,6 +7,7 @@ import {
 import { readUserScopedStorage, writeUserScopedStorage } from "../services/userScopedStorage";
 
 export const EDITABLE_TEMPLATE_OVERRIDES_KEY = "mce-editable-template-overrides-v1";
+export const EDITABLE_TEMPLATE_STORAGE_EVENT = "mce-editable-templates-changed";
 
 interface StoredTemplateOverride {
   layers: TemplateLayer[];
@@ -41,18 +42,30 @@ function readOverrides(): StoredTemplateOverrides {
 
 function writeOverrides(overrides: StoredTemplateOverrides): void {
   writeUserScopedStorage(EDITABLE_TEMPLATE_OVERRIDES_KEY, JSON.stringify(overrides));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(EDITABLE_TEMPLATE_STORAGE_EVENT));
+  }
+}
+
+function applyOverride(template: EditableTemplate, override?: StoredTemplateOverride): EditableTemplate {
+  if (!override) return cloneEditableTemplate(template);
+  return {
+    ...cloneEditableTemplate(template),
+    layers: override.layers,
+  };
 }
 
 export function loadEditableTemplates(): EditableTemplate[] {
   const overrides = readOverrides();
-  return EDITABLE_TEMPLATE_LIBRARY.map((template) => {
-    const override = overrides[template.id];
-    if (!override) return cloneEditableTemplate(template);
-    return {
-      ...cloneEditableTemplate(template),
-      layers: override.layers,
-    };
-  });
+  return EDITABLE_TEMPLATE_LIBRARY.map((template) => applyOverride(template, overrides[template.id]));
+}
+
+/** Templates that the operator has explicitly saved on this device. */
+export function loadSavedEditableTemplates(): EditableTemplate[] {
+  const overrides = readOverrides();
+  return EDITABLE_TEMPLATE_LIBRARY
+    .filter((template) => Boolean(overrides[template.id]))
+    .map((template) => applyOverride(template, overrides[template.id]));
 }
 
 export function saveEditableTemplate(template: EditableTemplate): void {

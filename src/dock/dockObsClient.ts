@@ -62,6 +62,8 @@ import {
 import type { DockOverlayFontFitMeasurement } from "./lowerThirdQuickSettings";
 import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
+import type { EditableTemplate } from "../templates/editableTemplateCatalog";
+import { createMceTemplateBlob } from "../templates/mceTemplatePackage";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,6 +205,7 @@ const DOCK_MEDIA_IMAGE_SOURCE = "MCE Media Image";
 const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "MCE Media Image Audio";
 const DOCK_MEDIA_PATTERN_SOURCE = "MCE Media Pattern";
 const DOCK_MEDIA_TEXT_SOURCE = "MCE Media Text";
+const DOCK_MEDIA_TEMPLATE_SOURCE = "MCE Media Template";
 const DOCK_LIVE_TOOL_SOURCE = "MCE Live Tools";
 const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "MCE Live Tools Media Video";
 const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "MCE Live Tools Media Image";
@@ -405,6 +408,7 @@ interface DockResourceNames {
   mediaImageAudioSource: string;
   mediaPatternSource: string;
   mediaTextSource: string;
+  mediaTemplateSource: string;
   fsBgSource: string;
   fsTargetBgPrefix: string;
   bibleScene: string;
@@ -423,6 +427,7 @@ const DOCK_RESOURCES: DockResourceNames = {
   mediaImageAudioSource: DOCK_MEDIA_IMAGE_AUDIO_SOURCE,
   mediaPatternSource: DOCK_MEDIA_PATTERN_SOURCE,
   mediaTextSource: DOCK_MEDIA_TEXT_SOURCE,
+  mediaTemplateSource: DOCK_MEDIA_TEMPLATE_SOURCE,
   fsBgSource: DOCK_FS_BG_SOURCE,
   fsTargetBgPrefix: DOCK_FS_TARGET_BG_PREFIX,
   bibleScene: DOCK_BIBLE_SCENE,
@@ -10553,6 +10558,48 @@ class DockObsClient {
 
   }
 
+  /**
+   * Interpret and display a structured MCE template in OBS. The template is
+   * rendered by the app-owned browser overlay; no PNG export is needed.
+   */
+  async pushEditableTemplate(template: EditableTemplate): Promise<void> {
+    const resources = getDockResources();
+    const target = await this.getPresentationTargetScene("media");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("No active scene found in OBS");
+    const packageText = await createMceTemplateBlob(template).text();
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+
+    await Promise.all([
+      this.hideMediaSourceWithAnimation(sceneName, resources.mediaVideoSource),
+      this.hideMediaSourceWithAnimation(sceneName, resources.mediaImageSource),
+      this.hideOverlaySource(sceneName, resources.mediaImageAudioSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaPatternSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaTextSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaTemplateSource).catch(() => { }),
+    ]);
+
+    const sourceName = resources.mediaTemplateSource;
+    await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(sourceName).catch(() => { });
+    await this.setBrowserSourceUrl(
+      sourceName,
+      `${this.buildOverlayHtmlUrl("mce-template-overlay.html")}#data=${encodeURIComponent(JSON.stringify({
+        package: packageText,
+        timestamp: Date.now(),
+      }))}`,
+      true,
+    );
+    await this.fitSceneSourceToCanvas(sceneName, sourceName).catch(() => { });
+    await this.bringSceneSourceToFront(sceneName, sourceName);
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch {
+      // Ticker ordering is optional for template playback.
+    }
+  }
+
   async setMediaTextOverlay(
     payload: {
       headline: string;
@@ -10805,6 +10852,7 @@ class DockObsClient {
     await this.hideOverlaySource(scene, "MCE Media - Pattern").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image Audio").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Text").catch(() => { });
+    await this.hideOverlaySource(scene, DOCK_MEDIA_TEMPLATE_SOURCE).catch(() => { });
 
     // Restore Program scene to what it was before Media was pushed
     await this.restoreProgramSceneBeforePush("media");

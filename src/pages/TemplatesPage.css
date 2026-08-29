@@ -776,62 +776,6 @@
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
 }
 
-.templates-canvas-shell {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  overflow: hidden;
-  background: #0c111a;
-}
-
-.templates-canvas-shell > div {
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.templates-canvas-shell canvas {
-  display: block;
-}
-
-.templates-canvas-shell--editable {
-  cursor: default;
-  user-select: none;
-  touch-action: none;
-}
-
-.templates-canvas-shell--editable canvas {
-  cursor: grab;
-}
-
-.templates-canvas-shell--editable canvas:active {
-  cursor: grabbing;
-}
-
-.templates-inline-editor {
-  position: absolute;
-  z-index: 3;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 4px;
-  overflow: hidden;
-  border: 1px solid var(--accent-blue);
-  border-radius: var(--radius);
-  outline: 2px solid rgba(var(--accent-blue-rgb), 0.24);
-  background: rgba(8, 12, 18, 0.96);
-  color: #fff;
-  resize: none;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  font-family: inherit;
-  line-height: 1.2;
-}
-
-.templates-inline-editor:focus {
-  outline: 2px solid rgba(var(--accent-blue-rgb), 0.42);
-}
-
 @media (max-width: 860px) {
   .templates-page__header-mark {
     display: none;
