@@ -183,7 +183,6 @@
 .templates-button:focus-visible,
 .templates-icon-button:focus-visible,
 .templates-category-tabs button:focus-visible,
-.templates-layer-row:focus-visible,
 .templates-segmented button:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
@@ -575,52 +574,6 @@
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
-}
-
-.templates-layer-list {
-  display: grid;
-  gap: 5px;
-  margin-top: 12px;
-}
-
-.templates-layer-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-secondary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.templates-layer-row:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.templates-layer-row.is-selected {
-  border-color: var(--primary-soft-border);
-  background: var(--primary-soft);
-  color: var(--text-primary);
-}
-
-.templates-layer-row span {
-  color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-}
-
-.templates-layer-row strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
 }
 
 .templates-field {

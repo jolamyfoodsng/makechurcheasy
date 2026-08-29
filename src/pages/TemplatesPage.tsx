@@ -201,29 +201,7 @@ function TemplateEditor({
       </header>
 
       <div className="templates-editor-layout">
-        <aside className="templates-inspector" aria-label="Template editor controls">
-          <section className="templates-inspector__section">
-            <p className="templates-section-label">Layers</p>
-            <p className="templates-inspector__hint">Click any object on the canvas to select it. Drag it anywhere to reposition it.</p>
-            <div className="templates-layer-list">
-              {template.layers.map((layer, index) => (
-                <button
-                  key={layer.id}
-                  type="button"
-                  className={`templates-layer-row${selectedLayer?.id === layer.id ? " is-selected" : ""}`}
-                  onClick={() => onSelectLayer(layer.id)}
-                >
-                  <span>{layer.kind === "text" ? "T" : "A"}</span>
-                  <strong>
-                    {layer.kind === "text"
-                      ? layer.text.replace(/\n/g, " ").slice(0, 30) || "Empty text"
-                      : `${layer.kind === "circle" ? "Circle" : "Shape"} artwork ${String(index + 1).padStart(2, "0")}`}
-                  </strong>
-                </button>
-              ))}
-            </div>
-          </section>
-
+        <aside className="templates-inspector" aria-label="Template editing controls">
           {selectedTextLayer && (
             <section className="templates-inspector__section templates-inspector__section--form">
               <p className="templates-section-label">Selected text</p>
@@ -291,13 +269,13 @@ function TemplateEditor({
 
           <div className="templates-inspector__footer">
             <Icon name="info" size={15} />
-            Double-click text to edit it directly. Changes are saved to this device.
+            Click text on the canvas to select it, then edit it here or double-click it directly. Changes are saved to this device.
           </div>
         </aside>
 
         <main className="templates-editor-workspace">
           <div className="templates-editor-toolbar">
-            <span><Icon name="layers" size={15} /> Freeform canvas</span>
+            <span><Icon name="edit" size={15} /> Freeform canvas</span>
             <span className="templates-editor-toolbar__muted">Click to select · drag to move · double-click text to edit</span>
           </div>
           <div className="templates-editor-canvas-wrap">
