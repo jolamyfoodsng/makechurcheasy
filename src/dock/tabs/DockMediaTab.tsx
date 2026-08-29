@@ -24,6 +24,7 @@ import {
   templateToSvgDataUrl,
 } from "../../templates/mceTemplatePackage";
 import {
+  EDITABLE_TEMPLATE_BROADCAST_CHANNEL,
   EDITABLE_TEMPLATE_STORAGE_EVENT,
   loadSavedEditableTemplates,
 } from "../../templates/editableTemplateStorage";
@@ -795,10 +796,18 @@ function DockMediaTab({
     window.addEventListener("storage", refreshSavedTemplates);
     window.addEventListener("focus", refreshSavedTemplates);
     window.addEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refreshSavedTemplates);
+    let templateChannel: BroadcastChannel | null = null;
+    try {
+      templateChannel = new BroadcastChannel(EDITABLE_TEMPLATE_BROADCAST_CHANNEL);
+      templateChannel.addEventListener("message", refreshSavedTemplates);
+    } catch {
+      templateChannel = null;
+    }
     return () => {
       window.removeEventListener("storage", refreshSavedTemplates);
       window.removeEventListener("focus", refreshSavedTemplates);
       window.removeEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refreshSavedTemplates);
+      templateChannel?.close();
     };
   }, [browserTab, refreshSavedTemplates]);
 

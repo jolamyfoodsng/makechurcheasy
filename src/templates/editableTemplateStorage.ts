@@ -8,6 +8,7 @@ import { readUserScopedStorage, writeUserScopedStorage } from "../services/userS
 
 export const EDITABLE_TEMPLATE_OVERRIDES_KEY = "mce-editable-template-overrides-v1";
 export const EDITABLE_TEMPLATE_STORAGE_EVENT = "mce-editable-templates-changed";
+export const EDITABLE_TEMPLATE_BROADCAST_CHANNEL = "mce-editable-templates";
 
 interface StoredTemplateOverride {
   layers: TemplateLayer[];
@@ -44,6 +45,13 @@ function writeOverrides(overrides: StoredTemplateOverrides): void {
   writeUserScopedStorage(EDITABLE_TEMPLATE_OVERRIDES_KEY, JSON.stringify(overrides));
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(EDITABLE_TEMPLATE_STORAGE_EVENT));
+    try {
+      const channel = new BroadcastChannel(EDITABLE_TEMPLATE_BROADCAST_CHANNEL);
+      channel.postMessage({ type: EDITABLE_TEMPLATE_STORAGE_EVENT });
+      channel.close();
+    } catch {
+      // localStorage and the focus refresh remain the fallback for embedded windows.
+    }
   }
 }
 
