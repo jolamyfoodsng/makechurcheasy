@@ -10,8 +10,11 @@ import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
 import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
-import type { DockPresentationOutputTarget } from "./dockPresentationTarget";
-import { isPresentationLinkTarget } from "./dockPresentationTarget";
+import {
+  isPresentationLinkTarget,
+  resolveDockPresentationOutputTarget,
+  type DockPresentationOutputTarget,
+} from "./dockPresentationTarget";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   APP_APPEARANCE_PALETTES,
@@ -41,7 +44,8 @@ import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
-import { registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
+import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
+import { getDockPlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import {
   DEFAULT_DOCK_FONT_SCALE,
@@ -232,7 +236,7 @@ interface DockPageProps {
 function DockPageContent({
   externalObsSession = false,
   presentationBibleLmSplit = false,
-  presentationOutputTarget = "obs",
+  presentationOutputTarget: requestedPresentationOutputTarget,
   enablePresentationAssistantMicControls = false,
   hideLowerThirdControls = false,
   hideTickerControls = false,
@@ -242,6 +246,12 @@ function DockPageContent({
   onActiveTabChange,
 }: DockPageProps = {}) {
   const { t } = useTranslation();
+  const [dockPlan, setDockPlan] = useState(() => getDockPlan());
+  const presentationOutputTarget = resolveDockPresentationOutputTarget(
+    requestedPresentationOutputTarget,
+    dockPlan,
+  );
+  const isFreePlan = dockPlan === "free";
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   // Synchronous config reader (reads from cache, falls back to defaults)
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
@@ -376,6 +386,14 @@ function DockPageContent({
     registerUpgradeModal((msg) => setUpgradeModalMsg(msg));
     startPlanRefresh();
 
+    const syncPlan = () => setDockPlan(getDockPlan());
+    const unsubscribePlan = dockClient.onState((msg) => {
+      if (msg.type === "state:plan-update") syncPlan();
+    });
+    const handlePlanStorage = () => syncPlan();
+    window.addEventListener("storage", handlePlanStorage);
+    const planRefreshTimer = window.setInterval(syncPlan, 60_000);
+
     // Initialize device performance detection for dock (non-blocking). On
     // sub-8 GB systems the tab cache is bounded below so hidden production
     // panels do not accumulate across a service.
@@ -404,6 +422,9 @@ function DockPageContent({
       cancelled = true;
       unsubscribePerformance?.();
       window.removeEventListener("dock-upgrade", handleUpgradeEvent);
+      unsubscribePlan();
+      window.removeEventListener("storage", handlePlanStorage);
+      window.clearInterval(planRefreshTimer);
     };
   }, []);
 
@@ -1789,7 +1810,7 @@ function DockPageContent({
 
 
         <main id="dock-main-content" tabIndex={-1} className="dock-content">
-
+          {isFreePlan && presentationLinkMode && <DockPresentationLinkCard />}
           <div className="dock-content-main">
             <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
               {mountedDockTabs.has("planner") && (
