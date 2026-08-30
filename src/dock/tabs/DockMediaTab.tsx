@@ -17,19 +17,6 @@ import type { DockStagedItem } from "../dockTypes";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { MediaItem } from "../../library/libraryTypes";
-import type { EditableTemplate } from "../../templates/editableTemplateCatalog";
-import { TemplateCanvas } from "../../templates/TemplateCanvas";
-import {
-  downloadMceTemplate,
-  templateToSvgDataUrl,
-} from "../../templates/mceTemplatePackage";
-import {
-  EDITABLE_TEMPLATE_BROADCAST_CHANNEL,
-  EDITABLE_TEMPLATE_STORAGE_EVENT,
-  getSavedEditableTemplatesUpdatedAt,
-  loadSavedEditableTemplates,
-  loadSavedEditableTemplatesFromDockData,
-} from "../../templates/editableTemplateStorage";
 import {
   compareMediaItemsNewest,
   getMediaSortTimestamp,
@@ -82,7 +69,7 @@ interface Props {
 type DockMediaKind = "video" | "image";
 type DockMediaFilter = "all" | DockMediaKind | "document";
 type DockMediaViewMode = "uploaded" | "recent";
-type DockMediaBrowserTab = "uploads" | "templates" | "animations" | "patterns" | "text";
+type DockMediaBrowserTab = "uploads" | "animations" | "patterns" | "text";
 type DockAddMediaTab = "background" | "template-videos";
 type DockAnimationCatalogTab = "videos" | "pictures";
 type DockTextAlign = "left" | "center" | "right";
@@ -335,7 +322,7 @@ function loadLocalMediaLibrary(): MediaItem[] {
 }
 
 function isDockMediaBrowserTab(value: unknown): value is DockMediaBrowserTab {
-  return value === "uploads" || value === "templates" || value === "animations" || value === "patterns" || value === "text";
+  return value === "uploads" || value === "animations" || value === "patterns" || value === "text";
 }
 
 function isDockMediaKind(value: unknown): value is DockMediaFilter {
@@ -674,9 +661,6 @@ function DockMediaTab({
   const [isMicroHeight, setIsMicroHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
   const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
-  const [savedTemplates, setSavedTemplates] = useState<EditableTemplate[]>(() => loadSavedEditableTemplates());
-  const savedTemplatesUpdatedAtRef = useRef(getSavedEditableTemplatesUpdatedAt());
-  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
@@ -783,53 +767,12 @@ function DockMediaTab({
   const [uploadsDir, setUploadsDir] = useState<string | null>(null);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
-  const refreshSavedTemplates = useCallback(() => {
-    const localTemplates = loadSavedEditableTemplates();
-    const localUpdatedAt = getSavedEditableTemplatesUpdatedAt();
-    if (localUpdatedAt >= savedTemplatesUpdatedAtRef.current) {
-      savedTemplatesUpdatedAtRef.current = localUpdatedAt;
-      setSavedTemplates(localTemplates);
-    }
-
-    void loadSavedEditableTemplatesFromDockData().then((remote) => {
-      if (!remote || remote.updatedAt < savedTemplatesUpdatedAtRef.current) return;
-      savedTemplatesUpdatedAtRef.current = remote.updatedAt;
-      setSavedTemplates(remote.templates);
-    });
-  }, []);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    refreshSavedTemplates();
-    window.addEventListener("storage", refreshSavedTemplates);
-    window.addEventListener("focus", refreshSavedTemplates);
-    window.addEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refreshSavedTemplates);
-    let templateChannel: BroadcastChannel | null = null;
-    try {
-      templateChannel = new BroadcastChannel(EDITABLE_TEMPLATE_BROADCAST_CHANNEL);
-      templateChannel.addEventListener("message", refreshSavedTemplates);
-    } catch {
-      templateChannel = null;
-    }
-    return () => {
-      window.removeEventListener("storage", refreshSavedTemplates);
-      window.removeEventListener("focus", refreshSavedTemplates);
-      window.removeEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refreshSavedTemplates);
-      templateChannel?.close();
-    };
-  }, [browserTab, refreshSavedTemplates]);
-
-  useEffect(() => {
-    if (browserTab !== "templates") return;
-    const interval = window.setInterval(refreshSavedTemplates, 1500);
-    return () => window.clearInterval(interval);
-  }, [browserTab, refreshSavedTemplates]);
 
   // Keep the animation lock in sync when the desktop app refreshes or upgrades
   // the dock session without requiring a full dock reload.
@@ -1916,19 +1859,6 @@ function DockMediaTab({
     if (!query) return patternEntries;
     return patternEntries.filter((entry) => entry.name.toLowerCase().includes(query));
   }, [assetSearch, patternEntries]);
-  const filteredSavedTemplates = useMemo(() => {
-    const query = assetSearch.trim().toLowerCase();
-    if (!query) return savedTemplates;
-    return savedTemplates.filter((template) => [
-      template.name,
-      template.description,
-      template.category,
-      ...template.tags,
-      ...template.layers
-        .filter((layer) => layer.kind === "text")
-        .map((layer) => layer.text),
-    ].join(" ").toLowerCase().includes(query));
-  }, [assetSearch, savedTemplates]);
   const filteredAnimationEntries = useMemo(() => {
     if (animationsLocked) return [];
     const query = assetSearch.trim().toLowerCase();
@@ -2560,7 +2490,6 @@ function DockMediaTab({
 
       if (!success) return false;
 
-      setActiveTemplateId(null);
       setActiveTargetKeys({ active: entry.key });
       updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
       setPausedTargets({ active: false });
@@ -2708,7 +2637,6 @@ function DockMediaTab({
           url: entry.previewUrl,
           createdAt: new Date().toISOString(),
         });
-        setActiveTemplateId(null);
         setActiveTargetKeys({ active: entry.key });
         setPausedTargets({ active: false });
         updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
@@ -2716,7 +2644,6 @@ function DockMediaTab({
       }
       await ensureObsConnected();
       await dockObsClient.pushPatternBackground(entry.previewUrl, entry.name);
-      setActiveTemplateId(null);
       setActiveTargetKeys({ active: entry.key });
       setPausedTargets({ active: false });
       updateMediaPreference(entry.prefKey, { lastUsedAt: new Date().toISOString() });
@@ -2726,37 +2653,6 @@ function DockMediaTab({
       setSendingFile(null);
     }
   }, [presentationLinkMode, updateMediaPreference]);
-
-  const handleSendEditableTemplate = useCallback(async (template: EditableTemplate) => {
-    setSendingFile(`template:${template.id}`);
-    setSendError(null);
-    try {
-      if (presentationLinkMode) {
-        await publishMediaToPresentation({
-          id: `mce-template-${template.id}`,
-          name: `${template.name}.mce`,
-          type: "image",
-          url: templateToSvgDataUrl(template),
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        await ensureObsConnected();
-        await dockObsClient.pushEditableTemplate(template);
-      }
-      setActiveTemplateId(template.id);
-      setActiveTargetKeys({ active: null });
-      setPausedTargets({ active: false });
-      track("media_presented");
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("media.failedToSendMedia");
-      setSendError(message);
-      console.warn("[DockMediaTab] Template presentation failed:", message);
-      return false;
-    } finally {
-      setSendingFile(null);
-    }
-  }, [presentationLinkMode, t]);
 
   const findDownloadedTemplateVideo = useCallback((asset: TemplateVideoAsset) => (
     mergedLibraryItems.find((item) => (
@@ -2964,7 +2860,6 @@ function DockMediaTab({
       await ensureObsConnected();
 
       await dockObsClient.clearMedia();
-      setActiveTemplateId(null);
       setActiveTargetKeys({ active: null });
       setPausedTargets({ active: false });
       setTextOverlayTargets({ active: false });
@@ -3347,9 +3242,7 @@ function DockMediaTab({
     ? t('media.searchAnimations')
     : browserTab === "patterns"
       ? t('media.searchTemplates')
-      : browserTab === "templates"
-        ? "Search saved templates…"
-        : t('media.searchPlaceholderShort');
+      : t('media.searchPlaceholderShort');
 
   const updateOverlayFontSize = (
     key: "headlineSize" | "sublineSize",
@@ -3664,16 +3557,6 @@ function DockMediaTab({
           <button
             type="button"
             role="tab"
-            aria-selected={browserTab === "templates"}
-            className={`dock-media-tab ${browserTab === "templates" ? "dock-media-tab--active" : ""}`}
-            onClick={() => setBrowserTab("templates")}
-            title={t('media.myTemplates', 'My templates')}>
-            {useCompactMediaTabs ? <Icon name="layers" size={12} /> : t('media.myTemplates', 'My templates')}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{savedTemplates.length}</span>}
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={browserTab === "animations"}
             className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
             onClick={openAnimationsTab}
@@ -3763,97 +3646,6 @@ function DockMediaTab({
 
       {/* ── Asset Browser ── */}
       <div className="dock-media-browser">
-        {browserTab === "templates" && (
-          <section className="dock-template-library" aria-label={t('media.myTemplates', 'My templates')}>
-            <div className="dock-template-library__header">
-              <div>
-                <div className="dock-media-section__title">{t('media.myTemplates', 'My templates')}</div>
-                <div className="dock-media-section__meta">Saved editable designs · MCE format</div>
-              </div>
-              <div className="dock-template-library__header-actions">
-                <span className="dock-media-section__count">{filteredSavedTemplates.length}</span>
-                <button
-                  type="button"
-                  className="dock-shell-icon-btn"
-                  onClick={refreshSavedTemplates}
-                  aria-label="Refresh saved templates"
-                  title="Refresh saved templates"
-                >
-                  <Icon name="refresh" size={12} />
-                </button>
-              </div>
-            </div>
-
-            {filteredSavedTemplates.length === 0 ? (
-              <div className="dock-media-empty dock-template-library__empty">
-                <div className="dock-media-empty__icon"><Icon name="layers" size={24} /></div>
-                <div className="dock-media-empty__title">No saved templates yet</div>
-                <div className="dock-media-empty__text">Save a design from the Templates page and it will appear here as an editable .mce template.</div>
-              </div>
-            ) : (
-              <div className="dock-template-grid">
-                {filteredSavedTemplates.map((template) => {
-                  const isActive = activeTemplateId === template.id;
-                  const isSending = sendingFile === `template:${template.id}`;
-                  const handleTemplateClick = () => { void handleSendEditableTemplate(template); };
-
-                  return (
-                    <article key={template.id} className={`dock-template-card${isActive ? " dock-template-card--active" : ""}`}>
-                      <div
-                        className="dock-template-card__preview"
-                        role="button"
-                        tabIndex={0}
-                        onClick={handleTemplateClick}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            handleTemplateClick();
-                          }
-                        }}
-                        aria-label={`${presentationLinkMode ? "Show" : "Use"} ${template.name}`}
-                        title={`${presentationLinkMode ? "Show" : "Use"} ${template.name}`}
-                      >
-                        <TemplateCanvas template={template} />
-                        <span className="dock-template-card__preview-badge">
-                          <Icon name={isSending ? "hourglass_top" : isActive ? "check_circle" : "play_arrow"} size={13} />
-                          {isSending ? "Sending…" : isActive ? "Showing" : "Use template"}
-                        </span>
-                      </div>
-                      <div className="dock-template-card__body">
-                        <div className="dock-template-card__title-row">
-                          <strong title={template.name}>{template.name}</strong>
-                          <span>.mce</span>
-                        </div>
-                        <div className="dock-template-card__meta">{template.category} · {template.layers.filter((layer) => layer.kind === "text").length} editable text layers</div>
-                        <div className="dock-template-card__actions">
-                          <button
-                            type="button"
-                            className="dock-btn dock-btn--primary dock-btn--compact"
-                            onClick={handleTemplateClick}
-                            disabled={isSending}
-                          >
-                            <Icon name={isSending ? "hourglass_top" : "play_arrow"} size={12} />
-                            {presentationLinkMode ? "Show" : "Use in OBS"}
-                          </button>
-                          <button
-                            type="button"
-                            className="dock-btn dock-btn--secondary dock-btn--compact"
-                            onClick={() => downloadMceTemplate(template)}
-                            title={`Download ${template.name}.mce`}
-                          >
-                            <Icon name="download" size={12} />
-                            .mce
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
-
         {browserTab === "uploads" && (
           <>
             {mediaEntries.length === 0 && !uploadsLoading && !libraryLoading && !uploading ? (
@@ -5310,7 +5102,7 @@ function DockMediaTab({
       )}
 
       {/* ── Footer actions (hidden when in text section — it has its own clear) ── */}
-      {browserTab !== "text" && browserTab !== "templates" && (
+      {browserTab !== "text" && (
         <button
           type="button"
           className="dock-btn dock-btn--secondary dock-btn--compact dock-media-hide-btn"

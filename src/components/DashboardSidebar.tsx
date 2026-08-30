@@ -21,7 +21,6 @@ import {
   LogOut,
   FileText,
   LayoutGrid,
-  LayoutTemplate,
   Tv,
   Zap,
   GraduationCap,
@@ -67,7 +66,7 @@ export default function DashboardSidebar({
         to === "/"
           ? currentPath === "/"
           : currentPath.startsWith(full) &&
-          (query ? currentPath.includes(query) : full === "/templates" || !currentPath.includes("?"));
+          (query ? currentPath.includes(query) : !currentPath.includes("?"));
       return (
         <a
           key={to}
@@ -118,7 +117,6 @@ export default function DashboardSidebar({
           {navItem("/speech-to-scripture", Mic, t("sidebar.verseAi"))}
           {navItem("/transcripts", FileText, t("sidebar.transcripts"))}
           {navItem("/production/themes", Palette, t("sidebar.themes"))}
-          {navItem("/templates", LayoutTemplate, t("sidebar.templates", { defaultValue: "Templates" }))}
 
           {navItem("/resources?tab=bible", BookOpen, t("sidebar.bible"))}
           {navItem("/resources?tab=worship", Music, t("sidebar.worship"))}

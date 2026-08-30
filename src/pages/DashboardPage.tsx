@@ -166,21 +166,6 @@ export default function DashboardPage() {
                 <div className="dash-action-list">
                   <button
                     className="dash-action-card"
-                    onClick={() => handleModuleNav("/templates/studio", "Create New Layout", "grid_view")}
-                    title="Create">
-                    <div className="dash-action-copy">
-                      <div className="dash-action-icon">
-                        <Icon name="grid_view" size={18} />
-                      </div>
-                      <div>
-                        <h4>{t("dashboard.createNewLayout")}</h4>
-                        <p>{t("dashboard.createNewLayoutDesc")}</p>
-                      </div>
-                    </div>
-                    <Icon name="chevron_right" size={18} className="dash-action-chevron" />
-                  </button>
-                  <button
-                    className="dash-action-card"
                     onClick={() => handleModuleNav("/hub/quick-merge", "Quick Merge", "merge_type")}
                     title="Open">
                     <div className="dash-action-copy">
