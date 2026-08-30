@@ -26,6 +26,7 @@ import {
   getEffectivePlan as resolveCanonicalPlan,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
+import { getStoredLocalDevPlanOverride } from "../services/localDevPlanOverride";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
@@ -48,6 +49,8 @@ export function registerUpgradeModal(trigger: (message: string) => void): void {
  */
 export function getDockPlan(): string {
   try {
+    const localDevOverride = getStoredLocalDevPlanOverride();
+    if (localDevOverride) return localDevOverride;
     return normalizePlanId(localStorage.getItem(getUserScopedKey(PLAN_KEY)) || "free");
   } catch {
     return "free";
@@ -75,9 +78,22 @@ function checkWithServerLimits(
   plan: string,
   currentCount: number,
 ): EntitlementResult {
+  const localDevOverride = getStoredLocalDevPlanOverride();
+  const storedEntitlements = getStoredEntitlements();
+  const localDevEntitlements = localDevOverride
+    ? DEFAULT_PLAN_CONFIG.plans[normalizePlanId(plan)]?.entitlements as unknown as Record<string, number | boolean> | undefined
+    : null;
   // If we have server-provided entitlements, use them directly
-  const serverLimits = _serverEntitlements || getStoredEntitlements();
-  const source = _serverEntitlements ? "server" : getStoredEntitlements() ? "localStorage" : "defaultConfig";
+  // A local plan override must win over the admin account's server entitlements
+  // so switching to Free actually exercises Free limits in the Dock too.
+  const serverLimits = localDevEntitlements || _serverEntitlements || storedEntitlements;
+  const source = localDevEntitlements
+    ? "localDevOverride"
+    : _serverEntitlements
+      ? "server"
+      : storedEntitlements
+        ? "localStorage"
+        : "defaultConfig";
 
   if (serverLimits) {
     const limit = serverLimits[feature];

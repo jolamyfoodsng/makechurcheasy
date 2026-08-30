@@ -46,6 +46,7 @@ import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
 import { getDockPlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
+import { LOCAL_DEV_PLAN_OVERRIDE_EVENT } from "../services/localDevPlanOverride";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import {
   DEFAULT_DOCK_FONT_SCALE,
@@ -392,6 +393,7 @@ function DockPageContent({
     });
     const handlePlanStorage = () => syncPlan();
     window.addEventListener("storage", handlePlanStorage);
+    window.addEventListener(LOCAL_DEV_PLAN_OVERRIDE_EVENT, handlePlanStorage);
     const planRefreshTimer = window.setInterval(syncPlan, 60_000);
 
     // Initialize device performance detection for dock (non-blocking). On
@@ -424,6 +426,7 @@ function DockPageContent({
       window.removeEventListener("dock-upgrade", handleUpgradeEvent);
       unsubscribePlan();
       window.removeEventListener("storage", handlePlanStorage);
+      window.removeEventListener(LOCAL_DEV_PLAN_OVERRIDE_EVENT, handlePlanStorage);
       window.clearInterval(planRefreshTimer);
     };
   }, []);

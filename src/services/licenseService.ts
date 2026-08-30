@@ -41,6 +41,7 @@ import {
   isActiveTrial as isCanonicalTrialActive,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
+import { getLocalDevPlanOverride } from "./localDevPlanOverride";
 
 export type { PlanTier } from "./planConfigTypes";
 
@@ -249,6 +250,9 @@ function getCurrentFeatureRequiredPlan(): Record<string, PlanTier> {
  */
 export function getUserPlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
+  const localDevOverride = getLocalDevPlanOverride(user);
+  if (localDevOverride) return localDevOverride;
+
   const normalizedUserPlan = normalizePlanId(user.plan);
   const resolvedUserPlan = resolveCanonicalPlan(user as any);
 
@@ -300,6 +304,12 @@ export function getTrialDaysRemaining(user: AuthUser | null): number {
  */
 export function getEffectivePlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
+  const localDevOverride = getLocalDevPlanOverride(user);
+  if (localDevOverride) {
+    console.debug("[licenseService] local development plan override=%s", localDevOverride);
+    return localDevOverride;
+  }
+
   const userPlan = getUserPlan(user);
   const plan = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
   console.debug(

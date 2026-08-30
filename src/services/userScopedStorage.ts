@@ -137,6 +137,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "voiceBibleUsage",
 
   // Plan / entitlements
+  "mce-local-dev-plan-override",
   "ocs-dock-plan",
   "ocs-dock-entitlements",
   "ocs-dock-song-limit",
