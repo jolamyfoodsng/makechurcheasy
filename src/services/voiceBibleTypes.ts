@@ -97,6 +97,9 @@ export interface VoiceBibleCandidate {
   book: string;
   chapter: number;
   verse: number;
+  endVerse?: number;
+  /** Time this result was detected, preserved through relay polling. */
+  detectedAt?: number;
   translation: string;
   label: string;
   snippet: string;

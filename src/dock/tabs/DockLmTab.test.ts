@@ -91,6 +91,16 @@ describe("DockLmTab settings helpers", () => {
     expect(expired).toHaveLength(0);
   });
 
+  it("keeps a new or revisited reference ahead of retained queue history", () => {
+    const john = candidate("John", 3, 16);
+    const genesis = candidate("Genesis", 3, 7);
+    const initial = mergeRetainedLmQueue([], [john], 1000);
+    const next = mergeRetainedLmQueue(initial, [genesis, john], 2000);
+    expect(next[0].candidate.label).toBe("Genesis 3:7");
+    expect(next[1].detectedAt).toBe(1000);
+    expect(mergeRetainedLmQueue(next, [john, genesis], 3000)[0].candidate.label).toBe("John 3:16");
+  });
+
   it("keeps a suggestion through a temporary empty live-search result", () => {
     const first = candidate("Psalms", 91, 1);
     const replacement = candidate("Psalms", 91, 2);

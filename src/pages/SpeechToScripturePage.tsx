@@ -54,6 +54,9 @@ import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
 import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
+import { loadLmSettings } from "../services/lmSettings";
+import { resolveScriptureProjection } from "../services/scriptureProjection";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import { isConfirmedAppClose } from "../services/appCloseGuard";
 
 const API_BASE =
@@ -107,6 +110,8 @@ function formatTimestamp(entry: { startTime?: number }, elapsed: number): string
 }
 
 function loadPreferredMicId(): string {
+  const nativeMic = readNativeDockSetting<string>(PREFERRED_MIC_STORAGE_KEY);
+  if (nativeMic?.trim()) return nativeMic.trim();
   if (typeof localStorage === "undefined") return "";
   try {
     return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY))?.trim() ?? "";
@@ -116,6 +121,7 @@ function loadPreferredMicId(): string {
 }
 
 function savePreferredMicId(micId: string): void {
+  writeNativeDockSetting(PREFERRED_MIC_STORAGE_KEY, micId.trim());
   if (typeof localStorage === "undefined") return;
   try {
     const key = getUserScopedKey(PREFERRED_MIC_STORAGE_KEY);
@@ -626,15 +632,17 @@ export default function SpeechToScripturePage() {
     setPushError(null);
     setPushSuccess(null);
     try {
+      const settings = loadLmSettings();
+      candidate = await resolveScriptureProjection(candidate, settings.translation);
       const slide: BibleSlide = {
         id: `speech-${candidate.book}-${candidate.chapter}-${candidate.verse}`,
         text: candidate.snippet || `${candidate.book} ${candidate.chapter}:${candidate.verse}`,
         reference: `${candidate.label} (${candidate.translation})`,
-        verseRange: String(candidate.verse),
+        verseRange: candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse),
         index: 0,
         total: 1,
       };
-      await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
+      await bibleObsService.pushSlide(slide, null, true, false, settings.overlayMode);
       track("sts_push_to_live", { reference: candidate.label, confidence: candidate.confidence });
       trackStsPushToLive();
       setPushSuccess(t("verseAi.pushedToBroadcast", { reference: candidate.label }));
@@ -788,18 +796,16 @@ export default function SpeechToScripturePage() {
     }
   }, [finalizedEntries, downloadFormat, fullTranscript, generateSrt]);
 
-  // ── Top match: selected candidate or first suggestion (auto) ──
+  // ── Top match: manual selection or the newest reference/quotation ──
   const topMatch = useMemo(() => {
     if (selectedCandidate) return selectedCandidate;
-    // Only use suggestions — never queue items.
-    if (snapshot.suggestions.length > 0) return snapshot.suggestions[0];
-    return null;
-  }, [selectedCandidate, snapshot.suggestions]);
+    return snapshot.latestMatch ?? null;
+  }, [selectedCandidate, snapshot.latestMatch]);
 
-  // ── Clear manual selection when new suggestions arrive ──
+  // ── Follow the newest detection when it arrives ──
   useEffect(() => {
-    if (snapshot.suggestions.length > 0) setSelectedCandidate(null);
-  }, [snapshot.suggestions]);
+    setSelectedCandidate(null);
+  }, [snapshot.latestMatch]);
 
   // ── Candidate matches: ONLY suggestions (quote search results) ──
   const candidateMatches = useMemo(() => {

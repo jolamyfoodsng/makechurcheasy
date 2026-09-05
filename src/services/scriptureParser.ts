@@ -230,6 +230,7 @@ function resolveNumberedBookWithTokens(text: string): NumberedBookResult | null 
   for (let i = 0; i < tokens.length - 1; i++) {
     const digit = resolveOrdinal(tokens[i]);
     if (!digit) continue;
+    if (tokens[i] === "to" && i > 0 && /^(?:john|jhon|jon|jn)$/.test(tokens[i + 1])) continue;
 
     for (const def of NUMBERED_BOOKS) {
       if (numberedBookSuffixMatches(tokens[i + 1], def)) {
@@ -247,48 +248,19 @@ interface ChapterVerseResult {
 }
 
 function parseChapterVerseFromTokens(tokens: string[]): ChapterVerseResult | null {
-  if (tokens.length === 0) return null;
-
-  const chapterIdx = tokens.findIndex((token) => /^(chapter|chap)$/i.test(token));
-  if (
-    chapterIdx > 0 &&
-    tokens.slice(0, chapterIdx).some((token) => parseNumberWord(token) !== null || /^verse$/i.test(token))
-  ) {
-    return null;
-  }
-
-  // Handle colon notation first (e.g., "2:1", "3:16-17")
-  // This is common when the input comes as a single token after a numbered book
-  // like "2 kings 2:1" where "2:1" is one token.
-  for (const t of tokens) {
-    const colonMatch = t.match(/^(\d+):(\d+)(?:-(\d+))?$/);
-    if (colonMatch) {
-      return {
-        chapter: parseInt(colonMatch[1], 10),
-        verse: parseInt(colonMatch[2], 10),
-        endVerse: colonMatch[3] ? parseInt(colonMatch[3], 10) : null,
-      };
-    }
-  }
-
-  // Filter out ordinal suffixes and filler words like "chapter", "verse", "open"
-  const cleaned: string[] = [];
-  for (const t of tokens) {
-    const low = t.toLowerCase();
-    if (/^\d+(st|nd|rd|th)$/.test(low)) continue; // ordinal suffix
-    if (/^(chapter|chap|verse|open|turn|read|look)$/i.test(low)) continue;
-    cleaned.push(t);
-  }
-
-  const numbers: number[] = [];
-  for (const t of cleaned) {
-    const n = parseNumberWord(t);
-    if (n !== null) numbers.push(n);
-  }
-
-  if (numbers.length === 0) return null;
-  if (numbers.length === 1) return { chapter: numbers[0], verse: null, endVerse: null };
-  return { chapter: numbers[0], verse: numbers[1], endVerse: numbers.length > 2 ? numbers[2] : null };
+  const text = tokens.join(" ");
+  // Numbers belong to the reference only while they are adjacent to its book.
+  // Never harvest unrelated numbers from the rest of a sermon sentence.
+  const match = text.match(/^(?:chapter\s+)?(\d+)(?:\s*:\s*|\s+(?:verse\s+)?)(\d+)(?:\s*(?:-|to|through|thru|and)\s*(?:verse\s+)?(\d+))?/)
+    ?? text.match(/^(?:chapter\s+)?(\d+)(?![\d:])/);
+  if (!match) return null;
+  const tail = text.slice(match[0].length);
+  if (/^\s+chapter\b/.test(tail)) return null;
+  return {
+    chapter: Number(match[1]),
+    verse: match[2] ? Number(match[2]) : null,
+    endVerse: match[3] ? Number(match[3]) : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -445,12 +417,30 @@ const CORRECTION_PREFIX_RE = /^(?:sorry(?:\s+sorry)?|rather|i\s+mean|correction|
 const CORRECTION_WINDOW_MS = 8_000;
 
 export function parseNumberWord(text: string): number | null {
-  const key = text.toLowerCase().trim();
+  const key = text.toLowerCase().trim().replace(/-/g, " ").replace(/\s+/g, " ");
+  if (/^\d+(?:st|nd|rd|th)?$/.test(key)) {
+    const value = Number.parseInt(key, 10);
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
   if (NUMBER_WORDS[key] !== undefined) return NUMBER_WORDS[key];
-  // Try plain number
-  const n = parseInt(key, 10);
-  if (!isNaN(n) && n > 0) return n;
-  return null;
+  const hundred = key.match(/^(?:(one|two|three|four|five|six|seven|eight|nine) )?hundred(?: (?:and )?(.+))?$/);
+  if (hundred) {
+    const remainder = hundred[2] ? parseNumberWord(hundred[2]) : 0;
+    if (remainder === null || remainder >= 100) return null;
+    return (hundred[1] ? NUMBER_WORDS[hundred[1]] : 1) * 100 + remainder;
+  }
+  const compound = key.match(/^(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety) (one|two|three|four|five|six|seven|eight|nine)$/);
+  return compound ? NUMBER_WORDS[compound[1]] + NUMBER_WORDS[compound[2]] : null;
+}
+
+/** Collapse cardinal phrases without joining separate chapter/verse numbers. */
+function normalizeSpokenNumbers(text: string): string {
+  const unit = "one|two|three|four|five|six|seven|eight|nine";
+  const small = `${unit}|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen`;
+  const tens = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
+  const underHundred = `(?:(?:${tens})(?:[ -](?:${unit}))?|${small})`;
+  const pattern = new RegExp(`\\b(?:(?:(?:${unit}) )?hundred(?: (?:and )?${underHundred})?|${underHundred})\\b`, "gi");
+  return text.replace(pattern, (value) => String(parseNumberWord(value) ?? value));
 }
 
 // ---------------------------------------------------------------------------
@@ -549,7 +539,7 @@ const TRANSLATION_ALIASES: Record<string, string> = {
  */
 export function parseScriptureIntent(text: string): ScriptureIntent {
   if (!text) return null;
-  const lower = text.toLowerCase().trim();
+  const lower = normalizeSpokenNumbers(text.toLowerCase().trim()).replace(/[.,!?;]+$/g, "").trim();
 
   // ── Noise filtering: ignore vague, incomplete, or nonsensical inputs ──
   // Pure numbers, vague thresholds, or misrecognized speech
@@ -585,7 +575,7 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
     const allRefs = parseScriptureReferenceAll(rest);
     if (allRefs.length > 0) {
       const primary = allRefs[0];
-      if (primary.book) {
+      if (primary.book && primary.chapter !== null) {
         const hasVerse = primary.verse != null;
         // If multiple interpretations, include all as candidates
         const candidates = allRefs
@@ -631,7 +621,7 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
     }
   }
 
-  if (isLikelyScriptureReferenceAttempt(lower)) {
+  if (isLikelyScriptureReferenceAttempt(lower) && !directRef[0]?.isRelative) {
     return null;
   }
 
@@ -769,296 +759,103 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
  * Strip filler words and normalize whitespace.
  */
 function cleanTranscript(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/['']/g, "'")
-    .replace(/\b(let's|lets|please|can we|could we|would you|now|so|no|and|but|or|the|a|an|to|into|in|on|of|for|our|your|we|i|you|it|he|she|they|is|are|was|were|be|been|has|have|had|do|does|did|will|would|shall|should|may|might|can|could)\b/g, " ")
-    .replace(/\b(open|turn|take|bring|move|switch|go|read|see|check|flip|turning|opening|reading)\b/g, " ")
-    .replace(/\b(bible|scripture|passage|text|word|page)\b/g, " ")
+  return normalizeSpokenNumbers(text.toLowerCase())
+    .replace(/[’']/g, "'")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
-    .replace(/\b(verse|verses|vs|vrs|vas|vass|buzz|by|bi|bah|bus|bas)\b/g, " verse ")
+    .replace(/\b(verse|verses|vs|vrs|vas|vass|buzz|bah|bus|bas)\b/g, " verse ")
+    .replace(/[–—]/g, "-")
+    .replace(/(\d)\s*:\s*(\d)/g, "$1:$2")
     .replace(/[^\w\s:-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-/**
- * Parse a Bible reference from text.
- *
- * Returns a ParsedReference or null if nothing recognizable was found.
- * If the text contains a relative reference (e.g. "verse 28" without a book),
- * isRelative will be true and book/chapter may be null.
- *
- * Smart extraction: finds book name anywhere in text, then grabs nearby numbers.
- */
 export function parseScriptureReference(text: string): ParsedReference | null {
-  // Priority 0: Try numbered book resolver on raw text BEFORE cleanTranscript.
-  // This catches "to king 6 17" → 2 Kings 6:17 and "tree john 1 2" → 3 John 1:2
-  // where cleanTranscript would strip "to" or exact alias would match "john" alone.
-  const rawNumbered = resolveNumberedBookWithTokens(text);
-  if (rawNumbered) {
-    const rawTokens = text.trim().split(/\s+/);
-    const afterBook = rawTokens.slice(rawNumbered.afterBookIdx);
-    const ref = parseChapterVerseFromTokens(afterBook);
-    if (ref) {
-      return {
-        book: rawNumbered.book,
-        chapter: ref.chapter,
-        verse: ref.verse,
-        endVerse: ref.endVerse,
-        isRelative: false,
-      };
-    }
-  }
-
   const cleaned = cleanTranscript(text);
   if (!cleaned) return null;
+  const tokens = cleaned.split(" ");
 
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return null;
+  const makeReference = (book: string, afterBookIdx: number): ParsedReference | null => {
+    const after = tokens.slice(afterBookIdx);
+    const suffix = after.join(" ");
+    const singleChapter = BOOK_CHAPTERS[book] === 1;
+    const verseOnly = suffix.match(/^verse\s+(\d+)(?:\s*(?:-|to|through|thru|and)\s*(?:verse\s+)?(\d+))?/);
+    if (verseOnly) return {
+      book, chapter: singleChapter ? 1 : null, verse: Number(verseOnly[1]),
+      endVerse: verseOnly[2] ? Number(verseOnly[2]) : null, isRelative: false,
+    };
+    const ref = parseChapterVerseFromTokens(after);
+    if (ref) {
+      if (singleChapter && ref.chapter > 1 && ref.verse === null) {
+        ref.verse = ref.chapter;
+        ref.chapter = 1;
+      }
+      return { book, ...ref, isRelative: false };
+    }
+    // A bare book is useful context. A book-like word within ordinary speech
+    // ("look at what God did") must not suppress the quotation search.
+    if (after.length > 0 && !/^(?:chapter|verse)$/.test(suffix)) return null;
+    return { book, chapter: null, verse: null, endVerse: null, isRelative: false };
+  };
 
-  // Step 1: Try to find a book name anywhere in the tokens
-  let book: string | null = null;
-  let bookEndIdx = -1;
+  const numbered = resolveNumberedBookWithTokens(cleaned);
+  if (numbered) {
+    const result = makeReference(numbered.book, numbered.afterBookIdx);
+    if (result) return result;
+  }
 
-  // Try multi-word book names first (longest match)
+  // Exact aliases take priority over fuzzy matches; prefer the longest name.
   for (let len = Math.min(tokens.length, 5); len >= 1; len--) {
     for (let i = 0; i <= tokens.length - len; i++) {
       const candidate = tokens.slice(i, i + len).join(" ");
-      const match = BOOK_ALIAS_MAP.get(candidate);
-      if (match) {
-        book = match;
-        bookEndIdx = i + len;
-        break;
-      }
-      // Also try without spaces
-      const noSpace = candidate.replace(/\s+/g, "");
-      const match2 = BOOK_ALIAS_MAP.get(noSpace);
-      if (match2) {
-        book = match2;
-        bookEndIdx = i + len;
-        break;
-      }
-    }
-    if (book) break;
-  }
-
-  // Fallback: numbered book resolver (handles "first king", "won corinthians", etc.)
-  if (!book) {
-    const resolved = resolveNumberedBookWithTokens(cleaned);
-    if (resolved) {
-      book = resolved.book;
-      bookEndIdx = resolved.afterBookIdx;
+      const book = BOOK_ALIAS_MAP.get(candidate) ?? BOOK_ALIAS_MAP.get(candidate.replace(/\s+/g, ""));
+      if (!book) continue;
+      const result = makeReference(book, i + len);
+      if (!result) continue;
+      if (result.chapter === null && result.verse === null && i > 0 &&
+          !/^(?:(?:let s|lets|please|can we|now|open|turn|go|read|take|bring|move|switch|to|the|book|of)\s*)+$/.test(tokens.slice(0, i).join(" "))) continue;
+      return result;
     }
   }
 
-  // Fallback: fuzzy Levenshtein match against all 66 books
-  // Only match single tokens — multi-token candidates like "thesalonians 5"
-  // would falsely match single-word books via Levenshtein, consuming numbers
-  // that should be chapter/verse.
-  if (!book) {
-    for (let i = 0; i < tokens.length; i++) {
-      const fuzzy = fuzzyMatchBook(tokens[i]);
-      if (fuzzy) {
-        book = fuzzy.book;
-        bookEndIdx = i + 1;
-        break;
-      }
+  for (let i = 0; i < tokens.length; i++) {
+    if (!/^(?:\d|chapter$|verse$)/.test(tokens[i + 1] ?? "")) continue;
+    const fuzzy = fuzzyMatchBook(tokens[i]);
+    if (fuzzy) {
+      const result = makeReference(fuzzy.book, i + 1);
+      if (result) return result;
     }
   }
+  if (hasMalformedBookReference(tokens)) return null;
+  return parseRelativeReference(tokens);
+}
 
-  if (!book) {
-    // No book found — try relative reference parsing
-    return parseRelativeReference(tokens);
-  }
-
-  // Step 2: Find numbers near the book name (after it)
-  const afterBook = tokens.slice(bookEndIdx);
-  let chapter: number | null = null;
-  let verse: number | null = null;
-  let endVerse: number | null = null;
-
-  // Look for numbers in the tokens after the book
-  const numbers: number[] = [];
-  for (let i = 0; i < afterBook.length; i++) {
-    const n = parseNumberWord(afterBook[i]);
-    if (n !== null) numbers.push(n);
-  }
-
-  // Check for "N:N" or "N-N" patterns in remaining tokens
-  for (let i = 0; i < afterBook.length; i++) {
-    const token = afterBook[i];
-    const colonMatch = token.match(/^(\d+):(\d+)(?:-(\d+))?$/);
-    if (colonMatch) {
-      chapter = parseInt(colonMatch[1], 10);
-      verse = parseInt(colonMatch[2], 10);
-      if (colonMatch[3]) endVerse = parseInt(colonMatch[3], 10);
-      // Also check for "N:N to M" format (e.g., "2:7 to 9")
-      if (!endVerse && i + 2 < afterBook.length) {
-        const connector = afterBook[i + 1];
-        if (connector === "to" || connector === "through" || connector === "thru") {
-          const evn = parseNumberWord(afterBook[i + 2]);
-          if (evn !== null && evn >= verse) endVerse = evn;
-        }
-      }
-      return { book, chapter, verse, endVerse, isRelative: false };
-    }
-  }
-
-  // Check for "chapter N" or "verse N" patterns
-  const chapterIdx = afterBook.indexOf("chapter");
-  if (
-    chapterIdx > 0 &&
-    afterBook.slice(0, chapterIdx).some((token) => parseNumberWord(token) !== null || token === "verse")
-  ) {
-    return null;
-  }
-  if (chapterIdx >= 0 && chapterIdx + 1 < afterBook.length) {
-    const n = parseNumberWord(afterBook[chapterIdx + 1]);
-    if (n !== null) {
-      chapter = n;
-      // Look for "verse N" or "verse N to M" after chapter
-      const afterChapter = afterBook.slice(chapterIdx + 2);
-      const verseIdx = afterChapter.indexOf("verse");
-      if (verseIdx >= 0 && verseIdx + 1 < afterChapter.length) {
-        const vn = parseNumberWord(afterChapter[verseIdx + 1]);
-        if (vn !== null) {
-          verse = vn;
-          // Check for range: "verse 7 to 9" or "verse 7 through 9"
-          if (verseIdx + 3 < afterChapter.length) {
-            const connector = afterChapter[verseIdx + 2];
-            if (connector === "to" || connector === "through" || connector === "thru") {
-              const evn = parseNumberWord(afterChapter[verseIdx + 3]);
-              if (evn !== null && evn >= vn) endVerse = evn;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Check for standalone "verse N to M" pattern (without "chapter" prefix)
-  if (chapter !== null && verse === null) {
-    const verseIdx = afterBook.indexOf("verse");
-    if (verseIdx >= 0 && verseIdx + 1 < afterBook.length) {
-      const vn = parseNumberWord(afterBook[verseIdx + 1]);
-      if (vn !== null) {
-        verse = vn;
-        // Check for range: "verse 7 to 9"
-        if (verseIdx + 3 < afterBook.length) {
-          const connector = afterBook[verseIdx + 2];
-          if (connector === "to" || connector === "through" || connector === "thru") {
-            const evn = parseNumberWord(afterBook[verseIdx + 3]);
-            if (evn !== null && evn >= vn) endVerse = evn;
-          }
-        }
-      }
-    }
-  }
-
-  // If no chapter/verse found yet, use the numbers we found
-  if (chapter === null && numbers.length > 0) {
-    chapter = numbers[0];
-    if (numbers.length > 1) {
-      verse = numbers[1];
-    }
-  }
-
-  // If we have a book + verse but no chapter, default to chapter 1
-  if (book && chapter === null && verse !== null) {
-    chapter = 1;
-  }
-
-  // Validate chapter against book
-  if (book && chapter !== null) {
-    const maxCh = BOOK_CHAPTERS[book];
-    if (maxCh !== undefined && chapter > maxCh) {
-      // Chapter exceeds max — might be a verse for single-chapter books
-      if (maxCh === 1) {
-        verse = chapter;
-        chapter = 1;
-      }
-    }
-  }
-
-  // Nothing parsed
-  if (!book && chapter === null && verse === null) return null;
-
-  return {
-    book,
-    chapter,
-    verse,
-    endVerse,
-    isRelative: !book,
-  };
+function hasMalformedBookReference(tokens: string[]): boolean {
+  return tokens.some((token, index) =>
+    (BOOK_ALIAS_MAP.has(token) || fuzzyMatchBook(token) !== null) &&
+    /^\d+$/.test(tokens[index + 1] ?? "") && tokens[index + 2] === "chapter",
+  );
 }
 
 export function isLikelyScriptureReferenceAttempt(text: string): boolean {
-  const cleaned = cleanTranscript(text);
-  if (!cleaned) return false;
-
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return false;
-
-  const hasReferenceStructure =
-    tokens.some((token) => token === "chapter" || token === "verse") ||
-    tokens.some((token) => parseNumberWord(token) !== null || /^\d+:\d+/.test(token));
-
-  if (!hasReferenceStructure) return false;
-  if (resolveNumberedBookWithTokens(text) || resolveNumberedBookWithTokens(cleaned)) return true;
-
-  for (let len = Math.min(tokens.length, 5); len >= 1; len -= 1) {
-    for (let index = 0; index <= tokens.length - len; index += 1) {
-      const candidate = tokens.slice(index, index + len).join(" ");
-      if (BOOK_ALIAS_MAP.has(candidate)) return true;
-      if (BOOK_ALIAS_MAP.has(candidate.replace(/\s+/g, ""))) return true;
-    }
-  }
-
-  return tokens.some((token) => fuzzyMatchBook(token) !== null);
+  const parsed = parseScriptureReference(text);
+  return parsed !== null || hasMalformedBookReference(cleanTranscript(text).split(" "));
 }
 
 /**
  * Parse a relative reference (no book name found).
  */
 function parseRelativeReference(tokens: string[]): ParsedReference | null {
-  let chapter: number | null = null;
-  let verse: number | null = null;
-
-  // Check for "chapter N" pattern
-  const chapterIdx = tokens.indexOf("chapter");
-  if (chapterIdx >= 0 && chapterIdx + 1 < tokens.length) {
-    const n = parseNumberWord(tokens[chapterIdx + 1]);
-    if (n !== null) {
-      chapter = n;
-      // Check for "verse N" after chapter
-      const afterChapter = tokens.slice(chapterIdx + 2);
-      const verseIdx = afterChapter.indexOf("verse");
-      if (verseIdx >= 0 && verseIdx + 1 < afterChapter.length) {
-        const vn = parseNumberWord(afterChapter[verseIdx + 1]);
-        if (vn !== null) verse = vn;
-      }
-    }
+  const text = tokens.join(" ");
+  const chapterMatch = text.match(/\bchapter\s+\d+/);
+  if (chapterMatch?.index !== undefined) {
+    const ref = parseChapterVerseFromTokens(text.slice(chapterMatch.index).split(" "));
+    if (ref) return { book: null, ...ref, isRelative: true };
   }
-
-  // Check for "verse N" pattern (without chapter)
-  if (chapter === null && verse === null) {
-    const verseIdx = tokens.indexOf("verse");
-    if (verseIdx >= 0 && verseIdx + 1 < tokens.length) {
-      const n = parseNumberWord(tokens[verseIdx + 1]);
-      if (n !== null) verse = n;
-    }
-  }
-
-  if (chapter === null && verse === null) return null;
-
-  return {
-    book: null,
-    chapter,
-    verse,
-    endVerse: null,
-    isRelative: true,
-  };
+  const verseMatch = text.match(/\bverse\s+(\d+)(?:\s*(?:-|to|through|thru|and)\s*(?:verse\s+)?(\d+))?/);
+  if (!verseMatch) return null;
+  return { book: null, chapter: null, verse: Number(verseMatch[1]),
+    endVerse: verseMatch[2] ? Number(verseMatch[2]) : null, isRelative: true };
 }
 
 /**
@@ -1078,7 +875,7 @@ export function parseScriptureReferenceAll(text: string): ParsedReference[] {
       const num = result.chapter;
       const numStr = String(num);
 
-      if (numStr.length >= 2) {
+      if (num > maxCh && numStr.length >= 2 && !/\bchapter\b/i.test(text)) {
         const candidates: ParsedReference[] = [];
 
         // Try splitting into chapter:verse FIRST (higher priority)
@@ -1164,18 +961,10 @@ function classifySpeechReference(reference: ParsedReference, hasCorrection: bool
 }
 
 function updateSpeechState(state: ScriptureSpeechState, reference: ParsedReference, timestamp: number): void {
-  if (reference.book) {
-    state.lastBook = reference.book;
-  }
-  if (reference.chapter !== null) {
-    state.lastChapter = reference.chapter;
-  }
-  if (reference.verse !== null) {
-    state.lastVerse = reference.verse;
-  }
-  if (reference.book || reference.chapter !== null || reference.verse !== null) {
-    state.lastReferenceTimestamp = timestamp;
-  }
+  if (reference.book) state.lastBook = reference.book;
+  state.lastChapter = reference.chapter;
+  state.lastVerse = reference.verse;
+  state.lastReferenceTimestamp = timestamp;
 }
 
 function resolveWithSpeechState(
@@ -1184,58 +973,16 @@ function resolveWithSpeechState(
   isCorrection: boolean,
   timestamp: number,
 ): ParsedReference | null {
-  const resolved: ParsedReference = { ...parsed };
-
-  if (!resolved.book && state.lastBook && (resolved.chapter !== null || resolved.verse !== null)) {
-    resolved.book = state.lastBook;
-  }
-
-  if (resolved.book && resolved.chapter === null && resolved.verse !== null && state.lastChapter !== null) {
-    resolved.chapter = state.lastChapter;
-  }
-
-  if (resolved.book && resolved.chapter !== null && resolved.verse === null && isCorrection && state.lastVerse !== null) {
+  const sameBook = !parsed.book || parsed.book === state.lastBook;
+  const resolved: ParsedReference = {
+    ...parsed,
+    book: parsed.book ?? state.lastBook,
+    chapter: parsed.chapter ?? (sameBook && parsed.verse !== null ? state.lastChapter : null),
+  };
+  if (!resolved.book) return null;
+  if (isCorrection && sameBook && parsed.chapter !== null && parsed.verse === null) {
     resolved.verse = state.lastVerse;
   }
-
-  if (!resolved.book && !resolved.chapter && !resolved.verse) {
-    return null;
-  }
-
-  if (!resolved.book && !resolved.chapter && parsed.verse !== null) {
-    if (state.lastBook && state.lastChapter !== null) {
-      resolved.book = state.lastBook;
-      resolved.chapter = state.lastChapter;
-    } else {
-      return null;
-    }
-  }
-
-  if (!resolved.book && resolved.chapter !== null && state.lastBook) {
-    resolved.book = state.lastBook;
-  }
-
-  if (isCorrection && !resolved.book && state.lastBook && state.lastChapter !== null && parsed.verse !== null) {
-    resolved.book = state.lastBook;
-    resolved.chapter = state.lastChapter;
-  }
-
-  if (isCorrection && resolved.book && resolved.chapter === null && state.lastChapter !== null) {
-    resolved.chapter = state.lastChapter;
-  }
-
-  if (isCorrection && resolved.book && resolved.chapter !== null && resolved.verse === null && state.lastVerse !== null) {
-    resolved.verse = state.lastVerse;
-  }
-
-  if (resolved.book === null && state.lastBook && resolved.chapter !== null) {
-    resolved.book = state.lastBook;
-  }
-
-  if (resolved.book === null) {
-    return null;
-  }
-
   updateSpeechState(state, resolved, timestamp);
   return resolved;
 }
@@ -1252,30 +999,31 @@ export function resolveScriptureSpeech(
   const trimmed = text.trim();
   if (!trimmed) return null;
 
+  const inlineCorrection = trimmed.match(/\b(?:sorry|rather|i mean|correction|make that)\b/i);
+  if (inlineCorrection && inlineCorrection.index! > 0) {
+    const leading = resolveScriptureSpeech(trimmed.slice(0, inlineCorrection.index), state, timestamp);
+    if (leading) {
+      return resolveScriptureSpeech(trimmed.slice(inlineCorrection.index), state, timestamp) ?? leading;
+    }
+  }
+
   const lower = trimmed.toLowerCase();
   const { text: stripped, isCorrection } = stripCorrectionPrefix(lower);
-  const normalized = stripped.trim();
+  const normalized = cleanTranscript(stripped);
   if (!normalized) return null;
 
-  const bareNumber = normalized.match(/^(?:verse\s+)?(\d+|one|two|three|first|second|third|1st|2nd|3rd)$/i);
-  if (bareNumber && state.lastBook && state.lastChapter !== null && (timestamp - state.lastReferenceTimestamp) <= CORRECTION_WINDOW_MS) {
-    const verse = parseNumberWord(bareNumber[1]);
-    if (verse !== null) {
-      const resolved: ParsedReference = {
-        book: state.lastBook,
-        chapter: state.lastChapter,
-        verse,
-        endVerse: null,
-        isRelative: true,
-      };
-      updateSpeechState(state, resolved, timestamp);
-      return {
-        ...resolved,
-        kind: "verse_reference",
-        shouldProject: true,
-        isCorrection,
-      };
-    }
+  const bareNumber = parseNumberWord(normalized);
+  if (bareNumber !== null && state.lastBook && (timestamp - state.lastReferenceTimestamp) <= CORRECTION_WINDOW_MS) {
+    const resolved: ParsedReference = {
+      book: state.lastBook,
+      chapter: state.lastChapter ?? bareNumber,
+      verse: state.lastChapter === null ? null : bareNumber,
+      endVerse: null,
+      isRelative: true,
+    };
+    updateSpeechState(state, resolved, timestamp);
+    return { ...resolved, kind: classifySpeechReference(resolved, isCorrection),
+      shouldProject: resolved.verse !== null, isCorrection };
   }
 
   const explicit = parseScriptureReference(normalized);
@@ -1287,7 +1035,7 @@ export function resolveScriptureSpeech(
   if (!resolved) return null;
 
   const kind = classifySpeechReference(resolved, isCorrection);
-  const shouldProject = resolved.verse !== null || resolved.endVerse !== null;
+  const shouldProject = resolved.chapter !== null && resolved.verse !== null;
 
   return {
     ...resolved,

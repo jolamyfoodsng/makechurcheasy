@@ -1,3 +1,6 @@
+import { loadLmSettings as loadSettings, saveLmSettings as saveSettings, type LmDockSettings, type LmOverlayMode } from "../../services/lmSettings";
+export { normalizeLmOverlayMode } from "../../services/lmSettings";
+import { resolveScriptureProjection, isConfidentScriptureSuggestion } from "../../services/scriptureProjection";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
@@ -13,7 +16,6 @@ import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
-import { getSettings } from "../../multiview/mvStore";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getEnvConfig } from "../../services/envConfig";
 import type { LmDockSnapshot } from "../../services/lmDockService";
@@ -36,9 +38,7 @@ import { formatNoteText, type NoteTextToolAction } from "../noteTextTools";
 import { loadDockSceneRoute } from "../dockSceneRouting";
 
 type LmStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
-type LmOverlayMode = "fullscreen" | "lower-third";
 
-const LM_DOCK_SETTINGS_KEY = "ocs-lm-dock-settings";
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
 const HISTORY_STORAGE_KEY = "ocs-lm-dock-history";
 const MAX_HISTORY = 50;
@@ -88,34 +88,6 @@ function getFreshness(detectedAt: number, now: number): FreshnessInfo {
   return { label: `~${Math.round(elapsed)}s ago`, color: "#EF4444", level: "stale" };
 }
 
-interface LmDockSettings {
-  autoNavigate: boolean;
-  translation: string;
-  overlayMode: LmOverlayMode;
-  autoScroll: boolean;
-  autoPushQueue: boolean;
-  autoPushSuggestions: boolean;
-  autoPushDedupWindow: number;
-  pushScene: "ai" | "main";
-  suggestionLifetime: number;
-}
-
-const DEFAULT_SETTINGS: LmDockSettings = {
-  autoNavigate: false,
-  translation: "KJV",
-  overlayMode: "fullscreen",
-  autoScroll: true,
-  autoPushQueue: false,
-  autoPushSuggestions: false,
-  autoPushDedupWindow: 15,
-  pushScene: "ai",
-  suggestionLifetime: 20,
-};
-
-export function normalizeLmOverlayMode(value: unknown, fallback: LmOverlayMode = "fullscreen"): LmOverlayMode {
-  return value === "fullscreen" || value === "lower-third" ? value : fallback;
-}
-
 export function isLmAutoPushSuppressed(
   lastPushedAt: number | undefined,
   nowMs: number,
@@ -143,52 +115,25 @@ export function mergeRetainedLmQueue(
   nowMs: number,
   retentionMs = LM_QUEUE_RETENTION_MS,
 ): RetainedLmCandidate[] {
+  const previous = new Map(current.map((item) => [item.key, item]));
   const next = new Map<string, RetainedLmCandidate>();
-  for (const item of current) {
-    if (nowMs - item.lastSeenAt <= retentionMs) {
-      next.set(item.key, item);
-    }
-  }
-  for (const candidate of incoming) {
+  for (const [index, candidate] of incoming.entries()) {
     const key = getLmCandidateKey(candidate);
+    const existing = previous.get(key);
+    const newlySelected = index === 0 && current[0]?.key !== key;
     next.set(key, {
       key,
       candidate,
-      detectedAt: nowMs,
+      detectedAt: candidate.detectedAt ?? (newlySelected || !existing ? nowMs : existing.detectedAt),
       lastSeenAt: nowMs,
     });
+  }
+  for (const item of current) {
+    if (!next.has(item.key) && nowMs - item.lastSeenAt <= retentionMs) next.set(item.key, item);
   }
   return Array.from(next.values())
     .sort((a, b) => b.detectedAt - a.detectedAt)
     .slice(0, 20);
-}
-
-function loadSettings(): LmDockSettings {
-  const globalDefaults = getSettings();
-  const fallbackOverlayMode = normalizeLmOverlayMode(globalDefaults.defaultBibleOverlayMode);
-  try {
-    const raw = readNativeDockSetting<unknown>(LM_DOCK_SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    const merged = { ...DEFAULT_SETTINGS, ...parsed };
-    const autoPushDedupWindow = Number(merged.autoPushDedupWindow);
-    return {
-      ...merged,
-      overlayMode: normalizeLmOverlayMode(merged.overlayMode, fallbackOverlayMode),
-      autoPushQueue: merged.autoPushQueue === true,
-      autoPushSuggestions: merged.autoPushSuggestions === true,
-      autoPushDedupWindow: Number.isFinite(autoPushDedupWindow)
-        ? Math.max(0, autoPushDedupWindow)
-        : DEFAULT_SETTINGS.autoPushDedupWindow,
-      suggestionLifetime: Math.max(5, Number(merged.suggestionLifetime) || DEFAULT_SETTINGS.suggestionLifetime),
-    };
-  } catch {
-    return { ...DEFAULT_SETTINGS, overlayMode: fallbackOverlayMode };
-  }
-}
-
-function saveSettings(settings: LmDockSettings): void {
-  writeNativeDockSetting(LM_DOCK_SETTINGS_KEY, settings);
 }
 
 function loadPreferredMicId(): string {
@@ -340,7 +285,7 @@ export default function DockLmTab({
     const nowMs = Date.now();
     setRetainedQueue((current) => mergeRetainedLmQueue(current, incoming, nowMs));
     for (const candidate of incoming) {
-      detectedAtRef.current.set(getLmCandidateKey(candidate), nowMs);
+      detectedAtRef.current.set(getLmCandidateKey(candidate), candidate.detectedAt ?? detectedAtRef.current.get(getLmCandidateKey(candidate)) ?? nowMs);
     }
   }, []);
 
@@ -351,7 +296,7 @@ export default function DockLmTab({
     if (incoming.length > 0) {
       const nowMs = Date.now();
       for (const candidate of incoming) {
-        detectedAtRef.current.set(getLmCandidateKey(candidate), nowMs);
+        detectedAtRef.current.set(getLmCandidateKey(candidate), candidate.detectedAt ?? detectedAtRef.current.get(getLmCandidateKey(candidate)) ?? nowMs);
       }
     }
     // A relay poll can briefly return the previous empty state while a new
@@ -635,8 +580,9 @@ export default function DockLmTab({
     candidate: VoiceBibleCandidate,
     overlayMode: LmOverlayMode,
   ) => {
+    candidate = await resolveScriptureProjection(candidate, settings.translation);
     const bibleTheme = await resolveDockBibleThemeForOverlayMode(overlayMode);
-    const verseRange = String(candidate.verse);
+    const verseRange = candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse);
     const referenceLabels = resolveDockBibleReferenceLabels(
       candidate.book,
       candidate.chapter,
@@ -653,7 +599,7 @@ export default function DockLmTab({
           book: candidate.book,
           chapter: candidate.chapter,
           verse: candidate.verse,
-          verseEnd: candidate.verse,
+          verseEnd: candidate.endVerse ?? candidate.verse,
           verseRange,
           rawReferenceLabel: referenceLabels.rawReferenceLabel,
           referenceLabel: referenceLabels.displayReferenceLabel,
@@ -668,7 +614,7 @@ export default function DockLmTab({
           _dockLive: true,
         },
       });
-      return;
+      return candidate;
     }
 
     const targetScene = settings.pushScene === "ai" ? "MCE Presentation" : undefined;
@@ -676,7 +622,7 @@ export default function DockLmTab({
       book: candidate.book,
       chapter: candidate.chapter,
       verse: candidate.verse,
-      verseEnd: candidate.verse,
+      verseEnd: candidate.endVerse ?? candidate.verse,
       verseRange,
       translation: settings.translation,
       rawReferenceLabel: referenceLabels.rawReferenceLabel,
@@ -709,10 +655,11 @@ export default function DockLmTab({
         target.sceneName,
       )));
       if (bibleSceneRoute.syncPresentation) await pushLive();
-      return;
+      return candidate;
     }
 
     await pushLive();
+    return candidate;
   }, [presentationLinkMode, settings.pushScene, settings.translation]);
 
   useEffect(() => {
@@ -724,8 +671,8 @@ export default function DockLmTab({
 
     setPushError(null);
     void pushBibleCandidateToOutput(live, settings.overlayMode)
-      .then(() => {
-        setLiveVerse(live);
+      .then((projected) => {
+        setLiveVerse(projected);
         setPushSuccess(settings.overlayMode === "lower-third" ? "Switched to LT" : "Switched to Full");
         setTimeout(() => setPushSuccess(null), 1600);
       })
@@ -738,7 +685,7 @@ export default function DockLmTab({
   const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate, source?: "queue" | "suggestion") => {
     if (!presentationLinkMode && obsStatus !== "connected") {
       setPushError(t("lm.notConnected"));
-      return;
+      return false;
     }
 
     setPushing(true);
@@ -746,7 +693,7 @@ export default function DockLmTab({
     setPushSuccess(null);
     try {
       const overlayMode = settings.overlayMode;
-      await pushBibleCandidateToOutput(candidate, overlayMode);
+      candidate = await pushBibleCandidateToOutput(candidate, overlayMode);
       setLiveVerse(candidate);
       setRetainedQueue((current) => mergeRetainedLmQueue(current, [candidate], Date.now()));
 
@@ -762,8 +709,10 @@ export default function DockLmTab({
 
       setPushSuccess(`${t("lm.pushed")} ${candidate.label}`);
       setTimeout(() => setPushSuccess(null), 4000);
+      return true;
     } catch (err) {
       setPushError(err instanceof Error ? err.message : String(err));
+      return false;
     } finally {
       setPushing(false);
     }
@@ -898,6 +847,21 @@ export default function DockLmTab({
     });
   }, [sendLmCommand, settings.translation]);
 
+  const autoNavigatedReferenceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!settings.autoNavigate || lmStatus !== "listening") {
+      autoNavigatedReferenceRef.current = null;
+      return;
+    }
+    const latest = retainedQueue[0]?.candidate;
+    if (!latest) return;
+    const key = `${getLmCandidateKey(latest)}:${settings.translation}`;
+    if (autoNavigatedReferenceRef.current === key) return;
+    autoNavigatedReferenceRef.current = key;
+    navigateBibleDock(latest);
+  }, [lmStatus, navigateBibleDock, retainedQueue, settings.autoNavigate, settings.translation]);
+
+
   // ── Track tab bar width for responsive layout ──
   useEffect(() => {
     const el = tabBarRef.current;
@@ -985,8 +949,8 @@ export default function DockLmTab({
 
   useEffect(() => {
     const visibleAutoPushKeys = new Set<string>();
-    for (const c of queueVerses) visibleAutoPushKeys.add(`queue:${getLmCandidateKey(c)}`);
-    for (const c of filteredSuggestions) visibleAutoPushKeys.add(`suggestion:${getLmCandidateKey(c)}`);
+    for (const c of queueVerses) visibleAutoPushKeys.add(`queue:${getLmCandidateKey(c)}:${c.detectedAt ?? "legacy"}`);
+    for (const c of filteredSuggestions) visibleAutoPushKeys.add(`suggestion:${getLmCandidateKey(c)}:${c.detectedAt ?? "legacy"}`);
 
     for (const key of Array.from(autoPushedKeysRef.current)) {
       if (!visibleAutoPushKeys.has(key)) autoPushedKeysRef.current.delete(key);
@@ -996,7 +960,7 @@ export default function DockLmTab({
   useEffect(() => {
     if (!settings.autoPushQueue && !settings.autoPushSuggestions) return;
     if (!presentationLinkMode && obsStatus !== "connected") return;
-    if (autoPushInFlightRef.current.size > 0) return;
+    if (pushing || autoPushInFlightRef.current.size > 0) return;
 
     const candidatesToPush: Array<{
       key: string;
@@ -1007,7 +971,7 @@ export default function DockLmTab({
     if (settings.autoPushQueue) {
       for (const candidate of queueVerses) {
         candidatesToPush.push({
-          key: `queue:${getLmCandidateKey(candidate)}`,
+          key: `queue:${getLmCandidateKey(candidate)}:${candidate.detectedAt ?? "legacy"}`,
           source: "queue",
           candidate,
         });
@@ -1015,9 +979,9 @@ export default function DockLmTab({
     }
 
     if (settings.autoPushSuggestions) {
-      for (const candidate of filteredSuggestions) {
+      for (const candidate of filteredSuggestions.slice(0, 1).filter(isConfidentScriptureSuggestion)) {
         candidatesToPush.push({
-          key: `suggestion:${getLmCandidateKey(candidate)}`,
+          key: `suggestion:${getLmCandidateKey(candidate)}:${candidate.detectedAt ?? "legacy"}`,
           source: "suggestion",
           candidate,
         });
@@ -1032,9 +996,9 @@ export default function DockLmTab({
     for (const item of unseen) autoPushedKeysRef.current.add(item.key);
 
     const nowMs = Date.now();
-    const target = unseen.find(({ key }) => (
+    const target = unseen.find(({ candidate }) => (
       !isLmAutoPushSuppressed(
-        autoPushLastPushedAtRef.current.get(key),
+        autoPushLastPushedAtRef.current.get(getLmCandidateKey(candidate)),
         nowMs,
         settings.autoPushDedupWindow,
       )
@@ -1042,8 +1006,9 @@ export default function DockLmTab({
     if (!target) return;
 
     autoPushInFlightRef.current.add(target.key);
-    autoPushLastPushedAtRef.current.set(target.key, nowMs);
-    void handlePushVerse(target.candidate, target.source).finally(() => {
+    void handlePushVerse(target.candidate, target.source).then((success) => {
+      if (success) autoPushLastPushedAtRef.current.set(getLmCandidateKey(target.candidate), Date.now());
+    }).finally(() => {
       autoPushInFlightRef.current.delete(target.key);
     });
   }, [
@@ -1052,6 +1017,7 @@ export default function DockLmTab({
     obsStatus,
     presentationLinkMode,
     queueVerses,
+    pushing,
     settings.autoPushDedupWindow,
     settings.autoPushQueue,
     settings.autoPushSuggestions,

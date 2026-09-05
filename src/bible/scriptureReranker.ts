@@ -125,7 +125,7 @@ interface IndexedStory {
   story: string;
   references: string[];
   aliases: string[];
-  referenceBooks: Set<string>;
+  referenceSet: Set<string>;
 }
 
 const STORY_LOOKUP = new Map<string, IndexedStory[]>();
@@ -135,9 +135,7 @@ for (const story of STORY_ENGINE) {
     story: story.story,
     references: story.references,
     aliases: story.aliases,
-    referenceBooks: new Set(
-      story.references.map((ref) => ref.split(/\s+\d/)[0]),
-    ),
+    referenceSet: new Set(story.references),
   };
 
   for (const alias of story.aliases) {
@@ -526,7 +524,7 @@ function conceptScore(queryKeywords: Set<string>, reference: string): number {
 }
 
 /** Layer 3 — uses STORY_LOOKUP map for O(words×matches) instead of O(stories×aliases) */
-function storyScore(queryWords: string[], referenceBook: string): number {
+function storyScore(queryWords: string[], reference: string): number {
   let bestScore = 0;
   const matchCounts = new Map<IndexedStory, number>();
 
@@ -540,12 +538,10 @@ function storyScore(queryWords: string[], referenceBook: string): number {
 
   for (const [story, matchCount] of matchCounts) {
     const aliasScore = matchCount / story.aliases.length;
-    const referenceMatch = story.referenceBooks.has(referenceBook);
+    const referenceMatch = story.referenceSet.has(reference);
 
     if (referenceMatch) {
       bestScore = Math.max(bestScore, aliasScore);
-    } else {
-      bestScore = Math.max(bestScore, aliasScore * 0.3);
     }
   }
 
@@ -591,7 +587,7 @@ function keywordOverlapScore(
 function phraseOverlapScore(normalizedQuery: string, normalizedVerse: string): number {
   if (normalizedQuery.length < 3 || normalizedVerse.length < 3) return 0;
 
-  const queryWords = normalizedQuery.split(" ").filter((w) => w.length >= 3);
+  const queryWords = normalizedQuery.split(" ").filter(Boolean);
   if (queryWords.length < 2) return 0;
 
   let phraseMatches = 0;
@@ -600,7 +596,7 @@ function phraseOverlapScore(normalizedQuery: string, normalizedVerse: string): n
   for (let i = 0; i < queryWords.length - 1; i++) {
     const phrase = queryWords.slice(i, i + 2).join(" ");
     totalPhrases++;
-    if (normalizedVerse.includes(phrase)) {
+    if (` ${normalizedVerse} `.includes(` ${phrase} `)) {
       phraseMatches++;
     }
   }
@@ -608,7 +604,7 @@ function phraseOverlapScore(normalizedQuery: string, normalizedVerse: string): n
   for (let i = 0; i < queryWords.length - 2; i++) {
     const phrase = queryWords.slice(i, i + 3).join(" ");
     totalPhrases++;
-    if (normalizedVerse.includes(phrase)) {
+    if (` ${normalizedVerse} `.includes(` ${phrase} `)) {
       phraseMatches++;
     }
   }
@@ -637,16 +633,9 @@ export function matchVerseAlias(query: string): string | null {
   // Only allow a shorter query to be contained by an alias when it has at
   // least three words. Without this floor, fragments such as "of Jesus"
   // incorrectly match the alias "the blood of Jesus".
-  const allowShorterQuery = q.split(" ").filter(Boolean).length >= 3;
+  const allowShorterQuery = new Set(getAliasContentWords(q)).size >= 2 && q.split(" ").length >= 3;
   for (const [normalizedPhrase, reference] of ALIAS_EXACT) {
-    if (q.includes(normalizedPhrase) || (allowShorterQuery && normalizedPhrase.includes(q))) {
-      return reference;
-    }
-  }
-
-  // Compressed substring containment
-  for (const [compressedPhrase, reference] of ALIAS_COMPRESSED) {
-    if (qCompressed.includes(compressedPhrase) || (allowShorterQuery && compressedPhrase.includes(qCompressed))) {
+    if (` ${q} `.includes(` ${normalizedPhrase} `) || (allowShorterQuery && ` ${normalizedPhrase} `.includes(` ${q} `))) {
       return reference;
     }
   }
@@ -748,7 +737,7 @@ export function rerankCandidates(
     const phScore = phraseOverlapScore(normalizedQuery, normalizedText);
     const popScore = popularityScore(candidate.reference);
     const conScore = conceptScore(queryKeywords, candidate.reference);
-    const stoScore = storyScore(queryWords, ref.book);
+    const stoScore = storyScore(queryWords, candidate.reference);
     const ctxScore = contextScore(ref.book, ref.chapter, context);
 
     const semanticWeighted = WEIGHTS.semantic * candidate.semanticScore;

@@ -13,12 +13,6 @@
 
 import { dockBridge } from "./dockBridge";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
-import {
-  createScriptureSpeechState,
-  isLikelyScriptureReferenceAttempt,
-  resolveScriptureSpeech,
-  type ScriptureSpeechState,
-} from "./scriptureParser";
 import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
@@ -62,6 +56,7 @@ export interface LmDockSnapshot {
   status: LmServiceStatus;
   entries: TranscriptEntry[];
   candidates: VoiceBibleCandidate[];
+  latestMatch?: VoiceBibleCandidate | null;
   queue: VoiceBibleCandidate[];      // High-confidence detections waiting for explicit user action
   suggestions: VoiceBibleCandidate[]; // Manual push only (quote matches)
   matching: boolean;
@@ -134,7 +129,7 @@ function nextEntryId(): string {
   return `e${++_entryId}`;
 }
 
-class LmDockService {
+export class LmDockService {
   private initialized = false;
   private unsubscribeDock: (() => void) | null = null;
   private listeners = new Set<SnapshotListener>();
@@ -177,6 +172,7 @@ class LmDockService {
     text: string;
     timestamp: number;
     options: QueueQuoteSearchOptions;
+    searchId: number;
   } | null = null;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
@@ -196,7 +192,6 @@ class LmDockService {
   private sentenceBuffer = "";
   /** Monotonically increasing search ID — discards stale results */
   private latestSearchId = 0;
-  private static readonly PAUSE_THRESHOLD_MS = 450;
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
   /** The dock only renders recent lines; never serialize an entire service into each live relay packet. */
   private static readonly MAX_RELAY_TRANSCRIPT_ENTRIES = 60;
@@ -226,8 +221,6 @@ class LmDockService {
   private get speedConfig() {
     return DETECTION_SPEED_CONFIG[this.detectionSpeed];
   }
-  /** Fast speech-state resolver for continuations and corrections */
-  private scriptureSpeechState: ScriptureSpeechState = createScriptureSpeechState();
 
   // ── Telemetry ─────────────────────────────────────────────────────────────
   private telemetry: LmDockTelemetry = {
@@ -313,6 +306,7 @@ class LmDockService {
       text: trimmed,
       timestamp: now,
       options: { mode },
+      searchId: ++this.latestSearchId,
     };
 
     // Abort the current search as soon as newer speech arrives. The drain
@@ -331,7 +325,7 @@ class LmDockService {
       while (this.pendingQuoteSearch && this.snapshot.status === "listening") {
         const job = this.pendingQuoteSearch;
         this.pendingQuoteSearch = null;
-        await this.runQuoteSearchWithText(job.text, job.timestamp, job.options);
+        await this.runQuoteSearchWithText(job.text, job.timestamp, job.options, job.searchId);
       }
     } finally {
       this.quoteSearchInFlight = false;
@@ -602,6 +596,15 @@ class LmDockService {
     if (!text.trim()) return;
     if (this.snapshot.status !== "listening") return;
 
+    if (isFinal || this.scriptureEngine.isReferenceSpeech(text)) {
+      this.latestSearchId++;
+      this.pendingQuoteSearch = null;
+      this.scriptureEngine.cancelQuoteSearchPublic();
+      if (this.liveQuoteSearchTimer) clearTimeout(this.liveQuoteSearchTimer);
+      this.liveQuoteSearchTimer = null;
+      this.liveQuoteSearchPendingText = "";
+      this.snapshot = { ...this.snapshot, matching: false };
+    }
     if (isFinal) {
       // A final ASR result supersedes the currently pending interim revision.
       this.pendingInterimChunk = null;
@@ -629,9 +632,15 @@ class LmDockService {
         if (!next.isFinal) this.pendingInterimChunk = null;
 
         try {
+          const token = this.sessionToken;
           const result = await this.scriptureEngine.processChunk(next.text, next.isFinal);
+          if (token !== this.sessionToken) continue;
           if (this.snapshot.status !== "listening") return;
           this.handleMatchResult(result);
+          if (next.isFinal) {
+            if (result.handledReference) this.sentenceBuffer = "";
+            else this.onTranscriptFinal(next.text);
+          }
         } catch (err) {
           console.warn("[LmDockService] processChunk error:", err);
         }
@@ -651,7 +660,7 @@ class LmDockService {
     result: { matches: Array<{ candidate: VoiceBibleCandidate; source: string; confidence: number; navigationOnly?: boolean }> },
   ): void {
     if (result.matches.length > 0) {
-      const newCandidates = result.matches.map((m) => m.candidate);
+      const newCandidates = result.matches.map((m) => ({ ...m.candidate, detectedAt: Date.now() }));
 
         // Confidence routing:
         // - source=reference OR confidence >= 0.90 → queue for explicit push
@@ -663,27 +672,9 @@ class LmDockService {
       const isNavigationOnly = result.matches.some((m) => m.navigationOnly === true);
 
       if ((isReferenceCommand || highConfidence) && !isNavigationOnly) {
-        const existingQueueKeys = new Set(this.snapshot.queue.map((c) => `${c.book}:${c.chapter}:${c.verse}`));
-        const uniqueNew = newCandidates.filter((c) => !existingQueueKeys.has(`${c.book}:${c.chapter}:${c.verse}`));
-
-        // Always place the newest match at the front so the user's Push click
-        // targets the most recent navigation result, even if the verse already
-        // existed in the queue (e.g. navigating back then forward again).
-        const queue = [...uniqueNew, ...this.snapshot.queue].slice(0, 20);
-        // Remove duplicates that snuck in via the old queue
-        const dedupedQueue = queue.filter(
-          (c, i, arr) => arr.findIndex((x) => `${x.book}:${x.chapter}:${x.verse}` === `${c.book}:${c.chapter}:${c.verse}`) === i,
-        );
-        // Move the newest candidate to the front even if it was already queued
-        const primary = newCandidates[0];
-        if (primary) {
-          const idx = dedupedQueue.findIndex((c) => `${c.book}:${c.chapter}:${c.verse}` === `${primary.book}:${primary.chapter}:${primary.verse}`);
-          if (idx > 0) {
-            dedupedQueue.splice(idx, 1);
-            dedupedQueue.unshift(primary);
-          }
-        }
-        this.snapshot = { ...this.snapshot, queue: dedupedQueue.slice(0, 20) };
+        const newKeys = new Set(newCandidates.map((c) => `${c.book}:${c.chapter}:${c.verse}`));
+        const queue = [...newCandidates, ...this.snapshot.queue.filter((c) => !newKeys.has(`${c.book}:${c.chapter}:${c.verse}`))].slice(0, 20);
+        this.snapshot = { ...this.snapshot, queue, suggestions: [] };
 
 
       } else {
@@ -695,7 +686,7 @@ class LmDockService {
       }
 
       const candidates = [...this.snapshot.queue, ...this.snapshot.suggestions].slice(0, 20);
-      this.snapshot = { ...this.snapshot, candidates };
+      this.snapshot = { ...this.snapshot, candidates, latestMatch: newCandidates[0] };
       this.pushCandidates();
       return;
     }
@@ -704,13 +695,8 @@ class LmDockService {
   // ── Sentence detection ────────────────────────────────────────────────────
 
   /**
-   * Called on EVERY ASR final. Accumulates text, detects sentence boundaries,
-   * and immediately triggers verse search. This is the primary search trigger.
-   *
-   * Triggers on:
-   *   - end_of_turn = true (every final)
-   *   - sentence-ending punctuation (. ? !)
-   *   - pause > 1s (via flushSentenceBuffer)
+   * Called after a finalized ASR turn has been checked for references.
+   * Keep a bounded context for quotes split across adjacent turns.
    */
   private onTranscriptFinal(text: string): void {
     const now = Date.now();
@@ -718,76 +704,16 @@ class LmDockService {
     // Record speech timestamp for telemetry
     this.telemetry.lastSpeechAt = now;
 
-    // Skip quote search for Bible references — processChunk handles these.
-    // Running quote search on reference text (e.g. "1 corinthians 1:1") would
-    // always return 0 results and clear suggestions, making the reference appear
-    // to show "nothing" even though processChunk already detected it.
-    const ref = resolveScriptureSpeech(text, this.scriptureSpeechState, now);
-    if (ref || isLikelyScriptureReferenceAttempt(text)) {
-      return;
-    }
-
-    // Accumulate into sentence buffer
-    this.sentenceBuffer += (this.sentenceBuffer ? " " : "") + text;
-
-    // Check for sentence boundary — split into individual sentences
-    if (/[.?!]/.test(this.sentenceBuffer)) {
-      // Split on sentence-ending punctuation followed by whitespace or end-of-string
-      const parts = this.sentenceBuffer.split(/(?<=[.?!])(?:\s+|$)/).filter(Boolean);
-
-      // Classify: parts ending with punctuation are complete sentences
-      const complete: string[] = [];
-      let trailing = "";
-      for (const part of parts) {
-        if (/[.?!]$/.test(part)) {
-          complete.push(part);
-        } else {
-          trailing = part;
-        }
-      }
-
-      // Keep any trailing incomplete text in buffer
-      this.sentenceBuffer = trailing;
-
-      for (const sentence of complete) {
-        this.queueQuoteSearch(sentence, { mode: "closest" });
-      }
-
-      if (trailing.trim().length >= 10) {
-        this.queueQuoteSearch(trailing, { mode: "closest" });
-        this.sentenceBuffer = "";
-      }
-    } else {
-      // AssemblyAI marks end_of_turn after silence, so even an incomplete
-      // phrase should search once the speaker pauses.
-      const trimmed = this.sentenceBuffer.trim();
-      if (trimmed.length >= 10) {
-        this.queueQuoteSearch(trimmed, { mode: "closest" });
-        this.sentenceBuffer = "";
-      }
-    }
-  }
-
-  /**
-   * Called when a sentence is complete (boundary detected or pause timeout).
-   * Queues the latest sentence search without allowing slow matching work to
-   * accumulate behind newer speech.
-   */
-  private onSentenceComplete(sentence: string): void {
-    const trimmed = sentence.trim();
-    if (!trimmed || trimmed.length < 10) return;
-
-    this.queueQuoteSearch(trimmed, { mode: "closest" });
-  }
-
-  /**
-   * Flush the sentence buffer on silence timeout — treat as sentence boundary.
-   */
-  private flushSentenceBuffer(): void {
-    if (this.sentenceBuffer.trim().length >= 10) {
-      this.onSentenceComplete(this.sentenceBuffer);
-    }
-    this.sentenceBuffer = "";
+    // A short final may complete the quotation from the previous ASR turn.
+    // Search the whole turn so punctuation plus a short trailing "Amen" cannot
+    // cancel a verse search that has just started.
+    const words = text.trim().split(/\s+/);
+    const previous = this.sentenceBuffer;
+    const searchText = words.length < 6 && previous
+      ? `${previous} ${text}`
+      : text;
+    this.sentenceBuffer = searchText.split(/\s+/).slice(-60).join(" ");
+    this.queueQuoteSearch(searchText, { mode: "closest" });
   }
 
   /**
@@ -799,13 +725,14 @@ class LmDockService {
     text: string,
     _transcriptTimestamp: number,
     options: QueueQuoteSearchOptions = {},
+    searchId = ++this.latestSearchId,
   ): Promise<void> {
-    if (this.snapshot.status === "idle") return;
+    if (this.snapshot.status !== "listening") return;
 
     // Cancel any in-flight search — we only care about the latest
     this.scriptureEngine.cancelQuoteSearchPublic();
 
-    const searchId = ++this.latestSearchId;
+    const token = this.sessionToken;
     const boundPassage = this.scriptureEngine.getBoundPassage();
     const searchStartedAt = Date.now();
     this.telemetry.lastSearchAt = searchStartedAt;
@@ -825,7 +752,7 @@ class LmDockService {
       );
 
       // Freshness guard: discard if a newer search has started
-      if (searchId !== this.latestSearchId) {
+      if (searchId !== this.latestSearchId || token !== this.sessionToken || this.snapshot.status !== "listening") {
         return;
       }
 
@@ -846,10 +773,10 @@ class LmDockService {
         // Empty interim searches must not remove a clickable suggestion.
         const suggestions = retainSuggestionsUntilReplacement(
           this.snapshot.suggestions,
-          usableQuoteMatches.map((m) => m.candidate),
+          usableQuoteMatches.map((m) => ({ ...m.candidate, detectedAt: Date.now() })),
         );
         const candidates = [...this.snapshot.queue, ...suggestions].slice(0, 20);
-        this.snapshot = { ...this.snapshot, suggestions, candidates };
+        this.snapshot = { ...this.snapshot, suggestions, candidates, latestMatch: suggestions[0] };
         this.telemetry.lastResultsAt = Date.now();
         this.telemetry.totalLatencyMs = this.lastSpeechReceivedAt > 0
           ? searchCompletedAt - this.lastSpeechReceivedAt
@@ -863,6 +790,7 @@ class LmDockService {
     } catch (err) {
       console.warn("[LmDockService] Sentence quote search failed:", err);
     } finally {
+      if (searchId !== this.latestSearchId || token !== this.sessionToken) return;
       this.snapshot = { ...this.snapshot, matching: false };
       // Don't push status after stop — the stop handler already pushed idle
       if (this.snapshot.status !== "idle") {
@@ -959,14 +887,17 @@ class LmDockService {
       candidates: [],
       queue: [],
       suggestions: [],
+      latestMatch: null,
       matching: false,
       inputLevel: 0,
       startedAt: Date.now(),
       entries: this.snapshot.entries,
       detectionSpeed: this.detectionSpeed,
     };
-    this.scriptureEngine.reset();
-    this.scriptureSpeechState = createScriptureSpeechState();
+    this.scriptureEngine.cancelQuoteSearchPublic();
+    this.scriptureEngine = new ScriptureDetectionEngine();
+    this.latestSearchId++;
+    this.sentenceBuffer = "";
     this.lastQueuedQuoteSearchKey = "";
     this.lastQueuedQuoteSearchAt = 0;
     this.pendingFinalChunks = [];
@@ -1021,6 +952,7 @@ class LmDockService {
         }
 
         if (end_of_turn) {
+          if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
           this.finalizeCurrent(text, audio_start, audio_end);
           this.pushTranscript();
           this.lastSpeechTime = Date.now();
@@ -1031,8 +963,6 @@ class LmDockService {
           this.speechBuffer = "";
           void this.processChunk(text, true);
 
-          // Sentence detection: accumulate finals, detect boundaries, trigger verse search
-          this.onTranscriptFinal(text);
         } else {
           // Interim — update buffer, track timestamp, and run live matching
           this.upsertInterim(text, audio_start, audio_end);
@@ -1040,7 +970,7 @@ class LmDockService {
           this.speechBuffer = text;
           this.lastSpeechTime = Date.now();
 
-          const interimRef = resolveScriptureSpeech(text, this.scriptureSpeechState, Date.now());
+          const interimRef = this.scriptureEngine.isReferenceSpeech(text);
 
           // Run scripture engine on interim text for live reference commands
           // such as "John three sixteen" while quote search continues below.
@@ -1151,19 +1081,13 @@ class LmDockService {
           }
         }
 
-        // Sentence boundary on silence: flush accumulated sentence buffer
-        if (this.sentenceBuffer.length > 0 && this.lastSpeechTime > 0) {
-          const silenceMs = Date.now() - this.lastSpeechTime;
-          if (silenceMs > LmDockService.PAUSE_THRESHOLD_MS) {
-            this.flushSentenceBuffer();
-          }
-        }
       }, 100);
 
       // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
-      const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
+      const rawGain = Number(mvSettings.inputGain ?? 100);
+      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0, Math.min(3, rawGain / 100)) : 1;
       const nativeStartPromise = safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
@@ -1274,6 +1198,7 @@ class LmDockService {
       candidates: [],
       queue: [],
       suggestions: [],
+      latestMatch: null,
       matching: false,
     };
     this.pushStatus();
