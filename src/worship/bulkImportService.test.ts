@@ -73,3 +73,24 @@ describe("Worship document imports", () => {
     expect(result.songs[0]?.sections[1]?.content).toContain("We will lift Your name");
   });
 });
+
+
+describe("additional document formats", () => {
+  it("extracts HTML without scripts and retains numbered headings", async () => {
+    const file = new File(['<h1>Hymn 1</h1><p>Ẹ jẹ́ ká kọrin<br>Amen &amp; amen</p><script>bad()</script><h1>Hymn 2</h1><p>Praise again</p>'], 'hymns.html');
+    const text = await extractTextFromFile(file);
+    expect(text).toContain('Hymn 1\n\nẸ jẹ́ ká kọrin\nAmen & amen');
+    expect(text).not.toContain('bad()');
+    expect((await processDocumentLocally(text, file.name)).songs.map((song) => song.hymnNumber)).toEqual(['1', '2']);
+  });
+  it("extracts OpenDocument paragraphs", async () => {
+    const zip = new JSZip();
+    zip.file('content.xml', '<office:text><text:h>Hymn 1</text:h><text:p>First lyric<text:line-break/>Second lyric</text:p></office:text>');
+    const file = new File([await zip.generateAsync({ type: 'uint8array' })], 'hymn.odt');
+    expect(await extractTextFromFile(file)).toBe('Hymn 1\n\nFirst lyric\nSecond lyric');
+  });
+  it("reads Markdown through the document entrypoint", async () => {
+    const file = new File(['# Hymn 1\nFirst lyric\nSecond lyric'], 'hymn.md');
+    expect((await processDocumentLocally(await extractTextFromFile(file), file.name)).songs[0].hymnNumber).toBe('1');
+  });
+});

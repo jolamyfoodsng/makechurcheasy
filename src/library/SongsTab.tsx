@@ -497,7 +497,7 @@ export function SongsTab() {
             type="button"
             className="lib-toolbar-btn lib-toolbar-btn--secondary"
             onClick={handleBulkImport}
-            title="Import DOCX, PDF, or TXT"
+            title="Import songs from a document"
           >
             <Icon name="upload_file" size={18} />
             Import File
@@ -583,7 +583,7 @@ export function SongsTab() {
                   <Icon name="add" size={20} />
                   Add Song
                 </button>
-                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import DOCX, PDF, or TXT">
+                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import songs from a document">
                   <Icon name="upload_file" size={18} />
                   Import File
                 </button>

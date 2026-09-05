@@ -153,6 +153,10 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
   song: Song;
   songs: Song[];
 }> {
+  if (payload.batch) {
+    const { saveWorshipDocumentBatch } = await import("./worship/saveWorshipDocumentBatch");
+    return saveWorshipDocumentBatch(payload.batch);
+  }
   const id = payload.id?.trim();
   const title = payload.title?.trim();
   const lyrics = payload.lyrics?.trim();
@@ -170,6 +174,7 @@ async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayloa
   const song: Song = {
     id,
     metadata: {
+      ...existing?.metadata,
       title,
       artist: payload.artist?.trim() ?? "",
     },

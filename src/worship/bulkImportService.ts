@@ -27,29 +27,40 @@ export async function extractTextFromFile(file: File): Promise<string> {
     case "pdf":
       return extractPdfText(file);
     case "txt":
+    case "md":
+    case "markdown":
       return file.text();
+    case "html":
+    case "htm":
+      return extractMarkupText(await file.text());
+    case "odt":
+    case "odp":
+      return extractOpenDocumentText(file);
     case "docx":
       return extractDocxText(file);
     case "pptx":
       return extractPptxText(file);
     default:
-      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, or TXT.`);
+      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, ODT, ODP, HTML, Markdown, or TXT.`);
   }
 }
 
 async function extractPdfText(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const data = Array.from(new Uint8Array(buffer));
+  let raw = "";
   try {
-    const raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
-    if (raw.trim()) {
-      return normalizeExtractedLyricsText(reorderTwoColumnText(raw));
-    }
+    raw = await extractPdfTextWithPdfJs(file);
   } catch {
-    // Fall through to in-browser extraction.
+    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+    raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
+    if (!isBilingualHymnTable(raw)) raw = reorderTwoColumnText(raw);
   }
-  const fallback = await extractPdfTextWithPdfJs(file);
-  return normalizeExtractedLyricsText(reorderTwoColumnText(fallback));
+  if (!raw.trim()) throw new Error("This PDF contains no readable text. Scanned pages need OCR first; export a searchable PDF or paste the lyrics.");
+  // Bilingual tables must reach their parser with both columns still aligned.
+  return normalizeExtractedLyricsText(raw);
+}
+
+function isBilingualHymnTable(text: string): boolean {
+  return /Orin\s+\d+[^\n]* {4,}Hymn\s+\d+/i.test(text);
 }
 
 interface ColumnGapCandidate {
@@ -265,10 +276,11 @@ function isAllCapsHeading(line: string): boolean {
 function isProtectedImportLine(line: string): boolean {
   const trimmed = normalizeExtractedLine(line);
   if (!trimmed) return true;
-  if (/^\d{1,4}$/.test(trimmed)) return true;
+  if (/\b\d{1,4}$/.test(trimmed)) return true;
   if (/^[ivxlcdm]{1,8}$/i.test(trimmed)) return true;
   if (SECTION_OR_SONG_LABEL_RE.test(trimmed)) return true;
   if (HYMN_MARKER_RE.test(trimmed)) return true;
+  if (/^(?:#{1,6}\s*)?(?:hymn|song|orin)\s*\d+\b/i.test(trimmed)) return true;
   if (REFERENCE_MARKER_RE.test(trimmed)) return true;
   if (isAllCapsHeading(trimmed)) return true;
   return false;
@@ -309,6 +321,7 @@ function appendJoinedLine(previous: string, next: string): string {
 }
 
 export function normalizeExtractedLyricsText(text: string): string {
+  if (isBilingualHymnTable(text)) return normalizeNfc(text).replace(/\r\n?/g, "\n");
   const pageBreakToken = "__MCE_PAGE_BREAK__";
   const normalized = normalizeNfc(text)
     .replace(/\r\n?/g, "\n")
@@ -448,6 +461,29 @@ function decodeXmlText(value: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+function extractMarkupText(markup: string): string {
+  return decodeXmlText(markup
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[^]*?-->/g, "")
+    .replace(/<(?:[\w.-]+:)?(?:br|line-break)\b[^>]*\/?>/gi, "\n")
+    .replace(/<\/(?:[\w.-]+:)?(?:p|h[1-6]|h|div|li|tr)>/gi, "\n\n")
+    .replace(/<[^>]*>/g, ""))
+    .replace(/&nbsp;/g, " ")
+    .replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function extractOpenDocumentText(file: File): Promise<string> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const content = zip.file("content.xml");
+  if (!content) throw new Error("This OpenDocument file is missing its text content.");
+  const xml = await content.async("string");
+  if (/\.odp$/i.test(file.name)) {
+    return Array.from(xml.matchAll(/<draw:page\b[^>]*>([\s\S]*?)<\/draw:page>/g))
+      .map((page) => extractMarkupText(page[1])).join("\f");
+  }
+  return extractMarkupText(xml);
 }
 
 function readXmlAttribute(tag: string, name: string): string {

@@ -4,7 +4,7 @@
  * Dense operator console for song browsing, lyric cueing, and live transport.
  */
 
-import { memo, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, startTransition, type ReactNode } from "react";
+import { lazy, Suspense, memo, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, startTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { DockStagedItem, DockWorshipSection } from "../dockTypes";
@@ -98,6 +98,8 @@ import {
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { DOCK_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 
+const DocumentSongImport = lazy(() => import("../../../others/SongImportFullprocess"));
+
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
@@ -116,6 +118,7 @@ type WorshipSubTab = "worship" | "notes";
 
 interface DockSong {
   id: string;
+  hymnNumber?: string;
   title: string;
   artist: string;
   lyrics: string;
@@ -334,7 +337,7 @@ function rememberDockSongDefaults(songs: DockSong[]): void {
 
 function mapAppSongToDockSong(song: {
   id: string;
-  metadata: { title: string; artist?: string };
+  metadata: { title: string; artist?: string; hymnNumber?: string };
   lyrics?: string;
   importSourceName?: string;
   importSourceType?: "manual" | "online" | "document";
@@ -346,6 +349,7 @@ function mapAppSongToDockSong(song: {
   return {
     id: song.id,
     title: song.metadata.title,
+    hymnNumber: song.metadata.hymnNumber,
     artist: song.metadata.artist || "",
     lyrics: song.lyrics || "",
     importSourceName: song.importSourceName,
@@ -1237,6 +1241,7 @@ function DockWorshipTab({
   // The Dock settings database has already been hydrated by DockAuthGate.
   // Show the last local song snapshot immediately while the main app bridge
   // refreshes it in the background.
+  const [documentImportOpen, setDocumentImportOpen] = useState(false);
   const [songs, setSongs] = useState<DockSong[]>(() => loadCachedSongs());
   const rawSongsRef = useRef<DockSong[]>([]);
   // Initialize from localStorage so the limit is known immediately
@@ -1698,7 +1703,7 @@ function DockWorshipTab({
   const mapSongs = useCallback(
     (all: Array<{
       id: string;
-      metadata: { title: string; artist?: string };
+      metadata: { title: string; artist?: string; hymnNumber?: string };
       lyrics?: string;
       importSourceName?: string;
       importSourceType?: "manual" | "online" | "document";
@@ -1896,7 +1901,8 @@ function DockWorshipTab({
         const title = entry.song.title.toLowerCase();
         let score = 0;
 
-        if (searchNumber) {
+        if (searchNumber && entry.song.hymnNumber === searchNumber) score += 10000;
+        if (searchNumber && score === 0) {
           const exactTitleRe = new RegExp(`^hymn\\s+${searchNumber}$`);
           const numDotRe = new RegExp(`^${searchNumber}[.\\s]`);
           const bareNumRe = new RegExp(`^${searchNumber}$`);
@@ -2437,7 +2443,7 @@ function DockWorshipTab({
           settled = true;
           cleanup();
           reject(fallbackError ?? new Error("Main app did not confirm the song save."));
-        }, DOCK_WORSHIP_SAVE_TIMEOUT_MS);
+        }, payload.batch ? 120_000 : DOCK_WORSHIP_SAVE_TIMEOUT_MS);
 
         dockClient.sendCommand({
           type: "worship:song-save",
@@ -3197,6 +3203,7 @@ function DockWorshipTab({
       if (!isDockTabVisible(tabRootRef.current)) return;
       const target = event.target;
       const targetElement = target instanceof Element ? target : null;
+      if (documentImportOpen) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === "Escape") {
@@ -3241,6 +3248,7 @@ function DockWorshipTab({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [
+    documentImportOpen,
     activeSectionIndex,
     closeNewSongModal,
     closeSlideEditor,
@@ -3259,8 +3267,22 @@ function DockWorshipTab({
 
   const renderSongSearchPanel = () => (
     <section className="dock-console-panel dock-console-panel--toolbar dock-worship-song-browser">
+      {documentImportOpen && createPortal(
+        <Suspense fallback={<div role="status">Opening document import…</div>}>
+          <DocumentSongImport onClose={() => setDocumentImportOpen(false)} onImported={() => { void loadSongs(); }}
+            saveBatch={async (batch, options) => {
+              const first = batch[0];
+              if (!first) return;
+              await saveSongInMainApp({ id: first.id, title: first.metadata.title, artist: first.metadata.artist, lyrics: first.lyrics, batch });
+              options?.onProgress?.(batch.length, batch.length);
+            }} />
+        </Suspense>, document.body)}
       <div className="dock-console-header dock-worship-song-browser__header">
         <div className="dock-console-actions dock-console-actions--song-browser">
+          <button type="button" className="dock-console-toggle dock-console-toggle--icon-only"
+            onClick={() => setDocumentImportOpen(true)} title="Import document" aria-label="Import document">
+            <Icon name="upload_file" size={14} />
+          </button>
           <button
             type="button"
             className="dock-console-toggle dock-console-toggle--icon-only"
@@ -3449,7 +3471,7 @@ function DockWorshipTab({
                               handleSelectSong(song);
                             }}
                             title={isLocked ? t('common.locked') : song.title}>
-                            <span className="dock-card__title">{song.title}</span>
+                            <span className="dock-card__title">{song.hymnNumber && !song.title.split(/\s+/).includes(song.hymnNumber) ? `${song.hymnNumber}. ` : ""}{song.title}</span>
                             {song.artist.trim() ? (
                               <span className="dock-card__subtitle">
                                 {song.artist.trim()}

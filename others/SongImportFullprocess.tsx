@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -44,6 +45,7 @@ type SourceMode = "file" | "text";
 interface SongImportFullprocessProps {
   onClose: () => void;
   onImported: () => void;
+  saveBatch?: NonNullable<Parameters<typeof importSmartSongs>[1]>["saveBatch"];
 }
 
 interface EditableImportSongDraft extends SmartImportSongDraft {
@@ -163,6 +165,7 @@ function sanitizeDraftsForImport(drafts: EditableImportSongDraft[]): SmartImport
 export default function SongImportFullprocess({
   onClose,
   onImported,
+  saveBatch,
 }: SongImportFullprocessProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<ImportStep>("pick");
@@ -178,6 +181,15 @@ export default function SongImportFullprocess({
   const [loadingLabel, setLoadingLabel] = useState("Preparing import...");
   const [importProgress, setImportProgress] = useState({ saved: 0, total: 0 });
   const [importedTitles, setImportedTitles] = useState<string[]>([]);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => previous?.focus();
+  }, []);
+
+  useEffect(() => { dialogRef.current?.focus(); }, [step]);
 
   const activeSong = useMemo(
     () => drafts.find((draft) => draft.id === activeSongId) ?? drafts[0] ?? null,
@@ -281,12 +293,12 @@ export default function SongImportFullprocess({
       }
 
       if (processedSongs.length === 0) {
-        throw new Error("OpenCode did not return any songs. Try a clearer PDF, DOCX, or PPTX, or paste readable lyrics.");
+        throw new Error("No songs were detected. Try another document or paste readable lyrics.");
       }
 
       const editableDrafts = processedSongs.map((draft) => ({
         ...draft,
-        enabled: true,
+        enabled: !draft.warnings.some((warning) => warning.includes("not fully recovered")),
         title: draft.title.trim() || defaultSongTitle(resolvedSourceName),
         sections: draft.sections.length > 0 ? draft.sections : toSectionDrafts(normalizedText),
       }));
@@ -328,9 +340,10 @@ export default function SongImportFullprocess({
         sanitizedDrafts,
         {
           sourceName,
+          saveBatch,
           // A PowerPoint already has deliberate slide boundaries. Keep those
           // boundaries instead of re-chunking the deck as lyric lines.
-          autoSplit: !/\.pptx$/i.test(sourceName),
+          autoSplit: !/\.(pptx|odp)$/i.test(sourceName),
         },
         (saved, total) => setImportProgress({ saved, total }),
       );
@@ -380,10 +393,23 @@ export default function SongImportFullprocess({
   const importedTitlePreview = importedTitles.slice(0, 6);
   const hiddenImportedTitleCount = Math.max(0, importedTitles.length - importedTitlePreview.length);
 
-  return (
+  return createPortal(
     <div className="song-import-modal-backdrop" onMouseDown={step === "importing" ? undefined : onClose}>
       <div
         className="song-import-modal"
+        ref={dialogRef}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape" && step !== "importing") onClose();
+          if (event.key === "Tab") {
+            const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea, select, [tabindex="0"]') ?? []).filter((node) => node.getClientRects().length);
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+          }
+        }}
         role="dialog"
         aria-modal="true"
         aria-label="Bulk import songs"
@@ -394,7 +420,7 @@ export default function SongImportFullprocess({
             <p className="song-import-modal__eyebrow">Worship</p>
             <h2>Bulk Import Songs</h2>
             <p className="song-import-modal__description">
-              Use this screen for document import only. Add Song and online lyrics stay in their own flows.
+              Import a hymn book as separate songs, then review the titles, numbers, and lyrics.
             </p>
           </div>
 
@@ -462,6 +488,9 @@ export default function SongImportFullprocess({
               {sourceMode === "file" ? (
                 <div
                   className="song-import-dropzone"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInputRef.current?.click(); } }}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
@@ -473,15 +502,16 @@ export default function SongImportFullprocess({
                     ref={fileInputRef}
                     className="song-import-hidden-input"
                     type="file"
-                    accept=".pdf,.docx,.pptx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                    onChange={(event) => handleFileSelected(event.target.files?.[0] ?? null)}
+                    accept=".pdf,.docx,.pptx,.odt,.odp,.html,.htm,.md,.markdown,.txt"
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => { handleFileSelected(event.target.files?.[0] ?? null); event.target.value = ""; }}
                   />
                   <Upload size={28} />
-                  <h3>{selectedFile ? selectedFile.name : "Drop a PDF, DOCX, PPTX, or TXT file here"}</h3>
+                  <h3>{selectedFile ? selectedFile.name : "Choose a document or drop it here"}</h3>
                   <p>
                     {selectedFile
                       ? `${getFileTypeLabel(selectedFile.name)} ready for extraction`
-                      : "Click to browse or drag a file into the import area."}
+                      : "PDF, Word (.docx), PowerPoint (.pptx), OpenDocument, HTML, Markdown, or text."}
                   </p>
                 </div>
               ) : (
@@ -513,8 +543,8 @@ export default function SongImportFullprocess({
                   <Music2 size={18} />
                 </div>
                 <div>
-                  <h3>Only for bulk import</h3>
-                  <p>This screen is now reserved for document and pasted-text imports. Manual add and online lyrics use their own screens.</p>
+                  <h3>One number, one song</h3>
+                  <p>Song numbers stay with their lyrics. Verses and choruses stay inside each song, ready for the Dock.</p>
                 </div>
               </div>
             </aside>
@@ -558,12 +588,11 @@ export default function SongImportFullprocess({
                 {drafts.map((draft) => {
                   const slideCount = estimateDraftSlideCount(draft, {
                     linesPerSlide: 2,
-                    autoSplit: !/\.pptx$/i.test(sourceName),
+                    autoSplit: !/\.(pptx|odp)$/i.test(sourceName),
                   });
                   return (
-                    <button
+                    <div
                       key={draft.id}
-                      type="button"
                       className={`song-import-song-tile${draft.id === activeSong.id ? " is-active" : ""}`}
                       onClick={() => setActiveSongId(draft.id)}
                     >
@@ -599,10 +628,12 @@ export default function SongImportFullprocess({
                           <Trash2 size={14} />
                         </button>
                       </div>
-                      <strong>{draft.title || "Untitled song"}</strong>
+                      <button type="button" className="song-import-song-title" onClick={() => setActiveSongId(draft.id)}>
+                        <strong>{draft.hymnNumber && !draft.title.split(/\s+/).includes(draft.hymnNumber) ? `${draft.hymnNumber}. ` : ""}{draft.title || "Untitled song"}</strong>
+                      </button>
                       <span>{draft.sections.length} sections</span>
                       <span>{slideCount} slides</span>
-                    </button>
+                    </div>
                   );
                 })}
               </aside>
@@ -854,6 +885,6 @@ export default function SongImportFullprocess({
           )}
         </footer>
       </div>
-    </div>
+    </div>, document.body
   );
 }

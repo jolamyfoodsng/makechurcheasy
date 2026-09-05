@@ -1,6 +1,8 @@
 import type { Song } from "../worship/types";
 
 export interface WorshipDockSongSavePayload {
+  /** Reviewed document songs, saved together in the main application. */
+  batch?: Song[];
   id: string;
   title: string;
   artist: string;

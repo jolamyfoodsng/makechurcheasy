@@ -128,31 +128,118 @@ export function repairPdfBytes(sourceBytes: Uint8Array): Uint8Array | null {
 
 async function loadPdfDocument(bytes: Uint8Array) {
   await ensurePdfWorker();
-  return pdfjsLib
-    .getDocument({
-      data: bytes,
-      useWorkerFetch: false,
-      stopAtErrors: false,
-    })
-    .promise;
+  const task = pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, stopAtErrors: false });
+  try {
+    return { doc: await task.promise, dispose: () => task.destroy() };
+  } catch (error) {
+    await task.destroy();
+    throw error;
+  }
+}
+
+interface PdfTextRun {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+}
+
+/** Reconstruct rows and a stable gutter before the hymn parser reads columns. */
+export function layoutPdfPage(items: PdfTextRun[], pageWidth: number, pageHeight: number, parallelColumns = false): string {
+  const runs = items.filter((item) => item.str.trim() && !(
+    /^\d+$/.test(item.str.trim()) && item.transform[5] < pageHeight * 0.055
+  )).sort((a, b) => b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]);
+  const rows: PdfTextRun[][] = [];
+  for (const run of runs) {
+    const row = rows[rows.length - 1];
+    if (row && Math.abs(row[0].transform[5] - run.transform[5]) <= Math.max(2, run.height * 0.2)) row.push(run);
+    else rows.push([run]);
+  }
+  const gutters: number[] = [];
+  for (const row of rows) {
+    row.sort((a, b) => a.transform[4] - b.transform[4]);
+    for (let i = 1; i < row.length; i++) {
+      const leftEnd = row[i - 1].transform[4] + row[i - 1].width;
+      const rightStart = row[i].transform[4];
+      if (rightStart - leftEnd > pageWidth * 0.025 && leftEnd < pageWidth * 0.6 && rightStart > pageWidth * 0.43 && rightStart < pageWidth * 0.7) {
+        gutters.push((leftEnd + rightStart) / 2);
+      }
+    }
+  }
+  gutters.sort((a, b) => a - b);
+  let gutter = gutters.length >= 4 ? gutters[Math.floor(gutters.length / 2)] : null;
+  if (gutter === null) {
+    const rightStarts = runs.filter((run) => run.transform[4] > pageWidth * 0.48 && run.transform[4] < pageWidth * 0.6);
+    const leftStarts = runs.filter((run) => run.transform[4] < pageWidth * 0.2);
+    if (rightStarts.length >= 6 && leftStarts.length >= 6) gutter = pageWidth * 0.48;
+  }
+  const joinRuns = (group: PdfTextRun[]) => {
+    let text = "";
+    let end = 0;
+    for (const run of group) {
+      if (text && run.transform[4] - end > Math.max(1, run.height * 0.12) && !/\s$/.test(text)) text += " ";
+      text += run.str;
+      end = run.transform[4] + run.width;
+    }
+    return text.trim();
+  };
+  if (gutter !== null) {
+    const rightRows = rows.map((row) => joinRuns(row.filter((run) => run.transform[4] >= gutter!))).filter(Boolean);
+    // A contents/index page has a title and its number on the same row.
+    if (rightRows.length && rightRows.filter((line) => /^\d{1,4}$/.test(line)).length / rightRows.length > 0.6) gutter = null;
+  }
+  if (gutter !== null && !parallelColumns) {
+    const renderColumn = (right: boolean) => {
+      const groups = rows.map((row) => row.filter((run) => (run.transform[4] >= gutter!) === right)).filter((row) => row.length);
+      const lines: string[] = [];
+      for (let i = 0; i < groups.length; i++) {
+        const row = groups[i];
+        if (i > 0 && groups[i - 1][0].transform[5] - row[0].transform[5] > Math.max(10, row[0].height) * 1.7) lines.push("");
+        lines.push(joinRuns(row));
+      }
+      return lines.join("\n");
+    };
+    return renderColumn(false) + "\n\n" + renderColumn(true);
+  }
+  const lines: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (i > 0 && rows[i - 1][0].transform[5] - row[0].transform[5] > Math.max(10, row[0].height) * 1.7) lines.push("");
+    if (gutter === null) lines.push(joinRuns(row));
+    else {
+      const left = joinRuns(row.filter((run) => run.transform[4] < gutter));
+      const right = joinRuns(row.filter((run) => run.transform[4] >= gutter));
+      lines.push(right ? left.padEnd(160, " ") + right : left);
+    }
+  }
+  return lines.join("\n");
 }
 
 export async function extractPdfTextWithPdfJs(file: File): Promise<string> {
   const originalBytes = new Uint8Array(await file.arrayBuffer());
-  const repairedBytes = repairPdfBytes(originalBytes) ?? stripLeadingByte(originalBytes);
-  const doc = await loadPdfDocument(repairedBytes);
-
-  const parts: string[] = [];
-  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
-    const page = await doc.getPage(pageNumber);
-    const content = await page.getTextContent();
-    for (const item of content.items) {
-      if (!("str" in item)) continue;
-      const str = item.str?.trim();
-      if (str) parts.push(str);
-    }
+  let loaded;
+  try {
+    loaded = await loadPdfDocument(stripLeadingByte(originalBytes).slice());
+  } catch (error) {
+    const repairedBytes = repairPdfBytes(originalBytes);
+    if (!repairedBytes) throw error;
+    loaded = await loadPdfDocument(repairedBytes);
   }
-  return parts.join("\n");
+  const { doc } = loaded;
+  const pages: string[] = [];
+  let parallelColumns = false;
+  try {
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+      const page = await doc.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const viewport = page.getViewport({ scale: 1 });
+      const pageText = content.items.filter((item) => "str" in item).map((item) => item.str).join("\n");
+      if (/Orin\s+\d+/i.test(pageText) && /Hymn\s+\d+/i.test(pageText)) parallelColumns = true;
+      pages.push(layoutPdfPage(content.items.filter((item): item is PdfTextRun & typeof item => "str" in item), viewport.width, viewport.height, parallelColumns));
+      page.cleanup();
+    }
+    return pages.join("\f");
+  } finally {
+    await loaded.dispose();
+  }
 }
-
-

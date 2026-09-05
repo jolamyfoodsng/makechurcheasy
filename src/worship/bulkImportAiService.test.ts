@@ -222,7 +222,7 @@ describe("Fast local hymn-book mode", () => {
     expect(result.warnings[0]).toContain("Large numbered hymn book detected");
   });
 
-  it("uses index pages to choose the largest hymn block and recover wrapped first-line titles", () => {
+  it("uses index pages to retain every hymn block and recover wrapped first-line titles", () => {
     const filler = "Repeated filler text to simulate a real scanned hymn book import and keep the fast local path active.";
     const englishContent = Array.from({ length: 20 }, (_, index) => {
       const hymnNumber = index + 1;
@@ -258,8 +258,9 @@ describe("Fast local hymn-book mode", () => {
     const text = [englishContent, englishIndex, twiContent, twiIndex].join("\f");
     const drafts = parseLargeNumberedHymnalDrafts(text);
 
-    expect(drafts).toHaveLength(26);
-    expect(drafts[0]?.title).toBe("Twi hymn 1 wrapped opening title for the larger block");
+    expect(drafts).toHaveLength(46);
+    expect(drafts[0]?.title).toBe("English hymn 1 opening line for the smaller block");
+    expect(drafts[20]?.title).toBe("Twi hymn 1 wrapped opening title for the larger block");
     expect(drafts[0]?.hymnNumber).toBe("1");
     expect(drafts[0]?.reviewNotes[0]).toContain("printed index");
   });

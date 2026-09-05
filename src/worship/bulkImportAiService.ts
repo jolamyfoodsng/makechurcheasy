@@ -1,3 +1,4 @@
+import { parseNumberedSongDrafts } from "./numberedSongImport";
 import { invoke } from "@tauri-apps/api/core";
 import { deductCreditsWithSync, fetchCreditsFromBackend } from "../services/credits";
 import { parseCccHymnDrafts } from "./cccHymnImport";
@@ -1174,29 +1175,10 @@ export function parseLargeNumberedHymnalDrafts(text: string): SmartImportSongDra
   const trimmed = text.trim();
   if (trimmed.length < LARGE_NUMBERED_HYMNAL_MIN_CHARS) return [];
 
-  const indexedCandidates = splitNumberedHymnalBlocks(trimmed)
-    .filter((block) => block.indexTitles.size >= LARGE_NUMBERED_HYMNAL_MIN_SONGS)
-    .map((block) => ({
-      block,
-      drafts: parseIndexedNumberedHymnalBlock(block),
-      maxNumber: Math.max(...[...block.indexTitles.keys()].map(Number)),
-    }))
-    .sort((left, right) => {
-      if (right.drafts.length !== left.drafts.length) {
-        return right.drafts.length - left.drafts.length;
-      }
-      if (right.maxNumber !== left.maxNumber) {
-        return right.maxNumber - left.maxNumber;
-      }
-      return right.block.indexTitles.size - left.block.indexTitles.size;
-    });
-
-  const bestIndexedCandidate = indexedCandidates[0];
-  if (bestIndexedCandidate) {
-    const indexedDrafts = bestIndexedCandidate.drafts;
-    if (indexedDrafts.length >= LARGE_NUMBERED_HYMNAL_MIN_SONGS) {
-      return indexedDrafts;
-    }
+  const blocks = splitNumberedHymnalBlocks(trimmed);
+  if (blocks.some((block) => block.indexTitles.size >= LARGE_NUMBERED_HYMNAL_MIN_SONGS)) {
+    // Preserve every language/book section, even when its numbering restarts.
+    return blocks.flatMap((block) => parseIndexedNumberedHymnalBlock(block));
   }
 
   const detection = detectSongs(trimmed);
@@ -1264,7 +1246,12 @@ export async function processDocumentLocally(
 ): Promise<AiProcessResult> {
   const startedAt = Date.now();
   const trimmed = text.trim();
-  if (/\.pptx$/i.test(fileName)) {
+  if (/\.(pptx|odp)$/i.test(fileName)) {
+    const numberedSlides = parseNumberedSongDrafts(trimmed);
+    if (numberedSlides.length > 1) return {
+      songs: numberedSlides, warnings: [], aiUsed: false, needsReview: true,
+      stats: { totalChunks: 0, aiChunks: 0, fallbackChunks: 0, provider: "numbered-local", durationMs: Date.now() - startedAt },
+    };
     const presentationDraft = buildPowerPointDraft(trimmed, fileName);
     if (presentationDraft) {
       onProgress?.({
@@ -1332,6 +1319,12 @@ export async function processDocumentLocally(
       },
     };
   }
+
+  const numberedSongs = parseNumberedSongDrafts(trimmed);
+  if (numberedSongs.length) return {
+    songs: numberedSongs, warnings: [], aiUsed: false, needsReview: true,
+    stats: { totalChunks: 0, aiChunks: 0, fallbackChunks: 0, provider: "numbered-local", durationMs: Date.now() - startedAt },
+  };
 
   const creditsNeeded = estimateWorshipImportAiCredits(trimmed);
   onProgress?.({

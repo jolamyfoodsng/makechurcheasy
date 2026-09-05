@@ -194,11 +194,38 @@ function cleanLyricLines(lines: string[]): string {
  */
 export function parseBilingualHymns(text: string): ParsedHymn[] {
   // Strip form-feed characters (page breaks from pdftotext)
-  const lines = text.replace(/\f/g, "").split("\n");
+  const lines = text.replace(/\f/g, "\n").split("\n");
   const hymns: ParsedHymn[] = [];
   const byNumber = new Map<number, ParsedHymn>();
 
   const splitCol = detectSplitCol(lines);
+
+  if (lines.some((line) => /Orin\s+\d+\s+Hymn\s+\d+/i.test(line))) {
+    // Track each language independently across pages. Some CCC pages label
+    // both columns "Hymn", and their headers need not share the same row.
+    for (const [column, language] of [[0, "yoruba"], [1, "english"]] as const) {
+      let current: ParsedHymn | null = null;
+      let sectionLabel = "";
+      for (const line of lines) {
+        const part = splitLine(line, splitCol)[column].trim();
+        const header = part.match(/^(?:Orin|Hymn)\s+(\d+)\s*[:.]?\s*$/i);
+        if (header) {
+          current = getOrCreateHymn(hymns, byNumber, Number(header[1]));
+          if (sectionLabel) current.sectionLabel = sectionLabel;
+          continue;
+        }
+        if (/\bHymns?\s+\d+.*\bReserved\b/i.test(part)) { current = null; continue; }
+        if (isSectionHeader(part)) { sectionLabel = part; continue; }
+        if (!current || MUSICAL_RE.test(part)) continue;
+        current[language] += (current[language] ? "\n" : "") + part;
+      }
+    }
+    for (const hymn of hymns) {
+      hymn.yoruba = hymn.yoruba.trim();
+      hymn.english = hymn.english.trim();
+    }
+    return hymns.sort((a, b) => a.number - b.number);
+  }
 
   // Pass 1: locate all "Orin N" header line indices for merged two-column text.
   const orinHeaders: { lineIdx: number; number: number }[] = [];
