@@ -22,6 +22,7 @@
  */
 
 import Fuse from "fuse.js";
+import { parseScriptureReference } from "../services/scriptureParser";
 import { POPULARITY_DB } from "./data/popularityDb";
 import { CONCEPT_INDEX } from "./data/conceptIndex";
 import { STORY_ENGINE } from "./data/storyEngine";
@@ -273,6 +274,12 @@ const ABBREVIATION_MAP: Record<string, string> = {
  * the book portion against the alias index.
  */
 function findBook(query: string): { reference: string; chapter: number | null; verse: number | null } | null {
+  // Keep reference normalization consistent with the live speech parser.
+  // In particular, do not fuzzy-rank short exact aliases ("Am" is Amos).
+  const parsed = parseScriptureReference(query);
+  if (parsed?.book && BOOK_INDEX.some((entry) => entry.reference === parsed.book)) {
+    return { reference: parsed.book, chapter: parsed.chapter, verse: parsed.verse };
+  }
   let s = query.trim().toLowerCase();
   if (!s) return null;
 

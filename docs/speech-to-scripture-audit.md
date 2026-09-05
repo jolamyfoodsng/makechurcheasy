@@ -2,6 +2,8 @@
 
 Date: 5 September 2026
 
+Numbered-book follow-up: 6 September 2026
+
 The reported failures came from several stages between the transcript and the projected verse. The fixes cover the reference parser, conversational context, quote search, ranking, service queues, the Speech to Scripture page, and the LM dock's projection settings.
 
 ## Confirmed defects and fixes
@@ -21,6 +23,9 @@ The reported failures came from several stages between the transcript and the pr
 - **Suggestion expiry was reset by polling.** Detection timestamps now survive relay polling. Duplicate-projection timing is recorded after a successful push.
 - **Auto Navigate had no effect.** It now stages the latest detected reference in the Bible dock when enabled.
 - **Semantic lookup rebuilt the extractor for each query.** Consecutive/concurrent queries now share one model initialization.
+- **Numbered-book spellings were inconsistent.** The follow-up regression suite reproduced 45 failures across grouped book-name tests. Ordinal words, numeric ordinals, Roman numerals, abbreviations, punctuation, joined forms, and repeated ordinals now share normalization before chapter aliases are expanded. Examples include “firstcor”, “1st Cor.”, “second 2nd Kings”, “1 Ch”, and “1Cor13:4”. “Isa” remains Isaiah rather than being read as compact “I Sa”.
+- **A pause after an ordinal lost the book number.** Finalized segments such as “first” → “Cor” → “chapter thirteen” → “verse four” now resolve to 1 Corinthians 13:4 and reach the live service queue. Pending ordinals expire after eight seconds, are cleared by unrelated speech, and are not committed from interim revisions.
+- **Reference normalization could disagree with live detection.** The reranker now uses the speech parser before fuzzy lookup. Exact abbreviations such as “Am” no longer resolve to a different book, and “Phlm” is recognized as Philemon.
 
 ## Settings checked
 
@@ -45,6 +50,7 @@ The reported failures came from several stages between the transcript and the pr
 - The initial regression suite reproduced 21 failures before the fixes.
 - 318 focused tests passed across nine files, including parser, real bundled Bible corpus, ranking, service races, projection settings, dock helpers, and a rendered page component.
 - An additional 66-book matrix passed: canonical 1:1 references and every book's final chapter remain correctly identified. Total: 384 checks.
+- Follow-up coverage now totals 778 passing tests across eleven files. The book-name matrix checks 1,849 numbered-reference spellings in both the parser and reranker, abbreviations spanning all 66 books, split ordinal/book/chapter/verse turns, interim revisions, expiry, and live service queue routing. Two older semantic tests were aligned with the corrected behavior: vague fragments are not certain aliases, while confident complete quotations can change the active book and subsequent navigation.
 - Desktop TypeScript and production frontend build passed. The build reports existing dependency/bundle-size warnings.
 - Existing unrelated worktree changes were preserved. UI layout, spacing, and existing components were retained using `../../docs/DESIGN.md` and `../../docs/COMPONENT_LIBRARY.md`.
 

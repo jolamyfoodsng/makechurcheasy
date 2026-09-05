@@ -13,6 +13,7 @@
  */
 
 import { BOOK_CHAPTERS } from "../dock/dockTypes";
+import { normalizeNumberedBookNames } from "../bible/bookAliasGenerator";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -39,6 +40,8 @@ export interface ScriptureSpeechState {
   lastChapter: number | null;
   lastVerse: number | null;
   lastReferenceTimestamp: number;
+  /** A finalized ASR turn may stop between "first" and "Corinthians". */
+  pendingBookOrdinal?: { digit: string; timestamp: number };
 }
 
 export interface ScriptureSpeechResolution extends ParsedReference {
@@ -277,10 +280,12 @@ function numberedBook(base: string, _canonical: string, spoken: string[]): void 
 
   for (const { digit, word, ord } of ordinals) {
     const full = `${digit} ${base}`;
+    if (!BOOK_CHAPTERS[full]) continue;
     const entries = [
       `${digit}${spokenLower}`, `${digit} ${spokenLower}`,
       ...spoken.map((s) => `${digit}${s}`), ...spoken.map((s) => `${digit} ${s}`),
       `${word} ${spokenLower}`, `${word}${spokenLower}`,
+      ...spoken.map((s) => `${word} ${s}`), ...spoken.map((s) => `${word}${s}`),
       `${ord} ${spokenLower}`, `${ord}${spokenLower}`,
       ...spoken.map((s) => `${ord} ${s}`), ...spoken.map((s) => `${ord}${s}`),
       `${digit}${singularLower}`, `${digit} ${singularLower}`,
@@ -293,6 +298,7 @@ function numberedBook(base: string, _canonical: string, spoken: string[]): void 
   const roman: Record<string, string> = { "1": "i", "2": "ii", "3": "iii" };
   for (const [digit, rom] of Object.entries(roman)) {
     const full = `${digit} ${base}`;
+    if (!BOOK_CHAPTERS[full]) continue;
     aliases(full, [
       `${rom}${spokenLower}`, `${rom} ${spokenLower}`,
       ...(singularLower !== spokenLower ? [`${rom}${singularLower}`, `${rom} ${singularLower}`] : []),
@@ -377,7 +383,7 @@ numberedBook("Thessalonians", "1 Thessalonians", [
 numberedBook("Timothy", "1 Timothy", ["tim", "ti", "tm", "timo", "timithy", "timoty"]);
 aliases("Titus", ["titus", "tit", "ti", "tytus", "tius"]);
 aliases("Philemon", [
-  "philemon", "phm", "philem", "pm",
+  "philemon", "phm", "phlm", "philem", "pm",
   "filemon", "filimon", "phileman", "fileman", "philamon", "fillimon",
 ]);
 aliases("Hebrews", ["hebrews", "heb", "he", "hebrew", "ebrews", "heebrews", "hebros", "hebrows"]);
@@ -759,7 +765,7 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
  * Strip filler words and normalize whitespace.
  */
 function cleanTranscript(text: string): string {
-  return normalizeSpokenNumbers(text.toLowerCase())
+  return normalizeSpokenNumbers(normalizeNumberedBookNames(text.toLowerCase()))
     .replace(/[’']/g, "'")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
     .replace(/\b(verse|verses|vs|vrs|vas|vass|buzz|bah|bus|bas)\b/g, " verse ")
@@ -961,6 +967,7 @@ function classifySpeechReference(reference: ParsedReference, hasCorrection: bool
 }
 
 function updateSpeechState(state: ScriptureSpeechState, reference: ParsedReference, timestamp: number): void {
+  delete state.pendingBookOrdinal;
   if (reference.book) state.lastBook = reference.book;
   state.lastChapter = reference.chapter;
   state.lastVerse = reference.verse;
@@ -1009,6 +1016,32 @@ export function resolveScriptureSpeech(
 
   const lower = trimmed.toLowerCase();
   const { text: stripped, isCorrection } = stripCorrectionPrefix(lower);
+  const ordinalText = stripped.replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim();
+  const ordinalWithoutCommand = ordinalText.replace(/^(?:(?:please|now|let s|lets|open|turn|go|read|to|the|book|of)\s+)+/, "");
+  const ordinalTokens = ordinalWithoutCommand.split(" ");
+  const ordinals = ordinalTokens.map(resolveOrdinal);
+  if (ordinals.length <= 3 && ordinals[0] && ordinals.every((digit) => digit === ordinals[0]) &&
+      (!state.lastBook || ordinalWithoutCommand !== ordinalText || /^(?:first|second|third|1st|2nd|3rd|i{1,3})$/.test(ordinalTokens[0]))) {
+    state.pendingBookOrdinal = { digit: ordinals[0], timestamp };
+    return { book: null, chapter: null, verse: null, endVerse: null, isRelative: false,
+      kind: "book_reference", shouldProject: false, isCorrection };
+  }
+
+  // Only the immediately following turn can complete an ordinal, within the
+  // same short conversation window used for numeric continuations.
+  const pendingOrdinal = state.pendingBookOrdinal;
+  delete state.pendingBookOrdinal;
+  if (pendingOrdinal && timestamp - pendingOrdinal.timestamp <= CORRECTION_WINDOW_MS) {
+    const combined = normalizeNumberedBookNames(`${pendingOrdinal.digit} ${stripped}`);
+    const parsed = parseScriptureReference(combined);
+    if (parsed?.book?.startsWith(`${pendingOrdinal.digit} `) &&
+        combined.toLowerCase().startsWith(parsed.book.toLowerCase())) {
+      const resolved = resolveWithSpeechState({ ...parsed, isRelative: true }, state, isCorrection, timestamp);
+      if (resolved) return { ...resolved, kind: classifySpeechReference(resolved, isCorrection),
+        shouldProject: resolved.chapter !== null && resolved.verse !== null, isCorrection };
+    }
+  }
+
   const normalized = cleanTranscript(stripped);
   if (!normalized) return null;
 

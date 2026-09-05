@@ -49,6 +49,20 @@ async function settled() {
 }
 
 describe("live transcript routing", () => {
+  it.each([
+    [["first", "Cor", "chapter thirteen", "verse four"], "1 Corinthians 13:4"],
+    [["second", "2nd Kings chapter six verse seventeen"], "2 Kings 6:17"],
+    [["1stCor 13:4"], "1 Corinthians 13:4"],
+    [["second 2nd cor 5:17"], "2 Corinthians 5:17"],
+  ] as const)("queues the intended verse from %j", async (chunks, label) => {
+    const search = vi.spyOn(harness.scriptureEngine, "searchQuotesWithText");
+    for (const chunk of chunks) harness.processChunk(chunk, true);
+    await settled();
+    expect(service.getSnapshot().latestMatch?.label).toBe(label);
+    expect(service.getSnapshot().queue[0]?.label).toBe(label);
+    expect(search).not.toHaveBeenCalled();
+  });
+
   it("surfaces a spoken reference as the latest match and does not search it as a quotation", async () => {
     const search = vi.spyOn(harness.scriptureEngine, "searchQuotesWithText");
     harness.processChunk("Romans chapter eight verse twenty eight.", true);

@@ -193,7 +193,6 @@ describe("Partial quotes that resolve via alias substring", () => {
   // These resolve via alias, NOT embeddings. This is correct behavior —
   // the alias fast path is faster and more reliable for these cases.
   const partialAliasMatches = [
-    { text: "greater is he", expected: "1 John 4:4" },
     { text: "faith is the substance", expected: "Hebrews 11:1" },
     { text: "for god so loved", expected: "John 3:16" },
     { text: "trust in the lord with all", expected: "Proverbs 3:5" },
@@ -207,6 +206,10 @@ describe("Partial quotes that resolve via alias substring", () => {
       expect(matchVerseAlias(text)).toBe(expected);
     });
   }
+
+  it("does not treat a fragment with only one distinctive word as a certain verse", () => {
+    expect(matchVerseAlias("greater is he")).toBeNull();
+  });
 });
 
 // ── Long sermon speech with alias substrings embedded ──────────────────────
@@ -1171,17 +1174,21 @@ describe("reference continuations", () => {
     ))).toBe(true);
   });
 
-  it("does not jump to another book without an explicit new reference", async () => {
+  it("follows a confident new quotation into another book and updates navigation", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const engine = new ScriptureDetectionEngine();
 
     await engine.processChunk("Psalms 91:1", true);
 
-    const unrelatedQuote = await engine.searchQuotesWithText("for God so loved the world");
-    expect(unrelatedQuote).toHaveLength(0);
+    const newQuote = await engine.searchQuotesWithText(
+      "for God so loved the world that he gave his only begotten son",
+    );
+    expect(newQuote[0]?.candidate.label).toBe("John 3:16");
+    expect(newQuote[0]?.candidate.source).not.toBe("fuzzy");
+    expect(newQuote[0]?.candidate.confidence).toBeGreaterThanOrEqual(0.90);
 
-    const explicitReference = await engine.processChunk("John 3:16", true);
-    expect(explicitReference.matches[0].candidate.label).toContain("John 3:16");
+    const continuation = await engine.processChunk("next verse", true);
+    expect(continuation.matches[0]?.candidate.label).toBe("John 3:17");
   });
 
   it("moves forward one verse from the current queue reference", async () => {
