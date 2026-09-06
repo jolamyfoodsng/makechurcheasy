@@ -71,3 +71,24 @@ The regression suite exercises supplied transcript text; the follow-up provider 
 No real microphone capture, live OBS projection, packaged desktop installation, or release deployment was performed. OBS was inspected and was neither streaming nor recording. Three synthetic samples are not a general accuracy or accent benchmark. A live microphone-to-OBS check is still required before calling the production incident resolved.
 
 Arbitrary speech does not always identify a unique Bible verse. Ambiguous or weak matches remain suggestions for manual selection rather than being presented as certain scripture.
+
+## Real sermon transcript replay — 6 September 2026
+
+The two supplied sermon transcripts were replayed through the actual `LmDockService` finalized-turn queue, parser, quote engine, reranker, local semantic model/index, and KJV verse resolution at revision `4ac184c`. Outbound dock/status notifications were disabled. Each original physical line was tested, followed by a separate sentence replay retaining context. Sentence boundaries came from punctuation, not audio timestamps. Previously displayed results were excluded from new detections. The complete transcripts and per-line HTML/CSV/JSON reports remain local in Downloads.
+
+These runs reveal unresolved detection defects despite the earlier passing regression tests:
+
+| Transcript | Text paragraphs | Sentences | Reviewed passage checks | Confident catches in sentence replay | Suggestion only | Missed |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BREAKOUT | 37 | 914 | 15 | 6 | 4 | 5 |
+| HUNDREDFOLD_SERVICE | 249 | 1,071 | 57 | 8 | 25 | 24 |
+
+The HUNDREDFOLD checks include 28 clear quotations, 18 paraphrases, eight damaged quotations, and three brief or damaged allusions. Among the 28 clear quotations, the sentence replay produced eight confident catches, 14 suggestions, and six misses. Whole-paragraph replay found only one confident catch, 18 suggestions, and 38 misses across all 57 checks. These are reviewed occurrences, including repetitions and accepted parallel passages, not an overall accuracy percentage for arbitrary speech.
+
+- **False book context remains possible.** Outline phrases such as “number two” and “number three” become Numbers chapters. “Other one” can become Esther chapter 1. Later quotations can remain constrained by that accidental context.
+- **A reference can consume an entire finalized paragraph.** An opening “Genesis 26” followed by quoted verses in the same turn sets chapter context but yields no fresh verse from the rest of the paragraph.
+- **Some generic fragments still qualify for automatic projection.** The sentence replay accepted “When Abraham's” as Genesis 24:52, “He looked at the land” as Isaiah 5:30, and a damaged “hundred footer” fragment as Exodus 12:37. Matching a few words does not establish the intended passage.
+- **Clear quoted words are still missed.** The HUNDREDFOLD sentence replay missed “the power of an endless life” (Hebrews 7:16) and the promises being “yes and amen” (2 Corinthians 1:20), despite finding Acts 20:32, Romans 8:14, and Proverbs 8:12 confidently elsewhere.
+- **Cold semantic startup is still unacceptable for live use.** With the prebuilt HNSW asset absent, HUNDREDFOLD's first semantic lookup took 629,929 ms, about 10 minutes 30 seconds. Once loaded, sentence matching had a median of 114 ms and a 95th percentile of 669 ms in this local run. Timings include queue processing and 5 ms completion polling, exclude transcription/projection, and are not controlled hardware benchmarks.
+
+All 497 HUNDREDFOLD physical lines, including 248 blank lines, and all 1,071 sentence records were verified in the saved reports. Every returned candidate resolved to actual KJV verse text. That verifies candidate validity, not relevance. No live microphone, speech-recognition provider, rendered projection, or OBS output was exercised in these transcript replays. The production detection incident remains unresolved.
