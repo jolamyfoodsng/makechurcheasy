@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 import { searchBibleRanked } from "./bibleData";
 
 describe("Bible keyword search", () => {
+  it.each([
+    ["God loved the world", "John", 3, 16],
+    ["shall be called sons of God", "1 John", 3, 1],
+    ["they shall be called children of God", "Matthew", 5, 9],
+    ["blessed are the peacemakers", "Matthew", 5, 9],
+  ])("ranks short spoken wording first: %s", async (query, book, chapter, verse) => {
+    expect((await searchBibleRanked(String(query), "KJV", 5))[0]).toMatchObject({ book, chapter, verse, endVerse: undefined });
+  });
+
+  it("returns distinct actual verses for a phrase shared by many passages", async () => {
+    const results = await searchBibleRanked("sons of men", "KJV", 5);
+    expect(results).toHaveLength(5);
+    expect(new Set(results.map((r) => `${r.book} ${r.chapter}:${r.verse}`)).size).toBe(5);
+    expect(results.every((r) => r.text.toLowerCase().includes("sons of men") && !r.endVerse)).toBe(true);
+  });
+
+  it("keeps cached results isolated from callers and book/chapter filters", async () => {
+    const first = await searchBibleRanked("sons of men", "KJV", 5);
+    first[0].text = "modified by caller";
+    expect((await searchBibleRanked("sons of men", "KJV", 5))[0].text).not.toBe("modified by caller");
+    const scoped = await searchBibleRanked("sons of men", "KJV", 5, { book: "Psalms", chapter: 33 });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((r) => r.book === "Psalms" && r.chapter === 33)).toBe(true);
+  });
   it("finds adjacent verse matches for phrase fragments", async () => {
     const results = await searchBibleRanked("all things must bow confess", "KJV", 5);
     const top = results[0];

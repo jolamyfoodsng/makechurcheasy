@@ -75,6 +75,7 @@ type QuoteSearchMode = "strict" | "closest";
 
 interface QueueQuoteSearchOptions {
   mode?: QuoteSearchMode;
+  contextText?: string;
 }
 
 /**
@@ -295,7 +296,7 @@ export class LmDockService {
     const mode = options.mode ?? "strict";
     const now = Date.now();
     const normalized = trimmed.toLowerCase().replace(/\s+/g, " ");
-    const key = `${mode}:${normalized}`;
+    const key = `${mode}:${normalized}:${options.contextText ?? ""}`;
     if (key === this.lastQueuedQuoteSearchKey && now - this.lastQueuedQuoteSearchAt < 1_000) {
       return;
     }
@@ -305,7 +306,7 @@ export class LmDockService {
     this.pendingQuoteSearch = {
       text: trimmed,
       timestamp: now,
-      options: { mode },
+      options: { ...options, mode },
       searchId: ++this.latestSearchId,
     };
 
@@ -713,7 +714,7 @@ export class LmDockService {
       ? `${previous} ${text}`
       : text;
     this.sentenceBuffer = searchText.split(/\s+/).slice(-60).join(" ");
-    this.queueQuoteSearch(searchText, { mode: "closest" });
+    this.queueQuoteSearch(text, { mode: "closest", contextText: words.length < 6 ? previous : undefined });
   }
 
   /**
@@ -748,7 +749,7 @@ export class LmDockService {
       const quoteMatches = await this.scriptureEngine.searchQuotesWithText(
         text,
         boundPassage,
-        { mode: options.mode ?? "strict" },
+        { ...options, mode: options.mode ?? "strict" },
       );
 
       // Freshness guard: discard if a newer search has started

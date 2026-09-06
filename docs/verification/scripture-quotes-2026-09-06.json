@@ -1,0 +1,472 @@
+{
+  "date": "2026-09-06",
+  "method": "Sequential local Vite SSR runs against the actual bundled KJV corpus and scripture detection engine. No microphone or OBS output used. Timings rounded to milliseconds; 0 means below rounding precision. Three warm query repetitions per phrase. After-change uncached measurements evicted all 32 cached answers between rounds using unrelated queries.",
+  "coldPreloadMs": 2335,
+  "coldPreloadNote": "One-time corpus and word-index preparation is started during microphone startup. Warm timings exclude this cost and exclude speech-provider/audio/rendering latency.",
+  "comparison": [
+    {
+      "query": "God loved the world",
+      "beforeWarmSearchMs": [
+        221,
+        206,
+        201
+      ],
+      "afterWarmUncachedSearchMs": [
+        28,
+        27,
+        26
+      ],
+      "beforeMedianMs": 206,
+      "afterMedianMs": 27,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "query": "You shall be called sons of men",
+      "beforeWarmSearchMs": [
+        351,
+        255,
+        244
+      ],
+      "afterWarmUncachedSearchMs": [
+        100,
+        99,
+        99
+      ],
+      "beforeMedianMs": 255,
+      "afterMedianMs": 99,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "query": "sons of men",
+      "beforeWarmSearchMs": [
+        284,
+        110,
+        109
+      ],
+      "afterWarmUncachedSearchMs": [
+        32,
+        31,
+        30
+      ],
+      "beforeMedianMs": 110,
+      "afterMedianMs": 31,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "query": "they shall be called children of God",
+      "beforeWarmSearchMs": [
+        359,
+        321,
+        314
+      ],
+      "afterWarmUncachedSearchMs": [
+        120,
+        118,
+        118
+      ],
+      "beforeMedianMs": 321,
+      "afterMedianMs": 118,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "query": "shall be called sons of God",
+      "beforeWarmSearchMs": [
+        277,
+        259,
+        258
+      ],
+      "afterWarmUncachedSearchMs": [
+        108,
+        104,
+        106
+      ],
+      "beforeMedianMs": 259,
+      "afterMedianMs": 106,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "query": "blessed are the peacemakers",
+      "beforeWarmSearchMs": [
+        121,
+        118,
+        116
+      ],
+      "afterWarmUncachedSearchMs": [
+        4,
+        4,
+        5
+      ],
+      "beforeMedianMs": 118,
+      "afterMedianMs": 4,
+      "cachedRevisionMs": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "beforeTopResults": [
+    {
+      "query": "God loved the world",
+      "results": [
+        {
+          "reference": "John 3:16",
+          "score": 1.79,
+          "text": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+        },
+        {
+          "reference": "John 3:15-16",
+          "score": 0.94,
+          "text": "That whosoever believeth in him should not perish, but have eternal life. For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+        },
+        {
+          "reference": "John 3:14-16",
+          "score": 0.9199999999999999,
+          "text": "And as Moses lifted up the serpent in the wilderness, even so must the Son of man be lifted up: That whosoever believeth in him should not perish, but have eternal life. For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+        }
+      ]
+    },
+    {
+      "query": "You shall be called sons of men",
+      "results": [
+        {
+          "reference": "Proverbs 8:4",
+          "score": 0.6699999999999999,
+          "text": "Unto you, O men, I call; and my voice to the sons of man."
+        },
+        {
+          "reference": "Genesis 32:28",
+          "score": 0.6599999999999999,
+          "text": "And he said, Thy name shall be called no more Jacob, but Israel: for as a prince hast thou power with God and with men, and hast prevailed."
+        },
+        {
+          "reference": "Psalms 57:3-4",
+          "score": 0.6599999999999999,
+          "text": "He shall send from heaven, and save me the reproach of him that would swallow me up. Selah. God shall send forth his mercy and his truth. My soul among lions: I lie them that are set on fire, the sons of men, whose teeth spears and arrows, and their tongue a sharp sword."
+        },
+        {
+          "reference": "Psalms 145:11-12",
+          "score": 0.6599999999999999,
+          "text": "They shall speak of the glory of thy kingdom, and talk of thy power; To make known to the sons of men his mighty acts, and the glorious majesty of his kingdom."
+        },
+        {
+          "reference": "Micah 5:6-7",
+          "score": 0.6599999999999999,
+          "text": "And they shall waste the land of Assyria with the sword, and the land of Nimrod in the entrances thereof: thus shall he deliver from the Assyrian, when he cometh into our land, and when he treadeth within our borders. And the remnant of Jacob shall be in the midst of many people as a dew from the LORD, as the showers upon the grass, that tarrieth not for man, nor waiteth for the sons of men."
+        }
+      ]
+    },
+    {
+      "query": "sons of men",
+      "results": [
+        {
+          "reference": "Psalms 4:2",
+          "score": 1,
+          "text": "O ye sons of men, how long my glory into shame? will ye love vanity, seek after leasing? Selah."
+        },
+        {
+          "reference": "Psalms 31:19",
+          "score": 1,
+          "text": "how great thy goodness, which thou hast laid up for them that fear thee; thou hast wrought for them that trust in thee before the sons of men!"
+        },
+        {
+          "reference": "Psalms 33:13",
+          "score": 1,
+          "text": "The LORD looketh from heaven; he beholdeth all the sons of men."
+        },
+        {
+          "reference": "Psalms 57:4",
+          "score": 1,
+          "text": "My soul among lions: I lie them that are set on fire, the sons of men, whose teeth spears and arrows, and their tongue a sharp sword."
+        },
+        {
+          "reference": "Psalms 58:1",
+          "score": 1,
+          "text": "[To the chief Musician, Altaschith, Michtam of David.] Do ye indeed speak righteousness, O congregation? do ye judge uprightly, O ye sons of men?"
+        }
+      ]
+    },
+    {
+      "query": "they shall be called children of God",
+      "results": [
+        {
+          "reference": "Matthew 5:9",
+          "score": 1,
+          "text": "Blessed the peacemakers: for they shall be called the children of God."
+        },
+        {
+          "reference": "Matthew 5:8-9",
+          "score": 0.9299999999999999,
+          "text": "Blessed the pure in heart: for they shall see God. Blessed the peacemakers: for they shall be called the children of God."
+        },
+        {
+          "reference": "Matthew 5:7-9",
+          "score": 0.9199999999999999,
+          "text": "Blessed the merciful: for they shall obtain mercy. Blessed the pure in heart: for they shall see God. Blessed the peacemakers: for they shall be called the children of God."
+        }
+      ]
+    },
+    {
+      "query": "shall be called sons of God",
+      "results": [
+        {
+          "reference": "1 Kings 1:24-25",
+          "score": 0.72,
+          "text": "And Nathan said, My lord, O king, hast thou said, Adonijah shall reign after me, and he shall sit upon my throne? For he is gone down this day, and hath slain oxen and fat cattle and sheep in abundance, and hath called all the king's sons, and the captains of the host, and Abiathar the priest; and, behold, they eat and drink before him, and say, God save king Adonijah."
+        },
+        {
+          "reference": "1 John 3:1",
+          "score": 0.71,
+          "text": "Behold, what manner of love the Father hath bestowed upon us, that we should be called the sons of God: therefore the world knoweth us not, because it knew him not."
+        },
+        {
+          "reference": "1 Kings 1:23-25",
+          "score": 0.7,
+          "text": "And they told the king, saying, Behold Nathan the prophet. And when he was come in before the king, he bowed himself before the king with his face to the ground. And Nathan said, My lord, O king, hast thou said, Adonijah shall reign after me, and he shall sit upon my throne? For he is gone down this day, and hath slain oxen and fat cattle and sheep in abundance, and hath called all the king's sons, and the captains of the host, and Abiathar the priest; and, behold, they eat and drink before him, and say, God save king Adonijah."
+        },
+        {
+          "reference": "1 Kings 1:17-19",
+          "score": 0.6849999999999999,
+          "text": "And she said unto him, My lord, thou swarest by the LORD thy God unto thine handmaid, , Assuredly Solomon thy son shall reign after me, and he shall sit upon my throne. And now, behold, Adonijah reigneth; and now, my lord the king, thou knowest not: And he hath slain oxen and fat cattle and sheep in abundance, and hath called all the sons of the king, and Abiathar the priest, and Joab the captain of the host: but Solomon thy servant hath he not called."
+        }
+      ]
+    },
+    {
+      "query": "blessed are the peacemakers",
+      "results": [
+        {
+          "reference": "Matthew 5:9",
+          "score": 0.7661261261261261,
+          "text": "Blessed the peacemakers: for they shall be called the children of God."
+        },
+        {
+          "reference": "Matthew 5:8-9",
+          "score": 0.746126126126126,
+          "text": "Blessed the pure in heart: for they shall see God. Blessed the peacemakers: for they shall be called the children of God."
+        },
+        {
+          "reference": "Matthew 5:7-9",
+          "score": 0.726126126126126,
+          "text": "Blessed the merciful: for they shall obtain mercy. Blessed the pure in heart: for they shall see God. Blessed the peacemakers: for they shall be called the children of God."
+        }
+      ]
+    }
+  ],
+  "afterEngineResults": [
+    {
+      "query": "God loved the world",
+      "ms": 29,
+      "matches": [
+        {
+          "book": "John",
+          "chapter": 3,
+          "verse": 16,
+          "translation": "KJV",
+          "label": "John 3:16",
+          "snippet": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+          "confidence": 1,
+          "source": "keyword"
+        }
+      ]
+    },
+    {
+      "query": "You shall be called sons of men",
+      "ms": 102,
+      "matches": [
+        {
+          "book": "1 John",
+          "chapter": 3,
+          "verse": 1,
+          "endVerse": 3,
+          "translation": "KJV",
+          "label": "1 John 3:1-3",
+          "snippet": "Behold, what manner of love the Father hath bestowed upon us, that we should be called the sons of God: therefore the world knoweth us not, because it knew him not. Beloved, now are we the sons of God, and it doth not yet appear what we shall be: but we know that, when he shall appear, we shall be like him; for we shall see him as he is. And every man that hath this hope in him purifieth himself, even as he is pure.",
+          "confidence": 0.85,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Hebrews",
+          "chapter": 2,
+          "verse": 9,
+          "endVerse": 11,
+          "translation": "KJV",
+          "label": "Hebrews 2:9-11",
+          "snippet": "But we see Jesus, who was made a little lower than the angels for the suffering of death, crowned with glory and honour; that he by the grace of God should taste death for every man. For it became him, for whom all things, and by whom all things, in bringing many sons unto glory, to make the captain of their salvation perfect through sufferings. For both he that sanctifieth and they who are sanctified all of one: for which cause he is not ashamed to call them brethren,",
+          "confidence": 0.7000000000000001,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Proverbs",
+          "chapter": 8,
+          "verse": 4,
+          "translation": "KJV",
+          "label": "Proverbs 8:4",
+          "snippet": "Unto you, O men, I call; and my voice to the sons of man.",
+          "confidence": 0.6699999999999999,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Genesis",
+          "chapter": 32,
+          "verse": 28,
+          "translation": "KJV",
+          "label": "Genesis 32:28",
+          "snippet": "And he said, Thy name shall be called no more Jacob, but Israel: for as a prince hast thou power with God and with men, and hast prevailed.",
+          "confidence": 0.6599999999999999,
+          "source": "fuzzy"
+        }
+      ]
+    },
+    {
+      "query": "sons of men",
+      "ms": 29,
+      "matches": [
+        {
+          "book": "Psalms",
+          "chapter": 4,
+          "verse": 2,
+          "translation": "KJV",
+          "label": "Psalms 4:2",
+          "snippet": "O ye sons of men, how long my glory into shame? will ye love vanity, seek after leasing? Selah.",
+          "confidence": 1,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Psalms",
+          "chapter": 31,
+          "verse": 19,
+          "translation": "KJV",
+          "label": "Psalms 31:19",
+          "snippet": "how great thy goodness, which thou hast laid up for them that fear thee; thou hast wrought for them that trust in thee before the sons of men!",
+          "confidence": 1,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Psalms",
+          "chapter": 33,
+          "verse": 13,
+          "translation": "KJV",
+          "label": "Psalms 33:13",
+          "snippet": "The LORD looketh from heaven; he beholdeth all the sons of men.",
+          "confidence": 1,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Psalms",
+          "chapter": 57,
+          "verse": 4,
+          "translation": "KJV",
+          "label": "Psalms 57:4",
+          "snippet": "My soul among lions: I lie them that are set on fire, the sons of men, whose teeth spears and arrows, and their tongue a sharp sword.",
+          "confidence": 1,
+          "source": "fuzzy"
+        },
+        {
+          "book": "Psalms",
+          "chapter": 58,
+          "verse": 1,
+          "translation": "KJV",
+          "label": "Psalms 58:1",
+          "snippet": "[To the chief Musician, Altaschith, Michtam of David.] Do ye indeed speak righteousness, O congregation? do ye judge uprightly, O ye sons of men?",
+          "confidence": 1,
+          "source": "fuzzy"
+        }
+      ]
+    },
+    {
+      "query": "they shall be called children of God",
+      "ms": 148,
+      "matches": [
+        {
+          "book": "Matthew",
+          "chapter": 5,
+          "verse": 9,
+          "translation": "KJV",
+          "label": "Matthew 5:9",
+          "snippet": "Blessed the peacemakers: for they shall be called the children of God.",
+          "confidence": 0.98,
+          "source": "keyword"
+        }
+      ]
+    },
+    {
+      "query": "shall be called sons of God",
+      "ms": 308,
+      "matches": [
+        {
+          "book": "1 John",
+          "chapter": 3,
+          "verse": 1,
+          "translation": "KJV",
+          "label": "1 John 3:1",
+          "snippet": "Behold, what manner of love the Father hath bestowed upon us, that we should be called the sons of God: therefore the world knoweth us not, because it knew him not.",
+          "confidence": 0.98,
+          "source": "keyword"
+        }
+      ]
+    },
+    {
+      "query": "blessed are the peacemakers",
+      "ms": 12,
+      "matches": [
+        {
+          "book": "Matthew",
+          "chapter": 5,
+          "verse": 9,
+          "translation": "KJV",
+          "label": "Matthew 5:9",
+          "snippet": "Blessed the peacemakers: for they shall be called the children of God.",
+          "confidence": 0.98,
+          "source": "keyword"
+        }
+      ]
+    }
+  ],
+  "contextContinuation": {
+    "previousReference": "Psalms 91:1",
+    "previousWords": "We are thankful to be here this morning",
+    "utterance": "God loved the world",
+    "match": {
+      "book": "John",
+      "chapter": 3,
+      "verse": 16,
+      "translation": "KJV",
+      "label": "John 3:16",
+      "snippet": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+      "confidence": 1,
+      "source": "keyword"
+    },
+    "nextUtterance": "next verse",
+    "nextMatch": {
+      "book": "John",
+      "chapter": 3,
+      "verse": 17,
+      "translation": "KJV",
+      "label": "John 3:17",
+      "snippet": "For God sent not his Son into the world to condemn the world; but that the world through him might be saved.",
+      "confidence": 1,
+      "source": "keyword"
+    }
+  },
+  "verificationBoundary": "Local transcript-to-candidate ranking and context checked. This does not verify microphone recognition, display latency, live OBS projection, or a packaged release."
+}

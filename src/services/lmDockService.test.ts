@@ -49,6 +49,22 @@ async function settled() {
 }
 
 describe("live transcript routing", () => {
+  it("does not bury a new short quotation in unrelated previous speech", async () => {
+    harness.processChunk("We are thankful to be here this morning", true);
+    await settled();
+    harness.processChunk("God loved the world", true);
+    await settled();
+    expect(service.getSnapshot().latestMatch).toMatchObject({ label: "John 3:16", confidence: 1 });
+  });
+
+  it("replaces a shared phrase with the specific verse as more words arrive", async () => {
+    harness.queueQuoteSearch("sons of men");
+    await settled();
+    expect(service.getSnapshot().suggestions.length).toBeGreaterThan(1);
+    harness.processChunk("the Lord looketh from heaven he beholdeth all the sons of men", true);
+    await settled();
+    expect(service.getSnapshot().latestMatch?.label).toBe("Psalms 33:13");
+  });
   it.each([
     [["first", "Cor", "chapter thirteen", "verse four"], "1 Corinthians 13:4"],
     [["second", "2nd Kings chapter six verse seventeen"], "2 Kings 6:17"],
@@ -77,6 +93,14 @@ describe("live transcript routing", () => {
     harness.processChunk("both were opened.", true);
     await settled();
     expect(service.getSnapshot().latestMatch).toMatchObject({ book: "Genesis", chapter: 3, verse: 7 });
+  });
+
+  it("uses the preceding words to disambiguate a shared short phrase", async () => {
+    harness.processChunk("A new commandment I give unto you that", true);
+    await settled();
+    harness.processChunk("ye love one another", true);
+    await settled();
+    expect(service.getSnapshot().latestMatch).toMatchObject({ label: "John 13:34", source: "keyword" });
   });
 
   it("keeps a complete quote when the turn also ends with Amen", async () => {

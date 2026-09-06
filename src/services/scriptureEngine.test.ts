@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { BOOK_CHAPTERS } from "../dock/dockTypes";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
 import { parseNumberWord, parseScriptureIntent, parseScriptureReference, resolveScriptureSpeech, createScriptureSpeechState } from "./scriptureParser";
+import { loadBibleEmbeddings } from "../bible/bibleEmbeddings";
 
 // Keep the regression suite offline; exercise the actual bundled Bible corpus.
 vi.mock("../bible/bibleEmbeddings", () => ({
   hasEmbeddings: () => false,
-  loadBibleEmbeddings: async () => false,
+  loadBibleEmbeddings: vi.fn(async () => false),
 }));
 
 describe("transcribed reference regressions", () => {
@@ -59,6 +60,32 @@ describe("transcribed reference regressions", () => {
 });
 
 describe("scripture engine conversations", () => {
+  it("finds a short new quotation across old context and follows it with next verse", async () => {
+    const engine = new ScriptureDetectionEngine();
+    await engine.processChunk("Psalms 91:1", true);
+    const matches = await engine.searchQuotesWithText("God loved the world");
+    expect(matches[0]?.candidate).toMatchObject({ label: "John 3:16", source: "keyword", confidence: 1 });
+    expect((await engine.processChunk("next verse", true)).matches[0]?.candidate.label).toBe("John 3:17");
+  });
+
+  it("shows shared exact phrases immediately without loading a semantic model", async () => {
+    vi.mocked(loadBibleEmbeddings).mockClear();
+    const engine = new ScriptureDetectionEngine();
+    const matches = await engine.searchQuotesWithText("sons of men");
+    expect(matches).toHaveLength(5);
+    expect(matches.every((m) => m.candidate.source === "fuzzy" && m.candidate.snippet.toLowerCase().includes("sons of men"))).toBe(true);
+    expect(loadBibleEmbeddings).not.toHaveBeenCalled();
+    expect(engine.getBoundPassage()).toBeNull();
+  });
+
+  it("offers similar words for an inexact utterance without treating it as a certain quote", async () => {
+    vi.mocked(loadBibleEmbeddings).mockClear();
+    const engine = new ScriptureDetectionEngine();
+    const matches = await engine.searchQuotesWithText("You shall be called sons of men", undefined, { mode: "closest" });
+    expect(matches.length).toBeGreaterThan(1);
+    expect(matches.every((m) => m.candidate.source === "fuzzy")).toBe(true);
+    expect(loadBibleEmbeddings).not.toHaveBeenCalled();
+  });
   it.each([
     ["John 3:16", "Genesis chapter 4", "verse 7", "Genesis", 4, 7],
     ["John 3:16", "Genesis", "chapter 4 verse 7", "Genesis", 4, 7],

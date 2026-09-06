@@ -85,6 +85,8 @@ type QuoteSearchMode = "strict" | "closest";
 
 interface QuoteSearchOptions {
   mode?: QuoteSearchMode;
+  /** Previous finalized words, used only if the new turn needs completion. */
+  contextText?: string;
 }
 
 function normalizeBookForScope(book: string): string {
@@ -129,7 +131,8 @@ function isSupportingPassageResult(
 }
 
 function canStrongQuoteLeaveScope(confidence: number, profile: QuoteQueryProfile): boolean {
-  return confidence >= 0.82 && (profile.strongAnchors > 0 || profile.contentTokens.length >= 4);
+  return confidence >= 0.82 && (profile.strongAnchors > 0 || profile.contentTokens.length >= 4 ||
+    (confidence >= 0.95 && new Set(profile.contentTokens).size >= 3));
 }
 
 function hasStrongRankedSearchWinner(
@@ -143,7 +146,7 @@ function hasStrongRankedSearchWinner(
   const hasStrongScore = best.score >= quoteThresholds.lexicalMinScore;
   const hasClearGap = runnerUp
     ? (best.score >= 0.95 && isSupportingPassageResult(best, runnerUp)) ||
-      (best.score - runnerUp.score) >= quoteThresholds.lexicalMinGap
+      (Math.min(1, best.score) - Math.min(1, runnerUp.score)) >= quoteThresholds.lexicalMinGap
     : true;
 
   return hasStrongScore && hasClearGap;
@@ -153,7 +156,8 @@ function buildLexicalQuoteMatches(
   rankedResults: RankedBibleSearchResult[],
   translation: string,
 ): ScriptureMatch[] {
-  return rankedResults.slice(0, 1).map((result) => ({
+  const confident = rankedResults[0]?.score >= 0.90;
+  return rankedResults.slice(0, confident ? 1 : 5).map((result) => ({
     candidate: {
       book: result.book,
       chapter: result.chapter,
@@ -162,11 +166,11 @@ function buildLexicalQuoteMatches(
       translation,
       label: `${result.book} ${result.chapter}:${result.verse}${result.endVerse ? `-${result.endVerse}` : ""}`,
       snippet: result.text,
-      confidence: result.score,
-      source: "keyword",
+      confidence: Math.min(1, result.score),
+      source: confident ? "keyword" : "fuzzy",
     },
     source: "quote" as const,
-    confidence: result.score,
+    confidence: Math.min(1, result.score),
   }));
 }
 
@@ -487,11 +491,8 @@ export class ScriptureDetectionEngine {
     try {
       if (!this.bibleDataLoaded) {
         this.bibleDataLoadPromise ??= (async () => {
-          const { getBibleCorpus, preloadTranslation } = await loadBibleDataModule();
-          await Promise.all([
-            preloadTranslation(this.translation as "KJV"),
-            getBibleCorpus(this.translation as "KJV", 3),
-          ]);
+          const { preloadBibleSearch } = await loadBibleDataModule();
+          await preloadBibleSearch(this.translation as "KJV");
           this.bibleDataLoaded = true;
         })().catch((error) => {
           this.bibleDataLoadPromise = null;
@@ -905,9 +906,20 @@ export class ScriptureDetectionEngine {
 
     const searchInput = text.trim();
     const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
-    const matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal, options);
+    let matches = await this.runQuoteSearchPipeline(searchInput, searchScope, signal, options);
     if (signal.aborted) return [];
-    this.bindSearchMatch(matches, analyzeQuoteQuery(searchInput));
+    let matchedInput = searchInput;
+    if (options.contextText && (!matches[0] || matches[0].confidence < 0.9 || matches[0].candidate.source === "fuzzy")) {
+      const combined = `${options.contextText} ${searchInput}`.split(/\s+/).slice(-60).join(" ");
+      const completed = await this.runQuoteSearchPipeline(combined, searchScope, signal, options);
+      if (signal.aborted) return [];
+      if (completed[0] && (!matches[0] || completed[0].confidence > matches[0].confidence ||
+        (matches[0].candidate.source === "fuzzy" && completed[0].candidate.source !== "fuzzy" && completed[0].confidence >= 0.9))) {
+        matches = completed;
+        matchedInput = combined;
+      }
+    }
+    this.bindSearchMatch(matches, analyzeQuoteQuery(matchedInput));
     return matches;
   }
 
@@ -984,6 +996,14 @@ export class ScriptureDetectionEngine {
           if (hasStrongRankedSearchWinner(scopedRankedResults, quoteThresholds)) {
             return buildLexicalQuoteMatches(scopedRankedResults, this.translation);
           }
+        }
+
+        // When the words fit several passages, show those actual passages
+        // immediately. Loading a semantic model cannot make a shared phrase
+        // uniquely identify one verse, and must not delay useful suggestions.
+        if ((canUseClosestFallback && rankedSearchResults[0]?.score >= 0.72) ||
+            (hasEnoughDistinctiveText && rankedSearchResults[0]?.score >= 0.98)) {
+          return this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope);
         }
       } catch (err) {
         console.warn("[ScriptureEngine] Lexical search failed:", err);
@@ -1238,11 +1258,11 @@ export class ScriptureDetectionEngine {
         translation: this.translation,
         label: `${result.book} ${result.chapter}:${result.verse}${result.endVerse ? `-${result.endVerse}` : ""}`,
         snippet: result.snippet || result.text,
-        confidence: result.score,
+        confidence: Math.min(1, result.score),
         source: "fuzzy",
       },
       source: "quote" as const,
-      confidence: result.score,
+      confidence: Math.min(1, result.score),
     }));
   }
 
@@ -1294,7 +1314,8 @@ export class ScriptureDetectionEngine {
     if (
       candidate.source === "fuzzy" ||
       candidate.confidence < 0.90 ||
-      (candidate.source !== "alias" && profile.strongAnchors === 0)
+      (candidate.source !== "alias" && profile.strongAnchors === 0 &&
+        !(candidate.confidence >= 0.95 && new Set(profile.contentTokens).size >= 3))
     ) {
       return;
     }
