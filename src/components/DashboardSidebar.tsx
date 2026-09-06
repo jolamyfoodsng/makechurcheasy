@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AppLogo } from "./AppLogo";
 import {
@@ -163,8 +164,11 @@ export default function DashboardSidebar({
         )}
       </div>
 
-      {showLogoutConfirm && (
-        <div className="end-confirm-backdrop" onClick={() => setShowLogoutConfirm(false)}>
+      {showLogoutConfirm && typeof document !== "undefined" && createPortal(
+        <div
+          className="end-confirm-backdrop"
+          onClick={() => setShowLogoutConfirm(false)}
+          onKeyDown={(event) => { if (event.key === "Escape") setShowLogoutConfirm(false); }}>
           <div
             className="end-confirm-modal"
             role="dialog"
@@ -176,6 +180,7 @@ export default function DashboardSidebar({
             <div className="end-confirm-actions">
               <button
                 className="end-confirm-btn-cancel"
+                autoFocus
                 onClick={() => setShowLogoutConfirm(false)}
                 title={t("sidebar.cancel")}>
                 {t("sidebar.cancel")}
@@ -188,7 +193,8 @@ export default function DashboardSidebar({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </nav>
   );
