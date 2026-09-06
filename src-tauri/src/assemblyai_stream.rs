@@ -49,6 +49,103 @@ const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
 
+// Bible vocabulary boosts recognition without guessing a book in the parser.
+const REALTIME_KEYTERMS: &[&str] = &[
+    "Genesis",
+    "Exodus",
+    "Leviticus",
+    "Numbers",
+    "Deuteronomy",
+    "Joshua",
+    "Judges",
+    "Ruth",
+    "1 Samuel",
+    "2 Samuel",
+    "1 Kings",
+    "2 Kings",
+    "1 Chronicles",
+    "2 Chronicles",
+    "Ezra",
+    "Nehemiah",
+    "Esther",
+    "Job",
+    "Psalms",
+    "Proverbs",
+    "Ecclesiastes",
+    "Song of Solomon",
+    "Isaiah",
+    "Jeremiah",
+    "Lamentations",
+    "Ezekiel",
+    "Daniel",
+    "Hosea",
+    "Joel",
+    "Amos",
+    "Obadiah",
+    "Jonah",
+    "Micah",
+    "Nahum",
+    "Habakkuk",
+    "Zephaniah",
+    "Haggai",
+    "Zechariah",
+    "Malachi",
+    "Matthew",
+    "Mark",
+    "Luke",
+    "John",
+    "Acts",
+    "Romans",
+    "1 Corinthians",
+    "2 Corinthians",
+    "Galatians",
+    "Ephesians",
+    "Philippians",
+    "Colossians",
+    "1 Thessalonians",
+    "2 Thessalonians",
+    "1 Timothy",
+    "2 Timothy",
+    "Titus",
+    "Philemon",
+    "Hebrews",
+    "James",
+    "1 Peter",
+    "2 Peter",
+    "1 John",
+    "2 John",
+    "3 John",
+    "Jude",
+    "Revelation",
+    "First Samuel",
+    "Second Samuel",
+    "First Kings",
+    "Second Kings",
+    "First Chronicles",
+    "Second Chronicles",
+    "First Corinthians",
+    "Second Corinthians",
+    "First Thessalonians",
+    "Second Thessalonians",
+    "First Timothy",
+    "Second Timothy",
+    "First Peter",
+    "Second Peter",
+    "First John",
+    "Second John",
+    "Third John",
+    "First Cor",
+    "Second Cor",
+    "First Thess",
+    "Second Thess",
+    "First Tim",
+    "Second Tim",
+    "First Sam",
+    "Second Sam",
+    "First Chron",
+    "Second Chron",
+];
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 struct StreamBox(Option<cpal::Stream>);
@@ -62,8 +159,6 @@ struct RealtimeProfile {
     min_turn_silence_ms: u32,
     max_turn_silence_ms: u32,
     interruption_delay_ms: u32,
-    force_endpoint_min_words: Option<usize>,
-    force_endpoint_cooldown_ms: u64,
 }
 
 fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
@@ -71,11 +166,9 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
         Some("sharp") => RealtimeProfile {
             label: "sharp",
             realtime_mode: "min_latency",
-            min_turn_silence_ms: 80,
-            max_turn_silence_ms: 500,
+            min_turn_silence_ms: 200,
+            max_turn_silence_ms: 1_000,
             interruption_delay_ms: 0,
-            force_endpoint_min_words: Some(4),
-            force_endpoint_cooldown_ms: 500,
         },
         Some("fast") => RealtimeProfile {
             label: "fast",
@@ -83,8 +176,6 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
             min_turn_silence_ms: 100,
             max_turn_silence_ms: 700,
             interruption_delay_ms: 0,
-            force_endpoint_min_words: Some(8),
-            force_endpoint_cooldown_ms: 1_200,
         },
         Some("accurate") => RealtimeProfile {
             label: "accurate",
@@ -92,8 +183,6 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
             min_turn_silence_ms: 700,
             max_turn_silence_ms: 1_800,
             interruption_delay_ms: 500,
-            force_endpoint_min_words: Some(32),
-            force_endpoint_cooldown_ms: 5_000,
         },
         _ => RealtimeProfile {
             label: "balanced",
@@ -101,8 +190,6 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
             min_turn_silence_ms: 300,
             max_turn_silence_ms: 1_200,
             interruption_delay_ms: 250,
-            force_endpoint_min_words: Some(14),
-            force_endpoint_cooldown_ms: 2_500,
         },
     }
 }
@@ -162,18 +249,11 @@ struct RealtimeWord {
 struct RealtimeTranscriptMessage {
     #[serde(rename = "type")]
     message_type: String,
-    turn_order: Option<u64>,
     transcript: Option<String>,
     end_of_turn: Option<bool>,
     words: Option<Vec<RealtimeWord>>,
     error: Option<String>,
     message: Option<String>,
-}
-
-struct RealtimeTurnInfo {
-    turn_order: Option<u64>,
-    end_of_turn: bool,
-    word_count: usize,
 }
 
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
@@ -425,9 +505,6 @@ async fn run_realtime_transcriber(
     );
     println!("[AssemblyAI Realtime] WebSocket connected");
 
-    let mut profile = initial_profile;
-    let mut forced_turn_order: Option<u64> = None;
-    let mut last_force_endpoint_at: Option<Instant> = None;
     let mut last_server_activity = Instant::now();
     let mut heartbeat = interval(WS_HEARTBEAT_INTERVAL);
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -464,10 +541,7 @@ async fn run_realtime_transcriber(
                     )
                         .await
                         .map_err(|_| "Realtime WebSocket profile update timed out".to_string())??;
-                    profile = next_profile;
-                    forced_turn_order = None;
-                    last_force_endpoint_at = None;
-                    println!("[AssemblyAI Realtime] Profile updated to {}", profile.label);
+                    println!("[AssemblyAI Realtime] Profile updated to {}", next_profile.label);
                 }
             }
             _ = heartbeat.tick() => {
@@ -493,29 +567,11 @@ async fn run_realtime_transcriber(
                 last_server_activity = Instant::now();
                 match message {
                     Ok(Message::Text(text)) => {
-                        if let Some(turn) = handle_realtime_message(&app, text.as_ref())? {
-                            maybe_force_endpoint(
-                                &mut write,
-                                &turn,
-                                &profile,
-                                &mut forced_turn_order,
-                                &mut last_force_endpoint_at,
-                            )
-                            .await?;
-                        }
+                        handle_realtime_message(&app, text.as_ref())?;
                     }
                     Ok(Message::Binary(bytes)) => {
                         if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
-                            if let Some(turn) = handle_realtime_message(&app, text)? {
-                                maybe_force_endpoint(
-                                    &mut write,
-                                    &turn,
-                                    &profile,
-                                    &mut forced_turn_order,
-                                    &mut last_force_endpoint_at,
-                                )
-                                .await?;
-                            }
+                            handle_realtime_message(&app, text)?;
                         }
                     }
                     Ok(Message::Ping(payload)) => {
@@ -559,6 +615,10 @@ fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
         ("min_turn_silence", profile.min_turn_silence_ms.to_string()),
         ("max_turn_silence", profile.max_turn_silence_ms.to_string()),
         ("prompt", REALTIME_PROMPT.to_string()),
+        (
+            "keyterms_prompt",
+            serde_json::json!(REALTIME_KEYTERMS).to_string(),
+        ),
     ];
 
     let query = params
@@ -581,6 +641,7 @@ where
     let update = serde_json::json!({
         "type": "UpdateConfiguration",
         "prompt": REALTIME_PROMPT,
+        "keyterms_prompt": REALTIME_KEYTERMS,
         "min_turn_silence": profile.min_turn_silence_ms,
         "max_turn_silence": profile.max_turn_silence_ms,
     })
@@ -592,85 +653,32 @@ where
         .map_err(|e| format!("Failed to update realtime profile: {e}"))
 }
 
-async fn maybe_force_endpoint<S>(
-    write: &mut S,
-    turn: &RealtimeTurnInfo,
-    profile: &RealtimeProfile,
-    forced_turn_order: &mut Option<u64>,
-    last_force_endpoint_at: &mut Option<Instant>,
-) -> Result<(), String>
-where
-    S: SinkExt<Message> + Unpin,
-    <S as futures_util::Sink<Message>>::Error: std::fmt::Display,
-{
-    if turn.end_of_turn {
-        if turn.turn_order.is_some() && turn.turn_order == *forced_turn_order {
-            *forced_turn_order = None;
-        }
-        return Ok(());
+// Do not force a turn to end after a word count. A partial may stop inside
+// a book name or number ("seventeen" was finalized as "seven" in live tests).
+// Let the configured silence detection determine when the speech is complete.
+fn realtime_transcript_payload(message: &RealtimeTranscriptMessage) -> Option<TranscriptPayload> {
+    let text = message.transcript.as_deref()?.trim();
+    if text.is_empty() {
+        return None;
     }
-
-    let Some(force_endpoint_min_words) = profile.force_endpoint_min_words else {
-        return Ok(());
-    };
-
-    if turn.word_count < force_endpoint_min_words {
-        return Ok(());
-    }
-
-    if let (Some(current), Some(forced)) = (turn.turn_order, *forced_turn_order) {
-        if current == forced {
-            return Ok(());
-        }
-    }
-
-    if last_force_endpoint_at
-        .map(|instant| {
-            instant.elapsed() < Duration::from_millis(profile.force_endpoint_cooldown_ms)
-        })
-        .unwrap_or(false)
-    {
-        return Ok(());
-    }
-
-    let force_endpoint = serde_json::json!({ "type": "ForceEndpoint" }).to_string();
-    write
-        .send(Message::Text(force_endpoint.into()))
-        .await
-        .map_err(|e| format!("Failed to force realtime endpoint: {e}"))?;
-
-    *forced_turn_order = turn.turn_order;
-    *last_force_endpoint_at = Some(Instant::now());
-    Ok(())
+    let (audio_start, audio_end) = extract_realtime_word_range(&message.words);
+    Some(TranscriptPayload {
+        text: text.to_string(),
+        end_of_turn: message.end_of_turn.unwrap_or(false),
+        audio_start,
+        audio_end,
+    })
 }
 
-fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<Option<RealtimeTurnInfo>, String> {
+fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<(), String> {
     let message: RealtimeTranscriptMessage = serde_json::from_str(raw)
         .map_err(|e| format!("Failed to parse realtime message: {e}: {raw}"))?;
 
     match message.message_type.as_str() {
         "Turn" => {
-            let transcript = message.transcript.unwrap_or_default();
-            let transcript = transcript.trim();
-            if transcript.is_empty() {
-                return Ok(None);
+            if let Some(payload) = realtime_transcript_payload(&message) {
+                let _ = app.emit("assemblyai-transcript", payload);
             }
-
-            let (audio_start, audio_end) = extract_realtime_word_range(&message.words);
-            let end_of_turn = message.end_of_turn.unwrap_or(false);
-            let word_count = transcript.split_whitespace().count();
-            let payload = TranscriptPayload {
-                text: transcript.to_string(),
-                end_of_turn,
-                audio_start,
-                audio_end,
-            };
-            let _ = app.emit("assemblyai-transcript", payload);
-            return Ok(Some(RealtimeTurnInfo {
-                turn_order: message.turn_order,
-                end_of_turn,
-                word_count,
-            }));
         }
         "Begin" => {
             let _ = app.emit(
@@ -703,7 +711,7 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<Option<Realtime
         _ => {}
     }
 
-    Ok(None)
+    Ok(())
 }
 
 fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) {
@@ -987,4 +995,63 @@ fn blackman_window(n: i32, half_len: i32) -> f32 {
     let n_f = (n_f + half_len as f32) / (2.0 * half_len as f32); // normalize to [0, 1]
     0.42 - 0.5 * (2.0 * std::f32::consts::PI * n_f).cos()
         + 0.08 * (4.0 * std::f32::consts::PI * n_f).cos()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_formatted_partial_reference_stays_provisional() {
+        let message: RealtimeTranscriptMessage = serde_json::from_value(serde_json::json!({
+            "type": "Turn",
+            "transcript": "Second Corinthians chapter five verse seven",
+            "end_of_turn": false,
+            "turn_is_formatted": true,
+            "words": [{ "start": 0, "end": 1500 }]
+        }))
+        .unwrap();
+        let payload = realtime_transcript_payload(&message).unwrap();
+        assert!(!payload.end_of_turn);
+        assert_eq!(payload.audio_end, 1500.0);
+    }
+
+    #[test]
+    fn a_completed_reference_preserves_the_providers_number() {
+        let message: RealtimeTranscriptMessage = serde_json::from_value(serde_json::json!({
+            "type": "Turn",
+            "transcript": " Second Corinthians chapter 5 verse 17. ",
+            "end_of_turn": true
+        }))
+        .unwrap();
+        let payload = realtime_transcript_payload(&message).unwrap();
+        assert!(payload.end_of_turn);
+        assert_eq!(payload.text, "Second Corinthians chapter 5 verse 17.");
+    }
+
+    #[test]
+    fn all_profiles_send_the_complete_bible_vocabulary_within_provider_limits() {
+        let books: serde_json::Value =
+            serde_json::from_str(include_str!("../../public/bible-kjv.json")).unwrap();
+        for speed in ["sharp", "fast", "balanced", "accurate"] {
+            let endpoint = build_realtime_endpoint(&realtime_profile(Some(speed)));
+            let url = reqwest::Url::parse(&endpoint).unwrap();
+            let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+            let terms: Vec<String> = serde_json::from_str(&params["keyterms_prompt"]).unwrap();
+            assert!(terms.len() <= 100);
+            assert!(terms.iter().all(|term| term.chars().count() <= 50));
+            for book in books.as_object().unwrap().keys() {
+                assert!(terms.contains(book), "Missing Bible book: {book}");
+            }
+            for alias in [
+                "First Cor",
+                "Second Cor",
+                "First Kings",
+                "Second Kings",
+                "Third John",
+            ] {
+                assert!(terms.iter().any(|term| term == alias));
+            }
+        }
+    }
 }

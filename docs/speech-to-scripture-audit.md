@@ -26,6 +26,7 @@ The reported failures came from several stages between the transcript and the pr
 - **Numbered-book spellings were inconsistent.** The follow-up regression suite reproduced 45 failures across grouped book-name tests. Ordinal words, numeric ordinals, Roman numerals, abbreviations, punctuation, joined forms, and repeated ordinals now share normalization before chapter aliases are expanded. Examples include “firstcor”, “1st Cor.”, “second 2nd Kings”, “1 Ch”, and “1Cor13:4”. “Isa” remains Isaiah rather than being read as compact “I Sa”.
 - **A pause after an ordinal lost the book number.** Finalized segments such as “first” → “Cor” → “chapter thirteen” → “verse four” now resolve to 1 Corinthians 13:4 and reach the live service queue. Pending ordinals expire after eight seconds, are cleared by unrelated speech, and are not committed from interim revisions.
 - **Reference normalization could disagree with live detection.** The reranker now uses the speech parser before fuzzy lookup. Exact abbreviations such as “Am” no longer resolve to a different book, and “Phlm” is recognized as Philemon.
+- **The native speech service finalized partial words.** A live provider check reproduced “seventeen” becoming a finalized “seven” followed by “17” when the Sharp profile forced a turn after four words. Word-count forcing has been removed from every profile. Sharp now waits for 200–1,000 ms of silence, and all profiles send 93 Bible-name hints, including every canonical book and common numbered abbreviations. The same generated recordings then produced all three intended references with no incorrect intermediate reference.
 
 ## Settings checked
 
@@ -33,7 +34,7 @@ The reported failures came from several stages between the transcript and the pr
 | --- | --- |
 | Microphone | The page and dock use the same native saved microphone preference, retaining migration from the previous page preference. |
 | Input gain | Saved gain is applied at capture startup; invalid/non-finite values fall back safely and the supported multiplier is clamped to 0–3. |
-| Detection speed | The active live service intentionally uses its existing fixed Sharp profile. |
+| Detection speed | The active service uses Sharp. Its native turn detection now uses 200–1,000 ms of silence and does not cut off speech based on word count. |
 | Translation | Default KJV; the selected installed version is fetched before projection. The page and dock share the saved setting loader. |
 | Fullscreen / lower third | Shared saved setting, with the global Bible overlay preference as fallback. The page no longer forces fullscreen. |
 | Auto-project references | Existing default remains off; when enabled, finalized explicit references enter the automatic queue. |
@@ -52,12 +53,15 @@ The reported failures came from several stages between the transcript and the pr
 - An additional 66-book matrix passed: canonical 1:1 references and every book's final chapter remain correctly identified. Total: 384 checks.
 - Follow-up coverage now totals 778 passing tests across eleven files. The book-name matrix checks 1,849 numbered-reference spellings in both the parser and reranker, abbreviations spanning all 66 books, split ordinal/book/chapter/verse turns, interim revisions, expiry, and live service queue routing. Two older semantic tests were aligned with the corrected behavior: vague fragments are not certain aliases, while confident complete quotations can change the active book and subsequent navigation.
 - Desktop TypeScript and production frontend build passed. The build reports existing dependency/bundle-size warnings.
+- Three native Rust tests passed, covering provisional versus final transcripts and all-book vocabulary within the provider's limits.
+- The native desktop development binary rebuilt successfully. One overlapping frontend build/test run timed out on four corpus-heavy tests; the complete 778-test suite then passed with one worker after the build finished.
+- The [recorded provider comparison](verification/scripture-audio-2026-09-06.json) uses 15.85 seconds of generated English speech per run. Before: “First Cor” was transcribed as “First Paul,” and 2 Corinthians 5:7 was emitted before the intended 5:17. After: 1 Corinthians 13:4, 2 Kings 6:17, and 2 Corinthians 5:17 were all detected, and their actual KJV projection text resolved correctly. The protocol was checked against [AssemblyAI's current WebSocket guide](https://www.assemblyai.com/blog/raw-websocket-voice-agent-with-assemblyai-universal-3-pro-streaming).
 - Existing unrelated worktree changes were preserved. UI layout, spacing, and existing components were retained using `../../docs/DESIGN.md` and `../../docs/COMPONENT_LIBRARY.md`.
 
 ## Verification boundaries
 
-These checks exercise supplied transcript text. Semantic model initialization is mocked in its regression test; no new live model/provider session was run. Browser verification reached the application's credit-verification gate, so the authenticated live page could not be checked in that browser. The component rendering test confirms that an explicit reference appears in the main match panel.
+The regression suite exercises supplied transcript text; the follow-up provider comparison additionally sends generated audio through the live streaming model. Semantic embedding initialization remains mocked in its focused regression test. Browser credit verification initially blocked access but subsequently completed, and the live page opened. The component rendering test confirms that an explicit reference appears in the main match panel.
 
-No microphone capture, paid speech transcription, live OBS projection, packaged desktop installation, or release deployment was performed. A live microphone-to-OBS check is still required before calling the production incident resolved.
+No real microphone capture, live OBS projection, packaged desktop installation, or release deployment was performed. OBS was inspected and was neither streaming nor recording. Three synthetic samples are not a general accuracy or accent benchmark. A live microphone-to-OBS check is still required before calling the production incident resolved.
 
 Arbitrary speech does not always identify a unique Bible verse. Ambiguous or weak matches remain suggestions for manual selection rather than being presented as certain scripture.
