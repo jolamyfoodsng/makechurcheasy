@@ -43,6 +43,7 @@ import {
 import { DEFAULT_WORSHIP_LINES_PER_SLIDE } from "../../worship/slideLayout";
 import type { Song } from "../../worship/types";
 import { nextAutoSongTitle } from "../../worship/songTitleAutoGen";
+import { archiveSong } from "../../worship/worshipDb";
 import {
   formatOnlineLyricsSearchError,
   searchOnlineSongLyrics,
@@ -583,6 +584,67 @@ function DockModalPortal({ children }: { children: ReactNode }) {
   }, []);
 
   return host ? createPortal(children, host) : null;
+}
+
+function DockSongDeleteDialog({
+  songTitle,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  songTitle: string;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <DockModalPortal>
+      <div className="dock-dialog-backdrop" onClick={busy ? undefined : onCancel} role="presentation">
+        <div className="dock-dialog dock-dialog--compact" role="dialog" aria-modal="true" aria-labelledby="dock-song-delete-title" onClick={(event) => event.stopPropagation()}>
+          <div className="dock-dialog__header">
+            <div>
+              <div className="dock-dialog__eyebrow">{t("worship.title")}</div>
+              <h2 id="dock-song-delete-title" className="dock-dialog__title">
+                {t("worship.archiveSongTitle", "Remove song?")}
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="dock-dialog__close"
+              onClick={onCancel}
+              disabled={busy}
+              aria-label={t("common.close")}
+              title={t("common.close")}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+          <div className="dock-dialog__body">
+            <p style={{ margin: 0, color: "var(--dock-text-secondary)", lineHeight: 1.5 }}>
+              {t(
+                "worship.archiveSongDescription",
+                {
+                  song: songTitle,
+                  defaultValue: `“${songTitle}” will be removed from the active worship library. You can restore it later from the archive.`,
+                },
+              )}
+            </p>
+          </div>
+          <div className="dock-dialog__footer">
+            <button type="button" className="dock-btn dock-btn--ghost" onClick={onCancel} disabled={busy} title={t("common.cancel")}>
+              {t("common.cancel")}
+            </button>
+            <button type="button" className="dock-btn dock-btn--danger" onClick={onConfirm} disabled={busy} title={t("common.delete")}>
+              <Icon name={busy ? "hourglass_top" : "delete_outline"} size={13} />
+              {busy ? t("worship.saving") : t("common.delete")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </DockModalPortal>
+  );
 }
 
 function WorshipLinesPerSlideControl({
@@ -1360,8 +1422,10 @@ function DockWorshipTab({
   const [hiddenSectionIndexes, setHiddenSectionIndexes] = useState<Set<number>>(() => new Set());
   const [showPresentationMeta, setShowPresentationMeta] = useState(false);
   const [savingSong, setSavingSong] = useState(false);
+  const [songDeleteTarget, setSongDeleteTarget] = useState<DockSong | null>(null);
+  const [deletingSong, setDeletingSong] = useState(false);
 
-  const worshipModalOpen = Boolean(songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen);
+  const worshipModalOpen = Boolean(songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || songDeleteTarget);
 
   useEffect(() => {
     if (!worshipModalOpen) return;
@@ -2821,6 +2885,32 @@ function DockWorshipTab({
     setActionError("");
   }, []);
 
+  const handleDeleteSong = useCallback(async () => {
+    if (!songDeleteTarget || deletingSong) return;
+
+    const songId = songDeleteTarget.id;
+    const songTitle = songDeleteTarget.title;
+    setDeletingSong(true);
+    try {
+      await archiveSong(songId);
+      setSongs((current) => {
+        const next = current.filter((song) => song.id !== songId);
+        rawSongsRef.current = next;
+        cacheSongsLocally(next);
+        return next;
+      });
+      if (selectedSong?.id === songId) handleBackToSongList();
+      setSongDeleteTarget(null);
+      showToast(t("worship.songArchived", "Song removed from the active worship library."), "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[DockWorshipTab] archive song failed:", err);
+      showToast(message || `Could not remove “${songTitle}”.`, "error");
+    } finally {
+      setDeletingSong(false);
+    }
+  }, [deletingSong, handleBackToSongList, selectedSong?.id, showToast, songDeleteTarget, t]);
+
   useEffect(() => {
     setDeletedSections([]);
     setShowDeletedSectionsPopover(false);
@@ -3504,18 +3594,33 @@ function DockWorshipTab({
                             )}
                           </button>
                           {!isLocked && (
-                            <button
-                              type="button"
-                              className="dock-song-card__edit"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openSongEditor(song);
-                              }}
-                              aria-label={`${t('common.edit')} ${song.title}`}
-                              title={t('worship.editSong')}
-                            >
-                              <Icon name="edit" size={16} />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="dock-song-card__edit"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openSongEditor(song);
+                                }}
+                                aria-label={`${t('common.edit')} ${song.title}`}
+                                title={t('worship.editSong')}
+                              >
+                                <Icon name="edit" size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                className="dock-song-card__delete"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSongDeleteTarget(song);
+                                }}
+                                aria-label={`${t('common.delete')} ${song.title}`}
+                                title={t('common.delete')}
+                                disabled={deletingSong}
+                              >
+                                <Icon name="delete_outline" size={16} />
+                              </button>
+                            </>
                           )}
                         </div>
                       );
@@ -4122,6 +4227,17 @@ function DockWorshipTab({
         showReferences={false}
         storageScope="worship"
       />
+
+      {songDeleteTarget && (
+        <DockSongDeleteDialog
+          songTitle={songDeleteTarget.title}
+          busy={deletingSong}
+          onConfirm={() => void handleDeleteSong()}
+          onCancel={() => {
+            if (!deletingSong) setSongDeleteTarget(null);
+          }}
+        />
+      )}
 
       {toasts.length > 0 && (
         <div className="dock-toast-stack" role="status" aria-live="polite">

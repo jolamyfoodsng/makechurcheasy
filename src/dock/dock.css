@@ -7297,7 +7297,7 @@ body.dock-modal-open {
   width: 100%;
   min-width: 0;
   min-height: 35px;
-  padding: 8px 36px 8px 8px;
+  padding: 8px 72px 8px 8px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -7338,7 +7338,8 @@ body.dock-modal-open {
   font-style: italic;
 }
 
-.dock-song-card__edit {
+.dock-song-card__edit,
+.dock-song-card__delete {
   position: absolute;
   top: 50%;
   right: 6px;
@@ -7358,16 +7359,38 @@ body.dock-modal-open {
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
+.dock-song-card__edit {
+  right: 40px;
+}
+
 .dock-song-card:hover .dock-song-card__edit,
-.dock-song-card:focus-within .dock-song-card__edit {
+.dock-song-card:hover .dock-song-card__delete,
+.dock-song-card:focus-within .dock-song-card__edit,
+.dock-song-card:focus-within .dock-song-card__delete {
   opacity: 1;
   pointer-events: auto;
 }
 
-.dock-song-card__edit:hover {
+.dock-song-card__edit:hover,
+.dock-song-card__edit:focus-visible {
   border-color: color-mix(in srgb, var(--dock-accent) 34%, var(--dock-border));
   background: color-mix(in srgb, var(--dock-accent-soft) 72%, var(--dock-surface));
   color: var(--dock-text);
+}
+
+.dock-song-card__delete {
+  color: #FCA5A5;
+}
+
+.dock-song-card__delete:hover,
+.dock-song-card__delete:focus-visible {
+  border-color: color-mix(in srgb, #EF4444 48%, var(--dock-border));
+  background: rgba(220, 38, 38, 0.12);
+  color: #FCA5A5;
+}
+
+.dock-song-card__delete:disabled {
+  cursor: progress;
 }
 
 .dock-notes-card .dock-song-card__main {
@@ -29037,6 +29060,352 @@ body.dock-modal-open {
   border-bottom-color: var(--dock-accent, #1D4ED8);
 }
 
+/* ── Time tools: Countdown, Timer, and Clock ───────────────────────── */
+
+.dock-time-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-time-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+  flex-shrink: 0;
+}
+
+.dock-time-shell__title,
+.dock-time-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dock-text, #f8fafc);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dock-time-shell__title svg,
+.dock-time-panel__title svg {
+  color: var(--dock-accent, #f97316);
+}
+
+.dock-time-shell__header p,
+.dock-time-panel__intro p {
+  margin: 3px 0 0;
+  color: var(--dock-text-dim, #94a3b8);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.dock-time-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+  flex-shrink: 0;
+}
+
+.dock-time-tabs__button,
+.dock-time-segmented__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface, #111827);
+  color: var(--dock-text-dim, #94a3b8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dock-time-tabs__button {
+  flex: 1;
+  padding: 7px 6px;
+}
+
+.dock-time-tabs__button:hover,
+.dock-time-segmented__button:hover {
+  color: var(--dock-text, #f8fafc);
+  border-color: var(--dock-accent, #f97316);
+}
+
+.dock-time-tabs__button--active,
+.dock-time-segmented__button--active {
+  color: #fff7ed;
+  border-color: var(--dock-accent, #f97316);
+  background: rgba(234, 88, 12, 0.16);
+}
+
+.dock-time-shell__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-time-panel {
+  height: 100%;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.dock-time-panel__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dock-time-panel__format,
+.dock-time-live {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 3px;
+  padding: 3px 5px;
+  color: var(--dock-text-dim, #94a3b8);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dock-time-live {
+  margin-left: 2px;
+  border-color: rgba(34, 197, 94, 0.55);
+  color: #86efac;
+}
+
+.dock-time-preview {
+  position: relative;
+  min-height: 146px;
+  overflow: hidden;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-canvas, #0b1220);
+}
+
+.dock-time-preview__card {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr);
+  gap: 8px;
+  min-width: min(230px, calc(100% - 20px));
+  max-width: calc(100% - 20px);
+  padding: 9px 11px 10px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
+  background: rgba(17, 24, 39, 0.94);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.dock-time-preview--lower-third.dock-time-preview--left .dock-time-preview__card {
+  left: 10px;
+  bottom: 10px;
+}
+
+.dock-time-preview--lower-third.dock-time-preview--right .dock-time-preview__card {
+  right: 10px;
+  bottom: 10px;
+}
+
+.dock-time-preview--fullscreen .dock-time-preview__card {
+  inset: 0;
+  min-width: 0;
+  max-width: none;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.dock-time-preview__accent {
+  min-height: 100%;
+  border-radius: 3px;
+  background: var(--dock-accent, #f97316);
+}
+
+.dock-time-preview__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.dock-time-preview__label {
+  overflow: hidden;
+  color: var(--dock-text-dim, #cbd5e1);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dock-time-preview__value {
+  margin-top: 3px;
+  color: var(--dock-text, #f8fafc);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.dock-time-preview--fullscreen .dock-time-preview__accent { display: none; }
+
+.dock-time-preview--fullscreen .dock-time-preview__content {
+  align-items: center;
+  max-width: 80%;
+}
+
+.dock-time-preview--fullscreen .dock-time-preview__label {
+  color: var(--dock-text, #f8fafc);
+  font-size: 10px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.dock-time-preview--fullscreen .dock-time-preview__value {
+  font-size: 40px;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+}
+
+.dock-time-preview--fullscreen .dock-time-preview__date {
+  color: var(--dock-text, #f8fafc);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.dock-time-preview__date {
+  margin-top: 4px;
+  color: var(--dock-text-dim, #cbd5e1);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.dock-time-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.dock-time-field {
+  display: grid;
+  gap: 5px;
+}
+
+.dock-time-field__label {
+  color: var(--dock-text-dim, #94a3b8);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dock-time-field input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  outline: none;
+  background: var(--dock-surface, #111827);
+  color: var(--dock-text, #f8fafc);
+  font: inherit;
+  font-size: 11px;
+  padding: 0 9px;
+}
+
+.dock-time-field input[type="text"]:focus {
+  border-color: var(--dock-accent, #f97316);
+}
+
+.dock-time-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.dock-time-segmented__button { min-height: 30px; padding: 6px; }
+
+.dock-time-timer-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+}
+
+.dock-time-timer-readout span {
+  color: var(--dock-text-dim, #94a3b8);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dock-time-timer-readout strong {
+  color: var(--dock-text, #f8fafc);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.dock-time-switches {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+}
+
+.dock-time-switches label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dock-text-dim, #cbd5e1);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.dock-time-switches input { accent-color: var(--dock-accent, #f97316); }
+
+.dock-time-message {
+  margin-top: 10px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.dock-time-message--info { color: var(--dock-text-dim, #cbd5e1); }
+.dock-time-message--success { border-color: rgba(34, 197, 94, 0.45); color: #86efac; }
+.dock-time-message--error { border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
+
+.dock-time-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .dock-mv-tab__header {
   display: flex;
   align-items: center;
@@ -29900,9 +30269,15 @@ body.dock-modal-open {
 
 .dock-mv-card__rename {
   display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .dock-mv-card__rename-input {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   min-height: 24px;
   padding: 0 6px;
@@ -29914,6 +30289,28 @@ body.dock-modal-open {
   font-weight: 600;
   font-family: inherit;
   outline: none;
+}
+
+.dock-mv-card__rename-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim);
+  cursor: pointer;
+}
+
+.dock-mv-card__rename-action:hover,
+.dock-mv-card__rename-action:focus-visible {
+  border-color: var(--dock-border-active);
+  background: var(--dock-surface-hover);
+  color: var(--dock-text);
 }
 
 /* ── MV Tab: Card Actions Menu (⋮) ──────────────────────────────── */
@@ -29937,7 +30334,8 @@ body.dock-modal-open {
   transition: all 0.12s;
 }
 
-.dock-mv-card__menu-btn:hover {
+.dock-mv-card__menu-btn:hover,
+.dock-mv-card__menu-btn:focus-visible {
   background: var(--dock-surface);
   border-color: var(--dock-border);
   color: var(--dock-text);
@@ -29953,7 +30351,8 @@ body.dock-modal-open {
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
   border-radius: 4px;
-
+  margin-top: 4px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.34);
 }
 
 .dock-mv-card__menu-item {
@@ -29973,7 +30372,8 @@ body.dock-modal-open {
   text-align: left;
 }
 
-.dock-mv-card__menu-item:hover {
+.dock-mv-card__menu-item:hover,
+.dock-mv-card__menu-item:focus-visible {
   background: var(--dock-input-bg);
 }
 
@@ -31273,7 +31673,8 @@ body.dock-modal-open {
   transition: all 0.12s;
 }
 
-.dock-mv-slot-row__menu-btn:hover {
+.dock-mv-slot-row__menu-btn:hover,
+.dock-mv-slot-row__menu-btn:focus-visible {
   background: var(--dock-surface);
   color: var(--dock-text);
 }
@@ -31292,6 +31693,29 @@ body.dock-modal-open {
   margin-top: 2px;
 }
 
+.dock-mv-slot-row__dropdown--portal {
+  position: fixed;
+  top: auto;
+  right: auto;
+  margin-top: 0;
+  z-index: 10000;
+  background: var(--dock-bg, #0F172A);
+  border-color: var(--dock-border, #334155);
+}
+
+.dock-mv-slot-row__dropdown--portal .dock-mv-slot-row__dropdown-item {
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-slot-row__dropdown--portal .dock-mv-slot-row__dropdown-item:hover,
+.dock-mv-slot-row__dropdown--portal .dock-mv-slot-row__dropdown-item:focus-visible {
+  background: var(--dock-surface, #111827);
+}
+
+.dock-mv-slot-row__dropdown--portal .dock-mv-slot-row__dropdown-divider {
+  background: var(--dock-border, #334155);
+}
+
 .dock-mv-slot-row__dropdown-item {
   display: block;
   width: 100%;
@@ -31306,7 +31730,8 @@ body.dock-modal-open {
   font-family: inherit;
 }
 
-.dock-mv-slot-row__dropdown-item:hover {
+.dock-mv-slot-row__dropdown-item:hover,
+.dock-mv-slot-row__dropdown-item:focus-visible {
   background: var(--dock-surface);
 }
 
@@ -35719,6 +36144,21 @@ button.dock-btm-toolbar__clear--inline,
   margin-bottom: 12px;
 }
 
+/* Keep the user's downloaded/new media ahead of the remote template catalog.
+ * The browser is a column flex container, so this changes visual order
+ * without changing the catalog or upload data ordering. */
+.dock-animation-catalog-tabs {
+  order: 0;
+}
+
+.dock-animation-downloaded {
+  order: 1;
+}
+
+.dock-animation-catalog {
+  order: 2;
+}
+
 .dock-media-empty__starter-grid {
   width: 100%;
   max-width: 520px;
@@ -37383,4 +37823,53 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-template-library__empty {
   margin: 0;
+}
+
+/* Keep only the background asset picker compact; the Dock Media browser owns
+   scrolling for the full media and animation collections. */
+.dtb-bg-picker__asset-grid {
+  min-height: 0;
+  height: 260px;
+  max-height: 260px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--dock-border) transparent;
+  scrollbar-width: thin;
+}
+
+.dtb-bg-picker__asset-grid {
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.dtb-bg-picker__asset-grid > .dtb-bg-picker__card {
+  align-self: start;
+  height: max-content;
+}
+
+.dtb-bg-picker__asset-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dtb-bg-picker__asset-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dtb-bg-picker__asset-grid::-webkit-scrollbar-thumb {
+  background: var(--dock-border);
+  border-radius: 4px;
+}
+
+/* The media browser is the scroll boundary for the dock itself. Without a
+   zero minimum height, a flex child can expand to the full asset library. */
+.dock-media-browser {
+  min-height: 0;
+}
+
+.dtb-studio-card--compact-height .dtb-bg-picker__asset-grid {
+  height: 220px;
+  max-height: 220px;
 }

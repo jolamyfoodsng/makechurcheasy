@@ -89,6 +89,7 @@ import {
   Inbox,
   Infinity,
   Info,
+  Italic,
   Keyboard,
   Layers,
   LayoutDashboard,
@@ -285,6 +286,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   format_align_left: AlignLeft,
   format_align_center: AlignCenter,
   format_align_right: AlignRight,
+  format_color_text: Palette,
+  format_italic: Italic,
 
   /* Media */
   play_arrow: Play,

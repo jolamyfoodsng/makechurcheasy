@@ -7,7 +7,8 @@ export type DockSceneRouteModule =
   | "notes"
   | "ticker"
   | "lower-third"
-  | "countdown";
+  | "countdown"
+  | "time";
 
 export type DockSceneOutputMode = "inherit" | "fullscreen" | "lower-third";
 

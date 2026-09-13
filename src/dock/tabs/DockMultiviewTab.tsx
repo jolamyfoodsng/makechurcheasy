@@ -10,6 +10,7 @@
  */
 
 import { memo, useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
@@ -1391,6 +1392,111 @@ function FramingEditor({
 // SlotControl — redesigned card-style slot assignment
 // ---------------------------------------------------------------------------
 
+function SlotContentMenu({
+  onSelect,
+  onRemove,
+}: {
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 168;
+    const menuHeight = 76;
+    const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+    const top = fitsBelow
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - menuHeight - 4);
+    const left = Math.max(
+      8,
+      Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8),
+    );
+    setPosition({ top, left });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    updatePosition();
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const handleViewportChange = () => updatePosition();
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    window.addEventListener("resize", handleViewportChange);
+    document.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointer);
+      window.removeEventListener("resize", handleViewportChange);
+      document.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [open, updatePosition]);
+
+  return (
+    <div className="dock-mv-slot-row__menu-wrap">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="dock-mv-slot-row__menu-btn"
+        onClick={() => setOpen((current) => !current)}
+        title={t("common.more", "More")}
+        aria-label={t("common.more", "More")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Icon name="more_vert" size={14} />
+      </button>
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          className="dock-mv-slot-row__dropdown dock-mv-slot-row__dropdown--portal"
+          role="menu"
+          style={{ top: position.top, left: position.left, right: "auto" }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="dock-mv-slot-row__dropdown-item"
+            onClick={() => {
+              setOpen(false);
+              onSelect();
+            }}
+          >
+            {t("multiview.changeContent")}
+          </button>
+          <div className="dock-mv-slot-row__dropdown-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="dock-mv-slot-row__dropdown-item dock-mv-slot-row__dropdown-item--danger"
+            onClick={() => {
+              setOpen(false);
+              onRemove();
+            }}
+          >
+            {t("multiview.removeContent")}
+          </button>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
 function ImageSlotControl({
   slot,
   slotIndex,
@@ -1649,6 +1755,15 @@ function ImageSlotControl({
             </div>
           )}
         </div>
+        {hasImage && (
+          <SlotContentMenu
+            onSelect={() => setOpen(true)}
+            onRemove={() => {
+              onRemove();
+              setOpen(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -1680,24 +1795,11 @@ function SlotControl({
   obsSources: string[];
 }) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const hasValue = Boolean(value);
   const isLegacySource = mode === "source";
   const valueExistsInObs = hasValue && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
   const displayValue = formatMvContentLabel(value);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
 
   if (isSceneType(slot.contentType)) {
     return (
@@ -1730,31 +1832,7 @@ function SlotControl({
                   <Icon name="crop" size={14} />
                 </button>
               )}
-              <div className="dock-mv-slot-row__menu-wrap" ref={menuRef}>
-                <button
-                  type="button"
-                  className="dock-mv-slot-row__menu-btn"
-                  onClick={() => setMenuOpen(o => !o)}
-                  title={t('common.more')}
-                >
-                  <Icon name="more_vert" size={14} />
-                </button>
-                {menuOpen && (
-                  <div className="dock-mv-slot-row__dropdown">
-                    <button type="button" className="dock-mv-slot-row__dropdown-item" onClick={() => { setMenuOpen(false); onSelect(); }}>
-                      {t('multiview.changeContent')}
-                    </button>
-                    <div className="dock-mv-slot-row__dropdown-divider" />
-                    <button
-                      type="button"
-                      className="dock-mv-slot-row__dropdown-item dock-mv-slot-row__dropdown-item--danger"
-                      onClick={() => { setMenuOpen(false); onRemove(); }}
-                    >
-                      {t('multiview.removeContent')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
             </>
           )}
         </div>
@@ -1789,6 +1867,13 @@ function SlotControl({
             onChange={(e) => onChange(e.target.value, "scene")}
             placeholder={t('multiview.urlPlaceholder')}
           />
+          {hasValue ? (
+            <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
+          ) : (
+            <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
+              <Icon name="add" size={14} />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1807,6 +1892,13 @@ function SlotControl({
           onChange={(e) => onChange(e.target.value, "scene")}
           placeholder={t('multiview.value')}
         />
+        {hasValue ? (
+          <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
+        ) : (
+          <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
+            <Icon name="add" size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2407,6 +2499,7 @@ const MVCard = memo(function MVCard({
   clearingId,
   onPush,
   onClear,
+  onUpdateName,
   onUpdateLayout,
   onUpdateBackground,
   onAssign,
@@ -2418,6 +2511,8 @@ const MVCard = memo(function MVCard({
   onUpdateFrameOpacity,
   onUpdateFrameColor,
   onUpdateSlotFrame: _onUpdateSlotFrame,
+  onDuplicate,
+  onDelete,
 }: {
   mv: SavedMultiView;
   index: number;
@@ -2448,6 +2543,10 @@ const MVCard = memo(function MVCard({
   const { t } = useTranslation();
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
   const [framingSlot, setFramingSlot] = useState<string | null>(null);
+  const [cardMenuOpen, setCardMenuOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(mv.name);
+  const cardMenuRef = useRef<HTMLDivElement>(null);
   const [showFramePicker, setShowFramePicker] = useState(false);
   const [showFrameSettings, setShowFrameSettings] = useState(false);
   const frameSettingsRef = useRef<HTMLDivElement>(null);
@@ -2456,6 +2555,22 @@ const MVCard = memo(function MVCard({
   const allSlotsFilled = !!layout && assignedCount >= layout.slots.length;
   const isPushing = pushingId === mv.id;
   const isClearing = clearingId === mv.id;
+
+  useEffect(() => {
+    if (!renameOpen) setRenameDraft(mv.name);
+  }, [mv.name, renameOpen]);
+
+  useEffect(() => {
+    if (!cardMenuOpen) return;
+    const handler = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !cardMenuRef.current?.contains(target)) {
+        setCardMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
+  }, [cardMenuOpen]);
 
   // Close frame settings on outside click
   useEffect(() => {
@@ -2484,11 +2599,98 @@ const MVCard = memo(function MVCard({
       {/* Card Header */}
       <div className="dock-mv-card__header">
         <div className="dock-mv-card__title-group">
-          <span className="dock-mv-card__name">
-            {mv.name}
-            {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
-          </span>
+          {renameOpen ? (
+            <form
+              className="dock-mv-card__rename"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const nextName = renameDraft.trim();
+                if (nextName && nextName !== mv.name) onUpdateName(mv.id, nextName);
+                setRenameOpen(false);
+              }}
+            >
+              <input
+                autoFocus
+                className="dock-mv-card__rename-input"
+                value={renameDraft}
+                onChange={(event) => setRenameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setRenameOpen(false);
+                  }
+                }}
+                aria-label={t("common.rename")}
+              />
+              <button type="submit" className="dock-mv-card__rename-action" title={t("common.save")} aria-label={t("common.save")}>
+                <Icon name="check" size={13} />
+              </button>
+              <button type="button" className="dock-mv-card__rename-action" onClick={() => setRenameOpen(false)} title={t("common.cancel")} aria-label={t("common.cancel")}>
+                <Icon name="close" size={13} />
+              </button>
+            </form>
+          ) : (
+            <span className="dock-mv-card__name">
+              {mv.name}
+              {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
+            </span>
+          )}
           <span className="dock-mv-card__id">{shortId(index)}</span>
+        </div>
+        <div className="dock-mv-card__menu-wrap" ref={cardMenuRef}>
+          <button
+            type="button"
+            className="dock-mv-card__menu-btn"
+            onClick={() => setCardMenuOpen((current) => !current)}
+            title={t("common.more", "More")}
+            aria-label={`${t("common.more", "More")} ${mv.name}`}
+            aria-haspopup="menu"
+            aria-expanded={cardMenuOpen}
+          >
+            <Icon name="more_vert" size={15} />
+          </button>
+          {cardMenuOpen && (
+            <div className="dock-mv-card__menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  setRenameDraft(mv.name);
+                  setRenameOpen(true);
+                }}
+              >
+                <Icon name="edit" size={13} />
+                <span>{t("common.rename", t("multiview.rename"))}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  onDuplicate(mv.id);
+                }}
+              >
+                <Icon name="content_copy" size={13} />
+                <span>{t("multiview.copy")}</span>
+              </button>
+              <div className="dock-mv-card__menu-divider" />
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  onDelete(mv.id);
+                }}
+              >
+                <Icon name="delete_outline" size={13} />
+                <span>{t("common.delete")}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

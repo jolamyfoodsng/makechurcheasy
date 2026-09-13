@@ -45,21 +45,21 @@ export function getUploadTimestampFromFileName(fileName: string | null | undefin
 /**
  * Get the timestamp used by Newly Uploaded ordering.
  *
- * The explicit uploadedAt marker wins for user uploads. Template media uses
- * downloadedAt, while older records fall back to the generated disk-name
- * timestamp and then createdAt.
+ * Generated upload filenames are the most reliable marker for user uploads:
+ * library records can retain an older uploadedAt after a refresh. Template
+ * media uses downloadedAt, while older records fall back to createdAt.
  */
 export function getMediaSortTimestamp(item: MediaOrderMetadata): number {
+  const fileUploadTime = parseTimestamp(
+    getUploadTimestampFromFileName(item.diskFileName || item.filePath),
+  );
+  if (fileUploadTime !== Number.NEGATIVE_INFINITY) return fileUploadTime;
+
   const explicitUploadTime = parseTimestamp(item.uploadedAt);
   if (explicitUploadTime !== Number.NEGATIVE_INFINITY) return explicitUploadTime;
 
   const explicitDownloadTime = parseTimestamp(item.downloadedAt);
   if (explicitDownloadTime !== Number.NEGATIVE_INFINITY) return explicitDownloadTime;
-
-  const fileUploadTime = parseTimestamp(
-    getUploadTimestampFromFileName(item.diskFileName || item.filePath),
-  );
-  if (fileUploadTime !== Number.NEGATIVE_INFINITY) return fileUploadTime;
 
   return parseTimestamp(item.createdAt);
 }

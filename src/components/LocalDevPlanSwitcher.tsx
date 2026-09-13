@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, FlaskConical, RotateCcw } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext";
+import { getSession } from "../services/authService";
 import { getEffectivePlan } from "../services/licenseService";
 import {
   clearLocalDevPlanOverride,
@@ -49,15 +50,20 @@ export function LocalDevPlanSwitcher() {
   const applyPlan = (plan: LocalDevPlanId) => {
     if (!setLocalDevPlanOverride(user, plan)) return;
     setOverride(plan);
+    const nextUser = { ...user, plan, effectivePlan: plan };
     // Refresh the AuthContext object so every plan-aware screen re-renders
-    // immediately. The override is intentionally not sent to the backend.
-    setUser({ ...user, plan, effectivePlan: plan });
+    // immediately, and hand the same local-only snapshot to the overlay
+    // server so the browser Dock updates without a reload.
+    setUser(nextUser);
   };
 
   const resetPlan = () => {
     if (!clearLocalDevPlanOverride(user)) return;
     setOverride(null);
-    setUser({ ...user });
+    const session = getSession();
+    // Restore the account snapshot from the persisted session, not the
+    // temporarily simulated user object held by React state.
+    setUser(session?.user ?? { ...user, effectivePlan: undefined });
   };
 
   return (
@@ -70,7 +76,7 @@ export function LocalDevPlanSwitcher() {
         <h2 id="local-dev-plan-switcher-title">Test as another plan</h2>
         <p>
           Switch the local app between Free, Pro, and Growth to test plan-gated features.
-          This only affects this computer and never changes billing or the account online.
+          This only affects local app, web preview, and Dock behavior. It never changes billing or the account online.
         </p>
         <span className="local-dev-plan-switcher__scope">Available only for admin@gmail.com in local development</span>
       </div>

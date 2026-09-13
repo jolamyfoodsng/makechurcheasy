@@ -50,6 +50,7 @@ import {
   DOCK_NOTES_BROADCAST_CHANNEL,
   DOCK_NOTES_UPDATED_EVENT,
   appendTextToDockNotes,
+  applyQuickSettingsToNotesTheme,
   getDockNotesThemeForMode,
   getFallbackDockNotesTheme,
   loadDockNotes,
@@ -273,6 +274,19 @@ function getNoteQuickSettings(
   };
 }
 
+function resolveNotesOutputThemeSettings(
+  selectedTheme: BibleTheme,
+  overlayMode: OverlayMode,
+  quickSettings: DockFullscreenQuickThemeSettings | null | undefined,
+): DockFullscreenQuickThemeSettings {
+  const baseTheme = getDockNotesThemeForMode(selectedTheme, overlayMode);
+  const effectiveTheme = applyQuickSettingsToNotesTheme(baseTheme, quickSettings);
+  return normalizeExplicitOutputFontSettings(
+    { ...(effectiveTheme.settings as unknown as DockFullscreenQuickThemeSettings) },
+    overlayMode,
+  );
+}
+
 type ToastTone = "info" | "success" | "error";
 
 const DOCK_NOTES_TRANSLATIONS_KEY = "ocs-dock-notes-translations-v1";
@@ -419,11 +433,15 @@ export default function DockNotesTab({
   const liveLowerThirdThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
-    liveFullscreenThemeSettingsRef.current = (
-      fullscreenQuickSettings ?? getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings
+    liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+      selectedFSTheme,
+      "fullscreen",
+      fullscreenQuickSettings,
     ) as unknown as Record<string, unknown>;
-    liveLowerThirdThemeSettingsRef.current = (
-      lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings
+    liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+      selectedLTTheme,
+      "lower-third",
+      lowerThirdQuickSettings,
     ) as unknown as Record<string, unknown>;
   }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
 
@@ -753,10 +771,7 @@ export default function DockNotesTab({
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = quickSettingsOverride
         ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
-      const themeSettings = normalizeExplicitOutputFontSettings(
-        { ...(quickSettings ?? theme.settings) } as unknown as DockFullscreenQuickThemeSettings,
-        overlayMode,
-      );
+      const themeSettings = resolveNotesOutputThemeSettings(selectedTheme, overlayMode, quickSettings);
       const slideText = normalizeDockMultilineText(slide.text);
       const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
       const showBoth = Boolean(effectiveNotesTranslation?.showBoth && translatedText);
@@ -916,6 +931,16 @@ export default function DockNotesTab({
     );
     setFullscreenQuickSettings(nextFullscreenSettings);
     setLowerThirdQuickSettings(nextLowerThirdSettings);
+    liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+      selectedFSTheme,
+      "fullscreen",
+      nextFullscreenSettings,
+    ) as unknown as Record<string, unknown>;
+    liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+      selectedLTTheme,
+      "lower-third",
+      nextLowerThirdSettings,
+    ) as unknown as Record<string, unknown>;
     if (nextLineMode !== undefined) {
       setNotesAutoSplit(nextLineMode !== "original");
       setSelectedSlideIdx(0);
@@ -1511,6 +1536,19 @@ export default function DockNotesTab({
           : (lowerThirdQuickSettings ?? getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings as unknown as DockFullscreenQuickThemeSettings)}
         onQuickSettingsSave={async (settings) => {
           const nextSettings = normalizeExplicitOutputFontSettings(settings, overlayMode);
+          if (overlayMode === "fullscreen") {
+            liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+              selectedFSTheme,
+              "fullscreen",
+              nextSettings,
+            ) as unknown as Record<string, unknown>;
+          } else {
+            liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+              selectedLTTheme,
+              "lower-third",
+              nextSettings,
+            ) as unknown as Record<string, unknown>;
+          }
           if (overlayVisible && activeSlideIndex !== null) {
             await pushNoteSlide(activeSlideIndex, nextSettings);
           }

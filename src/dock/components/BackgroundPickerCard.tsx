@@ -1389,7 +1389,7 @@ function ImageTab({
           <span>{search ? t('bgPicker.noImagesMatch') : t('bgPicker.noImagesUploaded')}</span>
         </div>
       ) : (
-        <div className="dtb-bg-picker__grid">
+        <div className="dtb-bg-picker__grid dtb-bg-picker__asset-grid">
           {filtered.map((item) => {
             const relUrl = toBackgroundAssetUrl(item);
             const isSelected = selectedUrl === relUrl;
@@ -1599,7 +1599,7 @@ function VideoTab({
           <span>{search ? t('bgPicker.noVideosMatch') : t('bgPicker.noVideosUploaded')}</span>
         </div>
       ) : (
-        <div className="dtb-bg-picker__grid">
+        <div className="dtb-bg-picker__grid dtb-bg-picker__asset-grid">
           {filtered.map((item) => {
             const relUrl = toBackgroundAssetUrl(item);
             const isSelected = selectedUrl === relUrl;
@@ -2265,15 +2265,13 @@ function ReferenceSection({
               />
             </div>
 
-            {overlayMode !== "lower-third" && (
-              <div className="dtb-color-field">
-                <span className="dtb-color-field__label">{t('bgPicker.background', 'Background')}</span>
-                <InlineColorPicker
-                  value={quickSettings.referenceBackgroundColor}
-                  onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
-                />
-              </div>
-            )}
+            <div className="dtb-color-field">
+              <span className="dtb-color-field__label">{t('bgPicker.background', 'Background')}</span>
+              <InlineColorPicker
+                value={quickSettings.referenceBackgroundColor}
+                onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
+              />
+            </div>
           </div>
 
           <SliderNumberField
@@ -2313,13 +2311,11 @@ function ReferenceSection({
         />
       )}
 
-      {overlayMode !== "lower-third" && (
-        <ReferenceBackgroundSection
-          quickSettings={quickSettings}
-          onQuickSettingsChange={onQuickSettingsChange}
-          showColorPicker={false}
-        />
-      )}
+      <ReferenceBackgroundSection
+        quickSettings={quickSettings}
+        onQuickSettingsChange={onQuickSettingsChange}
+        showColorPicker={false}
+      />
 
       <button
         type="button"

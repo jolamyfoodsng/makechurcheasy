@@ -1,9 +1,8 @@
 /**
- * Editable church graphic templates.
+ * Shared editable-template types and the built-in template catalog.
  *
- * A template is deliberately stored as structured layers instead of a flat
- * image. That keeps the artwork vector-friendly while allowing operators to
- * change the text without rebuilding the design.
+ * The catalog is intentionally empty while the template library is being
+ * rebuilt. The editor, storage, import, and Dock handoff remain available.
  */
 
 export type TemplateCategory = "Bible" | "Worship" | "Announcements" | "Service";
@@ -18,6 +17,9 @@ export interface TemplateBackground {
   gradientStart: string;
   gradientEnd: string;
   accent: string;
+  imageUrl?: string;
+  previewImageUrl?: string;
+  imageOpacity?: number;
 }
 
 export interface TemplateTextLayer {
@@ -36,6 +38,10 @@ export interface TemplateTextLayer {
   align?: "left" | "center" | "right";
   lineHeight?: number;
   letterSpacing?: number;
+  wrap?: "word" | "none";
+  scaleX?: number;
+  preserveScaleX?: boolean;
+  scaleY?: number;
 }
 
 export interface TemplateShapeLayer {
@@ -46,11 +52,35 @@ export interface TemplateShapeLayer {
   width: number;
   height: number;
   fill: string;
+  stroke?: string;
+  strokeWidth?: number;
   opacity?: number;
   cornerRadius?: number;
 }
 
-export type TemplateLayer = TemplateTextLayer | TemplateShapeLayer;
+export interface TemplateImageLayer {
+  id: string;
+  kind: "image";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  src: string;
+  opacity?: number;
+  scaleX?: number;
+  scaleY?: number;
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  sourceWidth?: number;
+  sourceHeight?: number;
+  removeBackgroundOnLoad?: boolean;
+}
+
+export type TemplateLayer = TemplateTextLayer | TemplateShapeLayer | TemplateImageLayer;
 
 export interface EditableTemplate {
   id: string;
@@ -64,19 +94,27 @@ export interface EditableTemplate {
   layers: TemplateLayer[];
 }
 
-const CANVAS: TemplateCanvas = { width: 1600, height: 900 };
-const DISPLAY_FONT = "Questrial, Inter, sans-serif";
-const BODY_FONT = "Questrial, Inter, sans-serif";
+const WEEKLY_ACTIVITIES_SOURCE = "/templates/weekly-activities-source.png";
+const WEEKLY_ACTIVITIES_RIGHT_ARTWORK = "/templates/weekly-right-artwork.png";
+const WEEKLY_ACTIVITIES_LOGO = "/templates/weekly-logo.png";
+const WEEKLY_ACTIVITIES_RIBBON = "/templates/weekly-ribbon.png";
+const WEEKLY_ACTIVITIES_TUESDAY_ICON = "/templates/weekly-tuesday-icon.png";
+const WEEKLY_ACTIVITIES_THURSDAY_ICON = "/templates/weekly-thursday-icon.png";
+const WEEKLY_ACTIVITIES_SUNDAY_ICON = "/templates/weekly-sunday-icon.png";
+const WEEKLY_ACTIVITIES_CANVAS: TemplateCanvas = { width: 1672, height: 941 };
+const WEEKLY_ACTIVITIES_FONT = "Arial Black, Arial, sans-serif";
+const WEEKLY_ACTIVITIES_BODY_FONT = "Arial, Helvetica, sans-serif";
 
-function text(
+function weeklyText(
   id: string,
   value: string,
   x: number,
   y: number,
   width: number,
+  height: number,
   fontSize: number,
-  fill: string,
-  options: Partial<Omit<TemplateTextLayer, "id" | "kind" | "x" | "y" | "width" | "text" | "fontSize" | "fill">> = {},
+  fill = "#FFFFFF",
+  options: Partial<Omit<TemplateTextLayer, "id" | "kind" | "x" | "y" | "width" | "height" | "text" | "fontSize" | "fill">> = {},
 ): TemplateTextLayer {
   return {
     id,
@@ -84,18 +122,19 @@ function text(
     x,
     y,
     width,
-    height: Math.max(54, Math.ceil(fontSize * 1.45)),
+    height,
     text: value,
     fill,
     fontSize,
-    fontFamily: BODY_FONT,
-    fontWeight: 500,
-    lineHeight: 1.2,
+    fontFamily: WEEKLY_ACTIVITIES_BODY_FONT,
+    fontWeight: 700,
+    lineHeight: 1.08,
+    wrap: "none",
     ...options,
   };
 }
 
-function rect(
+function weeklyRect(
   id: string,
   x: number,
   y: number,
@@ -107,287 +146,96 @@ function rect(
   return { id, kind: "rect", x, y, width, height, fill, ...options };
 }
 
-function circle(id: string, x: number, y: number, diameter: number, fill: string, opacity = 1): TemplateShapeLayer {
-  return { id, kind: "circle", x, y, width: diameter, height: diameter, fill, opacity };
+function weeklyImage(
+  id: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  src: string,
+): TemplateImageLayer {
+  return { id, kind: "image", x, y, width, height, src };
 }
 
 export const EDITABLE_TEMPLATE_LIBRARY: EditableTemplate[] = [
   {
-    id: "sunday-service",
-    name: "Sunday Service",
-    description: "A calm, high-contrast welcome slide for the start of service.",
+    id: "weekly-activities",
+    name: "Weekly Activities",
+    description: "An editable weekly church schedule for prayers, Bible study, and Sunday services.",
     category: "Service",
-    tags: ["welcome", "service", "weekly"],
-    accentColor: "#F4B942",
-    canvas: CANVAS,
+    tags: ["weekly", "schedule", "activities"],
+    accentColor: "#6B5BFF",
+    canvas: WEEKLY_ACTIVITIES_CANVAS,
     background: {
-      base: "#10253D",
-      gradientStart: "#091521",
-      gradientEnd: "#1B4E5F",
-      accent: "#F4B942",
+      base: "#2F287E",
+      gradientStart: "#F6F5F1",
+      gradientEnd: "#27206C",
+      accent: "#6B5BFF",
+      previewImageUrl: WEEKLY_ACTIVITIES_SOURCE,
     },
     layers: [
-      circle("sunday-orb", 1190, -180, 640, "#2D7C82", 0.42),
-      rect("sunday-rule", 112, 176, 122, 8, "#F4B942", { cornerRadius: 4 }),
-      text("sunday-kicker", "MAKECHURCHEASY  /  SERVICE", 112, 112, 720, 22, "#B9D4DB", {
+      // Preserve the supplied artwork while masking the original copy so the
+      // recreated text remains independently selectable in the editor.
+      weeklyRect("weekly-clean-top", 0, 0, 1260, 465, "rgba(247, 246, 242, 0.99)"),
+      weeklyRect("weekly-clean-bottom", 0, 425, 1260, 516, "rgba(47, 40, 126, 0.99)"),
+      weeklyImage("weekly-right-artwork", 1260, 0, 412, 941, WEEKLY_ACTIVITIES_RIGHT_ARTWORK),
+      weeklyImage("weekly-logo", 48, 35, 218, 82, WEEKLY_ACTIVITIES_LOGO),
+      weeklyImage("weekly-ribbon", 390, 355, 390, 125, WEEKLY_ACTIVITIES_RIBBON),
+      weeklyRect("weekly-ribbon-text-cover", 438, 388, 310, 52, "#F72A28"),
+
+      weeklyText("weekly-title", "Weekly", 238, 78, 760, 180, 170, "#050505", {
+        fontFamily: WEEKLY_ACTIVITIES_FONT,
+        fontWeight: 900,
+        letterSpacing: -4,
+      }),
+      weeklyText("weekly-subtitle", "Activities", 238, 238, 780, 180, 158, "#050505", {
+        fontFamily: WEEKLY_ACTIVITIES_FONT,
+        fontWeight: 900,
+        letterSpacing: -4,
+      }),
+      weeklyText("weekly-ribbon-copy", "Join us every week!", 450, 394, 300, 48, 27, "#FFFFFF", {
+        fontFamily: "Georgia, serif",
         fontWeight: 700,
-        letterSpacing: 3,
-      }),
-      text("sunday-title", "Welcome to\nSunday Service", 112, 232, 900, 86, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        lineHeight: 1.02,
-      }),
-      text("sunday-subtitle", "Prepare your heart. Find your place. Worship together.", 116, 486, 840, 30, "#D7E5E8"),
-      rect("sunday-date-bg", 112, 690, 374, 92, "#F4B942", { cornerRadius: 10 }),
-      text("sunday-date", "SUNDAY  •  10:00 AM", 140, 720, 320, 25, "#10253D", {
-        fontWeight: 700,
-        letterSpacing: 1.5,
-      }),
-      text("sunday-footer", "Grace Community Church", 1120, 792, 360, 22, "#B9D4DB", { align: "right" }),
-    ],
-  },
-  {
-    id: "worship-night",
-    name: "Worship Night",
-    description: "A bold lyric-led graphic for worship nights, praise sets, and live moments.",
-    category: "Worship",
-    tags: ["worship", "praise", "lyrics"],
-    accentColor: "#EAA3FF",
-    canvas: CANVAS,
-    background: {
-      base: "#251A3D",
-      gradientStart: "#120F26",
-      gradientEnd: "#5A2866",
-      accent: "#EAA3FF",
-    },
-    layers: [
-      circle("worship-glow", -190, 500, 660, "#D946EF", 0.26),
-      circle("worship-glow-small", 1160, -250, 680, "#7C3AED", 0.25),
-      text("worship-kicker", "AN EVENING OF", 108, 146, 500, 26, "#F3D8FF", { fontWeight: 700, letterSpacing: 5 }),
-      text("worship-title", "Worship\nNight", 104, 214, 820, 112, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        lineHeight: 0.96,
-      }),
-      rect("worship-line", 108, 500, 150, 8, "#EAA3FF", { cornerRadius: 4 }),
-      text("worship-description", "One voice. One church. One sound of praise.", 108, 550, 670, 32, "#F0DFF5"),
-      text("worship-meta", "FRIDAY  •  7:00 PM\nMAIN AUDITORIUM", 108, 720, 500, 25, "#EAA3FF", {
-        fontWeight: 700,
-        lineHeight: 1.35,
-        letterSpacing: 1.2,
-      }),
-      text("worship-brand", "MAKECHURCHEASY", 1170, 804, 330, 22, "#E7C4F1", { align: "right", letterSpacing: 2 }),
-    ],
-  },
-  {
-    id: "bible-verse",
-    name: "Bible Verse",
-    description: "A focused Scripture card with a generous reading area and editable reference.",
-    category: "Bible",
-    tags: ["scripture", "verse", "teaching"],
-    accentColor: "#8DD6CA",
-    canvas: CANVAS,
-    background: {
-      base: "#0F2A2A",
-      gradientStart: "#08191D",
-      gradientEnd: "#1D5A54",
-      accent: "#8DD6CA",
-    },
-    layers: [
-      rect("bible-frame", 88, 86, 1424, 728, "rgba(255,255,255,0.035)", { cornerRadius: 24 }),
-      rect("bible-rule", 158, 176, 92, 8, "#8DD6CA", { cornerRadius: 4 }),
-      text("bible-kicker", "SCRIPTURE FOR TODAY", 158, 126, 600, 24, "#9FC9C4", { fontWeight: 700, letterSpacing: 3 }),
-      text("bible-quote", "Be strong and courageous.\nDo not be afraid; do not be discouraged.", 158, 260, 1220, 67, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        lineHeight: 1.12,
-      }),
-      text("bible-reference", "Joshua 1:9  •  KJV", 162, 565, 700, 34, "#8DD6CA", { fontWeight: 700, letterSpacing: 1 }),
-      text("bible-footer", "MAKECHURCHEASY  /  BIBLE", 158, 744, 800, 20, "#9FC9C4", { fontWeight: 700, letterSpacing: 2 }),
-    ],
-  },
-  {
-    id: "prayer-meeting",
-    name: "Prayer Meeting",
-    description: "A warm, practical announcement for prayer gatherings and ministry moments.",
-    category: "Service",
-    tags: ["prayer", "announcement", "midweek"],
-    accentColor: "#F08D71",
-    canvas: CANVAS,
-    background: {
-      base: "#2A1D24",
-      gradientStart: "#17131C",
-      gradientEnd: "#61342E",
-      accent: "#F08D71",
-    },
-    layers: [
-      circle("prayer-orb", 1060, 98, 560, "#A34B42", 0.34),
-      text("prayer-kicker", "MIDWEEK GATHERING", 112, 132, 640, 24, "#E9C7BF", { fontWeight: 700, letterSpacing: 3 }),
-      text("prayer-title", "Prayer\nMeeting", 110, 214, 770, 108, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        lineHeight: 0.98,
-      }),
-      text("prayer-copy", "Come with expectation. Leave strengthened.", 114, 510, 720, 32, "#F2DCD6"),
-      rect("prayer-pill", 112, 674, 512, 98, "#F08D71", { cornerRadius: 12 }),
-      text("prayer-meta", "WEDNESDAY  •  6:30 PM", 146, 708, 430, 24, "#2A1D24", { fontWeight: 700, letterSpacing: 1 }),
-      text("prayer-brand", "YOUR CHURCH NAME", 1170, 804, 320, 20, "#E9C7BF", { align: "right", letterSpacing: 2 }),
-    ],
-  },
-  {
-    id: "family-prayers",
-    name: "Family Prayers",
-    description: "A dramatic welcome graphic for family prayer gatherings and church prayer moments.",
-    category: "Worship",
-    tags: ["prayer", "family", "welcome"],
-    accentColor: "#E40072",
-    canvas: CANVAS,
-    background: {
-      base: "#130A17",
-      gradientStart: "#07040F",
-      gradientEnd: "#3B102C",
-      accent: "#E40072",
-    },
-    layers: [
-      circle("family-prayers-left-glow", -250, 280, 820, "#1B2B68", 0.34),
-      circle("family-prayers-top-glow", 590, -360, 930, "#9D104F", 0.24),
-      circle("family-prayers-right-glow", 1260, 240, 620, "#075A96", 0.2),
-      circle("family-prayers-bottom-glow", 160, 610, 560, "#22285F", 0.26),
-      rect("family-prayers-floor", 0, 730, 1600, 170, "#070A17", { opacity: 0.72 }),
-      rect("family-prayers-time-badge", 1160, 350, 118, 206, "#C20B61", { cornerRadius: 3 }),
-      text("family-prayers-monogram", "ip", 665, 112, 130, 94, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        letterSpacing: -5,
-      }),
-      text("family-prayers-brand", "Intentional\nParenting\nWith PI", 806, 148, 290, 27, "#FFFFFF", {
-        fontFamily: BODY_FONT,
-        fontWeight: 500,
-        lineHeight: 1.04,
-      }),
-      text("family-prayers-welcome", "Welcome to", 516, 276, 568, 64, "#FFFFFF", {
-        fontFamily: "Great Vibes, Dancing Script, cursive",
-        fontWeight: 400,
         align: "center",
       }),
-      text("family-prayers-family", "FAMILY", 302, 364, 1006, 146, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        align: "center",
-        letterSpacing: 1,
-      }),
-      text("family-prayers-prayers", "PRAYERS", 296, 525, 1020, 142, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        align: "center",
-        letterSpacing: 1,
-      }),
-      text("family-prayers-time", "T\nI\nM\nE", 1160, 367, 118, 42, "#FFFFFF", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        align: "center",
-        lineHeight: 1.02,
-      }),
-    ],
-  },
-  {
-    id: "church-announcement",
-    name: "Church Announcement",
-    description: "A clean announcement layout for dates, reminders, and service-wide notices.",
-    category: "Announcements",
-    tags: ["notice", "calendar", "community"],
-    accentColor: "#F1D38B",
-    canvas: CANVAS,
-    background: {
-      base: "#F2EBDD",
-      gradientStart: "#E8E0CF",
-      gradientEnd: "#C9D5D2",
-      accent: "#1A4247",
-    },
-    layers: [
-      rect("announcement-block", 0, 0, 540, 900, "#1A4247"),
-      text("announcement-kicker", "CHURCH NEWS", 112, 124, 340, 24, "#B7D6D0", { fontWeight: 700, letterSpacing: 3 }),
-      text("announcement-number", "01", 112, 260, 310, 160, "#F1D38B", { fontFamily: DISPLAY_FONT, fontWeight: 700 }),
-      text("announcement-side", "THIS WEEK", 112, 700, 340, 22, "#B7D6D0", { fontWeight: 700, letterSpacing: 2 }),
-      text("announcement-title", "Community\nOutreach", 638, 198, 800, 90, "#1A4247", {
-        fontFamily: DISPLAY_FONT,
-        fontWeight: 700,
-        lineHeight: 1.02,
-      }),
-      text("announcement-copy", "We are serving our neighbours with food, prayer, and practical support.", 642, 458, 700, 36, "#39555A", { lineHeight: 1.3 }),
-      text("announcement-meta", "SATURDAY  •  9:00 AM\nMEET AT THE CHURCH FOYER", 642, 686, 670, 24, "#1A4247", { fontWeight: 700, lineHeight: 1.45, letterSpacing: 1 }),
-    ],
-  },
-  {
-    id: "youth-service",
-    name: "Youth Service",
-    description: "An energetic title card for youth church, campus ministry, and student events.",
-    category: "Worship",
-    tags: ["youth", "students", "event"],
-    accentColor: "#B9F55A",
-    canvas: CANVAS,
-    background: {
-      base: "#101A26",
-      gradientStart: "#091018",
-      gradientEnd: "#17455B",
-      accent: "#B9F55A",
-    },
-    layers: [
-      rect("youth-accent", 110, 132, 22, 636, "#B9F55A", { cornerRadius: 11 }),
-      circle("youth-circle", 1190, 80, 480, "#B9F55A", 0.14),
-      text("youth-kicker", "MAKECHURCHEASY  /  YOUTH", 178, 142, 700, 22, "#C7D6DE", { fontWeight: 700, letterSpacing: 3 }),
-      text("youth-title", "Built for\nMore", 178, 238, 760, 108, "#FFFFFF", { fontFamily: DISPLAY_FONT, fontWeight: 700, lineHeight: 0.98 }),
-      text("youth-copy", "A night of worship, real conversations, and a faith that moves.", 182, 536, 800, 30, "#D2E1E5", { lineHeight: 1.3 }),
-      text("youth-meta", "THURSDAY  •  5:00 PM", 182, 738, 520, 25, "#B9F55A", { fontWeight: 700, letterSpacing: 1.2 }),
-      text("youth-brand", "YOUTH CHURCH", 1170, 804, 310, 20, "#B9F55A", { align: "right", letterSpacing: 2 }),
-    ],
-  },
-  {
-    id: "giving-partnership",
-    name: "Giving & Partnership",
-    description: "A trustworthy, people-first graphic for giving moments and partnership updates.",
-    category: "Announcements",
-    tags: ["giving", "partnership", "impact"],
-    accentColor: "#F0B45B",
-    canvas: CANVAS,
-    background: {
-      base: "#142E28",
-      gradientStart: "#091A16",
-      gradientEnd: "#37634C",
-      accent: "#F0B45B",
-    },
-    layers: [
-      circle("giving-orb", 1120, -160, 620, "#F0B45B", 0.14),
-      text("giving-kicker", "GENEROSITY IN ACTION", 118, 144, 700, 24, "#B9D6C4", { fontWeight: 700, letterSpacing: 3 }),
-      text("giving-title", "Together,\nwe make room", 116, 242, 920, 92, "#FFFFFF", { fontFamily: DISPLAY_FONT, fontWeight: 700, lineHeight: 1.02 }),
-      rect("giving-rule", 118, 548, 132, 8, "#F0B45B", { cornerRadius: 4 }),
-      text("giving-copy", "Your giving helps the Gospel reach people, places, and generations.", 118, 600, 780, 31, "#D7E7DB", { lineHeight: 1.3 }),
-      text("giving-footer", "GIVE  •  SERVE  •  BUILD", 118, 782, 660, 23, "#F0B45B", { fontWeight: 700, letterSpacing: 2 }),
-      text("giving-brand", "YOUR CHURCH NAME", 1170, 804, 320, 20, "#B9D6C4", { align: "right", letterSpacing: 2 }),
-    ],
-  },
-  {
-    id: "sermon-title",
-    name: "Sermon Title",
-    description: "A restrained title slide for sermon series, teaching sessions, and Bible studies.",
-    category: "Bible",
-    tags: ["sermon", "teaching", "series"],
-    accentColor: "#A9B9FF",
-    canvas: CANVAS,
-    background: {
-      base: "#1B2037",
-      gradientStart: "#0F1327",
-      gradientEnd: "#303B70",
-      accent: "#A9B9FF",
-    },
-    layers: [
-      rect("sermon-top-rule", 112, 106, 1376, 2, "rgba(255,255,255,0.22)"),
-      text("sermon-kicker", "SERMON SERIES  /  WEEK 04", 112, 148, 720, 23, "#B8C2ED", { fontWeight: 700, letterSpacing: 3 }),
-      text("sermon-title-text", "Faith in\nthe waiting", 112, 268, 920, 110, "#FFFFFF", { fontFamily: DISPLAY_FONT, fontWeight: 700, lineHeight: 0.98 }),
-      text("sermon-reference", "Psalm 27:14", 116, 602, 430, 36, "#A9B9FF", { fontWeight: 700, letterSpacing: 1 }),
-      rect("sermon-bottom-rule", 112, 748, 1376, 2, "rgba(255,255,255,0.22)"),
-      text("sermon-brand", "MAKECHURCHEASY  /  BIBLE", 112, 790, 700, 20, "#B8C2ED", { fontWeight: 700, letterSpacing: 2 }),
+
+      weeklyText("weekly-days-heading", "WEEK DAYS", 146, 478, 230, 38, 25),
+      weeklyText("weekly-activity-heading", "ACTIVITY", 503, 478, 210, 38, 25),
+      weeklyText("weekly-time-heading", "TIME", 809, 478, 150, 38, 25),
+      weeklyText("weekly-venue-heading", "VENUE", 1068, 478, 180, 38, 25),
+
+      weeklyImage("weekly-tuesday-icon", 111, 526, 75, 75, WEEKLY_ACTIVITIES_TUESDAY_ICON),
+      weeklyText("weekly-tuesday-day", "TUESDAY\nEVERY WEEK", 210, 540, 180, 64, 24),
+      weeklyText("weekly-tuesday-activity", "GENERAL\nHOUSE PRAYERS", 472, 540, 220, 64, 24, "#FFFFFF", { align: "center" }),
+      weeklyText("weekly-tuesday-time", "5:00PM\nPROMPT", 786, 540, 165, 64, 23, "#FFFFFF", { align: "center" }),
+      weeklyText("weekly-tuesday-venue", "VICTORY GROUND (VG)\nBESIDE ACCESS BANK", 1007, 541, 222, 64, 16, "#FFFFFF", { align: "center", fontWeight: 500, wrap: "word" }),
+
+      weeklyImage("weekly-thursday-icon", 111, 616, 75, 75, WEEKLY_ACTIVITIES_THURSDAY_ICON),
+      weeklyText("weekly-thursday-day", "THURSDAY\nEVERY WEEK", 210, 630, 180, 64, 24),
+      weeklyText("weekly-thursday-activity", "BIBLE\nSTUDY", 472, 630, 220, 64, 24, "#FFFFFF", { align: "center" }),
+      weeklyText("weekly-thursday-time", "4:00PM\nPROMPT", 786, 630, 165, 64, 23, "#FFFFFF", { align: "center" }),
+      weeklyText("weekly-thursday-venue", "CHAPEL OF REDEMPTION\nRESOURCE CENTER CORRIDOR", 1007, 631, 222, 64, 16, "#FFFFFF", { align: "center", fontWeight: 500, wrap: "word" }),
+
+      weeklyImage("weekly-sunday-icon", 111, 716, 75, 75, WEEKLY_ACTIVITIES_SUNDAY_ICON),
+      weeklyText("weekly-sunday-day", "SUNDAY\nEVERY WEEK", 210, 730, 180, 64, 24),
+      weeklyText("weekly-sunday-activity", "SUNDAY\nSERVICE", 472, 730, 220, 64, 24, "#FFFFFF", { align: "center" }),
+      weeklyText("weekly-sunday-time", "9:00AM\nFIRST SERVICE\n\n11:30AM\nSECOND SERVICE", 770, 716, 195, 112, 18, "#FFFFFF", { align: "center", lineHeight: 1.12 }),
+      weeklyText("weekly-sunday-venue", "CHAPEL OF REDEMPTION", 1007, 746, 222, 36, 16, "#FFFFFF", { align: "center", fontWeight: 500, wrap: "word" }),
+
+      weeklyRect("weekly-divider-one", 409, 534, 2, 72, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-two", 717, 534, 2, 72, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-three", 969, 534, 2, 72, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-row-one-rule", 111, 605, 1122, 2, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-four", 409, 624, 2, 74, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-five", 717, 624, 2, 74, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-six", 969, 624, 2, 74, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-row-two-rule", 111, 700, 1122, 2, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-seven", 409, 724, 2, 88, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-eight", 717, 724, 2, 88, "rgba(255, 255, 255, 0.9)"),
+      weeklyRect("weekly-divider-nine", 969, 724, 2, 88, "rgba(255, 255, 255, 0.9)"),
+
+      weeklyRect("weekly-location-card", 110, 844, 960, 62, "rgba(39, 32, 108, 0.18)", { stroke: "#FFFFFF", strokeWidth: 2, cornerRadius: 12 }),
+      weeklyText("weekly-location", "●   SAPPHIRE GRILLS EVENT HALL, OPPOSITE SAPPHIRE GARDENS ESTATE, LEKKI-EPE EXPRESS WAY", 145, 864, 900, 28, 14, "#FFFFFF", { fontWeight: 500, wrap: "word" }),
     ],
   },
 ];

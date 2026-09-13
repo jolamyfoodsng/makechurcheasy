@@ -8,6 +8,7 @@ import notesTabSource from "./tabs/DockNotesTab.tsx?raw";
 import mediaTabSource from "./tabs/DockMediaTab.tsx?raw";
 import ministryTabSource from "./tabs/DockMinistryTab.tsx?raw";
 import countdownTabSource from "./tabs/DockCountdownsTab.tsx?raw";
+import timeTabSource from "./tabs/DockTimeTab.tsx?raw";
 import dockPageSource from "./DockPage.tsx?raw";
 import obsClientSource from "./dockObsClient.ts?raw";
 import bibleOverlaySource from "../../public/mce-bible-overlay.html?raw";
@@ -26,6 +27,8 @@ describe("dock scene routing", () => {
       .toBe("MCE Lower Third - Livestream Scene");
     expect(dockObsClient.getSceneRouteSourceName("countdown", "Livestream Scene", "Background"))
       .toBe("MCE Countdown Background - Livestream Scene");
+    expect(dockObsClient.getSceneRouteSourceName("time", "Livestream Scene"))
+      .toBe("MCE Time - Livestream Scene");
   });
 
   it("persists an independent target and an explicit MCE Presentation sync choice per module", () => {
@@ -113,8 +116,8 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain("Only after that do we isolate this tab's");
     expect(obsClientSource).toContain("focusMcePresentationModule(\"media\")");
     expect(mediaTabSource).not.toContain("How the slideshow works");
-    expect(mediaTabSource).toContain('useState("MC slideshow")');
-    expect(mediaTabSource).toContain('const sourceName = playlistName.trim() || "MC slideshow"');
+    expect(mediaTabSource).toContain('useState("MCE slideshow")');
+    expect(mediaTabSource).toContain('const sourceName = playlistName.trim() || "MCE slideshow"');
   });
 
   it("does not reorder the active source when only the verse payload changes", () => {
@@ -223,6 +226,7 @@ describe("dock scene routing", () => {
     expect(ministryTabSource).toContain('module="ticker"');
     expect(ministryTabSource).toContain('module="lower-third"');
     expect(countdownTabSource).toContain('module="countdown"');
+    expect(timeTabSource).toContain('module="time"');
   });
 
   it("routes each tab through its independent sender before optionally syncing MCE Presentation", () => {

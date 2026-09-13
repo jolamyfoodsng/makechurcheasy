@@ -25,6 +25,10 @@ import {
   type PlanTier,
 } from "../services/entitlementClient";
 import { getUserScopedKey } from "../services/userScopedStorage";
+import {
+  getStoredLocalDevPlanOverride,
+  LOCAL_DEV_PLAN_OVERRIDE_EVENT,
+} from "../services/localDevPlanOverride";
 
 export type { FeatureKey, PlanTier };
 
@@ -113,6 +117,25 @@ export function useFeatureGate(): FeatureGateState {
   useEffect(() => {
     let cancelled = false;
 
+    const applyLocalOverride = () => {
+      const override = getStoredLocalDevPlanOverride();
+      if (override) {
+        setCurrentPlan(override);
+        setLoading(false);
+        return;
+      }
+      void fetchPlanFromOverlayServer().then((plan) => {
+        if (!cancelled) setCurrentPlan((plan || "free") as PlanTier);
+      });
+    };
+
+    // MVSettings changes the local development plan in another app surface.
+    // Update existing feature gates immediately instead of waiting for a reload
+    // or the overlay server's periodic refresh.
+    applyLocalOverride();
+    window.addEventListener(LOCAL_DEV_PLAN_OVERRIDE_EVENT, applyLocalOverride);
+    window.addEventListener("storage", applyLocalOverride);
+
     (async () => {
       try {
         // fetchPlanFromOverlayServer resolves the canonical effective plan
@@ -127,7 +150,11 @@ export function useFeatureGate(): FeatureGateState {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.removeEventListener(LOCAL_DEV_PLAN_OVERRIDE_EVENT, applyLocalOverride);
+      window.removeEventListener("storage", applyLocalOverride);
+    };
   }, []);
 
   const checkFeature = useCallback(

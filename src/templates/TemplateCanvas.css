@@ -37,7 +37,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 4px;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid var(--accent-blue);
   border-radius: var(--radius);
   outline: 2px solid rgba(var(--accent-blue-rgb), 0.24);
@@ -49,4 +49,9 @@
 
 .templates-inline-editor:focus {
   outline: 2px solid rgba(var(--accent-blue-rgb), 0.42);
+}
+
+.templates-inline-editor--single-line {
+  overflow: hidden;
+  white-space: pre;
 }

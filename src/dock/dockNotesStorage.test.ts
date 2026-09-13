@@ -143,6 +143,7 @@ describe("dock notes presentation settings", () => {
     const settings = await resolveDockNotesPresentationSettings("lower-third");
 
     expect(settings.overlayMode).toBe("lower-third");
+    expect(settings.themeSettings?.backgroundType).toBe("pattern");
     expect(settings.themeSettings?.backgroundPattern).toBe("diagonal-lines");
     expect(settings.themeSettings?.backgroundColor).toBe("transparent");
     expect(settings.themeSettings?.boxBackground).toBeTruthy();

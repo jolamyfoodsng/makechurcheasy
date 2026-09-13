@@ -921,7 +921,10 @@
       let latestRenderAck = null;
       let lastRenderAckPacket = null;
       let lastTargetSource = _routeSource;
-      let lastAppliedThemeKey = '';
+      const lastAppliedThemeKeyByMode = {
+        fullscreen: '',
+        'lower-third': '',
+      };
       let fitRafId = 0;
       let lastBgFingerprint = '';
       let lastBgType = 'none';
@@ -1359,6 +1362,7 @@
         lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
         activeMode = mode;
         body.dataset.mode = mode;
+        lastAppliedThemeKeyByMode[mode] = '';
         console.log('[Mode] ' + mode);
       }
 
@@ -1807,9 +1811,10 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKey) return;
+        const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode];
+        if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
-        lastAppliedThemeKey = themeKey;
+        lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */

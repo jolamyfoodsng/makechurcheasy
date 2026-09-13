@@ -19,6 +19,14 @@ describe("media upload ordering", () => {
     })).toBe(Date.parse("2026-08-24T12:00:00.000Z"));
   });
 
+  it("prefers the generated upload filename over stale library metadata", () => {
+    expect(getMediaSortTimestamp({
+      diskFileName: "media_1787647609533_new-video.mp4",
+      uploadedAt: "2020-01-01T00:00:00.000Z",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    })).toBe(Date.parse("2026-08-25T08:46:49.533Z"));
+  });
+
   it("uses the latest download time for refreshed template media", () => {
     const refreshed = {
       id: "template-video",

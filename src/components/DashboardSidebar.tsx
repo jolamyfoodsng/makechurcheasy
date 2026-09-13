@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Mic,
   Palette,
+  Layers,
   Settings,
   Images,
   BookOpen,
@@ -25,6 +26,7 @@ import {
   Tv,
   Zap,
   GraduationCap,
+  PenTool,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
@@ -118,6 +120,8 @@ export default function DashboardSidebar({
           {navItem("/speech-to-scripture", Mic, t("sidebar.verseAi"))}
           {navItem("/transcripts", FileText, t("sidebar.transcripts"))}
           {navItem("/production/themes", Palette, t("sidebar.themes"))}
+          {navItem("/templates", Layers, "Templates")}
+          {navItem("/design-studio", PenTool, "Design Studio")}
 
           {navItem("/resources?tab=bible", BookOpen, t("sidebar.bible"))}
           {navItem("/resources?tab=worship", Music, t("sidebar.worship"))}

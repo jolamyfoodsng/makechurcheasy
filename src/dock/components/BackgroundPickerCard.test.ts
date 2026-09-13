@@ -203,6 +203,11 @@ describe("Background picker layout", () => {
     expect(dockCssSource).toContain('.dtb-studio-card--picker {\n  display: flex;\n  flex: 1 1 auto;\n  width: 100%;\n  max-width: 100%;\n  min-width: 0;\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: hidden;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}');
+    expect(backgroundPickerSource).toContain('className="dtb-bg-picker__grid dtb-bg-picker__asset-grid"');
+    expect(dockMediaTabSource).not.toContain('--scrollable');
+    expect(dockCssSource).toContain('height: 260px;\n  max-height: 260px;\n  overflow-x: hidden;\n  overflow-y: auto;');
+    expect(dockCssSource).toContain('.dtb-bg-picker__asset-grid {\n  grid-auto-rows: max-content;\n  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));\n}');
+    expect(dockCssSource).toContain('.dock-media-browser {\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__theme-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}');
     expect(dockCssSource).not.toContain('max-height: 560px;\n  max-height: min(560px');
     expect(dockCssSource).toContain('overflow-y: auto;');
@@ -958,9 +963,16 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("order: 2");
   });
 
-  it("hides reference background controls from lower-third reference options", () => {
-    expect(backgroundPickerSource).toContain('overlayMode !== "lower-third"');
-    expect(backgroundPickerSource).toContain("<ReferenceBackgroundSection");
+  it("shows reference background controls for lower-third Bible output", () => {
+    const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
+    const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
+    const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
+
+    expect(referenceSectionSource).toContain("referenceBackgroundColor");
+    expect(referenceSectionSource).toContain("<ReferenceBackgroundSection");
+    expect(referenceSectionSource).not.toContain('overlayMode !== "lower-third"');
+    expect(overlayHtml).toContain("--ref-bg-color");
+    expect(overlayHtml).toContain("if (s.referenceBackgroundEnabled !== true)");
   });
 
   it("keeps background picker color/image/pattern/video fields wired into the active overlay", () => {

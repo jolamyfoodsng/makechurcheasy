@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import Icon from "../components/Icon";
 import {
   type EditableTemplate,
   type TemplateCategory,
-  type TemplateLayer,
   type TemplateTextLayer,
 } from "../templates/editableTemplateCatalog";
-import {
-  loadEditableTemplates,
-  saveEditableTemplate,
-} from "../templates/editableTemplateStorage";
+import { loadEditableTemplates } from "../templates/editableTemplateStorage";
 import { TemplateCanvas } from "../templates/TemplateCanvas";
-import { downloadMceTemplate } from "../templates/mceTemplatePackage";
 import "./TemplatesPage.css";
 
 type CategoryFilter = "All" | TemplateCategory;
@@ -29,6 +24,18 @@ const CATEGORY_ICONS: Record<CategoryFilter, string> = {
 
 function formatCategory(category: TemplateCategory): string {
   return category === "Announcements" ? "Announcements" : category;
+}
+
+function formatCanvas(template: EditableTemplate): string {
+  const ratio = template.canvas.width / template.canvas.height;
+  const ratioLabel = Math.abs(ratio - 16 / 9) < 0.06
+    ? "16:9"
+    : Math.abs(ratio - 4 / 3) < 0.06
+      ? "4:3"
+      : ratio > 1
+        ? "Landscape"
+        : "Portrait";
+  return `${ratioLabel} · ${template.canvas.width} × ${template.canvas.height}`;
 }
 
 function templateSearchText(template: EditableTemplate): string {
@@ -72,7 +79,7 @@ function TemplateCard({
           <span className="templates-card__category" style={{ color: template.accentColor }}>
             {formatCategory(template.category)}
           </span>
-          <span className="templates-card__format">16:9</span>
+          <span className="templates-card__format">{formatCanvas(template)}</span>
         </div>
         <h2>{template.name}</h2>
         <p>{template.description}</p>
@@ -132,7 +139,7 @@ function PreviewModal({
               <p className="templates-preview-modal__description">{template.description}</p>
             </div>
             <div className="templates-preview-modal__specs">
-              <div><span>Canvas</span><strong>16:9 · 1600 × 900</strong></div>
+              <div><span>Canvas</span><strong>{formatCanvas(template)}</strong></div>
               <div><span>Editable</span><strong>Text, artwork, and layout</strong></div>
               <div><span>Best for</span><strong>{template.tags.join(" · ")}</strong></div>
             </div>
@@ -151,158 +158,13 @@ function PreviewModal({
   );
 }
 
-function TemplateEditor({
-  template,
-  selectedLayerId,
-  onSelectLayer,
-  onUpdateLayer,
-  onMoveLayer,
-  onSave,
-  saveMessage,
-  onBack,
-}: {
-  template: EditableTemplate;
-  selectedLayerId: string | null;
-  onSelectLayer: (layerId: string | null) => void;
-  onUpdateLayer: (layerId: string, changes: Partial<TemplateLayer>) => void;
-  onMoveLayer: (layerId: string, x: number, y: number) => void;
-  onSave: () => void;
-  saveMessage: string | null;
-  onBack: () => void;
-}) {
-  const selectedLayer = selectedLayerId
-    ? template.layers.find((layer) => layer.id === selectedLayerId) ?? null
-    : null;
-  const selectedTextLayer = selectedLayer?.kind === "text" ? selectedLayer : null;
-
-  return (
-    <div className="templates-editor-page">
-      <header className="templates-editor-header">
-        <div className="templates-editor-header__left">
-          <button type="button" className="templates-icon-button" onClick={onBack} aria-label="Back to templates" title="Back to templates">
-            <Icon name="arrow_back" size={18} />
-          </button>
-          <div>
-            <p className="templates-preview-modal__eyebrow">Editing {formatCategory(template.category)} template</p>
-            <h1>{template.name}</h1>
-          </div>
-        </div>
-        <div className="templates-editor-header__actions">
-          {saveMessage && <span className="templates-save-message" role="status"><Icon name="check_circle" size={15} />{saveMessage}</span>}
-          <button type="button" className="templates-button templates-button--secondary" onClick={() => downloadMceTemplate(template)}>
-            <Icon name="download" size={16} />
-            Download .mce
-          </button>
-          <button type="button" className="templates-button templates-button--primary" onClick={onSave}>
-            <Icon name="save" size={16} />
-            Save changes
-          </button>
-        </div>
-      </header>
-
-      <div className="templates-editor-layout">
-        <aside className="templates-inspector" aria-label="Template editing controls">
-          {selectedTextLayer && (
-            <section className="templates-inspector__section templates-inspector__section--form">
-              <p className="templates-section-label">Selected text</p>
-              <label className="templates-field">
-                <span>Content</span>
-                <textarea
-                  value={selectedTextLayer.text}
-                  onChange={(event) => onUpdateLayer(selectedTextLayer.id, { text: event.target.value })}
-                  rows={4}
-                />
-              </label>
-              <div className="templates-field-grid">
-                <label className="templates-field">
-                  <span>Font size</span>
-                  <div className="templates-range-field">
-                    <input
-                      type="range"
-                      min={16}
-                      max={140}
-                      step={1}
-                      value={selectedTextLayer.fontSize}
-                      onChange={(event) => onUpdateLayer(selectedTextLayer.id, { fontSize: Number(event.target.value) })}
-                    />
-                    <output>{selectedTextLayer.fontSize}px</output>
-                  </div>
-                </label>
-                <label className="templates-field">
-                  <span>Text color</span>
-                  <div className="templates-color-field">
-                    <input
-                      type="color"
-                      value={selectedTextLayer.fill.startsWith("#") ? selectedTextLayer.fill : "#FFFFFF"}
-                      onChange={(event) => onUpdateLayer(selectedTextLayer.id, { fill: event.target.value })}
-                      aria-label="Text color"
-                    />
-                    <code>{selectedTextLayer.fill}</code>
-                  </div>
-                </label>
-              </div>
-              <div className="templates-field">
-                <span className="templates-field__label">Alignment</span>
-                <div className="templates-segmented" role="group" aria-label="Text alignment">
-                  {(["left", "center", "right"] as const).map((align) => (
-                    <button
-                      key={align}
-                      type="button"
-                      className={selectedTextLayer.align === align ? "is-selected" : ""}
-                      onClick={() => onUpdateLayer(selectedTextLayer.id, { align })}
-                    >
-                      <Icon name={`format_align_${align}`} size={15} />
-                      <span className="sr-only">{align}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {selectedLayer && !selectedTextLayer && (
-            <section className="templates-inspector__section">
-              <p className="templates-section-label">Artwork layer selected</p>
-              <p className="templates-inspector__hint">This decorative layer is already part of the template. Drag it directly on the canvas to reposition it.</p>
-            </section>
-          )}
-
-          <div className="templates-inspector__footer">
-            <Icon name="info" size={15} />
-            Click text on the canvas to select it, then edit it here or double-click it directly. Changes are saved to this device.
-          </div>
-        </aside>
-
-        <main className="templates-editor-workspace">
-          <div className="templates-editor-toolbar">
-            <span><Icon name="edit" size={15} /> Freeform canvas</span>
-            <span className="templates-editor-toolbar__muted">Click to select · drag to move · double-click text to edit</span>
-          </div>
-          <div className="templates-editor-canvas-wrap">
-            <TemplateCanvas
-              template={template}
-              editable
-              selectedLayerId={selectedLayerId}
-              onSelectLayer={onSelectLayer}
-              onMoveLayer={onMoveLayer}
-              onEditText={(layerId, text) => onUpdateLayer(layerId, { text })}
-            />
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
-
 export default function TemplatesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [templates, setTemplates] = useState<EditableTemplate[]>(() => loadEditableTemplates());
+  const [templates] = useState<EditableTemplate[]>(() => loadEditableTemplates());
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("All");
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const editingTemplateId = searchParams.get("edit");
   const editingTemplate = templates.find((template) => template.id === editingTemplateId) ?? null;
@@ -317,82 +179,26 @@ export default function TemplatesPage() {
   }, [category, query, templates]);
 
   useEffect(() => {
-    if (!editingTemplate) {
-      setSelectedLayerId(null);
-      return;
-    }
-    const firstTextLayer = editingTemplate.layers.find((layer) => layer.kind === "text");
-    if (selectedLayerId && !editingTemplate.layers.some((layer) => layer.id === selectedLayerId)) {
-      setSelectedLayerId(firstTextLayer?.id ?? null);
-    }
-  }, [editingTemplate, selectedLayerId]);
-
-  useEffect(() => {
     if (!previewTemplate && previewTemplateId) setPreviewTemplateId(null);
   }, [previewTemplate, previewTemplateId]);
 
   useEffect(() => {
-    if (!previewTemplate && !editingTemplate) return;
+    if (!previewTemplate) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (previewTemplate) setPreviewTemplateId(null);
-      else navigate("/templates");
+      if (event.key === "Escape") setPreviewTemplateId(null);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editingTemplate, navigate, previewTemplate]);
+  }, [previewTemplate]);
 
   const openEditor = useCallback((template: EditableTemplate) => {
     setPreviewTemplateId(null);
-    setSaveMessage(null);
-    setSelectedLayerId(template.layers.find((layer) => layer.kind === "text")?.id ?? null);
-    navigate(`/templates?edit=${encodeURIComponent(template.id)}`);
+    navigate(`/design-studio?template=${encodeURIComponent(template.id)}`);
   }, [navigate]);
 
-  const updateLayer = useCallback((layerId: string, changes: Partial<TemplateLayer>) => {
-    setTemplates((current) => current.map((template) => {
-      if (template.id !== editingTemplateId) return template;
-      return {
-        ...template,
-        layers: template.layers.map((layer) => (
-          layer.id === layerId ? { ...layer, ...changes } as TemplateLayer : layer
-        )),
-      };
-    }));
-    setSaveMessage(null);
-  }, [editingTemplateId]);
-
-  const moveLayer = useCallback((layerId: string, x: number, y: number) => {
-    updateLayer(layerId, {
-      x: Math.max(0, Math.round(x)),
-      y: Math.max(0, Math.round(y)),
-    });
-  }, [updateLayer]);
-
-  const saveCurrentTemplate = useCallback(() => {
-    if (!editingTemplate) return;
-    saveEditableTemplate(editingTemplate);
-    setSaveMessage("Saved on this device");
-    window.setTimeout(() => setSaveMessage(null), 2200);
-  }, [editingTemplate]);
-
+  // Preserve bookmarked legacy editor links while routing them through Fabric Design Studio.
   if (editingTemplate) {
-    return (
-      <div className="app-page templates-page templates-page--editor">
-        <div className="app-page__inner templates-page__inner">
-          <TemplateEditor
-            template={editingTemplate}
-            selectedLayerId={selectedLayerId}
-            onSelectLayer={setSelectedLayerId}
-            onUpdateLayer={updateLayer}
-            onMoveLayer={moveLayer}
-            onSave={saveCurrentTemplate}
-            saveMessage={saveMessage}
-            onBack={() => navigate("/templates")}
-          />
-        </div>
-      </div>
-    );
+    return <Navigate to={`/design-studio?template=${encodeURIComponent(editingTemplate.id)}`} replace />;
   }
 
   return (

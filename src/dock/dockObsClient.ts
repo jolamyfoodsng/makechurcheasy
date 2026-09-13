@@ -64,6 +64,7 @@ import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
 import type { EditableTemplate } from "../templates/editableTemplateCatalog";
 import { createMceTemplateBlob } from "../templates/mceTemplatePackage";
+import type { DockTimeOverlayData } from "./timeOverlay";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,7 +81,7 @@ export interface DockLTThemeRef {
   css: string;
 }
 
-export type DockSceneRouteModule = "bible" | "worship" | "notes" | "ticker" | "lower-third" | "countdown";
+export type DockSceneRouteModule = "bible" | "worship" | "notes" | "ticker" | "lower-third" | "countdown" | "time";
 
 /** Shared MCE Presentation content families that can be focused by a dock card. */
 export type DockPresentationModule = "bible" | "worship" | "notes" | "media";
@@ -253,6 +254,7 @@ const MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES = [
   "MCE Lower Third",
   "MCE Ticker",
   "MCE Countdown",
+  "MCE Time",
   "MCE Pre-Service",
   "MCE_PreService",
   "MCE Live",
@@ -281,6 +283,7 @@ function getMcePresentationSourceFamily(sourceName: string): string | null {
   if (normalized.includes("lower third") || normalized.includes("lower-third") || normalized.startsWith("mce lt:")) return "lower-third";
   if (normalized.includes("ticker")) return "ticker";
   if (normalized.includes("countdown") || normalized.includes("pre-service") || normalized.includes("preservice")) return "countdown";
+  if (normalized.includes("time")) return "time";
   if (normalized.includes("live")) return "live-tools";
   return null;
 }
@@ -371,7 +374,7 @@ type PrimeWorshipOverlayData = {
   backgroundOnly?: boolean;
 };
 
-type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes" | "lower-third";
+type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes" | "lower-third" | "time";
 
 export interface DockOverlayFitOptions {
   /** Wait for the browser source to finish measuring the rendered text. */
@@ -6436,6 +6439,7 @@ class DockObsClient {
       ticker: "Ticker",
       "lower-third": "Lower Third",
       countdown: "Countdown",
+      time: "Time",
     };
     const safeScene = sceneName
       .normalize("NFKD")
@@ -6752,6 +6756,51 @@ class DockObsClient {
       width: options?.sourceWidth,
       height: options?.sourceHeight,
     });
+  }
+
+  /**
+   * Send a live Timer or Clock document to one OBS scene. Once the browser
+   * source is prepared, control changes are delivered as a small in-place
+   * packet instead of restarting the OBS browser page.
+   */
+  async pushTimeOverlayToScene(
+    data: DockTimeOverlayData,
+    sceneName: string,
+    options?: { sourceName?: string },
+  ): Promise<string> {
+    const targetScene = sceneName.trim();
+    const sourceName = options?.sourceName ?? this.getSceneRouteSourceName("time", targetScene);
+    const canvas = await this.getCanvasSize();
+    const packet: DockTimeOverlayData = {
+      ...data,
+      timestamp: Date.now(),
+    };
+    const source = await this.pushSceneRouteBrowserSource({
+      module: "time",
+      sceneName: targetScene,
+      sourceName,
+      url: this.buildOverlayHtmlUrl("time-overlay.html"),
+      overlayPacket: { ...packet },
+      overlayTab: "time",
+      width: canvas.width,
+      height: canvas.height,
+    });
+
+    if (targetScene === PRESENTATION_SCENE_NAME) {
+      await this.applyMcePresentationSourceVisibility(source).catch(() => { });
+    }
+
+    return source;
+  }
+
+  async clearTimeOverlayFromScene(
+    sceneName: string,
+    options?: { sourceName?: string },
+  ): Promise<void> {
+    const targetScene = sceneName.trim();
+    if (!targetScene) return;
+    const sourceName = options?.sourceName ?? this.getSceneRouteSourceName("time", targetScene);
+    await this.hideOverlaySource(targetScene, sourceName).catch(() => { });
   }
 
   /**

@@ -59,6 +59,12 @@ import {
   publishTextOverlayToPresentation,
 } from "../../services/presentationPublish";
 import { isDockTabVisible } from "../dockTabVisibility";
+import {
+  EDITABLE_TEMPLATE_BROADCAST_CHANNEL,
+  EDITABLE_TEMPLATE_STORAGE_EVENT,
+  loadSavedTemplateImagesFromDockData,
+  type DockTemplateImage,
+} from "../../templates/editableTemplateStorage";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -69,7 +75,7 @@ interface Props {
 type DockMediaKind = "video" | "image";
 type DockMediaFilter = "all" | DockMediaKind | "document";
 type DockMediaViewMode = "uploaded" | "recent";
-type DockMediaBrowserTab = "uploads" | "animations" | "patterns" | "text";
+type DockMediaBrowserTab = "uploads" | "templates" | "animations" | "patterns" | "text";
 type DockAddMediaTab = "background" | "template-videos";
 type DockAnimationCatalogTab = "videos" | "pictures";
 type DockTextAlign = "left" | "center" | "right";
@@ -197,7 +203,7 @@ const MEDIA_SESSION_STORAGE_KEY = "ocs-dock-media-session-v1";
 const MEDIA_CONTEXT_MENU_WIDTH = 236;
 const MEDIA_CONTEXT_MENU_GAP = 8;
 const MEDIA_CONTEXT_MENU_GUTTER = 8;
-const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
+const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_", "mce-template-"];
 const TEXT_OVERLAY_HEADLINE_MIN_SIZE = 24;
 const TEXT_OVERLAY_SUBLINE_MIN_SIZE = 14;
 const TEXT_OVERLAY_MAX_FONT_SIZE = 250;
@@ -280,6 +286,23 @@ function getUploadDisplayName(filename: string): string {
   return filename.replace(/^media_\d{10,13}_/, "");
 }
 
+function normalizeUploadFileName(value: string): string {
+  const basename = value.split(/[\\/]/).pop() || value;
+  try {
+    return decodeURIComponent(basename).trim().toLowerCase();
+  } catch {
+    return basename.trim().toLowerCase();
+  }
+}
+
+function isTemplateCatalogUploadFile(value: string): boolean {
+  const name = normalizeUploadFileName(value);
+  // Preserve compatibility with the existing catalog files, including the
+  // historical `vidoes` spelling used by the template download endpoint.
+  return name.startsWith("template_")
+    || name.startsWith("mce-template-");
+}
+
 function loadMediaPreferences(): DockMediaPreferences {
   try {
     const stored = readNativeDockSetting<unknown>(MEDIA_PREFS_STORAGE_KEY);
@@ -322,7 +345,7 @@ function loadLocalMediaLibrary(): MediaItem[] {
 }
 
 function isDockMediaBrowserTab(value: unknown): value is DockMediaBrowserTab {
-  return value === "uploads" || value === "animations" || value === "patterns" || value === "text";
+  return value === "uploads" || value === "templates" || value === "animations" || value === "patterns" || value === "text";
 }
 
 function isDockMediaKind(value: unknown): value is DockMediaFilter {
@@ -534,6 +557,39 @@ function createLibraryEntry(item: MediaItem, overlayBaseUrl: string, originLabel
   };
 }
 
+function createSavedTemplateEntry(template: DockTemplateImage): DockMediaEntry {
+  const safeId = template.id.replace(/[^a-z0-9_-]+/gi, "-") || "template";
+  const imageFileName = `mce-template-${safeId}.png`;
+  const libraryItem: MediaItem = {
+    id: `saved-template:${template.id}`,
+    name: imageFileName,
+    type: "image",
+    url: template.imageUrl,
+    thumbnailUrl: template.imageUrl,
+    width: template.width,
+    height: template.height,
+    mimeType: "image/png",
+    createdAt: template.updatedAt || new Date().toISOString(),
+    uploadedAt: template.updatedAt || undefined,
+    source: "local",
+  };
+
+  return {
+    key: `saved-template:${template.id}`,
+    prefKey: `saved-template:${template.id}`,
+    name: template.name,
+    kind: "image",
+    createdAt: libraryItem.createdAt,
+    uploadedAt: libraryItem.uploadedAt,
+    originLabel: "Templates",
+    mimeLabel: "TEMPLATE",
+    thumbnailUrl: template.imageUrl,
+    previewUrl: template.imageUrl,
+    libraryItem,
+    playingKey: `saved-template:${template.id}`,
+  };
+}
+
 function getDockMediaOrderMetadata(entry: DockMediaEntry): MediaOrderMetadata {
   return {
     createdAt: entry.createdAt,
@@ -729,8 +785,12 @@ function DockMediaTab({
   const [templatePicturesLoading, setTemplatePicturesLoading] = useState(false);
   const [templatePicturesError, setTemplatePicturesError] = useState<string | null>(null);
   const [templatePictureProgress, setTemplatePictureProgress] = useState<Record<string, number | null>>({});
+  const [savedTemplateImages, setSavedTemplateImages] = useState<DockTemplateImage[]>([]);
+  const [savedTemplateImagesLoading, setSavedTemplateImagesLoading] = useState(false);
+  const [savedTemplateImagesError, setSavedTemplateImagesError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const templatePicturesLoadAttemptedRef = useRef(false);
+  const savedTemplateImagesRequestRef = useRef(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaPollBusyRef = useRef(false);
   const libraryLoadRequestRef = useRef(0);
@@ -758,7 +818,7 @@ function DockMediaTab({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [playlistName, setPlaylistName] = useState("MC slideshow");
+  const [playlistName, setPlaylistName] = useState("MCE slideshow");
   const [playlistLoop, setPlaylistLoop] = useState(true);
   const [playlistShuffle, setPlaylistShuffle] = useState(false);
   const [playlistMuted, setPlaylistMuted] = useState(true);
@@ -1055,6 +1115,13 @@ function DockMediaTab({
     }
   }, [animationsLocked, t]);
 
+  // Load the catalog early because downloaded template files share the
+  // uploads directory. The Newly Uploaded filter needs the catalog filenames
+  // even when the user opens Uploads directly instead of Animations first.
+  useEffect(() => {
+    if (!animationsLocked) void loadTemplateVideos();
+  }, [animationsLocked, loadTemplateVideos]);
+
   const loadTemplatePictures = useCallback(async () => {
     if (animationsLocked) return;
     setTemplatePicturesLoading(true);
@@ -1073,6 +1140,25 @@ function DockMediaTab({
       }
     }
   }, [animationsLocked, t]);
+
+  const loadSavedTemplateImages = useCallback(async () => {
+    const requestId = ++savedTemplateImagesRequestRef.current;
+    setSavedTemplateImagesLoading(true);
+    setSavedTemplateImagesError(null);
+    try {
+      const snapshot = await loadSavedTemplateImagesFromDockData();
+      if (!mountedRef.current || requestId !== savedTemplateImagesRequestRef.current) return;
+      setSavedTemplateImages(snapshot?.templates ?? []);
+    } catch {
+      if (!mountedRef.current || requestId !== savedTemplateImagesRequestRef.current) return;
+      setSavedTemplateImages([]);
+      setSavedTemplateImagesError("Could not load saved templates.");
+    } finally {
+      if (mountedRef.current && requestId === savedTemplateImagesRequestRef.current) {
+        setSavedTemplateImagesLoading(false);
+      }
+    }
+  }, []);
 
   const openAnimationsTab = useCallback(() => {
     if (animationsLocked) return;
@@ -1148,7 +1234,11 @@ function DockMediaTab({
       if (resp.ok) {
         const files: string[] = await resp.json();
         if (isCurrentRequest()) {
-          const mediaFiles = files.filter((file) => isMediaFile(file) && !isInternalUploadFile(file));
+          const mediaFiles = files.filter((file) => (
+            isMediaFile(file)
+            && !isInternalUploadFile(file)
+            && !isTemplateCatalogUploadFile(file)
+          ));
           const fetchedAt = Date.now();
           const mediaFileSet = new Set(mediaFiles);
           for (const file of uploadedFileTimestampsRef.current.keys()) {
@@ -1256,6 +1346,35 @@ function DockMediaTab({
     templatePicturesLoadAttemptedRef.current = true;
     void loadTemplatePictures();
   }, [animationsLocked, loadTemplatePictures, templatePictures.length, templatePicturesLoading]);
+
+  useEffect(() => {
+    if (browserTab !== "templates") return;
+
+    const refresh = () => { void loadSavedTemplateImages(); };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh();
+    window.addEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(EDITABLE_TEMPLATE_BROADCAST_CHANNEL);
+      channel.addEventListener("message", refresh);
+    } catch {
+      // Focus refresh remains available in embedded Dock windows.
+    }
+
+    return () => {
+      window.removeEventListener(EDITABLE_TEMPLATE_STORAGE_EVENT, refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      channel?.removeEventListener("message", refresh);
+      channel?.close();
+    };
+  }, [browserTab, loadSavedTemplateImages]);
 
   // ── Play uploaded media via OBS — send to Preview or Send to OBS ──
 
@@ -1612,7 +1731,15 @@ function DockMediaTab({
   const uploadedEntries = useMemo(
     () => uploadedFiles.reduce<DockMediaEntry[]>((entries, file) => {
       const kind = getUploadMediaKind(file);
-      if (!kind || representedUploadNames.has(file)) return entries;
+      // Template downloads share the uploads directory, but they belong to
+      // the template catalog—not to Newly Uploaded. Keep them out even when
+      // the library snapshot has not arrived yet.
+      const normalizedFile = normalizeUploadFileName(file);
+      const isDownloadedTemplateVideo = isTemplateCatalogUploadFile(file)
+        || templateVideos.some((asset) => (
+          normalizeUploadFileName(asset.fileName) === normalizedFile
+        ));
+      if (!kind || isDownloadedTemplateVideo || representedUploadNames.has(file)) return entries;
       const prefKey = `media:${file}`;
       if (mediaPrefs[prefKey]?.hidden) return entries;
       const uploadedAt = extractUploadTimestamp(file) || uploadedFileTimestampsRef.current.get(file) || "";
@@ -1631,12 +1758,21 @@ function DockMediaTab({
       });
       return entries;
     }, []),
-    [mediaPrefs, overlayBaseUrl, representedUploadNames, uploadedFiles],
+    [mediaPrefs, overlayBaseUrl, representedUploadNames, templateVideos, uploadedFiles],
   );
 
   const libraryEntries = useMemo(
     () => mergedLibraryItems
-      .filter((item) => (item.type === "video" || item.type === "image") && !isAnimationMediaItem(item))
+      .filter((item) => {
+        if (item.type !== "video" && item.type !== "image") return false;
+        if (isAnimationMediaItem(item)) return false;
+        // Older template records may have lost their source metadata, but
+        // retain the catalog filename. Never expose those records as user
+        // uploads; animationEntries still owns the recognized catalog items.
+        if (isTemplateCatalogUploadFile(item.name)) return false;
+        if (isTemplateCatalogUploadFile(item.diskFileName || item.filePath || "")) return false;
+        return true;
+      })
       .map((item) => createLibraryEntry(
         item,
         overlayBaseUrl,
@@ -1770,6 +1906,12 @@ function DockMediaTab({
     () => mediaEntries.filter((entry) => entry.kind === "image" && entry.libraryItem?.source !== "document-conversion"),
     [mediaEntries],
   );
+  const savedTemplateEntries = useMemo(
+    () => [...savedTemplateImages]
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+      .map(createSavedTemplateEntry),
+    [savedTemplateImages],
+  );
   const patternEntries = useMemo(() => BACKGROUND_PATTERNS.map((p) => createPatternEntry(p, t('media.pattern'))), []);
   // ── Plan-locked items: items beyond the plan limit get a blur + padlock ──
   const lockedKeys = useMemo(() => {
@@ -1835,15 +1977,37 @@ function DockMediaTab({
     const folderPool = activeFolder === "all"
       ? pool
       : pool.filter((entry) => mediaPrefs[entry.prefKey]?.folder === activeFolder);
+    // A downloaded template can arrive through both the library snapshot and
+    // the uploads directory. Exclude the duplicate from Newly Uploaded when
+    // it is already represented in the animation/template collection.
+    const animationIdentity = new Set(
+      animationEntries.flatMap((entry) => [
+        normalizeUploadFileName(entry.name),
+        normalizeUploadFileName(entry.uploadFile || ""),
+        normalizeUploadFileName(entry.libraryItem?.name || ""),
+        normalizeUploadFileName(entry.libraryItem?.diskFileName || ""),
+        normalizeUploadFileName(entry.libraryItem?.filePath || ""),
+      ].filter(Boolean)),
+    );
+    const withoutTemplateDuplicates = folderPool.filter((entry) => {
+      const identities = [
+        normalizeUploadFileName(entry.name),
+        normalizeUploadFileName(entry.uploadFile || ""),
+        normalizeUploadFileName(entry.libraryItem?.name || ""),
+        normalizeUploadFileName(entry.libraryItem?.diskFileName || ""),
+        normalizeUploadFileName(entry.libraryItem?.filePath || ""),
+      ].filter(Boolean);
+      return !identities.some((identity) => animationIdentity.has(identity));
+    });
     let result = !query
-      ? folderPool
-      : folderPool.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
+      ? withoutTemplateDuplicates
+      : withoutTemplateDuplicates.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
     // Free plan: only show the allowed items so search never reveals locked media
     if (isFreePlan) {
       result = result.filter((entry) => !lockedKeys.has(entry.key));
     }
     return result;
-  }, [activeFolder, activeKind, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
+  }, [activeFolder, activeKind, animationEntries, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -1859,6 +2023,11 @@ function DockMediaTab({
     if (!query) return patternEntries;
     return patternEntries.filter((entry) => entry.name.toLowerCase().includes(query));
   }, [assetSearch, patternEntries]);
+  const filteredSavedTemplateEntries = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    if (!query) return savedTemplateEntries;
+    return savedTemplateEntries.filter((entry) => entry.name.toLowerCase().includes(query));
+  }, [assetSearch, savedTemplateEntries]);
   const filteredAnimationEntries = useMemo(() => {
     if (animationsLocked) return [];
     const query = assetSearch.trim().toLowerCase();
@@ -1902,8 +2071,8 @@ function DockMediaTab({
     [animationEntries, mediaEntries],
   );
   const allResolvableEntries = useMemo(
-    () => [...managedEntries, ...patternEntries],
-    [managedEntries, patternEntries],
+    () => [...managedEntries, ...savedTemplateEntries, ...patternEntries],
+    [managedEntries, patternEntries, savedTemplateEntries],
   );
   const activeOptionsEntry = useMemo(
     () => managedEntries.find((entry) => entry.key === openOptionsKey) ?? null,
@@ -2042,7 +2211,7 @@ function DockMediaTab({
     try {
       // Keep the OBS source name readable when the operator leaves the name
       // empty. The media-type suffix keeps image and video sources distinct.
-      const sourceName = playlistName.trim() || "MC slideshow";
+      const sourceName = playlistName.trim() || "MCE slideshow";
 
       // Create Slideshow for videos
       if (videoPaths.length > 0) {
@@ -3020,6 +3189,67 @@ function DockMediaTab({
     ]
   );
 
+  const renderSavedTemplateCard = useCallback((entry: DockMediaEntry) => {
+    const isActiveTarget = activeTargets.active?.key === entry.key;
+    const isSending = sendingFile === `library:${entry.libraryItem?.id}`;
+    const statusLabel = isActiveTarget ? (pausedTargets.active ? t('media.inPreview') : t('media.live')) : null;
+    const statusVariant = isActiveTarget ? (pausedTargets.active ? "preview" : "live") : null;
+
+    const showInObs = () => { void handleSendEntry(entry); };
+    const handleKeyDown = (event: React.KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showInObs();
+      }
+    };
+
+    return (
+      <div
+        key={entry.key}
+        className={`dock-media-gallery-card${isActiveTarget ? " dock-media-gallery-card--active" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={showInObs}
+        onKeyDown={handleKeyDown}
+        aria-label={`${entry.name}. Click to show in OBS.`}
+      >
+        <div className="dock-media-gallery-card__image-wrap">
+          <img src={entry.previewUrl || entry.thumbnailUrl || ""} alt={entry.name} loading="lazy" className="dock-media-gallery-card__image" />
+          <div className="dock-media-gallery-card__overlay">
+            <div className="dock-media-gallery-card__overlay-center">
+              <button
+                type="button"
+                className="dock-media-gallery-card__preview-btn"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPreviewEntry(entry);
+                }}
+              >
+                <Icon name="visibility" size={13} />
+                {t('common.preview')}
+              </button>
+            </div>
+          </div>
+          <span className="dock-media-gallery-card__type-badge">TEMPLATE</span>
+        </div>
+        <div className="dock-media-gallery-card__meta">
+          <span className="dock-media-gallery-card__name">{entry.name}</span>
+          <div className="dock-media-gallery-card__meta-row">
+            <span className="dock-media-gallery-card__duration">
+              <Icon name={isSending ? "hourglass_top" : "send"} size={10} />
+              {isSending ? t('media.sending') : "Show in OBS"}
+            </span>
+          </div>
+        </div>
+        {statusLabel && (
+          <span className={`dock-media-gallery-card__status-chip dock-media-gallery-card__status-chip--${statusVariant}`}>
+            {statusLabel}
+          </span>
+        )}
+      </div>
+    );
+  }, [activeTargets.active, handleSendEntry, pausedTargets.active, sendingFile, t]);
+
   const renderDocumentCard = useCallback(
     (deck: DockDocumentDeck) => {
       const isActiveTarget = deck.pages.some((page) => activeTargets.active?.key === page.key);
@@ -3240,6 +3470,8 @@ function DockMediaTab({
 
   const searchPlaceholder = browserTab === "animations"
     ? t('media.searchAnimations')
+    : browserTab === "templates"
+      ? "Search saved templates"
     : browserTab === "patterns"
       ? t('media.searchTemplates')
       : t('media.searchPlaceholderShort');
@@ -3553,6 +3785,17 @@ function DockMediaTab({
             title={t('media.uploads')}>
             {useCompactMediaTabs ? <Icon name="upload" size={12} /> : t('media.uploads')}
             {!useCompactMediaTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={browserTab === "templates"}
+            className={`dock-media-tab ${browserTab === "templates" ? "dock-media-tab--active" : ""}`}
+            onClick={() => setBrowserTab("templates")}
+            title="Templates"
+          >
+            {useCompactMediaTabs ? <Icon name="collections" size={12} /> : "Templates"}
+            {!useCompactMediaTabs && <span className="dock-media-tab__count">{savedTemplateEntries.length}</span>}
           </button>
           <button
             type="button"
@@ -4114,6 +4357,48 @@ function DockMediaTab({
           </>
         )}
 
+        {browserTab === "templates" && (
+          <section className="dock-media-section" aria-label="Saved templates">
+            <div className="dock-media-section__header">
+              <div>
+                <div className="dock-media-section__title">Templates</div>
+                <div className="dock-media-section__meta">Saved designs are sent here as images. Preview or click one to show it in OBS.</div>
+              </div>
+              <div className="dock-media-section__actions">
+                <span className="dock-media-section__count">{filteredSavedTemplateEntries.length}</span>
+                <button
+                  type="button"
+                  className="dock-shell-icon-btn"
+                  onClick={() => void loadSavedTemplateImages()}
+                  disabled={savedTemplateImagesLoading}
+                  aria-label="Refresh saved templates"
+                  title="Refresh saved templates"
+                >
+                  <Icon
+                    name="refresh"
+                    size={12}
+                    style={{ animation: savedTemplateImagesLoading ? "spin 1s linear infinite" : undefined }}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {savedTemplateImagesError ? (
+              <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{savedTemplateImagesError}</div></div>
+            ) : savedTemplateImagesLoading && savedTemplateEntries.length === 0 ? (
+              <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">Loading saved templates…</div></div>
+            ) : filteredSavedTemplateEntries.length === 0 ? (
+              <div className="dock-empty dock-empty--inline">
+                <div className="dock-empty__text">
+                  {savedTemplateEntries.length > 0 ? "No saved templates match your search." : "Save an edited template in Templates to see its image here."}
+                </div>
+              </div>
+            ) : (
+              <div className="dock-media-list">{filteredSavedTemplateEntries.map(renderSavedTemplateCard)}</div>
+            )}
+          </section>
+        )}
+
         {browserTab === "animations" && (
           <>
             {renderMediaFolderFilter()}
@@ -4161,7 +4446,11 @@ function DockMediaTab({
                   </button>
                 </div>
 
-                <section className="dock-media-section dock-animation-catalog" aria-label={animationCatalogTab === "videos" ? t('media.templateVideos', 'Template videos') : t('media.templatePictures', 'Template pictures')}>
+                <section
+                  className="dock-media-section dock-animation-catalog"
+                  style={{ order: 2 }}
+                  aria-label={animationCatalogTab === "videos" ? t('media.templateVideos', 'Template videos') : t('media.templatePictures', 'Template pictures')}
+                >
                   <div className="dock-media-section__header">
                     <div>
                       <div className="dock-media-section__title">
@@ -4218,7 +4507,11 @@ function DockMediaTab({
                 </section>
 
                 {filteredAnimationEntries.length > 0 && (
-                  <section className="dock-media-section dock-animation-downloaded" aria-label={animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}>
+                  <section
+                    className="dock-media-section dock-animation-downloaded"
+                    style={{ order: 1 }}
+                    aria-label={animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}
+                  >
                     <div className="dock-media-section__header">
                       <div>
                         <div className="dock-media-section__title">{animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}</div>

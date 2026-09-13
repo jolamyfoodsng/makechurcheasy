@@ -136,7 +136,7 @@ function backgroundTypeFromQuickSettings(
   return "theme";
 }
 
-function applyQuickSettingsToNotesTheme(
+export function applyQuickSettingsToNotesTheme(
   theme: BibleTheme,
   quickSettings: DockFullscreenQuickThemeSettings | null | undefined,
 ): BibleTheme {
@@ -235,6 +235,7 @@ function applyQuickSettingsToNotesTheme(
       refOpacity: quickSettings.refOpacity ?? theme.settings.refOpacity,
       refTextAlign: quickSettings.refTextAlign ?? theme.settings.refTextAlign,
       refSpacing: quickSettings.refSpacing ?? theme.settings.refSpacing,
+      backgroundType: bgType,
       lowerThirdPosition: quickSettings.lowerThirdPosition ?? theme.settings.lowerThirdPosition,
       lowerThirdSize: quickSettings.lowerThirdSize ?? theme.settings.lowerThirdSize,
       lowerThirdWidthPreset: quickSettings.lowerThirdWidthPreset ?? theme.settings.lowerThirdWidthPreset,

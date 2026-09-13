@@ -6,8 +6,10 @@ import {
   logout as authLogout,
   refreshAccountBootstrapFromServer,
   syncSessionToOverlay,
+  syncLocalDevPlanOverride,
   type AuthUser,
 } from "@/services/authService";
+import { getLocalDevPlanOverride } from "@/services/localDevPlanOverride";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
 import { resetLicenseGuard } from "@/services/licenseGuard";
@@ -47,7 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
     refreshAppAppearance();
     // Re-sync session to overlay server so the OBS dock can see it
-    if (stored) syncSessionToOverlay(getSession());
+    if (stored) {
+      syncSessionToOverlay(getSession());
+      void syncLocalDevPlanOverride(getLocalDevPlanOverride(stored)).catch((error) => {
+        console.warn("[AuthContext] Could not restore local plan override in API:", error);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -63,6 +70,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthenticated(true);
     setIsAdmin(u.role === "admin");
     refreshAppAppearance();
+    // Keep the local browser/Dock session aligned with the app whenever the
+    // effective plan changes. This is intentionally local-only; it does not
+    // mutate the online account or billing records.
+    const session = getSession();
+    if (session) {
+      void syncSessionToOverlay({ ...session, user: u }).catch((error) => {
+        console.warn("[AuthContext] Could not sync updated user session to Dock:", error);
+      });
+      void syncLocalDevPlanOverride(getLocalDevPlanOverride(u)).catch((error) => {
+        console.warn("[AuthContext] Could not sync local plan override to API:", error);
+      });
+    }
   }
 
   function logout() {

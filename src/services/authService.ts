@@ -10,6 +10,11 @@ import {
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { requestJsonWithRetry } from "./requestDedup";
+import {
+  isLocalDevAdmin,
+  isLocalDevelopment,
+  type LocalDevPlanId,
+} from "./localDevPlanOverride";
 
 const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
 const PRODUCTION_DASHBOARD_BASE = "https://makechurcheazy.com";
@@ -347,6 +352,47 @@ export function getDeviceId(): string | null {
 
 export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
+}
+
+/**
+ * Push the local simulated plan to the local API backend. The backend keeps
+ * this override in memory and applies it to status, bootstrap, credits, and
+ * entitlement checks. It is never sent to a production API.
+ */
+export async function syncLocalDevPlanOverride(plan: LocalDevPlanId | null): Promise<void> {
+  const session = _session;
+  if (!session || !isLocalDevelopment() || !isLocalDevAdmin(session.user)) return;
+
+  const apiBase = getSessionApiBase();
+  if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase)) return;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Device-Id": session.deviceId,
+  };
+  if (session.deviceSecret) headers["X-Device-Secret"] = session.deviceSecret;
+
+  const response = await fetch(`${apiBase}/api/dev/local-plan`, {
+    method: plan ? "POST" : "DELETE",
+    headers,
+    body: plan ? JSON.stringify({ plan }) : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Local plan backend returned ${response.status}`);
+  }
+
+  // The Dock reads /api/auth/status from the overlay/Vite session, not the
+  // API process's private in-memory override map. Re-sync that session after
+  // the override succeeds so the Dock receives the new plan immediately.
+  await syncSessionToOverlay({
+    ...session,
+    user: {
+      ...session.user,
+      plan: plan ?? session.user.plan,
+      effectivePlan: plan ?? undefined,
+    },
+  });
 }
 
 export function resolveDeviceApiBaseCandidates(sessionApiBase?: string | null): string[] {
