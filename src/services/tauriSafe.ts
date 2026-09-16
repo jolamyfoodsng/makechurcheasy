@@ -35,3 +35,9 @@ export async function safeTauriListen<T>(
   const { listen } = await import("@tauri-apps/api/event");
   return listen<T>(event, handler);
 }
+
+export async function safeTauriEmit<T>(event: string, payload: T): Promise<void> {
+  if (!hasTauriInvoke()) return;
+  const { emit } = await import("@tauri-apps/api/event");
+  await emit(event, payload);
+}

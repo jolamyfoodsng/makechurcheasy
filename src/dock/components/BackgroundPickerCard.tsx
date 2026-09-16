@@ -6,6 +6,7 @@ import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
+import { getDockEntitlementLimit } from "../dockEntitlement";
 import {
   readNativeDockSetting,
   writeNativeDockSetting,
@@ -159,6 +160,12 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function sliderProgress(value: number, min: number, max: number): CSSProperties {
+  const safeValue = Number.isFinite(value) ? value : min;
+  const progress = Math.min(100, Math.max(0, ((safeValue - min) / (max - min)) * 100));
+  return { "--dtb-slider-progress": `${progress}%` } as CSSProperties;
+}
+
 function inferBgTypeFromSettings(qs: DockFullscreenQuickThemeSettings): BackgroundType {
   // Prefer explicit persisted type
   if (qs.backgroundType) return qs.backgroundType;
@@ -197,6 +204,18 @@ function resolveInitialTab(
 function isBackgroundType(value: string | null): value is BackgroundType {
   return value === "off" || value === "theme" || value === "color" || value === "image" || value === "pattern" || value === "video";
 }
+
+/** Apply the same plan quota used by the media library to background choices. */
+export function limitBackgroundPickerAssets<T>(items: T[], limit: number): T[] {
+  if (limit === -1 || limit === Number.POSITIVE_INFINITY) return items;
+  return items.slice(0, Math.max(0, Math.floor(limit)));
+}
+
+export function canAddBackgroundPickerAsset(currentCount: number, limit: number): boolean {
+  return limit === -1 || limit === Number.POSITIVE_INFINITY || currentCount < limit;
+}
+
+export const BACKGROUND_PATTERN_PICKER_LIMIT = 3;
 
 function createLocalStyleId(): string {
   try {
@@ -302,6 +321,8 @@ export default function BackgroundPickerCard({
   onSaveFeedback,
 }: Props) {
   const { t } = useTranslation();
+  const imageLimit = getDockEntitlementLimit("images");
+  const videoLimit = getDockEntitlementLimit("videos");
   const backgroundTypeSelectId = useId();
   const localStylesSelectId = useId();
   const storageKeys = useMemo(() => {
@@ -825,6 +846,7 @@ export default function BackgroundPickerCard({
                     quickSettings={quickSettings}
                     onQuickSettingsChange={onQuickSettingsChange}
                     onBackgroundPresetChange={onBackgroundPresetChange}
+                    limit={imageLimit}
                   />
                 )}
                 {bgType === "video" && (
@@ -832,6 +854,7 @@ export default function BackgroundPickerCard({
                     quickSettings={quickSettings}
                     onQuickSettingsChange={onQuickSettingsChange}
                     onBackgroundPresetChange={onBackgroundPresetChange}
+                    limit={videoLimit}
                   />
                 )}
                 {bgType === "pattern" && (
@@ -839,6 +862,7 @@ export default function BackgroundPickerCard({
                     quickSettings={quickSettings}
                     onQuickSettingsChange={onQuickSettingsChange}
                     onBackgroundPresetChange={onBackgroundPresetChange}
+                    limit={BACKGROUND_PATTERN_PICKER_LIMIT}
                   />
                 )}
                 {bgType === "color" && (
@@ -898,16 +922,13 @@ export default function BackgroundPickerCard({
                         <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
                       </div>
                       <div className="dtb-control-section__body">
-                        {/* Text Color */}
-                        <div className="dtb-color-field">
-                          <span className="dtb-color-field__label">{t('common.color')}</span>
-                          <InlineColorPicker
+                        <div className="dtb-typography-control-row">
+                          <ColorPickerCard
+                            label={t('common.color')}
                             value={quickSettings.fontColor ?? "#ffffff"}
                             onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, fontColor: v }))}
                           />
-                        </div>
 
-                        <div className="dtb-typography-control-row">
                           <SliderNumberField
                             label={t('bgPicker.fontSize')}
                             value={quickSettings.fontSize}
@@ -916,26 +937,26 @@ export default function BackgroundPickerCard({
                             step={1}
                             onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: value }))}
                           />
-
-                          <SliderNumberField
-                            label={t('bgPicker.lineHeight')}
-                            value={quickSettings.lineHeight}
-                            min={1.05}
-                            max={1.8}
-                            step={0.01}
-                            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
-                          />
                         </div>
 
-                        <div className="dtb-typography-control-row dtb-typography-control-row--segmented">
-                          <IconSegmentedControl<CompactFontWeight>
+                        <SliderNumberField
+                          label={t('bgPicker.lineHeight')}
+                          value={quickSettings.lineHeight}
+                          min={1.05}
+                          max={1.8}
+                          step={0.01}
+                          onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
+                        />
+
+                        <div className="dtb-typography-control-row dtb-typography-control-row--selects">
+                          <CompactSelectField<CompactFontWeight>
                             label={t('bgPicker.weight')}
                             value={(quickSettings.fontWeight ?? "normal") as CompactFontWeight}
                             options={getWeightOptions(t)}
                             onChange={(w) => onQuickSettingsChange((prev) => ({ ...prev, fontWeight: w }))}
                           />
 
-                          <IconSegmentedControl<CompactTextCase>
+                          <CompactSelectField<CompactTextCase>
                             label={t('bgPicker.textCase')}
                             value={(quickSettings.textTransform ?? "none") as CompactTextCase}
                             options={getTextCaseOptions(t)}
@@ -1202,6 +1223,8 @@ export default function BackgroundPickerCard({
               onThemeSelect={_onThemeSelect}
               allowedCategories={_allowedCategories}
               overlayMode={overlayMode}
+              imageLimit={imageLimit}
+              videoLimit={videoLimit}
             />
           )}
             </div>
@@ -1217,10 +1240,12 @@ function ImageTab({
   quickSettings,
   onQuickSettingsChange,
   onBackgroundPresetChange,
+  limit,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
   onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+  limit: number;
 }) {
   const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -1288,10 +1313,11 @@ function ImageTab({
   }, []);
 
   const filtered = useMemo(() => {
+    const availableMedia = limitBackgroundPickerAssets(media, limit);
     const q = search.toLowerCase().trim();
-    if (!q) return media;
-    return media.filter((m) => m.name.toLowerCase().includes(q));
-  }, [media, search]);
+    if (!q) return availableMedia;
+    return availableMedia.filter((m) => m.name.toLowerCase().includes(q));
+  }, [limit, media, search]);
 
   const selectedUrl = quickSettings.backgroundImage;
 
@@ -1310,7 +1336,9 @@ function ImageTab({
 
   const handleUpload = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
+    let currentCount = media.length;
     for (const file of Array.from(files)) {
+      if (!canAddBackgroundPickerAsset(currentCount, limit)) break;
       if (!file.type.startsWith("image/")) continue;
       try {
         const { uploadFileToDock } = await import("../dockUploadService");
@@ -1319,6 +1347,7 @@ function ImageTab({
           const { registerDockMediaItem } = await import("../dockUploadService");
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
+          currentCount += 1;
           const relUrl = toBackgroundAssetUrl(result.item);
           onQuickSettingsChange((prev) => ({
             ...prev,
@@ -1332,11 +1361,12 @@ function ImageTab({
         }
       } catch (err) {
         console.warn("[BackgroundPicker] Upload failed:", err);
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     }
-  }, [onBackgroundPresetChange, onQuickSettingsChange]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [limit, media.length, onBackgroundPresetChange, onQuickSettingsChange]);
+
+  const canUpload = canAddBackgroundPickerAsset(media.length, limit);
 
   return (
     <div className="dtb-bg-picker__tab-content">
@@ -1361,10 +1391,16 @@ function ImageTab({
             </button>
           )}
         </div>
+        {Number.isFinite(limit) && limit >= 0 && (
+          <span className="dtb-bg-picker__limit-count" aria-label={`${media.length} of ${limit} images`}>
+            {media.length}/{limit}
+          </span>
+        )}
         <button
           type="button"
           className="dtb-bg-picker__upload-btn"
           onClick={() => fileInputRef.current?.click()}
+          disabled={loading || !canUpload}
           title={t('common.upload')}>
           <Icon name="add_photo_alternate" size={13} />
           {t('common.upload')}
@@ -1374,6 +1410,7 @@ function ImageTab({
           type="file"
           accept="image/*"
           multiple
+          disabled={loading || !canUpload}
           className="dtb-bg-picker__file-input"
           onChange={(e) => handleUpload(e.target.files)}
         />
@@ -1427,10 +1464,12 @@ function VideoTab({
   quickSettings,
   onQuickSettingsChange,
   onBackgroundPresetChange,
+  limit,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
   onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+  limit: number;
 }) {
   const { t } = useTranslation();
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -1498,10 +1537,11 @@ function VideoTab({
   }, []);
 
   const filtered = useMemo(() => {
+    const availableMedia = limitBackgroundPickerAssets(media, limit);
     const q = search.toLowerCase().trim();
-    if (!q) return media;
-    return media.filter((m) => m.name.toLowerCase().includes(q));
-  }, [media, search]);
+    if (!q) return availableMedia;
+    return availableMedia.filter((m) => m.name.toLowerCase().includes(q));
+  }, [limit, media, search]);
 
   const selectedUrl = quickSettings.backgroundVideo;
 
@@ -1520,7 +1560,9 @@ function VideoTab({
 
   const handleUpload = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
+    let currentCount = media.length;
     for (const file of Array.from(files)) {
+      if (!canAddBackgroundPickerAsset(currentCount, limit)) break;
       if (!file.type.startsWith("video/")) continue;
       try {
         const { uploadFileToDock } = await import("../dockUploadService");
@@ -1529,6 +1571,7 @@ function VideoTab({
           const { registerDockMediaItem } = await import("../dockUploadService");
           await registerDockMediaItem(result.item);
           setMedia((prev) => [result.item!, ...prev]);
+          currentCount += 1;
           const relUrl = toBackgroundAssetUrl(result.item);
           onQuickSettingsChange((prev) => ({
             ...prev,
@@ -1542,11 +1585,12 @@ function VideoTab({
         }
       } catch (err) {
         console.warn("[BackgroundPicker] Upload failed:", err);
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     }
-  }, [onBackgroundPresetChange, onQuickSettingsChange]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [limit, media.length, onBackgroundPresetChange, onQuickSettingsChange]);
+
+  const canUpload = canAddBackgroundPickerAsset(media.length, limit);
 
   return (
     <div className="dtb-bg-picker__tab-content">
@@ -1571,10 +1615,16 @@ function VideoTab({
             </button>
           )}
         </div>
+        {Number.isFinite(limit) && limit >= 0 && (
+          <span className="dtb-bg-picker__limit-count" aria-label={`${media.length} of ${limit} videos`}>
+            {media.length}/{limit}
+          </span>
+        )}
         <button
           type="button"
           className="dtb-bg-picker__upload-btn"
           onClick={() => fileInputRef.current?.click()}
+          disabled={loading || !canUpload}
           title={t('common.upload')}>
           <Icon name="videocam" size={13} />
           {t('common.upload')}
@@ -1584,6 +1634,7 @@ function VideoTab({
           type="file"
           accept="video/*"
           multiple
+          disabled={loading || !canUpload}
           className="dtb-bg-picker__file-input"
           onChange={(e) => handleUpload(e.target.files)}
         />
@@ -1665,10 +1716,12 @@ function PatternTab({
   quickSettings,
   onQuickSettingsChange,
   onBackgroundPresetChange,
+  limit,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
   onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+  limit: number;
 }) {
   const { t } = useTranslation();
   const currentPattern = quickSettings.backgroundPattern || "";
@@ -1690,7 +1743,7 @@ function PatternTab({
     <div className="dtb-pattern-tab">
       <p className="dtb-bg-picker__sub-heading">{t('bgPicker.selectPattern')}</p>
       <div className="dtb-pattern-grid">
-        {PATTERN_OPTIONS.map((opt) => {
+        {limitBackgroundPickerAssets(PATTERN_OPTIONS, limit).map((opt) => {
           const isSelected = currentPattern === opt.src;
           return (
             <button
@@ -1736,6 +1789,7 @@ function MotionSection({
   const { t } = useTranslation();
   const animation = quickSettings.animation ?? "fade";
   const animationEnabled = animation !== "none";
+  const duration = Math.min(1500, Math.max(100, Number(quickSettings.animationDuration) || 400));
 
   return (
     <section className="dtb-bg-picker__motion-section" aria-labelledby="dtb-motion-title">
@@ -1763,20 +1817,22 @@ function MotionSection({
         <div className="dtb-bg-picker__motion-duration">
           <div className="dtb-slider-field__head">
             <span>{t("bgPicker.duration", "Duration")}</span>
-            <span className="dtb-slider-field__value">{quickSettings.animationDuration}ms</span>
+            <span className="dtb-slider-field__value">{duration} ms</span>
           </div>
           <input
             type="range"
-            className="dtb-slider"
-            min="100"
-            max="1500"
-            step="50"
-            value={quickSettings.animationDuration}
+            className="dtb-slider dtb-slider--filled"
+            min={100}
+            max={1500}
+            step={10}
+            value={duration}
+            style={sliderProgress(duration, 100, 1500)}
             onChange={(event) => onQuickSettingsChange((prev) => ({
               ...prev,
               animationDuration: Number(event.target.value),
             }))}
             aria-label={t("bgPicker.duration", "Duration")}
+            aria-valuetext={`${duration} milliseconds`}
           />
         </div>
       )}
@@ -1992,11 +2048,12 @@ function ColorSection({
           </div>
           <input
             type="range"
-            className="dtb-slider"
+            className="dtb-slider dtb-slider--filled"
             min={0}
             max={100}
             step={1}
             value={Math.round(quickSettings.fullscreenShadeOpacity * 100)}
+            style={sliderProgress(quickSettings.fullscreenShadeOpacity * 100, 0, 100)}
             onChange={(e) =>
               pushChange((prev) => ({
                 ...prev,
@@ -2004,6 +2061,7 @@ function ColorSection({
               }))
             }
             aria-label={t('bgPicker.darkness')}
+            aria-valuetext={`${Math.round(quickSettings.fullscreenShadeOpacity * 100)} percent`}
           />
         </div>
       </div>
@@ -2019,11 +2077,12 @@ function ColorSection({
           </div>
           <input
             type="range"
-            className="dtb-slider"
+            className="dtb-slider dtb-slider--filled"
             min={0}
             max={100}
             step={1}
             value={Math.round(quickSettings.backgroundOpacity * 100)}
+            style={sliderProgress(quickSettings.backgroundOpacity * 100, 0, 100)}
             onChange={(e) =>
               pushChange((prev) => ({
                 ...prev,
@@ -2031,6 +2090,7 @@ function ColorSection({
               }))
             }
             aria-label={t('bgPicker.opacity')}
+            aria-valuetext={`${Math.round(quickSettings.backgroundOpacity * 100)} percent`}
           />
         </div>
       </div>
@@ -2073,11 +2133,12 @@ function BackgroundAppearanceControls({
           </div>
           <input
             type="range"
-            className="dtb-slider"
+            className="dtb-slider dtb-slider--filled"
             min={0}
             max={100}
             step={1}
             value={Math.round(quickSettings.fullscreenShadeOpacity * 100)}
+            style={sliderProgress(quickSettings.fullscreenShadeOpacity * 100, 0, 100)}
             onChange={(e) =>
               updateAppearance((prev) => ({
                 ...prev,
@@ -2085,6 +2146,7 @@ function BackgroundAppearanceControls({
               }))
             }
             aria-label={t('bgPicker.darkness')}
+            aria-valuetext={`${Math.round(quickSettings.fullscreenShadeOpacity * 100)} percent`}
           />
         </div>
       </div>
@@ -2099,11 +2161,12 @@ function BackgroundAppearanceControls({
           </div>
           <input
             type="range"
-            className="dtb-slider"
+            className="dtb-slider dtb-slider--filled"
             min={0}
             max={100}
             step={1}
             value={Math.round(quickSettings.backgroundOpacity * 100)}
+            style={sliderProgress(quickSettings.backgroundOpacity * 100, 0, 100)}
             onChange={(e) =>
               updateAppearance((prev) => ({
                 ...prev,
@@ -2111,6 +2174,7 @@ function BackgroundAppearanceControls({
               }))
             }
             aria-label={t('bgPicker.opacity')}
+            aria-valuetext={`${Math.round(quickSettings.backgroundOpacity * 100)} percent`}
           />
         </div>
       </div>
@@ -2251,51 +2315,48 @@ function ReferenceSection({
           </p>
         </div>
       )}
+      <ReferenceBackgroundSection
+        quickSettings={quickSettings}
+        onQuickSettingsChange={onQuickSettingsChange}
+      />
+
       <div className="dtb-control-section">
         <div className="dtb-control-section__head">
           <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
         </div>
         <div className="dtb-control-section__body">
-          <div className="dtb-reference-color-row">
-            <div className="dtb-color-field">
-              <span className="dtb-color-field__label">{t('common.color')}</span>
-              <InlineColorPicker
-                value={quickSettings.refFontColor ?? "#cccccc"}
-                onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
-              />
-            </div>
+          <div className="dtb-typography-control-row">
+            <ColorPickerCard
+              label={t('common.color')}
+              value={quickSettings.refFontColor ?? "#cccccc"}
+              onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
+            />
 
-            <div className="dtb-color-field">
-              <span className="dtb-color-field__label">{t('bgPicker.background', 'Background')}</span>
-              <InlineColorPicker
-                value={quickSettings.referenceBackgroundColor}
-                onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
-              />
-            </div>
+            <SliderNumberField
+              label={t('bgPicker.fontSize')}
+              value={refFontSize}
+              min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10}
+              max={overlayMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 80}
+              step={1}
+              onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: value }))}
+            />
           </div>
 
-          <SliderNumberField
-            label={t('bgPicker.fontSize')}
-            value={refFontSize}
-            min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10}
-            max={overlayMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 80}
-            step={1}
-            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: value }))}
-          />
+          <div className="dtb-typography-control-row dtb-typography-control-row--selects">
+            <CompactSelectField<CompactFontWeight>
+              label={t('bgPicker.weight')}
+              value={refFontWeight as CompactFontWeight}
+              options={getWeightOptions(t)}
+              onChange={(w) => onQuickSettingsChange((prev) => ({ ...prev, refFontWeight: w }))}
+            />
 
-          <IconSegmentedControl<CompactFontWeight>
-            label={t('bgPicker.weight')}
-            value={refFontWeight as CompactFontWeight}
-            options={getWeightOptions(t)}
-            onChange={(w) => onQuickSettingsChange((prev) => ({ ...prev, refFontWeight: w }))}
-          />
-
-          <IconSegmentedControl<CompactTextCase>
-            label={t('bgPicker.textCase')}
-            value={refTextTransform as CompactTextCase}
-            options={getTextCaseOptions(t)}
-            onChange={(tc) => onQuickSettingsChange((prev) => ({ ...prev, refTextTransform: tc }))}
-          />
+            <CompactSelectField<CompactTextCase>
+              label={t('bgPicker.textCase')}
+              value={refTextTransform as CompactTextCase}
+              options={getTextCaseOptions(t)}
+              onChange={(tc) => onQuickSettingsChange((prev) => ({ ...prev, refTextTransform: tc }))}
+            />
+          </div>
 
         </div>
       </div>
@@ -2310,12 +2371,6 @@ function ReferenceSection({
           onReferenceVersionVisibleChange={onReferenceVersionVisibleChange}
         />
       )}
-
-      <ReferenceBackgroundSection
-        quickSettings={quickSettings}
-        onQuickSettingsChange={onQuickSettingsChange}
-        showColorPicker={false}
-      />
 
       <button
         type="button"
@@ -2483,13 +2538,12 @@ function ReferenceBackgroundSection({
           </button>
         </div>
         {refBgEnabled && showColorPicker && (
-          <div className="dtb-color-field dtb-colors__ref-bg-color">
-            <span className="dtb-color-field__label">{t('common.color')}</span>
-            <InlineColorPicker
-              value={quickSettings.referenceBackgroundColor}
-              onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
-            />
-          </div>
+          <ColorPickerCard
+            className="dtb-colors__ref-bg-color-card"
+            label={t('bgPicker.background', 'Background')}
+            value={quickSettings.referenceBackgroundColor}
+            onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
+          />
         )}
       </div>
 
@@ -2880,6 +2934,34 @@ type IconSegmentedOption<T extends string> = {
   glyphClassName?: string;
 };
 
+function CompactSelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<IconSegmentedOption<T>>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="dtb-compact-select-field">
+      <span className="dtb-position-label">{label}</span>
+      <select
+        className="dtb-compact-select-field__select"
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        aria-label={label}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function IconSegmentedControl<T extends string>({
   label,
   value,
@@ -3238,6 +3320,8 @@ function CompareSettingsPanel({
   onBackdropChange,
   onBackgroundPresetChange,
   overlayMode = "fullscreen",
+  imageLimit,
+  videoLimit,
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
@@ -3248,6 +3332,8 @@ function CompareSettingsPanel({
   onThemeSelect?: (theme: BibleTheme) => void;
   allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
   overlayMode?: "fullscreen" | "lower-third";
+  imageLimit: number;
+  videoLimit: number;
 }) {
   const { t } = useTranslation();
   const compare = useMemo(
@@ -3397,6 +3483,7 @@ function CompareSettingsPanel({
           quickSettings={quickSettings}
           onQuickSettingsChange={onQuickSettingsChange}
           onBackgroundPresetChange={onBackgroundPresetChange}
+          limit={imageLimit}
         />
       )}
       {resolvedCompareBackdropValue === "video" && (
@@ -3404,6 +3491,7 @@ function CompareSettingsPanel({
           quickSettings={quickSettings}
           onQuickSettingsChange={onQuickSettingsChange}
           onBackgroundPresetChange={onBackgroundPresetChange}
+          limit={videoLimit}
         />
       )}
       {resolvedCompareBackdropValue === "pattern" && (
@@ -3411,6 +3499,7 @@ function CompareSettingsPanel({
           quickSettings={quickSettings}
           onQuickSettingsChange={onQuickSettingsChange}
           onBackgroundPresetChange={onBackgroundPresetChange}
+          limit={BACKGROUND_PATTERN_PICKER_LIMIT}
         />
       )}
       {resolvedCompareBackdropValue === "color" && (
@@ -3547,12 +3636,35 @@ function CompareSettingsPanel({
 }
 
 /* ── Inline Color Picker ── */
+function ColorPickerCard({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`dtb-color-picker-card${className ? ` ${className}` : ""}`}>
+      <span className="dtb-color-picker-card__label">{label}</span>
+      <InlineColorPicker value={value} onChange={onChange} variant="card" label={label} />
+    </div>
+  );
+}
+
 function InlineColorPicker({
   value,
   onChange,
+  variant = "inline",
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
+  variant?: "inline" | "card";
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -3601,22 +3713,34 @@ function InlineColorPicker({
     <>
       <button
         type="button"
-        className="dtb-color-inline__trigger"
+        className={`dtb-color-inline__trigger${variant === "card" ? " dtb-color-inline__trigger--card" : ""}`}
         ref={triggerRef}
         onClick={openPopover}
+        aria-label={`${label || "Color"}: ${normalizedValue}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={variant === "card" ? `Choose ${label || "color"}` : undefined}
       >
-        <span className="dtb-color-inline__preview" style={{ backgroundColor: value }} />
-        <span className="dtb-color-inline__meta">
-          <span className="dtb-color-inline__eyebrow">Color</span>
-          <span className="dtb-color-inline__hex">{normalizedValue}</span>
-        </span>
-        <Icon name={open ? "expand_less" : "expand_more"} size={14} className="dtb-color-inline__chevron" />
+        {variant === "card" ? (
+          <span className="dtb-color-inline__card-swatch" style={{ backgroundColor: value }} />
+        ) : (
+          <>
+            <span className="dtb-color-inline__preview" style={{ backgroundColor: value }} />
+            <span className="dtb-color-inline__meta">
+              <span className="dtb-color-inline__eyebrow">Color</span>
+              <span className="dtb-color-inline__hex">{normalizedValue}</span>
+            </span>
+            <Icon name={open ? "expand_less" : "expand_more"} size={14} className="dtb-color-inline__chevron" />
+          </>
+        )}
       </button>
       {open && createPortal(
         <div
           ref={popoverRef}
           className="dtb-color-inline__popover"
           style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 10000 }}
+          role="dialog"
+          aria-label={`Choose ${label || "color"}`}
         >
           <div className="dtb-color-inline__popover-header">
             <span className="dtb-color-inline__popover-preview" style={{ backgroundColor: value }} />

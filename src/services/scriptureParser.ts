@@ -266,6 +266,25 @@ function parseChapterVerseFromTokens(tokens: string[]): ChapterVerseResult | nul
   };
 }
 
+function parseTrailingVerseAfterChapter(
+  tokens: string[],
+  chapterResult: ChapterVerseResult,
+): Pick<ChapterVerseResult, "verse" | "endVerse"> | null {
+  if (chapterResult.verse !== null) return null;
+
+  const chapterTokenIndex = tokens[0] === "chapter" ? 1 : 0;
+  const trailingSpeech = tokens.slice(chapterTokenIndex + 1).join(" ");
+  const match = trailingSpeech.match(
+    /\b(?:from|read\s+from|starting\s+(?:at|from)|begin(?:ning)?\s+(?:at|from))\s+verse\s+(\d+)(?:\s*(?:-|to|through|thru|and)\s*(?:verse\s+)?(\d+))?/,
+  );
+  if (!match) return null;
+
+  return {
+    verse: Number(match[1]),
+    endVerse: match[2] ? Number(match[2]) : null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Pre-register all numbered book aliases (digit-based)
 // ---------------------------------------------------------------------------
@@ -792,6 +811,11 @@ export function parseScriptureReference(text: string): ParsedReference | null {
     };
     const ref = parseChapterVerseFromTokens(after);
     if (ref) {
+      const trailingVerse = parseTrailingVerseAfterChapter(after, ref);
+      if (trailingVerse) {
+        ref.verse = trailingVerse.verse;
+        ref.endVerse = trailingVerse.endVerse;
+      }
       if (singleChapter && ref.chapter > 1 && ref.verse === null) {
         ref.verse = ref.chapter;
         ref.chapter = 1;

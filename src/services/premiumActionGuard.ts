@@ -35,6 +35,7 @@ export interface AccessCheckResult {
   reason?:
   | "feature_not_available"
   | "insufficient_credits"
+  | "daily_speech_limit"
   | "subscription_expired"
   | "trial_expired"
   | "account_suspended"

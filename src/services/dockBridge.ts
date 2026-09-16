@@ -88,6 +88,7 @@ export type DockStateType =
   | "state:lm-status"
   | "state:lm-transcript"
   | "state:lm-candidates"
+  | "state:bible-theme-updated"
   | "state:song-limit"
   | "state:plan-update"
   | "state:countdowns"
@@ -108,6 +109,19 @@ export interface DockStateMessage {
 const DOCK_COMMAND_CHANNEL = "ocs-dock-commands";
 const DOCK_STATE_CHANNEL = "ocs-dock-state";
 const DOCK_STORAGE_EVENT_KEY = "ocs-dock-storage-event";
+export const DOCK_BIBLE_LIVE_THEME_KEY = "ocs-dock-bible-live-theme";
+
+function persistLiveBibleThemeSnapshot(msg: DockStateMessage): void {
+  if (msg.type !== "state:bible-theme-updated") return;
+  try {
+    localStorage.setItem(
+      getUserScopedKey(DOCK_BIBLE_LIVE_THEME_KEY),
+      JSON.stringify(msg.payload ?? null),
+    );
+  } catch {
+    // Ignore storage failures; BroadcastChannel remains the live transport.
+  }
+}
 
 type StorageEventType =
   | "library-updated"
@@ -207,6 +221,7 @@ class DockBridge {
 
   /** Send a state update to the dock */
   sendState(msg: DockStateMessage) {
+    persistLiveBibleThemeSnapshot(msg);
     try {
       this.stateChannel?.postMessage(msg);
     } catch {
@@ -365,6 +380,16 @@ class DockClient {
   sendCommand(cmd: DockCommand) {
     try {
       this.commandChannel?.postMessage(cmd);
+    } catch {
+      // Channel might be closed
+    }
+  }
+
+  /** Share a dock-owned live snapshot with sibling dock tabs. */
+  sendState(msg: DockStateMessage) {
+    persistLiveBibleThemeSnapshot(msg);
+    try {
+      this.stateChannel?.postMessage(msg);
     } catch {
       // Channel might be closed
     }

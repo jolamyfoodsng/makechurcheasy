@@ -252,7 +252,7 @@ export function getYouTubeEmbedUrl(url: string): string | null {
     const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
     let videoId = "";
     if (host === "youtu.be") videoId = parsed.pathname.split("/").filter(Boolean)[0] || "";
-    if (host.endsWith("youtube.com")) {
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
       videoId = parsed.searchParams.get("v") || "";
       if (!videoId) {
         const segments = parsed.pathname.split("/").filter(Boolean);
@@ -260,7 +260,7 @@ export function getYouTubeEmbedUrl(url: string): string | null {
         videoId = embedIndex >= 0 ? segments[embedIndex + 1] || "" : "";
       }
     }
-    if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return null;
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return null;
     return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`;
   } catch {
     return null;

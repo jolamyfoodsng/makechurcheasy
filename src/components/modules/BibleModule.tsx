@@ -195,7 +195,7 @@ function ContentLibrary({
             <Search size={12} className="bm-library-search-icon" />
             <input
               type="text"
-              placeholder="Search Bible verses or keywords..."
+              placeholder={'e.g. j316, joh316, john316, j 316, or "for God so loved the world"'}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
             />

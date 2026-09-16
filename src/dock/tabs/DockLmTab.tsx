@@ -6,7 +6,12 @@ import { useTranslation } from "react-i18next";
 import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
-import { dockClient, type DockStateMessage, type DockCommandType } from "../../services/dockBridge";
+import {
+  dockClient,
+  DOCK_BIBLE_LIVE_THEME_KEY,
+  type DockStateMessage,
+  type DockCommandType,
+} from "../../services/dockBridge";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { VoiceBibleCandidate, TranscriptEntry } from "../../services/voiceBibleTypes";
@@ -72,6 +77,81 @@ interface FreshnessInfo {
   label: string;
   color: string;
   level: "fresh" | "warning" | "stale";
+}
+
+interface LiveBibleThemeSnapshot {
+  fullscreen?: {
+    themeId?: string;
+    themeSettings?: Record<string, unknown>;
+    liveOverrides?: Record<string, unknown> | null;
+  };
+  lowerThird?: {
+    themeId?: string;
+    themeSettings?: Record<string, unknown>;
+    liveOverrides?: Record<string, unknown> | null;
+  };
+}
+
+const BIBLE_BACKGROUND_SETTING_KEYS = [
+  "backgroundType",
+  "backgroundColor",
+  "backgroundColorEnd",
+  "bgGradientAngle",
+  "backgroundImage",
+  "backgroundImageFilePath",
+  "backgroundPattern",
+  "backgroundVideo",
+  "backgroundVideoFilePath",
+  "backgroundOpacity",
+  "fullscreenShadeEnabled",
+  "fullscreenShadeColor",
+  "fullscreenShadeOpacity",
+  "boxBackground",
+  "boxOpacity",
+  "boxBackgroundImage",
+] as const;
+
+function mergeBibleBackgroundSettings(
+  baseSettings: Record<string, unknown>,
+  bibleSettings: Record<string, unknown>,
+): Record<string, unknown> {
+  const backgroundSettings: Record<string, unknown> = {};
+  for (const key of BIBLE_BACKGROUND_SETTING_KEYS) {
+    if (key in bibleSettings) backgroundSettings[key] = bibleSettings[key];
+  }
+  return { ...baseSettings, ...backgroundSettings };
+}
+
+async function resolveLmBibleTheme(
+  overlayMode: LmOverlayMode,
+  liveSnapshot: LiveBibleThemeSnapshot | null,
+) {
+  const resolvedBibleTheme = await resolveDockBibleThemeForOverlayMode(overlayMode);
+  const liveTheme = overlayMode === "fullscreen"
+    ? liveSnapshot?.fullscreen
+    : liveSnapshot?.lowerThird;
+  if (!liveTheme?.themeSettings) return resolvedBibleTheme;
+
+  return {
+    ...resolvedBibleTheme,
+    themeId: liveTheme.themeId || resolvedBibleTheme.themeId,
+    themeSettings: liveTheme.themeSettings,
+    liveOverrides: liveTheme.liveOverrides === undefined
+      ? resolvedBibleTheme.liveOverrides
+      : liveTheme.liveOverrides,
+  };
+}
+
+function loadLiveBibleThemeSnapshot(): LiveBibleThemeSnapshot | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(DOCK_BIBLE_LIVE_THEME_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LiveBibleThemeSnapshot;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface RetainedLmCandidate {
@@ -245,6 +325,7 @@ export default function DockLmTab({
   }, []);
 
   const [lmStatus, setLmStatus] = useState<LmStatus>("idle");
+  const [lmSessionStartedAt, setLmSessionStartedAt] = useState<number | null>(null);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [candidates, setCandidates] = useState<VoiceBibleCandidate[]>([]);
   const [retainedQueue, setRetainedQueue] = useState<RetainedLmCandidate[]>([]);
@@ -271,6 +352,7 @@ export default function DockLmTab({
   const autoPushLastPushedAtRef = useRef<Map<string, number>>(new Map());
   const liveVerseRef = useRef<VoiceBibleCandidate | null>(liveVerse);
   const lastRepublishedOverlayModeRef = useRef<LmOverlayMode>(settings.overlayMode);
+  const liveBibleThemeSnapshotRef = useRef<LiveBibleThemeSnapshot | null>(loadLiveBibleThemeSnapshot());
 
   const setLiveVerse = useCallback((candidate: VoiceBibleCandidate | null) => {
     liveVerseRef.current = candidate;
@@ -322,6 +404,11 @@ export default function DockLmTab({
   const applyLmSnapshot = useCallback((snapshot: LmDockSnapshot) => {
     setAppConnected(true);
     setLmStatus(snapshot.status);
+    setLmSessionStartedAt((current) => (
+      typeof snapshot.startedAt === "number"
+        ? snapshot.startedAt
+        : snapshot.status === "idle" ? null : current
+    ));
     setEntries(snapshot.entries);
     setCandidates(snapshot.candidates);
     syncQueueSnapshot(snapshot.queue);
@@ -437,12 +524,18 @@ export default function DockLmTab({
       if (msg.type === "state:lm-status") {
         const payload = msg.payload as {
           status: LmStatus;
+          startedAt?: number;
           entries?: TranscriptEntry[];
           suggestions?: VoiceBibleCandidate[];
           matching: boolean;
           error?: string;
         };
         setLmStatus(payload.status);
+        setLmSessionStartedAt((current) => (
+          typeof payload.startedAt === "number"
+            ? payload.startedAt
+            : payload.status === "idle" ? null : current
+        ));
         if (payload.entries) setEntries(payload.entries);
         if (payload.suggestions) {
           syncSuggestionSnapshot(
@@ -464,6 +557,11 @@ export default function DockLmTab({
         setCandidates(payload.candidates);
         if (payload.queue) syncQueueSnapshot(payload.queue);
         if (payload.suggestions) syncSuggestionSnapshot(payload.suggestions);
+      } else if (msg.type === "state:bible-theme-updated") {
+        const payload = msg.payload as LiveBibleThemeSnapshot | null;
+        if (payload && typeof payload === "object") {
+          liveBibleThemeSnapshotRef.current = payload;
+        }
       }
     });
 
@@ -476,6 +574,11 @@ export default function DockLmTab({
         if (state && state.status) {
           setAppConnected(true);
           setLmStatus(state.status);
+          setLmSessionStartedAt((current) => (
+            typeof state.startedAt === "number"
+              ? state.startedAt
+              : state.status === "idle" ? null : current
+          ));
           if (state.entries) setEntries(state.entries);
           setMatching(state.matching ?? false);
           setError(state.error ?? null);
@@ -581,7 +684,7 @@ export default function DockLmTab({
     overlayMode: LmOverlayMode,
   ) => {
     candidate = await resolveScriptureProjection(candidate, settings.translation);
-    const bibleTheme = await resolveDockBibleThemeForOverlayMode(overlayMode);
+    const bibleTheme = await resolveLmBibleTheme(overlayMode, liveBibleThemeSnapshotRef.current);
     const verseRange = candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse);
     const referenceLabels = resolveDockBibleReferenceLabels(
       candidate.book,
@@ -681,12 +784,46 @@ export default function DockLmTab({
       });
   }, [obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode]);
 
+  const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
+    const cmd = {
+      type,
+      payload: payload ?? {},
+      commandId: `lm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: Date.now(),
+    };
+    dockClient.sendCommand(cmd);
+    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cmd),
+      keepalive: true,
+    }).catch(() => { });
+  }, []);
+
+  const navigateBibleDock = useCallback((
+    reference: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">,
+    pushToPreview = false,
+  ) => {
+    sendLmCommand("lm:navigate", {
+      book: reference.book,
+      chapter: reference.chapter,
+      verse: reference.verse,
+      translation: settings.translation,
+      ...(pushToPreview ? { pushToPreview: true } : {}),
+    });
+  }, [sendLmCommand, settings.translation]);
+
   // ── Show/push detected scripture ──
   const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate, source?: "queue" | "suggestion") => {
     if (!presentationLinkMode && obsStatus !== "connected") {
       setPushError(t("lm.notConnected"));
       return false;
     }
+
+    // Showing an AI match should also move the Bible dock to the exact
+    // reference, so the operator can continue from the neighboring verses.
+    onNavigateToBible?.();
+    navigateBibleDock(candidate);
 
     setPushing(true);
     setPushError(null);
@@ -716,7 +853,7 @@ export default function DockLmTab({
     } finally {
       setPushing(false);
     }
-  }, [obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode, t]);
+  }, [navigateBibleDock, obsStatus, onNavigateToBible, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode, t]);
 
   // ── Show/push transcript text ──
   const pushTranscriptToOBS = useCallback(async (text: string) => {
@@ -734,12 +871,16 @@ export default function DockLmTab({
       const notesSettings = await resolveDockNotesPresentationSettings(settings.overlayMode, {
         forceOverlayMode: true,
       });
+      const bibleTheme = await resolveLmBibleTheme(settings.overlayMode, liveBibleThemeSnapshotRef.current);
       const obsData = {
         sectionText: cleanText,
         sectionLabel: "Transcript Note",
         songTitle: "Transcript Note",
         overlayMode: notesSettings.overlayMode,
-        bibleThemeSettings: notesSettings.themeSettings,
+        bibleThemeSettings: mergeBibleBackgroundSettings(
+          notesSettings.themeSettings ?? {},
+          bibleTheme.themeSettings,
+        ),
         liveOverrides: null,
         backgroundOnly: false,
       };
@@ -817,35 +958,6 @@ export default function DockLmTab({
       setMicError(err instanceof Error ? err.message : "Could not start listening.");
     }
   }, [allowLocalMicControls, isListening, mics.length, refreshPresentationMics, selectedMic]);
-
-  const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
-    const cmd = {
-      type,
-      payload: payload ?? {},
-      commandId: `lm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: Date.now(),
-    };
-    dockClient.sendCommand(cmd);
-    fetch(`${getOverlayBaseUrlSync()}/api/lm-command`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cmd),
-      keepalive: true,
-    }).catch(() => { });
-  }, []);
-
-  const navigateBibleDock = useCallback((
-    reference: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">,
-    pushToPreview = false,
-  ) => {
-    sendLmCommand("lm:navigate", {
-      book: reference.book,
-      chapter: reference.chapter,
-      verse: reference.verse,
-      translation: settings.translation,
-      ...(pushToPreview ? { pushToPreview: true } : {}),
-    });
-  }, [sendLmCommand, settings.translation]);
 
   const autoNavigatedReferenceRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1151,8 +1263,17 @@ export default function DockLmTab({
       return;
     }
 
-    const command = createDockNotesAppendCommand(cleanText);
-    const result = appendTextToDockNotes(cleanText, undefined, { sourceId: command.commandId });
+    const sessionId = isListening && lmSessionStartedAt !== null
+      ? `lm-session-${lmSessionStartedAt}`
+      : undefined;
+    const sessionTitle = sessionId
+      ? `Speech Notes · ${new Date(lmSessionStartedAt!).toLocaleString()}`
+      : undefined;
+    const command = createDockNotesAppendCommand(cleanText, sessionTitle, "lm", sessionId);
+    const result = appendTextToDockNotes(cleanText, sessionTitle, {
+      sourceId: command.commandId,
+      sessionId,
+    });
     const relayCommand = {
       ...command,
       ...(result?.note.title ? { title: result.note.title } : {}),
@@ -1167,12 +1288,22 @@ export default function DockLmTab({
       console.warn("[DockLmTab] Notes relay failed:", err);
     });
     showToast(result ? "Saved in Notes" : "Nothing to save");
-  }, [showToast]);
+  }, [isListening, lmSessionStartedAt, showToast]);
+
+  const handleSaveAndShowTranscript = useCallback(async (text: string) => {
+    const cleanText = text.trim();
+    if (!cleanText) {
+      showToast("Nothing to push");
+      return;
+    }
+    await handlePushToNotes(cleanText);
+    await pushTranscriptToOBS(cleanText);
+  }, [handlePushToNotes, pushTranscriptToOBS, showToast]);
 
   const handleEditPushToOBS = useCallback(() => {
-    pushTranscriptToOBS(editModal.text);
+    void handleSaveAndShowTranscript(editModal.text);
     setEditModal({ visible: false, text: "" });
-  }, [editModal.text, pushTranscriptToOBS]);
+  }, [editModal.text, handleSaveAndShowTranscript]);
 
   const lastSelectedEntryId = selectedEntries.length > 0
     ? selectedEntries[selectedEntries.length - 1].id
@@ -1599,10 +1730,10 @@ export default function DockLmTab({
                             onClick={(e) => {
                               e.stopPropagation();
                               const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
-                              pushTranscriptToOBS(text);
+                              void handleSaveAndShowTranscript(text);
                               handleCancelSelection();
                             }}
-                            title={transcriptPushLabel}
+                            title={`${transcriptPushLabel} and save in Notes`}
                             disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
                           >
                             <MonitorUp size={12} />
@@ -1810,7 +1941,7 @@ export default function DockLmTab({
             onClick={() => {
               if (contextEntry?.text) {
                 const text = contextEntry.text;
-                if (text) pushTranscriptToOBS(text);
+                if (text) void handleSaveAndShowTranscript(text);
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}

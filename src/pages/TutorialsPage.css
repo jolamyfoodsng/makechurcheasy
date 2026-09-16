@@ -138,6 +138,7 @@
 
 .tutorial-card:focus-visible,
 .tutorials-video-list__item:focus-visible,
+.tutorials-modal__back:focus-visible,
 .tutorials-modal__close:focus-visible,
 .tutorials-category:focus-visible,
 .tutorials-refresh:focus-visible,
@@ -339,6 +340,28 @@
   margin: 0;
   color: var(--text-primary, #f8fafc);
   font-size: 18px;
+}
+
+.tutorials-modal__back {
+  min-height: 36px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  color: var(--text-secondary, #cbd5e1);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tutorials-modal__back:hover {
+  color: var(--text-primary, #f8fafc);
+  background: var(--elevated, #1f2937);
 }
 
 .tutorials-modal__close {

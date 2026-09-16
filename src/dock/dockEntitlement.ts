@@ -135,6 +135,26 @@ function checkWithServerLimits(
   return result;
 }
 
+/**
+ * Read a resource limit for UI visibility without requiring an AuthProvider.
+ * Dock surfaces can mount in detached roots, so they must use the same cached
+ * server entitlements as the action guards instead of React auth context.
+ */
+export function getDockEntitlementLimit(feature: FeatureKey): number {
+  const plan = getDockPlan();
+  const localDevOverride = getStoredLocalDevPlanOverride();
+  const storedEntitlements = getStoredEntitlements();
+  const localDevEntitlements = localDevOverride
+    ? DEFAULT_PLAN_CONFIG.plans[normalizePlanId(plan)]?.entitlements as unknown as Record<string, number | boolean> | undefined
+    : null;
+  const limits = localDevEntitlements || _serverEntitlements || storedEntitlements;
+  const limit = limits?.[feature];
+
+  if (typeof limit === "number") return limit;
+  if (typeof limit === "boolean") return limit ? -1 : 0;
+  return checkEntitlementSync(feature, plan).limit;
+}
+
 // ── Feature metadata ─────────────────────────────────────────────────────────
 
 // FEATURE_LABELS imported from planConfigTypes.ts (single source of truth)

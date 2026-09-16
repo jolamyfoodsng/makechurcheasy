@@ -48,6 +48,9 @@ describe("tutorial catalogue", () => {
 
   it("creates a safe privacy-enhanced YouTube embed URL", () => {
     expect(getYouTubeEmbedUrl("https://www.youtube.com/watch?v=abcdefghijk")).toBe("https://www.youtube-nocookie.com/embed/abcdefghijk?rel=0&modestbranding=1");
+    expect(getYouTubeEmbedUrl("https://youtu.be/abcdefghijk")).toBe("https://www.youtube-nocookie.com/embed/abcdefghijk?rel=0&modestbranding=1");
+    expect(getYouTubeEmbedUrl("https://youtube.com.attacker.example/watch?v=abcdefghijk")).toBeNull();
+    expect(getYouTubeEmbedUrl("https://notyoutube.com/watch?v=abcdefghijk")).toBeNull();
     expect(getYouTubeEmbedUrl("not a url")).toBeNull();
   });
 

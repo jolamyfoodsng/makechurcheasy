@@ -33,7 +33,7 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-void initOverlayUrl();
+const overlayInitPromise = initOverlayUrl();
 
 function getPublicPresentationSessionId(): string | null {
   const match = window.location.pathname.match(/^\/p\/([^/?#]+)/i);
@@ -108,7 +108,7 @@ const publicPresentationSessionId = getPublicPresentationSessionId();
 if (publicPresentationSessionId) {
   void openPublicPresentationRoute(publicPresentationSessionId);
 } else {
-void initAuthStore().then(async () => {
+void Promise.all([initAuthStore(), overlayInitPromise]).then(async () => {
   // Hydrate the native Dock database before any Dock page computes its
   // synchronous initial state. This keeps defaults from briefly replacing
   // the user's saved appearance or output settings.

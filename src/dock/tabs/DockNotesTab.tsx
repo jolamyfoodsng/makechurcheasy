@@ -545,7 +545,10 @@ export default function DockNotesTab({
     if (!commandId || processedAppendCommandIdsRef.current.has(commandId)) return;
     processedAppendCommandIdsRef.current.add(commandId);
 
-    const result = appendTextToDockNotes(command.text, command.title, { sourceId: commandId });
+    const result = appendTextToDockNotes(command.text, command.title, {
+      sourceId: commandId,
+      sessionId: command.sessionId,
+    });
     if (result) refreshNotes(result.notes);
   }, [refreshNotes]);
 

@@ -2102,6 +2102,20 @@ fn get_lan_overlay_info(target_host: Option<String>) -> Result<serde_json::Value
     }))
 }
 
+/// Return a LAN URL for the Vite development Dock. This is intentionally
+/// unavailable to packaged/release builds; the production app uses its own
+/// embedded overlay server instead.
+#[tauri::command]
+fn get_dev_dock_base_url() -> Result<String, String> {
+    if !cfg!(debug_assertions) {
+        return Err("The development Dock URL is only available in debug builds".to_string());
+    }
+
+    let ip = get_local_ip()
+        .ok_or_else(|| "Could not determine this computer's LAN IP".to_string())?;
+    Ok(format!("http://{}:1420", ip))
+}
+
 /// Prepare a local media file for remote OBS by ensuring it is served from the
 /// MakeChurchEasy uploads directory, then return its LAN URL.
 #[tauri::command]
@@ -6856,6 +6870,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         tiny_http::Response::from_string(r#"{"error":"sessionId is required"}"#)
                             .with_status_code(400)
                             .with_header(header)
+                            .with_header(overlay_header(
+                                "Cache-Control",
+                                "no-store, no-cache, must-revalidate, max-age=0",
+                            ))
+                            .with_header(overlay_header("Pragma", "no-cache"))
                             .with_header(cors);
                     let _ = request.respond(resp);
                     continue;
@@ -6875,6 +6894,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     .to_string(),
                 )
                 .with_header(header)
+                .with_header(overlay_header(
+                    "Cache-Control",
+                    "no-store, no-cache, must-revalidate, max-age=0",
+                ))
+                .with_header(overlay_header("Pragma", "no-cache"))
                 .with_header(cors);
                 let _ = request.respond(resp);
                 continue;
@@ -8078,6 +8102,7 @@ pub fn run() {
             get_overlay_port,
             get_local_share_info,
             get_lan_overlay_info,
+            get_dev_dock_base_url,
             prepare_remote_media_url,
             get_device_info,
             get_system_hardware_info,

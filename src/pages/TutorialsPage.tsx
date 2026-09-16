@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
+  ArrowLeft,
   BookOpen,
   CheckCircle2,
   Clock3,
@@ -39,6 +41,7 @@ function progressLabel(completed: number, total: number): string {
 }
 
 export default function TutorialsPage() {
+  const { t } = useTranslation();
   const [playlists, setPlaylists] = useState<TutorialPlaylist[]>(() => getCachedTutorialCatalog());
   const [progress, setProgress] = useState<TutorialProgress>(() => getTutorialProgress());
   const [search, setSearch] = useState("");
@@ -216,6 +219,9 @@ export default function TutorialsPage() {
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header className="tutorials-modal__header">
+              <button type="button" className="tutorials-modal__back" onClick={closePlaylist}>
+                <ArrowLeft size={17} /> <span>{t("common.back")}</span>
+              </button>
               <div>
                 <p>{selectedPlaylist.category}</p>
                 <h2 id="tutorial-playlist-title">{selectedPlaylist.title}</h2>

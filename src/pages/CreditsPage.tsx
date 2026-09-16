@@ -61,6 +61,24 @@ function getFeatureIcon(name: string): typeof Zap {
   return FEATURE_ICONS[name] ?? Zap;
 }
 
+const FEATURE_LABELS: Record<string, string> = {
+  transcription: "Speech-to-Scripture",
+  speech_to_scripture: "Speech-to-Scripture",
+  translation: "Live Translation",
+  ai_generation: "AI Generation",
+  ai_summary: "AI Sermon Summary",
+  ai_sermon_notes: "AI Sermon Notes",
+  ai_sermon_points: "AI Sermon Points",
+  worship_import_ai: "Worship Import",
+};
+
+function getFeatureUsageLabel(tx: CreditTransaction): string {
+  const feature = typeof tx.metadata?.feature === "string" ? tx.metadata.feature : "";
+  return FEATURE_LABELS[feature || ""]
+    ?? FEATURE_LABELS[tx.source || ""]
+    ?? (tx.source || tx.type).replace(/_/g, " ");
+}
+
 // ── Usage timeline API ───────────────────────────────────────────────────
 
 interface UsageDay {
@@ -267,8 +285,9 @@ export default function CreditsPage() {
     const map = new Map<string, { label: string; credits: number; count: number }>();
     for (const tx of recentTransactions) {
       if (tx.amount >= 0) continue; // only deductions
-      const key = tx.source || tx.type;
-      const existing = map.get(key) ?? { label: getTransactionLabel(tx), credits: 0, count: 0 };
+      const metadataFeature = typeof tx.metadata?.feature === "string" ? tx.metadata.feature : "";
+      const key = metadataFeature || tx.source || tx.type;
+      const existing = map.get(key) ?? { label: getFeatureUsageLabel(tx), credits: 0, count: 0 };
       existing.credits += Math.abs(tx.amount);
       existing.count += 1;
       map.set(key, existing);
@@ -295,7 +314,9 @@ export default function CreditsPage() {
       const [details, config, txs, timeline] = await Promise.all([
         fetchCreditDetails(),
         getPlanConfig(),
-        fetchCreditTransactions(20),
+        // Feature usage must represent the full recorded history, not only
+        // the small Recent Activity preview.
+        fetchCreditTransactions(10_000),
         fetchUsageTimeline(chartRange),
       ]);
       if (details) setCreditDetails(details);
@@ -322,9 +343,19 @@ export default function CreditsPage() {
   useEffect(() => {
     const unsub = onCreditChange((newBalance) => {
       setCreditDetails((prev) => prev ? { ...prev, credits: newBalance } : prev);
+      // A deduction emits a balance event before this page necessarily
+      // remounts. Refresh the ledger and chart so the charge is documented
+      // immediately in the Credits screen.
+      void Promise.all([
+        fetchCreditTransactions(10_000),
+        fetchUsageTimeline(chartRange),
+      ]).then(([transactions, timeline]) => {
+        setRecentTransactions(transactions);
+        setUsageTimeline(timeline);
+      });
     });
     return unsub;
-  }, []);
+  }, [chartRange]);
 
   // ── Handlers ──
   const handleComparePlans = useCallback(() => {

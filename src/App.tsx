@@ -19,7 +19,7 @@ import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
 import FeatureGuard from "./components/FeatureGuard";
 import { useAuth } from "./contexts/AuthContext";
-import { initLicenseGuard, reverifyOnAuth } from "./services/licenseGuard";
+import { initLicenseGuard, reverifyOnAuth, useLicenseGuardState } from "./services/licenseGuard";
 import { AppShell } from "./AppShell";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
@@ -32,7 +32,7 @@ import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, downloadAndInstallFromUrl, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -53,7 +53,9 @@ import { dockBridge } from "./services/dockBridge";
 import { initDockCommandHandler } from "./services/dockCommandHandler";
 import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBridge";
 import { automationRunner } from "./services/automationRunner";
-import { safeTauriInvoke } from "./services/tauriSafe";
+import { hasTauriInvoke, safeTauriInvoke } from "./services/tauriSafe";
+import { showMakeChatGptWindow } from "./services/makeChatGptWindow";
+import MakeChatGPTFloating from "./makechatgpt/MakeChatGPTFloating";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { obsService } from "./services/obsService";
 import { appStatusManager } from "./services/appStatusManager";
@@ -149,6 +151,35 @@ function AppRouteFallback() {
       Loading…
     </div>
   );
+}
+
+/**
+ * The pet belongs to the desktop application process, not to the in-app
+ * navigation shell. This keeps it alive over the desktop while the main
+ * MakeChurchEasy window is minimized or on another route.
+ */
+function MakeChurchEasyPetLauncher() {
+  const nativeWindowAvailable = hasTauriInvoke();
+
+  useEffect(() => {
+    if (!nativeWindowAvailable) return;
+
+    void showMakeChatGptWindow().catch((error) => {
+      console.warn("[MakeChurchEasy] Could not show floating pet:", error);
+    });
+
+    return undefined;
+  }, [nativeWindowAvailable]);
+
+  if (!nativeWindowAvailable) {
+    return (
+      <div className="makechatgpt-inline-dev">
+        <MakeChatGPTFloating />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayload): Promise<{
@@ -346,6 +377,7 @@ function App() {
   // ── Global theme (dark/light) ──
   useAppTheme();
   const { user, setUser } = useAuth();
+  const { lockReason: licenseLockReason } = useLicenseGuardState();
   const mceOnboardingDone =
     localStorage.getItem("mce-onboarding-complete") === "true";
   const [globalMediaDragging, setGlobalMediaDragging] = useState(false);
@@ -696,6 +728,7 @@ function App() {
           }
           const result = appendTextToDockNotes(payload.text, payload.title, {
             sourceId: payload.commandId,
+            sessionId: payload.sessionId,
           });
           if (result) {
             void syncDockNotesToDock(result.notes);
@@ -1288,6 +1321,7 @@ function App() {
   const handleFloorUpdate = useCallback(async () => {
     setFloorUpdateStatus("checking");
     setFloorUpdateError(null);
+    const manualDownloadUrl = forcedUpdateState.downloadUrl;
     try {
       // Try Tauri auto-updater first (works when signed binary exists)
       const result = await checkForUpdate();
@@ -1303,16 +1337,25 @@ function App() {
 
       // No signed binary from Tauri updater — download platform installer
       // directly from GitHub Releases and launch it in-app
-      await downloadAndInstallFromGitHub(
-        (progress) => setFloorUpdateProgress(progress),
-        (status) => setFloorUpdateStatus(status),
-      );
+      try {
+        await downloadAndInstallFromGitHub(
+          (progress) => setFloorUpdateProgress(progress),
+          (status) => setFloorUpdateStatus(status),
+        );
+      } catch (githubError) {
+        if (!manualDownloadUrl) throw githubError;
+        await downloadAndInstallFromUrl(
+          manualDownloadUrl,
+          (progress) => setFloorUpdateProgress(progress),
+          (status) => setFloorUpdateStatus(status),
+        );
+      }
     } catch (err: any) {
       console.error("[App] Floor update failed:", err);
       setFloorUpdateError(err?.message || "Update failed. Please try again.");
       setFloorUpdateStatus("error");
     }
-  }, []);
+  }, [forcedUpdateState.downloadUrl]);
 
   return (
     <div className="app">
@@ -1329,13 +1372,17 @@ function App() {
           }
         }}
       />
+      <MakeChurchEasyPetLauncher />
       {/* 1. Splash screen — shown until resources ready */}
       {splashVisible && (
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
 
-      {/* 2a. Version floor block — server-configured minimum, no self-update possible */}
-      {!splashVisible && versionFloorBlocked?.blocked && (
+      {/* 2a. Version floor block — server-configured minimum with in-app update */}
+      {!splashVisible &&
+        versionFloorBlocked?.blocked &&
+        !forcedUpdateState.active &&
+        licenseLockReason !== "forced_upgrade" && (
         <div className="force-update-overlay">
           <div className="force-update-modal">
             <div className="force-update-banner force-update-banner--locked">
@@ -1428,7 +1475,9 @@ function App() {
         versionFloorBlocked &&
         !versionFloorBlocked.blocked &&
         versionFloorGraceStartedAt &&
-        !versionFloorGraceDismissed && (
+        !versionFloorGraceDismissed &&
+        !forcedUpdateState.active &&
+        licenseLockReason !== "forced_upgrade" && (
           <VersionFloorWarningBanner
             currentVersion={versionFloorBlocked.currentVersion}
             minimumVersion={versionFloorBlocked.minimumVersion}
@@ -1441,7 +1490,9 @@ function App() {
         )}
 
       {/* 2a-b. Server-driven forced update overlay (admin-controlled) — countdown or locked */}
-      {!splashVisible && !versionFloorBlocked?.blocked && forcedUpdateState.active &&
+      {!splashVisible &&
+        licenseLockReason !== "forced_upgrade" &&
+        forcedUpdateState.active &&
         (forcedUpdateState.blocked || shouldReshowOverlay(forcedUpdateState.hoursRemaining)) && (
           <ForcedUpdateOverlay
             state={forcedUpdateState}

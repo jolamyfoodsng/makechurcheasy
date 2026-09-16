@@ -106,6 +106,22 @@ describe("scripture engine conversations", () => {
     expect((await engine.processChunk("verse sixteen", true)).matches[0]?.candidate.label).toBe("John 3:16");
   });
 
+  it.each([
+    ["And the Lord— Exodus 34, I'll read from verse 5.", "Exodus", 34, 5],
+    ["Romans chapter 9. Okay, let's read something in the book of Romans chapter 9. Praise God. Let me read from verse 10.", "Romans", 9, 10],
+  ])("resolves a verse announced after the chapter in the same turn", async (speech, book, chapter, verse) => {
+    const engine = new ScriptureDetectionEngine();
+    const result = await engine.processChunk(speech, true);
+    expect(result.matches[0]?.candidate).toMatchObject({ book, chapter, verse });
+  });
+
+  it("retains the chapter while the verse arrives in a later speech turn", async () => {
+    const engine = new ScriptureDetectionEngine();
+    await engine.processChunk("Romans chapter 9. Okay, let's read something in the book of Romans chapter 9. Praise God.", true);
+    const result = await engine.processChunk("I'm going to read from— let me read from verse 10.", true);
+    expect(result.matches[0]?.candidate).toMatchObject({ book: "Romans", chapter: 9, verse: 10 });
+  });
+
   it("uses the correction at the end of the same audio turn", async () => {
     const engine = new ScriptureDetectionEngine();
     const result = await engine.processChunk("John 3:16, sorry verse seventeen", true);

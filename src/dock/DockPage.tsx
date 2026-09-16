@@ -46,7 +46,9 @@ import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
 import { getDockPlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
+import { FREE_DOCK_OBS_MUTATION_MESSAGE } from "./dockMutationPolicy";
 import { LOCAL_DEV_PLAN_OVERRIDE_EVENT } from "../services/localDevPlanOverride";
+import { getUserScopedKey } from "../services/userScopedStorage";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
 import {
   DEFAULT_DOCK_FONT_SCALE,
@@ -300,6 +302,9 @@ function DockPageContent({
   const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
+  const [showFreePlanNotice, setShowFreePlanNotice] = useState(false);
+  const presentationPublishRequestRef = useRef(0);
+  const presentationPublishTailRef = useRef(Promise.resolve());
   const hiddenTabsKey = hiddenTabs.join("|");
   const hiddenTabIds = useMemo(() => new Set<DockTab>(hiddenTabs), [hiddenTabsKey]);
   const visibleDockTabs = useMemo(() => DOCK_TABS.filter((tab) => !hiddenTabIds.has(tab.id)), [hiddenTabIds]);
@@ -383,6 +388,19 @@ function DockPageContent({
   }, []);
 
   // Register the upgrade modal trigger so any dock tab can show it.
+  useEffect(() => {
+    if (!isFreePlan) return;
+
+    const noticeKey = getUserScopedKey("ocs-dock-free-plan-notice-v1");
+    try {
+      if (localStorage.getItem(noticeKey)) return;
+      localStorage.setItem(noticeKey, "1");
+    } catch {
+      // Still show the notice when embedded-browser storage is unavailable.
+    }
+    setShowFreePlanNotice(true);
+  }, [isFreePlan]);
+
   useEffect(() => {
     registerUpgradeModal((msg) => setUpgradeModalMsg(msg));
     startPlanRefresh();
@@ -847,11 +865,21 @@ function DockPageContent({
 
   const handleStage = useCallback((item: DockStagedItem | null) => {
     setStaged(item);
-    if (!presentationLinkMode) return;
-    void publishDockStagedItemToPresentation(item).catch((error) => {
-      console.warn("[Dock] Failed to publish staged item to presentation link:", error);
-    });
-  }, [presentationLinkMode]);
+    const requestId = ++presentationPublishRequestRef.current;
+    presentationPublishTailRef.current = presentationPublishTailRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        // Keep rapid next/previous clicks ordered and ensure the latest click
+        // is the final state written to the shared presentation session. The
+        // link mirrors the current Dock selection even when a paid plan also
+        // sends that selection directly to OBS.
+        if (requestId !== presentationPublishRequestRef.current) return;
+        await publishDockStagedItemToPresentation(item);
+      })
+      .catch((error) => {
+        console.warn("[Dock] Failed to publish staged item to presentation link:", error);
+      });
+  }, []);
 
   const handleManualConnect = useCallback(async () => {
     setObsError("");
@@ -2063,9 +2091,12 @@ function DockPageContent({
 
       {/* ── Entitlement upgrade modal ── */}
       <DockUpgradeModal
-        open={Boolean(upgradeModalMsg)}
-        onClose={() => setUpgradeModalMsg("")}
-        message={upgradeModalMsg}
+        open={showFreePlanNotice || Boolean(upgradeModalMsg)}
+        onClose={() => {
+          setShowFreePlanNotice(false);
+          setUpgradeModalMsg("");
+        }}
+        message={showFreePlanNotice ? FREE_DOCK_OBS_MUTATION_MESSAGE : upgradeModalMsg}
       />
 
       {/* ── Language change confirmation modal ── */}

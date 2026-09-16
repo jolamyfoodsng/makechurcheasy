@@ -971,7 +971,7 @@ function applyFullscreenQuickThemeSettings(
       backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
       backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
       backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
-      backgroundOpacity: useNoBg ? 0 : useThemeBg ? (theme.settings.backgroundOpacity ?? 1) : quickSettings.backgroundOpacity,
+      backgroundOpacity: useNoBg ? 0 : quickSettings.backgroundOpacity,
       backgroundColor: useNoBg
         ? "transparent"
         : useThemeBg
@@ -1298,6 +1298,10 @@ function DockBibleTab({
     data: DockBiblePushData,
     options?: DockOverlayFitOptions,
   ) => {
+    // Free users are presentation-link only. Keep this guard at the output
+    // boundary so a future action cannot accidentally touch the MCE Bible
+    // source even if it forgets an earlier presentation-mode branch.
+    if (presentationLinkMode) return null;
     if (!hasSceneRoute) {
       return dockObsClient.pushBible(data, options);
     }
@@ -1330,9 +1334,10 @@ function DockBibleTab({
     }));
     if (sceneRoute.syncPresentation) return dockObsClient.pushBible(data, options);
     return null;
-  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
+  }, [hasSceneRoute, presentationLinkMode, sceneRoute.targets, sceneRoute.syncPresentation]);
 
   const clearBibleFromConfiguredOutput = useCallback(async () => {
+    if (presentationLinkMode) return;
     if (!hasSceneRoute) {
       await dockObsClient.clearBible();
       return;
@@ -1341,7 +1346,7 @@ function DockBibleTab({
       dockObsClient.clearSceneRouteSource("bible", target.sceneName)
     )));
     if (sceneRoute.syncPresentation) await dockObsClient.clearBible();
-  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
+  }, [hasSceneRoute, presentationLinkMode, sceneRoute.targets, sceneRoute.syncPresentation]);
   const initialPrefsRef = useRef<DockBiblePreferences | null>(null);
   if (initialPrefsRef.current === null) {
     initialPrefsRef.current = loadDockBiblePreferences();
@@ -2347,6 +2352,32 @@ function DockBibleTab({
   useEffect(() => {
     fullscreenLiveOverridesRef.current = fullscreenLiveOverrides as Record<string, unknown> | null;
   }, [fullscreenLiveOverrides]);
+
+  // Keep other dock tabs (especially LM) aligned with the Bible tab's live
+  // background. Saved preferences can lag briefly while a quick setting is
+  // being edited, so publish the effective theme snapshot as well.
+  useEffect(() => {
+    dockClient.sendState({
+      type: "state:bible-theme-updated",
+      payload: {
+        fullscreen: {
+          themeId: effectiveSelectedBibleTheme.id,
+          themeSettings: effectiveSelectedBibleTheme.settings,
+          liveOverrides: fullscreenLiveOverrides,
+        },
+        lowerThird: {
+          themeId: effectiveSelectedLowerThirdTheme.id,
+          themeSettings: effectiveSelectedLowerThirdTheme.settings,
+          liveOverrides: null,
+        },
+      },
+      timestamp: Date.now(),
+    });
+  }, [
+    effectiveSelectedBibleTheme,
+    effectiveSelectedLowerThirdTheme,
+    fullscreenLiveOverrides,
+  ]);
 
   const persistDockBiblePreferencesNow = useCallback((overrides: Partial<DockBiblePreferences> = {}) => {
     if (prefsSaveDebounceRef.current !== null) {

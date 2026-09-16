@@ -35,7 +35,6 @@ import { safeTauriListen } from "./services/tauriSafe";
 import type { ConnectionStatus } from "./services/obsService";
 
 
-
 export function AppShell() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -43,6 +42,8 @@ export function AppShell() {
   const svc = useServiceStore();
 
   const isServiceEnded = svc.status === "ended";
+  const isTranscriptDetailRoute = /^\/transcripts\/[^/]+\/?$/.test(location.pathname);
+  const isFixedViewportRoute = isTranscriptDetailRoute || location.pathname === "/speech-to-scripture";
 
   // ── Sidebar ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -215,10 +216,10 @@ export function AppShell() {
       <main
         id="app-main-content"
         tabIndex={-1}
-        className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
+        className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}${isTranscriptDetailRoute ? " app-main--transcript-detail" : ""}${isFixedViewportRoute ? " app-main--fixed-viewport" : ""}`}>
         <LiveStatusBar />
         <div className="app-glow" />
-        <div className="app-content">
+        <div className={`app-content${isTranscriptDetailRoute ? " app-content--transcript-detail" : ""}${isFixedViewportRoute ? " app-content--fixed-viewport" : ""}`}>
           <VoiceBibleResumeBanner />
           <Outlet />
         </div>

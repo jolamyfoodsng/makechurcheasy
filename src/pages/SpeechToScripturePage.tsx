@@ -16,6 +16,7 @@ import {
   Check,
   CheckCircle,
   ChevronDown,
+  Clock,
   Copy,
   Download,
   Lock,
@@ -33,6 +34,7 @@ import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
 import { bibleObsService } from "../bible/bibleObsService";
 import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
+import MacSelect from "../components/MacSelect";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
 import {
@@ -63,6 +65,8 @@ const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
+const FREE_SPEECH_TO_SCRIPTURE_MINUTES = 15;
+const FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES = 20;
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
@@ -151,6 +155,7 @@ export default function SpeechToScripturePage() {
 
   // ── Backend access check (declared early for use in useEffects below) ──
   const [checkingAccess, setCheckingAccess] = useState(false);
+  const [sessionLimitSeconds, setSessionLimitSeconds] = useState<number | null>(null);
   const [accessDenied, setAccessDenied] = useState<{
     reason: string;
     requiredPlan?: string;
@@ -194,14 +199,13 @@ export default function SpeechToScripturePage() {
   const chargedSessionCreditsRef = useRef(0);
   const chargingSessionCreditsRef = useRef(false);
   const stoppedForCreditFailureRef = useRef(false);
+  const limitStopTriggeredRef = useRef(false);
 
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([]);
   const [selectedMic, setSelectedMic] = useState(() => loadPreferredMicId());
   const [micLoading, setMicLoading] = useState(false);
-  const [micDropdownOpen, setMicDropdownOpen] = useState(false);
-  const micDropdownRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyLine = useCallback(async (id: string, text: string) => {
@@ -255,18 +259,6 @@ export default function SpeechToScripturePage() {
   useEffect(() => {
     void enumerateMics();
   }, []);
-
-  // Close mic dropdown on outside click
-  useEffect(() => {
-    if (!micDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (micDropdownRef.current && !micDropdownRef.current.contains(e.target as Node)) {
-        setMicDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [micDropdownOpen]);
 
   // ── Connectivity & service states ──
   const isOnline = useOnlineStatus();
@@ -387,6 +379,7 @@ export default function SpeechToScripturePage() {
     // Disable button and show checking state
     setCheckingAccess(true);
     setAccessDenied(null);
+    setSessionLimitSeconds(null);
 
     try {
       const deviceId = getDeviceId();
@@ -439,6 +432,8 @@ export default function SpeechToScripturePage() {
       console.log("[SpeechToScripture] ✅ Access ALLOWED — calling lmDockService.startListening()");
       chargedSessionCreditsRef.current = 0;
       stoppedForCreditFailureRef.current = false;
+      limitStopTriggeredRef.current = false;
+      setSessionLimitSeconds(typeof data.dailyRemainingSeconds === "number" ? data.dailyRemainingSeconds : null);
       track("sts_listening_started", { mic: selectedMic || "default" });
       trackVoiceSessionStarted();
       await lmDockService.startListening(selectedMic || undefined);
@@ -591,6 +586,13 @@ export default function SpeechToScripturePage() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isTranscribing, snapshot.startedAt]);
+
+  useEffect(() => {
+    if (!isTranscribing || sessionLimitSeconds === null || sessionLimitSeconds <= 0 || elapsed < sessionLimitSeconds || limitStopTriggeredRef.current) return;
+    limitStopTriggeredRef.current = true;
+    setAccessDenied({ reason: "daily_speech_limit" });
+    confirmStop();
+  }, [confirmStop, elapsed, isTranscribing, sessionLimitSeconds]);
 
   useEffect(() => {
     if (!isListening || stoppedForCreditFailureRef.current) return;
@@ -872,6 +874,7 @@ export default function SpeechToScripturePage() {
           <div>
             <div className="sts3-header-title">Verse AI</div>
             <div className="sts3-header-sub">Real-time speech to scripture detection</div>
+            {effectivePlan === "free" && <div className="sts3-header-sub">Free plan: {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes daily · {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays</div>}
           </div>
         </div>
         <CreditsDisplay userId={user?.id} />
@@ -1048,44 +1051,24 @@ export default function SpeechToScripturePage() {
           {/* ── Left: Live Transcript ── */}
           <aside className="sts3-sidebar">
             <div className="sts3-sidebar-header">
-              <div className="sts3-select-mic-wrapper" ref={micDropdownRef}>
-                <div
-                  className="sts3-select-mic"
-                  onClick={() => {
-                    if (isListening || isConnecting) return;
-                    if (!micDropdownOpen) void enumerateMics();
-                    setMicDropdownOpen((o) => !o);
-                  }}
-                >
-                  <span className="sts3-select-mic-label">
-                    <Mic size={14} />
-                    {mics.find((m) => m.id === selectedMic)?.label || (micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophone"))}
-                  </span>
-                  <ChevronDown size={14} />
-                </div>
-                {micDropdownOpen && (
-                  <div className="sts3-mic-dropdown">
-                    {mics.length === 0 && (
-                      <div className="sts3-mic-dropdown-item sts3-mic-dropdown-item--disabled">
-                        {micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophonesFound")}
-                      </div>
-                    )}
-                    {mics.map((mic) => (
-                      <div
-                        key={mic.id}
-                        className={`sts3-mic-dropdown-item${mic.id === selectedMic ? " sts3-mic-dropdown-item--active" : ""}`}
-                        onClick={() => {
-                          track("sts_mic_changed", { mic: mic.id });
-                          selectMic(mic.id);
-                          setMicDropdownOpen(false);
-                        }}
-                      >
-                        {mic.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <MacSelect
+                options={mics.map((mic) => ({ value: mic.id, label: mic.label }))}
+                value={selectedMic}
+                onChange={(micId) => {
+                  track("sts_mic_changed", { mic: micId });
+                  selectMic(micId);
+                }}
+                onReload={() => void enumerateMics()}
+                ariaLabel={t("verseAi.selectMicrophone")}
+                quickStartLabel={t("verseAi.quickStart")}
+                allDevicesLabel={t("verseAi.allDevices")}
+                reloadLabel={t("verseAi.reloadDevices")}
+                loadingLabel={t("verseAi.loadingMics")}
+                placeholder={t("verseAi.noMicrophone")}
+                emptyLabel={t("verseAi.noMicrophonesFound")}
+                loading={micLoading}
+                disabled={isListening || isConnecting}
+              />
               <div className="sts3-timer">
                 {formatTimerDisplay(elapsed)}
               </div>
@@ -1538,6 +1521,19 @@ export default function SpeechToScripturePage() {
                     title={t("verseAi.dismiss")}>
                     {t("verseAi.dismiss")}
                   </button>
+                </div>
+              </>
+            )}
+            {accessDenied.reason === "daily_speech_limit" && (
+              <>
+                <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Daily free allowance used</h2>
+                <p className="sts3-lock-desc">
+                  Free accounts can use Speech to Scripture for {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes each day and {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays. Your allowance will be available again tomorrow.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="sts3-btn sts3-btn--primary" onClick={() => navigate("/subscription/plans")} title="View plans">View plans</button>
+                  <button className="sts3-btn sts3-btn--ghost" onClick={() => setAccessDenied(null)} title="Dismiss">Dismiss</button>
                 </div>
               </>
             )}

@@ -244,7 +244,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     cloudSync: false,
     lowerThirds: false,
     translation: false,
-    speechToScripture: false,
+    speechToScripture: true,
     sermonExport: false,
     aiFeatures: false,
     advancedAnalytics: false,

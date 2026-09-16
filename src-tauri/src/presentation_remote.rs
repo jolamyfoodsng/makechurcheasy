@@ -135,6 +135,10 @@ fn cors_header() -> Header {
     Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap()
 }
 
+fn no_store_header() -> Header {
+    Header::from_bytes("Cache-Control", "no-store").unwrap()
+}
+
 fn accept_ranges_header() -> Header {
     Header::from_bytes("Accept-Ranges", "bytes").unwrap()
 }
@@ -411,6 +415,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                     .with_header(
                         Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap(),
                     )
+                    .with_header(no_store_header())
                     .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;
@@ -441,6 +446,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                     .to_string(),
                 )
                 .with_header(json_header())
+                .with_header(no_store_header())
                 .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;
@@ -553,6 +559,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                     .to_string(),
                 )
                 .with_header(json_header())
+                .with_header(no_store_header())
                 .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;
@@ -613,6 +620,7 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                     serde_json::json!({ "viewerCount": viewer_count }).to_string(),
                 )
                 .with_header(json_header())
+                .with_header(no_store_header())
                 .with_header(cors_header());
                 let _ = request.respond(response);
                 continue;

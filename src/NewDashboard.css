@@ -65,6 +65,30 @@
     margin-left: 60px;
 }
 
+.app-main--transcript-detail,
+.app-main--fixed-viewport {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.app-main--transcript-detail > :not(.app-content):not(.app-glow),
+.app-main--fixed-viewport > :not(.app-content):not(.app-glow) {
+    flex-shrink: 0;
+}
+
+.app-main--transcript-detail .app-content--transcript-detail,
+.app-main--fixed-viewport .app-content--fixed-viewport {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+}
+
 .app-main--full {
     margin-left: 0;
 }

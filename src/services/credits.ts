@@ -374,9 +374,11 @@ export interface CreditTransaction {
  * Fetch recent credit transactions from the backend.
  * Returns an array of transactions, most recent first.
  */
-export async function fetchCreditTransactions(limit = 10): Promise<CreditTransaction[]> {
+export async function fetchCreditTransactions(limit = 10, skip = 0): Promise<CreditTransaction[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/credit-transactions?limit=${limit}`, {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (skip > 0) params.set("skip", String(skip));
+    const res = await fetch(`${API_BASE}/api/credit-transactions?${params.toString()}`, {
       headers: authHeaders(),
     });
     if (!res.ok) return [];

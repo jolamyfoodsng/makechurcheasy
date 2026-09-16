@@ -13,6 +13,12 @@ const toolbarCss = readFileSync(fileURLToPath(new URL("./DockBottomToolbar.css",
 const bottomPanelCss = readFileSync(fileURLToPath(new URL("./DockBottomSearchPanel.css", import.meta.url)), "utf8");
 
 describe("Dock bottom toolbar narrow actions", () => {
+  it("notifies the parent outside the local state updater", () => {
+    expect(toolbarSource).toContain("const next = !showOverflow;");
+    expect(toolbarSource).toContain("setShowOverflow(next);\n    onOverflowChange?.(next);");
+    expect(toolbarSource).not.toContain("setShowOverflow((prev) => {");
+  });
+
   it("measures the toolbar itself and switches at 350px", () => {
     expect(toolbarSource).toContain("setIsNarrow(width <= 350)");
     expect(toolbarSource).toContain("width <= 239");

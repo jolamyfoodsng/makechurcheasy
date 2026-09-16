@@ -36,7 +36,11 @@ describe("projection settings and verse text", () => {
     vi.mocked(readNativeDockSetting).mockReturnValue({ translation: " niv ", overlayMode: "lower-third", autoPushQueue: true });
     expect(loadLmSettings()).toMatchObject({ translation: "NIV", overlayMode: "lower-third", autoPushQueue: true, autoPushSuggestions: false });
   });
-  it("preserves manual projection defaults and the global Bible output mode", () => {
-    expect(loadLmSettings()).toMatchObject({ overlayMode: "lower-third", autoPushQueue: false, autoPushSuggestions: false });
+  it("auto-pushes detected Scripture by default while keeping quote suggestions manual", () => {
+    expect(loadLmSettings()).toMatchObject({ overlayMode: "lower-third", autoPushQueue: true, autoPushSuggestions: false });
+  });
+  it("respects an explicit saved opt-out from automatic Scripture pushes", () => {
+    vi.mocked(readNativeDockSetting).mockReturnValue({ autoPushQueue: false });
+    expect(loadLmSettings()).toMatchObject({ autoPushQueue: false, autoPushSuggestions: false });
   });
 });

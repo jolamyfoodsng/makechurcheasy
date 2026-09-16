@@ -1,7 +1,8 @@
 /**
  * overlay_relay.rs — Local WebSocket relay for instant overlay communication.
  *
- * Listens on 127.0.0.1:17891. Both the dock and the overlay HTML (running
+ * Listens on 127.0.0.1:17891 in production. Development builds also allow
+ * LAN clients on port 17891. Both the dock and the overlay HTML (running
  * inside OBS Browser Source) connect once at startup.
  *
  * Features:
@@ -82,7 +83,8 @@ fn is_overlay_update(text: &str) -> bool {
 }
 
 pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
-    let addr = format!("127.0.0.1:{}", port);
+    let bind_host = if cfg!(debug_assertions) { "0.0.0.0" } else { "127.0.0.1" };
+    let addr = format!("{}:{}", bind_host, port);
 
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,

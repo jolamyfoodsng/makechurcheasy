@@ -20,7 +20,7 @@ export const DEFAULT_LM_SETTINGS: LmDockSettings = {
   translation: "KJV",
   overlayMode: "fullscreen",
   autoScroll: true,
-  autoPushQueue: false,
+  autoPushQueue: true,
   autoPushSuggestions: false,
   autoPushDedupWindow: 15,
   pushScene: "ai",

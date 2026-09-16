@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 
 import DockPage from "../dock/DockPage";
 import type { DockTab } from "../dock/dockTypes";
+import { getDockPlan } from "../dock/dockEntitlement";
 import { dockObsClient, type DockObsStatus } from "../dock/dockObsClient";
 import { setOverlayBaseUrlOverride } from "../services/overlayUrl";
 import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
@@ -513,6 +514,7 @@ function PresentationLinkPanel({
 }: {
   showScreenZoom: boolean;
 }) {
+  const isFreePlan = getDockPlan() === "free";
   const [session, setSession] = useState<PresentationSettings>(() => getPresentationSettings());
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -824,10 +826,12 @@ function PresentationLinkPanel({
             <ExternalLink size={18} />
             Launch Screen
           </button>
-          <button type="button" className="remote-secondary-button" onClick={() => void handleRegenerate()}>
-            <RotateCcw size={18} />
-            Change Link
-          </button>
+          {!isFreePlan && (
+            <button type="button" className="remote-secondary-button" onClick={() => void handleRegenerate()}>
+              <RotateCcw size={18} />
+              Change Link
+            </button>
+          )}
         </div>
 
         {message ? (

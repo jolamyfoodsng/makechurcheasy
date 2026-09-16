@@ -15,6 +15,10 @@ export interface DockNote {
   content: string;
   updatedAt: number;
   sourceId?: string;
+  /** Stable voice-listening session; transcript captures from one session share one note. */
+  sessionId?: string;
+  /** Bounded append-command history makes relay retries idempotent across reloads. */
+  appendSourceIds?: string[];
   /** Legacy compatibility flag; blank lines now determine slide boundaries. */
   splitOnLineBreaks?: boolean;
 }
@@ -294,7 +298,7 @@ export async function syncDockNotesToDock(notes: DockNote[] = loadDockNotes()): 
 export function appendTextToDockNotes(
   text: string,
   title?: string,
-  options: { sourceId?: string } = {},
+  options: { sourceId?: string; sessionId?: string } = {},
 ): { note: DockNote; notes: DockNote[] } | null {
   const cleanText = text.trim();
   if (!cleanText) return null;
@@ -302,19 +306,28 @@ export function appendTextToDockNotes(
   const notes = loadDockNotes();
   const now = Date.now();
   const sourceId = options.sourceId?.trim();
+  const sessionId = options.sessionId?.trim();
   if (sourceId) {
-    const existingSourceNote = notes.find((note) => note.sourceId === sourceId);
+    const existingSourceNote = notes.find((note) => (
+      note.sourceId === sourceId || note.appendSourceIds?.includes(sourceId)
+    ));
     if (existingSourceNote) return { note: existingSourceNote, notes };
   }
 
   const noteTitle = title ?? formatSavedNoteTitle(now, cleanText);
-  const existingIndex = notes.findIndex((note) => note.title === noteTitle);
+  const existingIndex = sessionId
+    ? notes.findIndex((note) => note.sessionId === sessionId)
+    : notes.findIndex((note) => note.title === noteTitle);
 
   if (existingIndex >= 0) {
     const existing = notes[existingIndex];
     const note: DockNote = {
       ...existing,
       sourceId: existing.sourceId ?? sourceId,
+      ...(sessionId ? { sessionId } : {}),
+      ...(sourceId ? {
+        appendSourceIds: [...new Set([...(existing.appendSourceIds ?? []), sourceId])].slice(-100),
+      } : {}),
       content: existing.content ? `${existing.content}\n\n${cleanText}` : cleanText,
       updatedAt: now,
     };
@@ -328,7 +341,9 @@ export function appendTextToDockNotes(
     title: noteTitle,
     content: cleanText,
     updatedAt: now,
+    ...(sessionId ? { sessionId } : {}),
     ...(sourceId ? { sourceId } : {}),
+    ...(sourceId ? { appendSourceIds: [sourceId] } : {}),
   };
   const next = [note, ...notes];
   saveDockNotes(next);

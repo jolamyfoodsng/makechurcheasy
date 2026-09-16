@@ -14,6 +14,7 @@ import {
   checkForUpdate,
   downloadAndInstallUpdate,
   downloadAndInstallFromGitHub,
+  downloadAndInstallFromUrl,
   type DownloadProgress,
 } from "../services/updateService";
 import type { Update } from "@tauri-apps/plugin-updater";
@@ -120,16 +121,20 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
         return;
       }
 
-      await downloadAndInstallFromGitHub(
-        (p) => setProgress(p),
-        (s) => setStatus(s)
-      );
-    } catch (err: any) {
-      if (state.downloadUrl) {
-        window.open(state.downloadUrl, "_blank", "noopener,noreferrer");
-        setStatus("prompt");
-        return;
+      try {
+        await downloadAndInstallFromGitHub(
+          (p) => setProgress(p),
+          (s) => setStatus(s),
+        );
+      } catch (githubError) {
+        if (!state.downloadUrl) throw githubError;
+        await downloadAndInstallFromUrl(
+          state.downloadUrl,
+          (p) => setProgress(p),
+          (s) => setStatus(s),
+        );
       }
+    } catch (err: any) {
       console.error("[ForcedUpdate] Update failed:", err);
       setErrorMsg(err?.message || "Update failed. Please try again.");
       setStatus("error");

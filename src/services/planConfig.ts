@@ -48,11 +48,25 @@ function normalizePlanConfigShape(config: PlanConfig): PlanConfig {
     }),
   ) as PlanConfig["plans"];
 
-  return {
+  const normalized = {
     ...DEFAULT_PLAN_CONFIG,
     ...config,
     plans,
   };
+
+  // Plan config v10 introduced the free Speech to Scripture allowance. Older
+  // local caches must not keep the feature locked while the server refreshes.
+  if ((config.version ?? 0) < 10 && normalized.plans.free) {
+    normalized.plans.free = {
+      ...normalized.plans.free,
+      entitlements: {
+        ...normalized.plans.free.entitlements,
+        speechToScripture: true,
+      },
+    };
+  }
+
+  return normalized;
 }
 
 function readCacheEntry(): CacheEntry | null {

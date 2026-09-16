@@ -22,6 +22,7 @@ describe("speech page latest detection", () => {
     const html = renderToStaticMarkup(<MemoryRouter><SpeechToScripturePage /></MemoryRouter>);
     expect(html).toContain("John 3:16");
     expect(html).toContain("For God so loved the world");
+    expect(html).toContain('aria-label="verseAi.selectMicrophone"');
     vi.unstubAllGlobals();
   });
 });

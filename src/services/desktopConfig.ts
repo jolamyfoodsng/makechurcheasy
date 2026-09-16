@@ -82,7 +82,10 @@ async function fetchConfig(): Promise<DesktopConfig> {
 
 async function doFetch(): Promise<DesktopConfig> {
   try {
-    const res = await fetch(`${API_BASE}/api/config/desktop`);
+    // Update policy changes must reach running clients promptly. The admin
+    // screen can publish a forced update at any time, so browser/WebView HTTP
+    // caching must not hide the new minimum version or installer URL.
+    const res = await fetch(`${API_BASE}/api/config/desktop`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       if (data && data.obs && data.storage) {

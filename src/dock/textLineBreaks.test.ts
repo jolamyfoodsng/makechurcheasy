@@ -72,7 +72,7 @@ describe("Dock multiline text", () => {
       "const allowed = ['fade', 'reveal-bg-then-text'];",
     );
     expect(worshipOverlay).toContain(
-      "root.style.setProperty('--text-transition-duration', Math.min(180, ead) + 'ms');",
+      "root.style.setProperty('--text-transition-duration', ead + 'ms');",
     );
     expect(worshipOverlay).not.toContain('await waitForOverlayAnimation');
     expect(worshipOverlay).toContain(

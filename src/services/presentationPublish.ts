@@ -149,7 +149,9 @@ export async function publishMediaToPresentation(media: MediaItem): Promise<void
       ? {
         kind: media.type,
         url,
-        fit: "fill",
+        // Keep the complete asset visible in the shared 16:9 presentation
+        // link. Covering the frame crops portrait and non-16:9 media.
+        fit: "contain",
         backgroundColor: "#000000",
         playback: media.type === "video"
           ? {

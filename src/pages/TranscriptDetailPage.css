@@ -979,7 +979,12 @@ a {
 .detail-view {
     display: flex;
     flex-direction: column;
+    flex: 1 1 0;
     height: 100%;
+    width: 100%;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
 }
 
 .detail-header-section {
@@ -1188,6 +1193,7 @@ a {
 .detail-content {
     flex: 1;
     display: flex;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -1196,6 +1202,7 @@ a {
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--app-border);
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -1214,7 +1221,9 @@ a {
 
 .transcript-scroll {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0 24px 120px;
     display: flex;
     flex-direction: column;
@@ -1293,7 +1302,8 @@ a {
 .right-sidebar {
     width: 320px;
     flex-shrink: 0;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     padding: 24px;
     display: flex;
     flex-direction: column;
@@ -1445,9 +1455,13 @@ a {
 .translation-view {
     display: flex;
     flex-direction: column;
+    flex: 1 1 0;
     height: 100%;
+    width: 100%;
+    min-height: 0;
+    max-height: 100%;
     padding: 20px 24px 28px;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .t-header-row {
@@ -1461,8 +1475,9 @@ a {
     display: flex;
     gap: 24px;
     position: relative;
-    min-height: 400px;
+    min-height: 0;
     flex: 1;
+    overflow: hidden;
 }
 
 .pane {
@@ -1488,8 +1503,10 @@ a {
 
 .pane-content {
     flex: 1;
+    min-height: 0;
     padding: 16px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1668,7 +1685,49 @@ a {
 
 .sidebar-tab-content {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.transcript-language-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.transcript-language-back {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    color: var(--app-text-muted);
+    background: var(--app-surface);
+}
+
+.transcript-language-back:hover {
+    color: var(--app-text-main);
+    border-color: var(--app-text-muted);
+}
+
+.transcript-language-heading > div {
+    display: grid;
+    gap: 2px;
+}
+
+.transcript-language-label {
+    color: var(--app-text-muted);
+    font-size: 0.75rem;
+}
+
+.transcript-language-heading strong {
+    color: var(--app-text-main);
+    font-size: 0.875rem;
+    font-weight: 600;
 }
 
 .sidebar-empty-state {

@@ -17221,6 +17221,7 @@ body.dock-modal-open {
 .dtb-slider-field__head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   font-size: 12px;
   color: var(--dock-text-secondary);
   font-weight: 500;
@@ -17322,19 +17323,27 @@ body.dock-modal-open {
 
 .dtb-slider {
   width: 100%;
-  height: 4px;
-  border-radius: 4px;
+  height: 6px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--dock-border) 60%, var(--dock-surface-alt));
   outline: none;
   appearance: none;
   cursor: pointer;
 }
 
+.dtb-slider--filled {
+  background: linear-gradient(
+    to right,
+    var(--dock-accent) 0 var(--dtb-slider-progress, 0%),
+    color-mix(in srgb, var(--dock-border) 60%, var(--dock-surface-alt)) var(--dtb-slider-progress, 0%) 100%
+  );
+}
+
 .dtb-slider::-webkit-slider-thumb {
   appearance: none;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: 999px;
   background: var(--dock-accent);
   border: 2px solid var(--dock-surface);
   box-shadow: 0 1px 4px rgba(29, 78, 216, 0.3);
@@ -17349,7 +17358,7 @@ body.dock-modal-open {
 .dtb-slider::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: 999px;
   background: var(--dock-accent);
   border: 2px solid var(--dock-surface);
   box-shadow: 0 1px 4px rgba(29, 78, 216, 0.3);
@@ -34808,6 +34817,13 @@ button.dock-btm-toolbar__clear--inline,
   background: var(--dock-accent-hover);
 }
 
+/* Keep upgrade calls to action centered in dock empty states. */
+.dock-upgrade-plan-btn {
+  display: flex;
+  width: fit-content;
+  margin-inline: auto;
+}
+
 /* ── Growth+ Badge ── */
 .dock-growth-badge {
   display: inline-flex;
@@ -37843,6 +37859,7 @@ button.dock-btm-toolbar__clear--inline,
 .dtb-bg-picker__asset-grid {
   grid-auto-rows: max-content;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
 }
 
 .dtb-bg-picker__asset-grid > .dtb-bg-picker__card {
@@ -37872,4 +37889,105 @@ button.dock-btm-toolbar__clear--inline,
 .dtb-studio-card--compact-height .dtb-bg-picker__asset-grid {
   height: 220px;
   max-height: 220px;
+}
+
+/* Compact plan counters and disabled upload actions in the background picker. */
+.dtb-bg-picker__limit-count {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  color: var(--dock-text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtb-bg-picker__upload-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+/* The active Bible/Reference text sub-tab needs a clear selected state. */
+.dtb-bg-picker__subtab--active {
+  background: color-mix(in srgb, var(--dock-accent, #1D4ED8) 28%, var(--dock-surface-1, #334155));
+  color: var(--dock-text, #F8FAFC);
+  box-shadow: inset 0 -2px 0 var(--dock-accent, #1D4ED8);
+  font-weight: 700;
+}
+
+.dtb-bg-picker__subtab--active:hover {
+  background: color-mix(in srgb, var(--dock-accent, #1D4ED8) 34%, var(--dock-surface-1, #334155));
+}
+
+/* Color fields use a label above one large, directly clickable swatch. */
+.dtb-color-picker-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dtb-color-picker-card__label {
+  color: var(--dock-text-secondary, #CBD5E1);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.dtb-color-inline__trigger--card {
+  min-height: 40px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.dtb-color-inline__trigger--card:hover {
+  transform: none;
+}
+
+.dtb-color-inline__card-swatch {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 80%, transparent);
+  border-radius: 2px;
+}
+
+.dtb-colors__ref-bg-header:not(.dtb-colors__ref-bg-header--toggle-only) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+}
+
+.dtb-colors__ref-bg-color-card {
+  width: 100%;
+}
+
+.dtb-typography-control-row--selects {
+  align-items: end;
+}
+
+.dtb-compact-select-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dtb-compact-select-field__select {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 24px 4px 8px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-input-bg, var(--dock-surface-1));
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 11px;
+}
+
+.dtb-compact-select-field__select:focus-visible {
+  outline: 1px solid var(--dock-accent, #1D4ED8);
+  outline-offset: 1px;
 }

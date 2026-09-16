@@ -25,12 +25,67 @@ import {
   type LockReason,
 } from "@/services/licenseGuard";
 import { getDashboardBaseForAuth } from "@/services/authService";
+import ForcedUpdateOverlay from "./ForcedUpdateOverlay";
+import {
+  getForcedUpdateState,
+  refreshAppSettings,
+  type ForcedUpdateState,
+} from "../services/forcedUpdateService";
 import Icon from "./Icon";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 
 interface LicenseGuardProps {
   children: ReactNode;
+}
+
+const CURRENT_APP_VERSION =
+  typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+
+/**
+ * Version-gate responses happen before the license payload is returned, so
+ * the license guard cannot use the normal license retry screen to update.
+ * Reuse the real updater overlay instead and load the admin download settings
+ * so Update Now can install the configured release.
+ */
+function ForcedUpgradeScreen() {
+  const [state, setState] = useState<ForcedUpdateState>(() => ({
+    blocked: true,
+    active: true,
+    lockType: "forced-update",
+    requiredVersion: "",
+    hoursRemaining: null,
+    gracePeriodHours: null,
+    startedAt: null,
+    lockAt: null,
+    updateMessage: "A mandatory update is required to continue using MakeChurchEasy.",
+    currentVersion: CURRENT_APP_VERSION,
+    downloadUrl: "",
+    releaseNotesUrl: "",
+    loading: true,
+  }));
+
+  useEffect(() => {
+    let mounted = true;
+    void refreshAppSettings().then((settings) => {
+      if (!mounted) return;
+      const next = getForcedUpdateState(settings, CURRENT_APP_VERSION);
+      setState({
+        ...next,
+        blocked: true,
+        active: true,
+        lockType: "forced-update",
+        hoursRemaining: null,
+        gracePeriodHours: null,
+        loading: false,
+      });
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return <ForcedUpdateOverlay state={state} />;
 }
 
 export default function LicenseGuard({ children }: LicenseGuardProps) {
@@ -91,13 +146,15 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
           </div>
         </div>
       )}
-      {!unlocked && (
+      {!unlocked && lockReason === "forced_upgrade" ? (
+        <ForcedUpgradeScreen />
+      ) : !unlocked ? (
         <LicenseLockScreen
           reason={lockReason}
           payload={payload}
           verifying={verifying}
         />
-      )}
+      ) : null}
     </>
   );
 }
@@ -218,7 +275,13 @@ function LicenseLockScreen({
   }, [getFocusableElements]);
 
   return (
-    <div ref={overlayRef} className="license-guard-overlay" role="dialog" aria-modal="true" aria-label="License required">
+    <div
+      ref={overlayRef}
+      className="license-guard-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={config.title}
+    >
       <div className="license-guard-modal">
         <div className="license-guard-banner">
           <Icon name="lock" size={16} />
@@ -229,7 +292,11 @@ function LicenseLockScreen({
           <div className="license-guard-icon-wrapper">
             <Icon name={config.icon} size={32} />
           </div>
-          <p className="license-guard-eyebrow">Access to MakeChurchEasy is currently blocked</p>
+          <p className="license-guard-eyebrow">
+            {reason === "too_many_devices"
+              ? "This device cannot be verified yet"
+              : "Access to MakeChurchEasy is currently blocked"}
+          </p>
           <h2 className="license-guard-title">{config.title}</h2>
         </div>
 

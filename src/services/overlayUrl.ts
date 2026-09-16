@@ -14,10 +14,12 @@ import { invoke } from "@tauri-apps/api/core";
 
 let _cachedBaseUrl: string | null = null;
 let _overrideBaseUrl: string | null = null;
+let _devDockBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
 const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
 const DEV_VITE_PORT = "1420";
+export const DEV_DOCK_BASE_URL_READY_EVENT = "mce-dev-dock-base-url-ready";
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
@@ -200,6 +202,7 @@ export function getOverlayBaseUrlSync(): string {
 }
 
 export function getDockBaseUrl(): string {
+  if (import.meta.env.DEV && _devDockBaseUrl) return _devDockBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
     const { protocol, hostname } = window.location;
     const isHttpLocalOrigin =
@@ -216,5 +219,13 @@ export function getDockBaseUrl(): string {
  * Initialize the overlay URL cache. Call this once at app startup.
  */
 export async function initOverlayUrl(): Promise<void> {
+  if (import.meta.env.DEV && isTauriRuntime()) {
+    try {
+      _devDockBaseUrl = await invoke<string>("get_dev_dock_base_url");
+      window.dispatchEvent(new Event(DEV_DOCK_BASE_URL_READY_EVENT));
+    } catch {
+      // A pure browser Vite session does not have Tauri IPC; use its origin.
+    }
+  }
   await getOverlayBaseUrl();
 }

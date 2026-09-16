@@ -57,7 +57,7 @@ export interface LmDockSnapshot {
   entries: TranscriptEntry[];
   candidates: VoiceBibleCandidate[];
   latestMatch?: VoiceBibleCandidate | null;
-  queue: VoiceBibleCandidate[];      // High-confidence detections waiting for explicit user action
+  queue: VoiceBibleCandidate[];      // High-confidence detections eligible for auto-push or manual review
   suggestions: VoiceBibleCandidate[]; // Manual push only (quote matches)
   matching: boolean;
   error?: string;
@@ -493,6 +493,7 @@ export class LmDockService {
   private postToRelay(): void {
     this.relayPendingPayload = {
       status: this.snapshot.status,
+      startedAt: this.snapshot.startedAt,
       entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
       candidates: this.snapshot.candidates,
       queue: this.snapshot.queue,
@@ -664,7 +665,7 @@ export class LmDockService {
       const newCandidates = result.matches.map((m) => ({ ...m.candidate, detectedAt: Date.now() }));
 
         // Confidence routing:
-        // - source=reference OR confidence >= 0.90 → queue for explicit push
+        // - source=reference OR confidence >= 0.90 → queue for configured push behavior
         // - navigationOnly (chapter-only open) → suggestions only (no auto-push)
         // - confidence >= 0.75 → suggestion
         // - confidence < 0.75 → low-confidence suggestion
@@ -891,7 +892,9 @@ export class LmDockService {
       latestMatch: null,
       matching: false,
       inputLevel: 0,
-      startedAt: Date.now(),
+      startedAt: options.reconnect
+        ? this.snapshot.startedAt ?? Date.now()
+        : Date.now(),
       entries: this.snapshot.entries,
       detectionSpeed: this.detectionSpeed,
     };

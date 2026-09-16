@@ -130,6 +130,19 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
   });
 
+  it("moves the Bible dock to an AI reference when the operator shows it", () => {
+    const showVerseHandler = dockLmTabSource.match(/const handlePushVerse = useCallback\([\s\S]*?\n  \}, \[[^\]]+\]\);/)?.[0] ?? "";
+    expect(showVerseHandler).toContain("onNavigateToBible?.()");
+    expect(showVerseHandler).toContain("navigateBibleDock(candidate)");
+  });
+
+  it("groups transcript saves by the active microphone session", () => {
+    expect(dockLmTabSource).toContain("snapshot.startedAt");
+    expect(dockLmTabSource).toContain("`lm-session-${lmSessionStartedAt}`");
+    expect(dockLmTabSource).toContain("handleSaveAndShowTranscript(editModal.text)");
+    expect(lmDockServiceSource).toContain("startedAt: this.snapshot.startedAt");
+  });
+
   it("takes clickable history references to Bible and requests an OBS preview push", () => {
     expect(dockLmTabSource).toContain("onNavigateToBible?.()");
     expect(dockLmTabSource).toContain("navigateBibleDock({");
@@ -151,6 +164,10 @@ describe("DockLmTab settings helpers", () => {
 
   it("uses the saved Bible stream style when pushing LM verses", () => {
     expect(dockLmTabSource).toContain("resolveDockBibleThemeForOverlayMode(overlayMode)");
+    expect(dockLmTabSource).toContain('msg.type === "state:bible-theme-updated"');
+    expect(dockLmTabSource).toContain("loadLiveBibleThemeSnapshot()");
+    expect(dockLmTabSource).toContain("liveBibleThemeSnapshotRef.current");
+    expect(dockLmTabSource).toContain("mergeBibleBackgroundSettings(");
     expect(dockLmTabSource).toContain("resolveDockBibleReferenceLabels(");
     expect(dockLmTabSource).toContain("bibleThemeSettings: bibleTheme.themeSettings");
     expect(dockLmTabSource).toContain("liveOverrides: bibleTheme.liveOverrides");

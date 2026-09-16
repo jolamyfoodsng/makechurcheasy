@@ -64,10 +64,8 @@ interface ParsedLine {
 function parseTranscriptLines(raw: string): ParsedLine[] {
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map((line, i) => {
-    const tabIdx = line.indexOf('\t');
-    if (tabIdx > 0 && /^\d{2}:\d{2}:\d{2}$/.test(line.substring(0, tabIdx))) {
-      return { time: line.substring(0, tabIdx), text: line.substring(tabIdx + 1) };
-    }
+    const timestampMatch = line.match(/^(\d{2}:\d{2}:\d{2})[\t ]+(.*)$/);
+    if (timestampMatch) return { time: timestampMatch[1], text: timestampMatch[2] };
     return { time: formatTimeFallback(i * 5), text: line };
   });
 }
@@ -994,7 +992,9 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'scriptures' | 'translations'>('scriptures');
+  const [selectedTranslationId, setSelectedTranslationId] = useState<string | null>(null);
   const [accessDeniedDialog, setAccessDeniedDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const isLicenseUnlocked = useLicenseGuardState();
   const navigate = useNavigate();
 
@@ -1056,6 +1056,22 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     () => transcript ? mapScriptures(transcript.scriptures, parsedLines) : [],
     [transcript, parsedLines],
   );
+
+  const selectedTranslation = useMemo(
+    () => transcript?.translations.find((item) => item.id === selectedTranslationId) ?? null,
+    [transcript, selectedTranslationId],
+  );
+
+  const visibleTranscriptLines = useMemo(
+    () => selectedTranslation
+      ? parseTranscriptLines(selectedTranslation.translatedText)
+      : displayLines,
+    [displayLines, selectedTranslation],
+  );
+
+  useEffect(() => {
+    if (transcriptScrollRef.current) transcriptScrollRef.current.scrollTop = 0;
+  }, [selectedTranslationId]);
 
   const doExport = useCallback(async (type: 'pdf' | 'docx') => {
     if (!transcript || exporting !== 'idle') return;
@@ -1130,12 +1146,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
   const handleCopy = useCallback(() => {
     if (copyState === 'done') return;
-    const text = copyTranscriptText(displayLines);
+    const text = copyTranscriptText(visibleTranscriptLines);
     navigator.clipboard.writeText(text).then(() => {
       setCopyState('done');
       setTimeout(() => setCopyState('idle'), 2000);
     });
-  }, [displayLines, copyState]);
+  }, [visibleTranscriptLines, copyState]);
 
   const renderHighlight = (text: string, highlight?: { type: string; text: string }) => {
     if (!highlight) return text;
@@ -1346,9 +1362,26 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         {/* Left/Center Transcript Panel */}
         <div className="transcript-panel">
           <div className="transcript-toolbar">
-            <div className="search-input-wrapper">
-              <input type="text" className="search-input" placeholder="Search in transcript…" />
-            </div>
+            {selectedTranslation ? (
+              <div className="transcript-language-heading">
+                <button
+                  type="button"
+                  className="transcript-language-back"
+                  onClick={() => setSelectedTranslationId(null)}
+                  title="Back to original transcript"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <div>
+                  <span className="transcript-language-label">Translated transcript</span>
+                  <strong>{selectedTranslation.language}</strong>
+                </div>
+              </div>
+            ) : (
+              <div className="search-input-wrapper">
+                <input type="text" className="search-input" placeholder="Search in transcript…" />
+              </div>
+            )}
             <div className="toolbar-actions">
               <button
                 className="btn-icon-only"
@@ -1363,13 +1396,13 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             </div>
           </div>
 
-          <div className="transcript-scroll">
-            {displayLines.map((line, i) => (
+          <div className="transcript-scroll" ref={transcriptScrollRef}>
+            {visibleTranscriptLines.map((line, i) => (
               <div key={i} className={`t-line-wrapper ${line.highlight ? 'has-highlight' : ''}`}
                 style={line.highlight ? { borderLeftColor: `var(--hl-${line.highlight.type})` } : {}}>
                 <div className="t-timestamp">{line.time}</div>
                 <div className="t-content">
-                  {renderHighlight(line.text, line.highlight)}
+                  {selectedTranslation ? line.text : renderHighlight(line.text, line.highlight)}
                 </div>
               </div>
             ))}
@@ -1523,6 +1556,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                             <button
                               className="btn-icon-small"
                               title="View translation"
+                              aria-label={`View ${t.language} transcript`}
+                              onClick={() => {
+                                setSelectedTranslationId(t.id);
+                                setSidebarTab('translations');
+                                setCopyState('idle');
+                              }}
                             >
                               <ArrowUpRight size={12} />
                             </button>

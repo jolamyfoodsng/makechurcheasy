@@ -339,6 +339,63 @@ function findPlatformAsset(assets: { name: string; browser_download_url: string 
 }
 
 /**
+ * Download an installer from an admin-configured URL, launch it with the
+ * operating system, and exit this app so the installer can replace it.
+ */
+export async function downloadAndInstallFromUrl(
+  url: string,
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void,
+): Promise<void> {
+  const parsedUrl = new URL(url);
+  const fallbackName = `MakeChurchEasy-${Date.now()}.installer`;
+  const filename = decodeURIComponent(parsedUrl.pathname.split("/").pop() || fallbackName)
+    .replace(/[^a-zA-Z0-9._-]/g, "_") || fallbackName;
+
+  onStatusChange?.("downloading");
+  const response = await tauriFetch(url);
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+
+  const contentLength = Number(response.headers.get("content-length")) || 0;
+  let downloaded = 0;
+  let buffer: ArrayBuffer;
+
+  if (response.body) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      downloaded += value.length;
+      onProgress?.({ contentLength, downloaded });
+    }
+
+    const merged = new Uint8Array(downloaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    buffer = merged.buffer;
+  } else {
+    buffer = await response.arrayBuffer();
+    downloaded = buffer.byteLength;
+    onProgress?.({ contentLength: contentLength || downloaded, downloaded });
+  }
+
+  const tmpDir = await tempDir();
+  const filePath = await join(tmpDir, filename);
+  await writeFile(filePath, new Uint8Array(buffer));
+
+  onStatusChange?.("installing");
+  await open(filePath);
+  onStatusChange?.("relaunching");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await exit(0);
+}
+
+/**
  * Download and install an update directly from GitHub Releases.
  * Used as a fallback when the Tauri auto-updater has no signed binary
  * for the current platform.
@@ -363,55 +420,5 @@ export async function downloadAndInstallFromGitHub(
   const platform = detectPlatform();
   const asset = findPlatformAsset(release.assets ?? [], platform);
   if (!asset) throw new Error(`No installer available for ${platform}`);
-
-  // 3. Download the binary with progress tracking
-  onStatusChange?.("downloading");
-  const binRes = await tauriFetch(asset.browser_download_url);
-  if (!binRes.ok) throw new Error(`Download failed (${binRes.status})`);
-
-  const contentLength = Number(binRes.headers.get("content-length")) || 0;
-  let downloaded = 0;
-
-  let buffer: ArrayBuffer;
-
-  if (binRes.body) {
-    // Stream with progress
-    const reader = binRes.body.getReader();
-    const chunks: Uint8Array[] = [];
-
-    for (; ;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      downloaded += value.length;
-      onProgress?.({ contentLength, downloaded });
-    }
-
-    const merged = new Uint8Array(downloaded);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
-    buffer = merged.buffer;
-  } else {
-    // Fallback: no streaming support
-    buffer = await binRes.arrayBuffer();
-    downloaded = buffer.byteLength;
-    onProgress?.({ contentLength: contentLength || downloaded, downloaded });
-  }
-
-  // 4. Write installer to temp directory
-  const tmpDir = await tempDir();
-  const filePath = await join(tmpDir, asset.name);
-  await writeFile(filePath, new Uint8Array(buffer));
-
-  // 5. Open the installer with the OS default handler
-  onStatusChange?.("installing");
-  await open(filePath);
-
-  // 6. Exit the app so the installer can replace files
-  onStatusChange?.("relaunching");
-  await new Promise((r) => setTimeout(r, 800));
-  await exit(0);
+  await downloadAndInstallFromUrl(asset.browser_download_url, onProgress, onStatusChange);
 }

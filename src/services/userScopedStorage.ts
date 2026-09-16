@@ -140,6 +140,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "mce-local-dev-plan-override",
   "ocs-dock-plan",
   "ocs-dock-entitlements",
+  "ocs-dock-free-plan-notice-v1",
   "ocs-dock-song-limit",
 
   // Bible

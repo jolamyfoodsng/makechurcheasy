@@ -121,6 +121,7 @@
       --bg-opacity: 1;
       --bg-shade-gradient: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42));
       --bg-shade-display: block;
+      --lt-bg-shade-opacity: 0;
       --padding: 60px;
       --safe-area: 40px;
       --anim-duration: 152ms;
@@ -712,9 +713,25 @@
       z-index: 0;
     }
 
+    #lt-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, var(--lt-bg-shade-opacity, 0));
+      pointer-events: none;
+      transition: background-color var(--anim-duration, 152ms) ease;
+      z-index: 2;
+    }
+
     #lt-bar>* {
       position: relative;
       z-index: 1;
+    }
+
+    #lt-bar>#lt-verse-text,
+    #lt-bar>#ref-text,
+    #lt-bar>#lt-translation-text {
+      z-index: 3;
     }
 
     #lt-verse-text {
@@ -2008,7 +2025,7 @@
             : 400,
         )));
         root.style.setProperty('--anim-duration', ead + 'ms');
-        root.style.setProperty('--text-transition-duration', Math.min(180, ead) + 'ms');
+        root.style.setProperty('--text-transition-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
         root.style.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
@@ -2135,10 +2152,11 @@
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
+        root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
-        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.style.opacity = String(s.backgroundOpacity ?? 1); barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); barBackgroundVideoEl.style.opacity = '1'; if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
         if (!barBgV && targetMode === 'lower-third') {
           const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
           const bgPattern = String(s.backgroundPattern || '').trim();

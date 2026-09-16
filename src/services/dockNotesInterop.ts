@@ -5,6 +5,7 @@ export interface DockNotesAppendCommand {
   timestamp: number;
   text: string;
   title?: string;
+  sessionId?: string;
   source?: "lm" | "dock";
 }
 
@@ -47,12 +48,14 @@ export function createDockNotesAppendCommand(
   text: string,
   title?: string,
   source: DockNotesAppendCommand["source"] = "lm",
+  sessionId?: string,
 ): DockNotesAppendCommand {
   return {
     commandId: `dock-notes-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: Date.now(),
     text,
     ...(title ? { title } : {}),
+    ...(sessionId ? { sessionId } : {}),
     source,
   };
 }

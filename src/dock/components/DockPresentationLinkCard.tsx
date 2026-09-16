@@ -46,17 +46,17 @@ export default function DockPresentationLinkCard() {
   }, [presentationLink]);
 
   return (
-    <section className="dock-presentation-link-card" aria-label={t("dock.freePlanOutput", "Free plan output")}>
+    <section className="dock-presentation-link-card" aria-label={t("dock.freePlanOutput", "Free plan presentation link")}>
       <div className="dock-presentation-link-card__copy">
         <span className="dock-presentation-link-card__icon" aria-hidden="true">
           <Icon name="link" size={16} />
         </span>
         <div className="dock-presentation-link-card__content">
-          <strong>{t("dock.freePlanOutput", "Free plan output")}</strong>
+          <strong>{t("dock.freePlanOutput", "Free plan presentation link")}</strong>
           <span>
             {t(
               "dock.freePlanOutputDescription",
-              "Add this link as a Browser Source in OBS. Use any Dock tab; updates go through the link, not OBS scenes or sources.",
+              "You are on the Free plan. The Dock will not create or update OBS scenes or sources, including MCE Presentation. Copy this link once and add it to OBS as a single Browser Source. Bible, worship, Notes, Media, and other Dock updates will replace the current view through this same link.",
             )}
           </span>
           <code title={presentationLink}>{presentationLink}</code>

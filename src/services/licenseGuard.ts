@@ -921,7 +921,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "devices",
         title: "Device Limit Reached",
         description:
-          "You have reached the maximum number of devices for your plan. Please remove a device or upgrade your plan.",
+          "Your plan has no device slots available, so MakeChurchEasy cannot verify this device. Open Manage Devices to remove a device you no longer use, then return here and select Retry Verification. If you need to keep all your current devices, upgrade your plan for more device slots.",
         primaryAction: "manage_devices",
         primaryLabel: "Manage Devices",
       };

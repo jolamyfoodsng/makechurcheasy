@@ -664,6 +664,10 @@ describe("Standard references through parser", () => {
   it("turn to romans 8 28 → Romans 8:28", () => {
     expect(fmt(parseScriptureReference("turn to romans 8 28"))).toBe("Romans 8:28");
   });
+  it("keeps a later from-verse phrase attached to the spoken chapter", () => {
+    expect(fmt(parseScriptureReference("And the Lord— Exodus 34, I'll read from verse 5."))).toBe("Exodus 34:5");
+    expect(fmt(parseScriptureReference("Romans chapter 9. Praise God. Let me read from verse 10."))).toBe("Romans 9:10");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

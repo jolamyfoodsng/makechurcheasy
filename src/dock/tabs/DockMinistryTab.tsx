@@ -516,19 +516,9 @@ export default function DockMinistryTab({
     return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
   }, []);
 
-  // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
-  useEffect(() => {
-    if (dockPlan !== "free") return;
-    if (!obsConnected) return;
-
-    (async () => {
-      try {
-        // Remove "MCE Ticker" input — OBS auto-removes all scene items referencing it
-        await dockObsClient.call("RemoveInput", { inputName: "MCE Ticker" }).catch(() => { });
-        console.log("[DockMinistry] Free plan enforced: removed MCE Ticker source");
-      } catch { /* OBS may not be connected, source may not exist */ }
-    })();
-  }, [dockPlan, obsConnected]);
+  // Free-plan enforcement is read-only. Never delete or rewrite an existing
+  // OBS source when a user downgrades; the shared Dock OBS mutation policy
+  // blocks all scene/source writes for Free users.
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -1115,7 +1105,7 @@ export default function DockMinistryTab({
           </div>
           <button
             type="button"
-            className="dock-btn dock-btn--primary dock-btn--sm"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
             onClick={() => showUpgradeModal(t("upgrade.tickerRequiredMessage", "Upgrade to Growth to enable the Ticker feature."))}
           >
             <Icon name="upgrade" size={14} />
@@ -1569,7 +1559,7 @@ export default function DockMinistryTab({
           </div>
           <button
             type="button"
-            className="dock-btn dock-btn--primary dock-btn--sm"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
             onClick={() => showUpgradeModal(t("upgrade.lowerThirdRequiredMessage", "Upgrade to Growth to enable Lower Thirds."))}
           >
             <Icon name="upgrade" size={14} />
@@ -2095,7 +2085,7 @@ export default function DockMinistryTab({
           </div>
           <button
             type="button"
-            className="dock-btn dock-btn--primary dock-btn--sm"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
             onClick={() => showUpgradeModal(t("upgrade.timeRequiredMessage", "Upgrade to Growth to enable Time tools."))}
           >
             <Icon name="upgrade" size={14} />

@@ -10,7 +10,16 @@ import worshipOverlayHtml from "../../../public/mce-worship-overlay.html?raw";
 import backgroundOverlayHtml from "../../../public/bible-overlay-bg.html?raw";
 import noteOverlayHtml from "../../../public/mce-note.html?raw";
 import backgroundPickerSource from "./BackgroundPickerCard.tsx?raw";
-import { BACKGROUND_PICKER_COMPACT_HEIGHT, toBackgroundAssetUrl } from "./BackgroundPickerCard";
+import {
+  BACKGROUND_PATTERN_PICKER_LIMIT,
+  BACKGROUND_PICKER_COMPACT_HEIGHT,
+  PATTERN_OPTIONS,
+  canAddBackgroundPickerAsset,
+  limitBackgroundPickerAssets,
+  toBackgroundAssetUrl,
+} from "./BackgroundPickerCard";
+import { checkEntitlementSync } from "../../services/entitlementClient";
+import { getDockEntitlementLimit } from "../dockEntitlement";
 import dockThemeSettingsModalSource from "./DockThemeSettingsModal.tsx?raw";
 import dockOutputQuickActionsSource from "./DockOutputQuickActions.tsx?raw";
 import dockBibleTabSource from "../tabs/DockBibleTab.tsx?raw";
@@ -141,6 +150,65 @@ describe("Text Tab settings pipeline", () => {
   });
 });
 
+describe("Background picker plan limits", () => {
+  const media = ["first", "second", "third", "fourth", "fifth"];
+
+  it("shows only the current plan's image and video allowance", () => {
+    const freeImageLimit = checkEntitlementSync("images", "free").limit;
+    const freeVideoLimit = checkEntitlementSync("videos", "free").limit;
+    const basicImageLimit = checkEntitlementSync("images", "basic").limit;
+    const growthVideoLimit = checkEntitlementSync("videos", "growth").limit;
+
+    expect(freeImageLimit).toBe(3);
+    expect(freeVideoLimit).toBe(2);
+    expect(limitBackgroundPickerAssets(media, freeImageLimit)).toEqual(media.slice(0, 3));
+    expect(limitBackgroundPickerAssets(media, freeVideoLimit)).toEqual(media.slice(0, 2));
+    expect(limitBackgroundPickerAssets(media, basicImageLimit)).toEqual(media);
+    expect(limitBackgroundPickerAssets(media, growthVideoLimit)).toEqual(media);
+  });
+
+  it("uses Dock entitlements without requiring the React auth context", () => {
+    expect(backgroundPickerSource).toContain('getDockEntitlementLimit("images")');
+    expect(backgroundPickerSource).toContain('getDockEntitlementLimit("videos")');
+    expect(backgroundPickerSource).not.toContain("useAuth");
+    expect(getDockEntitlementLimit("images")).toBe(checkEntitlementSync("images", "free").limit);
+    expect(getDockEntitlementLimit("videos")).toBe(checkEntitlementSync("videos", "free").limit);
+  });
+
+  it("stops picker uploads at the same quota and limits patterns to the first three", () => {
+    expect(canAddBackgroundPickerAsset(2, 3)).toBe(true);
+    expect(canAddBackgroundPickerAsset(3, 3)).toBe(false);
+    expect(canAddBackgroundPickerAsset(500, -1)).toBe(true);
+    expect(limitBackgroundPickerAssets(PATTERN_OPTIONS, BACKGROUND_PATTERN_PICKER_LIMIT)).toEqual(PATTERN_OPTIONS.slice(0, 3));
+    expect(BACKGROUND_PATTERN_PICKER_LIMIT).toBe(3);
+
+    const imageTabStart = backgroundPickerSource.indexOf("function ImageTab");
+    const videoTabStart = backgroundPickerSource.indexOf("function VideoTab", imageTabStart);
+    const patternTabStart = backgroundPickerSource.indexOf("function PatternTab", videoTabStart);
+    const imageTabSource = backgroundPickerSource.slice(imageTabStart, videoTabStart);
+    const videoTabSource = backgroundPickerSource.slice(videoTabStart, patternTabStart);
+    const patternTabSource = backgroundPickerSource.slice(patternTabStart);
+    expect(imageTabSource).toContain("limitBackgroundPickerAssets(media, limit)");
+    expect(imageTabSource).toContain("canAddBackgroundPickerAsset(currentCount, limit)");
+    expect(imageTabSource).toContain("disabled={loading || !canUpload}");
+    expect(videoTabSource).toContain("limitBackgroundPickerAssets(media, limit)");
+    expect(videoTabSource).toContain("canAddBackgroundPickerAsset(currentCount, limit)");
+    expect(videoTabSource).toContain("disabled={loading || !canUpload}");
+    expect(patternTabSource).toContain("limitBackgroundPickerAssets(PATTERN_OPTIONS, limit)");
+  });
+});
+
+describe("Text appearance layout", () => {
+  it("places the color card beside font size for Bible and Reference", () => {
+    expect(backgroundPickerSource).toContain(
+      '<div className="dtb-typography-control-row">\n                          <ColorPickerCard',
+    );
+    expect(backgroundPickerSource).toContain(
+      '<div className="dtb-typography-control-row">\n            <ColorPickerCard',
+    );
+  });
+});
+
 describe("Dock motion defaults", () => {
   it("defaults to fade and keeps the dock motion in the live theme payload", () => {
     expect(DEFAULT_THEME_SETTINGS.animation).toBe("fade");
@@ -206,7 +274,7 @@ describe("Background picker layout", () => {
     expect(backgroundPickerSource).toContain('className="dtb-bg-picker__grid dtb-bg-picker__asset-grid"');
     expect(dockMediaTabSource).not.toContain('--scrollable');
     expect(dockCssSource).toContain('height: 260px;\n  max-height: 260px;\n  overflow-x: hidden;\n  overflow-y: auto;');
-    expect(dockCssSource).toContain('.dtb-bg-picker__asset-grid {\n  grid-auto-rows: max-content;\n  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));\n}');
+    expect(dockCssSource).toContain('.dtb-bg-picker__asset-grid {\n  grid-auto-rows: max-content;\n  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));\n  gap: 12px;\n}');
     expect(dockCssSource).toContain('.dock-media-browser {\n  min-height: 0;\n}');
     expect(dockCssSource).toContain('.dtb-bg-picker__theme-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}');
     expect(dockCssSource).not.toContain('max-height: 560px;\n  max-height: min(560px');
@@ -257,6 +325,8 @@ describe("Background picker background retention", () => {
     );
     expect(backgroundPickerSource).toContain("fullscreenShadeOpacity: Number(e.target.value) / 100");
     expect(backgroundPickerSource).toContain("backgroundOpacity: Number(e.target.value) / 100");
+    expect(backgroundPickerSource).toContain('className="dtb-slider dtb-slider--filled"');
+    expect(backgroundPickerSource).toContain("step={10}");
     expect(backgroundPickerSource).toContain('bgType === "theme"');
   });
 
@@ -264,6 +334,11 @@ describe("Background picker background retention", () => {
     expect(dockBibleThemeResolutionSource).toContain("fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity");
     expect(dockBibleThemeResolutionSource).toContain("backgroundOpacity: useNoBg ? 0");
     expect(overlayHtml).toContain("backgroundVideoEl.style.opacity = bgOpacity");
+    expect(overlayHtml).toContain("barBackgroundVideoEl.style.opacity = String(s.backgroundOpacity ?? 1)");
+    expect(overlayHtml).toContain("root.style.setProperty('--lt-bg-shade-opacity'");
+    expect(worshipOverlayHtml).toContain("barBackgroundVideoEl.style.opacity = String(s.backgroundOpacity ?? 1)");
+    expect(worshipOverlayHtml).toContain("root.style.setProperty('--lt-bg-shade-opacity'");
+    expect(worshipOverlayHtml).toContain("root.style.setProperty('--text-transition-duration', ead + 'ms');");
     expect(overlayHtml).toContain("root.style.setProperty('--bg-opacity', bgOpacity)");
     expect(overlayHtml).toContain("buildShadeGradient(s.fullscreenShadeColor || '#000', s.fullscreenShadeOpacity ?? 0.42)");
   });
@@ -393,7 +468,8 @@ describe("Bible reader font-size quick actions", () => {
 
     expect(referenceSectionSource).toContain("refFontSize");
     expect(referenceSectionSource).toContain("SliderNumberField");
-    expect(referenceSectionSource).toContain("referenceBackgroundColor");
+    expect(referenceSectionSource).toContain("<ReferenceBackgroundSection");
+    expect(backgroundPickerSource).toContain("referenceBackgroundColor");
     expect(dockBibleTabSource).toContain("handleSyncBibleBrowserSettings");
     expect(dockBibleTabSource).toContain("autoFontScale: true");
     expect(dockBibleTabSource).toContain("nextLowerThirdSettings");
@@ -452,7 +528,7 @@ function applyFullscreenQuickThemeSettings(
       backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
       backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
       backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
-      backgroundOpacity: useNoBg ? 0 : useThemeBg ? (theme.settings.backgroundOpacity ?? 1) : quickSettings.backgroundOpacity,
+      backgroundOpacity: useNoBg ? 0 : quickSettings.backgroundOpacity,
       backgroundColor: useNoBg
         ? "transparent"
         : useThemeBg
@@ -800,19 +876,19 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(comparePanelSource).toContain("getCompareAlignOptions()");
   });
 
-  it("keeps text weight, line height, and text case in the Text typography section", () => {
+  it("keeps text weight and text case in compact side-by-side dropdowns", () => {
     const textSectionStart = backgroundPickerSource.indexOf("{/* ── Bible Text Section ── */}");
     const referenceSectionStart = backgroundPickerSource.indexOf("{/* ── Reference Section ── */}", textSectionStart);
     const textSectionSource = backgroundPickerSource.slice(textSectionStart, referenceSectionStart);
 
     expect(textSectionSource).toContain("dtb-typography-control-row");
-    expect(textSectionSource).toContain("dtb-typography-control-row--segmented");
+    expect(textSectionSource).toContain("dtb-typography-control-row--selects");
     expect(backgroundPickerSource).toContain('["light", "normal", "bold", "extrabold"]');
     expect(textSectionSource).toContain("fontWeight: w");
     expect(textSectionSource).toContain("lineHeight: value");
     expect(textSectionSource).toContain("textTransform: tc");
-    expect(textSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
-    expect(textSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
+    expect(textSectionSource).toContain("CompactSelectField<CompactFontWeight>");
+    expect(textSectionSource).toContain("CompactSelectField<CompactTextCase>");
     expect(textSectionSource).not.toContain("sermon.typography");
     expect(textSectionSource).not.toContain("common.moreOptions");
   });
@@ -820,8 +896,8 @@ describe("Active OBS Bible overlay wiring", () => {
   it("applies worship text case directly in the overlay renderer", () => {
     expect(worshipOverlayHtml).toContain("function applyDisplayTextTransform");
     expect(worshipOverlayHtml).toContain("case 'uppercase': return value.toLocaleUpperCase()");
-    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(displayText.primary, textTransform))");
-    expect(worshipOverlayHtml).toContain("safeSupText(applyDisplayTextTransform(l.text || '', textTransform))");
+    expect(worshipOverlayHtml).toContain("verseText.innerHTML = renderVerseLines(applyDisplayTextTransform(displayText.primary, textTransform), sl.lineCount);");
+    expect(worshipOverlayHtml).toContain("renderTranslationBlock(translationText, displayText.secondary, textTransform);");
   });
 
   it("adds a Layout tab and groups text layout controls there", () => {
@@ -866,8 +942,8 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(fontSizeIndex).toBeGreaterThan(colorIndex);
     expect(weightIndex).toBeGreaterThan(fontSizeIndex);
     expect(textCaseIndex).toBeGreaterThan(weightIndex);
-    expect(referenceSectionSource).toContain("IconSegmentedControl<CompactFontWeight>");
-    expect(referenceSectionSource).toContain("IconSegmentedControl<CompactTextCase>");
+    expect(referenceSectionSource).toContain("CompactSelectField<CompactFontWeight>");
+    expect(referenceSectionSource).toContain("CompactSelectField<CompactTextCase>");
     expect(moreOptionsIndex).toBeGreaterThan(textCaseIndex);
     expect(referenceSectionSource).not.toContain("refTextAlign: a");
     expect(referenceSectionSource).not.toContain("setReferencePlacement");
@@ -896,16 +972,34 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(referenceLayoutSource).toContain('"bottom-edge"');
   });
 
-  it("places reference text and background colors side by side", () => {
+  it("places reference background first and keeps its color control inside that section", () => {
     const referenceSectionStart = backgroundPickerSource.indexOf("function ReferenceSection");
     const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
     const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
+    const referenceBackgroundIndex = referenceSectionSource.indexOf("<ReferenceBackgroundSection");
+    const textAppearanceIndex = referenceSectionSource.indexOf("dtb-control-section__title");
+    const referenceBackgroundStart = backgroundPickerSource.indexOf("function ReferenceBackgroundSection");
+    const referenceBackgroundEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceBackgroundStart);
+    const referenceBackgroundSource = backgroundPickerSource.slice(referenceBackgroundStart, referenceBackgroundEnd);
 
-    expect(referenceSectionSource).toContain('className="dtb-reference-color-row"');
-    expect(referenceSectionSource).toContain("referenceBackgroundColor");
-    expect(referenceSectionSource).toContain('showColorPicker={false}');
-    expect(dockCssSource).toContain('.dtb-reference-color-row {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));');
-    expect(dockCssSource).toContain('.dtb-colors__ref-bg-header--toggle-only {\n  grid-template-columns: 1fr;');
+    expect(referenceBackgroundIndex).toBeGreaterThan(-1);
+    expect(referenceBackgroundIndex).toBeLessThan(textAppearanceIndex);
+    expect(referenceBackgroundSource).toContain('label={t(\'bgPicker.background\', \'Background\')}');
+    expect(referenceBackgroundSource).toContain("referenceBackgroundColor");
+    expect(referenceBackgroundSource).toContain("<ColorPickerCard");
+    expect(referenceSectionSource).not.toContain('showColorPicker={false}');
+    expect(dockCssSource).toContain(".dtb-color-inline__trigger--card");
+    expect(dockCssSource).toContain(".dtb-bg-picker__subtab--active");
+
+    const inlinePickerStart = backgroundPickerSource.indexOf("function InlineColorPicker");
+    const inlinePickerSource = backgroundPickerSource.slice(inlinePickerStart);
+    const cardBranchStart = inlinePickerSource.indexOf('{variant === "card" ? (');
+    const cardBranchEnd = inlinePickerSource.indexOf(": (", cardBranchStart);
+    const cardBranchSource = inlinePickerSource.slice(cardBranchStart, cardBranchEnd);
+    expect(cardBranchSource).toContain("dtb-color-inline__card-swatch");
+    expect(cardBranchSource).not.toContain("dtb-color-inline__hex");
+    expect(backgroundPickerSource).toContain('variant="card"');
+    expect(backgroundPickerSource).toContain("dtb-color-picker-card__label");
   });
 
   it("centers Bible compare content by default while keeping edge-aware lower-third placement", () => {
@@ -968,8 +1062,8 @@ describe("Active OBS Bible overlay wiring", () => {
     const referenceSectionEnd = backgroundPickerSource.indexOf("/* ── Reference Layout Section ── */", referenceSectionStart);
     const referenceSectionSource = backgroundPickerSource.slice(referenceSectionStart, referenceSectionEnd);
 
-    expect(referenceSectionSource).toContain("referenceBackgroundColor");
     expect(referenceSectionSource).toContain("<ReferenceBackgroundSection");
+    expect(backgroundPickerSource).toContain("referenceBackgroundColor");
     expect(referenceSectionSource).not.toContain('overlayMode !== "lower-third"');
     expect(overlayHtml).toContain("--ref-bg-color");
     expect(overlayHtml).toContain("if (s.referenceBackgroundEnabled !== true)");

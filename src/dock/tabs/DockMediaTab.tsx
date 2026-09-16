@@ -1937,7 +1937,8 @@ function DockMediaTab({
     const imageLimit = getLimit("images");
     const videoLimit = getLimit("videos");
 
-    // Lock excess images (items sorted by createdAt desc — first N are allowed)
+    // Lock excess images in the same order shown by the gallery; the first N
+    // items are available and the remainder stay visible as upgrade prompts.
     if (imageLimit >= 0) {
       let count = 0;
       for (const entry of mediaEntries) {
@@ -1962,7 +1963,8 @@ function DockMediaTab({
     return locked;
   }, [dockPlan, mediaEntries]);
 
-  // Free-plan gating: restrict visible uploads to the allowed count only
+  // Free-plan gating: mark uploads beyond the configured quota while keeping
+  // the full library visible so locked items can explain how to upgrade.
   const isFreePlan = dockPlan === "free";
 
   const filteredUploadEntries = useMemo(() => {
@@ -1999,15 +2001,11 @@ function DockMediaTab({
       ].filter(Boolean);
       return !identities.some((identity) => animationIdentity.has(identity));
     });
-    let result = !query
+    const result = !query
       ? withoutTemplateDuplicates
       : withoutTemplateDuplicates.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
-    // Free plan: only show the allowed items so search never reveals locked media
-    if (isFreePlan) {
-      result = result.filter((entry) => !lockedKeys.has(entry.key));
-    }
     return result;
-  }, [activeFolder, activeKind, animationEntries, assetSearch, imageEntries, isFreePlan, lockedKeys, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
+  }, [activeFolder, activeKind, animationEntries, assetSearch, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -4411,7 +4409,7 @@ function DockMediaTab({
                 <div className="dock-media-empty__text">{t('media.upgradeToAccess')}</div>
                 <button
                   type="button"
-                  className="dock-btn dock-btn--preview dock-btn--compact"
+                  className="dock-btn dock-btn--preview dock-btn--compact dock-upgrade-plan-btn"
                   onClick={() => void requireEntitlement("slideshow", 0)}
                   title={t('media.upgradeToAccess')}
                 >

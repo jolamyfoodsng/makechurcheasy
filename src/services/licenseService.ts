@@ -140,7 +140,7 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 1, devices: 1, bibleVersions: 4,
         multiviewTemplates: 0, tickerThemes: 0, themePresets: 0, cloudStorageGB: 0,
         multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
+        proPresenterImport: false, translation: false, speechToScripture: true,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, presentationMode: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,

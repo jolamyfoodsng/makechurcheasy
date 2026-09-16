@@ -88,6 +88,45 @@ describe("dock notes presentation settings", () => {
     expect(notes[0].sourceId).toBe("lm-command-1");
   });
 
+  it("appends captures from one listening session to a single note and deduplicates relays", () => {
+    const first = appendTextToDockNotes("First edited capture", "Speech Notes · Session A", {
+      sourceId: "lm-command-a",
+      sessionId: "lm-session-a",
+    });
+    const second = appendTextToDockNotes("Second edited capture", "Speech Notes · Session A", {
+      sourceId: "lm-command-b",
+      sessionId: "lm-session-a",
+    });
+    appendTextToDockNotes("Second edited capture", "Speech Notes · Session A", {
+      sourceId: "lm-command-b",
+      sessionId: "lm-session-a",
+    });
+
+    expect(first?.note.id).toBe(second?.note.id);
+    expect(loadDockNotes()).toHaveLength(1);
+    expect(loadDockNotes()[0]).toMatchObject({
+      title: "Speech Notes · Session A",
+      sessionId: "lm-session-a",
+      content: "First edited capture\n\nSecond edited capture",
+      appendSourceIds: ["lm-command-a", "lm-command-b"],
+    });
+  });
+
+  it("starts a separate transcript note when the listening session changes", () => {
+    appendTextToDockNotes("First session", "Speech Notes · A", {
+      sourceId: "lm-command-a",
+      sessionId: "lm-session-a",
+    });
+    appendTextToDockNotes("Second session", "Speech Notes · B", {
+      sourceId: "lm-command-b",
+      sessionId: "lm-session-b",
+    });
+
+    expect(loadDockNotes()).toHaveLength(2);
+    expect(loadDockNotes()[0].sessionId).toBe("lm-session-b");
+    expect(loadDockNotes()[1].sessionId).toBe("lm-session-a");
+  });
+
   it("resolves Notes lower-third quick pattern settings into the final overlay theme", async () => {
     const quickSettings: DockFullscreenQuickThemeSettings = {
       fontSize: 42,

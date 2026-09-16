@@ -68,7 +68,12 @@
 
     .remote-stage {
       position: absolute;
-      inset: 0;
+      top: 50%;
+      left: 50%;
+      width: min(100vw, calc(100vh * 16 / 9));
+      height: min(100vh, calc(100vw * 9 / 16));
+      transform: translate(-50%, -50%);
+      aspect-ratio: 16 / 9;
       background: transparent;
       overflow: hidden;
     }
@@ -635,6 +640,31 @@
         return `${isPreviewFrame ? Math.min(PREVIEW_MAX_FONT_SIZE, scaled) : scaled}px`;
       }
 
+      function fitBibleTextSize(text, requestedSize, style, viewportScale, overlayOpacity) {
+        const stageWidth = stage && stage.clientWidth ? stage.clientWidth : (window.innerWidth || 1280);
+        const stageHeight = stage && stage.clientHeight ? stage.clientHeight : (window.innerHeight || 720);
+        const outerPadding = Math.max(4, Math.round(Number(style.safeArea || style.padding || 48) * viewportScale));
+        const boxPadding = overlayOpacity > 0 ? Math.max(12, Number(style.padding || 24)) : 0;
+        const availableWidth = Math.max(240, stageWidth - (outerPadding + boxPadding) * 2);
+        const availableHeight = Math.max(180, stageHeight - (outerPadding + boxPadding) * 2);
+        const lineHeight = Math.max(1, Number(style.lineHeight || 1.2));
+        let size = Math.max(30, Number(requestedSize) || 72);
+        const content = String(text || "").trim();
+        if (!content) return size;
+
+        // Estimate wrapping from the rendered width and step down until the
+        // complete verse fits inside the 16:9 stage instead of being clipped.
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const charsPerLine = Math.max(8, Math.floor(availableWidth / (size * 0.56)));
+          const lineCount = Math.max(1, content.split("\n").reduce(function (total, line) {
+            return total + Math.max(1, Math.ceil(line.length / charsPerLine));
+          }, 0));
+          if (lineCount * size * lineHeight <= availableHeight) return Math.round(size);
+          size *= 0.88;
+        }
+        return Math.round(Math.max(30, size));
+      }
+
       function getBibleCompareColumns(item) {
         const compare = item && item.bibleCompare;
         if (!compare || !Array.isArray(compare.columns)) return [];
@@ -678,13 +708,14 @@
         const alignClass = `align-${style.textAlign || "center"}`;
         const rawFontSize = Number(style.fontSize || 0);
         const effectiveFontSize = isPreviewFrame ? getPreviewTextFontSize(rawFontSize) : rawFontSize;
+        const isBible = item.source === "bible";
         const baseBodySize = effectiveFontSize
           ? isPreviewFrame
             ? effectiveFontSize
-            : Math.max(68, effectiveFontSize * 1.45)
+            : isBible
+              ? Math.min(96, Math.max(48, effectiveFontSize * 1.15))
+              : Math.max(68, effectiveFontSize * 1.45)
           : 0;
-        const isBible = item.source === "bible";
-        const bodySize = baseBodySize ? formatScaledTextSize(baseBodySize, zoom) : "";
         const titleSize = baseBodySize
           ? formatScaledTextSize(Math.max(42, baseBodySize * 0.58), zoom)
           : zoomClamp(46, 4, 90, zoom);
@@ -713,6 +744,11 @@
         const compareColumns = isBible ? getBibleCompareColumns(item) : [];
         const hasBibleCompare = compareColumns.length >= 2;
         const boxAlignClass = hasBibleCompare ? "align-center stage-box--compare" : alignClass;
+        const requestedBodySize = (baseBodySize || (isBible ? 72 : 0)) * zoom;
+        const fittedBodySize = isBible && item.body
+          ? fitBibleTextSize(item.body, requestedBodySize, style, viewportScale, overlayOpacity)
+          : requestedBodySize;
+        const bodySize = fittedBodySize ? `${fittedBodySize}px` : "";
 
         const bgImage = getContentUrl(style.backgroundImage);
         const bgVideo = getContentUrl(style.backgroundVideo);
@@ -757,6 +793,7 @@
             return "fill";
           case "fit":
           case "contain":
+            return "contain";
           case "fill":
           default:
             return "cover";
@@ -960,6 +997,17 @@
       }
 
       function applyRemoteState(nextState) {
+        // A healthy WebSocket delivers updates immediately. The no-store poll
+        // below is a recovery path for browser sources that keep a half-open
+        // socket after a network interruption, so ignore snapshots we've
+        // already rendered rather than restarting video/countdown content.
+        if (
+          nextState &&
+          lastResolvedState &&
+          Number(nextState.updatedAt) === Number(lastResolvedState.updatedAt)
+        ) {
+          return;
+        }
         lastResolvedState = nextState;
         if (nextState === undefined) {
           showWaiting();
@@ -1051,8 +1099,7 @@
         pollTimer = window.setInterval(function () {
           if (document.visibilityState === "hidden") return;
           void fetchState();
-          void sendHeartbeat();
-        }, 12000);
+        }, 3000);
       }
 
       function clearReconnectTimer() {
@@ -1099,7 +1146,8 @@
 
         socket.addEventListener("open", function () {
           reconnectAttempt = 0;
-          stopPolling();
+          // Keep polling as a recovery path in case the socket becomes
+          // half-open and never emits a close event.
           socket.send(JSON.stringify({
             type: "viewer_hello",
             sessionId,

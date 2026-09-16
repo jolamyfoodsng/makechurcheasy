@@ -1129,11 +1129,6 @@ function applyQuickThemeSettings(
   const useThemeBg = bgType === "theme";
   const useNoBg = bgType === "off";
   const useColorBg = bgType === "color";
-  const useCustomBg = bgType !== "theme" && bgType !== "off";
-  const effectiveShadeOpacity =
-    useCustomBg && quickSettings.fullscreenShadeOpacity >= 1
-      ? 0.42
-      : quickSettings.fullscreenShadeOpacity;
   const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
   return {
     ...theme,
@@ -1153,8 +1148,8 @@ function applyQuickThemeSettings(
       refTextAlign: quickSettings.refTextAlign,
       refSpacing: quickSettings.refSpacing,
       fullscreenShadeColor: quickSettings.fullscreenShadeColor,
-      fullscreenShadeOpacity: effectiveShadeOpacity,
-      fullscreenShadeEnabled: effectiveShadeOpacity > 0,
+      fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity,
+      fullscreenShadeEnabled: quickSettings.fullscreenShadeOpacity > 0,
       textAlign: quickSettings.textAlign,
       lineHeight: quickSettings.lineHeight,
       fontWeight: quickSettings.fontWeight,
@@ -1183,7 +1178,7 @@ function applyQuickThemeSettings(
       backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
       backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
       backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
-      backgroundOpacity: useNoBg ? 0 : useThemeBg ? (theme.settings.backgroundOpacity ?? 1) : quickSettings.backgroundOpacity,
+      backgroundOpacity: useNoBg ? 0 : quickSettings.backgroundOpacity,
       backgroundColor: useNoBg
         ? "transparent"
         : useThemeBg

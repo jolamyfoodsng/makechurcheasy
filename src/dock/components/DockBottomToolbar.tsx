@@ -141,12 +141,10 @@ export default function DockBottomToolbar({
   }, [showDisplayModeMenu]);
 
   const toggleOverflow = useCallback(() => {
-    setShowOverflow((prev) => {
-      const next = !prev;
-      onOverflowChange?.(next);
-      return next;
-    });
-  }, [onOverflowChange]);
+    const next = !showOverflow;
+    setShowOverflow(next);
+    onOverflowChange?.(next);
+  }, [onOverflowChange, showOverflow]);
 
   const closeOverflow = useCallback(() => {
     setShowOverflow(false);

@@ -417,13 +417,14 @@ export default defineConfig(async () => ({
     __MCE_OVERLAY_HTML_VERSION__: JSON.stringify(OVERLAY_HTML_VERSION),
   },
 
-  // Multi-page build: main app + standalone dock + LM dock
+  // Multi-page build: main app + standalone dock + LM dock + floating assistant
   build: {
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),
         dock: resolve(root, "dock.html"),
         "lm-dock": resolve(root, "lm-dock.html"),
+        makechatgpt: resolve(root, "makechatgpt.html"),
       },
     },
   },
@@ -436,7 +437,10 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Development-only LAN access: a second laptop on the same Wi-Fi can
+    // open the dev Dock using this computer's LAN address. Production builds
+    // do not use Vite's dev server.
+    host: host || "0.0.0.0",
     hmr: host
       ? {
         protocol: "ws",

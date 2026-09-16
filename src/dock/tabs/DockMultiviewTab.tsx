@@ -3763,7 +3763,7 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           </div>
           <button
             type="button"
-            className="dock-btn dock-btn--primary dock-btn--sm"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
             onClick={() => showUpgradeModal(t("upgrade.multiviewRequiredMessage", "Upgrade to Basic or higher to enable Multi-View."))}
           >
             <Icon name="upgrade" size={14} />

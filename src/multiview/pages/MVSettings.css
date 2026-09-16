@@ -64,33 +64,33 @@
     box-sizing: border-box;
 }
 
-/* Handle system layouts and custom properties */
+/* Keep the legacy Settings components on the shared application palette. */
 :scope[data-theme="dark"] {
-    --bg-app: #0A0A0A;
-    --bg-sidebar: #0A0A0A;
-    --bg-header: #0A0A0A;
-    --bg-card: #151515;
-    --bg-card-hover: #1F1F1F;
-    --bg-input: #151515;
-    --bg-hover: #292929;
-    --border-color: #303030;
-    --text-primary: #F5F5F5;
-    --text-secondary: #B3B3B3;
-    --text-muted: #737373;
+    --bg-app: var(--bg-dark);
+    --bg-sidebar: var(--surface-dark);
+    --bg-header: var(--toolbar-bg);
+    --bg-card: var(--surface);
+    --bg-card-hover: var(--surface-hover);
+    --bg-input: var(--input-bg);
+    --bg-hover: var(--surface-hover);
+    --border-color: var(--border);
+    --text-primary: var(--text);
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
     --text-on-accent: #ffffff;
     --glow-opacity: 0.15;
     --shadow-main: 0 4px 18px rgba(0, 0, 0, 0.4);
     --switch-knob: #ffffff;
     --range-thumb-border: #ffffff;
     --swatch-check: #ffffff;
-    --preview-bg: #0A0A0A;
-    --preview-border: #303030;
-    --preview-surface: #0A0A0A;
-    --preview-sidebar-bg: #0A0A0A;
-    --preview-card-bg: #151515;
-    --preview-card-border: #303030;
-    --preview-text: #F5F5F5;
-    --preview-text-muted: #737373;
+    --preview-bg: var(--bg-dark);
+    --preview-border: var(--border);
+    --preview-surface: var(--bg-dark);
+    --preview-sidebar-bg: var(--surface-dark);
+    --preview-card-bg: var(--surface);
+    --preview-card-border: var(--border);
+    --preview-text: var(--text);
+    --preview-text-muted: #94A3B8;
     --logs-bg: #0A0A0A;
     --logs-text: #737373;
     --logs-time: #22c55e;
@@ -101,17 +101,17 @@
 }
 
 :scope[data-theme="light"] {
-    --bg-app: #f8fafc;
-    --bg-sidebar: #ffffff;
-    --bg-header: #f8fafc;
-    --bg-card: #ffffff;
-    --bg-card-hover: #f1f5f9;
-    --bg-input: #ffffff;
-    --bg-hover: #f1f5f9;
-    --border-color: #cbd5e1;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #64748b;
+    --bg-app: var(--bg-dark);
+    --bg-sidebar: var(--surface-dark);
+    --bg-header: var(--toolbar-bg);
+    --bg-card: var(--surface);
+    --bg-card-hover: var(--surface-hover);
+    --bg-input: var(--input-bg);
+    --bg-hover: var(--surface-hover);
+    --border-color: var(--border);
+    --text-primary: var(--text);
+    --text-secondary: #334155;
+    --text-muted: #64748B;
     --success-color: #15803D;
     --danger-color: #B91C1C;
     --warning: #B45309;
@@ -121,14 +121,14 @@
     --switch-knob: #ffffff;
     --range-thumb-border: #ffffff;
     --swatch-check: #ffffff;
-    --preview-bg: #0F172A;
-    --preview-border: #1e293b;
-    --preview-surface: #0F172A;
-    --preview-sidebar-bg: #111827;
-    --preview-card-bg: #1f2937;
-    --preview-card-border: #374151;
-    --preview-text: #f1f5f9;
-    --preview-text-muted: #9ca3af;
+    --preview-bg: var(--bg-dark);
+    --preview-border: var(--border);
+    --preview-surface: var(--bg-dark);
+    --preview-sidebar-bg: var(--surface-dark);
+    --preview-card-bg: var(--surface);
+    --preview-card-border: var(--border);
+    --preview-text: var(--text);
+    --preview-text-muted: #64748B;
     --logs-bg: #0F172A;
     --logs-text: #94A3B8;
     --logs-time: #22c55e;
@@ -177,7 +177,7 @@
     --base-size: 16px;
 }
 
-/* Settings page font & color stay on the Settings surface, not the shell */
+/* Keep the Settings styling scoped while matching the shared app theme. */
 :scope {
     font-family: var(--font-sans);
     background-color: var(--bg-app);

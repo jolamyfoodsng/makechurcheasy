@@ -65,6 +65,10 @@ import { buildVlcPlaylistItems } from "./vlcPlaylist";
 import type { EditableTemplate } from "../templates/editableTemplateCatalog";
 import { createMceTemplateBlob } from "../templates/mceTemplatePackage";
 import type { DockTimeOverlayData } from "./timeOverlay";
+import {
+  assertDockObsMutationAllowed,
+  isFreeDockPlan,
+} from "./dockMutationPolicy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -830,7 +834,7 @@ class DockObsClient {
   }
 
   private startProgramBackgroundWatcher(): void {
-    if (!this.isConnected || this._programBackgroundWatchTimer) return;
+    if (!this.isConnected || this._programBackgroundWatchTimer || isFreeDockPlan()) return;
 
     // Reconcile once immediately, then use the interval as a safety net for
     // OBS builds or remote sessions that fail to emit a scene-change event.
@@ -852,7 +856,10 @@ class DockObsClient {
   }
 
   private scheduleProgramBackgroundReconcile(sceneName?: string, force = false): void {
-    if (!this.isConnected) return;
+    if (!this.isConnected || isFreeDockPlan()) {
+      if (isFreeDockPlan()) this.stopProgramBackgroundWatcher();
+      return;
+    }
     if (loadProjectionSettings().sceneMode !== "auto-duplicate") return;
 
     this._programBackgroundPendingScene = sceneName?.trim() || "";
@@ -1245,6 +1252,7 @@ class DockObsClient {
   }
 
   async prewarmPrimaryDockSources(): Promise<void> {
+    if (isFreeDockPlan()) return;
     if (this._startupPrewarmPromise) return this._startupPrewarmPromise;
 
     const warmupPromise = (async () => {
@@ -1356,6 +1364,10 @@ class DockObsClient {
     requestData?: Record<string, unknown>,
     options: { priority?: "high" | "normal" | "low" } = {},
   ): Promise<unknown> {
+    // Check before auto-reconnecting. A Free-plan Dock must not even open an
+    // OBS mutation path that could later create or update a scene/source.
+    assertDockObsMutationAllowed(requestType);
+
     // Auto-reconnect if not connected
     if (!this.isConnected) {
       await this.connect();
@@ -1370,7 +1382,13 @@ class DockObsClient {
     try {
       const request = () => obsQueue.enqueue(
         requestType,
-        () => this.obs.call(requestType as never, requestData as never),
+        () => {
+          // Re-check immediately before the WebSocket write in case the
+          // account was downgraded while this request was reconnecting or
+          // waiting in the OBS queue.
+          assertDockObsMutationAllowed(requestType);
+          return this.obs.call(requestType as never, requestData as never);
+        },
         {
           dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined,
           priority: options.priority,
@@ -1407,6 +1425,10 @@ class DockObsClient {
     requests: Array<{ requestType: string; requestData?: Record<string, unknown> }>,
     executionType: 0 | 1 | 2 = 2, // default: Parallel
   ): Promise<Array<{ requestData?: unknown; requestStatus?: { code: number; comment?: string } }>> {
+    for (const request of requests) {
+      assertDockObsMutationAllowed(request.requestType);
+    }
+
     if (!this.isConnected) {
       await this.connect();
       const deadline = Date.now() + 3000;
@@ -1422,6 +1444,9 @@ class DockObsClient {
         requestType: r.requestType as never,
         requestData: r.requestData as never,
       }));
+      for (const request of requests) {
+        assertDockObsMutationAllowed(request.requestType);
+      }
       const results = await this.obs.callBatch(batch, { executionType });
       for (const request of requests) {
         this.noteObsSceneMutation(request.requestType, request.requestData);
@@ -2879,7 +2904,7 @@ class DockObsClient {
   }
 
   async applyProjectionSettings(options: { allowSceneMutation?: boolean } = {}): Promise<void> {
-    if (!options.allowSceneMutation) return;
+    if (!options.allowSceneMutation || isFreeDockPlan()) return;
 
     await this.ensurePresentationSceneReady().catch(() => { });
 
