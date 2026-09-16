@@ -44,7 +44,7 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
     expect(dockLmTabSource).toContain('data-testid={`lm-tab-${tab}`}');
     expect(dockLmTabSource).toMatch(/tabBarCompact:\s*\{[\s\S]*?height: "100%"[\s\S]*?boxSizing: "border-box"[\s\S]*?overflow: "hidden"/);
-    expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "0 0 52px"/);
+    expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "1 1 0"/);
     expect(dockLmTabSource).not.toContain("style={S.emptyState}");
     expect(dockLmTabSource).not.toContain("!presentationLinkMode && renderOverlayModeSwitch()");
     expect(dockLmTabSource).toContain("{renderOverlayModeSwitch()}");
@@ -181,8 +181,8 @@ describe("DockLmTab settings helpers", () => {
   it("keeps compact LM side tabs recognizable as buttons", () => {
     expect(dockLmTabSource).toContain('className={`lm-tab${isCompactHeight ? " lm-tab--compact" : ""}`}');
     expect(dockLmTabSource).toContain('border: "1px solid var(--dock-border, rgba(255,255,255,0.1))"');
-    expect(dockLmTabSource).toContain('borderRadius: 10');
-    expect(dockLmTabSource).toContain('height: 52');
+    expect(dockLmTabSource).toContain('borderRadius: 0');
+    expect(dockLmTabSource).toContain('minHeight: 48');
     expect(dockLmTabSource).toContain(".lm-tab--compact:hover");
   });
 

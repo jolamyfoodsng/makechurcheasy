@@ -43,6 +43,6 @@ describe("Dock Bible narrow layout", () => {
     expect(dockCssSource).toContain("border: 1px solid var(--dock-border);");
     expect(dockCssSource).toContain("border-radius: 9px;");
     expect(dockCssSource).toContain(".dock-module--bible--compact .dock-bible-compact-actions button:focus-visible {");
-    expect(dockCssSource).toContain("height: 42px;");
+    expect(dockCssSource).toContain("height: 48px;");
   });
 });

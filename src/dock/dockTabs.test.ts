@@ -39,7 +39,8 @@ describe("combined Worship and Notes Dock tab", () => {
     expect(dockPageSource).toContain("const updateHeight = () => setDockHeight(el.getBoundingClientRect().height);");
     expect(dockPageSource).toContain('if (typeof ResizeObserver === "undefined")');
     expect(dockCssSource).toContain(".dock-vertical-nav__item {");
-    expect(dockCssSource).toContain("height: 54px;");
-    expect(dockCssSource).toContain("min-height: 54px;");
+    expect(dockCssSource).toContain("flex: 1 1 0;");
+    expect(dockCssSource).toContain("height: auto;");
+    expect(dockCssSource).toContain("min-height: 48px;");
   });
 });
