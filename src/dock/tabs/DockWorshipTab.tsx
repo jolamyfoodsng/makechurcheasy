@@ -1111,6 +1111,18 @@ function sanitizeQuickThemeSettings(
   };
 }
 
+function getWorshipThemeVariantForMode(
+  theme: BibleTheme,
+  mode: OverlayMode,
+): BibleTheme {
+  const variant = mode === "lower-third"
+    ? theme.variants?.lowerThird
+    : theme.variants?.fullscreen;
+  return variant
+    ? { ...theme, settings: variant.settings, rawTemplate: variant.rawTemplate }
+    : theme;
+}
+
 function applyQuickThemeSettings(
   theme: BibleTheme,
   quickSettings: DockFullscreenQuickThemeSettings | null,
@@ -2264,12 +2276,16 @@ function DockWorshipTab({
       const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
       const displayLabel = cleanWorshipSectionLabel(section.label);
       const renderedTheme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
+      const selectedThemeForMode = liveOverlayMode === "fullscreen"
+        ? selectedFSThemeRef.current
+        : selectedLTThemeRef.current;
+      const baseThemeForMode = getWorshipThemeVariantForMode(selectedThemeForMode, liveOverlayMode);
       const liveThemeSettings = liveOverlayMode === "fullscreen"
         ? liveFullscreenThemeSettingsRef.current
         : liveLowerThirdThemeSettingsRef.current;
       const theme = options?.quickSettingsOverride
         ? applyQuickThemeSettings(
-          liveOverlayMode === "fullscreen" ? baseFullscreenTheme : baseLowerThirdTheme,
+          baseThemeForMode,
           liveOverlayMode === "lower-third"
             ? normalizeLowerThirdFitSettings(options.quickSettingsOverride)
             : options.quickSettingsOverride,
@@ -2725,7 +2741,7 @@ function DockWorshipTab({
     // lyric's optional font-fit measurement. The next lyric can be clicked
     // while that measurement is pending.
     liveFullscreenThemeSettingsRef.current = applyQuickThemeSettings(
-      baseFullscreenTheme,
+      getWorshipThemeVariantForMode(selectedFSThemeRef.current, "fullscreen"),
       nextSettings,
     ).settings as unknown as Record<string, unknown>;
     if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
@@ -2734,7 +2750,7 @@ function DockWorshipTab({
         nextSettings,
       );
       liveLowerThirdThemeSettingsRef.current = applyQuickThemeSettings(
-        baseLowerThirdTheme,
+        getWorshipThemeVariantForMode(selectedLTThemeRef.current, "lower-third"),
         linkedLowerThirdSettings,
       ).settings as unknown as Record<string, unknown>;
     }
@@ -2766,7 +2782,7 @@ function DockWorshipTab({
     manualThemeSettingsSelectionRef.current = true;
     const nextLowerThirdSettings = normalizeLowerThirdFitSettings(nextSettings);
     liveLowerThirdThemeSettingsRef.current = applyQuickThemeSettings(
-      baseLowerThirdTheme,
+      getWorshipThemeVariantForMode(selectedLTThemeRef.current, "lower-third"),
       nextLowerThirdSettings,
     ).settings as unknown as Record<string, unknown>;
     setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);

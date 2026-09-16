@@ -431,8 +431,22 @@ export default function DockNotesTab({
   }, []);
   const liveFullscreenThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
   const liveLowerThirdThemeSettingsRef = useRef<Record<string, unknown> | null>(null);
+  const selectedFSThemeRef = useRef(selectedFSTheme);
+  const selectedLTThemeRef = useRef(selectedLTTheme);
+
+  const handleSelectFSTheme = useCallback((theme: BibleTheme) => {
+    selectedFSThemeRef.current = theme;
+    setSelectedFSTheme(theme);
+  }, []);
+
+  const handleSelectLTTheme = useCallback((theme: BibleTheme) => {
+    selectedLTThemeRef.current = theme;
+    setSelectedLTTheme(theme);
+  }, []);
 
   useEffect(() => {
+    selectedFSThemeRef.current = selectedFSTheme;
+    selectedLTThemeRef.current = selectedLTTheme;
     liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
       selectedFSTheme,
       "fullscreen",
@@ -770,7 +784,9 @@ export default function DockNotesTab({
       if (!selectedNote) return null;
       const slide = selectedNoteSlides[idx];
       if (!slide) return null;
-      const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
+      const selectedTheme = overlayMode === "fullscreen"
+        ? selectedFSThemeRef.current
+        : selectedLTThemeRef.current;
       const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
       const quickSettings = quickSettingsOverride
         ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
@@ -908,9 +924,11 @@ export default function DockNotesTab({
     nextLineCount?: number,
     nextLineMode?: DockOutputLineMode,
   ) => {
+    const fullscreenTheme = selectedFSThemeRef.current;
+    const lowerThirdTheme = selectedLTThemeRef.current;
     const fullscreenBase = fullscreenQuickSettings
       ?? (() => {
-        const settings = getDockNotesThemeForMode(selectedFSTheme, "fullscreen").settings;
+        const settings = getDockNotesThemeForMode(fullscreenTheme, "fullscreen").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
           autoFontScale: false,
@@ -918,7 +936,7 @@ export default function DockNotesTab({
       })();
     const lowerThirdBase = lowerThirdQuickSettings
       ?? (() => {
-        const settings = getDockNotesThemeForMode(selectedLTTheme, "lower-third").settings;
+        const settings = getDockNotesThemeForMode(lowerThirdTheme, "lower-third").settings;
         return {
           ...(settings as unknown as DockFullscreenQuickThemeSettings),
           autoFontScale: false,
@@ -935,12 +953,12 @@ export default function DockNotesTab({
     setFullscreenQuickSettings(nextFullscreenSettings);
     setLowerThirdQuickSettings(nextLowerThirdSettings);
     liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-      selectedFSTheme,
+      fullscreenTheme,
       "fullscreen",
       nextFullscreenSettings,
     ) as unknown as Record<string, unknown>;
     liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-      selectedLTTheme,
+      lowerThirdTheme,
       "lower-third",
       nextLowerThirdSettings,
     ) as unknown as Record<string, unknown>;
@@ -1525,10 +1543,7 @@ export default function DockNotesTab({
 
       <DockThemeSettingsModal
         selectedThemeId={overlayMode === "fullscreen" ? selectedFSTheme.id : selectedLTTheme.id}
-        onSelect={(theme) => {
-          if (overlayMode === "fullscreen") setSelectedFSTheme(theme);
-          else setSelectedLTTheme(theme);
-        }}
+        onSelect={overlayMode === "fullscreen" ? handleSelectFSTheme : handleSelectLTTheme}
         allowedCategories={["worship", "general"]}
         isOpen={showThemeSettings}
         onClose={() => setShowThemeSettings(false)}
@@ -1541,13 +1556,13 @@ export default function DockNotesTab({
           const nextSettings = normalizeExplicitOutputFontSettings(settings, overlayMode);
           if (overlayMode === "fullscreen") {
             liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-              selectedFSTheme,
+              selectedFSThemeRef.current,
               "fullscreen",
               nextSettings,
             ) as unknown as Record<string, unknown>;
           } else {
             liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-              selectedLTTheme,
+              selectedLTThemeRef.current,
               "lower-third",
               nextSettings,
             ) as unknown as Record<string, unknown>;

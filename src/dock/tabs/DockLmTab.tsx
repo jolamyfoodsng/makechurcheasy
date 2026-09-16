@@ -3,7 +3,7 @@ export { normalizeLmOverlayMode } from "../../services/lmSettings";
 import { resolveScriptureProjection, isConfidentScriptureSuggestion } from "../../services/scriptureProjection";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Edit2, MonitorUp, Check, StickyNote } from "lucide-react";
+import { Copy, Edit2, MonitorUp, Check, StickyNote, MoreHorizontal, X } from "lucide-react";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import {
@@ -20,6 +20,7 @@ import { parseScriptureReference } from "../../services/scriptureParser";
 import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { getDockPlan } from "../dockEntitlement";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getEnvConfig } from "../../services/envConfig";
@@ -57,9 +58,19 @@ const SUGGESTION_COOLDOWN_MS = 60_000;
 const LM_RELAY_POLL_MS = 500;
 const LM_RELAY_HIDDEN_POLL_MS = 2_000;
 export const LM_COMPACT_HEIGHT_PX = 400;
+const DEFAULT_SUGGESTIONS_HEIGHT_PERCENT = 42;
+const MIN_SUGGESTIONS_HEIGHT_PERCENT = 18;
+const MAX_SUGGESTIONS_HEIGHT_PERCENT = 72;
 
 export function isLmCompactHeight(height: number): boolean {
   return Number.isFinite(height) && height > 0 && height < LM_COMPACT_HEIGHT_PX;
+}
+
+function clampSuggestionsHeightPercent(value: number): number {
+  return Math.min(
+    MAX_SUGGESTIONS_HEIGHT_PERCENT,
+    Math.max(MIN_SUGGESTIONS_HEIGHT_PERCENT, value),
+  );
 }
 
 async function loadLmDockService() {
@@ -306,12 +317,17 @@ export default function DockLmTab({
   }, [presentationLinkMode]);
 
   const [appConnected, setAppConnected] = useState(false);
+  const [dockPlan, setDockPlan] = useState(() => getDockPlan());
+  const isFreePlan = dockPlan === "free";
 
   useEffect(() => {
     dockClient.init();
     const unsub = dockClient.onState((msg: DockStateMessage) => {
       if (msg.type === "state:pong") {
         setAppConnected(true);
+      }
+      if (msg.type === "state:plan-update") {
+        setDockPlan(getDockPlan());
       }
     });
     dockClient.sendCommand({ type: "ping", timestamp: Date.now() });
@@ -486,6 +502,7 @@ export default function DockLmTab({
   // ── Transcript interaction state ──
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+  const [selectionActionsOpen, setSelectionActionsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; entryId: string | null }>({
     visible: false, x: 0, y: 0, entryId: null,
@@ -494,11 +511,14 @@ export default function DockLmTab({
     visible: false, text: "",
   });
   const clickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionActionsRef = useRef<HTMLDivElement | null>(null);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const [tabBarWidth, setTabBarWidth] = useState(0);
+  const [suggestionsHeightPercent, setSuggestionsHeightPercent] = useState(DEFAULT_SUGGESTIONS_HEIGHT_PERCENT);
+  const [isResizingSuggestions, setIsResizingSuggestions] = useState(false);
   const [rootHeight, setRootHeight] = useState(() => (
     typeof window === "undefined" ? 0 : window.innerHeight
   ));
@@ -511,12 +531,18 @@ export default function DockLmTab({
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (event: MouseEvent) => {
       if (contextMenu.visible) setContextMenu(prev => ({ ...prev, visible: false }));
+      if (
+        selectionActionsOpen &&
+        !selectionActionsRef.current?.contains(event.target as Node)
+      ) {
+        setSelectionActionsOpen(false);
+      }
     };
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [contextMenu.visible]);
+  }, [contextMenu.visible, selectionActionsOpen]);
 
   // ── Polling / BroadcastChannel ──
   useEffect(() => {
@@ -1009,6 +1035,59 @@ export default function DockLmTab({
     return () => ro.disconnect();
   }, []);
 
+  const adjustSuggestionsHeight = useCallback((deltaPercent: number) => {
+    setSuggestionsHeightPercent((current) => clampSuggestionsHeightPercent(current + deltaPercent));
+  }, []);
+
+  const handleSuggestionsResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      adjustSuggestionsHeight(5);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      adjustSuggestionsHeight(-5);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setSuggestionsHeightPercent(MAX_SUGGESTIONS_HEIGHT_PERCENT);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setSuggestionsHeightPercent(MIN_SUGGESTIONS_HEIGHT_PERCENT);
+    }
+  }, [adjustSuggestionsHeight]);
+
+  const startSuggestionsResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const tabContent = event.currentTarget.parentElement?.parentElement;
+    const tabContentHeight = tabContent?.getBoundingClientRect().height ?? 0;
+    if (tabContentHeight <= 0) return;
+
+    const startY = event.clientY;
+    const startHeightPercent = suggestionsHeightPercent;
+    setIsResizingSuggestions(true);
+
+    const updateHeight = (clientY: number) => {
+      const deltaPercent = ((clientY - startY) / tabContentHeight) * 100;
+      setSuggestionsHeightPercent(
+        clampSuggestionsHeightPercent(startHeightPercent - deltaPercent),
+      );
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      updateHeight(moveEvent.clientY);
+    };
+    const stopResize = () => {
+      setIsResizingSuggestions(false);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }, [suggestionsHeightPercent]);
+
   // ── Auto-navigate inside the dock only ──
   useEffect(() => {
     if (!settings.autoNavigate) return;
@@ -1045,6 +1124,10 @@ export default function DockLmTab({
   const queueVerses = processedQueue;
   const suggestionExpiryMs = Math.max(5, Number(settings.suggestionLifetime) || 20) * 1000;
   const queuedVerseKeys = useMemo(() => new Set(processedQueue.map((c) => getLmCandidateKey(c))), [processedQueue]);
+  const pinnedVerseKeys = useMemo(
+    () => new Set(pinnedVerses.map((candidate) => getLmCandidateKey(candidate))),
+    [pinnedVerses],
+  );
 
   const filteredSuggestions = useMemo(() => {
     const nowMs = Date.now();
@@ -1052,12 +1135,15 @@ export default function DockLmTab({
       const key = getLmCandidateKey(s);
       if (queuedVerseKeys.has(key)) return false;
       const detectedAt = detectedAtRef.current.get(key) ?? nowMs;
-      if (nowMs - detectedAt > suggestionExpiryMs) return false;
+      // Keep the last usable suggestion mounted while speech is active. A
+      // relay poll can briefly expose an older or empty snapshot between a
+      // match and its follow-up update, which otherwise makes the panel blink.
+      if (!isListening && nowMs - detectedAt > suggestionExpiryMs) return false;
       const cooldownAt = suggestionCooldownRef.current.get(key);
       if (cooldownAt && nowMs - cooldownAt < SUGGESTION_COOLDOWN_MS) return false;
       return true;
     });
-  }, [queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
+  }, [isListening, queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
 
   useEffect(() => {
     const visibleAutoPushKeys = new Set<string>();
@@ -1232,6 +1318,7 @@ export default function DockLmTab({
   const handleCancelSelection = useCallback(() => {
     setIsSelectionMode(false);
     setSelectedEntryIds(new Set());
+    setSelectionActionsOpen(false);
   }, []);
 
   const handleCopyAll = useCallback(() => {
@@ -1256,11 +1343,11 @@ export default function DockLmTab({
     }));
   }, []);
 
-  const handlePushToNotes = useCallback(async (text: string) => {
+  const appendTranscriptToNotes = useCallback(async (text: string): Promise<boolean> => {
     const cleanText = text.trim();
     if (!cleanText) {
       showToast("Nothing to save");
-      return;
+      return false;
     }
 
     const sessionId = isListening && lmSessionStartedAt !== null
@@ -1284,11 +1371,26 @@ export default function DockLmTab({
       commandId: relayCommand.commandId,
       timestamp: Date.now(),
     });
-    void postDockNotesAppendCommand(relayCommand).catch((err) => {
-      console.warn("[DockLmTab] Notes relay failed:", err);
-    });
+    // Complete the cross-window relay before an OBS publish can navigate or
+    // replace the dock. The local append above remains immediate, while the
+    // timeout prevents an unavailable relay from blocking the OBS action.
+    await Promise.race([
+      postDockNotesAppendCommand(relayCommand).catch((err) => {
+        console.warn("[DockLmTab] Notes relay failed:", err);
+      }),
+      new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+    ]);
     showToast(result ? "Saved in Notes" : "Nothing to save");
+    return Boolean(result);
   }, [isListening, lmSessionStartedAt, showToast]);
+
+  const handlePushToNotes = useCallback(async (text: string): Promise<boolean> => {
+    if (isFreePlan) {
+      showToast("Save in Notes requires a paid plan");
+      return false;
+    }
+    return appendTranscriptToNotes(text);
+  }, [appendTranscriptToNotes, isFreePlan, showToast]);
 
   const handleSaveAndShowTranscript = useCallback(async (text: string) => {
     const cleanText = text.trim();
@@ -1296,9 +1398,11 @@ export default function DockLmTab({
       showToast("Nothing to push");
       return;
     }
-    await handlePushToNotes(cleanText);
+    // Sending to OBS includes saving the transcript in Notes, even for Free
+    // users. The standalone Save in Notes action remains plan-gated.
+    await appendTranscriptToNotes(cleanText);
     await pushTranscriptToOBS(cleanText);
-  }, [handlePushToNotes, pushTranscriptToOBS, showToast]);
+  }, [appendTranscriptToNotes, pushTranscriptToOBS, showToast]);
 
   const handleEditPushToOBS = useCallback(() => {
     void handleSaveAndShowTranscript(editModal.text);
@@ -1366,7 +1470,87 @@ export default function DockLmTab({
 
   return (
     <div style={S.root} ref={rootRef}>
-      <style>{`@keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}`}</style>
+      <style>{`
+        @keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}
+        .lm-candidate-card {
+          border: 1px solid var(--dock-border, rgba(255,255,255,0.06));
+          background: rgba(255,255,255,0.02);
+          transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+        }
+        .lm-candidate-card:hover {
+          border-color: rgba(96,165,250,0.55);
+          background: rgba(59,130,246,0.08);
+          box-shadow: 0 4px 14px rgba(15,23,42,0.24);
+          transform: translateY(-1px);
+        }
+        .lm-candidate-card:focus-visible {
+          outline: 2px solid #60A5FA;
+          outline-offset: 1px;
+        }
+        .lm-candidate-card--suggestion {
+          border-color: rgba(34,197,94,0.22);
+          background: rgba(34,197,94,0.05);
+        }
+        .lm-candidate-card--suggestion:hover {
+          border-color: rgba(74,222,128,0.62);
+          background: rgba(34,197,94,0.11);
+        }
+        .lm-candidate-card--pinned {
+          box-shadow: inset 3px 0 0 rgba(96,165,250,0.72);
+        }
+        .lm-candidate-card--active,
+        .lm-candidate-card--active:hover {
+          border-color: rgba(96,165,250,0.8);
+          background: rgba(59,130,246,0.18);
+          box-shadow: 0 0 0 1px rgba(96,165,250,0.18), 0 4px 14px rgba(15,23,42,0.28);
+        }
+        .lm-pin-button {
+          border: 1px solid var(--dock-border, rgba(255,255,255,0.1));
+          background: rgba(255,255,255,0.04);
+          color: var(--dock-text-dim, #94A3B8);
+          cursor: pointer;
+          transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+        }
+        .lm-pin-button:hover {
+          border-color: rgba(96,165,250,0.6);
+          background: rgba(96,165,250,0.18);
+          color: #BFDBFE;
+        }
+        .lm-pin-button:active {
+          transform: scale(0.94);
+        }
+        .lm-pin-button--active {
+          border-color: rgba(96,165,250,0.7);
+          background: rgba(96,165,250,0.2);
+          color: #60A5FA;
+        }
+        .lm-suggestions-resizer {
+          border-top: 1px solid var(--dock-border, rgba(255,255,255,0.08));
+          background: rgba(255,255,255,0.015);
+          cursor: row-resize;
+          transition: background-color 140ms ease, border-color 140ms ease;
+        }
+        .lm-suggestions-resizer:hover,
+        .lm-suggestions-resizer:focus-visible,
+        .lm-suggestions-resizer--active {
+          border-top-color: rgba(96,165,250,0.72);
+          background: rgba(59,130,246,0.1);
+          outline: none;
+        }
+        .lm-suggestions-resizer__grip {
+          width: 38px;
+          height: 3px;
+          border-radius: 999px;
+          background: var(--dock-text-dim, #64748B);
+          transition: background-color 140ms ease, width 140ms ease;
+        }
+        .lm-suggestions-resizer:hover .lm-suggestions-resizer__grip,
+        .lm-suggestions-resizer:focus-visible .lm-suggestions-resizer__grip,
+        .lm-suggestions-resizer--active .lm-suggestions-resizer__grip {
+          width: 48px;
+          background: #60A5FA;
+        }
+      `}</style>
       {isTestEnv && (
         <div
           style={{
@@ -1533,9 +1717,28 @@ export default function DockLmTab({
                 const key = getLmCandidateKey(c);
                 const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
                 const freshness = getFreshness(detectedAt, now);
+                const isLive = liveVerse ? getLmCandidateKey(liveVerse) === key : false;
+                const isPinned = pinnedVerseKeys.has(key);
 
                 return (
-                  <div key={`queue-${key}-${i}`} style={S.queueCard}>
+                  <div
+                    key={`queue-${key}-${i}`}
+                    className={`lm-candidate-card${isLive ? " lm-candidate-card--active" : ""}${isPinned ? " lm-candidate-card--pinned" : ""}`}
+                    style={S.queueCard}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isLive}
+                    aria-label={`${c.label}. ${pushActionLabel}`}
+                    title={pushActionTitle}
+                    onClick={() => void handlePushVerse(c, "queue")}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void handlePushVerse(c, "queue");
+                      }
+                    }}
+                  >
                     <div style={S.queueCardTop}>
                       <span style={S.queueRef}>{c.label}</span>
                     </div>
@@ -1546,15 +1749,23 @@ export default function DockLmTab({
                       <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button
+                          className={`lm-pin-button${isPinned ? " lm-pin-button--active" : ""}`}
                           style={S.pinBtnSmall}
-                          onClick={() => handlePinVerse(c)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handlePinVerse(c);
+                          }}
+                          aria-pressed={isPinned}
                           title="Pin verse"
                         >
-                          <Icon name="push_pin" size={10} />
+                          <Icon name="push_pin" size={12} />
                         </button>
                         <button
                           style={S.pushBtn}
-                          onClick={() => void handlePushVerse(c, "queue")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handlePushVerse(c, "queue");
+                          }}
                           disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
                           title={pushActionTitle}
                         >
@@ -1570,7 +1781,24 @@ export default function DockLmTab({
           </div>
 
           {filteredSuggestions.length > 0 && (
-            <div style={S.suggestionsSection}>
+            <div style={{ ...S.suggestionsSection, height: `${suggestionsHeightPercent}%` }}>
+              <div
+                className={`lm-suggestions-resizer${isResizingSuggestions ? " lm-suggestions-resizer--active" : ""}`}
+                style={S.suggestionsResizeHandle}
+                role="separator"
+                tabIndex={0}
+                aria-orientation="horizontal"
+                aria-label={t("lm.resizeSuggestions", "Resize suggestions panel")}
+                aria-valuemin={MIN_SUGGESTIONS_HEIGHT_PERCENT}
+                aria-valuemax={MAX_SUGGESTIONS_HEIGHT_PERCENT}
+                aria-valuenow={Math.round(suggestionsHeightPercent)}
+                aria-valuetext={`${Math.round(suggestionsHeightPercent)}% suggestions panel height`}
+                title={t("lm.resizeSuggestionsHint", "Drag to resize Queue and Suggestions")}
+                onPointerDown={startSuggestionsResize}
+                onKeyDown={handleSuggestionsResizeKeyDown}
+              >
+                <span className="lm-suggestions-resizer__grip" style={S.suggestionsResizeGrip} aria-hidden="true" />
+              </div>
               <div style={S.sectionHeader}>
                 <span style={S.sectionLabel}>{t("lm.suggestions", "Suggestions")}</span>
                 <span style={S.sectionCount}>{filteredSuggestions.length}</span>
@@ -1580,9 +1808,28 @@ export default function DockLmTab({
                   const key = getLmCandidateKey(c);
                   const detectedAt = detectedAtRef.current.get(key) ?? Date.now();
                   const freshness = getFreshness(detectedAt, now);
+                  const isLive = liveVerse ? getLmCandidateKey(liveVerse) === key : false;
+                  const isPinned = pinnedVerseKeys.has(key);
 
                   return (
-                    <div key={`suggestion-${key}-${i}`} style={S.suggestionCard}>
+                    <div
+                      key={`suggestion-${key}-${i}`}
+                      className={`lm-candidate-card lm-candidate-card--suggestion${isLive ? " lm-candidate-card--active" : ""}${isPinned ? " lm-candidate-card--pinned" : ""}`}
+                      style={S.suggestionCard}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isLive}
+                      aria-label={`${c.label}. ${pushActionLabel}`}
+                      title={pushActionTitle}
+                      onClick={() => void handlePushVerse(c, "suggestion")}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          void handlePushVerse(c, "suggestion");
+                        }
+                      }}
+                    >
                       <div style={S.queueCardTop}>
                         <span style={S.queueRef}>{c.label}</span>
                         <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
@@ -1594,15 +1841,23 @@ export default function DockLmTab({
                         <span style={S.suggestionHint}>{t("lm.manualSuggestion", "Suggested match")}</span>
                         <div style={{ display: "flex", gap: 4 }}>
                           <button
+                            className={`lm-pin-button${isPinned ? " lm-pin-button--active" : ""}`}
                             style={S.pinBtnSmall}
-                            onClick={() => handlePinVerse(c)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handlePinVerse(c);
+                            }}
+                            aria-pressed={isPinned}
                             title="Pin verse"
                           >
-                            <Icon name="push_pin" size={10} />
+                            <Icon name="push_pin" size={12} />
                           </button>
                           <button
                             style={S.pushBtn}
-                            onClick={() => void handlePushVerse(c, "suggestion")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handlePushVerse(c, "suggestion");
+                            }}
                             disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
                             title={pushActionTitle}
                           >
@@ -1688,57 +1943,86 @@ export default function DockLmTab({
                       <div data-action-bar style={S.actionBar}>
                         <div style={S.actionBarLeft}>
                           <span style={S.selectionCount}>{selectedEntries.length} selected</span>
-                          <button
-                            style={S.btnCancel}
-                            onClick={(e) => { e.stopPropagation(); handleCancelSelection(); }}
-                          >
-                            Cancel
-                          </button>
                         </div>
-                        <div style={S.actionBarRight}>
+                        <div style={S.actionBarRight} ref={selectionActionsRef}>
                           <button
+                            type="button"
+                            style={S.btnCloseSelection}
+                            onClick={(e) => { e.stopPropagation(); handleCancelSelection(); }}
+                            aria-label="Close selection"
+                            title="Close selection"
+                          >
+                            <X size={14} strokeWidth={2.4} />
+                          </button>
+                          <button
+                            type="button"
                             style={S.btnAction}
                             onClick={(e) => { e.stopPropagation(); handleCopyAll(); }}
                             title="Copy selected transcript lines"
+                            aria-label="Copy selected transcript lines"
                           >
                             <Copy size={12} />
-                            <span style={S.btnText}>Copy</span>
                           </button>
                           <button
-                            style={S.btnAction}
-                            onClick={(e) => { e.stopPropagation(); handleEditAll(); }}
-                            title="Edit"
-                          >
-                            <Edit2 size={12} />
-                            <span style={S.btnText}>Edit</span>
-                          </button>
-                          <button
-                            style={S.btnAction}
+                            type="button"
+                            style={S.btnIcon}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
-                              handlePushToNotes(text);
-                              handleCancelSelection();
+                              setSelectionActionsOpen((open) => !open);
                             }}
-                            title="Save in Notes tab"
+                            aria-label="More selection actions"
+                            title="More selection actions"
+                            aria-haspopup="menu"
+                            aria-expanded={selectionActionsOpen}
                           >
-                            <StickyNote size={12} />
-                            <span style={S.btnText}>Save in Notes</span>
+                            <MoreHorizontal size={15} />
                           </button>
-                          <button
-                            style={S.btnPrimary}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
-                              void handleSaveAndShowTranscript(text);
-                              handleCancelSelection();
-                            }}
-                            title={`${transcriptPushLabel} and save in Notes`}
-                            disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
-                          >
-                            <MonitorUp size={12} />
-                            <span style={S.btnText}>{transcriptPushShortLabel}</span>
-                          </button>
+                          {selectionActionsOpen && (
+                            <div style={S.selectionOverflowMenu} role="menu">
+                              <button
+                                type="button"
+                                style={{ ...S.contextMenuItem, ...(isFreePlan ? S.contextMenuItemDisabled : {}) }}
+                                role="menuitem"
+                                onClick={(e) => { e.stopPropagation(); handleEditAll(); }}
+                                disabled={isFreePlan}
+                                title={isFreePlan ? "Edit requires a paid plan" : "Edit selected transcript lines"}
+                              >
+                                <Edit2 size={13} />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...S.contextMenuItem, ...(isFreePlan ? S.contextMenuItemDisabled : {}) }}
+                                role="menuitem"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
+                                  void handlePushToNotes(text);
+                                  handleCancelSelection();
+                                }}
+                                disabled={isFreePlan}
+                                title={isFreePlan ? "Save in Notes requires a paid plan" : "Save selected transcript lines in Notes"}
+                              >
+                                <StickyNote size={13} />
+                                Save in Notes
+                              </button>
+                              <button
+                                type="button"
+                                style={S.contextMenuItem}
+                                role="menuitem"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const text = selectedEntries.map((selected) => selected.text).filter(Boolean).join("\n");
+                                  void handleSaveAndShowTranscript(text);
+                                  handleCancelSelection();
+                                }}
+                                disabled={pushing || (!presentationLinkMode && obsStatus !== "connected")}
+                              >
+                                <MonitorUp size={13} />
+                                {transcriptPushShortLabel}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1933,6 +2217,8 @@ export default function DockLmTab({
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
+            disabled={isFreePlan}
+            title={isFreePlan ? "Edit requires a paid plan" : "Edit selected transcript line"}
           >
             Edit
           </button>
@@ -1950,13 +2236,15 @@ export default function DockLmTab({
             {transcriptPushLabel}
           </button>
           <button
-            style={S.contextMenuItem}
+            style={{ ...S.contextMenuItem, ...(isFreePlan ? S.contextMenuItemDisabled : {}) }}
             onClick={() => {
               if (contextEntry) {
                 void handlePushToNotes(contextEntry.text);
               }
               setContextMenu(prev => ({ ...prev, visible: false }));
             }}
+            disabled={isFreePlan}
+            title={isFreePlan ? "Save in Notes requires a paid plan" : "Save selected transcript line in Notes"}
           >
             Save in Notes
           </button>
@@ -1990,7 +2278,12 @@ export default function DockLmTab({
             </div>
             <div style={S.editModalFooter}>
               <button style={S.modalBtnGhost} onClick={() => { setEditModal({ visible: false, text: "" }); handleCancelSelection(); }}>Cancel</button>
-              <button style={S.btnSecondary} onClick={() => { void handlePushToNotes(editModal.text); setEditModal({ visible: false, text: "" }); handleCancelSelection(); }}>
+              <button
+                style={{ ...S.btnSecondary, ...(isFreePlan ? S.modalButtonDisabled : {}) }}
+                onClick={() => { void handlePushToNotes(editModal.text); setEditModal({ visible: false, text: "" }); handleCancelSelection(); }}
+                disabled={isFreePlan}
+                title={isFreePlan ? "Save in Notes requires a paid plan" : "Save in Notes"}
+              >
                 <StickyNote size={14} /> Save in Notes
               </button>
               <button
@@ -2523,13 +2816,9 @@ const S: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: 18,
-    height: 18,
+    width: 24,
+    height: 24,
     borderRadius: 3,
-    border: "none",
-    background: "rgba(255,255,255,0.04)",
-    color: "var(--dock-text-dim, #94A3B8)",
-    cursor: "pointer",
   },
   // ── Pinned chips ──
   pinnedRow: {
@@ -2605,11 +2894,21 @@ const S: Record<string, React.CSSProperties> = {
   },
   suggestionsSection: {
     flex: "0 0 auto",
-    maxHeight: "42%",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+    minHeight: 0,
+  },
+  suggestionsResizeHandle: {
+    flex: "0 0 10px",
+    height: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+  },
+  suggestionsResizeGrip: {
+    display: "block",
   },
   suggestionsScroll: {
     overflowY: "auto",
@@ -2636,20 +2935,18 @@ const S: Record<string, React.CSSProperties> = {
   queueCard: {
     padding: "6px 10px",
     borderRadius: 6,
-    border: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
-    background: "rgba(255,255,255,0.02)",
     display: "flex",
     flexDirection: "column",
     gap: 4,
+    cursor: "pointer",
   },
   suggestionCard: {
     padding: "6px 10px",
     borderRadius: 6,
-    border: "1px solid rgba(34,197,94,0.22)",
-    background: "rgba(34,197,94,0.05)",
     display: "flex",
     flexDirection: "column",
     gap: 4,
+    cursor: "pointer",
   },
   queueCardTop: {
     display: "flex",
@@ -2793,19 +3090,52 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: "var(--dock-text, #E2E8F0)",
   },
-  btnCancel: {
-    background: "transparent",
-    border: "1px solid rgba(148,163,184,0.18)",
-    color: "#CBD5E1",
-    fontSize: 11,
-    cursor: "pointer",
-    padding: "4px 8px",
-    borderRadius: 6,
-  },
   actionBarRight: {
     display: "flex",
     flexWrap: "wrap",
     gap: 4,
+    alignItems: "center",
+    position: "relative" as const,
+  },
+  btnCloseSelection: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    padding: 0,
+    background: "rgba(127,29,29,0.28)",
+    color: "#F87171",
+    border: "1px solid rgba(248,113,113,0.38)",
+    borderRadius: 6,
+    cursor: "pointer",
+  },
+  btnIcon: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    padding: 0,
+    background: "#1F2937",
+    color: "#E2E8F0",
+    border: "1px solid rgba(148,163,184,0.18)",
+    borderRadius: 6,
+    cursor: "pointer",
+  },
+  selectionOverflowMenu: {
+    position: "absolute" as const,
+    top: "calc(100% + 4px)",
+    right: 0,
+    minWidth: 154,
+    display: "flex",
+    flexDirection: "column" as const,
+    padding: "4px 0",
+    background: "#0F172A",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 8,
+    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.5)",
+    zIndex: 110,
   },
   btnAction: {
     display: "flex",
@@ -2835,8 +3165,6 @@ const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
-  btnText: {},
-
   // ── Context menu ──
   contextMenu: {
     position: "fixed" as const,
@@ -2862,8 +3190,16 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 6,
   },
+  contextMenuItemDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
 
   // ── Edit modal ──
+  modalButtonDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
   editModalOverlay: {
     position: "fixed" as const,
     inset: 0,

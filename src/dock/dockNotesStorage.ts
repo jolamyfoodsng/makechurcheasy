@@ -150,11 +150,6 @@ export function applyQuickSettingsToNotesTheme(
   const useThemeBg = bgType === "theme";
   const useNoBg = bgType === "off";
   const useColorBg = bgType === "color";
-  const useCustomBg = bgType !== "theme" && bgType !== "off";
-  const effectiveShadeOpacity =
-    useCustomBg && quickSettings.fullscreenShadeOpacity >= 1
-      ? 0.42
-      : quickSettings.fullscreenShadeOpacity;
   const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
 
   return {
@@ -169,8 +164,8 @@ export function applyQuickSettingsToNotesTheme(
       fontColor: quickSettings.fontColor ?? theme.settings.fontColor,
       refFontColor: quickSettings.refFontColor ?? theme.settings.refFontColor,
       fullscreenShadeColor: quickSettings.fullscreenShadeColor ?? theme.settings.fullscreenShadeColor,
-      fullscreenShadeOpacity: effectiveShadeOpacity ?? theme.settings.fullscreenShadeOpacity,
-      fullscreenShadeEnabled: (effectiveShadeOpacity ?? theme.settings.fullscreenShadeOpacity) > 0,
+      fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity ?? theme.settings.fullscreenShadeOpacity,
+      fullscreenShadeEnabled: (quickSettings.fullscreenShadeOpacity ?? theme.settings.fullscreenShadeOpacity) > 0,
       textAlign: quickSettings.textAlign ?? theme.settings.textAlign,
       lineHeight: quickSettings.lineHeight ?? theme.settings.lineHeight,
       fontWeight: quickSettings.fontWeight ?? theme.settings.fontWeight,

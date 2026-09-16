@@ -37,7 +37,7 @@ import {
   type TemplatePictureAsset,
   type TemplateVideoAsset,
 } from "../../services/templateVideos";
-import { registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
+import { getSafeFileName, registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { isInternalDockMediaItem, isInternalDockUploadFile } from "../internalMediaAssets";
 import { getDockPlan, requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { getMediaKind, isSupportedMediaFile } from "../../services/mediaValidation";
@@ -284,6 +284,22 @@ function extractUploadTimestamp(filename: string): string {
 /** Show the user-facing filename instead of the generated disk-storage prefix. */
 function getUploadDisplayName(filename: string): string {
   return filename.replace(/^media_\d{10,13}_/, "");
+}
+
+function getMediaDownloadFileName(entry: DockMediaEntry, preferredName?: string): string {
+  const sourceName = (
+    entry.uploadFile
+    || entry.libraryItem?.diskFileName
+    || entry.libraryItem?.name
+    || entry.name
+  ).split(/[\\/]/).pop() || "media";
+  const cleanSourceName = getUploadDisplayName(sourceName);
+  const sourceExtension = cleanSourceName.match(/\.[a-z0-9]{1,8}$/i)?.[0] || "";
+  const requestedName = preferredName?.trim() || getUploadDisplayName(entry.name).trim() || cleanSourceName;
+  const fileName = /\.[a-z0-9]{1,8}$/i.test(requestedName)
+    ? requestedName
+    : `${requestedName}${sourceExtension}`;
+  return getSafeFileName(fileName);
 }
 
 function normalizeUploadFileName(value: string): string {
@@ -734,6 +750,7 @@ function DockMediaTab({
   const uploadedFileTimestampsRef = useRef(new Map<string, string>());
   const [uploadsLoading, setUploadsLoading] = useState(false);
   const [sendingFile, setSendingFile] = useState<string | null>(null);
+  const [downloadingMediaKey, setDownloadingMediaKey] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [mediaPrefs, setMediaPrefs] = useState<DockMediaPreferences>(() => loadMediaPreferences());
   const [mediaFolders, setMediaFolders] = useState<string[]>(() => loadMediaFolders());
@@ -951,7 +968,7 @@ function DockMediaTab({
       MEDIA_CONTEXT_MENU_WIDTH,
       Math.max(0, window.innerWidth - MEDIA_CONTEXT_MENU_GUTTER * 2),
     );
-    const menuHeight = 320;
+    const menuHeight = 356;
     const leftPlacement = event.clientX - menuWidth - MEDIA_CONTEXT_MENU_GAP;
     const rightmostX = Math.max(
       MEDIA_CONTEXT_MENU_GUTTER,
@@ -1425,6 +1442,68 @@ function DockMediaTab({
 
     throw new Error("Cannot resolve media to a local file path");
   }, [uploadsDir]);
+
+  const downloadMediaEntry = useCallback(async (entry: DockMediaEntry) => {
+    const mediaFileName = entry.uploadFile || entry.libraryItem?.diskFileName;
+    const sourceUrl = mediaFileName
+      ? `/uploads/${encodeURIComponent(mediaFileName)}`
+      : entry.previewUrl || entry.libraryItem?.url || "";
+    const fileName = getMediaDownloadFileName(entry, mediaPrefs[entry.prefKey]?.label);
+
+    setMediaContextMenu(null);
+    setDownloadingMediaKey(entry.key);
+    try {
+      if (!sourceUrl) throw new Error("No media source is available.");
+
+      let downloadUrl = sourceUrl;
+      let objectUrl: string | null = null;
+      const resolvedUrl = sourceUrl.startsWith("data:")
+        ? null
+        : new URL(sourceUrl, window.location.href);
+      const shouldFetchSource = sourceUrl.startsWith("data:")
+        || Boolean(resolvedUrl && resolvedUrl.origin !== window.location.origin);
+
+      if (shouldFetchSource) {
+        const response = await fetch(sourceUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Media download failed (${response.status}).`);
+        const blob = await response.blob();
+        if (blob.size === 0) throw new Error("The media file was empty.");
+        objectUrl = URL.createObjectURL(blob);
+        downloadUrl = objectUrl;
+      }
+
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = fileName;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl as string), 1000);
+      setSendError(null);
+    } catch (error) {
+      console.warn("[DockMediaTab] Media download failed:", error);
+      if (!sourceUrl) {
+        setSendError(t('media.downloadFailed', { defaultValue: 'Could not download this media.' }));
+        return;
+      }
+      // A direct link is still useful for remote assets when the source does
+      // not allow CORS, so let the embedded browser handle that fallback.
+      if (!sourceUrl.startsWith("data:")) {
+        const link = document.createElement("a");
+        link.href = sourceUrl;
+        link.download = fileName;
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        setSendError(t('media.downloadFailed', { defaultValue: 'Could not download this media.' }));
+      }
+    } finally {
+      setDownloadingMediaKey(null);
+    }
+  }, [mediaPrefs, t]);
 
   const playMedia = useCallback(
     async (fileName: string, options?: DockMediaSendOptions): Promise<boolean> => {
@@ -5944,6 +6023,19 @@ function DockMediaTab({
             >
               <Icon name="open_in_full" size={13} />
               <span className="dock-media-context-menu__label">{t('common.preview')}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item"
+              onClick={() => void downloadMediaEntry(contextEntry)}
+              disabled={downloadingMediaKey === contextEntry.key}
+              title={t('media.downloadAsset')}
+            >
+              <Icon name={downloadingMediaKey === contextEntry.key ? "downloading" : "download"} size={13} />
+              <span className="dock-media-context-menu__label">
+                {downloadingMediaKey === contextEntry.key ? t('media.downloadProgress') : t('media.downloadAsset')}
+              </span>
             </button>
             {!presentationLinkMode && canSendEntryToScene(contextEntry) && (
               <button

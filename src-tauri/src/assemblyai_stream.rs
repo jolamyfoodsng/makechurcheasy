@@ -21,7 +21,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
@@ -47,6 +47,7 @@ const WS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
 const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
 
 // Bible vocabulary boosts recognition without guessing a book in the parser.
@@ -287,8 +288,12 @@ pub async fn start_assemblyai_stream(
     }
 
     // Channel: audio capture → WS sender task.
-    // Capacity 64 buffers ≈ ~6 s of 100 ms chunks — enough headroom.
-    let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(64);
+    // Each item is 50 ms, so 128 items provide about 6.4 s of headroom.
+    // The ready gate below prevents startup audio from consuming this queue
+    // while the WebSocket is still negotiating.
+    let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(128);
+    let audio_ready = Arc::new(AtomicBool::new(false));
+    let audio_drop_count = Arc::new(AtomicU32::new(0));
     let (profile_tx, profile_rx) = mpsc::channel::<RealtimeProfile>(4);
     let profile = realtime_profile(detection_speed.as_deref());
 
@@ -337,6 +342,8 @@ pub async fn start_assemblyai_stream(
 
     let app_clone = app.clone();
     let audio_tx_clone = audio_tx.clone();
+    let audio_ready_clone = Arc::clone(&audio_ready);
+    let audio_drop_count_clone = Arc::clone(&audio_drop_count);
 
     // Accumulator lives inside the audio callback closure.
     let stream = match sample_format {
@@ -350,6 +357,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -367,6 +376,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -387,6 +398,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -423,6 +436,7 @@ pub async fn start_assemblyai_stream(
     let realtime_app = app.clone();
     let task_stream = Arc::clone(&state.stream);
     let task_is_streaming = Arc::clone(&state.is_streaming);
+    let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
         let result = run_realtime_transcriber(
             realtime_app.clone(),
@@ -431,8 +445,12 @@ pub async fn start_assemblyai_stream(
             shutdown_rx,
             profile_rx,
             profile,
+            Arc::clone(&task_audio_ready),
+            Arc::clone(&audio_drop_count),
         )
         .await;
+
+        task_audio_ready.store(false, Ordering::Release);
 
         // A network close can end the WebSocket without an explicit stop command.
         // Release the microphone and start guard so the UI can reconnect immediately.
@@ -481,6 +499,8 @@ async fn run_realtime_transcriber(
     mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
     mut profile_rx: mpsc::Receiver<RealtimeProfile>,
     initial_profile: RealtimeProfile,
+    audio_ready: Arc<AtomicBool>,
+    audio_drop_count: Arc<AtomicU32>,
 ) -> Result<(), String> {
     let endpoint = build_realtime_endpoint(&initial_profile);
     let mut request = endpoint
@@ -503,6 +523,9 @@ async fn run_realtime_transcriber(
             status: "connected".to_string(),
         },
     );
+    // cpal starts before this task so device startup stays responsive, but no
+    // samples are accepted until AssemblyAI has completed the WS handshake.
+    audio_ready.store(true, Ordering::Release);
     println!("[AssemblyAI Realtime] WebSocket connected");
 
     let mut last_server_activity = Instant::now();
@@ -513,6 +536,13 @@ async fn run_realtime_transcriber(
     heartbeat.tick().await;
 
     loop {
+        if audio_drop_count.load(Ordering::Relaxed) >= MAX_AUDIO_QUEUE_DROPS {
+            return Err(
+                "Realtime WebSocket fell behind the microphone; restarting the speech connection."
+                    .to_string(),
+            );
+        }
+
         tokio::select! {
             _ = &mut shutdown_rx => {
                 println!("[AssemblyAI Realtime] Shutdown signal received");
@@ -832,12 +862,22 @@ fn process_and_send_f32(
     target_rate: u32,
     chunk_target: usize,
     audio_tx: &mpsc::Sender<Vec<u8>>,
+    audio_ready: &AtomicBool,
+    audio_drop_count: &AtomicU32,
     app: &AppHandle,
 ) {
     use std::cell::RefCell;
     thread_local! {
         static ACCUMULATOR: RefCell<Vec<f32>> = RefCell::new(Vec::with_capacity(8192));
         static STATE: RefCell<AudioState> = RefCell::new(AudioState::new());
+    }
+
+    // Do not fill the bounded queue while the WebSocket is connecting. Clear
+    // any callback-local state so a reconnect starts with fresh audio.
+    if !audio_ready.load(Ordering::Acquire) {
+        ACCUMULATOR.with(|acc| acc.borrow_mut().clear());
+        STATE.with(|state| *state.borrow_mut() = AudioState::new());
+        return;
     }
 
     // Mix down to mono
@@ -930,7 +970,11 @@ fn process_and_send_f32(
                     })
                     .collect();
 
-                let _ = audio_tx.try_send(pcm16_bytes);
+                if let Err(tokio::sync::mpsc::error::TrySendError::Full(_)) =
+                    audio_tx.try_send(pcm16_bytes)
+                {
+                    audio_drop_count.fetch_add(1, Ordering::Relaxed);
+                }
                 let _ = app.emit("assemblyai-audio-level", LevelPayload { level });
             }
         });

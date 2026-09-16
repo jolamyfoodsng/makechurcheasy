@@ -745,6 +745,159 @@ function getMvBg(mv: SavedMultiView): MVBackground {
   return mv.background ?? DEFAULT_MV_BG;
 }
 
+function isMultiviewBackgroundEmpty(background: MVBackground): boolean {
+  return (background.type === "color" && (background.color === "transparent" || background.color === "#0F172A"))
+    || (background.type === "scene" && !background.sceneName)
+    || (background.type === "pattern" && !background.patternSrc)
+    || ((background.type === "image" || background.type === "video") && !background.filePath);
+}
+
+function getMultiviewBackgroundInput(background: MVBackground): { inputKind: string; inputSettings: Record<string, unknown> } | null {
+  if (background.type === "scene") return null;
+
+  if (background.type === "image" && background.filePath) {
+    return {
+      inputKind: "image_source",
+      inputSettings: { file: background.filePath, width: CANVAS_W, height: CANVAS_H },
+    };
+  }
+
+  if (background.type === "video" && background.filePath) {
+    return {
+      inputKind: "ffmpeg_source",
+      inputSettings: {
+        local_file: background.filePath,
+        is_local_file: true,
+        looping: true,
+        restart_on_activate: true,
+        close_when_inactive: true,
+      },
+    };
+  }
+
+  if (background.type === "pattern" && background.patternSrc) {
+    return {
+      inputKind: "browser_source",
+      inputSettings: {
+        url: buildMultiviewPatternBrowserUrl(background.patternSrc),
+        width: CANVAS_W,
+        height: CANVAS_H,
+        css: "",
+        bgcolor: "#00000000",
+        shutdown: false,
+        restart_when_active: false,
+      },
+    };
+  }
+
+  return {
+    inputKind: "color_source_v3",
+    inputSettings: {
+      color: cssColorToObsInt(background.color || "#0F172A"),
+      width: CANVAS_W,
+      height: CANVAS_H,
+    },
+  };
+}
+
+/** Apply a background change to an already-created Multi-View scene. */
+export async function updateMultiviewBackgroundSource(
+  sceneName: string,
+  multiviewId: string,
+  background: MVBackground,
+  previousBackground?: MVBackground,
+): Promise<void> {
+  const inputName = `${multiviewId}::BACKGROUND`;
+  const existing = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
+    sceneItems?: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex?: number }>;
+  };
+  const previousSceneName = previousBackground?.type === "scene" ? previousBackground.sceneName.trim() : "";
+  const previousSceneItem = previousSceneName
+    ? (existing.sceneItems ?? []).filter((item) => item.sourceName === previousSceneName)
+      .sort((a, b) => (a.sceneItemIndex ?? Number.MAX_SAFE_INTEGER) - (b.sceneItemIndex ?? Number.MAX_SAFE_INTEGER))[0]
+    : undefined;
+
+  // Remove the old managed background item, or the old nested scene item,
+  // before adding the replacement. This is what makes type changes reliable.
+  for (const item of existing.sceneItems ?? []) {
+    const isManagedBackground = item.sourceName === inputName;
+    const isPreviousNestedBackground = item.sceneItemId === previousSceneItem?.sceneItemId;
+    if (!isManagedBackground && !isPreviousNestedBackground) continue;
+    await dockObsClient.call("RemoveSceneItem", { sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
+  }
+
+  if (isMultiviewBackgroundEmpty(background)) {
+    await dockObsClient.call("RemoveInput", { inputName }).catch(() => { });
+    return;
+  }
+
+  let sceneItemId: number;
+  if (background.type === "scene" && background.sceneName) {
+    // A nested scene does not use the managed input source.
+    await dockObsClient.call("RemoveInput", { inputName }).catch(() => { });
+    const created = await dockObsClient.call("CreateSceneItem", {
+      sceneName,
+      sourceName: background.sceneName,
+      sceneItemEnabled: true,
+    }) as { sceneItemId: number };
+    sceneItemId = created.sceneItemId;
+  } else {
+    const input = getMultiviewBackgroundInput(background);
+    if (!input) return;
+
+    try {
+      const inputList = await dockObsClient.call("GetInputList") as {
+        inputs?: Array<{ inputName: string; inputKind?: string }>;
+      };
+      const existingInput = inputList.inputs?.find((item) => item.inputName === inputName);
+      if (existingInput?.inputKind && existingInput.inputKind !== input.inputKind) {
+        await dockObsClient.call("RemoveInput", { inputName });
+      }
+    } catch {
+      // CreateInput below still handles bridges without input metadata.
+    }
+
+    try {
+      const created = await dockObsClient.call("CreateInput", {
+        sceneName,
+        inputName,
+        inputKind: input.inputKind,
+        inputSettings: input.inputSettings,
+        sceneItemEnabled: true,
+      }) as { sceneItemId: number };
+      sceneItemId = created.sceneItemId;
+    } catch {
+      // The managed input already exists: update its settings and re-add it to
+      // the scene after removing the previous scene item above.
+      await dockObsClient.call("SetInputSettings", { inputName, inputSettings: input.inputSettings });
+      await dockObsClient.call("AddSceneItem", { sceneName, sourceName: inputName });
+      const resolved = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: inputName }) as { sceneItemId: number };
+      sceneItemId = resolved.sceneItemId;
+    }
+  }
+
+  await dockObsClient.call("SetSceneItemTransform", {
+    sceneName,
+    sceneItemId,
+    sceneItemTransform: {
+      positionX: 0,
+      positionY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      boundsType: "OBS_BOUNDS_STRETCH",
+      boundsWidth: CANVAS_W,
+      boundsHeight: CANVAS_H,
+      boundsAlignment: 0,
+      cropLeft: 0,
+      cropTop: 0,
+      cropRight: 0,
+      cropBottom: 0,
+    },
+  });
+  await dockObsClient.call("SetSceneItemIndex", { sceneName, sceneItemId, sceneItemIndex: 0 }).catch(() => { });
+}
+
 function isSceneType(ct: GallerySlot["contentType"]): boolean {
   return SCENE_TYPES.has(ct);
 }
@@ -3369,9 +3522,47 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
   }, [commitSavedList]);
 
   const handleUpdateBackground = useCallback((id: string, bg: MVBackground) => {
-    const next = savedListRef.current.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
+    const current = savedListRef.current;
+    const previous = current.find(m => m.id === id);
+    if (!previous) return;
+
+    const next = current.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
     commitSavedList(next);
-  }, [commitSavedList]);
+
+    // Persisting the card is not enough when its managed OBS scene already
+    // exists. Apply the latest background directly to that scene so changing
+    // a background does not require rebuilding the whole layout.
+    void (async () => {
+      try {
+        const sceneWasAlreadyKnown = obsScenes.includes(previous.obsSceneName);
+        if (!sceneWasAlreadyKnown && !dockObsClient.isConnected) return;
+
+        await ensureObsConnected();
+        if (!dockObsClient.isConnected) return;
+
+        let sceneExists = sceneWasAlreadyKnown;
+        if (!sceneExists) {
+          const response = await dockObsClient.call("GetSceneList") as {
+            scenes?: Array<{ sceneName: string }>;
+          };
+          sceneExists = Boolean(response.scenes?.some((scene) => scene.sceneName === previous.obsSceneName));
+        }
+        if (!sceneExists) return;
+
+        await updateMultiviewBackgroundSource(
+          previous.obsSceneName,
+          previous.id,
+          bg,
+          getMvBg(previous),
+        );
+      } catch (err) {
+        console.warn("[DockMultiview] Live background update failed", err);
+        if (mountedRef.current) {
+          showFeedback("error", err instanceof Error ? err.message : "Background update failed");
+        }
+      }
+    })();
+  }, [commitSavedList, ensureObsConnected, obsScenes, showFeedback]);
 
   const handleUpdateFrame = useCallback((id: string, frameId: string | null) => {
     const next = savedListRef.current.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);

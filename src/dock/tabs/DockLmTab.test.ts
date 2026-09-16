@@ -162,6 +162,22 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain("fontSize: 12");
   });
 
+  it("makes queue and suggestion cards send to OBS when clicked", () => {
+    expect(dockLmTabSource).toContain('onClick={() => void handlePushVerse(c, "queue")}');
+    expect(dockLmTabSource).toContain('onClick={() => void handlePushVerse(c, "suggestion")}');
+    expect(dockLmTabSource).toContain('aria-label={`${c.label}. ${pushActionLabel}`}');
+    expect(dockLmTabSource).toContain("event.stopPropagation();");
+  });
+
+  it("renders a keyboard-accessible draggable queue and suggestions divider", () => {
+    expect(dockLmTabSource).toContain("lm-suggestions-resizer");
+    expect(dockLmTabSource).toContain("startSuggestionsResize");
+    expect(dockLmTabSource).toContain('aria-valuemin={MIN_SUGGESTIONS_HEIGHT_PERCENT}');
+    expect(dockLmTabSource).toContain('event.key === "ArrowUp"');
+    expect(dockLmTabSource).toContain('event.key === "ArrowDown"');
+    expect(dockLmTabSource).toContain('overflowY: "auto"');
+  });
+
   it("uses the saved Bible stream style when pushing LM verses", () => {
     expect(dockLmTabSource).toContain("resolveDockBibleThemeForOverlayMode(overlayMode)");
     expect(dockLmTabSource).toContain('msg.type === "state:bible-theme-updated"');
