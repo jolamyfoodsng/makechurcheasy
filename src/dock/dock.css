@@ -11550,14 +11550,14 @@ body.dock-modal-open {
 .dock-vertical-nav {
   display: flex;
   flex-direction: column;
-  width: 40px;
+  width: 56px;
   flex-shrink: 0;
   background: var(--dock-surface);
   border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 0;
-  gap: 0;
+  padding: 7px 5px;
+  gap: 6px;
   transition: width 0.2s ease, opacity 0.2s ease;
 }
 
@@ -11565,36 +11565,48 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 54px;
+  min-height: 54px;
+  margin: 0 auto;
   padding: 0;
-  border: 0;
-  border-left: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 78%, var(--dock-surface));
   color: var(--dock-text-dim);
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   position: relative;
 }
 
 .dock-vertical-nav__item:hover {
   color: var(--dock-text);
-  background: color-mix(in srgb, var(--dock-surface-hover) 60%, transparent);
+  border-color: color-mix(in srgb, var(--dock-accent) 52%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent-soft) 62%, var(--dock-surface-hover));
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.24);
+  transform: translateY(-1px);
+}
+
+.dock-vertical-nav__item:focus-visible {
+  outline: 2px solid var(--dock-accent-hover);
+  outline-offset: 2px;
 }
 
 .dock-vertical-nav__item--active {
   color: #fff;
-  border-left-color: var(--dock-accent);
-  background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 /* Keep the Worship/Notes secondary rail visibly selected as a filled item,
    matching the primary vertical navigation. */
 .dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab.dock-vertical-nav__item--active {
   color: #fff;
-  border-left-color: var(--dock-accent);
-  background: color-mix(in srgb, var(--dock-accent) 86%, black 14%);
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 /* Tooltip for vertical nav items */
@@ -26569,15 +26581,15 @@ body.dock-modal-open {
 }
 
 .dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
-  flex: 0 0 40px;
+  flex: 0 0 56px;
   align-self: stretch;
-  width: 40px;
-  min-width: 40px;
+  width: 56px;
+  min-width: 56px;
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  gap: 0;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 7px 5px;
   border: 0;
   border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   border-radius: 0;
@@ -26586,17 +26598,29 @@ body.dock-modal-open {
 }
 
 .dtb-bg-picker__layout--compact .dtb-bg-picker__tab {
-  flex: 1 1 0;
-  width: 40px;
-  min-width: 40px;
-  min-height: 0;
-  height: auto;
+  flex: 0 0 52px;
+  width: 46px;
+  min-width: 46px;
+  min-height: 52px;
+  height: 52px;
+  margin: 0 auto;
   padding: 0;
+  box-sizing: border-box;
   gap: 0;
-  border-left: 2px solid transparent;
-  border-bottom: 0;
-  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 78%, var(--dock-surface));
   font-size: 0;
+}
+
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tab:hover,
+.dtb-bg-picker__layout--compact .dtb-bg-picker__tab:focus-visible {
+  border-color: color-mix(in srgb, var(--dock-accent) 52%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent-soft) 62%, var(--dock-surface-hover));
+  color: var(--dock-text);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.24);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .dtb-bg-picker__layout--compact .dtb-bg-picker__tab span {
@@ -26604,8 +26628,9 @@ body.dock-modal-open {
 }
 
 .dtb-bg-picker__layout--compact .dtb-bg-picker__tab--active {
-  border-left-color: var(--dock-accent);
-  background: color-mix(in srgb, var(--dock-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 .dtb-bg-picker--compare-only .dtb-compare-settings>.dtb-bg-picker__settings:first-child {
@@ -35078,7 +35103,7 @@ button.dock-btm-toolbar__clear--inline,
 .dock-module--bible--compact .dock-bible-compact-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -35086,33 +35111,48 @@ button.dock-btm-toolbar__clear--inline,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
+  width: 38px;
+  height: 46px;
+  min-width: 38px;
+  min-height: 46px;
+  border: 1px solid var(--dock-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--dock-surface-alt) 78%, var(--dock-surface));
   color: var(--dock-fg);
   cursor: pointer;
   flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.dock-module--bible--compact .dock-bible-compact-actions button:hover {
-  background: var(--dock-hover);
+.dock-module--bible--compact .dock-bible-compact-actions button:hover,
+.dock-module--bible--compact .dock-bible-compact-actions button:focus-visible {
+  border-color: color-mix(in srgb, var(--dock-accent) 52%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent-soft) 62%, var(--dock-surface-hover));
+  color: var(--dock-text);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.24);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .dock-module--bible--compact .dock-bible-compact-actions__compare--active {
-  background: var(--dock-active, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
   color: var(--dock-accent, #60A5FA);
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 .dock-module--bible--compact .dock-bible-compact-actions__reference--active {
-  background: var(--dock-active, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
   color: var(--dock-accent, #60A5FA);
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 .dock-module--bible--compact .dock-bible-compact-actions__browse--active {
-  background: var(--dock-active, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
+  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
   color: var(--dock-accent, #60A5FA);
+  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
 }
 
 .dock-module--bible--compact .dock-bible-controls-panel {
@@ -37276,20 +37316,22 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-module--bible--narrow .dock-bible-actions__overflow {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: 26px;
-  flex: 0 0 26px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
 }
 
 .dock-module--bible--narrow .dock-bible-compact-actions .dock-bible-actions__overflow {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: 26px;
-  flex: 0 0 26px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
 }
 
 .dock-module--bible--narrow .dock-bible-header-actions {

@@ -198,6 +198,16 @@ describe("Background picker plan limits", () => {
   });
 });
 
+describe("Background picker compact navigation", () => {
+  it("keeps the compact side tabs recognizable as buttons", () => {
+    expect(dockCssSource).toContain(".dtb-bg-picker__layout--compact .dtb-bg-picker__tab {");
+    expect(dockCssSource).toContain("border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);");
+    expect(dockCssSource).toContain("border-radius: 10px;");
+    expect(dockCssSource).toContain("height: 52px;");
+    expect(dockCssSource).toContain(".dtb-bg-picker__layout--compact .dtb-bg-picker__tab:focus-visible {");
+  });
+});
+
 describe("Text appearance layout", () => {
   it("places the color card beside font size for Bible and Reference", () => {
     expect(backgroundPickerSource).toContain(

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { DOCK_TABS } from "./dockTypes";
 import dockPageSource from "./DockPage.tsx?raw";
+
+const dockCssSource = readFileSync(fileURLToPath(new URL("./dock.css", import.meta.url)), "utf8");
 
 describe("combined Worship and Notes Dock tab", () => {
   it("exposes one top-level tab while retaining the internal subtab switcher", () => {
@@ -27,5 +31,15 @@ describe("combined Worship and Notes Dock tab", () => {
     expect(dockPageSource).toContain('aria-controls="bible-search-panel"');
     expect(dockPageSource).toContain('id="bible-search-panel"');
     expect(dockPageSource).toContain("dock-sidebar__item--open");
+  });
+
+  it("keeps compact section navigation visibly button-like", () => {
+    expect(dockPageSource).toContain('className="dock-vertical-nav"');
+    expect(dockPageSource).toContain('className={`dock-vertical-nav__item');
+    expect(dockPageSource).toContain("const updateHeight = () => setDockHeight(el.getBoundingClientRect().height);");
+    expect(dockPageSource).toContain('if (typeof ResizeObserver === "undefined")');
+    expect(dockCssSource).toContain(".dock-vertical-nav__item {");
+    expect(dockCssSource).toContain("height: 54px;");
+    expect(dockCssSource).toContain("min-height: 54px;");
   });
 });

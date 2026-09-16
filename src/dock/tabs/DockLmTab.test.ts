@@ -44,7 +44,7 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain('aria-orientation={isCompactHeight ? "vertical" : "horizontal"}');
     expect(dockLmTabSource).toContain('data-testid={`lm-tab-${tab}`}');
     expect(dockLmTabSource).toMatch(/tabBarCompact:\s*\{[\s\S]*?height: "100%"[\s\S]*?boxSizing: "border-box"[\s\S]*?overflow: "hidden"/);
-    expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "1 1 0"/);
+    expect(dockLmTabSource).toMatch(/tabCompact:\s*\{[\s\S]*?flex: "0 0 52px"/);
     expect(dockLmTabSource).not.toContain("style={S.emptyState}");
     expect(dockLmTabSource).not.toContain("!presentationLinkMode && renderOverlayModeSwitch()");
     expect(dockLmTabSource).toContain("{renderOverlayModeSwitch()}");
@@ -176,6 +176,14 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain('event.key === "ArrowUp"');
     expect(dockLmTabSource).toContain('event.key === "ArrowDown"');
     expect(dockLmTabSource).toContain('overflowY: "auto"');
+  });
+
+  it("keeps compact LM side tabs recognizable as buttons", () => {
+    expect(dockLmTabSource).toContain('className={`lm-tab${isCompactHeight ? " lm-tab--compact" : ""}`}');
+    expect(dockLmTabSource).toContain('border: "1px solid var(--dock-border, rgba(255,255,255,0.1))"');
+    expect(dockLmTabSource).toContain('borderRadius: 10');
+    expect(dockLmTabSource).toContain('height: 52');
+    expect(dockLmTabSource).toContain(".lm-tab--compact:hover");
   });
 
   it("uses the saved Bible stream style when pushing LM verses", () => {

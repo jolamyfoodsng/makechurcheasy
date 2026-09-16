@@ -1504,6 +1504,20 @@ export default function DockLmTab({
           background: rgba(59,130,246,0.18);
           box-shadow: 0 0 0 1px rgba(96,165,250,0.18), 0 4px 14px rgba(15,23,42,0.28);
         }
+        .lm-tab--compact:hover {
+          border-color: rgba(96,165,250,0.58) !important;
+          background: rgba(59,130,246,0.12) !important;
+          color: #F8FAFC !important;
+          box-shadow: 0 4px 12px rgba(15,23,42,0.24);
+          transform: translateY(-1px);
+        }
+        .lm-tab--compact:focus-visible {
+          outline: 2px solid #60A5FA;
+          outline-offset: 1px;
+        }
+        .lm-tab--compact:active {
+          transform: translateY(1px) scale(0.98);
+        }
         .lm-pin-button {
           border: 1px solid var(--dock-border, rgba(255,255,255,0.1));
           background: rgba(255,255,255,0.04);
@@ -1637,6 +1651,7 @@ export default function DockLmTab({
       <div style={isCompactHeight ? S.mainAreaCompact : S.mainArea} data-compact-height={isCompactHeight}>
       <div
         style={{ ...S.tabBar, ...(isCompactHeight ? S.tabBarCompact : undefined) }}
+        className={isCompactHeight ? "lm-tab-bar lm-tab-bar--compact" : "lm-tab-bar"}
         ref={tabBarRef}
         role="tablist"
         aria-orientation={isCompactHeight ? "vertical" : "horizontal"}
@@ -1648,6 +1663,7 @@ export default function DockLmTab({
             type="button"
             role="tab"
             aria-selected={activeTab === tab}
+            className={`lm-tab${isCompactHeight ? " lm-tab--compact" : ""}`}
             style={{
               ...S.tab,
               ...(isCompactHeight ? S.tabCompact : undefined),
@@ -2688,8 +2704,8 @@ const S: Record<string, React.CSSProperties> = {
   },
   tabBarCompact: {
     flexDirection: "column",
-    flex: "0 0 40px",
-    width: 40,
+    flex: "0 0 54px",
+    width: 54,
     height: "100%",
     boxSizing: "border-box",
     minHeight: 0,
@@ -2697,8 +2713,8 @@ const S: Record<string, React.CSSProperties> = {
     borderBottom: "none",
     borderRight: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
     overflow: "hidden",
-    padding: "4px 0",
-    gap: 0,
+    padding: "7px 5px",
+    gap: 6,
   },
   tab: {
     flex: 1,
@@ -2718,13 +2734,17 @@ const S: Record<string, React.CSSProperties> = {
     fontFamily: "inherit",
   },
   tabCompact: {
-    flex: "1 1 0",
-    width: 40,
-    minHeight: 0,
+    flex: "0 0 52px",
+    width: 42,
+    height: 52,
+    minHeight: 52,
+    margin: "0 auto",
     padding: 0,
-    borderBottom: "none",
-    borderLeft: "2px solid transparent",
-    borderRadius: 0,
+    boxSizing: "border-box",
+    border: "1px solid var(--dock-border, rgba(255,255,255,0.1))",
+    borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.1))",
+    borderRadius: 10,
+    background: "color-mix(in srgb, var(--dock-surface-alt, #1F2937) 78%, var(--dock-surface, #111827))",
   },
   tabActive: {
     color: "#3B82F6",
@@ -2733,9 +2753,10 @@ const S: Record<string, React.CSSProperties> = {
   },
   tabActiveCompact: {
     color: "#FFFFFF",
-    borderBottom: "none",
-    borderLeftColor: "#3B82F6",
-    background: "rgba(59,130,246,0.16)",
+    borderBottom: "1px solid rgba(96,165,250,0.76)",
+    borderColor: "rgba(96,165,250,0.76)",
+    background: "color-mix(in srgb, var(--dock-accent, #1D4ED8) 26%, var(--dock-surface, #111827))",
+    boxShadow: "inset 3px 0 0 var(--dock-accent-hover, #2563EB), 0 4px 12px rgba(15,23,42,0.24)",
   },
   tabContent: {
     flex: 1,

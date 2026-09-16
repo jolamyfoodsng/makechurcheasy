@@ -7,9 +7,9 @@ import bibleDockUiSource from "./components/BibleDockUI.tsx?raw";
 const dockCssSource = readFileSync(fileURLToPath(new URL("./dock.css", import.meta.url)), "utf8");
 
 describe("Dock Bible narrow layout", () => {
-  it("removes Browse Bible while keeping Compare Translations in both overflow menus", () => {
+  it("removes Browse Bible while keeping Compare Translations in the overflow menus", () => {
     expect((dockBibleTabSource.match(/className=\"dock-bible-actions__menu-item\"/g) ?? []).length).toBe(2);
-    expect((dockBibleTabSource.match(/setShowComparePopover\(true\);/g) ?? []).length).toBe(2);
+    expect((dockBibleTabSource.match(/setShowComparePopover\(true\);/g) ?? []).length).toBe(3);
     expect(dockBibleTabSource).not.toContain("bible.browseBible");
     expect(dockBibleTabSource).not.toContain("closeBibleBrowser");
   });
@@ -36,5 +36,13 @@ describe("Dock Bible narrow layout", () => {
     expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row {\n  min-height: 0;\n  padding-block: 4px;");
     expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row__input .dock_search__input {\n  height: 24px;\n  min-height: 24px;");
     expect(dockCssSource).toContain(".dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,");
+  });
+
+  it("gives compact Bible actions a clear button surface", () => {
+    expect(dockCssSource).toContain(".dock-module--bible--compact .dock-bible-compact-actions button {");
+    expect(dockCssSource).toContain("border: 1px solid var(--dock-border);");
+    expect(dockCssSource).toContain("border-radius: 9px;");
+    expect(dockCssSource).toContain(".dock-module--bible--compact .dock-bible-compact-actions button:focus-visible {");
+    expect(dockCssSource).toContain("height: 42px;");
   });
 });

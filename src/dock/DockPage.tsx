@@ -282,8 +282,17 @@ function DockPageContent({
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
     (shellPreferences.disabledTabs ?? []).filter((tab) => tab !== "notes"),
   );
-  const [dockHeight, setDockHeight] = useState(0);
-  const verticalTabs = dockHeight > 0 && dockHeight <= 600;
+  const [dockHeight, setDockHeight] = useState(() => (
+    typeof window !== "undefined" ? window.innerHeight : 0
+  ));
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0;
+  const responsiveDockHeight = dockHeight > 0
+    ? dockHeight
+    : viewportHeight;
+  const verticalTabs = (
+    (viewportHeight > 0 && viewportHeight <= 600)
+    || (responsiveDockHeight > 0 && responsiveDockHeight <= 600)
+  );
   const [obsConnected, setObsConnected] = useState(false);
   const [obsError, setObsError] = useState("");
   const [staged, setStaged] = useState<DockStagedItem | null>(() => loadDockStagedItem());
@@ -595,6 +604,14 @@ function DockPageContent({
   useEffect(() => {
     const el = dockRootRef.current;
     if (!el) return;
+    const updateHeight = () => setDockHeight(el.getBoundingClientRect().height);
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateHeight);
+      return () => window.removeEventListener("resize", updateHeight);
+    }
+
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setDockHeight(entry.contentRect.height);
