@@ -100,6 +100,7 @@ import {
   readDockBibleKeywordMatchPreference,
   updateDockBibleKeywordMatchPreference,
 } from "./dockBibleKeywordPreference";
+import { coerce, gt } from "semver";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -142,6 +143,11 @@ function preloadDockTab(tab: DockTab): void {
 
 function isSubEightGbDevice(totalRAMMB: number): boolean {
   return totalRAMMB > 0 && totalRAMMB < 8 * 1024;
+}
+
+function normalizeDockVersion(version?: string): string | null {
+  const normalizedInput = String(version || "").trim();
+  return normalizedInput ? coerce(normalizedInput)?.version ?? null : null;
 }
 
 const DOCK_SHELL_PREFS_KEY = "ocs-dock-shell-preferences";
@@ -708,48 +714,59 @@ function DockPageContent({
     void loadDockProductionSettings().then(setProductionSettings).catch(() => { });
   }, []);
 
-  // ── Force update: fetch latest release info and check pub_date ──
+  // ── Force update: only warn when a genuinely newer release is available ──
   useEffect(() => {
     const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
     const CACHE_KEY = "ocs-dock-update-cache-v1";
 
-    // Use config for force-update settings (fallback: 21 days, enabled)
-    const FORCE_UPDATE_DAYS = Math.round((cfg.appUpdates.gracePeriodHours || 24 * 21) / 24);
+    // Use config for force-update settings (fallback: 21 days).
+    // Keep this in hours so a configured value such as 1 does not round to 0 days.
+    const configuredGracePeriodHours = Number(cfg.appUpdates.gracePeriodHours);
+    const gracePeriodHours = Number.isFinite(configuredGracePeriodHours)
+      ? Math.max(0, configuredGracePeriodHours)
+      : 24 * 21;
     const forceEnabled = cfg.appUpdates.forceUpdatesEnabled;
 
-    const currentVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined;
+    const currentVersion = normalizeDockVersion(
+      typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined,
+    );
 
     if (!forceEnabled) return;
+
+    const evaluateRelease = (publishedAt: string, tagName?: string) => {
+      if (!currentVersion) return;
+      const latestVersion = normalizeDockVersion(tagName);
+      if (!latestVersion || !gt(latestVersion, currentVersion)) return;
+
+      const releaseDate = new Date(publishedAt);
+      if (Number.isNaN(releaseDate.getTime())) return;
+      const ageHours = Math.max(0, (Date.now() - releaseDate.getTime()) / (1000 * 60 * 60));
+      const daysOld = Math.floor(ageHours / 24);
+
+      if (ageHours >= gracePeriodHours) {
+        setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion });
+      }
+    };
 
     fetch(RELEASES_API)
       .then((r) => r.json())
       .then((release: { published_at?: string; tag_name?: string }) => {
         if (!release.published_at) return;
-        const releaseDate = new Date(release.published_at);
-        const now = new Date();
-        const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
 
         // Cache for offline fallback
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
         } catch { /* non-critical */ }
 
-        if (daysOld >= FORCE_UPDATE_DAYS) {
-          setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: release.tag_name });
-        }
+        evaluateRelease(release.published_at, release.tag_name);
       })
       .catch(() => {
-        // Offline fallback: use cached release date to still enforce 21-day lockout
+        // Offline fallback: use the last release, but keep the same version guard.
         try {
           const raw = localStorage.getItem(CACHE_KEY);
           if (raw) {
-            const cached = JSON.parse(raw) as { date: string; version: string };
-            const releaseDate = new Date(cached.date);
-            const now = new Date();
-            const daysOld = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
-            if (daysOld >= FORCE_UPDATE_DAYS) {
-              setVersionAge({ daysOld, forceUpdate: true, currentVersion, latestVersion: cached.version });
-            }
+            const cached = JSON.parse(raw) as { date?: string; version?: string };
+            if (cached.date) evaluateRelease(cached.date, cached.version);
           }
         } catch { /* non-critical */ }
       });
@@ -1109,7 +1126,7 @@ function DockPageContent({
               )}
             </span>
             <a
-              href="https://github.com/nicholasracisz/makechurcheasy/releases/latest"
+              href="https://makechurcheazy.com/download"
               target="_blank"
               rel="noopener noreferrer"
               className="dock-force-update-banner__link"
