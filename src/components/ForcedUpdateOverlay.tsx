@@ -12,9 +12,7 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   checkForUpdate,
-  downloadAndInstallUpdate,
-  downloadAndInstallFromGitHub,
-  downloadAndInstallFromUrl,
+  downloadAndInstallVerifiedUpdate,
   type DownloadProgress,
 } from "../services/updateService";
 import type { Update } from "@tauri-apps/plugin-updater";
@@ -112,28 +110,11 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
       const result = await checkForUpdate();
       const update = (result as any).update as Update | undefined;
 
-      if (update) {
-        await downloadAndInstallUpdate(
-          update,
-          (p) => setProgress(p),
-          (s) => setStatus(s)
-        );
-        return;
-      }
-
-      try {
-        await downloadAndInstallFromGitHub(
-          (p) => setProgress(p),
-          (s) => setStatus(s),
-        );
-      } catch (githubError) {
-        if (!state.downloadUrl) throw githubError;
-        await downloadAndInstallFromUrl(
-          state.downloadUrl,
-          (p) => setProgress(p),
-          (s) => setStatus(s),
-        );
-      }
+      await downloadAndInstallVerifiedUpdate(
+        update,
+        (p) => setProgress(p),
+        (s) => setStatus(s),
+      );
     } catch (err: any) {
       console.error("[ForcedUpdate] Update failed:", err);
       setErrorMsg(err?.message || "Update failed. Please try again.");

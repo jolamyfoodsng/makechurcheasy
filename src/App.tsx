@@ -32,7 +32,7 @@ import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallUpdate, downloadAndInstallFromGitHub, downloadAndInstallFromUrl, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, downloadAndInstallVerifiedUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -1321,41 +1321,22 @@ function App() {
   const handleFloorUpdate = useCallback(async () => {
     setFloorUpdateStatus("checking");
     setFloorUpdateError(null);
-    const manualDownloadUrl = forcedUpdateState.downloadUrl;
     try {
       // Try Tauri auto-updater first (works when signed binary exists)
       const result = await checkForUpdate();
-      if (result.available && result.update) {
-        setFloorUpdateStatus("downloading");
-        await downloadAndInstallUpdate(
-          result.update,
-          (progress) => setFloorUpdateProgress(progress),
-          (status) => setFloorUpdateStatus(status === "relaunching" ? "relaunching" : status as "downloading" | "installing"),
-        );
-        return;
-      }
-
-      // No signed binary from Tauri updater — download platform installer
-      // directly from GitHub Releases and launch it in-app
-      try {
-        await downloadAndInstallFromGitHub(
-          (progress) => setFloorUpdateProgress(progress),
-          (status) => setFloorUpdateStatus(status),
-        );
-      } catch (githubError) {
-        if (!manualDownloadUrl) throw githubError;
-        await downloadAndInstallFromUrl(
-          manualDownloadUrl,
-          (progress) => setFloorUpdateProgress(progress),
-          (status) => setFloorUpdateStatus(status),
-        );
-      }
+      // Use only a signed manifest that matches the real published release,
+      // or the verified published installer fallback.
+      await downloadAndInstallVerifiedUpdate(
+        result.update,
+        (progress) => setFloorUpdateProgress(progress),
+        (status) => setFloorUpdateStatus(status),
+      );
     } catch (err: any) {
       console.error("[App] Floor update failed:", err);
       setFloorUpdateError(err?.message || "Update failed. Please try again.");
       setFloorUpdateStatus("error");
     }
-  }, [forcedUpdateState.downloadUrl]);
+  }, []);
 
   return (
     <div className="app">

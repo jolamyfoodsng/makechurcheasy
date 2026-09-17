@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useEffect, type ReactNode } from "react";
 import {
-  downloadAndInstallUpdate,
+  downloadAndInstallVerifiedUpdate,
   type UpdateCheckResult,
   type DownloadProgress,
 } from "../services/updateService";
@@ -128,7 +128,7 @@ export default function UpdateNotification({
     }
     try {
       setStatus("downloading");
-      await downloadAndInstallUpdate(
+      await downloadAndInstallVerifiedUpdate(
         result.update as Update,
         (p) => setProgress(p),
         (s) => setStatus(s)
