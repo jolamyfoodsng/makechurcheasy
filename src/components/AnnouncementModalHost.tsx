@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, Crown, Sparkles, X } from "lucide-react";
 import {
+  clearCachedDesktopAnnouncement,
+  getCachedDesktopAnnouncement,
+  subscribeToDesktopAnnouncement,
+} from "../services/desktopConfig";
+import {
   dismissDesktopAnnouncement,
-  fetchNextDesktopAnnouncement,
-  subscribeToAnnouncementStream,
   type DiscountBillingCycle,
   type DesktopAnnouncement,
 } from "../services/announcementService";
@@ -15,15 +18,6 @@ const PREMIUM_FEATURES = [
   "More AI credits",
   "Priority app updates",
 ];
-
-const INITIAL_REFRESH_DELAY_MS = 1500;
-const INITIAL_REFRESH_RETRY_DELAY_MS = 3500;
-const FALLBACK_POLL_INTERVAL_MS = 5 * 60 * 1000;
-const FOCUS_REFRESH_THROTTLE_MS = 60 * 1000;
-
-function isAppVisible(): boolean {
-  return typeof document === "undefined" || document.visibilityState !== "hidden";
-}
 
 function toneLabel(tone: DesktopAnnouncement["tone"]) {
   if (tone === "upgrade") return "Upgrade";
@@ -121,64 +115,15 @@ export function AnnouncementModalHost() {
   const countdown = useAnnouncementCountdown(announcement?.expiresAt);
 
   useEffect(() => {
-    let cancelled = false;
-    let lastRefreshAt = 0;
-
-    const refresh = async () => {
-      lastRefreshAt = Date.now();
-      const next = await fetchNextDesktopAnnouncement().catch(() => null);
-      if (!cancelled) setAnnouncement(next);
-    };
-    const refreshIfActive = () => {
-      if (!isAppVisible()) return;
-      void refresh();
-    };
-    const refreshIfStale = () => {
-      if (Date.now() - lastRefreshAt < FOCUS_REFRESH_THROTTLE_MS) return;
-      void refreshIfActive();
-    };
-
-    // Fetch once after the app mounts even when the webview reports itself as
-    // hidden during startup. A second lightweight retry covers the brief auth
-    // store hydration window without adding a hot polling loop.
-    const timer = window.setTimeout(() => void refresh(), INITIAL_REFRESH_DELAY_MS);
-    const retryTimer = window.setTimeout(() => void refreshIfActive(), INITIAL_REFRESH_RETRY_DELAY_MS);
-    const handleOnline = refreshIfStale;
-    const handleFocus = refreshIfStale;
-    const handleVisibilityChange = () => {
-      if (isAppVisible()) refreshIfStale();
-    };
-    const interval = window.setInterval(() => void refreshIfActive(), FALLBACK_POLL_INTERVAL_MS);
-
-    // Real-time SSE listener for instant delivery
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = subscribeToAnnouncementStream(() => {
-        if (!cancelled) void refreshIfActive();
-      });
-    } catch {
-      // SSE unavailable, polling fallback is sufficient
-    }
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      window.clearTimeout(retryTimer);
-      window.clearInterval(interval);
-      if (eventSource) eventSource.close();
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    setAnnouncement(getCachedDesktopAnnouncement());
+    return subscribeToDesktopAnnouncement(setAnnouncement);
   }, []);
 
   async function dismiss(clicked = false) {
     if (!announcement) return;
     const current = announcement;
     setAnnouncement(null);
+    clearCachedDesktopAnnouncement();
     await dismissDesktopAnnouncement(current.deliveryId, clicked);
   }
 
@@ -194,6 +139,52 @@ export function AnnouncementModalHost() {
   }
 
   if (!announcement) return null;
+
+  const isImageOnly = Boolean(
+    announcement.imageUrl &&
+      (announcement.tags?.some((t) => t.toLowerCase().includes("image-only")) ||
+        announcement.format === "image_only")
+  );
+
+  if (isImageOnly && announcement.imageUrl) {
+    return (
+      <div className="desktop-announcement-overlay desktop-announcement-overlay--image-only">
+        <div className="desktop-announcement-backdrop" onClick={() => void dismiss(false)} />
+        <div className="desktop-announcement-image-card">
+          <button
+            type="button"
+            className="desktop-announcement-image-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              void dismiss(false);
+            }}
+            aria-label="Dismiss announcement"
+          >
+            <X size={18} />
+          </button>
+          <div
+            role="button"
+            tabIndex={0}
+            className="desktop-announcement-image-wrapper"
+            onClick={() => void openAction()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                void openAction();
+              }
+            }}
+            title={announcement.ctaUrl ? `Open ${announcement.ctaUrl}` : "Announcement"}
+          >
+            <img
+              src={announcement.imageUrl}
+              alt={announcement.title || "Announcement"}
+              className="desktop-announcement-image-only"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const discountPercent = clampDiscount(announcement.offerDiscountPercent);
   const showOfferLayout = Boolean(announcement.offerCode && discountPercent && ["offer", "upgrade"].includes(announcement.tone));

@@ -5864,6 +5864,196 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: save a media file to the user's Downloads folder.
+            // When running inside OBS's embedded browser (CEF), synthetic `<a download>`
+            // clicks and Blob downloads do not save to disk. This endpoint copies an uploaded
+            // file or writes provided binary/data to the user's Downloads folder.
+            if clean == "api/save-to-downloads" && request.method() == &tiny_http::Method::Options {
+                let resp = tiny_http::Response::from_string("")
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                    .with_header(overlay_header(
+                        "Access-Control-Allow-Methods",
+                        "POST, OPTIONS",
+                    ))
+                    .with_header(overlay_header(
+                        "Access-Control-Allow-Headers",
+                        "Content-Type",
+                    ));
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            if clean == "api/save-to-downloads" && request.method() == &tiny_http::Method::Post {
+                let is_json = request
+                    .headers()
+                    .iter()
+                    .any(|h| h.field.equiv("Content-Type") && h.value.as_str().contains("application/json"));
+
+                let query_filename = url_path
+                    .find('?')
+                    .and_then(|index| {
+                        url_path[index + 1..]
+                            .split('&')
+                            .find(|part| part.starts_with("filename="))
+                            .map(|part| &part[9..])
+                    })
+                    .map(|value| urlencoding::decode(value).unwrap_or_default().into_owned());
+
+                let mut requested_name = query_filename.unwrap_or_default();
+                let mut upload_source_name: Option<String> = None;
+                let mut binary_data: Option<Vec<u8>> = None;
+
+                if is_json {
+                    let mut body_str = String::new();
+                    if request.as_reader().read_to_string(&mut body_str).is_ok() && !body_str.trim().is_empty() {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                            if let Some(name) = parsed.get("fileName").and_then(|v| v.as_str()) {
+                                if !name.trim().is_empty() {
+                                    requested_name = name.to_string();
+                                }
+                            }
+                            if let Some(u_file) = parsed.get("uploadFile").and_then(|v| v.as_str()) {
+                                if !u_file.trim().is_empty() {
+                                    upload_source_name = Some(u_file.to_string());
+                                }
+                            }
+                            if let Some(d_url) = parsed.get("dataUrl").and_then(|v| v.as_str()) {
+                                if let Some(comma_pos) = d_url.find(',') {
+                                    use base64::Engine as _;
+                                    let b64 = &d_url[comma_pos + 1..];
+                                    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                                        binary_data = Some(bytes);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let mut reader = request.as_reader();
+                    let mut buf = Vec::new();
+                    if std::io::Read::read_to_end(&mut reader, &mut buf).is_ok() && !buf.is_empty() {
+                        binary_data = Some(buf);
+                    }
+                }
+
+                if requested_name.trim().is_empty() {
+                    requested_name = upload_source_name.as_deref().unwrap_or("media_download").to_string();
+                }
+
+                let safe_name = match sanitize_filename_for_storage(&requested_name) {
+                    Ok(name) => name,
+                    Err(error) => {
+                        let json = serde_json::json!({ "error": error }).to_string();
+                        let resp = tiny_http::Response::from_string(json).with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+
+                let downloads_dir = match dirs::download_dir()
+                    .or_else(|| dirs::home_dir().map(|home| home.join("Downloads")))
+                {
+                    Some(path) => path,
+                    None => {
+                        let resp = tiny_http::Response::from_string(
+                            r#"{"error":"Could not determine the Downloads folder"}"#,
+                        )
+                        .with_status_code(500);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = fs::create_dir_all(&downloads_dir) {
+                    let json = serde_json::json!({
+                        "error": format!("Could not create Downloads folder: {}", error)
+                    })
+                    .to_string();
+                    let resp = tiny_http::Response::from_string(json).with_status_code(500);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let mut destination = downloads_dir.join(&safe_name);
+                if destination.exists() {
+                    let path_obj = std::path::Path::new(&safe_name);
+                    let stem = path_obj.file_stem().and_then(|s| s.to_str()).unwrap_or("media");
+                    let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("");
+                    for counter in 1..1000 {
+                        let candidate = if ext.is_empty() {
+                            format!("{} ({})", stem, counter)
+                        } else {
+                            format!("{} ({}).{}", stem, counter, ext)
+                        };
+                        let p = downloads_dir.join(candidate);
+                        if !p.exists() {
+                            destination = p;
+                            break;
+                        }
+                    }
+                }
+
+                let final_filename = destination
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&safe_name)
+                    .to_string();
+
+                let mut saved_bytes = 0usize;
+                let mut copy_success = false;
+
+                if let (Some(source_file_name), Some(uploads)) = (upload_source_name.as_ref(), uploads_dir.as_ref()) {
+                    let clean_source = sanitize_filename_for_storage(source_file_name).unwrap_or_else(|_| source_file_name.clone());
+                    let src_path = uploads.join(&clean_source);
+                    if src_path.exists() && src_path.is_file() {
+                        if let Ok(bytes) = fs::copy(&src_path, &destination) {
+                            saved_bytes = bytes as usize;
+                            copy_success = true;
+                        }
+                    }
+                }
+
+                if !copy_success {
+                    if let Some(bytes) = binary_data {
+                        if fs::write(&destination, &bytes).is_ok() {
+                            saved_bytes = bytes.len();
+                            copy_success = true;
+                        }
+                    }
+                }
+
+                if copy_success {
+                    let path_str = destination.to_string_lossy().to_string();
+                    println!(
+                        "[Overlay API] Saved media file to downloads: {} ({} bytes)",
+                        path_str,
+                        saved_bytes
+                    );
+                    let json = serde_json::json!({
+                        "ok": true,
+                        "path": path_str,
+                        "fileName": final_filename,
+                        "bytes": saved_bytes
+                    })
+                    .to_string();
+                    let resp = tiny_http::Response::from_string(json)
+                        .with_header(overlay_header(
+                            "Content-Type",
+                            "application/json; charset=utf-8",
+                        ))
+                        .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                    let _ = request.respond(resp);
+                } else {
+                    let json = serde_json::json!({
+                        "error": "Failed to save file to downloads. Source file was not found or write failed."
+                    })
+                    .to_string();
+                    let resp = tiny_http::Response::from_string(json).with_status_code(500);
+                    let _ = request.respond(resp);
+                }
+                continue;
+            }
+
             // API: delete one exact user-uploaded file from the shared uploads
             // folder. The OBS Dock cannot call Tauri directly, so this is the
             // HTTP fallback used by the same media deletion path.

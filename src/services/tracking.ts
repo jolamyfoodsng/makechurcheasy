@@ -28,19 +28,27 @@ export function trackEvent(
   event: string,
   properties?: Record<string, unknown>,
 ): void {
-  // Skip tracking in local/dev contexts — Vercel API blocks CORS from localhost/127.0.0.1
-  const host = typeof window !== "undefined" ? window.location.hostname : "";
-  if (host === "localhost" || host === "127.0.0.1") return;
-
   const session = getSession();
-  const userId = session?.user?.id || null;
-  const deviceId = getDeviceId();
-  const deviceSecret = getDeviceSecret();
+  const userId =
+    session?.user?.id ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-dock-auth-user-id") || localStorage.getItem("mce_auth_user_id")
+      : null) ||
+    null;
+  const deviceId =
+    getDeviceId() ||
+    session?.deviceId ||
+    (typeof localStorage !== "undefined" ? localStorage.getItem("mce-device-id") : null) ||
+    null;
+  const deviceSecret = getDeviceSecret() || session?.deviceSecret || null;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (deviceId) headers["X-Device-Id"] = deviceId;
   if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
 
-  void fetch(`${getSessionApiBase()}/api/tracking/event`, {
+  const apiBase = getSessionApiBase();
+  if (!apiBase) return;
+
+  void fetch(`${apiBase}/api/tracking/event`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -58,15 +66,27 @@ export function trackEvent(
 function activateTrial(event: "obs_connected" | "first_use_started" | "first_presentation" | "first_use"): void {
   if (trialActivationAttempted) return;
   const session = getSession();
-  const deviceId = getDeviceId();
-  if (!session?.user?.id || !deviceId) return;
+  const deviceId =
+    getDeviceId() ||
+    session?.deviceId ||
+    (typeof localStorage !== "undefined" ? localStorage.getItem("mce-device-id") : null) ||
+    null;
+  const userId =
+    session?.user?.id ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-dock-auth-user-id") || localStorage.getItem("mce_auth_user_id")
+      : null);
+  if (!userId || !deviceId) return;
   trialActivationAttempted = true;
 
   const headers: Record<string, string> = { "Content-Type": "application/json", "X-Device-Id": deviceId };
-  const deviceSecret = getDeviceSecret();
+  const deviceSecret = getDeviceSecret() || session?.deviceSecret;
   if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
 
-  void fetch(`${getSessionApiBase()}/api/trial/activate`, {
+  const apiBase = getSessionApiBase();
+  if (!apiBase) return;
+
+  void fetch(`${apiBase}/api/trial/activate`, {
     method: "POST",
     headers,
     body: JSON.stringify({ event }),

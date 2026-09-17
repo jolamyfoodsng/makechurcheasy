@@ -1147,7 +1147,7 @@ class VoiceBibleService {
   ): Promise<{ deviceId?: string; sourceLabel: string }> {
     if (settings.audioSourceMode === "obs-input") {
       if (!settings.obsInputName) {
-        throw new Error("Select an OBS input source in Voice Bible settings.");
+        throw new Error("Select an OBS input source in Speech to Scripture settings.");
       }
 
       const obsInputs = await listObsAudioInputs();
@@ -1620,7 +1620,7 @@ class VoiceBibleService {
       this.snapshot = {
         ...this.snapshot,
         status: "error",
-        detail: "Voice Bible failed",
+        detail: "Speech to Scripture failed",
         transcript: this.snapshot.transcript,
         matchDetail: undefined,
         matching: false,

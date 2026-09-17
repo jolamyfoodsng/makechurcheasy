@@ -18,7 +18,7 @@ describe("African-language font stack", () => {
   it("keeps the normal app font separate from the Dock font", () => {
     expect(appCss).toContain('--font-african-latin: "Questrial", "Charis SIL", "Noto Sans"');
     expect(appCss).toContain(':where(input, textarea, select, button, [contenteditable="true"])');
-    expect(dockCss).toContain('--dock-font-african-latin: "CMG Sans Black", "CMG Sans", "Charis SIL", "Noto Sans"');
+    expect(dockCss).toContain('--dock-font-african-latin: "CMG Sans", "Questrial", "Charis SIL", "Noto Sans"');
     expect(dockCss).toContain('.dock-root :where(input, textarea, select, button, [contenteditable="true"])');
   });
 

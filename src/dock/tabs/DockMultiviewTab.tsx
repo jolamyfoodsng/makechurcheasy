@@ -2230,6 +2230,9 @@ function BackgroundSection({
     setResolvingMediaId(item.id);
     setMediaLibraryError("");
     try {
+      if (item.type !== "image" && item.type !== "video") {
+        throw new Error("Only image and video files can be used as a multiview background.");
+      }
       const diskPath = await resolveBackgroundMediaFilePath(item);
       onChange({ ...background, type: item.type, filePath: diskPath, sceneName: "" });
     } catch (err) {

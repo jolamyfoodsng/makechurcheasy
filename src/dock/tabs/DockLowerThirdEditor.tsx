@@ -33,6 +33,7 @@ import {
 import type { SpeakerProfileSetting } from "../../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
+import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
 
 // ---------------------------------------------------------------------------
@@ -126,6 +127,15 @@ function withoutLtAppearanceColors(styles: LTCustomStyle): LTCustomStyle {
   };
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read image."));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -211,19 +221,66 @@ export default function DockLowerThirdEditor({
     [theme],
   );
   const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const imagePreviewUrlRef = useRef<string | null>(null);
+  const imageUploadIdRef = useRef(0);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [imageHovered, setImageHovered] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
 
-  const handleImageFileSelect = useCallback((file: File) => {
+  const clearImagePreview = useCallback(() => {
+    const previous = imagePreviewUrlRef.current;
+    if (previous) URL.revokeObjectURL(previous);
+    imagePreviewUrlRef.current = null;
+    setImagePreviewUrl(null);
+  }, []);
+
+  const handleImageFileSelect = useCallback(async (file: File) => {
     if (!imageVariable) return;
     if (!file.type.startsWith("image/")) return;
-    const url = URL.createObjectURL(file);
-    setVariableValues((prev) => ({ ...prev, [imageVariable.key]: url }));
-  }, [imageVariable, setVariableValues]);
+    const uploadId = ++imageUploadIdRef.current;
+    clearImagePreview();
+    const previewUrl = URL.createObjectURL(file);
+    imagePreviewUrlRef.current = previewUrl;
+    setImagePreviewUrl(previewUrl);
+    setImageUploading(true);
+
+    try {
+      // Blob URLs only live for the current browser session. Save the image
+      // first, then persist a stable uploads URL in the content slot so a
+      // refreshed Dock can restore the logo.
+      const safeName = `lt_logo_${Date.now()}_${getSafeFileName(file.name)}`;
+      const savedPath = await saveToDisk(file, safeName);
+      if (uploadId !== imageUploadIdRef.current) return;
+      const persistedUrl = resolveOverlayAssetUrl(savedPath);
+      if (!persistedUrl || persistedUrl.startsWith("blob:")) {
+        throw new Error("A persistent image URL was not returned.");
+      }
+      setVariableValues((prev) => ({ ...prev, [imageVariable.key]: persistedUrl }));
+    } catch (err) {
+      if (uploadId !== imageUploadIdRef.current) return;
+      // Keep the editor usable in a browser without the local upload API.
+      // The data URL is durable in the existing content-slot storage, unlike
+      // the object URL used only for the temporary preview.
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (uploadId === imageUploadIdRef.current) {
+          setVariableValues((prev) => ({ ...prev, [imageVariable.key]: dataUrl }));
+        }
+      } catch (fallbackErr) {
+        console.warn("[LowerThirdEditor] Could not persist selected image:", err, fallbackErr);
+      }
+    } finally {
+      if (uploadId === imageUploadIdRef.current) {
+        setImageUploading(false);
+        clearImagePreview();
+      }
+    }
+  }, [clearImagePreview, imageVariable]);
 
   const handleImageFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleImageFileSelect(file);
+    if (file) void handleImageFileSelect(file);
     e.target.value = "";
   }, [handleImageFileSelect]);
 
@@ -231,17 +288,42 @@ export default function DockLowerThirdEditor({
     e.preventDefault();
     setImageDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleImageFileSelect(file);
+    if (file) void handleImageFileSelect(file);
   }, [handleImageFileSelect]);
 
   const handleImageRemove = useCallback(() => {
     if (!imageVariable) return;
+    imageUploadIdRef.current += 1;
+    setImageUploading(false);
+    clearImagePreview();
     // For text-type logo variables, reset to the theme's default URL; otherwise clear
     setVariableValues((prev) => ({
       ...prev,
       [imageVariable.key]: imageVariable.type === "text" ? (imageVariable.defaultValue ?? "") : "",
     }));
-  }, [imageVariable, setVariableValues]);
+  }, [clearImagePreview, imageVariable]);
+
+  // Older slots may contain a session-only blob URL from before uploads were
+  // persisted. It cannot be recovered after refresh, so fall back cleanly to
+  // the theme default/global branding instead of showing a broken image.
+  useEffect(() => {
+    if (!imageVariable) return;
+    setVariableValues((prev) => {
+      const current = prev[imageVariable.key];
+      if (typeof current !== "string" || !current.startsWith("blob:")) return prev;
+      return {
+        ...prev,
+        [imageVariable.key]: imageVariable.type === "text" ? (imageVariable.defaultValue ?? "") : "",
+      };
+    });
+  }, [imageVariable]);
+
+  useEffect(() => () => {
+    imageUploadIdRef.current += 1;
+    const previous = imagePreviewUrlRef.current;
+    if (previous) URL.revokeObjectURL(previous);
+    imagePreviewUrlRef.current = null;
+  }, []);
 
   const [speakers, setSpeakers] = useState<SpeakerProfileSetting[]>([]);
   const [selectedSpeakerIdx, setSelectedSpeakerIdx] = useState<number | null>(null);
@@ -740,10 +822,11 @@ export default function DockLowerThirdEditor({
                     onDrop={handleImageDrop}
                     onMouseEnter={() => setImageHovered(true)}
                     onMouseLeave={() => setImageHovered(false)}
+                    aria-busy={imageUploading}
                   >
-                    {variableValues[imageVariable.key] ? (
+                    {(imagePreviewUrl || variableValues[imageVariable.key]) ? (
                       <>
-                        <img src={variableValues[imageVariable.key]} alt="" />
+                        <img src={imagePreviewUrl || variableValues[imageVariable.key]} alt="" />
                         {imageHovered && (
                           <div className="dock-lt-image-picker-overlay">
                             <button

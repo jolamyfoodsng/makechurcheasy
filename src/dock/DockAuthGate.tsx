@@ -7,9 +7,12 @@ import { refreshAppThemePreference } from "../hooks/useAppTheme";
 import { DEFAULT_PLAN_CONFIG } from "../services/planConfigTypes";
 import {
   getEffectivePlan as resolveCanonicalPlan,
+  isActiveTrial,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { getEnvConfig } from "../services/envConfig";
+import { setAuthSession } from "../services/authService";
+import { TRIAL_ACTIVE_KEY } from "./dockEntitlement";
 
 /**
  * Auth gate for the OBS Dock.
@@ -30,7 +33,10 @@ function clearDockAuthCache(): void {
   try {
     localStorage.removeItem(getUserScopedKey(PLAN_KEY));
     localStorage.removeItem(getUserScopedKey(ENTITLEMENTS_KEY));
+    localStorage.removeItem(getUserScopedKey(TRIAL_ACTIVE_KEY));
     localStorage.removeItem(DOCK_AUTH_USER_ID_KEY);
+    localStorage.removeItem("mce-device-id");
+    setAuthSession(null);
     refreshAppAppearance();
   } catch {
     // ignore localStorage failures
@@ -71,6 +77,17 @@ async function checkLocalAuth(expectedDeviceId: string): Promise<LocalAuthStatus
     }
 
     storeDockAuthUserId(data.user?.id);
+    if (data.deviceId) {
+      try {
+        localStorage.setItem("mce-device-id", String(data.deviceId).trim());
+      } catch { /* ignore */ }
+    }
+    setAuthSession(data as any);
+
+    const trialActive = Boolean(data.user && isActiveTrial(data.user as any));
+    try {
+      localStorage.setItem(getUserScopedKey(TRIAL_ACTIVE_KEY), trialActive ? "true" : "false");
+    } catch { /* ignore */ }
 
     if (data.user?.plan) {
       const effectivePlan = normalizePlanId(

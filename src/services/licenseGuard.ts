@@ -19,7 +19,7 @@
  * Architecture:
  *   - Backend returns a signed license payload during verification
  *   - Payload is normalized (expired paid → free) before caching
- *   - On startup: verify internet → verify with backend → normalize → cache → continue
+ *   - On startup: fetch the authenticated bootstrap → normalize → cache → continue
  *   - Every 6 hours: re-verify while running
  *   - Connectivity failures preserve local auth during the configured grace window
  *   - After the grace window, the user is asked to reconnect and verify
@@ -40,8 +40,11 @@ import {
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 import { refreshSubscriptionState } from "./subscriptionCache";
-
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+import {
+  cacheDesktopBootstrap,
+  clearDesktopBootstrapCache,
+  readDesktopBootstrap,
+} from "./desktopConfig";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,7 +123,7 @@ const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_BACKGROUND_REVERIFY_INTERVAL_MS = 60 * 1000;
+const MAX_BACKGROUND_REVERIFY_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SUBSCRIPTION_CACHE_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
@@ -199,34 +202,6 @@ function emit(): void {
   }
 }
 
-// ── Internet Detection ───────────────────────────────────────────────────────
-
-async function checkInternet(): Promise<boolean> {
-  const candidates = Array.from(new Set([API_BASE, ...getDeviceApiBaseCandidates()]));
-
-  for (const apiBase of candidates) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-      // Use a lightweight HEAD request to the API server
-      const res = await fetch(`${apiBase}/api/health`, {
-        method: "HEAD",
-        signal: controller.signal,
-        cache: "no-store",
-      });
-      if (res.ok || res.status < 500) {
-        return true;
-      }
-    } catch {
-      // Try the next API candidate.
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  return false;
-}
-
 // ── Backend Verification ─────────────────────────────────────────────────────
 
 async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
@@ -236,13 +211,18 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
     return { ok: false, lockReason: "device_removed", transient: false };
   }
 
+  const cachedBootstrap = readDesktopBootstrap(30_000, deviceId);
+  if (cachedBootstrap?.license) {
+    return { ok: true, payload: cachedBootstrap.license as LicensePayload };
+  }
+
   const candidates = getDeviceApiBaseCandidates();
   let sawDeviceMissing = false;
 
   for (const apiBase of candidates) {
     try {
       const res = await fetch(
-        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}`,
+        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}&bootstrap=1`,
         {
           headers: {
             "X-App-Version": APP_VERSION,
@@ -288,6 +268,7 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
       if (!data?.license) {
         return { ok: false, lockReason: "internet_required", transient: true };
       }
+      cacheDesktopBootstrap(data, deviceId);
       if (sawDeviceMissing || candidates[0] !== apiBase) {
         await rememberSessionApiBase(apiBase);
       }
@@ -588,8 +569,7 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
 
 /**
  * Run the full verification flow:
- * 1. Check internet connectivity
- * 2. If online, fetch license from backend
+ * 1. Fetch the authenticated desktop bootstrap from the backend
  * 3. Cache the result
  * 4. Evaluate and update lock state
  *
@@ -611,22 +591,6 @@ export async function verify(): Promise<boolean> {
   emit();
 
   try {
-    const online = await checkInternet();
-
-    if (!online) {
-      if (_cache) {
-        _lockReason = evaluateOfflineValidity(_cache);
-      } else {
-        // A first launch can be offline before a license cache exists. The
-        // desktop must still open and allow local/free workflows; verification
-        // will happen when connectivity returns.
-        _lockReason = null;
-      }
-      emit();
-      return _lockReason === null;
-    }
-
-    // Online — fetch from backend
     const licenseResult = await fetchLicenseFromBackend();
     if (!licenseResult.ok) {
       if (!licenseResult.transient) {
@@ -689,6 +653,7 @@ export async function retryVerification(): Promise<boolean> {
 export async function reverifyOnAuth(): Promise<boolean> {
   // Reset initialized flag so initLicenseGuard can run again if needed
   // but the main purpose here is to force a fresh backend check.
+  clearDesktopBootstrapCache();
   return verify();
 }
 
@@ -700,8 +665,8 @@ export async function reverifyOnAuth(): Promise<boolean> {
  * Startup sequence:
  * 1. Load cached license from localStorage
  * 2. Evaluate offline validity
- * 3. If online: verify with backend
- * 4. If offline: use cache if within 14-day window
+ * 3. Fetch the authenticated bootstrap when available
+ * 4. If the request fails: use cache if within the configured offline window
  * 5. Start periodic revalidation (every 6 hours)
  */
 export async function initLicenseGuard(): Promise<void> {
@@ -715,16 +680,9 @@ export async function initLicenseGuard(): Promise<void> {
   computeState();
   emit();
 
-  // Start verification flow (non-blocking)
-  const isOnline = await checkInternet();
-
-  if (isOnline) {
-    // Online — verify with backend
-    await verify();
-  } else {
-    _lockReason = _cache ? evaluateOfflineValidity(_cache) : null;
-    emit();
-  }
+  // Start verification flow (non-blocking). The authenticated license request
+  // is also the desktop heartbeat and carries health/config/announcements.
+  await verify();
 
   // Start periodic revalidation
   startPeriodicVerification();
@@ -745,19 +703,7 @@ function startPeriodicVerification(): void {
   );
 
   _revalidationTimer = setInterval(async () => {
-    const online = await checkInternet();
-    if (online) {
-      await verify();
-    } else {
-      // Check offline validity
-      if (_cache) {
-        const offlineReason = evaluateOfflineValidity(_cache);
-        if (offlineReason !== _lockReason) {
-          _lockReason = offlineReason;
-          emit();
-        }
-      }
-    }
+    await verify();
   }, intervalMs);
 
   // Re-verify when the user returns to the app (e.g. after sleep/switch)
@@ -802,6 +748,7 @@ export function resetLicenseGuard(): void {
   _initialized = false;
   _lastVisibilityVerificationAt = 0;
   _lastSubscriptionCacheRefreshAt = 0;
+  clearDesktopBootstrapCache();
   clearCache();
   emit();
 }

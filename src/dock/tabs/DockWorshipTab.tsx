@@ -28,7 +28,7 @@ import { withScriptureFontFallback } from "../../bible/scriptureFont";
 import { dockClient } from "../../services/dockBridge";
 import type { DockProductionModuleSettings } from "../../services/productionSettings";
 import { track } from "../../services/analytics";
-import { trackWorshipSongPresented } from "../../services/tracking";
+import { trackWorshipSongPresented, trackWorshipSongCreated } from "../../services/tracking";
 import {
   createWorshipDockSongSaveCommand,
   loadWorshipDockSongSaveResult,
@@ -2647,6 +2647,7 @@ function DockWorshipTab({
         setHiddenSectionIndexes(new Set());
         showToast(newSong.importSourceType === "online" ? t('worship.importSaved') : t('worship.songAdded'), "success");
         track("song_created", { autoSplit: false });
+        trackWorshipSongCreated();
         track("song_imported", { source: newSong.importSourceType ?? "manual" });
       }
     } catch (err) {

@@ -354,6 +354,21 @@ export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
 }
 
+export function setAuthSession(session: AuthSession | null): void {
+  _session = session;
+  if (session) {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch { /* ignore */ }
+    syncDockAuthUserId(session.user?.id);
+  } else {
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch { /* ignore */ }
+    syncDockAuthUserId(null);
+  }
+}
+
 /**
  * Push the local simulated plan to the local API backend. The backend keeps
  * this override in memory and applies it to status, bootstrap, credits, and

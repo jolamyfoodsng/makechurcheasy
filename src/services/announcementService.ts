@@ -12,6 +12,7 @@ export interface DesktopAnnouncement {
   message: string;
   tone: AnnouncementTone;
   tags: string[];
+  format?: "standard" | "image_only";
   ctaLabel?: string | null;
   ctaUrl?: string | null;
   imageUrl?: string | null;
@@ -31,18 +32,6 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-export async function fetchNextDesktopAnnouncement(): Promise<DesktopAnnouncement | null> {
-  const deviceId = getDeviceId();
-  if (!deviceId) return null;
-
-  const res = await fetch(`${API_BASE}/api/user/announcements?surface=desktop`, {
-    headers: authHeaders(),
-  });
-  if (!res.ok) return null;
-  const body = await res.json().catch(() => ({}));
-  return body.announcement || null;
-}
-
 export async function dismissDesktopAnnouncement(deliveryId: string, clicked = false): Promise<void> {
   const deviceId = getDeviceId();
   if (!deviceId || !deliveryId) return;
@@ -55,41 +44,4 @@ export async function dismissDesktopAnnouncement(deliveryId: string, clicked = f
     },
     body: JSON.stringify({ deliveryId, clicked }),
   }).catch(() => {});
-}
-
-const REFRESH_STREAM_TYPES = new Set(["announcement_published", "announcement_restarted"]);
-
-function shouldRefreshFromStream(event: MessageEvent): boolean {
-  try {
-    const body = JSON.parse(event.data) as { type?: string };
-    return Boolean(body.type && REFRESH_STREAM_TYPES.has(body.type));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Opens an SSE connection receiving real-time announcement events.
- * Returns an EventSource — caller closes it on cleanup.
- */
-export function subscribeToAnnouncementStream(
-  onEvent: () => void,
-): EventSource {
-  const deviceId = getDeviceId();
-  const deviceSecret = getDeviceSecret();
-  if (!deviceId) {
-    throw new Error("Desktop device is not authenticated");
-  }
-
-  const url = new URL(`${API_BASE}/api/user/announcements/stream`);
-  url.searchParams.set("deviceId", deviceId);
-  if (deviceSecret) url.searchParams.set("deviceSecret", deviceSecret);
-
-  const es = new EventSource(url.toString());
-  es.addEventListener("message", (event) => {
-    if (shouldRefreshFromStream(event)) onEvent();
-  });
-  es.addEventListener("open", () => console.log("[Announcements] SSE connected"));
-
-  return es;
 }

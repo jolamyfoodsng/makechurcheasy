@@ -21,7 +21,7 @@ import Icon from "../components/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
-import { getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
+import { DOCK_MEDIA_ACCEPT, getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
   isSupportedDocumentFile,
@@ -45,7 +45,7 @@ import {
 } from "../services/templateVideos";
 
 type FilterType = "all" | "image" | "video";
-type AddMediaCategory = "image" | "video" | "document";
+type AddMediaCategory = "image" | "video" | "audio" | "document";
 type MediaView = "library" | "share";
 
 export interface LibraryMediaImportItem {
@@ -64,7 +64,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export const MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv,.pdf,.docx,.pptx";
+export const MEDIA_FILE_ACCEPT = DOCK_MEDIA_ACCEPT;
 
 /* ---------- helpers ---------- */
 
@@ -665,7 +665,6 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
       <input
         ref={fileInputRef}
         type="file"
-        accept={MEDIA_FILE_ACCEPT}
         multiple
         style={{ display: "none" }}
         onChange={(event) => {
@@ -1588,7 +1587,6 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
             <input
               ref={inputRef}
               type="file"
-              accept={MEDIA_FILE_ACCEPT}
               className="lib-dropzone-file-input"
               onChange={(e) => {
                 const f = e.target.files?.[0];

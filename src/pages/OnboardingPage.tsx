@@ -769,7 +769,7 @@ function StepTest({
     { label: "OBS Connected", status: "pending", detail: "" },
     { label: "MakeChurchEasy Dock", status: "pending", detail: "" },
     { label: "AI Dock", status: "pending", detail: "" },
-    { label: "Voice Bible", status: "pending", detail: "" },
+    { label: "Speech to Scripture", status: "pending", detail: "" },
   ]);
   const [running, setRunning] = useState(false);
 
@@ -818,24 +818,24 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 4. Voice Bible (check if mic permission is available)
+    // 4. Speech to Scripture (check if mic permission is available)
     try {
       if (navigator.mediaDevices) {
         results.push({
-          label: "Voice Bible",
+          label: "Speech to Scripture",
           status: "ok",
           detail: "Microphone available",
         });
       } else {
         results.push({
-          label: "Voice Bible",
+          label: "Speech to Scripture",
           status: "warn",
           detail: "Microphone API not available",
         });
       }
     } catch {
       results.push({
-        label: "Voice Bible",
+        label: "Speech to Scripture",
         status: "warn",
         detail: "Could not verify",
       });
@@ -939,7 +939,7 @@ function StepReady({ onFinish }: { onFinish: () => void }) {
         </div>
         <div className="ob-summary-item">
           <CheckCircle size={16} className="ob-summary-check" />
-          Voice Bible Ready
+          Speech to Scripture Ready
         </div>
       </div>
 

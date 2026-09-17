@@ -18,15 +18,21 @@ const DB_VERSION = 2;
 const MEDIA_UPLOAD_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp",
   "mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv",
+  "mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus",
+]);
+const AUDIO_UPLOAD_EXTENSIONS = new Set([
+  "mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus",
 ]);
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
 
 function getUploadMediaType(fileName: string): MediaItem["type"] | null {
   const extension = fileName.split(".").pop()?.toLowerCase() || "";
   if (!MEDIA_UPLOAD_EXTENSIONS.has(extension)) return null;
-  return ["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"].includes(extension)
-    ? "video"
-    : "image";
+  if (["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"].includes(extension)) {
+    return "video";
+  }
+  if (AUDIO_UPLOAD_EXTENSIONS.has(extension)) return "audio";
+  return "image";
 }
 
 function isInternalUploadFile(fileName: string): boolean {

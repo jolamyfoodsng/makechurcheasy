@@ -113,7 +113,6 @@ import { getRecommendedPollingInterval } from "./services/performanceManager";
 const UPDATE_POLL_INTERVAL_MS = 30_000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
-const MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv,.pdf,.docx,.pptx";
 
 // Keep large route trees and their optional dependencies out of the startup
 // graph. The first screen stays small; a page pays its loading cost only when
@@ -1343,7 +1342,6 @@ function App() {
       <input
         ref={globalMediaInputRef}
         type="file"
-        accept={MEDIA_FILE_ACCEPT}
         multiple
         style={{ display: "none" }}
         onChange={(event) => {
@@ -1565,6 +1563,7 @@ function App() {
                             <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
                             <Route path="settings" element={<MVSettings />} />
                             <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
+                            <Route path="transcribe" element={<Navigate to="/speech-to-scripture" replace />} />
                             <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
                             <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />
                             <Route path="tutorials" element={<TutorialsPage />} />

@@ -17002,6 +17002,7 @@ html.mv-theme-light .dash-v2-footer {
   background: var(--bg-dark);
   color: var(--text);
   font-family: var(--font-body);
+  padding: 12px 0 12px 16px;
 }
 
 /* ── Header ── */
@@ -21838,6 +21839,76 @@ html.mv-theme-light .tc-editor .canvas-area {
   .desktop-announcement-offer-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Desktop Image-Only Announcement Banner ── */
+.desktop-announcement-overlay--image-only {
+  padding: 24px;
+}
+
+.desktop-announcement-image-card {
+  position: relative;
+  max-width: min(720px, 90vw);
+  max-height: 85vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55);
+}
+
+.desktop-announcement-image-wrapper {
+  cursor: pointer;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.desktop-announcement-image-wrapper:hover {
+  opacity: 0.95;
+  transform: scale(1.005);
+}
+
+.desktop-announcement-image-wrapper:active {
+  transform: scale(0.995);
+}
+
+.desktop-announcement-image-only {
+  display: block;
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 20px;
+}
+
+.desktop-announcement-image-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.desktop-announcement-image-close:hover {
+  background: #1e293b;
+  transform: scale(1.1);
 }
 
 /* ── Test environment banner ── */

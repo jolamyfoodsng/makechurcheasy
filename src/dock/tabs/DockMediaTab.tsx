@@ -27,7 +27,7 @@ import {
 import { BACKGROUND_PATTERNS, type BackgroundPattern } from "../../library/backgroundAssets";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { track } from "../../services/analytics";
-import { trackMediaPresented } from "../../services/tracking";
+import { trackMediaPresented, trackMediaUploaded } from "../../services/tracking";
 import {
   downloadTemplatePictureToLibrary,
   downloadTemplateVideoToLibrary,
@@ -39,7 +39,7 @@ import {
 } from "../../services/templateVideos";
 import { getSafeFileName, registerDockMediaItem, uploadFileToDock } from "../dockUploadService";
 import { isInternalDockMediaItem, isInternalDockUploadFile } from "../internalMediaAssets";
-import { getDockPlan, requireEntitlement, showUpgradeModal } from "../dockEntitlement";
+import { getDockPlan, isDockTrialActive, requireEntitlement, showUpgradeModal } from "../dockEntitlement";
 import { getMediaKind, isSupportedMediaFile } from "../../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
@@ -72,7 +72,7 @@ interface Props {
   presentationOutputTarget?: DockPresentationOutputTarget;
 }
 
-type DockMediaKind = "video" | "image";
+type DockMediaKind = "video" | "image" | "audio";
 type DockMediaFilter = "all" | DockMediaKind | "document";
 type DockMediaViewMode = "uploaded" | "recent";
 type DockMediaBrowserTab = "uploads" | "templates" | "animations" | "patterns" | "text";
@@ -196,6 +196,7 @@ interface DockMediaSessionState {
 
 const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"]);
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"]);
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus"]);
 const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
 const MEDIA_FOLDERS_STORAGE_KEY = "ocs-dock-media-folders-v1";
 const MEDIA_LOCAL_LIBRARY_STORAGE_KEY = "ocs-dock-media-library-v1";
@@ -258,13 +259,16 @@ const DEFAULT_BACKGROUND_SETTINGS: OverlayBackgroundSettings = {
 
 /** Determine icon for file type */
 function getFileIcon(kind: DockMediaKind): string {
-  return kind === "video" ? "movie" : "image";
+  if (kind === "video") return "movie";
+  if (kind === "audio") return "music_note";
+  return "image";
 }
 
 function getUploadMediaKind(name: string): DockMediaKind | null {
   const ext = name.split(".").pop()?.toLowerCase() || "";
   if (VIDEO_EXTENSIONS.has(ext)) return "video";
   if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (AUDIO_EXTENSIONS.has(ext)) return "audio";
   return null;
 }
 
@@ -284,6 +288,11 @@ function extractUploadTimestamp(filename: string): string {
 /** Show the user-facing filename instead of the generated disk-storage prefix. */
 function getUploadDisplayName(filename: string): string {
   return filename.replace(/^media_\d{10,13}_/, "");
+}
+
+function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "tauri:" || "__TAURI_INTERNALS__" in window;
 }
 
 function getMediaDownloadFileName(entry: DockMediaEntry, preferredName?: string): string {
@@ -365,7 +374,7 @@ function isDockMediaBrowserTab(value: unknown): value is DockMediaBrowserTab {
 }
 
 function isDockMediaKind(value: unknown): value is DockMediaFilter {
-  return value === "video" || value === "image" || value === "document" || value === "all";
+  return value === "video" || value === "image" || value === "audio" || value === "document" || value === "all";
 }
 
 function isDockTextAlign(value: unknown): value is DockTextAlign {
@@ -537,10 +546,10 @@ function getClosestTextSizePreset(value: number, presets: readonly DockTextSizeP
 
 function buildSceneMediaSourceName(entry: DockMediaEntry): string {
   const baseName = entry.name.replace(/\.[^.]+$/, "");
-  const defaultLabel = entry.kind === "video" ? "Video" : "Image";
+  const defaultLabel = entry.kind === "video" ? "Video" : entry.kind === "audio" ? "Audio" : "Image";
   const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || defaultLabel;
   const suffix = entry.prefKey.replace(/[^a-z0-9]+/gi, "").slice(-10) || "media";
-  const sourceType = entry.kind === "video" ? "Video" : "Image";
+  const sourceType = entry.kind === "video" ? "Video" : entry.kind === "audio" ? "Audio" : "Image";
   return `MCE Scene ${sourceType} - ${sanitizedBase} - ${suffix}`;
 }
 
@@ -752,6 +761,13 @@ function DockMediaTab({
   const [sendingFile, setSendingFile] = useState<string | null>(null);
   const [downloadingMediaKey, setDownloadingMediaKey] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!downloadSuccess) return;
+    const timer = window.setTimeout(() => setDownloadSuccess(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [downloadSuccess]);
   const [mediaPrefs, setMediaPrefs] = useState<DockMediaPreferences>(() => loadMediaPreferences());
   const [mediaFolders, setMediaFolders] = useState<string[]>(() => loadMediaFolders());
   const [activeFolder, setActiveFolder] = useState("all");
@@ -1446,70 +1462,182 @@ function DockMediaTab({
   const downloadMediaEntry = useCallback(async (entry: DockMediaEntry) => {
     const mediaFileName = entry.uploadFile || entry.libraryItem?.diskFileName;
     const sourceUrl = mediaFileName
-      ? `/uploads/${encodeURIComponent(mediaFileName)}`
+      ? `${overlayBaseUrl}/uploads/${encodeURIComponent(mediaFileName)}`
       : entry.previewUrl || entry.libraryItem?.url || "";
     const fileName = getMediaDownloadFileName(entry, mediaPrefs[entry.prefKey]?.label);
 
     setMediaContextMenu(null);
     setDownloadingMediaKey(entry.key);
+    setSendError(null);
+    setDownloadSuccess(null);
+
     try {
-      if (!sourceUrl) throw new Error("No media source is available.");
+      if (!sourceUrl && !mediaFileName) throw new Error("No media source is available.");
 
-      let downloadUrl = sourceUrl;
-      let objectUrl: string | null = null;
-      const resolvedUrl = sourceUrl.startsWith("data:")
-        ? null
-        : new URL(sourceUrl, window.location.href);
-      const shouldFetchSource = sourceUrl.startsWith("data:")
-        || Boolean(resolvedUrl && resolvedUrl.origin !== window.location.origin);
+      // 1. If running in native Tauri runtime: prompt native Save As dialog
+      if (isTauriRuntime()) {
+        try {
+          const [{ save }, { writeFile, copyFile }] = await Promise.all([
+            import("@tauri-apps/plugin-dialog"),
+            import("@tauri-apps/plugin-fs"),
+          ]);
+          const ext = fileName.includes(".") ? (fileName.split(".").pop() || "") : "";
+          const filePath = await save({
+            defaultPath: fileName,
+            filters: ext ? [{ name: `${entry.kind.toUpperCase()} files`, extensions: [ext] }] : undefined,
+          });
 
-      if (shouldFetchSource) {
-        const response = await fetch(sourceUrl, { cache: "no-store" });
-        if (!response.ok) throw new Error(`Media download failed (${response.status}).`);
-        const blob = await response.blob();
-        if (blob.size === 0) throw new Error("The media file was empty.");
-        objectUrl = URL.createObjectURL(blob);
-        downloadUrl = objectUrl;
+          if (!filePath) {
+            // User cancelled the file dialog
+            return;
+          }
+
+          let savedDirectly = false;
+          if (uploadsDir && mediaFileName) {
+            try {
+              const sep = uploadsDir.includes("\\") ? "\\" : "/";
+              const sourcePath = `${uploadsDir}${sep}${decodeURIComponent(mediaFileName)}`;
+              await copyFile(sourcePath, filePath);
+              savedDirectly = true;
+            } catch (copyErr) {
+              console.warn("[DockMediaTab] Direct copyFile failed, will write buffer:", copyErr);
+            }
+          }
+
+          if (!savedDirectly) {
+            let buffer: ArrayBuffer;
+            if (sourceUrl.startsWith("data:")) {
+              const res = await fetch(sourceUrl);
+              buffer = await res.arrayBuffer();
+            } else {
+              const res = await fetch(sourceUrl, { cache: "no-store" });
+              if (!res.ok) throw new Error(`Media fetch failed (${res.status}).`);
+              buffer = await res.arrayBuffer();
+            }
+            await writeFile(filePath, new Uint8Array(buffer));
+          }
+
+          const savedFileName = filePath.split(/[\\/]/).pop() || fileName;
+          setDownloadSuccess(t('media.savedToFile', { defaultValue: 'Saved {{fileName}}', fileName: savedFileName }));
+          return;
+        } catch (tauriError) {
+          console.warn("[DockMediaTab] Tauri save dialog failed, attempting server fallback:", tauriError);
+        }
       }
 
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = fileName;
-      link.rel = "noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl as string), 1000);
-      setSendError(null);
-    } catch (error) {
-      console.warn("[DockMediaTab] Media download failed:", error);
-      if (!sourceUrl) {
-        setSendError(t('media.downloadFailed', { defaultValue: 'Could not download this media.' }));
-        return;
+      // 2. In OBS CEF dock / browser environment: Try the local server endpoint
+      try {
+        const saveApiUrl = `${overlayBaseUrl}/api/save-to-downloads`;
+        let res: Response | null = null;
+
+        if (mediaFileName) {
+          res = await fetch(saveApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName, uploadFile: mediaFileName }),
+          });
+        } else if (sourceUrl.startsWith("data:")) {
+          res = await fetch(saveApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName, dataUrl: sourceUrl }),
+          });
+        } else if (sourceUrl) {
+          const fetchRes = await fetch(sourceUrl, { cache: "no-store" });
+          if (fetchRes.ok) {
+            const blob = await fetchRes.blob();
+            res = await fetch(`${saveApiUrl}?filename=${encodeURIComponent(fileName)}`, {
+              method: "POST",
+              headers: { "Content-Type": blob.type || "application/octet-stream" },
+              body: blob,
+            });
+          }
+        }
+
+        if (res && res.ok) {
+          const data = await res.json() as { ok?: boolean; fileName?: string; path?: string };
+          if (data.ok) {
+            const savedName = data.fileName || fileName;
+            setDownloadSuccess(t('media.savedToDownloads', { defaultValue: 'Saved to Downloads: {{fileName}}', fileName: savedName }));
+            return;
+          }
+        }
+      } catch (apiError) {
+        console.warn("[DockMediaTab] Local server save-to-downloads unavailable, trying browser fallback:", apiError);
       }
-      // A direct link is still useful for remote assets when the source does
-      // not allow CORS, so let the embedded browser handle that fallback.
-      if (!sourceUrl.startsWith("data:")) {
+
+      // 3. Browser fallback (for regular web browsers outside OBS)
+      let blob: Blob;
+      if (sourceUrl.startsWith("data:")) {
+        const res = await fetch(sourceUrl);
+        blob = await res.blob();
+      } else {
+        const res = await fetch(sourceUrl, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Media download failed (${res.status}).`);
+        blob = await res.blob();
+      }
+
+      if (blob.size === 0) throw new Error("The media file was empty.");
+
+      // Check for window.showSaveFilePicker
+      type WindowWithPicker = Window & {
+        showSaveFilePicker?: (opts: { suggestedName?: string }) => Promise<{
+          createWritable: () => Promise<{
+            write: (data: Blob) => Promise<void>;
+            close: () => Promise<void>;
+          }>;
+        }>;
+      };
+      const picker = (window as WindowWithPicker).showSaveFilePicker;
+      if (typeof picker === "function") {
+        try {
+          const handle = await picker({ suggestedName: fileName });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          setDownloadSuccess(t('media.savedToFile', { defaultValue: 'Saved {{fileName}}', fileName }));
+          return;
+        } catch (pickerErr) {
+          if (pickerErr instanceof DOMException && pickerErr.name === "AbortError") {
+            return; // User cancelled
+          }
+          console.warn("[DockMediaTab] showSaveFilePicker failed, trying file-saver:", pickerErr);
+        }
+      }
+
+      // Final browser fallback: file-saver saveAs or anchor click
+      try {
+        const { saveAs } = await import("file-saver");
+        saveAs(blob, fileName);
+        setDownloadSuccess(t('media.savedToFile', { defaultValue: 'Saved {{fileName}}', fileName }));
+      } catch {
+        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.href = sourceUrl;
+        link.href = objectUrl;
         link.download = fileName;
         link.rel = "noopener";
         document.body.appendChild(link);
         link.click();
         link.remove();
-      } else {
-        setSendError(t('media.downloadFailed', { defaultValue: 'Could not download this media.' }));
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+        setDownloadSuccess(t('media.savedToFile', { defaultValue: 'Saved {{fileName}}', fileName }));
       }
+    } catch (error) {
+      console.warn("[DockMediaTab] Media download failed:", error);
+      setSendError(t('media.downloadFailed', { defaultValue: 'Could not download this media.' }));
     } finally {
       setDownloadingMediaKey(null);
     }
-  }, [mediaPrefs, t]);
+  }, [mediaPrefs, overlayBaseUrl, t, uploadsDir]);
 
   const playMedia = useCallback(
     async (fileName: string, options?: DockMediaSendOptions): Promise<boolean> => {
       if (presentationLinkMode) {
         const kind = getUploadMediaKind(fileName);
-        if (!kind) return false;
+        if (!kind || kind === "audio") {
+          setSendError(kind === "audio" ? "Audio playback requires a direct OBS connection." : t('media.failedToSendMedia'));
+          return false;
+        }
         setSendingFile(`upload:${fileName}`);
         try {
           await publishMediaToPresentation({
@@ -1582,6 +1710,10 @@ function DockMediaTab({
   const playLibraryMedia = useCallback(
     async (item: MediaItem, options?: DockMediaSendOptions): Promise<boolean> => {
       if (presentationLinkMode) {
+        if (item.type === "audio") {
+          setSendError("Audio playback requires a direct OBS connection.");
+          return false;
+        }
         setSendingFile(`library:${item.id}`);
         try {
           await publishMediaToPresentation(item);
@@ -1719,6 +1851,12 @@ function DockMediaTab({
           fitMode: prefs.fitMode ?? "cover",
         };
       }
+      if (entry.kind === "audio") {
+        return {
+          muted: false,
+          looping: prefs.loop ?? false,
+        };
+      }
       return {
         imageAudioInputName: prefs.imageAudioInputName || null,
         fitMode: prefs.fitMode ?? "cover",
@@ -1754,12 +1892,19 @@ function DockMediaTab({
           muted: entryPrefs.videoMuted ?? true,
           looping: entryPrefs.loop ?? true,
         });
-      } else {
+      } else if (entry.kind === "image") {
         await dockObsClient.addImageSourceToScene({
           sceneName: sceneSendSelection,
           sourceName: buildSceneMediaSourceName(entry),
           filePath,
           fitMode: entryPrefs.fitMode ?? "cover",
+        });
+      } else {
+        await dockObsClient.addAudioSourceToScene({
+          sceneName: sceneSendSelection,
+          sourceName: buildSceneMediaSourceName(entry),
+          filePath,
+          looping: false,
         });
       }
 
@@ -1843,7 +1988,7 @@ function DockMediaTab({
   const libraryEntries = useMemo(
     () => mergedLibraryItems
       .filter((item) => {
-        if (item.type !== "video" && item.type !== "image") return false;
+        if (item.type !== "video" && item.type !== "image" && item.type !== "audio") return false;
         if (isAnimationMediaItem(item)) return false;
         // Older template records may have lost their source metadata, but
         // retain the catalog filename. Never expose those records as user
@@ -1985,6 +2130,7 @@ function DockMediaTab({
     () => mediaEntries.filter((entry) => entry.kind === "image" && entry.libraryItem?.source !== "document-conversion"),
     [mediaEntries],
   );
+  const audioEntries = useMemo(() => mediaEntries.filter((entry) => entry.kind === "audio"), [mediaEntries]);
   const savedTemplateEntries = useMemo(
     () => [...savedTemplateImages]
       .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
@@ -2039,21 +2185,43 @@ function DockMediaTab({
       }
     }
 
+    // Audio is completely locked on Free plans (after free trial).
+    // Paid plans and active trials keep audio available.
+    if (plan === "free") {
+      const audioLocked = !isDockTrialActive();
+      let count = 0;
+      for (const entry of mediaEntries) {
+        if (entry.kind === "audio") {
+          if (audioLocked || count >= 1) locked.add(entry.key);
+          count++;
+        }
+      }
+    }
+
     return locked;
   }, [dockPlan, mediaEntries]);
 
   // Free-plan gating: mark uploads beyond the configured quota while keeping
   // the full library visible so locked items can explain how to upgrade.
   const isFreePlan = dockPlan === "free";
+  const isAudioLocked = isFreePlan && !isDockTrialActive();
+
+  useEffect(() => {
+    if (isAudioLocked && activeKind === "audio") {
+      setActiveKind("all");
+    }
+  }, [isAudioLocked, activeKind]);
 
   const filteredUploadEntries = useMemo(() => {
     const pool = activeKind === "all"
       ? nonDocumentMediaEntries
       : activeKind === "video"
         ? videoEntries
-        : activeKind === "document"
-          ? []
-          : imageEntries;
+        : activeKind === "audio"
+          ? audioEntries
+          : activeKind === "document"
+            ? []
+            : imageEntries;
     const query = assetSearch.trim().toLowerCase();
     const folderPool = activeFolder === "all"
       ? pool
@@ -2084,7 +2252,7 @@ function DockMediaTab({
       ? withoutTemplateDuplicates
       : withoutTemplateDuplicates.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
     return result;
-  }, [activeFolder, activeKind, animationEntries, assetSearch, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
+  }, [activeFolder, activeKind, animationEntries, assetSearch, audioEntries, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -2247,9 +2415,27 @@ function DockMediaTab({
 
   const handleCreateVlcPlaylist = useCallback(async () => {
     if (selectedKeys.size === 0) return;
-    if (!(await requireEntitlement("slideshow", 0))) return;
-    const videoCount = libraryMedia.filter((m) => m.type === "video").length;
-    if (!(await requireEntitlement("videos", videoCount))) return;
+
+    const entryMap = new Map(allResolvableEntries.map((e) => [e.key, e]));
+    const selectedMedia = Array.from(selectedKeys)
+      .map((key) => entryMap.get(key))
+      .filter((entry): entry is DockMediaEntry => Boolean(entry));
+    const hasAudio = selectedMedia.some((entry) => entry.kind === "audio");
+    const hasVisualMedia = selectedMedia.some((entry) => entry.kind === "video" || entry.kind === "image");
+
+    if (hasAudio && isAudioLocked) {
+      showUpgradeModal("Audio playlist creation is available on Basic and Growth plans. Upgrade to unlock.");
+      return;
+    }
+
+    // Audio playlists are part of the Audio section and do not require the
+    // visual slideshow entitlement. Mixed visual playlists keep the existing
+    // slideshow gate.
+    if (!hasAudio || hasVisualMedia) {
+      if (!(await requireEntitlement("slideshow", 0))) return;
+      const videoCount = libraryMedia.filter((m) => m.type === "video").length;
+      if (!(await requireEntitlement("videos", videoCount))) return;
+    }
     try {
       await ensureObsConnected();
     } catch {
@@ -2257,9 +2443,9 @@ function DockMediaTab({
       return;
     }
 
-    const entryMap = new Map(allResolvableEntries.map((e) => [e.key, e]));
     const videoPaths: string[] = [];
     const imagePaths: string[] = [];
+    const audioPaths: string[] = [];
 
     for (const key of selectedKeys) {
       const entry = entryMap.get(key);
@@ -2279,8 +2465,10 @@ function DockMediaTab({
       if (filePath) {
         if (entry.kind === "image") {
           imagePaths.push(filePath);
-        } else {
+        } else if (entry.kind === "video") {
           videoPaths.push(filePath);
+        } else {
+          audioPaths.push(filePath);
         }
       }
     }
@@ -2311,6 +2499,16 @@ function DockMediaTab({
         });
       }
 
+      if (audioPaths.length > 0) {
+        await dockObsClient.pushVlcPlaylist({
+          sourceName: `${sourceName} Audio`,
+          playlist: audioPaths,
+          loop: playlistLoop,
+          shuffle: playlistShuffle,
+          muted: false,
+        });
+      }
+
       setShowPlaylistModal(false);
       clearSelection();
     } catch (err) {
@@ -2326,6 +2524,7 @@ function DockMediaTab({
     resolveLibraryMediaFilePath,
     resolveUploadFilePath,
     selectedKeys,
+    t,
   ]);
 
   const selectedEntries = useMemo(
@@ -2345,6 +2544,11 @@ function DockMediaTab({
 
   const selectedImageEntries = useMemo(
     () => selectedEntries.filter((e) => e.kind === "image"),
+    [selectedEntries],
+  );
+
+  const selectedAudioEntries = useMemo(
+    () => selectedEntries.filter((e) => e.kind === "audio"),
     [selectedEntries],
   );
 
@@ -2521,7 +2725,7 @@ function DockMediaTab({
     // Validate file types — reject unsupported files with clear error
     const rejected = allFiles.filter((f) => !isSupportedMediaFile(f) && !isSupportedDocumentFile(f));
     for (const f of rejected) {
-      showUpgradeModal(`Unsupported file type: ${f.name}. Please upload an image, video, PDF, DOCX, or PPTX file.`);
+      showUpgradeModal(`Unsupported file type: ${f.name}. Please upload an image, video, audio, PDF, DOCX, or PPTX file.`);
     }
 
     let queueItems: UploadQueueItem[] = mediaFiles.map((file) => ({ file }));
@@ -2553,8 +2757,7 @@ function DockMediaTab({
 
     // ── Per-file-type quota enforcement ──
     // Resolve limits from server entitlements → localStorage → fallback
-    let plan = "free";
-    try { plan = localStorage.getItem(getUserScopedKey("ocs-dock-plan")) || "free"; } catch { /* */ }
+    const plan = getDockPlan();
     let serverEntitlements: Record<string, number | boolean> | null = null;
     try {
       const raw = localStorage.getItem(getUserScopedKey("ocs-dock-entitlements"));
@@ -2570,6 +2773,7 @@ function DockMediaTab({
     };
     const imageLimit = getLimit("images");
     const videoLimit = getLimit("videos");
+    const audioLimit = isAudioLocked ? 0 : (plan === "free" ? 1 : -1);
 
     // Count both the shared library and the local fallback library. The upload
     // path writes to both, and counting only IndexedDB can make quota state
@@ -2577,17 +2781,20 @@ function DockMediaTab({
     const currentMediaItems = dedupeMediaItems([...libraryMedia, ...localLibrary]);
     const currentImages = currentMediaItems.filter((m) => m.type === "image").length;
     const currentVideos = currentMediaItems.filter((m) => m.type === "video").length;
+    const currentAudio = currentMediaItems.filter((m) => m.type === "audio").length;
 
     // Count incoming files per type
     const incomingImages = queue.filter((f) => getMediaKind(f) === "image").length;
     const incomingVideos = queue.filter((f) => getMediaKind(f) === "video").length;
+    const incomingAudio = queue.filter((f) => getMediaKind(f) === "audio").length;
 
     // Check if each type would exceed quota
     const imageQuotaExceeded = imageLimit >= 0 && (currentImages + incomingImages) > imageLimit;
     const videoQuotaExceeded = videoLimit >= 0 && (currentVideos + incomingVideos) > videoLimit;
+    const audioQuotaExceeded = isAudioLocked ? incomingAudio > 0 : (audioLimit >= 0 && (currentAudio + incomingAudio) > audioLimit);
 
     // Both types over limit → block entirely
-    if (imageQuotaExceeded && videoQuotaExceeded) {
+    if (imageQuotaExceeded && videoQuotaExceeded && audioQuotaExceeded) {
       showUpgradeModal(t('media.mediaLimitsReached', { currentImages, imageLimit, currentVideos, videoLimit }));
       setUploading(false);
       setUploadStatus("");
@@ -2598,16 +2805,25 @@ function DockMediaTab({
     const allowedQueueItems = queueItems.filter(({ file }) => {
       if (getMediaKind(file) === "image" && imageQuotaExceeded) return false;
       if (getMediaKind(file) === "video" && videoQuotaExceeded) return false;
+      if (getMediaKind(file) === "audio" && (isAudioLocked || audioQuotaExceeded)) return false;
       return true;
     });
     const allowedQueue = allowedQueueItems.map((item) => item.file);
 
     if (allowedQueueItems.length === 0) {
       // All files rejected — show upgrade modal
-      const rejectedType = imageQuotaExceeded ? "images" : "videos";
-      const limit = imageQuotaExceeded ? imageLimit : videoLimit;
-      const current = imageQuotaExceeded ? currentImages : currentVideos;
-      showUpgradeModal(t('media.typeLimitReached', { type: rejectedType, current, limit }));
+      if (audioQuotaExceeded && !imageQuotaExceeded && !videoQuotaExceeded) {
+        showUpgradeModal(
+          isAudioLocked
+            ? "Audio uploads are available on Basic and Growth plans. Upgrade to unlock."
+            : "Free plans allow one audio file. Upgrade to add more audio files."
+        );
+      } else {
+        const rejectedType = imageQuotaExceeded ? "images" : "videos";
+        const limit = imageQuotaExceeded ? imageLimit : videoLimit;
+        const current = imageQuotaExceeded ? currentImages : currentVideos;
+        showUpgradeModal(t('media.typeLimitReached', { type: rejectedType, current, limit }));
+      }
       setUploading(false);
       setUploadStatus("");
       return;
@@ -2616,15 +2832,23 @@ function DockMediaTab({
     // Show explanation if some files were rejected
     const rejectedCount = queueItems.length - allowedQueueItems.length;
     if (rejectedCount > 0) {
-      const rejectedType = imageQuotaExceeded ? "images" : "videos";
-      const limit = imageQuotaExceeded ? imageLimit : videoLimit;
-      const current = imageQuotaExceeded ? currentImages : currentVideos;
-      showUpgradeModal(t('media.typeLimitWithSkipped', { type: rejectedType, current, limit, skipped: rejectedCount, skippedPlural: rejectedCount > 1 ? "s were" : " was" }));
+      if (audioQuotaExceeded && !imageQuotaExceeded && !videoQuotaExceeded) {
+        showUpgradeModal(
+          isAudioLocked
+            ? "Audio uploads are available on Basic and Growth plans. Upgrade to unlock."
+            : `Free plans allow one audio file. ${rejectedCount} audio file${rejectedCount === 1 ? " was" : "s were"} skipped.`
+        );
+      } else {
+        const rejectedType = imageQuotaExceeded ? "images" : "videos";
+        const limit = imageQuotaExceeded ? imageLimit : videoLimit;
+        const current = imageQuotaExceeded ? currentImages : currentVideos;
+        showUpgradeModal(t('media.typeLimitWithSkipped', { type: rejectedType, current, limit, skipped: rejectedCount, skippedPlural: rejectedCount > 1 ? "s were" : " was" }));
+      }
     }
 
     setUploading(true);
     console.log("[UPLOAD] Queue after filtering:", allowedQueue.map((f) => f.name));
-    console.log("[UPLOAD] Limits:", { imageLimit, videoLimit, currentImages, currentVideos });
+    console.log("[UPLOAD] Limits:", { imageLimit, videoLimit, audioLimit, currentImages, currentVideos, currentAudio });
     try {
       const nextItems: MediaItem[] = [];
       for (const { file, documentPage } of allowedQueueItems) {
@@ -2667,6 +2891,7 @@ function DockMediaTab({
         setShowAddMediaModal(false);
         for (const item of nextItems) {
           track("media_uploaded", { mediaType: item.type });
+          trackMediaUploaded(item.type || "unknown");
         }
         console.log("[UPLOAD] ─── Upload flow finished successfully ───");
       } else {
@@ -2723,6 +2948,10 @@ function DockMediaTab({
     async (entry: DockMediaEntry, optionOverrides: DockMediaSendOptions = {}) => {
       // Presentation actions do NOT consume storage quota — no entitlement check needed.
       // The media already exists within the user's allowed quota.
+      if (entry.kind === "audio" && isAudioLocked) {
+        showUpgradeModal("Audio playback is available on Basic and Growth plans. Upgrade to unlock.");
+        return false;
+      }
       if (entry.libraryItem && isAnimationMediaItem(entry.libraryItem)) {
         if (!(await requireEntitlement("slideshow", 0))) return false;
       }
@@ -3139,7 +3368,7 @@ function DockMediaTab({
       const prefs = getEntryPrefs(entry);
       const displayName = prefs.label?.trim() || entry.name;
       const isSelected = selectedKeys.has(entry.key);
-      const canSelect = selectionMode && (entry.kind === "video" || entry.kind === "image");
+      const canSelect = selectionMode && (entry.kind === "video" || entry.kind === "image" || entry.kind === "audio");
       const isLocked = lockedKeys.has(entry.key);
 
       let thumbUrl = "";
@@ -3154,10 +3383,18 @@ function DockMediaTab({
 
       const handleCardClick = () => {
         if (isLocked) {
-          void requireEntitlement(
-            entry.kind === "video" ? "videos" : "images",
-            entry.kind === "video" ? videoEntries.length : imageEntries.length,
-          );
+          if (entry.kind === "audio") {
+            showUpgradeModal(
+              isAudioLocked
+                ? "Audio library and playback are available on Basic and Growth plans. Upgrade to unlock."
+                : "Free plans allow one audio file. Upgrade to use more audio files."
+            );
+          } else {
+            void requireEntitlement(
+              entry.kind === "video" ? "videos" : "images",
+              entry.kind === "video" ? videoEntries.length : imageEntries.length,
+            );
+          }
           return;
         }
         if (canSelect) toggleSelectKey(entry.key);
@@ -3220,6 +3457,23 @@ function DockMediaTab({
                     <button
                       type="button"
                       className="dock-media-gallery-card__menu-btn"
+                      aria-label={downloadingMediaKey === entry.key ? t('media.downloadProgress', 'Downloading…') : t('media.downloadAsset', { fileName: displayName })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void downloadMediaEntry(entry);
+                      }}
+                      title={downloadingMediaKey === entry.key ? t('media.downloadProgress', 'Downloading…') : t('media.downloadAsset', { fileName: displayName })}
+                      disabled={downloadingMediaKey === entry.key}
+                    >
+                      <Icon
+                        name={downloadingMediaKey === entry.key ? "downloading" : "download"}
+                        size={14}
+                        style={{ animation: downloadingMediaKey === entry.key ? "spin 1s linear infinite" : undefined }}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-media-gallery-card__menu-btn"
                       aria-label={t('media.moreOptions')}
                       onClick={(event) => openMediaContextMenu(event, entry, isLocked)}
                       title={t('media.moreOptions')}
@@ -3234,10 +3488,10 @@ function DockMediaTab({
           <div className="dock-media-gallery-card__meta">
             <span className="dock-media-gallery-card__name">{displayName}</span>
             <div className="dock-media-gallery-card__meta-row">
-              <span className="dock-media-gallery-card__type-badge">{entry.mimeLabel || (entry.kind === "video" ? "VID" : "IMG")}</span>
+              <span className="dock-media-gallery-card__type-badge">{entry.mimeLabel || (entry.kind === "video" ? "VID" : entry.kind === "audio" ? "AUD" : "IMG")}</span>
               {entry.durationSec ? (
                 <span className="dock-media-gallery-card__duration">
-                  <Icon name="movie" size={10} />
+                  <Icon name={entry.kind === "audio" ? "music_note" : "movie"} size={10} />
                   {fmtDuration(entry.durationSec)}
                 </span>
               ) : null}
@@ -3253,14 +3507,17 @@ function DockMediaTab({
     },
     [
       activeTargets.active,
+      downloadMediaEntry,
+      downloadingMediaKey,
       getEntryPrefs,
       handleSendEntry,
       imageEntries.length,
       lockedKeys,
       openMediaContextMenu,
       pausedTargets.active,
-      selectionMode,
       selectedKeys,
+      selectionMode,
+      t,
       toggleSelectKey,
       videoEntries.length,
     ]
@@ -3293,6 +3550,25 @@ function DockMediaTab({
         <div className="dock-media-gallery-card__image-wrap">
           <img src={entry.previewUrl || entry.thumbnailUrl || ""} alt={entry.name} loading="lazy" className="dock-media-gallery-card__image" />
           <div className="dock-media-gallery-card__overlay">
+            <div className="dock-media-gallery-card__overlay-top">
+              <button
+                type="button"
+                className="dock-media-gallery-card__menu-btn"
+                aria-label={downloadingMediaKey === entry.key ? t('media.downloadProgress', 'Downloading…') : t('media.downloadAsset', { fileName: entry.name })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void downloadMediaEntry(entry);
+                }}
+                title={downloadingMediaKey === entry.key ? t('media.downloadProgress', 'Downloading…') : t('media.downloadAsset', { fileName: entry.name })}
+                disabled={downloadingMediaKey === entry.key}
+              >
+                <Icon
+                  name={downloadingMediaKey === entry.key ? "downloading" : "download"}
+                  size={14}
+                  style={{ animation: downloadingMediaKey === entry.key ? "spin 1s linear infinite" : undefined }}
+                />
+              </button>
+            </div>
             <div className="dock-media-gallery-card__overlay-center">
               <button
                 type="button"
@@ -3325,7 +3601,7 @@ function DockMediaTab({
         )}
       </div>
     );
-  }, [activeTargets.active, handleSendEntry, pausedTargets.active, sendingFile, t]);
+  }, [activeTargets.active, downloadMediaEntry, downloadingMediaKey, handleSendEntry, pausedTargets.active, sendingFile, t]);
 
   const renderDocumentCard = useCallback(
     (deck: DockDocumentDeck) => {
@@ -3734,12 +4010,16 @@ function DockMediaTab({
               toggleSelectionMode();
               return;
             }
-            if (!(await requireEntitlement("slideshow", 0))) return;
+            if (activeKind === "audio" && isAudioLocked) {
+              showUpgradeModal("Audio playlist creation is available on Basic and Growth plans. Upgrade to unlock.");
+              return;
+            }
+            if (activeKind !== "audio" && !(await requireEntitlement("slideshow", 0))) return;
             toggleSelectionMode();
           }}
           disabled={browserTab !== "uploads"}
-          title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
-          aria-label={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+          title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
+          aria-label={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
         >
           <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
         </button>
@@ -3819,11 +4099,15 @@ function DockMediaTab({
                   toggleSelectionMode();
                   return;
                 }
-                if (!(await requireEntitlement("slideshow", 0))) return;
+                if (activeKind === "audio" && isAudioLocked) {
+                  showUpgradeModal("Audio playlist creation is available on Basic and Growth plans. Upgrade to unlock.");
+                  return;
+                }
+                if (activeKind !== "audio" && !(await requireEntitlement("slideshow", 0))) return;
                 toggleSelectionMode();
               }}
               disabled={browserTab !== "uploads"}
-              title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : t('media.createSlideshow'))}
+              title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
             >
               <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
             </button>
@@ -4347,6 +4631,26 @@ function DockMediaTab({
                       <button
                         type="button"
                         role="tab"
+                        aria-selected={activeKind === "audio"}
+                        aria-disabled={isAudioLocked}
+                        className={`dock-media-pill${activeKind === "audio" ? " dock-media-pill--active" : ""}${isAudioLocked ? " dock-media-pill--disabled" : ""}`}
+                        onClick={() => {
+                          if (isAudioLocked) {
+                            showUpgradeModal("Audio library and playback are available on Basic and Growth plans. Upgrade to unlock.");
+                            return;
+                          }
+                          setActiveKind("audio");
+                        }}
+                        title={isAudioLocked ? "Audio is locked on Free plan. Upgrade to unlock." : "Audio"}>
+                        {isAudioLocked && <Icon name="lock" size={10} style={{ marginRight: 2 }} />}
+                        Audio
+                        <span className="dock-media-pill__count">
+                          {isAudioLocked ? <Icon name="lock" size={10} /> : audioEntries.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
                         aria-selected={activeKind === "image"}
                         className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
                         onClick={() => setActiveKind("image")}
@@ -4392,7 +4696,21 @@ function DockMediaTab({
                       </div>
                     )}
 
-                    {/* Error banner */}
+                    {/* Feedback banners */}
+                    {downloadSuccess && (
+                      <div className="dock-media-send-error dock-media-send-error--info">
+                        <Icon name="check_circle" size={13} />
+                        <span>{downloadSuccess}</span>
+                        <button
+                          type="button"
+                          className="dock-media-send-error__dismiss"
+                          onClick={() => setDownloadSuccess(null)}
+                          aria-label={t('media.dismiss', 'Dismiss')}
+                          title={t('common.close', 'Close')}>
+                          <Icon name="close" size={13} />
+                        </button>
+                      </div>
+                    )}
                     {sendError && (
                       <div className="dock-media-send-error">
                         <Icon name="error_outline" size={13} />
@@ -4416,6 +4734,8 @@ function DockMediaTab({
                             ? t('media.noUploads')
                             : activeKind === "video"
                               ? t('media.noVideos')
+                              : activeKind === "audio"
+                                ? "No audio imported"
                               : activeKind === "document"
                                 ? "No documents yet"
                                 : t('media.noImages')}
@@ -4459,6 +4779,35 @@ function DockMediaTab({
                 </button>
               </div>
             </div>
+
+            {downloadSuccess && (
+              <div className="dock-media-send-error dock-media-send-error--info">
+                <Icon name="check_circle" size={13} />
+                <span>{downloadSuccess}</span>
+                <button
+                  type="button"
+                  className="dock-media-send-error__dismiss"
+                  onClick={() => setDownloadSuccess(null)}
+                  aria-label={t('media.dismiss', 'Dismiss')}
+                  title={t('common.close', 'Close')}>
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            )}
+            {sendError && (
+              <div className="dock-media-send-error">
+                <Icon name="error_outline" size={13} />
+                <span>{sendError}</span>
+                <button
+                  type="button"
+                  className="dock-media-send-error__dismiss"
+                  onClick={() => setSendError(null)}
+                  aria-label={t('media.dismiss')}
+                  title={t('common.close')}>
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            )}
 
             {savedTemplateImagesError ? (
               <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{savedTemplateImagesError}</div></div>
@@ -5438,16 +5787,16 @@ function DockMediaTab({
           <div className="dock-media-selection-tray__info">
             <span className="dock-media-selection-tray__count">{t('media.selectedCount', { count: selectedKeys.size })}</span>
             <div className="dock-media-selection-tray__thumbs">
-              {selectedVideoEntries.slice(0, 5).map((entry) => (
+              {selectedEntries.slice(0, 5).map((entry) => (
                 <div key={entry.key} className="dock-media-selection-tray__thumb">
                   {entry.thumbnailUrl
                     ? <img src={entry.thumbnailUrl} alt="" />
-                    : <Icon name="movie" size={10} />
+                    : <Icon name={getFileIcon(entry.kind)} size={10} />
                   }
                 </div>
               ))}
-              {selectedVideoEntries.length > 5 && (
-                <span className="dock-media-selection-tray__more">+{selectedVideoEntries.length - 5}</span>
+              {selectedEntries.length > 5 && (
+                <span className="dock-media-selection-tray__more">+{selectedEntries.length - 5}</span>
               )}
             </div>
           </div>
@@ -5456,9 +5805,9 @@ function DockMediaTab({
               type="button"
               className="dock-btn dock-btn--primary dock-btn--compact"
               onClick={() => setShowPlaylistModal(true)}
-              title={t('media.createSlideshow')}>
+              title={selectedAudioEntries.length > 0 && selectedVideoEntries.length === 0 && selectedImageEntries.length === 0 ? "Create audio playlist" : t('media.createSlideshow')}>
               <Icon name="playlist_add" size={12} />
-              {t('media.createSlideshow')}
+              {selectedAudioEntries.length > 0 && selectedVideoEntries.length === 0 && selectedImageEntries.length === 0 ? "Create audio playlist" : t('media.createSlideshow')}
             </button>
             <button
               type="button"
@@ -5677,7 +6026,7 @@ function DockMediaTab({
                   </div>
                 </div>
 
-                {/* ── Audio (video only) ── */}
+                {/* ── Audio ── */}
                 {entry.kind === "video" && (
                   <div className="dock-media-inspector__card">
                     <h4 className="dock-media-inspector__card-title">{t('media.audio')}</h4>
@@ -5718,7 +6067,7 @@ function DockMediaTab({
                   onClick={() => { void deleteEntry(entry); closeEntryOptions(); }}
                   title={t('media.delete')}>
                   <Icon name="delete" size={12} />
-                  {t('media.delete')} {entry.kind === "video" ? t('media.video') : t('common.image')}
+                  {t('media.delete')} {entry.kind === "video" ? t('media.video') : entry.kind === "audio" ? "audio" : t('common.image')}
                 </button>
               </div>
             </div>
@@ -5789,6 +6138,19 @@ function DockMediaTab({
                     </div>
                   </div>
                 )}
+                {selectedAudioEntries.length > 0 && (
+                  <div className="dock-playlist-modal__field">
+                    <label className="dock-playlist-modal__label">Audio ({selectedAudioEntries.length})</label>
+                    <div className="dock-playlist-modal__thumbs">
+                      {selectedAudioEntries.map((entry) => (
+                        <div key={entry.key} className="dock-playlist-modal__thumb">
+                          <Icon name="music_note" size={14} />
+                          <span className="dock-playlist-modal__thumb-name">{entry.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="dock-playlist-modal__toggles">
                   <label className="dock-playlist-modal__toggle">
                     <input type="checkbox" checked={playlistLoop} onChange={(e) => setPlaylistLoop(e.target.checked)} />
@@ -5804,7 +6166,9 @@ function DockMediaTab({
                   </label>
                 </div>
                 <div className="dock-playlist-modal__hint">
-                  {selectedVideoEntries.length > 0 && selectedImageEntries.length > 0
+                  {selectedAudioEntries.length > 0 && selectedVideoEntries.length === 0 && selectedImageEntries.length === 0
+                    ? "Creates a VLC audio playlist source in the current OBS scene."
+                    : selectedVideoEntries.length > 0 && selectedImageEntries.length > 0
                     ? t('media.playlistHintBoth')
                     : selectedVideoEntries.length > 0
                       ? t('media.playlistHintVideos')
@@ -5823,7 +6187,7 @@ function DockMediaTab({
                   disabled={selectedKeys.size === 0}
                   title={t('media.create')}>
                   <Icon name="playlist_add" size={12} />
-                  {t('media.create')}{selectedVideoEntries.length > 0 && selectedImageEntries.length > 0 ? t('media.createBoth') : selectedVideoEntries.length > 0 ? t('media.createVlcSource') : t('media.createSlideshow')}
+                  {t('media.create')}{selectedAudioEntries.length > 0 && selectedVideoEntries.length === 0 && selectedImageEntries.length === 0 ? " audio playlist" : selectedVideoEntries.length > 0 && selectedImageEntries.length > 0 ? t('media.createBoth') : selectedVideoEntries.length > 0 ? t('media.createVlcSource') : t('media.createSlideshow')}
                 </button>
               </div>
             </div>

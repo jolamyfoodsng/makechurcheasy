@@ -14,6 +14,7 @@ import type {
 } from "./transcriptTypes";
 import { STORES, getAll, putRecord, deleteRecord } from "../services/db";
 import { getDeviceId } from "../services/authService";
+import { trackTranscriptCreated } from "../services/tracking";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,8 @@ export async function saveTranscript(transcript: Transcript): Promise<{ ok: bool
   }
 
   await cacheOne(updated);
+  const wordCount = (updated.transcriptText || "").split(/\s+/).filter(Boolean).length;
+  trackTranscriptCreated(wordCount);
   return { ok: true };
 }
 

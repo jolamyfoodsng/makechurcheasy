@@ -48,7 +48,7 @@ export type DockCommandType =
   // Service Planner
   | "request-service-plans"
   | "service-plan:save"
-  // Voice Bible
+  // Speech to Scripture
   | "voice-bible:start"
   | "voice-bible:stop"
   | "voice-bible:cancel"

@@ -16,6 +16,7 @@ import { dockClient } from "../services/dockBridge";
 import { writeNativeDockSetting } from "../services/localDockSettings";
 import "../fonts.css";
 import "./dock.css";
+import "./dock-theme.css";
 import "./dock-auth.css";
 
 dockClient.init();

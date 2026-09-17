@@ -17,6 +17,7 @@ import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import type { VoiceBibleCandidate, TranscriptEntry } from "../../services/voiceBibleTypes";
 
 import { parseScriptureReference } from "../../services/scriptureParser";
+import { trackTranscriptCreated } from "../../services/tracking";
 import { onCreditChange, isProUnlocked } from "../../services/credits";
 import Icon from "../DockIcon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
@@ -1401,6 +1402,7 @@ export default function DockLmTab({
     // Sending to OBS includes saving the transcript in Notes, even for Free
     // users. The standalone Save in Notes action remains plan-gated.
     await appendTranscriptToNotes(cleanText);
+    trackTranscriptCreated(cleanText.split(/\s+/).filter(Boolean).length);
     await pushTranscriptToOBS(cleanText);
   }, [appendTranscriptToNotes, pushTranscriptToOBS, showToast]);
 
@@ -2226,7 +2228,7 @@ export default function DockLmTab({
             Copy
           </button>
           <button
-            style={S.contextMenuItem}
+            style={{ ...S.contextMenuItem, ...(isFreePlan ? S.contextMenuItemDisabled : {}) }}
             onClick={() => {
               if (contextEntry) {
                 setEditModal({ visible: true, text: contextEntry.text });

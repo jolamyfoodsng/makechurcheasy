@@ -24,12 +24,14 @@ import {
 import { getUserScopedKey } from "../services/userScopedStorage";
 import {
   getEffectivePlan as resolveCanonicalPlan,
+  isActiveTrial,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { getStoredLocalDevPlanOverride } from "../services/localDevPlanOverride";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
+export const TRIAL_ACTIVE_KEY = "ocs-dock-trial-active";
 
 /** Module-level callback set by DockPage to show the upgrade modal. */
 let _showUpgrade: ((message: string) => void) | null = null;
@@ -42,6 +44,26 @@ let _serverEntitlements: Record<string, number | boolean> | null = null;
  */
 export function registerUpgradeModal(trigger: (message: string) => void): void {
   _showUpgrade = trigger;
+}
+
+/**
+ * Read whether the dock session is currently in an active trial period.
+ */
+export function isDockTrialActive(): boolean {
+  try {
+    const localDevOverride = getStoredLocalDevPlanOverride();
+    if (localDevOverride) return false;
+    return localStorage.getItem(getUserScopedKey(TRIAL_ACTIVE_KEY)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether the dock user is on a Free plan and NOT on an active free trial.
+ */
+export function isDockFreePlan(): boolean {
+  return getDockPlan() === "free" && !isDockTrialActive();
 }
 
 /**
@@ -196,6 +218,11 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
         _serverEntitlements = null;
         return;
       }
+      const trialActive = Boolean(data.user && isActiveTrial(data.user as any));
+      try {
+        localStorage.setItem(getUserScopedKey(TRIAL_ACTIVE_KEY), trialActive ? "true" : "false");
+      } catch { /* storage full */ }
+
       if (data.user?.plan) {
         const effectivePlan = normalizePlanId(
           data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
@@ -215,6 +242,15 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
             localStorage.setItem(getUserScopedKey(ENTITLEMENTS_KEY), JSON.stringify(effectiveEntitlements));
           } catch { /* storage full */ }
         }
+      }
+
+      // If on Free plan (not free trial), clean up MCE-created sources from OBS
+      if (isDockFreePlan()) {
+        void import("./dockObsClient").then(({ dockObsClient }) => {
+          if (dockObsClient.isConnected) {
+            void dockObsClient.clearMCESourcesForFreePlan();
+          }
+        }).catch(() => { /* ignore */ });
       }
     }
   } catch {

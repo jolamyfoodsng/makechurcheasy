@@ -3,12 +3,12 @@
  *
  * A simple singleton store that tracks the current book/chapter/verse
  * across the entire session. Updated by:
- * - Voice Bible service (when a verse is staged via voice)
+ * - Speech to Scripture service (when a verse is staged via voice)
  * - Bible UI (when a verse is selected/navigated to)
  * - Any other component that displays a verse
  *
  * Used by:
- * - Voice Bible matcher (for relative navigation: "next verse", "go to verse X")
+ * - Speech to Scripture matcher (for relative navigation: "next verse", "go to verse X")
  * - OpenCode/Ollama prompts (to inject current context)
  * - Any component that needs to know the current displayed verse
  */

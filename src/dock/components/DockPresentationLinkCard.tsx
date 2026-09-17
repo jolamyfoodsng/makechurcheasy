@@ -5,7 +5,11 @@ import { copyTextToClipboard } from "../bibleClipboard";
 import { getPresentationSettings } from "../../services/presentationSettings";
 import "./DockPresentationLinkCard.css";
 
-export default function DockPresentationLinkCard() {
+interface DockPresentationLinkCardProps {
+  onOpenHelp?: () => void;
+}
+
+export default function DockPresentationLinkCard({ onOpenHelp }: DockPresentationLinkCardProps) {
   const { t } = useTranslation();
   const [presentationLink, setPresentationLink] = useState(
     () => getPresentationSettings().presentationLink,
@@ -46,33 +50,48 @@ export default function DockPresentationLinkCard() {
   }, [presentationLink]);
 
   return (
-    <section className="dock-presentation-link-card" aria-label={t("dock.freePlanOutput", "Free plan presentation link")}>
-      <div className="dock-presentation-link-card__copy">
-        <span className="dock-presentation-link-card__icon" aria-hidden="true">
-          <Icon name="link" size={16} />
+    <section
+      className="dock-presentation-link-card dock-presentation-link-bar"
+      aria-label={t("dock.freePlanOutput", "Free plan presentation link")}
+    >
+      <div className="dock-presentation-link-bar__main">
+        <span className="dock-presentation-link-bar__tag">
+          <Icon name="link" size={13} />
+          <span>{t("dock.browserSource", "OBS Browser Source:")}</span>
         </span>
-        <div className="dock-presentation-link-card__content">
-          <strong>{t("dock.freePlanOutput", "Free plan presentation link")}</strong>
-          <span>
-            {t(
-              "dock.freePlanOutputDescription",
-              "You are on the Free plan. The Dock will not create or update OBS scenes or sources, including MCE Presentation. Copy this link once and add it to OBS as a single Browser Source. Bible, worship, Notes, Media, and other Dock updates will replace the current view through this same link.",
-            )}
-          </span>
-          <code title={presentationLink}>{presentationLink}</code>
-        </div>
+        <code
+          className="dock-presentation-link-bar__code"
+          title={presentationLink}
+        >
+          {presentationLink}
+        </code>
       </div>
-      <button
-        type="button"
-        className="dock-btn dock-btn--primary dock-btn--sm dock-presentation-link-card__button"
-        onClick={() => void handleCopy()}
-        disabled={!presentationLink}
-        title={t("dock.copyPresentationLink", "Copy presentation link")}
-        data-testid="dock-copy-presentation-link"
-      >
-        <Icon name={copied ? "check" : "content_copy"} size={14} />
-        <span>{copied ? t("common.copied", "Copied") : t("common.copy", "Copy")}</span>
-      </button>
+
+      <div className="dock-presentation-link-bar__actions">
+        <button
+          type="button"
+          className="dock-btn dock-btn--primary dock-btn--sm dock-presentation-link-bar__copy-btn"
+          onClick={() => void handleCopy()}
+          disabled={!presentationLink}
+          title={t("dock.copyPresentationLink", "Copy presentation link")}
+          data-testid="dock-copy-presentation-link"
+        >
+          <Icon name={copied ? "check" : "content_copy"} size={13} />
+          <span>{copied ? t("common.copied", "Copied") : t("common.copy", "Copy")}</span>
+        </button>
+
+        {onOpenHelp && (
+          <button
+            type="button"
+            className="dock-presentation-link-bar__help-btn"
+            onClick={onOpenHelp}
+            title={t("dock.setupInstructions", "OBS setup instructions")}
+            aria-label={t("dock.setupInstructions", "OBS setup instructions")}
+          >
+            <Icon name="help_outline" size={14} />
+          </button>
+        )}
+      </div>
     </section>
   );
 }

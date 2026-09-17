@@ -8,8 +8,9 @@ describe("DockBibleTab keyword-match direct output", () => {
     expect(dockBibleTabSource).toContain("keywordMatchPushDirectlyToObs?: boolean");
     expect(dockBibleTabSource).toContain("setKeywordMatchPushDirectlyToObs(prefs.keywordMatchPushDirectlyToObs === true)");
     expect(dockBibleTabSource).toContain("DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT");
+    expect(dockBibleTabSource).toContain("dock-bible-keyword-modal__direct-push");
+    expect(dockBibleTabSource).toContain("updateDockBibleKeywordMatchPreference");
     expect(dockBibleTabSource).not.toContain("onKeywordMatchPushDirectlyToObsChange");
-    expect(dockBibleTabSource).not.toContain("dock-bible-keyword-modal__direct-push");
     expect(dockPageSource).toContain("Auto-send keyword matches");
     expect(dockPageSource).toContain("updateKeywordMatchDirectPush");
     expect(keywordPreferenceSource).toContain("updateDockBibleKeywordMatchPreference");

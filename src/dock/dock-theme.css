@@ -16,12 +16,12 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--bg-dark, #0F172A);
-  color: var(--text-primary, #F5F5F5);
-  --text-primary: #FFFFFF;
-  --text-secondary: #CBD5E1;
-  --text-muted: #94A3B8;
-  --input-placeholder: #94A3B8;
+  background: var(--bg-dark, #111211);
+  color: var(--text-primary, #F7F2EC);
+  --text-primary: #F7F2EC;
+  --text-secondary: #D5C5B9;
+  --text-muted: #A59488;
+  --input-placeholder: #A59488;
   color-scheme: inherit;
 }
 
@@ -31,48 +31,48 @@ html.mv-theme-light body,
 html.mv-theme-light #dock-root,
 :root[data-theme="light"] body,
 :root[data-theme="light"] #dock-root {
-  background: #F8FAFC;
-  color: #0F172A;
-  --text-primary: #0F172A;
-  --text-secondary: #334155;
-  --text-muted: #64748B;
-  --input-placeholder: #64748B;
+  background: #F5F1EA;
+  color: #241D18;
+  --text-primary: #241D18;
+  --text-secondary: #5D4E44;
+  --text-muted: #88766A;
+  --input-placeholder: #88766A;
 }
 
 :root.light .dock-root {
-  --dock-bg: #F8FAFC;
-  --dock-surface: #FFFFFF;
-  --dock-surface-alt: #F1F5F9;
-  --dock-surface-hover: #E2E8F0;
-  --dock-surface-overlay: #FFFFFF;
-  --dock-border: #CBD5E1;
-  --dock-border-soft: #E2E8F0;
-  --dock-border-active: #1D4ED8;
-  --dock-text: #0F172A;
-  --dock-text-secondary: #334155;
-  --dock-text-dim: #64748B;
-  --dock-text-muted: #64748B;
-  --dock-text-disabled: #94A3B8;
-  --input-placeholder: #64748B;
-  --dock-accent: #1D4ED8;
-  --dock-accent-hover: #2563EB;
-  --dock-accent-pressed: #1E40AF;
-  --dock-accent-soft: rgba(29, 78, 216, 0.08);
-  --dock-accent-soft-border: rgba(29, 78, 216, 0.2);
-  --dock-green: #15803D;
-  --dock-green-button: #16A34A;
-  --dock-green-pressed: #16A34A;
-  --dock-green-soft: rgba(34, 197, 94, 0.08);
-  --dock-green-soft-border: rgba(34, 197, 94, 0.2);
-  --dock-red: #B91C1C;
-  --dock-red-hover: #991B1B;
-  --dock-red-soft: rgba(239, 68, 68, 0.06);
-  --dock-red-soft-border: rgba(239, 68, 68, 0.2);
-  --dock-red-text: #B91C1C;
-  --dock-yellow: #B45309;
-  --dock-yellow-soft: rgba(245, 158, 11, 0.08);
-  --dock-input-bg: #FFFFFF;
-  --dock-input-border: #CBD5E1;
+  --dock-bg: #F5F1EA;
+  --dock-surface: #FFFDF9;
+  --dock-surface-alt: #EEE7DE;
+  --dock-surface-hover: #E5D9CE;
+  --dock-surface-overlay: #FFFDF9;
+  --dock-border: #D7C8BA;
+  --dock-border-soft: #E5D9CE;
+  --dock-border-active: #A95335;
+  --dock-text: #241D18;
+  --dock-text-secondary: #5D4E44;
+  --dock-text-dim: #88766A;
+  --dock-text-muted: #88766A;
+  --dock-text-disabled: #B7A89C;
+  --input-placeholder: #88766A;
+  --dock-accent: #A95335;
+  --dock-accent-hover: #BB6747;
+  --dock-accent-pressed: #883D29;
+  --dock-accent-soft: rgba(169, 83, 53, 0.1);
+  --dock-accent-soft-border: rgba(169, 83, 53, 0.24);
+  --dock-green: #4E8569;
+  --dock-green-button: #5E9D7D;
+  --dock-green-pressed: #4E8569;
+  --dock-green-soft: rgba(78, 133, 105, 0.1);
+  --dock-green-soft-border: rgba(78, 133, 105, 0.22);
+  --dock-red: #B64F48;
+  --dock-red-hover: #9B403A;
+  --dock-red-soft: rgba(182, 79, 72, 0.08);
+  --dock-red-soft-border: rgba(182, 79, 72, 0.2);
+  --dock-red-text: #9B403A;
+  --dock-yellow: #A6762F;
+  --dock-yellow-soft: rgba(166, 118, 47, 0.1);
+  --dock-input-bg: #FFFDF9;
+  --dock-input-border: #D7C8BA;
 }
 
 .dock-status-bar__left,
@@ -509,4 +509,107 @@ html.mv-theme-light #dock-root,
 
 .dock-root.dock-root--glass .dock-console-panel--deck {
   background: var(--dock-surface-overlay);
+}
+
+/* ── Warm editorial finish ────────────────────────────────────────────────
+   Keep the Dock compact and operational, but give its shared chrome the same
+   copper/ink language as the admin console. These final rules intentionally
+   use the token values so dark and light themes stay in sync. */
+.dock-root {
+  background-image:
+    radial-gradient(circle at 88% -12%, color-mix(in srgb, var(--dock-accent) 12%, transparent), transparent 28%),
+    linear-gradient(155deg, color-mix(in srgb, var(--dock-accent) 7%, var(--dock-bg)), var(--dock-bg) 42%, var(--dock-bg-secondary));
+}
+
+.dock-root :where(
+  .dock-shell-header,
+  .dock-status-bar,
+  .dock-tabs,
+  .dock-worship-subtab-bar,
+  .dock-bottom-nav,
+  .dock-vertical-nav
+) {
+  border-color: var(--dock-border) !important;
+  background: var(--dock-surface) !important;
+}
+
+.dock-root .dock-shell-header {
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface)), var(--dock-surface) 58%) !important;
+}
+
+.dock-root :where(.dock-shell-titleline__section, .dock-tab, .dock-worship-subtab, .dock-bottom-nav__item) {
+  font-family: var(--dock-font-heading);
+}
+
+.dock-root .dock-tab--active {
+  color: var(--dock-accent-hover) !important;
+}
+
+.dock-root .dock-tab--active::after {
+  height: 3px;
+  background: linear-gradient(90deg, var(--dock-accent), var(--dock-yellow)) !important;
+}
+
+.dock-root :where(.dock-card, .dock-lyric-card, .dock-console-panel, .dock-settings-menu) {
+  border-color: var(--dock-border-soft) !important;
+  border-radius: 10px;
+}
+
+.dock-root .dock-bottom-nav__item {
+  border-color: var(--dock-border-soft) !important;
+  background: color-mix(in srgb, var(--dock-surface-alt) 88%, var(--dock-surface)) !important;
+  color: var(--dock-text-dim) !important;
+}
+
+.dock-root .dock-bottom-nav__item:hover,
+.dock-root .dock-bottom-nav__item--active {
+  border-color: color-mix(in srgb, var(--dock-accent) 62%, var(--dock-border)) !important;
+}
+
+.dock-root .dock-bottom-nav__item--active {
+  background: color-mix(in srgb, var(--dock-accent) 78%, var(--dock-surface)) !important;
+  color: var(--dock-text) !important;
+}
+
+.dock-root :where(.dock-input, .dock-select) {
+  border-color: var(--dock-input-border) !important;
+  background: var(--dock-input-bg) !important;
+}
+
+.dock-root :where(.dock-input:focus, .dock-select:focus) {
+  border-color: var(--dock-accent) !important;
+  box-shadow: 0 0 0 2px var(--dock-accent-soft) !important;
+}
+
+:root.light .dock-root {
+  background-image:
+    radial-gradient(circle at 88% -12%, rgba(169, 83, 53, 0.10), transparent 28%),
+    linear-gradient(155deg, #fbf7f1, var(--dock-bg) 48%, #eee5db);
+}
+
+:root.light .dock-root :where(
+  .dock-shell-header,
+  .dock-status-bar,
+  .dock-tabs,
+  .dock-worship-subtab-bar,
+  .dock-bottom-nav,
+  .dock-vertical-nav
+) {
+  border-color: var(--dock-border) !important;
+  background: var(--dock-surface) !important;
+}
+
+:root.light .dock-root .dock-shell-header {
+  background: linear-gradient(110deg, #fffaf4, var(--dock-surface) 62%) !important;
+}
+
+:root.light .dock-root .dock-bottom-nav__item {
+  background: var(--dock-surface-alt) !important;
+  color: var(--dock-text-dim) !important;
+}
+
+:root.light .dock-root .dock-bottom-nav__item--active {
+  background: var(--dock-accent) !important;
+  color: #fffaf4 !important;
 }

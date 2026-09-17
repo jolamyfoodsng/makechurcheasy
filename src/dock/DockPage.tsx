@@ -45,7 +45,8 @@ import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
-import { getDockPlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
+import DockPresentationLinkModal from "./components/DockPresentationLinkModal";
+import { getDockPlan, isDockFreePlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { FREE_DOCK_OBS_MUTATION_MESSAGE } from "./dockMutationPolicy";
 import { LOCAL_DEV_PLAN_OVERRIDE_EVENT } from "../services/localDevPlanOverride";
 import { getUserScopedKey } from "../services/userScopedStorage";
@@ -254,7 +255,7 @@ function DockPageContent({
     requestedPresentationOutputTarget,
     dockPlan,
   );
-  const isFreePlan = dockPlan === "free";
+  const isFreePlan = isDockFreePlan();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   // Synchronous config reader (reads from cache, falls back to defaults)
   const cfg = readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG;
@@ -312,6 +313,7 @@ function DockPageContent({
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const [showFreePlanNotice, setShowFreePlanNotice] = useState(false);
+  const [showPresentationLinkModal, setShowPresentationLinkModal] = useState(false);
   const presentationPublishRequestRef = useRef(0);
   const presentationPublishTailRef = useRef(Promise.resolve());
   const hiddenTabsKey = hiddenTabs.join("|");
@@ -411,10 +413,28 @@ function DockPageContent({
   }, [isFreePlan]);
 
   useEffect(() => {
+    if (!isFreePlan || !presentationLinkMode) return;
+
+    const modalKey = getUserScopedKey("ocs-dock-free-presentation-modal-shown-v1");
+    try {
+      if (localStorage.getItem(modalKey)) return;
+      localStorage.setItem(modalKey, "1");
+    } catch {
+      // Storage unavailable
+    }
+    setShowPresentationLinkModal(true);
+  }, [isFreePlan, presentationLinkMode]);
+
+  useEffect(() => {
     registerUpgradeModal((msg) => setUpgradeModalMsg(msg));
     startPlanRefresh();
 
-    const syncPlan = () => setDockPlan(getDockPlan());
+    const syncPlan = () => {
+      setDockPlan(getDockPlan());
+      if (isDockFreePlan() && dockObsClient.isConnected) {
+        void dockObsClient.clearMCESourcesForFreePlan();
+      }
+    };
     const unsubscribePlan = dockClient.onState((msg) => {
       if (msg.type === "state:plan-update") syncPlan();
     });
@@ -768,6 +788,10 @@ function DockPageContent({
       if (status === "connected") {
         // Stop auto-reconnect — we're connected
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
+
+        if (isDockFreePlan()) {
+          void dockObsClient.clearMCESourcesForFreePlan();
+        }
 
         dockObsClient.recoverLiveState().then((recovered) => {
           setStaged((current) => {
@@ -1858,7 +1882,9 @@ function DockPageContent({
 
 
         <main id="dock-main-content" tabIndex={-1} className="dock-content">
-          {isFreePlan && presentationLinkMode && <DockPresentationLinkCard />}
+          {isFreePlan && presentationLinkMode && (
+            <DockPresentationLinkCard onOpenHelp={() => setShowPresentationLinkModal(true)} />
+          )}
           <div className="dock-content-main">
             <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
               {mountedDockTabs.has("planner") && (
@@ -2114,6 +2140,12 @@ function DockPageContent({
           setUpgradeModalMsg("");
         }}
         message={showFreePlanNotice ? FREE_DOCK_OBS_MUTATION_MESSAGE : upgradeModalMsg}
+      />
+
+      {/* ── Free Plan OBS Setup modal ── */}
+      <DockPresentationLinkModal
+        open={showPresentationLinkModal}
+        onClose={() => setShowPresentationLinkModal(false)}
       />
 
       {/* ── Language change confirmation modal ── */}

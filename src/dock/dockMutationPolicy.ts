@@ -6,7 +6,7 @@
  * or other OBS state on their behalf.
  */
 
-import { getDockPlan } from "./dockEntitlement";
+import { isDockFreePlan } from "./dockEntitlement";
 
 export const FREE_DOCK_OBS_MUTATION_MESSAGE =
   "You are using the Free plan. MakeChurchEasy will not create or update OBS scenes or sources, including MCE Presentation. Copy the presentation link below and add it once to OBS as a Browser Source. Bible, worship, Notes, Media, and other Dock updates will then appear through that same link. Upgrade to enable direct OBS control.";
@@ -19,7 +19,7 @@ export function isDockObsMutationRequest(requestType: string): boolean {
 }
 
 export function isFreeDockPlan(): boolean {
-  return getDockPlan() === "free";
+  return isDockFreePlan();
 }
 
 export function assertDockObsMutationAllowed(requestType: string): void {

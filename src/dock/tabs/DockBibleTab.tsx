@@ -74,11 +74,12 @@ import { resolveInitialDockBibleCompareEnabled } from "../dockBibleComparePrefer
 import {
   DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT,
   DOCK_BIBLE_PREFS_KEY,
+  updateDockBibleKeywordMatchPreference,
 } from "../dockBibleKeywordPreference";
 import { DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
-import { trackBiblePresent } from "../../services/tracking";
+import { trackBiblePresent, trackBibleSearch } from "../../services/tracking";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import {
   BOOK_CHAPTERS,
@@ -1450,6 +1451,11 @@ function DockBibleTab({
 
     window.addEventListener(DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT, handleKeywordMatchPreferenceChange);
     return () => window.removeEventListener(DOCK_BIBLE_KEYWORD_MATCH_CHANGED_EVENT, handleKeywordMatchPreferenceChange);
+  }, []);
+
+  const handleKeywordMatchDirectPushChange = useCallback((enabled: boolean) => {
+    setKeywordMatchPushDirectlyToObs(enabled);
+    updateDockBibleKeywordMatchPreference(enabled);
   }, []);
 
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentBibleSearches());
@@ -4845,6 +4851,7 @@ function DockBibleTab({
   const handlePickResult = useCallback(
     async (result: DockBibleSearchOption) => {
       setRecentSearches(pushRecentBibleSearch(result.label));
+      trackBibleSearch(activeBibleSearchTranslation);
       setSearchQuery("");
       setShowDropdown(false);
       setShowRecentSearches(false);
@@ -6863,6 +6870,17 @@ function DockBibleTab({
                     <div className="dock-bible-keyword-modal__text">
                       {renderHighlightedKeywordText(keywordActionResult.text, keywordActionResult.query)}
                     </div>
+                    <label className="dock-bible-keyword-modal__direct-push">
+                      <input
+                        type="checkbox"
+                        checked={keywordMatchPushDirectlyToObs}
+                        onChange={(event) => handleKeywordMatchDirectPushChange(event.target.checked)}
+                      />
+                      <span className="dock-bible-keyword-modal__direct-push-copy">
+                        <span>{t("bible.keywordMatchShowImmediately", "Show matching verses immediately next time")}</span>
+                        <small>{t("bible.keywordMatchShowImmediatelyDesc", "Leave unchecked to show this confirmation each time.")}</small>
+                      </span>
+                    </label>
                   </div>
                   <div className="dock-dialog__footer dock-bible-keyword-modal__footer">
                     <button

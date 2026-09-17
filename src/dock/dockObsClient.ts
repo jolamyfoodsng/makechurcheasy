@@ -575,7 +575,7 @@ function matchesThemeHints(theme: ThemeLike, hints: string[]): boolean {
 // Client
 // ---------------------------------------------------------------------------
 
-class DockObsClient {
+export class DockObsClient {
   private static readonly NO_CLONE_UNDERLAY_CACHE_KEY = "__no-clone__";
   private obs = new OBSWebSocket();
   private _status: DockObsStatus = "disconnected";
@@ -1205,6 +1205,10 @@ class DockObsClient {
 
         this.startProgramBackgroundWatcher();
 
+        if (isFreeDockPlan()) {
+          void this.clearMCESourcesForFreePlan();
+        }
+
         const startupPromise = (async () => {
           // A dock reload must not reorder, rebuild, or otherwise mutate the
           // MCE Presentation scene. Scene creation and source wiring now happen
@@ -1362,11 +1366,13 @@ class DockObsClient {
   async call(
     requestType: string,
     requestData?: Record<string, unknown>,
-    options: { priority?: "high" | "normal" | "low" } = {},
+    options: { priority?: "high" | "normal" | "low"; bypassFreeMutationGate?: boolean } = {},
   ): Promise<unknown> {
     // Check before auto-reconnecting. A Free-plan Dock must not even open an
     // OBS mutation path that could later create or update a scene/source.
-    assertDockObsMutationAllowed(requestType);
+    if (!options.bypassFreeMutationGate) {
+      assertDockObsMutationAllowed(requestType);
+    }
 
     // Auto-reconnect if not connected
     if (!this.isConnected) {
@@ -1386,7 +1392,9 @@ class DockObsClient {
           // Re-check immediately before the WebSocket write in case the
           // account was downgraded while this request was reconnecting or
           // waiting in the OBS queue.
-          assertDockObsMutationAllowed(requestType);
+          if (!options.bypassFreeMutationGate) {
+            assertDockObsMutationAllowed(requestType);
+          }
           return this.obs.call(requestType as never, requestData as never);
         },
         {
@@ -4129,7 +4137,6 @@ class DockObsClient {
     }
 
     // Clean up MCE-prefixed sources from remaining user scenes
-    const MCE_SOURCE_PREFIXES = ["MCE ", "MCE_", "OCS "];
     let cleanedSources = 0;
 
     for (const scene of userScenes) {
@@ -4140,8 +4147,7 @@ class DockObsClient {
         const items = resp.sceneItems ?? [];
         for (const item of items) {
           const src = (item.sourceName ?? "").trim();
-          const isMCE = MCE_SOURCE_PREFIXES.some((p) => src.startsWith(p));
-          if (!isMCE) continue;
+          if (!DockObsClient.isMCESource(src)) continue;
           try {
             await this.call("RemoveSceneItem", {
               sceneName: scene,
@@ -4154,6 +4160,102 @@ class DockObsClient {
     }
 
     return { deletedScenes, cleanedSources };
+  }
+
+  /**
+   * Determine whether an OBS source or input was created by MakeChurchEasy.
+   * Matches MCE, MCA, and OCS naming conventions. Leaves user sources intact.
+   */
+  public static isMCESource(name: string): boolean {
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.startsWith("mce ") ||
+      lower.startsWith("mce_") ||
+      lower.startsWith("mca ") ||
+      lower.startsWith("mca_") ||
+      lower.startsWith("ocs ") ||
+      lower.startsWith("ocs_") ||
+      trimmed === "⚡ Quick Merge" ||
+      lower.startsWith("mv: ") ||
+      lower === "mce presentation" ||
+      lower === "mce lower thirds" ||
+      lower === "mce ticker" ||
+      lower === "mce stage display"
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private _isCleaningMceSources = false;
+
+  /**
+   * Remove all MCE/MCA-created sources from OBS for free plan users (after free trial).
+   * Leaves user scenes, MCE scenes, and all non-MCE sources completely intact.
+   */
+  async clearMCESourcesForFreePlan(): Promise<{ cleanedSources: number }> {
+    if (!this.isConnected || this._isCleaningMceSources) {
+      return { cleanedSources: 0 };
+    }
+    this._isCleaningMceSources = true;
+    let cleanedSources = 0;
+
+    try {
+      // 1. Remove all MCE-created inputs globally (removes them from all scenes and audio mixer)
+      const inputListResp = await this.call("GetInputList", undefined, { bypassFreeMutationGate: true }).catch(() => null) as {
+        inputs?: Array<{ inputName: string; inputKind: string }>;
+      } | null;
+
+      const inputs = inputListResp?.inputs ?? [];
+      for (const input of inputs) {
+        if (DockObsClient.isMCESource(input.inputName)) {
+          try {
+            await this.call("RemoveInput", { inputName: input.inputName }, { bypassFreeMutationGate: true });
+            cleanedSources++;
+          } catch (err) {
+            console.warn(`[DockOBS] Failed to remove MCE input "${input.inputName}":`, err);
+          }
+        }
+      }
+
+      // 2. Iterate through all scenes (including MCE Presentation, user scenes, etc.)
+      // and remove any scene items whose sourceName matches MCE source prefixes.
+      // NOTE: Scenes themselves are kept intact, only MCE sources within them are removed.
+      const sceneNames = await this.getObsSceneNames().catch(() => []);
+      for (const scene of sceneNames) {
+        try {
+          const resp = await this.call("GetSceneItemList", { sceneName: scene }, { bypassFreeMutationGate: true }).catch(() => null) as {
+            sceneItems?: Array<{ sceneItemId: number; sourceName?: string }>;
+          } | null;
+          const items = resp?.sceneItems ?? [];
+          for (const item of items) {
+            const src = (item.sourceName ?? "").trim();
+            if (DockObsClient.isMCESource(src)) {
+              try {
+                await this.call(
+                  "RemoveSceneItem",
+                  { sceneName: scene, sceneItemId: item.sceneItemId },
+                  { bypassFreeMutationGate: true }
+                );
+                cleanedSources++;
+              } catch { /* ignore individual item failure */ }
+            }
+          }
+        } catch { /* ignore scene-level failures */ }
+      }
+    } catch (err) {
+      console.warn("[DockOBS] Failed clearing MCE sources for free plan:", err);
+    } finally {
+      this._isCleaningMceSources = false;
+    }
+
+    if (cleanedSources > 0) {
+      console.log(`[DockOBS] Free plan cleanup: removed ${cleanedSources} MCE source(s) from OBS.`);
+    }
+
+    return { cleanedSources };
   }
 
   /**
@@ -10067,6 +10169,61 @@ class DockObsClient {
   }
 
   /**
+   * Push one audio file as a native OBS source. Local OBS sessions use the
+   * ffmpeg source so the track is available immediately; remote sessions use
+   * the existing VLC playlist transport so the remote OBS host can read the
+   * served upload URL.
+   */
+  async pushAudio(
+    filePath: string,
+    _fileName: string,
+    options: Pick<DockMediaSendOptions, "looping" | "muted"> = {},
+  ): Promise<void> {
+    const sourceName = "MCE Media - Audio";
+    if (this.isRemotePresentationSession()) {
+      await this.pushVlcPlaylist({
+        sourceName,
+        playlist: [filePath],
+        loop: options.looping ?? false,
+        muted: options.muted ?? false,
+      });
+      return;
+    }
+
+    await this.focusMcePresentationModule("media").catch(() => { });
+    const target = await this.getPresentationTargetScene("media");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("No active scene found in OBS");
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+    await this._ensureSceneInputSource(
+      sceneName,
+      sourceName,
+      "ffmpeg_source",
+      {
+        local_file: filePath,
+        looping: options.looping ?? false,
+        is_local_file: true,
+        restart_on_activate: true,
+      },
+      true,
+    );
+
+    try {
+      await this.call("SetInputMute", {
+        inputName: sourceName,
+        inputMuted: options.muted ?? false,
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+    } catch { /* source playback controls vary slightly by OBS version */ }
+
+    await this.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
+  }
+
+  /**
    * Push a media file to OBS using native sources (ffmpeg_source for video,
    * image_source for images) instead of a browser source.
    * @param filePath  Absolute local file path (e.g. ~/Documents/MakeChurchEasy/uploads/video.mp4)
@@ -10089,6 +10246,13 @@ class DockObsClient {
       ? pathExtension
       : nameExtension;
     const isImage = imageExtensions.includes(ext);
+    const audioExtensions = ["mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus"];
+    const isAudio = audioExtensions.includes(ext);
+
+    if (isAudio) {
+      await this.pushAudio(filePath, fileName, options);
+      return;
+    }
 
     const mediaVideoSource = "MCE Media - Video";
     const mediaImageSource = "MCE Media - Image";
@@ -10576,6 +10740,60 @@ class DockObsClient {
     }
   }
 
+  async addAudioSourceToScene(options: {
+    sceneName: string;
+    sourceName: string;
+    filePath: string;
+    looping?: boolean;
+    muted?: boolean;
+  }): Promise<void> {
+    const sceneName = options.sceneName.trim();
+    const sourceName = options.sourceName.trim();
+    const filePath = options.filePath.trim();
+
+    if (!sceneName) throw new Error("Scene name is required");
+    if (!sourceName) throw new Error("Source name is required");
+    if (!filePath) throw new Error("Audio file path is required");
+
+    if (!(await this.hasObsScene(sceneName))) {
+      await this.call("CreateScene", { sceneName });
+    }
+
+    await this._ensureNativeMediaSource(
+      sceneName,
+      sourceName,
+      "ffmpeg_source",
+      {
+        local_file: filePath,
+        looping: options.looping ?? false,
+        is_local_file: true,
+        restart_on_activate: true,
+        close_when_inactive: false,
+        clear_on_media_end: false,
+      },
+      true,
+    );
+
+    try {
+      await this.call("SetInputMute", {
+        inputName: sourceName,
+        inputMuted: options.muted ?? false,
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+    } catch {
+      // Ignore playback-control failures for arbitrary user scenes.
+    }
+
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch {
+      // Ignore ticker ordering failures for arbitrary user scenes.
+    }
+  }
+
   /**
    * Stop a running image-slideshow rotation timer.
    */
@@ -10922,6 +11140,7 @@ class DockObsClient {
     // Hide all media sources in MCE Presentation
     await this.hideOverlaySource(scene, "MCE Media - Video").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image").catch(() => { });
+    await this.hideOverlaySource(scene, "MCE Media - Audio").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Remote").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Pattern").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image Audio").catch(() => { });

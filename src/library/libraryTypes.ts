@@ -8,8 +8,8 @@ export interface MediaItem {
   id: string;
   /** Display name, e.g. "Welcome_Loop.mp4" */
   name: string;
-  /** "image" | "video" */
-  type: "image" | "video";
+  /** "image" | "video" | "audio" */
+  type: "image" | "video" | "audio";
   /**
    * Overlay-server URL for preview/playback in the UI, e.g.
    * "http://127.0.0.1:45678/uploads/Welcome_Loop.mp4"
@@ -33,7 +33,7 @@ export interface MediaItem {
   width?: number;
   /** Optional native pixel height */
   height?: number;
-  /** Duration in seconds (videos only) */
+  /** Duration in seconds (videos and audio) */
   durationSec?: number;
   /** File size in bytes */
   fileSize?: number;

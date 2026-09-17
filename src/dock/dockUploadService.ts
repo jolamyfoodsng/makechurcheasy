@@ -66,6 +66,22 @@ export function getVideoDuration(src: string): Promise<number> {
   });
 }
 
+export function getAudioDuration(src: string): Promise<number> {
+  return new Promise((resolve) => {
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
+      audio.src = "";
+    };
+    audio.onerror = () => {
+      resolve(0);
+      audio.src = "";
+    };
+    audio.src = src;
+  });
+}
+
 export function generateVideoThumbnail(src: string): Promise<string> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
@@ -252,14 +268,14 @@ export async function uploadFileToDock(
   console.log("[UPLOAD] uploadFileToDock: start", { name: file.name, size: file.size, type: file.type });
   if (!isSupportedMediaFile(file)) {
     console.warn("[UPLOAD] uploadFileToDock: unsupported file type", file.type);
-    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
+    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image, video, and audio files are allowed.` };
   }
   // File.type is empty or incorrect for some native/Tauri picker results.
   // Resolve the kind from MIME first, then fall back to the file extension so
   // a video cannot be saved as an image and disappear from the Videos filter.
   const category = getMediaKind(file);
   if (!category) {
-    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
+    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image, video, and audio files are allowed.` };
   }
 
   const uploadStartedAt = Date.now();
@@ -277,9 +293,12 @@ export async function uploadFileToDock(
       console.log("[UPLOAD] Generating video thumbnail…");
       durationSec = await getVideoDuration(objectUrl);
       thumbnailUrl = await generateVideoThumbnail(objectUrl);
-    } else {
+    } else if (category === "image") {
       console.log("[UPLOAD] Generating image thumbnail…");
       thumbnailUrl = await generateImageThumbnail(objectUrl);
+    } else {
+      console.log("[UPLOAD] Reading audio duration…");
+      durationSec = await getAudioDuration(objectUrl);
     }
     console.log("[UPLOAD] Thumbnail done:", { hasThumb: !!thumbnailUrl, durationSec });
   } finally {

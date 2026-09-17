@@ -138,6 +138,9 @@ export async function publishWorshipToPresentation(payload: {
 }
 
 export async function publishMediaToPresentation(media: MediaItem): Promise<void> {
+  if (media.type === "audio") {
+    throw new Error("Audio playback requires a direct OBS connection.");
+  }
   const url = getRemoteViewerAssetUrl(media);
   await publishItem({
     id: `media-${media.id}`,
