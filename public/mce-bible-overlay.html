@@ -88,19 +88,21 @@
       --font-size: 48px;
       --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
-      --font-weight: 400;
+      --font-weight: 900;
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
+      --word-spacing: 0px;
+      --paint-order: stroke fill;
       --text-align: center;
-      --text-shadow: none;
-      --outline-width: 0px;
-      --outline-color: transparent;
-      --ref-font-size: 24px;
+      --text-shadow: 4px 5px 2px rgba(0, 0, 0, 0.95);
+      --outline-width: 4px;
+      --outline-color: #000000;
+      --ref-font-size: 34px;
       --ref-font-family: var(--font-family);
-      --ref-font-weight: 400;
+      --ref-font-weight: 900;
       --ref-font-style: normal;
-      --ref-font-color: #ffffff;
+      --ref-font-color: var(--font-color);
       --ref-text-transform: none;
       --ref-letter-spacing: 0px;
       --ref-opacity: 1;
@@ -233,6 +235,7 @@
     }
 
     #verse-text {
+      order: 1;
       width: 100%;
       max-width: 100%;
       min-width: 0;
@@ -243,8 +246,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -260,6 +265,7 @@
       position: relative;
       width: 100%;
       min-width: 0;
+      box-sizing: border-box;
     }
 
     #verse-text .verse-text__number,
@@ -269,13 +275,15 @@
       position: absolute;
       left: 0;
       top: 0;
-      width: 1.5em;
+      min-width: 1.2em;
+      width: auto;
       font-size: 0.5em;
       line-height: 1.15;
       font-weight: 700;
       text-align: right;
       opacity: 0.82;
       -webkit-text-stroke: 0 transparent;
+      white-space: nowrap;
     }
 
     #verse-text .verse-text__body,
@@ -314,6 +322,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       order: 2;
     }
 
@@ -488,8 +499,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -514,6 +527,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #compare-layout.is-line-by-line .compare-column__reference {
@@ -897,6 +913,7 @@
     }
 
     #lt-verse-text {
+      order: 1;
       width: 100%;
       max-width: var(--lt-text-max-width, 100%);
       min-width: 0;
@@ -908,8 +925,11 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
       word-wrap: break-word;
@@ -982,8 +1002,18 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       order: 2;
       transform-origin: center;
+    }
+
+    /* Match ref-text width to verse-text in horizontal edge modes */
+    #lt-bar.lt-edge-bottom #ref-text,
+    #lt-bar.lt-edge-top #ref-text {
+      width: 100%;
+      max-width: none;
     }
 
     #lt-bar #ref-text:empty {
@@ -1118,13 +1148,13 @@
       let hasReceivedLiveOverlayUpdate = false;
 
       const SIZE_PRESETS = {
-        'smallest': { fontSize: 24, refFontSize: 10, lineHeight: 1.25 },
-        'smaller': { fontSize: 28, refFontSize: 10, lineHeight: 1.26 },
-        'small': { fontSize: 32, refFontSize: 11, lineHeight: 1.27 },
-        'medium': { fontSize: 36, refFontSize: 12, lineHeight: 1.28 },
-        'big': { fontSize: 48, refFontSize: 32, lineHeight: 1.3 },
-        'bigger': { fontSize: 60, refFontSize: 40, lineHeight: 1.32 },
-        'biggest': { fontSize: 72, refFontSize: 48, lineHeight: 1.34 },
+        'smallest': { fontSize: 24, refFontSize: 18, lineHeight: 1.25 },
+        'smaller': { fontSize: 28, refFontSize: 20, lineHeight: 1.26 },
+        'small': { fontSize: 32, refFontSize: 24, lineHeight: 1.27 },
+        'medium': { fontSize: 36, refFontSize: 26, lineHeight: 1.28 },
+        'big': { fontSize: 48, refFontSize: 34, lineHeight: 1.3 },
+        'bigger': { fontSize: 60, refFontSize: 42, lineHeight: 1.32 },
+        'biggest': { fontSize: 72, refFontSize: 50, lineHeight: 1.34 },
       };
       const WIDTH_PRESETS = {
         'sm': { maxWidth: 1000, hMargin: 460 },
@@ -1172,14 +1202,16 @@
           const body = line.querySelector('.verse-text__body');
           if (!marker || !body) return;
 
+          line.style.paddingLeft = '0px';
+          marker.style.left = '0px';
+          marker.style.top = '0px';
+
           const range = document.createRange();
           range.selectNodeContents(body);
           const firstTextRect = Array.from(range.getClientRects())
             .find((rect) => rect.width > 0 && rect.height > 0);
           if (!firstTextRect) return;
 
-          marker.style.left = '0px';
-          marker.style.top = '0px';
           const lineRect = line.getBoundingClientRect();
           const markerRect = marker.getBoundingClientRect();
           const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
@@ -1188,9 +1220,17 @@
           const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
           const firstTextHeight = firstTextRect.height / scaleY;
 
-          // Pin the marker to the actual first rendered letter, not to the
-          // full-width text container. This survives auto-fit and wrapping.
-          marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          // Ensure the marker never extends to the left of the container boundary.
+          // If text is left-aligned or close to the left edge, indent the line so
+          // the number marker sits cleanly inside the box right beside the text.
+          const neededLeftSpace = markerWidth + gap;
+          if (firstTextLeft < neededLeftSpace) {
+            const shift = Math.ceil(neededLeftSpace - firstTextLeft);
+            line.style.paddingLeft = `${shift}px`;
+            marker.style.left = '0px';
+          } else {
+            marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          }
           marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
         });
       }
@@ -1364,7 +1404,7 @@
       }
       function mapCompareFontWeight(w) {
         if (!w) return '';
-        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '';
       }
 
@@ -1410,12 +1450,13 @@
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
         if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
         var lower = value.toLowerCase();
-        if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
-          value = '"Charis SIL","Noto Sans",' + value;
-        } else {
-          if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
-          if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        if (lower.indexOf('cmg sans') !== -1) {
+          if (lower.indexOf('cmg sans black') === -1) {
+            value = '"CMG Sans Black",' + value;
+          }
         }
+        if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+        if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
         return value;
       }
 
@@ -1542,11 +1583,14 @@
           return direct.textContent;
         }
         const styles = document.querySelectorAll('style');
+        let matched = '';
         for (const styleEl of styles) {
           const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
-          if (cssText && cssText.includes('--overlay-data')) return cssText;
+          if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+            matched += '\n' + cssText;
+          }
         }
-        return '';
+        return matched;
       }
 
       function extractCssCustomPropertyValue(cssText, name) {
@@ -1912,7 +1956,7 @@
         // Compare settings can come from older preferences with an 18px
         // value. Never let that legacy value become the auto-fit floor.
         const base = Math.max(28, Math.round(Number(baseSize) || 36));
-        return Math.min(base, 28);
+        return Math.max(24, Math.round(base * 0.55));
       }
 
       function getViewportSize() {
@@ -2105,15 +2149,23 @@
           return;
         }
 
+        const currentFitKey = getSingleFitKey();
+        if (fullscreenFitKey !== currentFitKey) {
+          stableFullscreenTextSize = null;
+          stableFullscreenReferenceSize = null;
+        }
+
         const textFloor = resolveAutoFontFloor(baseFontSize, 28);
-        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
         let textSize = stableFullscreenTextSize === null
           ? baseTextSize
           : Math.max(textFloor, Math.min(baseTextSize, stableFullscreenTextSize));
+        const refRatio = baseFontSize > 0
+          ? Math.max(0.5, Math.min(0.85, baseRefFontSize / baseFontSize))
+          : 0.7;
         let referenceSize = stableFullscreenReferenceSize === null
-          ? Math.max(10, Math.round(baseRefFontSize))
-          : Math.max(10, stableFullscreenReferenceSize);
+          ? Math.max(14, Math.round(textSize * refRatio))
+          : Math.max(14, stableFullscreenReferenceSize);
         const frameRect = getFrameContentRect(overlay);
         const targetWidth = Math.max(320, frameRect.width);
         const targetHeight = Math.max(220, frameRect.height);
@@ -2125,14 +2177,15 @@
         const overflowing = () => isContentOutsideFrame(
           [verseText, reference],
           overlay,
-        ) || isOverflowing(verseContainer, targetWidth, targetHeight);
+        ) || isOverflowing(verseText, targetWidth, targetHeight)
+          || isOverflowing(verseContainer, targetWidth, targetHeight);
 
         resetSingleAutoFitStyles();
         apply();
         let guard = 0;
         while (overflowing() && textSize > textFloor && guard < 240) {
           textSize -= 1;
-          referenceSize = Math.max(10, Math.round(textSize * ratio));
+          referenceSize = Math.max(14, Math.round(textSize * refRatio));
           apply();
           guard += 1;
         }
@@ -2196,6 +2249,13 @@
           return;
         }
 
+        const currentFitKey = getCompareFitKey();
+        if (compareFitKey !== currentFitKey) {
+          stableCompareTextSize = null;
+          stableCompareReferenceSize = null;
+          stableCompareTranslationSize = null;
+        }
+
         const textFloor = resolveCompareAutoFontFloor(baseCompareFontSize);
         const referenceRatio = baseCompareFontSize > 0
           ? Math.max(0.35, baseCompareRefFontSize / baseCompareFontSize)
@@ -2209,10 +2269,10 @@
           : Math.max(textFloor, Math.min(baseTextSize, stableCompareTextSize));
         let referenceSize = stableCompareReferenceSize === null
           ? Math.max(10, Math.round(baseCompareRefFontSize))
-          : Math.max(10, stableCompareReferenceSize);
+          : Math.max(10, Math.min(Math.round(baseCompareRefFontSize), stableCompareReferenceSize));
         let translationSize = stableCompareTranslationSize === null
           ? Math.max(10, Math.round(baseCompareFontSize * translationRatio))
-          : Math.max(10, stableCompareTranslationSize);
+          : Math.max(10, Math.min(Math.round(baseCompareFontSize * translationRatio), stableCompareTranslationSize));
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
         const safeArea = resolveSafeArea();
         const targetWidth = Math.max(420, viewportWidth - safeArea * 2);
@@ -2301,17 +2361,25 @@
           return;
         }
 
+        const currentFitKey = getLowerThirdFitKey();
+        if (lowerThirdFitKey !== currentFitKey) {
+          stableLowerThirdTextSize = null;
+          stableLowerThirdReferenceSize = null;
+        }
+
         // Keep lower-third scripture readable. The card itself is allowed to
         // clip overflowing content, so the floor must be explicit rather than
         // inferred from the clipped scroll height.
         const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
-        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
         let textSize = stableLowerThirdTextSize === null
           ? baseTextSize
           : Math.max(textFloor, Math.min(baseTextSize, stableLowerThirdTextSize));
+        const ltRefRatio = baseFontSize > 0
+          ? Math.max(0.45, Math.min(0.85, baseRefFontSize / baseFontSize))
+          : 0.68;
         let referenceSize = stableLowerThirdReferenceSize === null
-          ? Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize))
+          ? Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(textSize * ltRefRatio))
           : Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, stableLowerThirdReferenceSize);
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
         const targetWidth = Math.max(280, viewportWidth);
@@ -2343,7 +2411,7 @@
           textSize -= 1;
           referenceSize = Math.max(
             LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
-            Math.round(textSize * ratio),
+            Math.round(textSize * ltRefRatio),
           );
           apply();
           guard += 1;
@@ -2547,25 +2615,46 @@
       /* ═══ THEME: Shared base ═══ */
       function applyThemeBase(s) {
         ensureCmgSansFont();
-        const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
+        const bs = Number(s.fontSize || 48); baseFontSize = bs;
+        const explicitRef = Number(s.refFontSize);
+        baseRefFontSize = (explicitRef && explicitRef > 0 && explicitRef < bs)
+          ? explicitRef
+          : Math.max(14, Math.round(bs * 0.7));
         autoFontScaleEnabled = true;
         root.style.setProperty('--font-size', baseFontSize + 'px');
         root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
-        root.style.setProperty('--font-color', s.fontColor || '#ffffff');
-        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        const mainColor = s.fontColor || '#ffffff';
+        root.style.setProperty('--font-color', mainColor);
+        const verseWeight = mapFontWeight(s.fontWeight || 'black');
+        root.style.setProperty('--font-weight', verseWeight);
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
         root.style.setProperty('--content-align-self', mapFlexAlign(s.textAlign || 'center'));
-        root.style.setProperty('--text-shadow', s.textShadow || 'none');
-        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
-        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--text-shadow', s.textShadow || '4px 5px 2px rgba(0, 0, 0, 0.95)');
+        const outlineEnabled = s.textOutline !== false;
+        const outlineWidth = outlineEnabled ? (s.textOutlineWidth != null ? Number(s.textOutlineWidth) : 4) : 0;
+        const outlineColor = outlineEnabled ? (s.textOutlineColor || '#000000') : 'transparent';
+        root.style.setProperty('--outline-width', outlineWidth + 'px');
+        root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
         root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
-        root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
+
+        const rawRefWeight = s.refFontWeight;
+        const refWeight = (rawRefWeight && rawRefWeight !== 'normal' && rawRefWeight !== '400')
+          ? mapFontWeight(rawRefWeight)
+          : verseWeight;
+        root.style.setProperty('--ref-font-weight', refWeight);
         root.style.setProperty('--ref-font-style', 'normal');
-        root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
+
+        const FAINT_REF_HEXES = new Set([
+          '#aaaaaa', '#aeb9d1', '#c9d2e5', '#cccccc', '#e0e0e0', '#888888', '#cbd5e1', '#94a3b8', '#64748b'
+        ]);
+        const rawRefColor = String(s.refFontColor || '').trim().toLowerCase();
+        const effectiveRefFontColor = (!rawRefColor || FAINT_REF_HEXES.has(rawRefColor)) ? mainColor : (s.refFontColor || mainColor);
+        root.style.setProperty('--ref-font-color', effectiveRefFontColor);
         root.style.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
         root.style.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
         root.style.setProperty('--ref-opacity', String(s.refOpacity ?? 1));
@@ -2614,14 +2703,26 @@
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
-        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
-        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        const prevCompareFontSize = baseCompareFontSize;
+        const prevCompareRefFontSize = baseCompareRefFontSize;
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         // Compare-specific reference font size
-        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
-        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+        if (baseCompareFontSize !== prevCompareFontSize || baseCompareRefFontSize !== prevCompareRefFontSize) {
+          stableCompareTextSize = null;
+          stableCompareReferenceSize = null;
+          stableCompareTranslationSize = null;
+          compareFitKey = '';
+        }
         // Compare-specific line height
         const hasCompareLineHeight = s.compareLineHeightLeft != null && Number(s.compareLineHeightLeft) > 0;
         root.style.setProperty('--compare-line-height', hasCompareLineHeight ? String(Number(s.compareLineHeightLeft)) : String(Math.max(1.22, Number(s.lineHeight || 1.6) - 0.08)));
@@ -2712,6 +2813,25 @@
         if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
+        const prevCompareFontSize = baseCompareFontSize;
+        const prevCompareRefFontSize = baseCompareRefFontSize;
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
+        root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
+        root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
+        root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
+        if (baseCompareFontSize !== prevCompareFontSize || baseCompareRefFontSize !== prevCompareRefFontSize) {
+          stableCompareTextSize = null;
+          stableCompareReferenceSize = null;
+          stableCompareTranslationSize = null;
+          compareFitKey = '';
+        }
         const compareAlign = normalizeCompareTextAlign(s.compareTextAlignLeft, s.textAlign || 'center');
         root.style.setProperty('--compare-text-align', compareAlign);
         const compareReferenceAlign = compareTextAlignForReference(compareAlign);
@@ -2827,6 +2947,7 @@
         if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
         if (themeChanged) resetStableAutoFitSizes();
+        else if (force) resetStableAutoFitSizes();
         lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
@@ -3303,6 +3424,9 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (targetSource) lastTargetSource = targetSource;
+          const data = packet.data || packet.packet || packet.overlayData;
+          const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
+          if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -3310,7 +3434,6 @@
             setActiveLayer(packet.mode);
             return true;
           }
-          const data = packet.data || packet.packet || packet.overlayData;
           if (!data || typeof data !== 'object') return false;
           processOverlayUpdate(data);
           return true;

@@ -327,9 +327,9 @@ export function getMcePresentationVisibilityKeepSet(
 type DockOverlayMode = "fullscreen" | "lower-third";
 
 type PrimeBibleOverlayData = {
-  book: string;
-  chapter: number;
-  verse: number;
+  book?: string;
+  chapter?: number;
+  verse?: number;
   lineCount?: number;
   verseEnd?: number;
   verseRange?: string;
@@ -337,7 +337,7 @@ type PrimeBibleOverlayData = {
   referenceLabel?: string;
   displayReferenceLabel?: string;
   referenceBaseLabel?: string;
-  translation: string;
+  translation?: string;
   verseText?: string;
   overlayMode?: DockOverlayMode;
   bibleThemeSettings?: Record<string, unknown> | null;
@@ -366,11 +366,11 @@ type PrimeBibleOverlayData = {
 };
 
 type PrimeWorshipOverlayData = {
-  sectionText: string;
+  sectionText?: string;
   translationText?: string;
   translationOrder?: DockTranslationOrder;
-  sectionLabel: string;
-  songTitle: string;
+  sectionLabel?: string;
+  songTitle?: string;
   artist?: string;
   overlayMode?: DockOverlayMode;
   bibleThemeSettings?: Record<string, unknown> | null;
@@ -5709,7 +5709,8 @@ export class DockObsClient {
       type: "overlay-update",
       revision: Date.now(),
       ...(routedSource ? { targetSource: routedSource } : {}),
-      data: { ...packet, revision: Date.now() },
+      data: { ...standalonePacket, revision: Date.now() },
+      css,
     });
   }
 
@@ -6305,13 +6306,13 @@ export class DockObsClient {
 
   private async primeBibleOverlayInternal(data: PrimeBibleOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
-    const verseRange = data.verseRange ?? String(data.verse);
-    const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
+    const verseRange = data.verseRange ?? (data.verse != null ? String(data.verse) : "");
+    const ref = data.referenceLabel ?? (data.book ? `${data.book} ${data.chapter ?? ""}:${verseRange}` : "");
     const backgroundOnly = Boolean(data.backgroundOnly);
     const primaryText = backgroundOnly ? "" : (data.verseText || ref);
     const referenceText = backgroundOnly
       ? ""
-      : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
+      : this.formatBibleReferenceDisplayText(ref, data.translation || "", data.displayReferenceLabel);
     const displayVerseRange = backgroundOnly ? "" : verseRange;
     const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
     const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
@@ -6493,7 +6494,7 @@ export class DockObsClient {
   private async primeWorshipOverlayInternal(data: PrimeWorshipOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const backgroundOnly = Boolean(data.backgroundOnly);
-    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const sectionText = backgroundOnly ? "" : (data.sectionText ?? "");
     const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
@@ -7847,7 +7848,7 @@ export class DockObsClient {
   async primeNotesOverlay(data: PrimeWorshipOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const backgroundOnly = Boolean(data.backgroundOnly);
-    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const sectionText = backgroundOnly ? "" : (data.sectionText ?? "");
     const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,

@@ -23,6 +23,7 @@ import {
   LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
 } from "./lowerThirdQuickSettings";
 import { readNativeDockSetting } from "../services/localDockSettings";
+import { readUserScopedStorage } from "../services/userScopedStorage";
 
 export type DockBibleOverlayMode = "fullscreen" | "lower-third";
 export type DockBibleReferenceFormat = "full" | "short" | "hidden";
@@ -67,7 +68,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function readScopedStorage(baseKey: string): string | null {
   const value = readNativeDockSetting<unknown>(baseKey);
-  return typeof value === "string" ? value : value ? JSON.stringify(value) : null;
+  if (value !== undefined && value !== null) {
+    return typeof value === "string" ? value : JSON.stringify(value);
+  }
+  return readUserScopedStorage(baseKey);
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -243,6 +247,37 @@ export function loadDockBibleOutputPreferences(): DockBibleOutputPreferences {
   return parsed && typeof parsed === "object" ? parsed as DockBibleOutputPreferences : {};
 }
 
+const FAINT_REF_HEXES = new Set([
+  "#AAAAAA", "#AEB9D1", "#C9D2E5", "#CCCCCC", "#E0E0E0", "#888888", "#CBD5E1", "#94A3B8", "#64748B"
+]);
+
+export function resolveEffectiveRefColor(refColor?: string, fontColor?: string): string {
+  const normalizedRef = (refColor || "").trim().toUpperCase();
+  const normalizedFont = (fontColor || "").trim().toUpperCase() || "#FFFFFF";
+  if (!normalizedRef || FAINT_REF_HEXES.has(normalizedRef)) {
+    return normalizedFont;
+  }
+  return normalizedRef;
+}
+
+export function resolveEffectiveRefFontSize(refFontSize?: number, fontSize?: number): number {
+  const baseSize = fontSize && fontSize > 0 ? fontSize : 48;
+  if (refFontSize && refFontSize > 0 && refFontSize < baseSize) {
+    return refFontSize;
+  }
+  return Math.max(14, Math.round(baseSize * 0.7));
+}
+
+export function resolveEffectiveRefFontWeight(
+  refFontWeight?: "normal" | "bold" | "light" | "extrabold" | "black",
+  fontWeight?: "normal" | "bold" | "light" | "extrabold" | "black",
+): "normal" | "bold" | "light" | "extrabold" | "black" {
+  if (refFontWeight && refFontWeight !== "normal") {
+    return refFontWeight;
+  }
+  return (fontWeight && fontWeight !== "normal") ? fontWeight : "black";
+}
+
 export function resolveThemeForBibleOverlayMode(
   theme: BibleTheme,
   mode: DockBibleOverlayMode,
@@ -260,30 +295,38 @@ export function extractFullscreenQuickThemeSettings(
   backgroundType?: DockFullscreenQuickThemeSettings["backgroundType"],
 ): DockFullscreenQuickThemeSettings {
   const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
+  const fontColor = settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor;
+  const fontSize = clampNumber(settings.fontSize, 28, 200);
+  const fontWeight = settings.fontWeight || "black";
   return {
     backgroundType,
-    fontSize: clampNumber(settings.fontSize, 28, 200),
+    fontSize,
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
-    refFontSize: clampNumber(settings.refFontSize, 10, 150),
-    refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
-    fontColor: settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor,
-    refFontColor: settings.refFontColor || settings.fontColor || DEFAULT_THEME_SETTINGS.refFontColor,
+    refFontSize: clampNumber(resolveEffectiveRefFontSize(settings.refFontSize, fontSize), 10, 150),
+    refFontWeight: resolveEffectiveRefFontWeight(settings.refFontWeight, fontWeight),
+    fontColor,
+    refFontColor: resolveEffectiveRefColor(settings.refFontColor, fontColor),
     refPosition: settings.refPosition || DEFAULT_THEME_SETTINGS.refPosition,
     refAnchor: settings.refAnchor || DEFAULT_THEME_SETTINGS.refAnchor || "normal",
     refTextTransform: settings.refTextTransform || DEFAULT_THEME_SETTINGS.refTextTransform,
     refLetterSpacing: clampNumber(settings.refLetterSpacing, 0, 10),
     refOpacity: clampNumber(settings.refOpacity, 0, 1),
     refTextAlign: settings.refTextAlign || DEFAULT_THEME_SETTINGS.refTextAlign,
-    refSpacing: clampNumber(settings.refSpacing, 0, 80),
+    refSpacing: clampNumber(settings.refSpacing, 0, 150),
     fullscreenShadeColor: settings.fullscreenShadeColor || DEFAULT_THEME_SETTINGS.fullscreenShadeColor,
     fullscreenShadeOpacity: clampNumber(settings.fullscreenShadeOpacity, 0, 1),
     textAlign: settings.textAlign || DEFAULT_THEME_SETTINGS.textAlign,
     lineHeight: clampNumber(settings.lineHeight, 1.05, 1.8),
+    letterSpacing: clampNumber(settings.letterSpacing ?? 0, -2, 20),
+    wordSpacing: clampNumber(settings.wordSpacing ?? 0, -5, 40),
     fontWeight: settings.fontWeight || DEFAULT_THEME_SETTINGS.fontWeight,
     fontStyle: settings.fontStyle || DEFAULT_THEME_SETTINGS.fontStyle,
     textTransform: settings.textTransform || DEFAULT_THEME_SETTINGS.textTransform,
     textShadow: settings.textShadow ?? DEFAULT_THEME_SETTINGS.textShadow,
+    textOutline: settings.textOutline ?? DEFAULT_THEME_SETTINGS.textOutline,
+    textOutlineColor: settings.textOutlineColor || DEFAULT_THEME_SETTINGS.textOutlineColor,
+    textOutlineWidth: clampNumber(settings.textOutlineWidth ?? DEFAULT_THEME_SETTINGS.textOutlineWidth ?? 4, 0, 12),
     animation: settings.animation ?? DEFAULT_THEME_SETTINGS.animation,
     animationDuration: settings.animationDuration ?? DEFAULT_THEME_SETTINGS.animationDuration,
     backgroundImage: settings.backgroundImage ?? "",
@@ -302,7 +345,7 @@ export function extractFullscreenQuickThemeSettings(
     lowerThirdSize: settings.lowerThirdSize || DEFAULT_THEME_SETTINGS.lowerThirdSize,
     lowerThirdWidthPreset: settings.lowerThirdWidthPreset || DEFAULT_THEME_SETTINGS.lowerThirdWidthPreset,
     lowerThirdOffsetX: clampNumber(settings.lowerThirdOffsetX ?? 0, -500, 500),
-    backgroundPattern: settings.backgroundPattern ?? "",
+    backgroundPattern: settings.backgroundPattern ?? DEFAULT_THEME_SETTINGS.backgroundPattern ?? "",
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
     lowerThirdEdge: sanitizeLowerThirdEdge(settings.lowerThirdEdge),
     lowerThirdCardPadding: sanitizeCssPadding(settings.lowerThirdCardPadding),
@@ -326,10 +369,11 @@ export function buildDefaultLowerThirdQuickThemeSettings(
 
   return {
     ...base,
-    fontSize: sizePreset.fontSize,
-    refFontSize: sizePreset.refFontSize,
+    fontSize: 64,
+    refFontSize: 42,
+    textAlign: "left",
     lineHeight: sizePreset.lineHeight,
-    refSpacing: sizePreset.refSpacing,
+    refSpacing: 14,
     lowerThirdBarMaxHeight: sizePreset.maxHeight,
     referenceBackgroundEnabled: false,
     lowerThirdWidthPreset:
@@ -350,29 +394,43 @@ function normalizeQuickThemeSettings(
   const refFontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14;
   const refFontSizeMax = mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150;
 
+  const rawFontColor = colorValue(source, "fontColor", base.fontColor);
+  const rawRefFontColor = colorValue(source, "refFontColor", base.refFontColor);
+  const fontColor = rawFontColor || base.fontColor;
+  const refFontColor = resolveEffectiveRefColor(rawRefFontColor, fontColor);
+  const rawFontWeight = oneOf(source, "fontWeight", base.fontWeight, ["light", "normal", "bold", "extrabold", "black"] as const);
+  const rawRefFontWeight = oneOf(source, "refFontWeight", base.refFontWeight, ["light", "normal", "bold", "extrabold", "black"] as const);
+  const fontWeight = rawFontWeight || "bold";
+  const refFontWeight = resolveEffectiveRefFontWeight(rawRefFontWeight, fontWeight);
+
   return {
     fontSize: numberValue(source, "fontSize", base.fontSize, fontSizeMin, fontSizeMax),
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(stringValue(source, "fontFamily", base.fontFamily)),
     refFontSize: numberValue(source, "refFontSize", base.refFontSize, refFontSizeMin, refFontSizeMax),
-    refFontWeight: oneOf(source, "refFontWeight", base.refFontWeight, ["light", "normal", "bold", "extrabold"] as const),
-    fontColor: colorValue(source, "fontColor", base.fontColor),
-    refFontColor: colorValue(source, "refFontColor", base.refFontColor),
+    refFontWeight,
+    fontColor,
+    refFontColor,
     refPosition: oneOf(source, "refPosition", base.refPosition, ["top", "bottom"] as const),
     refAnchor: oneOf(source, "refAnchor", base.refAnchor ?? "normal", ["top", "bottom", "normal"] as const),
     refTextTransform: oneOf(source, "refTextTransform", base.refTextTransform, ["none", "uppercase", "lowercase", "capitalize"] as const),
     refLetterSpacing: numberValue(source, "refLetterSpacing", base.refLetterSpacing, 0, 10),
     refOpacity: numberValue(source, "refOpacity", base.refOpacity, 0, 1),
     refTextAlign: oneOf(source, "refTextAlign", base.refTextAlign, ["left", "center", "right", "match"] as const),
-    refSpacing: numberValue(source, "refSpacing", base.refSpacing, 0, 80),
+    refSpacing: numberValue(source, "refSpacing", base.refSpacing, 0, 150),
     fullscreenShadeColor: colorValue(source, "fullscreenShadeColor", base.fullscreenShadeColor),
     fullscreenShadeOpacity: numberValue(source, "fullscreenShadeOpacity", base.fullscreenShadeOpacity, 0, 1),
     textAlign: oneOf(source, "textAlign", base.textAlign, ["left", "center", "right"] as const),
     lineHeight: numberValue(source, "lineHeight", base.lineHeight, 1.05, 1.8),
-    fontWeight: oneOf(source, "fontWeight", base.fontWeight, ["light", "normal", "bold", "extrabold"] as const),
+    letterSpacing: numberValue(source, "letterSpacing", base.letterSpacing ?? 0, -2, 20),
+    wordSpacing: numberValue(source, "wordSpacing", base.wordSpacing ?? 0, -5, 40),
+    fontWeight: oneOf(source, "fontWeight", base.fontWeight, ["light", "normal", "bold", "extrabold", "black"] as const),
     fontStyle: oneOf(source, "fontStyle", base.fontStyle ?? "normal", ["normal", "italic"] as const),
     textTransform: oneOf(source, "textTransform", base.textTransform, ["none", "uppercase", "lowercase", "capitalize"] as const),
     textShadow: stringValue(source, "textShadow", base.textShadow),
+    textOutline: boolValue(source, "textOutline", base.textOutline === true),
+    textOutlineColor: colorValue(source, "textOutlineColor", base.textOutlineColor || "#000000"),
+    textOutlineWidth: numberValue(source, "textOutlineWidth", base.textOutlineWidth ?? 2, 0, 10),
     animation: oneOf(source, "animation", base.animation, ["none", "fade", "slide-up", "slide-left", "scale-in", "reveal-bg-then-text"] as const),
     animationDuration: numberValue(source, "animationDuration", base.animationDuration, 100, 2000),
     backgroundImage: stringValue(source, "backgroundImage", base.backgroundImage),
@@ -453,10 +511,15 @@ export function applyFullscreenQuickThemeSettings(
       fullscreenShadeEnabled: quickSettings.fullscreenShadeOpacity > 0,
       textAlign: quickSettings.textAlign,
       lineHeight: quickSettings.lineHeight,
+      letterSpacing: quickSettings.letterSpacing,
+      wordSpacing: quickSettings.wordSpacing,
       fontWeight: quickSettings.fontWeight,
       refFontWeight: quickSettings.refFontWeight,
       textTransform: quickSettings.textTransform,
       textShadow: quickSettings.textShadow,
+      textOutline: quickSettings.textOutline,
+      textOutlineColor: quickSettings.textOutlineColor,
+      textOutlineWidth: quickSettings.textOutlineWidth,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
       backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,

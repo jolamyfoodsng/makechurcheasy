@@ -96,6 +96,7 @@
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
+      --word-spacing: 0px;
       --text-align: center;
       --text-shadow: none;
       --outline-width: 0px;
@@ -231,6 +232,7 @@
     }
 
     #verse-text {
+      order: 1;
       /* Keep measurement and wrapping inside the fullscreen frame. Without an
          explicit width, the centered flex item can size itself to the lyric's
          max-content width and make every large preset collapse to the same
@@ -243,8 +245,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -260,6 +264,7 @@
       position: relative;
       width: 100%;
       min-width: 0;
+      box-sizing: border-box;
     }
 
     #verse-text .verse-text__number,
@@ -269,13 +274,15 @@
       position: absolute;
       left: 0;
       top: 0;
-      width: 1.5em;
+      min-width: 1.2em;
+      width: auto;
       font-size: 0.5em;
       line-height: 1.15;
       font-weight: 700;
       text-align: right;
       opacity: 0.82;
       -webkit-text-stroke: 0 transparent;
+      white-space: nowrap;
     }
 
     #verse-text .verse-text__body,
@@ -306,8 +313,11 @@
       font-style: var(--font-style, normal);
       line-height: 1.35;
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
       opacity: 0.82;
@@ -331,6 +341,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #reference.top {
@@ -436,8 +449,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -461,6 +476,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     .compare-column__reference.is-above {
@@ -735,6 +753,7 @@
     }
 
     #lt-verse-text {
+      order: 1;
       width: 100%;
       min-width: 0;
       max-width: 100%;
@@ -745,8 +764,11 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
       transform-origin: center;
@@ -829,6 +851,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #lt-bar #ref-text.top {
@@ -993,14 +1018,16 @@
           const body = line.querySelector('.verse-text__body');
           if (!marker || !body) return;
 
+          line.style.paddingLeft = '0px';
+          marker.style.left = '0px';
+          marker.style.top = '0px';
+
           const range = document.createRange();
           range.selectNodeContents(body);
           const firstTextRect = Array.from(range.getClientRects())
             .find((rect) => rect.width > 0 && rect.height > 0);
           if (!firstTextRect) return;
 
-          marker.style.left = '0px';
-          marker.style.top = '0px';
           const lineRect = line.getBoundingClientRect();
           const markerRect = marker.getBoundingClientRect();
           const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
@@ -1009,9 +1036,17 @@
           const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
           const firstTextHeight = firstTextRect.height / scaleY;
 
-          // Pin the marker to the actual first rendered letter, not to the
-          // full-width text container. This survives auto-fit and wrapping.
-          marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          // Ensure the marker never extends to the left of the container boundary.
+          // If text is left-aligned or close to the left edge, indent the line so
+          // the number marker sits cleanly inside the box right beside the text.
+          const neededLeftSpace = markerWidth + gap;
+          if (firstTextLeft < neededLeftSpace) {
+            const shift = Math.ceil(neededLeftSpace - firstTextLeft);
+            line.style.paddingLeft = `${shift}px`;
+            marker.style.left = '0px';
+          } else {
+            marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          }
           marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
         });
       }
@@ -1152,7 +1187,7 @@
       }
       function mapCompareFontWeight(w) {
         if (!w) return '';
-        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '';
       }
 
@@ -1223,12 +1258,13 @@
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
         if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
         var lower = value.toLowerCase();
-        if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
-          value = '"Charis SIL","Noto Sans",' + value;
-        } else {
-          if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
-          if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        if (lower.indexOf('cmg sans') !== -1) {
+          if (lower.indexOf('cmg sans black') === -1) {
+            value = '"CMG Sans Black",' + value;
+          }
         }
+        if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+        if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
         return value;
       }
 
@@ -1304,11 +1340,14 @@
           return direct.textContent;
         }
         const styles = document.querySelectorAll('style');
+        let matched = '';
         for (const styleEl of styles) {
           const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
-          if (cssText && cssText.includes('--overlay-data')) return cssText;
+          if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+            matched += '\n' + cssText;
+          }
         }
-        return '';
+        return matched;
       }
 
       function extractCssCustomPropertyValue(cssText, name) {
@@ -1694,13 +1733,8 @@
         const overflowing = () => {
           const fitNodes = [verseText, reference, translationText].filter((node) => isFitVisible(node));
           if (!fitNodes.length) return false;
-          // Fullscreen is laid out on the fixed 1920x1080 stage. The stage is
-          // CSS-scaled in the Browser preview, so visual rectangles can report
-          // a transient transformed position during reload/animation and make
-          // a valid large font look like it is outside the frame. The
-          // container's untransformed scroll dimensions are the reliable fit
-          // signal here; they still shrink the requested size when the actual
-          // lyric/reference stack cannot fit in the stage content frame.
+          if (isContentOutsideFrame(fitNodes, overlay)) return true;
+          if (fitNodes.some((node) => isOverflowing(node, targetWidth, targetHeight))) return true;
           return isOverflowing(verseContainer, targetWidth, targetHeight);
         };
 
@@ -1764,10 +1798,13 @@
           translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
         };
-        const overflowing = () => cols.some((column) => {
-          const columnRect = getLayoutRect(column);
-          return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
-        });
+        const overflowing = () => {
+          if (isContentOutsideFrame(cols, overlay)) return true;
+          return cols.some((column) => {
+            const columnRect = getLayoutRect(column);
+            return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
+          });
+        };
 
         [...tn, ...rn, ...trn].forEach((node) => {
           if (!node) return;
@@ -1994,6 +2031,7 @@
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
         root.style.setProperty('--text-shadow', s.textShadow || 'none');
         root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
@@ -2041,12 +2079,16 @@
         root.style.setProperty('--padding', basePadding + 'px');
         root.style.setProperty('--fullscreen-text-max-width', resolveFullscreenTextMaxWidth(baseFontSize) + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
-        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
-        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         // Compare-specific reference font size
-        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
-        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
         // Compare-specific line height
@@ -2551,6 +2593,9 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (targetSource) lastTargetSource = targetSource;
+          const data = packet.data || packet.packet || packet.overlayData;
+          const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
+          if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -2558,7 +2603,6 @@
             setActiveLayer(packet.mode);
             return true;
           }
-          const data = packet.data || packet.packet || packet.overlayData;
           if (!data || typeof data !== 'object') return false;
           processOverlayUpdate(data);
           return true;

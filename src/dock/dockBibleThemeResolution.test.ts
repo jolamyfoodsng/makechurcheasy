@@ -46,9 +46,12 @@ function firstThemeFor(mode: "fullscreen" | "lower-third") {
   return theme;
 }
 
+import { removeNativeDockSetting } from "../services/localDockSettings";
+
 describe("dock Bible theme resolution", () => {
   beforeEach(() => {
     installStorage();
+    void removeNativeDockSetting(DOCK_BIBLE_PREFS_KEY);
   });
 
   afterEach(() => {

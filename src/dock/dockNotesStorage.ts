@@ -30,6 +30,8 @@ export interface DockNotesPreferences {
   fullscreenQuickSettings?: DockFullscreenQuickThemeSettings | null;
   lowerThirdQuickSettings?: DockFullscreenQuickThemeSettings | null;
   linesPerSlide?: number;
+  fullscreenLinesPerSlide?: number;
+  lowerThirdLinesPerSlide?: number;
   autoSplit?: boolean;
   quickActionsTop?: number;
   quickActionsLeft?: number | null;
@@ -168,10 +170,15 @@ export function applyQuickSettingsToNotesTheme(
       fullscreenShadeEnabled: (quickSettings.fullscreenShadeOpacity ?? theme.settings.fullscreenShadeOpacity) > 0,
       textAlign: quickSettings.textAlign ?? theme.settings.textAlign,
       lineHeight: quickSettings.lineHeight ?? theme.settings.lineHeight,
+      letterSpacing: quickSettings.letterSpacing ?? theme.settings.letterSpacing,
+      wordSpacing: quickSettings.wordSpacing ?? theme.settings.wordSpacing,
       fontWeight: quickSettings.fontWeight ?? theme.settings.fontWeight,
       fontStyle: quickSettings.fontStyle ?? theme.settings.fontStyle,
       textTransform: quickSettings.textTransform ?? theme.settings.textTransform,
       textShadow: quickSettings.textShadow ?? theme.settings.textShadow,
+      textOutline: quickSettings.textOutline ?? theme.settings.textOutline,
+      textOutlineColor: quickSettings.textOutlineColor ?? theme.settings.textOutlineColor,
+      textOutlineWidth: quickSettings.textOutlineWidth ?? theme.settings.textOutlineWidth,
       animation: quickSettings.animation ?? theme.settings.animation,
       animationDuration: quickSettings.animationDuration ?? theme.settings.animationDuration,
       backgroundPattern: useNoBg

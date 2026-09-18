@@ -41,9 +41,9 @@ function themePreviewStyle(settings: BibleThemeSettings) {
       ? `linear-gradient(${hexToRgba(settings.fullscreenShadeColor || "#0b1020", settings.fullscreenShadeOpacity)}, ${hexToRgba(settings.fullscreenShadeColor || "#0b1020", settings.fullscreenShadeOpacity)})`
       : null;
   const imageLayer = settings.boxBackgroundImage
-    ? `url(${settings.boxBackgroundImage})`
+    ? `url("${settings.boxBackgroundImage}")`
     : settings.backgroundImage
-      ? `url(${settings.backgroundImage})`
+      ? `url("${settings.backgroundImage}")`
       : null;
 
   return {

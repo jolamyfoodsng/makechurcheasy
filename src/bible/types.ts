@@ -5,6 +5,7 @@
  */
 
 import { getDefaultBibleTheme } from "../services/desktopConfig";
+import { QUIET_CLOUDS_PATTERN_SRC } from "../library/backgroundAssets";
 import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "./scriptureFont";
 
 // ---------------------------------------------------------------------------
@@ -234,13 +235,13 @@ export const LOWER_THIRD_SIZE_PRESETS: Record<LowerThirdSize, {
   lineHeight: number; // line-height multiplier
   refSpacing: number; // px — gap between verse and reference
 }> = {
-  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 10, safeArea: 30, lineHeight: 1.25, refSpacing: 10 },
-  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 10, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
-  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 11, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
-  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 12, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
-  big: { maxHeight: 520, padding: 36, fontSize: 48, refFontSize: 32, safeArea: 44, lineHeight: 1.3, refSpacing: 20 },
-  bigger: { maxHeight: 620, padding: 44, fontSize: 60, refFontSize: 40, safeArea: 48, lineHeight: 1.32, refSpacing: 24 },
-  biggest: { maxHeight: 760, padding: 52, fontSize: 72, refFontSize: 48, safeArea: 52, lineHeight: 1.34, refSpacing: 28 },
+  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 18, safeArea: 30, lineHeight: 1.25, refSpacing: 10 },
+  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 20, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
+  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 24, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
+  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 26, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
+  big: { maxHeight: 520, padding: 36, fontSize: 48, refFontSize: 34, safeArea: 44, lineHeight: 1.3, refSpacing: 20 },
+  bigger: { maxHeight: 620, padding: 44, fontSize: 60, refFontSize: 42, safeArea: 48, lineHeight: 1.32, refSpacing: 24 },
+  biggest: { maxHeight: 760, padding: 52, fontSize: 72, refFontSize: 50, safeArea: 52, lineHeight: 1.34, refSpacing: 28 },
 };
 
 export interface BibleThemeSettings {
@@ -249,21 +250,23 @@ export interface BibleThemeSettings {
   fontSize: number;          // px
   /** Reduce text only when it would overflow the selected overlay frame. */
   autoFontScale?: boolean;
-  fontWeight: "normal" | "bold" | "light" | "extrabold";
+  fontWeight: "normal" | "bold" | "light" | "extrabold" | "black";
   fontStyle?: "normal" | "italic";
   fontColor: string;         // hex
   lineHeight: number;        // ratio e.g. 1.6
+  letterSpacing?: number;    // px
+  wordSpacing?: number;      // px
   textAlign: "left" | "center" | "right";
   textShadow: string;        // CSS text-shadow value
-  textOutline: boolean;
-  textOutlineColor: string;
-  textOutlineWidth: number;
+  textOutline?: boolean;
+  textOutlineColor?: string;
+  textOutlineWidth?: number;
   textTransform: "none" | "uppercase" | "lowercase" | "capitalize";
 
   // Reference label
   refFontSize: number;
   refFontColor: string;
-  refFontWeight: "normal" | "bold" | "light" | "extrabold";
+  refFontWeight: "normal" | "bold" | "light" | "extrabold" | "black";
   refPosition: "top" | "bottom";
   refAnchor?: "normal" | "top" | "bottom";
   refTextTransform: "none" | "uppercase" | "lowercase" | "capitalize";
@@ -347,38 +350,41 @@ export interface BibleThemeSettings {
 
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   fontFamily: SCRIPTURE_FONT_FAMILY,
-  fontSize: 48,
+  fontSize: 145,
   autoFontScale: true,
-  fontWeight: "normal",
+  fontWeight: "black",
   fontStyle: "normal",
   fontColor: "#FFFFFF",
   lineHeight: 1.6,
+  letterSpacing: 0,
+  wordSpacing: 0,
   textAlign: "center",
-  textShadow: "0 2px 8px rgba(0,0,0,0.6)",
-  textOutline: false,
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
+  textOutline: true,
   textOutlineColor: "#000000",
-  textOutlineWidth: 2,
+  textOutlineWidth: 4,
   textTransform: "none",
 
-  refFontSize: 28,
-  refFontColor: "#cccccc",
-  refFontWeight: "normal",
+  refFontSize: 42,
+  refFontColor: "#FACC15",
+  refFontWeight: "black",
   refPosition: "bottom",
   refAnchor: "normal",
   refTextTransform: "none",
   refLetterSpacing: 0,
   refOpacity: 1,
   refTextAlign: "match",
-  refSpacing: 24,
+  refSpacing: 20,
 
   referenceBackgroundEnabled: false,
   referenceBackgroundColor: "#F4D17B",
   referenceBackgroundStyle: "solid",
   referenceBackgroundRadius: 12,
 
+  backgroundType: "pattern",
   backgroundColor: "#000000",
   backgroundImage: "",
-  backgroundPattern: "",
+  backgroundPattern: QUIET_CLOUDS_PATTERN_SRC,
   backgroundVideo: "",
   backgroundOpacity: 1,
   fullscreenShadeEnabled: true,
@@ -423,10 +429,20 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
 export function applyThemeConfigOverrides(): void {
   const bible = getDefaultBibleTheme();
   DEFAULT_THEME_SETTINGS.fontFamily = withScriptureFontFallback(bible.font);
-  DEFAULT_THEME_SETTINGS.fontSize = bible.textSize;
-  DEFAULT_THEME_SETTINGS.fontColor = bible.textColor;
+  DEFAULT_THEME_SETTINGS.fontSize = bible.textSize || 140;
+  DEFAULT_THEME_SETTINGS.fontColor = bible.textColor || "#FFFFFF";
   DEFAULT_THEME_SETTINGS.backgroundColor = bible.backgroundColor;
   DEFAULT_THEME_SETTINGS.referenceBackgroundColor = bible.accentColor;
+  DEFAULT_THEME_SETTINGS.refFontSize = Math.max(16, Math.round((bible.textSize || 140) * 0.7));
+  DEFAULT_THEME_SETTINGS.refFontColor = bible.textColor || "#FACC15";
+  DEFAULT_THEME_SETTINGS.fontWeight = "black";
+  DEFAULT_THEME_SETTINGS.refFontWeight = "black";
+  DEFAULT_THEME_SETTINGS.textOutline = true;
+  DEFAULT_THEME_SETTINGS.textOutlineWidth = 4;
+  DEFAULT_THEME_SETTINGS.textOutlineColor = "#000000";
+  DEFAULT_THEME_SETTINGS.textShadow = "4px 5px 2px rgba(0, 0, 0, 0.95)";
+  DEFAULT_THEME_SETTINGS.backgroundType = "pattern";
+  DEFAULT_THEME_SETTINGS.backgroundPattern = QUIET_CLOUDS_PATTERN_SRC;
 }
 
 // ---------------------------------------------------------------------------

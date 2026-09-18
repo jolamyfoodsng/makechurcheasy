@@ -370,7 +370,7 @@ export default function BibleThemeEditor({ editTheme, onSave, onCancel }: Props)
                       Genesis 1:1 | KJV
                     </div>
                   )}
-                  <div style={{ fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * 0.35}px`, fontWeight: settings.fontWeight, color: settings.fontColor, lineHeight: settings.lineHeight, textAlign: settings.textAlign as React.CSSProperties["textAlign"], textShadow: settings.textShadow || "0 4px 12px rgba(0,0,0,0.8)", WebkitTextStroke: settings.textOutline ? `${settings.textOutlineWidth * 0.3}px ${settings.textOutlineColor}` : undefined, letterSpacing: "0.02em", textTransform: settings.textTransform as React.CSSProperties["textTransform"] }}>
+                  <div style={{ fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * 0.35}px`, fontWeight: settings.fontWeight, color: settings.fontColor, lineHeight: settings.lineHeight, textAlign: settings.textAlign as React.CSSProperties["textAlign"], textShadow: settings.textShadow || "0 4px 12px rgba(0,0,0,0.8)", WebkitTextStroke: settings.textOutline ? `${(settings.textOutlineWidth || 2) * 0.3}px ${settings.textOutlineColor || "#000000"}` : undefined, letterSpacing: "0.02em", textTransform: settings.textTransform as React.CSSProperties["textTransform"] }}>
                     In the beginning God created the heaven and the earth.
                   </div>
                   {settings.refPosition !== "top" && (

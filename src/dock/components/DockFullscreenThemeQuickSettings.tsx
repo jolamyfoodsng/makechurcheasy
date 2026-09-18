@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { BibleThemeSettings } from "../../bible/types";
 import type { CompareThemeSettings } from "../compareThemeConfig";
 import Icon from "../DockIcon";
+import { parseTextShadow, buildTextShadow } from "./BackgroundPickerCard";
 
 export type DockFullscreenQuickThemeSettings = Pick<
   BibleThemeSettings,
@@ -24,10 +25,15 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "fullscreenShadeOpacity"
   | "textAlign"
   | "lineHeight"
+  | "letterSpacing"
+  | "wordSpacing"
   | "fontWeight"
   | "fontStyle"
   | "textTransform"
   | "textShadow"
+  | "textOutline"
+  | "textOutlineColor"
+  | "textOutlineWidth"
   | "animation"
   | "animationDuration"
   | "backgroundImage"
@@ -86,10 +92,10 @@ const PRESETS: ThemePreset[] = [
     settings: {
       fontSize: 58,
       fontFamily: "'Georgia', serif",
-      refFontSize: 25,
-      refFontWeight: "normal",
+      refFontSize: 40,
+      refFontWeight: "bold",
       fontColor: "#FFF8E0",
-      refFontColor: "#F4D17B",
+      refFontColor: "#FFF8E0",
       refPosition: "bottom",
       refTextTransform: "none",
       refLetterSpacing: 0,
@@ -138,10 +144,10 @@ const PRESETS: ThemePreset[] = [
     settings: {
       fontSize: 48,
       fontFamily: "'Inter', system-ui, sans-serif",
-      refFontSize: 20,
-      refFontWeight: "normal",
+      refFontSize: 34,
+      refFontWeight: "bold",
       fontColor: "#F8FAFC",
-      refFontColor: "#CBD5E1",
+      refFontColor: "#F8FAFC",
       refPosition: "bottom",
       refTextTransform: "none",
       refLetterSpacing: 0,
@@ -152,7 +158,7 @@ const PRESETS: ThemePreset[] = [
       fullscreenShadeOpacity: 0.36,
       textAlign: "left",
       lineHeight: 1.48,
-      fontWeight: "normal",
+      fontWeight: "bold",
       textTransform: "none",
       textShadow: "none",
       animation: "none",
@@ -190,8 +196,8 @@ const PRESETS: ThemePreset[] = [
     settings: {
       fontSize: 68,
       fontFamily: "'Impact', 'Arial Black', sans-serif",
-      refFontSize: 28,
-      refFontWeight: "normal",
+      refFontSize: 46,
+      refFontWeight: "bold",
       fontColor: "#FFFFFF",
       refFontColor: "#B9CCFF",
       refPosition: "bottom",
@@ -242,8 +248,8 @@ const PRESETS: ThemePreset[] = [
     settings: {
       fontSize: 56,
       fontFamily: "'Inter', system-ui, sans-serif",
-      refFontSize: 24,
-      refFontWeight: "normal",
+      refFontSize: 38,
+      refFontWeight: "bold",
       fontColor: "#FFFFFF",
       refFontColor: "#FDE68A",
       refPosition: "bottom",
@@ -288,7 +294,83 @@ const PRESETS: ThemePreset[] = [
       compareTranslationGap: 40,
     },
   },
+  {
+    id: "easyworship",
+    label: "Bold Contour",
+    settings: {
+      fontSize: 76,
+      fontFamily: '"CMG Sans Black", "CMG Sans", sans-serif',
+      refFontSize: 52,
+      refFontWeight: "black",
+      fontColor: "#FFFFFF",
+      refFontColor: "#FFFFFF",
+      refPosition: "top",
+      refTextTransform: "none",
+      refLetterSpacing: 0,
+      refOpacity: 1,
+      refTextAlign: "center",
+      refSpacing: 20,
+      fullscreenShadeColor: "#050816",
+      fullscreenShadeOpacity: 0.65,
+      textAlign: "center",
+      lineHeight: 1.24,
+      fontWeight: "black",
+      textTransform: "none",
+      textShadow: "3px 3px 0 #000000, -2px -2px 0 #000000, 2px -2px 0 #000000, -2px 2px 0 #000000, 4px 6px 12px rgba(0,0,0,1)",
+      textOutline: true,
+      textOutlineColor: "#000000",
+      textOutlineWidth: 4,
+      animation: "fade",
+      animationDuration: 300,
+      backgroundImage: "",
+      backgroundImageFilePath: "",
+      backgroundPattern: "",
+      backgroundVideo: "",
+      backgroundVideoFilePath: "",
+      backgroundOpacity: 1,
+      backgroundColor: "#050816",
+      backgroundColorEnd: "#1a1236",
+      bgGradientAngle: 180,
+      referenceBackgroundEnabled: false,
+      referenceBackgroundColor: "#FFD700",
+      referenceBackgroundStyle: "solid",
+      referenceBackgroundRadius: 12,
+      lowerThirdPosition: "left",
+      lowerThirdSize: "medium",
+      lowerThirdWidthPreset: "md",
+      lowerThirdOffsetX: 0,
+      lowerThirdCaptionPosition: "bottom",
+      lowerThirdEdge: "bottom",
+      lowerThirdCardPadding: "18px 28px",
+      lowerThirdPaddingLinked: false,
+      lowerThirdCardRadius: 18,
+      lowerThirdTextDirection: "normal",
+      compareTranslationWidth: 40,
+      compareTranslationGap: 40,
+    },
+  },
 ];
+
+export const QUICK_TEXT_SHADOW_PRESETS = [
+  { id: "broadcast", label: "Broadcast", value: "4px 5px 2px rgba(0, 0, 0, 0.95)" },
+  { id: "none", label: "None", value: "none" },
+  { id: "soft", label: "Soft", value: "0 2px 6px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.3)" },
+  { id: "bold", label: "Bold", value: "0 3px 8px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.45)" },
+  { id: "easyworship", label: "Solid Contour", value: "0 2px 8px rgba(0,0,0,0.7), 0 1px 2px rgba(0,0,0,0.5)" },
+  { id: "glow", label: "Glow", value: "0 0 8px rgba(0,0,0,0.6), 0 0 16px rgba(0,0,0,0.4)" },
+] as const;
+
+export const QUICK_TEXT_OUTLINE_PRESETS = [
+  { id: "none", label: "Off", width: 0, enabled: false },
+  { id: "1px", label: "1px", width: 1, enabled: true },
+  { id: "2px", label: "2px", width: 2, enabled: true },
+  { id: "3px", label: "3px", width: 3, enabled: true },
+  { id: "4px", label: "4px", width: 4, enabled: true },
+  { id: "6px", label: "6px", width: 6, enabled: true },
+  { id: "8px", label: "8px", width: 8, enabled: true },
+  { id: "10px", label: "10px", width: 10, enabled: true },
+  { id: "12px", label: "12px", width: 12, enabled: true },
+] as const;
 
 function formatPx(value: number): string {
   return `${Math.round(value)}px`;
@@ -421,14 +503,14 @@ export default function DockFullscreenThemeQuickSettings({
                   <div className="dock-theme-quick__section">
                     <div className="dock-theme-quick__section-label">{t("dock.fullscreenThemeQuickSettings.weight")}</div>
                     <div className="dock-console-segmented dock-console-segmented--compact">
-                      {(["normal", "bold"] as const).map((weight) => (
+                      {(["normal", "bold", "extrabold"] as const).map((weight) => (
                         <button
                           key={weight}
                           type="button"
                           className={`dock-console-segmented__item${settings.fontWeight === weight ? " dock-console-segmented__item--active" : ""}`}
                           onClick={() => onChange(withPatch(settings, { fontWeight: weight }))}
-                          title={weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : t("dock.fullscreenThemeQuickSettings.bold")}>
-                          {weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : t("dock.fullscreenThemeQuickSettings.bold")}
+                          title={weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : weight === "extrabold" ? t("bgPicker.extraBold", "Extra Bold") : t("dock.fullscreenThemeQuickSettings.bold")}>
+                          {weight === "normal" ? t("dock.fullscreenThemeQuickSettings.normal") : weight === "extrabold" ? t("bgPicker.extraBold", "Extra Bold") : t("dock.fullscreenThemeQuickSettings.bold")}
                         </button>
                       ))}
                     </div>
@@ -468,6 +550,7 @@ export default function DockFullscreenThemeQuickSettings({
                     value={settings.fontFamily ?? "Inter, system-ui, sans-serif"}
                     onChange={(event) => onChange(withPatch(settings, { fontFamily: event.target.value }))}
                   >
+                    <option value='"CMG Sans Black", "CMG Sans", sans-serif'>CMG Sans (Bold Presentation)</option>
                     <option value="Inter, system-ui, sans-serif">Inter</option>
                     <option value="'Georgia', serif">Georgia</option>
                     <option value="'Playfair Display', serif">Playfair Display</option>
@@ -491,9 +574,9 @@ export default function DockFullscreenThemeQuickSettings({
                   <input
                     className="dock-theme-quick__range"
                     type="range"
-                    min={10}
-                    max={14}
-                    step={0.5}
+                    min={12}
+                    max={80}
+                    step={1}
                     value={settings.refFontSize}
                     onChange={(event) =>
                       onChange(withPatch(settings, { refFontSize: Number(event.target.value) }))
@@ -619,6 +702,157 @@ export default function DockFullscreenThemeQuickSettings({
                     />
                   </label>
                 </div>
+              </div>
+
+              {/* Text Shadow */}
+              <div className="dock-theme-quick__section">
+                <div className="dock-theme-quick__section-label">{t("worship.textShadow", "Text Shadow")}</div>
+                <div className="dock-console-segmented dock-console-segmented--compact dock-theme-quick__segmented-wrap">
+                  {QUICK_TEXT_SHADOW_PRESETS.map((p) => {
+                    const isActive = (settings.textShadow ?? "none") === p.value;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`dock-console-segmented__item${isActive ? " dock-console-segmented__item--active" : ""}`}
+                        onClick={() => onChange(withPatch(settings, { textShadow: p.value }))}
+                        title={p.label}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const shadow = parseTextShadow(settings.textShadow);
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "8px" }}>
+                      <label className="dock-theme-quick__field">
+                        <span className="dock-theme-quick__field-head">
+                          <span>{t("bgPicker.shadowDistance", "Distance")}</span>
+                          <span>{formatPx(shadow.distance)}</span>
+                        </span>
+                        <input
+                          className="dock-theme-quick__range"
+                          type="range"
+                          min={0}
+                          max={15}
+                          step={1}
+                          value={shadow.distance}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            onChange(withPatch(settings, { textShadow: buildTextShadow(val, shadow.blur, shadow.opacity) }));
+                          }}
+                        />
+                      </label>
+                      <label className="dock-theme-quick__field">
+                        <span className="dock-theme-quick__field-head">
+                          <span>{t("bgPicker.shadowBlur", "Blur")}</span>
+                          <span>{formatPx(shadow.blur)}</span>
+                        </span>
+                        <input
+                          className="dock-theme-quick__range"
+                          type="range"
+                          min={0}
+                          max={15}
+                          step={1}
+                          value={shadow.blur}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            onChange(withPatch(settings, { textShadow: buildTextShadow(shadow.distance, val, shadow.opacity) }));
+                          }}
+                        />
+                      </label>
+                      <label className="dock-theme-quick__field">
+                        <span className="dock-theme-quick__field-head">
+                          <span>{t("bgPicker.shadowOpacity", "Opacity")}</span>
+                          <span>{shadow.opacity}%</span>
+                        </span>
+                        <input
+                          className="dock-theme-quick__range"
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={shadow.opacity}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            onChange(withPatch(settings, { textShadow: buildTextShadow(shadow.distance, shadow.blur, val) }));
+                          }}
+                        />
+                      </label>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Text Outline / Stroke */}
+              <div className="dock-theme-quick__section">
+                <div className="dock-theme-quick__section-label">{t("bible.themeEditor.textOutline", "Text Outline (Stroke)")}</div>
+                <div className="dock-theme-quick__split-row">
+                  <div className="dock-console-segmented dock-console-segmented--compact">
+                    {QUICK_TEXT_OUTLINE_PRESETS.map((p) => {
+                      const currentWidth = settings.textOutline ? (settings.textOutlineWidth ?? 2) : 0;
+                      const isActive = p.width === 0 ? !settings.textOutline : (settings.textOutline && currentWidth === p.width);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`dock-console-segmented__item${isActive ? " dock-console-segmented__item--active" : ""}`}
+                          onClick={() => onChange(withPatch(settings, {
+                            textOutline: p.enabled,
+                            textOutlineWidth: p.width,
+                            textOutlineColor: settings.textOutlineColor || "#000000",
+                          }))}
+                          title={p.label}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {settings.textOutline && (
+                    <label className="dock-theme-quick__color-field" style={{ minWidth: 100 }}>
+                      <span className="dock-theme-quick__color-input-wrap">
+                        <input
+                          className="dock-theme-quick__color-input"
+                          type="color"
+                          value={settings.textOutlineColor || "#000000"}
+                          onChange={(event) =>
+                            onChange(withPatch(settings, { textOutlineColor: event.target.value }))
+                          }
+                        />
+                        <span>{(settings.textOutlineColor || "#000000").toUpperCase()}</span>
+                      </span>
+                    </label>
+                  )}
+                </div>
+                <label className="dock-theme-quick__field" style={{ marginTop: "8px" }}>
+                  <span className="dock-theme-quick__field-head">
+                    <span>{t("bible.themeEditor.outlineWidth", "Outline Width")}</span>
+                    <span>{formatPx(settings.textOutline ? (settings.textOutlineWidth ?? 4) : 0)}</span>
+                  </span>
+                  <input
+                    className="dock-theme-quick__range"
+                    type="range"
+                    min={0}
+                    max={12}
+                    step={1}
+                    value={settings.textOutline ? (settings.textOutlineWidth ?? 4) : 0}
+                    onChange={(event) => {
+                      const val = Number(event.target.value);
+                      if (val <= 0) {
+                        onChange(withPatch(settings, { textOutline: false, textOutlineWidth: 0 }));
+                      } else {
+                        onChange(withPatch(settings, {
+                          textOutline: true,
+                          textOutlineWidth: val,
+                          textOutlineColor: settings.textOutlineColor || "#000000",
+                        }));
+                      }
+                    }}
+                  />
+                </label>
               </div>
 
               <div className="dock-theme-quick__section">

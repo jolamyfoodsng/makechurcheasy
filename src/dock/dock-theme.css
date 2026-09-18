@@ -613,3 +613,90 @@ html.mv-theme-light #dock-root,
   background: var(--dock-accent) !important;
   color: #fffaf4 !important;
 }
+
+/* ── Typography & Effects Custom Controls ── */
+
+.dtb-quick-sizes-row,
+.dtb-shadow-control-row,
+.dtb-outline-control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.dtb-control-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dtb-typography-control-row--line-shadow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.dtb-shadow-inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dtb-shadow-thickness-section {
+  border-top: 1px solid var(--dock-border-soft, rgba(255, 255, 255, 0.08));
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.dtb-ref-color-combos-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.dtb-ref-color-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dtb-ref-color-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--dock-surface-alt, #222);
+  border: 1px solid var(--dock-border, #333);
+  border-radius: 4px;
+  color: var(--dock-text, #eee);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+
+.dtb-ref-color-chip:hover {
+  background: var(--dock-surface-hover, #2a2a2a);
+  border-color: var(--dock-border-active, #a95335);
+}
+
+.dtb-ref-color-chip--active {
+  background: var(--dock-accent-soft, rgba(169, 83, 53, 0.2));
+  border-color: var(--dock-accent, #a95335);
+  color: #fff;
+}
+
+.dtb-ref-color-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+

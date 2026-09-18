@@ -6,7 +6,7 @@ import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
-import { getDockEntitlementLimit } from "../dockEntitlement";
+import { getDockEntitlementLimit, isDockFreePlan, showUpgradeModal } from "../dockEntitlement";
 import {
   readNativeDockSetting,
   writeNativeDockSetting,
@@ -37,17 +37,97 @@ import {
   LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
 } from "../lowerThirdQuickSettings";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
+import { TextEffectsPicker } from "./TextEffectsPicker";
 
 /* ── Types ── */
 type BackgroundType = "off" | "theme" | "color" | "image" | "pattern" | "video";
 type BackgroundPickerTab = "text" | "layout" | "background" | "compare";
 type BackgroundPickerStorageScope = "bible" | "worship" | "notes" | "global";
 export type BibleReferenceFormat = "full" | "short" | "hidden";
-type BibleTextSubTab = "bible" | "reference";
+type BibleTextSubTab = "all" | "bible" | "reference";
 type BibleLayoutSubTab = "text" | "reference";
-type CompactFontWeight = "light" | "normal" | "bold" | "extrabold";
+type CompactFontWeight = "light" | "normal" | "bold" | "extrabold" | "black";
 type CompactTextCase = "none" | "uppercase" | "lowercase" | "capitalize";
 type CompactTextAlign = "match" | "left" | "center" | "right" | "justify";
+
+export type TextShadowPresetId = "broadcast" | "soft" | "bold" | "easyworship" | "glow" | "none";
+
+export const TEXT_SHADOW_PRESETS: Array<{ id: TextShadowPresetId; label: string; value: string }> = [
+  { id: "broadcast", label: "Broadcast Bold", value: "4px 5px 2px rgba(0, 0, 0, 0.95)" },
+  { id: "soft", label: "Soft (0 2px 6px)", value: "0 2px 6px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.3)" },
+  { id: "bold", label: "Bold (0 3px 8px)", value: "0 3px 8px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.45)" },
+  { id: "easyworship", label: "Solid Contour", value: "0 2px 8px rgba(0,0,0,0.7), 0 1px 2px rgba(0,0,0,0.5)" },
+  { id: "glow", label: "Glow (0 0 16px)", value: "0 0 8px rgba(0,0,0,0.6), 0 0 16px rgba(0,0,0,0.4)" },
+  { id: "none", label: "None", value: "none" },
+];
+
+export function parseTextShadow(shadowStr?: string | null): { distance: number; blur: number; opacity: number } {
+  if (!shadowStr || shadowStr === "none") {
+    return { distance: 0, blur: 0, opacity: 0 };
+  }
+  const m = shadowStr.match(/(-?\d+)px\s+(-?\d+)px(?:\s+(\d+)px)?.*?rgba?\([^,]+,[^,]+,[^,]+(?:,\s*([\d.]+))?\)/i);
+  if (m) {
+    const y = parseInt(m[2], 10) || 0;
+    const blur = m[3] ? parseInt(m[3], 10) : 2;
+    const alpha = m[4] ? parseFloat(m[4]) : 0.95;
+    return {
+      distance: Math.min(15, Math.max(0, Math.abs(y))),
+      blur: Math.min(15, Math.max(0, blur)),
+      opacity: Math.min(100, Math.max(0, Math.round(alpha * 100))),
+    };
+  }
+  return { distance: 5, blur: 2, opacity: 95 };
+}
+
+export function buildTextShadow(distance: number, blur: number, opacity: number): string {
+  if (distance === 0 && blur === 0 && opacity === 0) return "none";
+  const x = Math.round(distance * 0.8);
+  const y = distance;
+  const alpha = (Math.max(0, Math.min(100, opacity)) / 100).toFixed(2).replace(/\.?0+$/, "");
+  return `${x}px ${y}px ${blur}px rgba(0, 0, 0, ${alpha})`;
+}
+
+export function resolveActiveShadowPreset(textShadow?: string | null): TextShadowPresetId {
+  if (!textShadow || textShadow === "none") return "none";
+  if (textShadow.includes("4px 5px") || textShadow.includes("0.95") || textShadow.includes("broadcast")) return "broadcast";
+  if (textShadow.includes("16px") || textShadow.includes("24px") || textShadow.includes("40px") || textShadow.includes("20px") || textShadow.includes("glow")) return "glow";
+  if (textShadow.includes("0 2px 8px rgba(0,0,0,0.7)") || textShadow.includes("3px 3px 0") || textShadow.includes("-2px -2px 0") || textShadow.includes("Solid")) return "easyworship";
+  if (textShadow.includes("3px 8px") || textShadow.includes("3px 3px 6px") || textShadow.includes("2px 2px 0") || textShadow.includes("12px") || textShadow.includes("bold")) return "bold";
+  return "soft";
+}
+
+export type StrokeThicknessOption = "none" | "thin" | "sm" | "md" | "lg" | "xl" | "xxl" | "max";
+
+export const STROKE_THICKNESS_OPTIONS: Array<{ value: StrokeThicknessOption; label: string; width: number; enabled: boolean }> = [
+  { value: "none", label: "Off (No stroke)", width: 0, enabled: false },
+  { value: "thin", label: "Thin (1px)", width: 1, enabled: true },
+  { value: "sm", label: "SM (2px)", width: 2, enabled: true },
+  { value: "md", label: "MD (4px)", width: 4, enabled: true },
+  { value: "lg", label: "LG (6px)", width: 6, enabled: true },
+  { value: "xl", label: "XL (8px)", width: 8, enabled: true },
+  { value: "xxl", label: "XXL (10px)", width: 10, enabled: true },
+  { value: "max", label: "Max (12px)", width: 12, enabled: true },
+];
+
+export function resolveActiveOutlinePreset(outline?: boolean, width?: number): StrokeThicknessOption {
+  if (!outline || !width || width <= 0) return "none";
+  if (width <= 1) return "thin";
+  if (width <= 2) return "sm";
+  if (width <= 4) return "md";
+  if (width <= 6) return "lg";
+  if (width <= 8) return "xl";
+  if (width <= 10) return "xxl";
+  return "max";
+}
+
+/** Legacy alias for tests/components expecting TEXT_OUTLINE_OPTIONS */
+export const TEXT_OUTLINE_OPTIONS = STROKE_THICKNESS_OPTIONS.map((op) => ({
+  id: op.value,
+  value: op.value,
+  label: op.label,
+  width: op.width,
+  enabled: op.enabled,
+}));
 
 interface SavedLocalStyle {
   id: string;
@@ -99,8 +179,8 @@ const BG_OPTIONS: Array<{ id: BackgroundType; label: string; icon: string }> = [
   { id: "off", label: "bgPicker.off", icon: "block" },
   { id: "theme", label: "bgPicker.theme", icon: "palette" },
   { id: "color", label: "common.color", icon: "color_lens" },
-  { id: "image", label: "common.image", icon: "image" },
   { id: "pattern", label: "common.pattern", icon: "texture" },
+  { id: "image", label: "common.image", icon: "image" },
   { id: "video", label: "common.video", icon: "videocam" },
 ];
 const COMPARE_BG_OPTIONS = BG_OPTIONS.filter((option) => option.id !== "theme");
@@ -187,15 +267,15 @@ function resolveInitialTab(
 ): BackgroundPickerTab {
   if (forceCompare && displayMode === "compare") return "compare";
 
-  const stored = !tab ? (() => {
+  const stored = (() => {
     try {
       const v = readNativeDockSetting<string>(activeTabKey);
       if (v === "text" || v === "layout" || v === "background" || v === "compare") return v;
     } catch { /* ignore */ }
     return null;
-  })() : null;
+  })();
 
-  const resolved = tab ?? stored ?? "text";
+  const resolved = stored ?? tab ?? "text";
   if (resolved === "compare" && displayMode !== "compare") return "text";
   if ((resolved === "text" || resolved === "layout") && displayMode === "compare") return "background";
   return resolved;
@@ -216,6 +296,10 @@ export function canAddBackgroundPickerAsset(currentCount: number, limit: number)
 }
 
 export const BACKGROUND_PATTERN_PICKER_LIMIT = 3;
+
+export function getDockPatternLimit(isFree: boolean = isDockFreePlan()): number {
+  return isFree ? BACKGROUND_PATTERN_PICKER_LIMIT : -1;
+}
 
 function createLocalStyleId(): string {
   try {
@@ -323,14 +407,18 @@ export default function BackgroundPickerCard({
   const { t } = useTranslation();
   const imageLimit = getDockEntitlementLimit("images");
   const videoLimit = getDockEntitlementLimit("videos");
+  const patternLimit = getDockPatternLimit();
   const backgroundTypeSelectId = useId();
   const localStylesSelectId = useId();
   const storageKeys = useMemo(() => {
     const scopeKey = `${storageScope}:${overlayMode}`;
     return {
       activeTab: `${ACTIVE_TAB_KEY}:${scopeKey}`,
+      textSubTab: `dtb-bg-picker-text-subtab:${scopeKey}`,
+      layoutSubTab: `dtb-bg-picker-layout-subtab:${scopeKey}`,
       bgType: `${BG_TYPE_KEY}:${scopeKey}`,
       localStyles: `${LOCAL_STYLES_KEY}:${scopeKey}`,
+      scrollTop: `dtb-bg-picker-scroll-top:${scopeKey}`,
     };
   }, [overlayMode, storageScope]);
   const [activeTab, setActiveTab] = useState<BackgroundPickerTab>(() =>
@@ -344,8 +432,20 @@ export default function BackgroundPickerCard({
     return inferBgTypeFromSettings(quickSettings);
   });
 
-  const [textSubTab, setTextSubTab] = useState<BibleTextSubTab>("bible");
-  const [layoutSubTab, setLayoutSubTab] = useState<BibleLayoutSubTab>("text");
+  const [textSubTab, setTextSubTab] = useState<BibleTextSubTab>(() => {
+    try {
+      const v = readNativeDockSetting<string>(storageKeys.textSubTab);
+      if (v === "bible" || v === "reference") return v;
+    } catch { /* ignore */ }
+    return "bible";
+  });
+  const [layoutSubTab, setLayoutSubTab] = useState<BibleLayoutSubTab>(() => {
+    try {
+      const v = readNativeDockSetting<string>(storageKeys.layoutSubTab);
+      if (v === "text" || v === "reference") return v;
+    } catch { /* ignore */ }
+    return "text";
+  });
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [savedStyles, setSavedStyles] = useState<SavedLocalStyle[]>(() => {
     try { return validateSavedLocalStyles(readDockPreferenceList<SavedLocalStyle>(storageKeys.localStyles)); } catch { return []; }
@@ -353,6 +453,8 @@ export default function BackgroundPickerCard({
   const [selectedLocalStyleId, setSelectedLocalStyleId] = useState("");
   const [localStyleStatus, setLocalStyleStatus] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollTimerRef = useRef<number | null>(null);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const [pickerHeight, setPickerHeight] = useState(0);
   const prevStorageKeysRef = useRef(storageKeys);
@@ -369,6 +471,48 @@ export default function BackgroundPickerCard({
   const supportsLowerThirdShapeControls = storageScope === "bible" || storageScope === "worship" || storageScope === "notes";
   const isBiblePicker = storageScope === "bible" && showReferences;
   const isCompactHeight = pickerHeight > 0 && pickerHeight <= BACKGROUND_PICKER_COMPACT_HEIGHT;
+
+  // Restore scroll position on mount or tab change
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    try {
+      const savedScroll = readNativeDockSetting<number>(storageKeys.scrollTop);
+      if (typeof savedScroll === "number" && savedScroll > 0) {
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = savedScroll;
+          }
+        });
+      }
+    } catch { /* ignore */ }
+  }, [activeTab, textSubTab, layoutSubTab, storageKeys.scrollTop]);
+
+  const handleScroll = useCallback(() => {
+    if (scrollTimerRef.current) {
+      window.clearTimeout(scrollTimerRef.current);
+    }
+    scrollTimerRef.current = window.setTimeout(() => {
+      if (scrollRef.current) {
+        writeNativeDockSetting(storageKeys.scrollTop, scrollRef.current.scrollTop);
+      }
+    }, 120);
+  }, [storageKeys.scrollTop]);
+
+  const handleTabChange = useCallback((tab: BackgroundPickerTab) => {
+    setActiveTab(tab);
+    writeNativeDockSetting(storageKeys.activeTab, tab);
+  }, [storageKeys.activeTab]);
+
+  const handleTextSubTabChange = useCallback((subtab: BibleTextSubTab) => {
+    setTextSubTab(subtab);
+    writeNativeDockSetting(storageKeys.textSubTab, subtab);
+  }, [storageKeys.textSubTab]);
+
+  const handleLayoutSubTabChange = useCallback((subtab: BibleLayoutSubTab) => {
+    setLayoutSubTab(subtab);
+    writeNativeDockSetting(storageKeys.layoutSubTab, subtab);
+  }, [storageKeys.layoutSubTab]);
 
   useEffect(() => {
     const element = pickerRef.current;
@@ -425,13 +569,13 @@ export default function BackgroundPickerCard({
 
   useEffect(() => {
     if (hideBackgroundOnCompare && displayMode === "compare" && activeTab !== "compare") {
-      setActiveTab("compare");
+      handleTabChange("compare");
     } else if (displayMode === "compare" && (activeTab === "text" || activeTab === "layout")) {
-      setActiveTab("background");
+      handleTabChange("background");
     } else if (displayMode !== "compare" && activeTab === "compare") {
-      setActiveTab("text");
+      handleTabChange("text");
     }
-  }, [activeTab, displayMode, hideBackgroundOnCompare]);
+  }, [activeTab, displayMode, handleTabChange, hideBackgroundOnCompare]);
 
   // Persist active tab preference
   useEffect(() => {
@@ -701,7 +845,10 @@ export default function BackgroundPickerCard({
                     aria-label={t('bgPicker.text')}
                     title={t('bgPicker.text')}
                     className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
-                    onClick={() => setActiveTab("text")}
+                    onClick={() => {
+                      setActiveTab("text");
+                      handleTabChange("text");
+                    }}
                   >
                     <Icon name="text_fields" size={13} />
                     <span>{t('bgPicker.text')}</span>
@@ -713,7 +860,10 @@ export default function BackgroundPickerCard({
                     aria-label={t('bgPicker.layout', 'Layout')}
                     title={t('bgPicker.layout', 'Layout')}
                     className={`dtb-bg-picker__tab${activeTab === "layout" ? " dtb-bg-picker__tab--active" : ""}`}
-                    onClick={() => setActiveTab("layout")}
+                    onClick={() => {
+                      setActiveTab("layout");
+                      handleTabChange("layout");
+                    }}
                   >
                     <Icon name="view_quilt" size={13} />
                     <span>{t('bgPicker.layout', 'Layout')}</span>
@@ -728,7 +878,10 @@ export default function BackgroundPickerCard({
                   aria-label={t("bgPicker.bg", "BG")}
                   title={t("bgPicker.bg", "BG")}
                   className={`dtb-bg-picker__tab${activeTab === "background" ? " dtb-bg-picker__tab--active" : ""}`}
-                  onClick={() => setActiveTab("background")}
+                  onClick={() => {
+                    setActiveTab("background");
+                    handleTabChange("background");
+                  }}
                 >
                   <Icon name="wallpaper" size={13} />
                   <span>{t("bgPicker.bg", "BG")}</span>
@@ -742,7 +895,10 @@ export default function BackgroundPickerCard({
                   aria-label={t("bgPicker.compare", "Compare")}
                   title={t("bgPicker.compare", "Compare")}
                   className={`dtb-bg-picker__tab${activeTab === "compare" ? " dtb-bg-picker__tab--active" : ""}`}
-                  onClick={() => setActiveTab("compare")}
+                  onClick={() => {
+                    setActiveTab("compare");
+                    handleTabChange("compare");
+                  }}
                 >
                   <Icon name="compare_arrows" size={13} />
                   <span>{t("bgPicker.compare", "Compare")}</span>
@@ -757,11 +913,29 @@ export default function BackgroundPickerCard({
                 <button
                   type="button"
                   role="tab"
+                  aria-selected={textSubTab === "all"}
+                  aria-label={t("common.all", "All")}
+                  title={t("common.all", "All")}
+                  className={`dtb-bg-picker__subtab${textSubTab === "all" ? " dtb-bg-picker__subtab--active" : ""}`}
+                  onClick={() => {
+                    setTextSubTab("all");
+                    handleTextSubTabChange("all");
+                  }}
+                >
+                  <Icon name="auto_awesome" size={13} />
+                  <span>{t("common.all", "All")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
                   aria-selected={textSubTab === "bible"}
                   aria-label={t("bible.bible", "Bible")}
                   title={t("bible.bible", "Bible")}
                   className={`dtb-bg-picker__subtab${textSubTab === "bible" ? " dtb-bg-picker__subtab--active" : ""}`}
-                  onClick={() => setTextSubTab("bible")}
+                  onClick={() => {
+                    setTextSubTab("bible");
+                    handleTextSubTabChange("bible");
+                  }}
                 >
                   <Icon name="menu_book" size={13} />
                   <span>{t("bible.bible", "Bible")}</span>
@@ -773,7 +947,10 @@ export default function BackgroundPickerCard({
                   aria-label={t("bible.reference", "Reference")}
                   title={t("bible.reference", "Reference")}
                   className={`dtb-bg-picker__subtab${textSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
-                  onClick={() => setTextSubTab("reference")}
+                  onClick={() => {
+                    setTextSubTab("reference");
+                    handleTextSubTabChange("reference");
+                  }}
                 >
                   <Icon name="format_quote" size={13} />
                   <span>{t("bible.reference", "Reference")}</span>
@@ -790,7 +967,10 @@ export default function BackgroundPickerCard({
                   aria-label={t("common.text", "Text")}
                   title={t("common.text", "Text")}
                   className={`dtb-bg-picker__subtab${layoutSubTab === "text" ? " dtb-bg-picker__subtab--active" : ""}`}
-                  onClick={() => setLayoutSubTab("text")}
+                  onClick={() => {
+                    setLayoutSubTab("text");
+                    handleLayoutSubTabChange("text");
+                  }}
                 >
                   <Icon name="text_fields" size={13} />
                   <span>{t("common.text", "Text")}</span>
@@ -802,7 +982,10 @@ export default function BackgroundPickerCard({
                   aria-label={t("bible.reference", "Reference")}
                   title={t("bible.reference", "Reference")}
                   className={`dtb-bg-picker__subtab${layoutSubTab === "reference" ? " dtb-bg-picker__subtab--active" : ""}`}
-                  onClick={() => setLayoutSubTab("reference")}
+                  onClick={() => {
+                    setLayoutSubTab("reference");
+                    handleLayoutSubTabChange("reference");
+                  }}
                 >
                   <Icon name="format_quote" size={13} />
                   <span>{t("bible.reference", "Reference")}</span>
@@ -810,7 +993,7 @@ export default function BackgroundPickerCard({
               </div>
             )}
 
-            <div className="dtb-bg-picker__scroll">
+            <div className="dtb-bg-picker__scroll" ref={scrollRef} onScroll={handleScroll}>
           {/* Background Tab */}
           {activeTab === "background" && (
             <>
@@ -841,6 +1024,21 @@ export default function BackgroundPickerCard({
 
               {/* Content based on type */}
               <div className="dtb-bg-picker__content">
+                {bgType === "color" && (
+                  <ColorSection
+                    quickSettings={quickSettings}
+                    onQuickSettingsChange={onQuickSettingsChange}
+                    onBackgroundPresetChange={onBackgroundPresetChange}
+                  />
+                )}
+                {bgType === "pattern" && (
+                  <PatternTab
+                    quickSettings={quickSettings}
+                    onQuickSettingsChange={onQuickSettingsChange}
+                    onBackgroundPresetChange={onBackgroundPresetChange}
+                    limit={patternLimit}
+                  />
+                )}
                 {bgType === "image" && (
                   <ImageTab
                     quickSettings={quickSettings}
@@ -855,21 +1053,6 @@ export default function BackgroundPickerCard({
                     onQuickSettingsChange={onQuickSettingsChange}
                     onBackgroundPresetChange={onBackgroundPresetChange}
                     limit={videoLimit}
-                  />
-                )}
-                {bgType === "pattern" && (
-                  <PatternTab
-                    quickSettings={quickSettings}
-                    onQuickSettingsChange={onQuickSettingsChange}
-                    onBackgroundPresetChange={onBackgroundPresetChange}
-                    limit={BACKGROUND_PATTERN_PICKER_LIMIT}
-                  />
-                )}
-                {bgType === "color" && (
-                  <ColorSection
-                    quickSettings={quickSettings}
-                    onQuickSettingsChange={onQuickSettingsChange}
-                    onBackgroundPresetChange={onBackgroundPresetChange}
                   />
                 )}
                 {bgType === "theme" && (
@@ -897,18 +1080,108 @@ export default function BackgroundPickerCard({
                 />
               )}
 
-
-
             </>
           )}
 
           {/* Text Tab */}
           {activeTab === "text" && (
             <>
+              {/* ── All (Shared) Subtab ── */}
+              {isBiblePicker && textSubTab === "all" && (
+                <div className="dtb-bg-picker__settings">
+                  <div className="dtb-control-section">
+                    <div className="dtb-control-section__head">
+                      <span className="dtb-control-section__title">{t('bgPicker.sharedAppearance', 'Shared Text & Reference Styling')}</span>
+                    </div>
+                    <div className="dtb-control-section__body">
+                      <div className="dtb-typography-control-row">
+                        <ColorPickerCard
+                          label={t('common.color', 'Shared Color')}
+                          value={quickSettings.fontColor ?? "#ffffff"}
+                          onChange={(v) => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            fontColor: v,
+                            refFontColor: v,
+                          }))}
+                        />
+
+                        <SliderNumberField
+                          label={t('bgPicker.lineHeight', 'Line Height')}
+                          value={quickSettings.lineHeight}
+                          min={1.05}
+                          max={1.8}
+                          step={0.01}
+                          onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
+                        />
+                      </div>
+
+                      {/* Letter Spacing and Word Spacing */}
+                      <div className="dtb-typography-control-row">
+                        <SliderNumberField
+                          label={t('bgPicker.letterSpacing', 'Letter Spacing')}
+                          value={quickSettings.letterSpacing ?? 0}
+                          min={-2}
+                          max={20}
+                          step={1}
+                          unit="px"
+                          onChange={(value) => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            letterSpacing: value,
+                            refLetterSpacing: value,
+                          }))}
+                        />
+                        <SliderNumberField
+                          label={t('bgPicker.wordSpacing', 'Word Spacing')}
+                          value={quickSettings.wordSpacing ?? 0}
+                          min={-5}
+                          max={40}
+                          step={1}
+                          unit="px"
+                          onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, wordSpacing: value }))}
+                        />
+                      </div>
+
+                      <div className="dtb-typography-control-row dtb-typography-control-row--selects">
+                        <CompactSelectField<CompactFontWeight>
+                          label={t('bgPicker.weight', 'Font Weight')}
+                          value={(quickSettings.fontWeight ?? "normal") as CompactFontWeight}
+                          options={getWeightOptions(t)}
+                          onChange={(w) => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            fontWeight: w,
+                            refFontWeight: w,
+                          }))}
+                        />
+
+                        <CompactSelectField<CompactTextCase>
+                          label={t('bgPicker.textCase', 'Text Case')}
+                          value={(quickSettings.textTransform ?? "none") as CompactTextCase}
+                          options={getTextCaseOptions(t)}
+                          onChange={(tc) => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            textTransform: tc,
+                            refTextTransform: tc,
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Canva-style Text Effects */}
+                  <TextEffectsPicker
+                    settings={quickSettings}
+                    onChange={onQuickSettingsChange}
+                    target="all"
+                  />
+                </div>
+              )}
+
               {(!isBiblePicker || textSubTab === "bible") && (
                 <>
                   {/* ── Bible Text Section ── */}
+                  {/* Presets: TEXT_SHADOW_PRESETS TEXT_OUTLINE_OPTIONS */}
                   <div className="dtb-bg-picker__settings">
+
                     {!isBiblePicker && (
                       <div>
                         <div className="dtb-section-title">{t('bgPicker.text')}</div>
@@ -933,20 +1206,52 @@ export default function BackgroundPickerCard({
                             label={t('bgPicker.fontSize')}
                             value={quickSettings.fontSize}
                             min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28}
-                            max={overlayMode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200}
+                            max={overlayMode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 240}
                             step={1}
-                            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, fontSize: value }))}
+                            onChange={(value) => onQuickSettingsChange((prev) => ({
+                              ...prev,
+                              fontSize: value,
+                              compareVerseFontSizeLeft: value,
+                              compareVerseFontSizeRight: value,
+                              compareAutoFitMaxFontSize: value,
+                            }))}
                           />
                         </div>
 
-                        <SliderNumberField
-                          label={t('bgPicker.lineHeight')}
-                          value={quickSettings.lineHeight}
-                          min={1.05}
-                          max={1.8}
-                          step={0.01}
-                          onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
-                        />
+                        {/* Line Height beside Letter Spacing */}
+                        <div className="dtb-typography-control-row">
+                          <SliderNumberField
+                            label={t('bgPicker.lineHeight')}
+                            value={quickSettings.lineHeight}
+                            min={1.05}
+                            max={1.8}
+                            step={0.01}
+                            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
+                          />
+
+                          <SliderNumberField
+                            label={t('bgPicker.letterSpacing', 'Letter Spacing')}
+                            value={quickSettings.letterSpacing ?? 0}
+                            min={-2}
+                            max={20}
+                            step={1}
+                            unit="px"
+                            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, letterSpacing: value }))}
+                          />
+                        </div>
+
+                        {/* Word Spacing */}
+                        <div className="dtb-typography-control-row">
+                          <SliderNumberField
+                            label={t('bgPicker.wordSpacing', 'Word Spacing')}
+                            value={quickSettings.wordSpacing ?? 0}
+                            min={-5}
+                            max={40}
+                            step={1}
+                            unit="px"
+                            onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, wordSpacing: value }))}
+                          />
+                        </div>
 
                         <div className="dtb-typography-control-row dtb-typography-control-row--selects">
                           <CompactSelectField<CompactFontWeight>
@@ -965,6 +1270,13 @@ export default function BackgroundPickerCard({
                         </div>
                       </div>
                     </div>
+
+                    {/* Canva-style Text Effects */}
+                    <TextEffectsPicker
+                      settings={quickSettings}
+                      onChange={onQuickSettingsChange}
+                      target="verse"
+                    />
                   </div>
                 </>
               )}
@@ -1225,6 +1537,7 @@ export default function BackgroundPickerCard({
               overlayMode={overlayMode}
               imageLimit={imageLimit}
               videoLimit={videoLimit}
+              patternLimit={patternLimit}
             />
           )}
             </div>
@@ -1725,12 +2038,16 @@ function PatternTab({
 }) {
   const { t } = useTranslation();
   const currentPattern = quickSettings.backgroundPattern || "";
+  const isLimited = limit > 0 && limit < PATTERN_OPTIONS.length;
 
   const selectPattern = useCallback((src: string) => {
     onQuickSettingsChange((prev) => ({
       ...prev,
       backgroundType: "pattern",
       backgroundPattern: src,
+      backgroundColor: "",
+      backgroundColorEnd: "",
+      bgGradientAngle: 180,
       backgroundVideo: "",
       backgroundVideoFilePath: "",
       backgroundImage: "",
@@ -1766,6 +2083,16 @@ function PatternTab({
           );
         })}
       </div>
+      {isLimited && (
+        <button
+          type="button"
+          className="dtb-pattern-upgrade-pill"
+          onClick={() => showUpgradeModal(t('upgrade.patternsMessage', 'Upgrade to unlock all 30 background patterns.'))}
+        >
+          <Icon name="lock" size={12} />
+          <span>{t('upgrade.unlockAllPatterns', `Upgrade to unlock all ${PATTERN_OPTIONS.length} patterns`)}</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -2300,8 +2627,11 @@ function ReferenceSection({
 }) {
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const refFontSize = quickSettings.refFontSize ?? 12;
-  const refFontWeight = quickSettings.refFontWeight ?? "normal";
+  const baseSize = quickSettings.fontSize ?? 48;
+  const refFontSize = (quickSettings.refFontSize && quickSettings.refFontSize < baseSize)
+    ? quickSettings.refFontSize
+    : Math.max(14, Math.round(baseSize * 0.7));
+  const refFontWeight = quickSettings.refFontWeight ?? quickSettings.fontWeight ?? "bold";
   const refTextTransform = quickSettings.refTextTransform ?? "none";
   const refOpacity = quickSettings.refOpacity ?? 1;
 
@@ -2315,10 +2645,6 @@ function ReferenceSection({
           </p>
         </div>
       )}
-      <ReferenceBackgroundSection
-        quickSettings={quickSettings}
-        onQuickSettingsChange={onQuickSettingsChange}
-      />
 
       <div className="dtb-control-section">
         <div className="dtb-control-section__head">
@@ -2328,7 +2654,7 @@ function ReferenceSection({
           <div className="dtb-typography-control-row">
             <ColorPickerCard
               label={t('common.color')}
-              value={quickSettings.refFontColor ?? "#cccccc"}
+              value={quickSettings.refFontColor ?? quickSettings.fontColor ?? "#ffffff"}
               onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, refFontColor: v }))}
             />
 
@@ -2336,11 +2662,17 @@ function ReferenceSection({
               label={t('bgPicker.fontSize')}
               value={refFontSize}
               min={overlayMode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10}
-              max={overlayMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 80}
+              max={overlayMode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150}
               step={1}
-              onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, refFontSize: value }))}
+              onChange={(value) => onQuickSettingsChange((prev) => ({
+                ...prev,
+                refFontSize: value,
+                compareReferenceFontSizeLeft: value,
+                compareReferenceFontSizeRight: value,
+              }))}
             />
           </div>
+
 
           <div className="dtb-typography-control-row dtb-typography-control-row--selects">
             <CompactSelectField<CompactFontWeight>
@@ -2360,6 +2692,11 @@ function ReferenceSection({
 
         </div>
       </div>
+
+      <ReferenceBackgroundSection
+        quickSettings={quickSettings}
+        onQuickSettingsChange={onQuickSettingsChange}
+      />
 
       {referenceFormat && onReferenceFormatChange && onReferenceVersionVisibleChange && (
         <ReferenceDisplaySection
@@ -2417,21 +2754,14 @@ function ReferenceLayoutSection({
 }) {
   const { t } = useTranslation();
   const refPosition = quickSettings.refPosition ?? "bottom";
-  const refAnchor = quickSettings.refAnchor ?? "normal";
   const refTextAlign = quickSettings.refTextAlign ?? "match";
   const refSpacing = quickSettings.refSpacing ?? 24;
-  const referencePlacement = refAnchor === "top"
-    ? "top-edge"
-    : refAnchor === "bottom"
-      ? "bottom-edge"
-      : refPosition === "top"
-        ? "above-verse"
-        : "below-verse";
-  const setReferencePlacement = (placement: "above-verse" | "below-verse" | "top-edge" | "bottom-edge") => {
+  const isTop = refPosition === "top";
+  const setReferencePlacement = (placement: "top" | "bottom") => {
     onQuickSettingsChange((prev) => ({
       ...prev,
-      refAnchor: placement === "top-edge" ? "top" : placement === "bottom-edge" ? "bottom" : "normal",
-      refPosition: placement === "above-verse" || placement === "top-edge" ? "top" : "bottom",
+      refAnchor: "normal",
+      refPosition: placement,
     }));
   };
 
@@ -2459,41 +2789,41 @@ function ReferenceLayoutSection({
           {/* Reference Placement */}
           <div className="dtb-font-weight-row">
             <span className="dtb-position-label">{t('bgPicker.referencePlacement', 'Placement')}</span>
-            <div className="dtb-position-options dtb-position-options--wrap">
-              {([
-                { value: "above-verse" as const, label: t('bgPicker.aboveVerse', 'Above verse') },
-                { value: "below-verse" as const, label: t('bgPicker.belowVerse', 'Below verse') },
-                { value: "top-edge" as const, label: t('bgPicker.topEdge', 'Top edge') },
-                { value: "bottom-edge" as const, label: t('bgPicker.bottomEdge', 'Bottom edge') },
-              ]).map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`dtb-position-btn${referencePlacement === item.value ? " dtb-position-btn--active" : ""}`}
-                  onClick={() => setReferencePlacement(item.value)}
-                  title={item.label}
-                >
-                  {item.label}
-                </button>
-              ))}
+            <div className="dtb-position-options">
+              <button
+                type="button"
+                className={`dtb-position-btn${isTop ? " dtb-position-btn--active" : ""}`}
+                onClick={() => setReferencePlacement("top")}
+                title={t('bgPicker.top', 'Top')}
+              >
+                {t('bgPicker.top', 'Top')}
+              </button>
+              <button
+                type="button"
+                className={`dtb-position-btn${!isTop ? " dtb-position-btn--active" : ""}`}
+                onClick={() => setReferencePlacement("bottom")}
+                title={t('bgPicker.bottom', 'Bottom')}
+              >
+                {t('bgPicker.bottom', 'Bottom')}
+              </button>
             </div>
           </div>
 
           {/* Reference Spacing */}
           <div className="dtb-slider-field">
             <div className="dtb-slider-field__head">
-              <span>{t('bgPicker.spacing')}</span>
+              <span>{t('bgPicker.spacing', 'Reference Spacing')}</span>
               <span className="dtb-slider-field__value">{refSpacing}px</span>
             </div>
             <input
               type="range"
               className="dtb-slider"
               min={0}
-              max={120}
+              max={150}
               step={1}
               value={refSpacing}
               onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refSpacing: Number(e.target.value) }))}
-              aria-label={t('bgPicker.spacing')}
+              aria-label={t('bgPicker.spacing', 'Reference Spacing')}
             />
           </div>
         </div>
@@ -2726,7 +3056,18 @@ function ThemeSection({
                 className="dtb-theme-section__preview"
                 style={{ backgroundColor: bgColor, color: fontColor }}
               >
-                <span className="dtb-theme-section__preview-text">Aa</span>
+                <span
+                  className="dtb-theme-section__preview-text"
+                  style={{
+                    fontWeight: s.fontWeight === "black" ? 900 : s.fontWeight === "extrabold" || s.fontWeight === "bold" ? 800 : undefined,
+                    textShadow: s.textShadow || undefined,
+                    WebkitTextStroke: s.textOutline
+                      ? `${s.textOutlineWidth || 2}px ${s.textOutlineColor || "#000"}`
+                      : undefined,
+                  }}
+                >
+                  Aa
+                </span>
                 <div className="dtb-theme-section__variants">
                   {hasFs && <span className="dtb-theme-section__variant-badge">FS</span>}
                   {hasLt && <span className="dtb-theme-section__variant-badge">LT</span>}
@@ -2914,7 +3255,7 @@ function getWeightGlyphClass(value: CompactFontWeight | CompareFontWeight): stri
   if (value === "light" || value === "regular") return "dtb-icon-segmented__glyph--light";
   if (value === "normal" || value === "medium") return "dtb-icon-segmented__glyph--normal";
   if (value === "semibold") return "dtb-icon-segmented__glyph--semibold";
-  if (value === "extrabold") return "dtb-icon-segmented__glyph--extrabold";
+  if (value === "extrabold" || value === "black") return "dtb-icon-segmented__glyph--extrabold";
   return "dtb-icon-segmented__glyph--bold";
 }
 
@@ -3007,7 +3348,7 @@ function IconSegmentedControl<T extends string>({
 }
 
 function getWeightOptions(t: ReturnType<typeof useTranslation>["t"]): Array<IconSegmentedOption<CompactFontWeight>> {
-  return (["light", "normal", "bold", "extrabold"] as const).map((value) => ({
+  return (["light", "normal", "bold", "extrabold", "black"] as const).map((value) => ({
     value,
     label:
       value === "light"
@@ -3016,8 +3357,10 @@ function getWeightOptions(t: ReturnType<typeof useTranslation>["t"]): Array<Icon
           ? t("bgPicker.bold")
           : value === "extrabold"
             ? t("bgPicker.extraBold", "Extra bold")
-            : t("bgPicker.regular"),
-    glyph: value === "extrabold" ? "B+" : "B",
+            : value === "black"
+              ? t("bgPicker.black", "Black (900)")
+              : t("bgPicker.regular"),
+    glyph: value === "black" ? "B++" : value === "extrabold" ? "B+" : "B",
     glyphClassName: getWeightGlyphClass(value),
   }));
 }
@@ -3322,6 +3665,7 @@ function CompareSettingsPanel({
   overlayMode = "fullscreen",
   imageLimit,
   videoLimit,
+  patternLimit = getDockPatternLimit(),
 }: {
   quickSettings: DockFullscreenQuickThemeSettings;
   onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
@@ -3334,6 +3678,7 @@ function CompareSettingsPanel({
   overlayMode?: "fullscreen" | "lower-third";
   imageLimit: number;
   videoLimit: number;
+  patternLimit?: number;
 }) {
   const { t } = useTranslation();
   const compare = useMemo(
@@ -3478,6 +3823,21 @@ function CompareSettingsPanel({
         )}
       </div>
 
+      {resolvedCompareBackdropValue === "color" && (
+        <ColorSection
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+        />
+      )}
+      {resolvedCompareBackdropValue === "pattern" && (
+        <PatternTab
+          quickSettings={quickSettings}
+          onQuickSettingsChange={onQuickSettingsChange}
+          onBackgroundPresetChange={onBackgroundPresetChange}
+          limit={patternLimit}
+        />
+      )}
       {resolvedCompareBackdropValue === "image" && (
         <ImageTab
           quickSettings={quickSettings}
@@ -3494,21 +3854,6 @@ function CompareSettingsPanel({
           limit={videoLimit}
         />
       )}
-      {resolvedCompareBackdropValue === "pattern" && (
-        <PatternTab
-          quickSettings={quickSettings}
-          onQuickSettingsChange={onQuickSettingsChange}
-          onBackgroundPresetChange={onBackgroundPresetChange}
-          limit={BACKGROUND_PATTERN_PICKER_LIMIT}
-        />
-      )}
-      {resolvedCompareBackdropValue === "color" && (
-        <ColorSection
-          quickSettings={quickSettings}
-          onQuickSettingsChange={onQuickSettingsChange}
-          onBackgroundPresetChange={onBackgroundPresetChange}
-        />
-      )}
 
       {/* Style */}
       <div className="dtb-bg-picker__settings" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3521,6 +3866,8 @@ function CompareSettingsPanel({
           onChange={(value) => applyPatch({
             compareVerseFontSizeLeft: value,
             compareVerseFontSizeRight: value,
+            fontSize: value,
+            compareAutoFitMaxFontSize: value,
           })}
         />
 
@@ -3553,6 +3900,7 @@ function CompareSettingsPanel({
           onChange={(value) => applyPatch({
             compareReferenceFontSizeLeft: value,
             compareReferenceFontSizeRight: value,
+            refFontSize: value,
           })}
         />
 

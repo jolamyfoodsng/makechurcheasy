@@ -3900,10 +3900,10 @@ function DockMediaTab({
             let bgImageStyle = "none";
             if (bg.bgType === "image" && bg.imageId) {
               const img = localLibrary.find((item) => item.id === bg.imageId && item.type === "image");
-              if (img) bgImageStyle = `url(${img.thumbnailUrl || img.url})`;
+              if (img) bgImageStyle = `url("${img.thumbnailUrl || img.url}")`;
             } else if (bg.bgType === "pattern" && bg.patternId) {
               const pat = BACKGROUND_PATTERNS.find((p) => p.label === bg.patternId);
-              if (pat) bgImageStyle = `url(${pat.src})`;
+              if (pat) bgImageStyle = `url("${pat.src}")`;
             }
             return (
               <div

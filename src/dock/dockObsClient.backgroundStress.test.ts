@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dockObsClient } from "./dockObsClient";
 import { removeNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 
+vi.mock("./dockEntitlement", () => ({
+  isDockFreePlan: vi.fn(() => false),
+  isDockTrialActive: vi.fn(() => false),
+  getDockPlan: vi.fn(() => "growth"),
+}));
+
 type BackgroundTheme = Record<string, unknown>;
 type InputState = {
   inputKind: string;

@@ -53,7 +53,7 @@
       overflow: hidden;
       background: var(--bg);
       color: var(--fg);
-      font-family: "Charis SIL", "Noto Sans", "CMG Sans", "Inter", "Segoe UI", sans-serif;
+      font-family: "CMG Sans Black", "CMG Sans", "Noto Sans", "Charis SIL", "Inter", "Segoe UI", sans-serif;
       position: relative;
     }
 
@@ -143,13 +143,13 @@
 
     .stage-reference {
       font-size: clamp(28px, 2.2vw, 42px);
-      font-weight: 700;
+      font-weight: inherit;
       color: #ffffff;
     }
 
     .stage-title {
       font-size: clamp(46px, 4vw, 90px);
-      font-weight: 700;
+      font-weight: inherit;
       line-height: 1.08;
     }
 
@@ -160,7 +160,7 @@
 
     .stage-body {
       font-size: clamp(68px, 6.8vw, 156px);
-      font-weight: 700;
+      font-weight: inherit;
       line-height: 1.2;
     }
 
@@ -770,6 +770,7 @@
                 font-weight:${escapeHtml(String(style.fontWeight || 700))};
                 line-height:${Math.max(1, Number(style.lineHeight || 1.2))};
                 text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+                ${style.textOutline ? `paint-order:stroke fill;-webkit-text-stroke:${Math.max(1, Number(style.textOutlineWidth || 2))}px ${escapeHtml(style.textOutlineColor || "#000000")};` : ""}
                 border-radius:${Math.max(0, Number(style.padding || 0) * 0.25)}px;
                 padding:${boxOpacity > 0 ? `${Math.max(12, Number(style.padding || 24))}px` : "0"};
                 opacity:1;
@@ -908,6 +909,7 @@
               color:${escapeHtml(textColor)};
               font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
               text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+              ${style.textOutline ? `paint-order:stroke fill;-webkit-text-stroke:${Math.max(1, Number(style.textOutlineWidth || 2))}px ${escapeHtml(style.textOutlineColor || "#000000")};` : ""}
             ">
               ${title ? `<div class="stage-title" style="font-size:${zoomClamp(46, 4, 90, zoom)};">${escapeHtml(title)}</div>` : ""}
               <div id="countdownClock" class="countdown-clock" style="font-size:${zoomClamp(100, 11, 240, zoom)};"></div>
@@ -936,7 +938,7 @@
               background:${escapeHtml(ticker.backgroundColor || "#000000")};
               color:${escapeHtml(ticker.textColor || "#ffffff")};
               font-size:${Math.max(16, Number(ticker.fontSize || 32))}px;
-              font-family:${escapeHtml(ticker.fontFamily || '"Charis SIL", "Noto Sans", "CMG Sans", "Inter", "Segoe UI", sans-serif')};
+              font-family:${escapeHtml(ticker.fontFamily || '"CMG Sans Black", "CMG Sans", "Noto Sans", "Charis SIL", "Inter", "Segoe UI", sans-serif')};
               font-weight:700;
             ">
               <div class="ticker-track ${directionClass} ${pausedClass}" style="animation-duration:${durationSeconds}s;">

@@ -40,7 +40,7 @@ describe("Dock lower-third animate out wiring", () => {
     expect(editorSource).not.toContain("pendingLiveSizeUpdateRef");
     expect(editorSource).not.toContain("latestHandleSendRef.current()");
     expect(ministrySource).not.toContain("live={ltLive}");
-    expect(ministrySource).toContain("writeUserScopedStorage(MINISTRY_LT_SIZE_STORAGE_KEY, s)");
+    expect(ministrySource).toContain("writeNativeDockSetting(MINISTRY_LT_SIZE_STORAGE_KEY, s)");
   });
 
   it("keeps Appearance behind an accessible collapsible section", () => {
@@ -54,9 +54,9 @@ describe("Dock lower-third animate out wiring", () => {
   it("uses compact visible Ministry labels while keeping full accessible labels", () => {
     expect(ministrySource).toContain('t("ministry.tickerShort", "Ticker")');
     expect(ministrySource).toContain('t("ministry.lowerThirdsShort", "Low")');
-    expect(ministrySource).toContain('t("ministry.countdownsShort", "Count")');
+    expect(ministrySource).toContain('t("ministry.timeShort", "Time")');
     expect(ministrySource).toContain('aria-label={t("ministry.lowerThirds")}');
-    expect(ministrySource).toContain('aria-label={t("ministry.countdowns")}');
+    expect(ministrySource).toContain('aria-label={t("ministry.time", "Time")}');
   });
 
   it("keeps Bible verse themes in the Bible tab instead of mixing them into Low", () => {

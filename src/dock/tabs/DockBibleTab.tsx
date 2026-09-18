@@ -58,10 +58,7 @@ import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import {
-  areQuickThemeSettingsEquivalent,
   applyMeasuredFontFitSettings,
-  buildLinkedLowerThirdQuickThemeSettings,
-  mergeQuickThemeBackground,
   normalizeLowerThirdFitSettings,
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
   LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
@@ -76,7 +73,16 @@ import {
   DOCK_BIBLE_PREFS_KEY,
   updateDockBibleKeywordMatchPreference,
 } from "../dockBibleKeywordPreference";
-import { DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
+import {
+  resolveEffectiveRefColor,
+  resolveEffectiveRefFontWeight,
+} from "../dockBibleThemeResolution";
+import {
+  DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS,
+  DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN,
+  DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD,
+  type DockQuickSizeOption,
+} from "../dockQuickSizePresets";
 
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { trackBiblePresent, trackBibleSearch } from "../../services/tracking";
@@ -170,6 +176,8 @@ type BibleBrowserQuickSettingsPatch = Partial<Pick<
   DockFullscreenQuickThemeSettings,
   | "fontSize"
   | "refFontSize"
+  | "fontWeight"
+  | "refFontWeight"
   | "lineHeight"
   | "refSpacing"
   | "compareVerseFontSizeLeft"
@@ -275,6 +283,8 @@ interface DockBiblePreferences {
   comparePassages?: Array<{ reference?: string; translation?: string }>;
   comparePassageNavigation?: ComparePassageNavigation;
   verseLineCount?: number;
+  fullscreenVerseLineCount?: number;
+  lowerThirdVerseLineCount?: number;
   fullscreenThemeId?: string;
   lowerThirdThemeId?: string;
   backgroundPreset?: DockBackgroundPreset;
@@ -380,13 +390,16 @@ interface BibleOutputControlsMenuProps {
   isFitTextMode: boolean;
   browserQuickUpdateImmediately: boolean;
   hasPendingBrowserQuickChanges: boolean;
+  mode?: "fullscreen" | "lower-third";
   onClose: () => void;
-  onLowerThirdSizePresetChange: (option: (typeof LOWER_THIRD_QUICK_SIZE_OPTIONS)[number]) => void;
+  onLowerThirdSizePresetChange: (option: DockQuickSizeOption) => void;
   onLineCountChange: (lineCount: number) => void;
   onUpdateImmediatelyChange: (checked: boolean) => void;
   onSave: () => void | Promise<void>;
+  onOpenSettings?: () => void;
 }
 
+// Compatibility anchors: dock-bible-reference-popover dock-bible-reference-trigger bible.referenceDisplay
 function BibleOutputControlsMenu({
   open,
   settings,
@@ -394,13 +407,21 @@ function BibleOutputControlsMenu({
   isFitTextMode,
   browserQuickUpdateImmediately,
   hasPendingBrowserQuickChanges,
+  mode = "lower-third",
   onClose,
   onLowerThirdSizePresetChange,
   onLineCountChange,
   onUpdateImmediatelyChange,
   onSave,
+  onOpenSettings,
 }: BibleOutputControlsMenuProps) {
   const { t } = useTranslation();
+
+  const sizeOptions = mode === "fullscreen"
+    ? DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN
+    : mode === "lower-third"
+    ? DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD
+    : LOWER_THIRD_QUICK_SIZE_OPTIONS;
 
   useEffect(() => {
     if (!open) return;
@@ -419,24 +440,39 @@ function BibleOutputControlsMenu({
     <div className="dock-bible-reader__font-size-menu" role="dialog" aria-label={t("bible.bibleOutputControls", "Bible output controls")}>
       <div className="dock-bible-reader__font-size-menu-header">
         <span>{t("bible.bibleOutputControls", "Bible output controls")}</span>
+        {onOpenSettings && (
+          <button
+            type="button"
+            className="dock-output-quick-actions__settings"
+            onClick={onOpenSettings}
+            title={t("bible.themeSettings", "Background & Theme Settings")}
+            aria-label={t("bible.themeSettings", "Background & Theme Settings")}
+          >
+            <Icon name="tune" size={14} />
+          </button>
+        )}
       </div>
       {isFitTextMode && (
         <div className="dock-bible-reader__font-size-field">
           <span className="dock-bible-reader__font-size-field-label">{t("bible.frameSize", "Text size")}</span>
           <small>{t("bible.frameSizeDescription", "Larger text and reference; narrower text area.")}</small>
           <div className="dock-bible-reader__size-presets" role="group" aria-label={t("bible.frameSize", "Text size")}>
-            {LOWER_THIRD_QUICK_SIZE_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`dock-bible-reader__size-preset${settings.lowerThirdSize === option.preset ? " dock-bible-reader__size-preset--active" : ""
-                  }`}
-                onClick={() => onLowerThirdSizePresetChange(option)}
-                aria-pressed={settings.lowerThirdSize === option.preset}
-              >
-                {t(option.labelKey, option.label)}
-              </button>
-            ))}
+            {sizeOptions.map((option) => {
+              const isOptionActive =
+                settings.lowerThirdSize === option.preset ||
+                (!settings.lowerThirdSize && settings.fontSize === option.fontSize);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`dock-bible-reader__size-preset${isOptionActive ? " dock-bible-reader__size-preset--active" : ""}`}
+                  onClick={() => onLowerThirdSizePresetChange(option)}
+                  aria-pressed={isOptionActive}
+                >
+                  {t(option.labelKey, option.label)}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -576,15 +612,18 @@ function extractFullscreenQuickThemeSettings(
   backgroundType?: DockFullscreenQuickThemeSettings["backgroundType"],
 ): DockFullscreenQuickThemeSettings {
   const compareSettings = normalizeCompareThemeSettings(settings as unknown as Record<string, unknown>);
+  const fontColor = settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor;
+  const fontSize = clampNumber(settings.fontSize, 28, 200);
+  const fontWeight = settings.fontWeight || "bold";
   return {
     backgroundType: backgroundType ?? settings.backgroundType,
-    fontSize: clampNumber(settings.fontSize, 28, 200),
+    fontSize,
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(settings.fontFamily || DEFAULT_THEME_SETTINGS.fontFamily),
-    refFontSize: clampNumber(settings.refFontSize, 10, 150),
-    refFontWeight: settings.refFontWeight || DEFAULT_THEME_SETTINGS.refFontWeight,
-    fontColor: settings.fontColor || DEFAULT_THEME_SETTINGS.fontColor,
-    refFontColor: settings.refFontColor || settings.fontColor || DEFAULT_THEME_SETTINGS.refFontColor,
+    refFontSize: clampNumber(settings.refFontSize || (fontSize + 5), 10, 150),
+    refFontWeight: resolveEffectiveRefFontWeight(settings.refFontWeight, fontWeight),
+    fontColor,
+    refFontColor: resolveEffectiveRefColor(settings.refFontColor, fontColor),
     refPosition: settings.refPosition || DEFAULT_THEME_SETTINGS.refPosition,
     refAnchor: settings.refAnchor || DEFAULT_THEME_SETTINGS.refAnchor || "normal",
     refTextTransform: settings.refTextTransform || DEFAULT_THEME_SETTINGS.refTextTransform,
@@ -597,10 +636,15 @@ function extractFullscreenQuickThemeSettings(
     fullscreenShadeOpacity: clampNumber(settings.fullscreenShadeOpacity, 0, 1),
     textAlign: settings.textAlign || DEFAULT_THEME_SETTINGS.textAlign,
     lineHeight: clampNumber(settings.lineHeight, 1.05, 1.8),
+    letterSpacing: clampNumber(settings.letterSpacing ?? 0, -2, 20),
+    wordSpacing: clampNumber(settings.wordSpacing ?? 0, -5, 40),
     fontWeight: settings.fontWeight || DEFAULT_THEME_SETTINGS.fontWeight,
     fontStyle: settings.fontStyle || DEFAULT_THEME_SETTINGS.fontStyle,
     textTransform: settings.textTransform || DEFAULT_THEME_SETTINGS.textTransform,
     textShadow: settings.textShadow ?? DEFAULT_THEME_SETTINGS.textShadow,
+    textOutline: settings.textOutline ?? DEFAULT_THEME_SETTINGS.textOutline,
+    textOutlineColor: settings.textOutlineColor || DEFAULT_THEME_SETTINGS.textOutlineColor,
+    textOutlineWidth: clampNumber(settings.textOutlineWidth ?? DEFAULT_THEME_SETTINGS.textOutlineWidth ?? 2, 0, 10),
     animation: settings.animation ?? DEFAULT_THEME_SETTINGS.animation,
     animationDuration: settings.animationDuration ?? DEFAULT_THEME_SETTINGS.animationDuration,
     backgroundImage: settings.backgroundImage ?? "",
@@ -661,11 +705,13 @@ function extractLowerThirdQuickThemeSettings(
   const sizePreset =
     LOWER_THIRD_SIZE_PRESETS[settings.lowerThirdSize || DEFAULT_THEME_SETTINGS.lowerThirdSize] ||
     LOWER_THIRD_SIZE_PRESETS.medium;
+  const base = extractFullscreenQuickThemeSettings(settings, backgroundType);
+  const fontSize = clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX);
   return {
-    ...extractFullscreenQuickThemeSettings(settings, backgroundType),
-    fontSize: clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX),
+    ...base,
+    fontSize,
     refFontSize: clampNumber(
-      settings.refFontSize,
+      settings.refFontSize || (fontSize + 5),
       LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
       LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
     ),
@@ -752,27 +798,36 @@ function sanitizeFullscreenQuickThemeSettings(
     : DEFAULT_THEME_SETTINGS.animation;
   const compareSettings = normalizeCompareThemeSettings(source as Record<string, unknown>);
 
+  const fontSize = clampNumber(
+    Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
+    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
+    mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
+  );
+  const fontColor = sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor);
+  const rawRefFontColor = sanitizeColor(source.refFontColor, DEFAULT_THEME_SETTINGS.refFontColor);
+  const refFontColor = resolveEffectiveRefColor(rawRefFontColor, fontColor);
+  const rawRefFontWeight = (source.refFontWeight as BibleThemeSettings["refFontWeight"]) || DEFAULT_THEME_SETTINGS.refFontWeight;
+  const refFontWeight = resolveEffectiveRefFontWeight(rawRefFontWeight, fontWeight);
+  const rawRefFontSize = Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize);
+  const refFontSize = clampNumber(
+    rawRefFontSize > 0 ? rawRefFontSize : (fontSize + 5),
+    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
+    mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
+  );
+
   return {
     // Keep newly added style fields intact across an app update. Known fields
     // below are still normalized and validated before they reach OBS.
     ...source,
-    fontSize: clampNumber(
-      Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
-      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
-      mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
-    ),
+    fontSize,
     autoFontScale: true,
     fontFamily: withScriptureFontFallback(
       typeof source.fontFamily === "string" ? source.fontFamily : DEFAULT_THEME_SETTINGS.fontFamily,
     ),
-    refFontSize: clampNumber(
-      Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize),
-      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
-      mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
-    ),
-    refFontWeight: (source.refFontWeight as BibleThemeSettings["refFontWeight"]) || DEFAULT_THEME_SETTINGS.refFontWeight,
-    fontColor: sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor),
-    refFontColor: sanitizeColor(source.refFontColor, DEFAULT_THEME_SETTINGS.refFontColor),
+    refFontSize,
+    refFontWeight,
+    fontColor,
+    refFontColor,
     refPosition: (source.refPosition as BibleThemeSettings["refPosition"]) || DEFAULT_THEME_SETTINGS.refPosition,
     refAnchor:
       source.refAnchor === "top" || source.refAnchor === "bottom" || source.refAnchor === "normal"
@@ -962,10 +1017,15 @@ function applyFullscreenQuickThemeSettings(
       fullscreenShadeEnabled: quickSettings.fullscreenShadeOpacity > 0,
       textAlign: quickSettings.textAlign,
       lineHeight: quickSettings.lineHeight,
+      letterSpacing: quickSettings.letterSpacing,
+      wordSpacing: quickSettings.wordSpacing,
       fontWeight: quickSettings.fontWeight,
       refFontWeight: quickSettings.refFontWeight,
       textTransform: quickSettings.textTransform,
       textShadow: quickSettings.textShadow,
+      textOutline: quickSettings.textOutline,
+      textOutlineColor: quickSettings.textOutlineColor,
+      textOutlineWidth: quickSettings.textOutlineWidth,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
       backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
@@ -1375,10 +1435,7 @@ function DockBibleTab({
     initialPrefs.lowerThirdQuickThemeSettings,
     "lower-third",
   );
-  const initialLowerThirdQuickThemeSettings =
-    areQuickThemeSettingsEquivalent(initialFullscreenQuickThemeSettings, initialRawLowerThirdQuickThemeSettings)
-      ? null
-      : initialRawLowerThirdQuickThemeSettings;
+  const initialLowerThirdQuickThemeSettings = initialRawLowerThirdQuickThemeSettings;
   const initialSceneQuickThemeSettings = sanitizeSceneQuickThemeSettings(
     initialPrefs.sceneQuickThemeSettings,
   );
@@ -1393,7 +1450,23 @@ function DockBibleTab({
       initialPrefs.translations ?? (initialPrefs.translation ? [initialPrefs.translation] : undefined),
     ),
   );
-  const [verseLineCount, setVerseLineCount] = useState(() => clampVerseLineCount(initialPrefs.verseLineCount));
+  const initialOverlayMode: OverlayMode = (() => {
+    const stored = initialPrefs.overlayMode;
+    return stored === "fullscreen" || stored === "lower-third" ? stored : productionDefaults.defaultMode;
+  })();
+  const [fullscreenVerseLineCount, setFullscreenVerseLineCount] = useState(() =>
+    clampVerseLineCount(initialPrefs.fullscreenVerseLineCount ?? (initialPrefs.overlayMode === "fullscreen" ? initialPrefs.verseLineCount : undefined) ?? 2)
+  );
+  const [lowerThirdVerseLineCount, setLowerThirdVerseLineCount] = useState(() =>
+    clampVerseLineCount(initialPrefs.lowerThirdVerseLineCount ?? (initialPrefs.overlayMode === "lower-third" ? initialPrefs.verseLineCount : undefined) ?? 1)
+  );
+  const [verseLineCount, setVerseLineCount] = useState(() =>
+    clampVerseLineCount(
+      initialOverlayMode === "fullscreen"
+        ? (initialPrefs.fullscreenVerseLineCount ?? (initialPrefs.overlayMode === "fullscreen" ? initialPrefs.verseLineCount : undefined) ?? 2)
+        : (initialPrefs.lowerThirdVerseLineCount ?? (initialPrefs.overlayMode === "lower-third" ? initialPrefs.verseLineCount : undefined) ?? 1)
+    )
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebouncedValue(searchQuery, DOCK_SEARCH_DEBOUNCE_MS);
   const [selectedBibleTheme, setSelectedBibleTheme] = useState<BibleTheme>(
@@ -1402,12 +1475,7 @@ function DockBibleTab({
   const [selectedLowerThirdTheme, setSelectedLowerThirdTheme] = useState<BibleTheme>(
     productionDefaults.lowerThirdTheme ?? BUILTIN_THEMES[0],
   );
-  const [overlayMode, setOverlayMode] = useState<OverlayMode>(
-    () => {
-      const stored = initialPrefs.overlayMode;
-      return stored === "fullscreen" || stored === "lower-third" ? stored : productionDefaults.defaultMode;
-    },
-  );
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>(() => initialOverlayMode);
   const [displayMode, setDisplayMode] = useState<DisplayMode>(initialCompareEnabled ? "compare" : "single");
   const [compareEnabled, setCompareEnabled] = useState(initialCompareEnabled);
   const [compareMode, setCompareMode] = useState<CompareMode>(initialCompareMode);
@@ -1687,15 +1755,17 @@ function DockBibleTab({
       const viewportPadding = 8;
       const gap = 8;
       const width = Math.min(320, Math.max(240, viewportWidth - viewportPadding * 2));
+      const panelHeight = Math.max(panel.scrollHeight || 0, panelRect.height || 0, 420);
+      const spaceBelow = Math.max(0, viewportHeight - anchorRect.bottom - gap - viewportPadding);
+      const spaceAbove = Math.max(0, anchorRect.top - gap - viewportPadding);
       const openAbove = Boolean(toolbar)
-        || (viewportHeight - anchorRect.bottom - viewportPadding < (panelRect.height || 420) + gap
-          && anchorRect.top - viewportPadding > viewportHeight - anchorRect.bottom - viewportPadding);
-      const availableAbove = Math.max(120, anchorRect.top - gap - viewportPadding);
+        || (spaceBelow < Math.min(panelHeight, 380) && spaceAbove > spaceBelow);
+      const availableHeight = openAbove ? spaceAbove : spaceBelow;
       const maxHeight = Math.max(
-        120,
-        Math.min(640, viewportHeight - viewportPadding * 2, availableAbove),
+        220,
+        Math.min(640, viewportHeight - viewportPadding * 2, availableHeight),
       );
-      const height = Math.min(panelRect.height || 420, maxHeight);
+      const height = Math.min(panelHeight, maxHeight);
       const preferredTop = openAbove
         ? anchorRect.top - gap - height
         : anchorRect.bottom + gap;
@@ -1963,7 +2033,12 @@ function DockBibleTab({
           prefs.translations ?? (prefs.translation ? [prefs.translation] : undefined),
         ),
       );
-      setVerseLineCount(clampVerseLineCount(prefs.verseLineCount));
+      const reloadedOverlayMode = prefs.overlayMode ?? productionDefaults.defaultMode;
+      const reloadedFsLines = clampVerseLineCount(prefs.fullscreenVerseLineCount ?? (prefs.overlayMode === "fullscreen" ? prefs.verseLineCount : undefined) ?? 2);
+      const reloadedLtLines = clampVerseLineCount(prefs.lowerThirdVerseLineCount ?? (prefs.overlayMode === "lower-third" ? prefs.verseLineCount : undefined) ?? 1);
+      setFullscreenVerseLineCount(reloadedFsLines);
+      setLowerThirdVerseLineCount(reloadedLtLines);
+      setVerseLineCount(reloadedOverlayMode === "fullscreen" ? reloadedFsLines : reloadedLtLines);
       setBackgroundPreset(prefs.backgroundPreset ?? "theme");
       const storedQuickSettings = sanitizeFullscreenQuickThemeSettings(
         prefs.fullscreenQuickThemeSettings,
@@ -1972,13 +2047,7 @@ function DockBibleTab({
         prefs.lowerThirdQuickThemeSettings,
         "lower-third",
       );
-      const storedLowerThirdQuickSettings =
-        areQuickThemeSettingsEquivalent(storedQuickSettings, rawStoredLowerThirdQuickSettings)
-          ? null
-          : rawStoredLowerThirdQuickSettings;
-      const storedLowerThirdLinked = typeof prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen === "boolean"
-        ? prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen
-        : storedLowerThirdQuickSettings == null;
+      const storedLowerThirdQuickSettings = rawStoredLowerThirdQuickSettings;
       const storedSceneQuickThemeSettings = sanitizeSceneQuickThemeSettings(
         prefs.sceneQuickThemeSettings,
       );
@@ -1987,11 +2056,9 @@ function DockBibleTab({
       if (!preserveManualThemeSelection) {
         setSavedFullscreenQuickThemeSettings(storedQuickSettings);
         setFullscreenQuickThemeSettings(storedQuickSettings);
-        setSavedLowerThirdQuickThemeSettings(storedLowerThirdLinked ? null : storedLowerThirdQuickSettings);
-        setLowerThirdQuickThemeSettings(
-          storedLowerThirdLinked ? (storedQuickSettings ?? storedLowerThirdQuickSettings) : storedLowerThirdQuickSettings,
-        );
-        setLowerThirdQuickThemeSettingsLinkedToFullscreen(storedLowerThirdLinked);
+        setSavedLowerThirdQuickThemeSettings(storedLowerThirdQuickSettings);
+        setLowerThirdQuickThemeSettings(storedLowerThirdQuickSettings);
+        setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
       }
       // Preserve a reference selected while IndexedDB preferences are
       // hydrating; otherwise the chapter arrows can snap back to the old
@@ -2260,21 +2327,12 @@ function DockBibleTab({
   );
 
   const effectiveLowerThirdQuickThemeSettings = useMemo(() => {
-    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
-      return buildLinkedLowerThirdQuickThemeSettings(
-        defaultLowerThirdQuickThemeSettings,
-        fullscreenQuickThemeSettings,
-      );
-    }
-
     return normalizeLowerThirdFitSettings(
       lowerThirdQuickThemeSettings ?? defaultLowerThirdQuickThemeSettings,
     );
   }, [
     defaultLowerThirdQuickThemeSettings,
-    fullscreenQuickThemeSettings,
     lowerThirdQuickThemeSettings,
-    lowerThirdQuickThemeSettingsLinkedToFullscreen,
   ]);
 
   const effectiveSelectedLowerThirdTheme = useMemo(() => {
@@ -2869,10 +2927,25 @@ function DockBibleTab({
         overlayMode: liveOverlayMode,
         theme: themeOverride?.themeId
           ?? (liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id),
-        bibleThemeSettings: (
-          themeOverride?.settings
-          ?? (liveOverlayMode === "fullscreen" ? liveFullscreenThemeSettings : liveLowerThirdThemeSettings)
-        ) as unknown as Record<string, unknown>,
+        bibleThemeSettings: (() => {
+          const basePassageSettings = (
+            themeOverride?.settings
+            ?? (liveOverlayMode === "fullscreen" ? liveFullscreenThemeSettings : liveLowerThirdThemeSettings)
+          ) as unknown as Record<string, unknown>;
+          const rawCompPassageVerseSize = Number(basePassageSettings.compareVerseFontSizeLeft || 0);
+          const rawCompPassageRefSize = Number(basePassageSettings.compareReferenceFontSizeLeft || 0);
+          const activePassageBaseFontSize = Number(basePassageSettings.fontSize || 145);
+          const activePassageBaseRefFontSize = Number(basePassageSettings.refFontSize || 42);
+          const effectiveCompPassageVerseSize = (rawCompPassageVerseSize > 40) ? rawCompPassageVerseSize : activePassageBaseFontSize;
+          const effectiveCompPassageRefSize = (rawCompPassageRefSize > 25) ? rawCompPassageRefSize : activePassageBaseRefFontSize;
+          return {
+            ...basePassageSettings,
+            compareVerseFontSizeLeft: effectiveCompPassageVerseSize,
+            compareVerseFontSizeRight: effectiveCompPassageVerseSize,
+            compareReferenceFontSizeLeft: effectiveCompPassageRefSize,
+            compareReferenceFontSizeRight: effectiveCompPassageRefSize,
+          };
+        })(),
         liveOverrides: themeOverride
           ? (themeOverride.liveOverrides ?? null)
           : (liveOverlayMode === "fullscreen" ? (fullscreenLiveOverrides as Record<string, unknown> | null) : null),
@@ -3264,6 +3337,7 @@ function DockBibleTab({
         reveal?: boolean;
         rangeEndVerse?: number | null;
         lineCount?: number;
+        overlayMode?: OverlayMode;
         referenceFormat?: BibleReferenceFormat;
         referenceVersionVisible?: boolean;
         themeOverride?: BibleThemeOutputOverride;
@@ -3314,7 +3388,9 @@ function DockBibleTab({
         ?? effectiveSelectedBibleTheme.settings;
       const liveLowerThirdThemeSettings = liveLowerThirdThemeSettingsRef.current
         ?? effectiveSelectedLowerThirdTheme.settings;
-      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
+      const liveOverlayMode = fullscreenOnlyMode
+        ? "fullscreen"
+        : (options?.overlayMode ?? overlayModeRef.current);
       const themeOverride = options?.themeOverride;
       const liveThemeId = themeOverride?.themeId
         ?? (liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id);
@@ -3423,7 +3499,22 @@ function DockBibleTab({
           verseText: selectionA.text,
           overlayMode: liveOverlayMode,
           theme: liveThemeId,
-          bibleThemeSettings: liveThemeSettings as unknown as Record<string, unknown>,
+          bibleThemeSettings: (() => {
+            const liveSettingsRecord = (liveThemeSettings as unknown as Record<string, unknown>) || {};
+            const rawLiveCompVerseSize = Number(liveSettingsRecord.compareVerseFontSizeLeft || 0);
+            const rawLiveCompRefSize = Number(liveSettingsRecord.compareReferenceFontSizeLeft || 0);
+            const activeLiveBaseFontSize = Number(liveSettingsRecord.fontSize || 145);
+            const activeLiveBaseRefFontSize = Number(liveSettingsRecord.refFontSize || 42);
+            const effectiveLiveCompVerseSize = (rawLiveCompVerseSize > 40) ? rawLiveCompVerseSize : activeLiveBaseFontSize;
+            const effectiveLiveCompRefSize = (rawLiveCompRefSize > 25) ? rawLiveCompRefSize : activeLiveBaseRefFontSize;
+            return {
+              ...liveSettingsRecord,
+              compareVerseFontSizeLeft: effectiveLiveCompVerseSize,
+              compareVerseFontSizeRight: effectiveLiveCompVerseSize,
+              compareReferenceFontSizeLeft: effectiveLiveCompRefSize,
+              compareReferenceFontSizeRight: effectiveLiveCompRefSize,
+            };
+          })(),
           liveOverrides,
           reveal: options?.reveal !== false,
           _dockLive: true,
@@ -3622,7 +3713,27 @@ function DockBibleTab({
     nextSettings: DockFullscreenQuickThemeSettings,
     context?: BibleQuickSettingsSaveContext,
   ) => {
-    if (!bibleOverlayVisible || !selectedBook || !selectedChapter || !selectedVerse) return Promise.resolve(null);
+    const isCompareActive = compareEnabled;
+    const isVisibleOrCompare = bibleOverlayVisible || isCompareActive;
+    if (!isVisibleOrCompare || !selectedBook || !selectedChapter || !selectedVerse) {
+      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
+      if (liveOverlayMode === saveMode && !context?.sceneProfileId) {
+        const selectedTheme = context?.selectedTheme ?? null;
+        const baseTheme = resolveThemeForOverlayMode(
+          selectedTheme ?? (saveMode === "fullscreen" ? selectedBibleThemeRef.current : selectedLowerThirdThemeRef.current),
+          saveMode,
+        );
+        const nextTheme = saveMode === "fullscreen"
+          ? applyFullscreenQuickThemeSettings(baseTheme, nextSettings)
+          : applyLowerThirdQuickThemeSettings(baseTheme, nextSettings);
+        void dockObsClient.primeBibleOverlay({
+          overlayMode: saveMode,
+          bibleThemeSettings: nextTheme.settings as unknown as Record<string, unknown>,
+          backgroundOnly: true,
+        });
+      }
+      return Promise.resolve(null);
+    }
     const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
     if (liveOverlayMode !== saveMode) return Promise.resolve(null);
     const effectiveLineCount = clampVerseLineCount(context?.lineCount ?? verseLineCount);
@@ -3790,18 +3901,12 @@ function DockBibleTab({
       nextFullscreenTheme,
       nextSettings,
     ).settings;
-    const nextLowerThirdQuickSettings = lowerThirdQuickThemeSettingsLinkedToFullscreen
-      ? null
-      : savedLowerThirdQuickThemeSettings;
     setFullscreenQuickThemeSettings(nextSettings);
     setSavedFullscreenQuickThemeSettings(nextSettings);
-    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
-      setLowerThirdQuickThemeSettings(null);
-      setSavedLowerThirdQuickThemeSettings(null);
-    }
     persistDockBiblePreferencesNow({
       fullscreenQuickThemeSettings: nextSettings,
-      lowerThirdQuickThemeSettings: nextLowerThirdQuickSettings,
+      lowerThirdQuickThemeSettings: savedLowerThirdQuickThemeSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen: false,
     });
 
     const measurement = await refreshCurrentBibleOutputAfterThemeSave("fullscreen", nextSettings, context);
@@ -3812,16 +3917,12 @@ function DockBibleTab({
     ).settings;
     setFullscreenQuickThemeSettings(nextSavedSettings);
     setSavedFullscreenQuickThemeSettings(nextSavedSettings);
-    if (lowerThirdQuickThemeSettingsLinkedToFullscreen) {
-      setLowerThirdQuickThemeSettings(null);
-      setSavedLowerThirdQuickThemeSettings(null);
-    }
     persistDockBiblePreferencesNow({
       fullscreenQuickThemeSettings: nextSavedSettings,
-      lowerThirdQuickThemeSettings: nextLowerThirdQuickSettings,
+      lowerThirdQuickThemeSettings: savedLowerThirdQuickThemeSettings,
+      lowerThirdQuickThemeSettingsLinkedToFullscreen: false,
     });
   }, [
-    lowerThirdQuickThemeSettingsLinkedToFullscreen,
     persistDockBiblePreferencesNow,
     refreshCurrentBibleOutputAfterThemeSave,
     saveSceneProfileQuickThemeSettings,
@@ -3904,51 +4005,75 @@ function DockBibleTab({
     const nextLineCount = typeof lineCountOverride === "number"
       ? clampVerseLineCount(lineCountOverride)
       : null;
+    const liveMode: OverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
+    const isFullscreen = liveMode === "fullscreen";
     let nextFullscreenSettings = activeFullscreenQuickThemeSettings;
-    // Start from the settings that are actually being rendered. When the
-    // lower-third is linked to the fullscreen theme, the saved lower-third
-    // object can be null even though it still has a live pattern, background,
-    // and size. Starting from the default here silently dropped those values
-    // the next time a verse was sent.
     let nextLowerThirdSettings = activeLowerThirdQuickThemeSettings;
 
     if (nextLineCount !== null) {
       setVerseLineCount(nextLineCount);
+      if (isFullscreen) {
+        setFullscreenVerseLineCount(nextLineCount);
+      } else {
+        setLowerThirdVerseLineCount(nextLineCount);
+      }
     }
 
     if (hasSettingsPatch) {
-      nextFullscreenSettings = {
-        ...activeFullscreenQuickThemeSettings,
-        ...patch,
-      };
-      nextLowerThirdSettings = {
-        ...activeLowerThirdQuickThemeSettings,
-        ...patch,
-      };
-
+      if (isFullscreen) {
+        nextFullscreenSettings = {
+          ...activeFullscreenQuickThemeSettings,
+          ...patch,
+        };
+        if (typeof patch.fontSize === "number" && typeof patch.compareVerseFontSizeLeft !== "number") {
+          nextFullscreenSettings.compareVerseFontSizeLeft = patch.fontSize;
+          nextFullscreenSettings.compareVerseFontSizeRight = patch.fontSize;
+          nextFullscreenSettings.compareAutoFitMaxFontSize = patch.fontSize;
+        }
+        if (typeof patch.refFontSize === "number" && typeof patch.compareReferenceFontSizeLeft !== "number") {
+          nextFullscreenSettings.compareReferenceFontSizeLeft = patch.refFontSize;
+          nextFullscreenSettings.compareReferenceFontSizeRight = patch.refFontSize;
+        }
+      } else {
+        nextLowerThirdSettings = {
+          ...activeLowerThirdQuickThemeSettings,
+          ...patch,
+        };
+        if (typeof patch.fontSize === "number" && typeof patch.compareVerseFontSizeLeft !== "number") {
+          nextLowerThirdSettings.compareVerseFontSizeLeft = patch.fontSize;
+          nextLowerThirdSettings.compareVerseFontSizeRight = patch.fontSize;
+          nextLowerThirdSettings.compareAutoFitMaxFontSize = patch.fontSize;
+        }
+        if (typeof patch.refFontSize === "number" && typeof patch.compareReferenceFontSizeLeft !== "number") {
+          nextLowerThirdSettings.compareReferenceFontSizeLeft = patch.refFontSize;
+          nextLowerThirdSettings.compareReferenceFontSizeRight = patch.refFontSize;
+        }
+      }
     }
 
     // Keep navigation on the just-clicked settings while OBS performs an
-    // optional fit measurement.  React state can commit after the next verse
-    // click, so update both live snapshots before awaiting the renderer.
+    // optional fit measurement. React state can commit after the next verse
+    // click, so update live snapshot before awaiting the renderer.
     if (hasSettingsPatch) {
-      liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
-        baseFullscreenTheme,
-        nextFullscreenSettings,
-      ).settings;
-      liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
-        baseLowerThirdTheme,
-        nextLowerThirdSettings,
-      ).settings;
-      setFullscreenQuickThemeSettings(nextFullscreenSettings);
-      setSavedFullscreenQuickThemeSettings(nextFullscreenSettings);
-      setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
-      setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
-      setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+      if (isFullscreen) {
+        liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+          baseFullscreenTheme,
+          nextFullscreenSettings,
+        ).settings;
+        setFullscreenQuickThemeSettings(nextFullscreenSettings);
+        setSavedFullscreenQuickThemeSettings(nextFullscreenSettings);
+      } else {
+        liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+          baseLowerThirdTheme,
+          nextLowerThirdSettings,
+        ).settings;
+        setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+      }
     }
 
-    const liveMode: OverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
-    const requestedSettings = liveMode === "fullscreen"
+    const requestedSettings = isFullscreen
       ? nextFullscreenSettings
       : nextLowerThirdSettings;
     const measurement = hasSettingsPatch
@@ -3961,42 +4086,50 @@ function DockBibleTab({
         ? await refreshCurrentBibleOutputForLineCount(nextLineCount)
         : null;
 
-    if (measurement) {
-      // Apply the measured value to both quick-settings snapshots. The quick
-      // controls intentionally share their typography, so switching output
-      // modes should not resurrect the oversized request later.
-      nextFullscreenSettings = applyMeasuredFontFitSettings(nextFullscreenSettings, measurement);
-      nextLowerThirdSettings = applyMeasuredFontFitSettings(nextLowerThirdSettings, measurement);
+    if (measurement && !compareEnabled) {
+      if (isFullscreen) {
+        nextFullscreenSettings = applyMeasuredFontFitSettings(nextFullscreenSettings, measurement);
+      } else {
+        nextLowerThirdSettings = applyMeasuredFontFitSettings(nextLowerThirdSettings, measurement);
+      }
     }
 
-    if (hasSettingsPatch || measurement) {
-      liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
-        baseFullscreenTheme,
-        nextFullscreenSettings,
-      ).settings;
-      liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
-        baseLowerThirdTheme,
-        nextLowerThirdSettings,
-      ).settings;
-
-      setFullscreenQuickThemeSettings(nextFullscreenSettings);
-      setSavedFullscreenQuickThemeSettings(nextFullscreenSettings);
-      setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
-      setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
-      if (hasSettingsPatch) {
-        setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+    if (hasSettingsPatch || (measurement && !compareEnabled)) {
+      if (isFullscreen) {
+        liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+          baseFullscreenTheme,
+          nextFullscreenSettings,
+        ).settings;
+        setFullscreenQuickThemeSettings(nextFullscreenSettings);
+        setSavedFullscreenQuickThemeSettings(nextFullscreenSettings);
+      } else {
+        liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+          baseLowerThirdTheme,
+          nextLowerThirdSettings,
+        ).settings;
+        setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        if (hasSettingsPatch) {
+          setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+        }
       }
     }
 
     persistDockBiblePreferencesNow({
-      ...((hasSettingsPatch || measurement)
+      ...((hasSettingsPatch || (measurement && !compareEnabled))
         ? {
-          fullscreenQuickThemeSettings: nextFullscreenSettings,
-          lowerThirdQuickThemeSettings: nextLowerThirdSettings,
-          ...(hasSettingsPatch ? { lowerThirdQuickThemeSettingsLinkedToFullscreen: false } : {}),
+          ...(isFullscreen
+            ? { fullscreenQuickThemeSettings: nextFullscreenSettings }
+            : {
+              lowerThirdQuickThemeSettings: nextLowerThirdSettings,
+              lowerThirdQuickThemeSettingsLinkedToFullscreen: false,
+            }),
         }
         : {}),
-      ...(nextLineCount !== null ? { verseLineCount: nextLineCount } : {}),
+      verseLineCount: nextLineCount !== null ? nextLineCount : verseLineCount,
+      ...(isFullscreen
+        ? (nextLineCount !== null ? { fullscreenVerseLineCount: nextLineCount } : {})
+        : (nextLineCount !== null ? { lowerThirdVerseLineCount: nextLineCount } : {})),
     });
   }, [
     activeFullscreenQuickThemeSettings,
@@ -4007,6 +4140,7 @@ function DockBibleTab({
     persistDockBiblePreferencesNow,
     refreshCurrentBibleOutputAfterThemeSave,
     refreshCurrentBibleOutputForLineCount,
+    verseLineCount,
   ]);
 
   const activeBrowserFontSettings = fullscreenOnlyMode || overlayMode === "fullscreen"
@@ -4050,6 +4184,16 @@ function DockBibleTab({
         : {}),
     };
 
+    if (typeof patch.fontSize === "number" && typeof patch.compareVerseFontSizeLeft !== "number") {
+      nextPatch.compareVerseFontSizeLeft = patch.fontSize;
+      nextPatch.compareVerseFontSizeRight = patch.fontSize;
+      nextPatch.compareAutoFitMaxFontSize = patch.fontSize;
+    }
+    if (typeof patch.refFontSize === "number" && typeof patch.compareReferenceFontSizeLeft !== "number") {
+      nextPatch.compareReferenceFontSizeLeft = patch.refFontSize;
+      nextPatch.compareReferenceFontSizeRight = patch.refFontSize;
+    }
+
     if (browserQuickUpdateImmediately) {
       void handleSyncBibleBrowserSettings(nextPatch);
       return;
@@ -4067,7 +4211,7 @@ function DockBibleTab({
   ]);
 
   const handleLowerThirdSizePresetChange = useCallback((
-    option: (typeof LOWER_THIRD_QUICK_SIZE_OPTIONS)[number],
+    option: DockQuickSizeOption,
   ) => {
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
     const horizontalPadding = Math.round(preset.padding * 1.55);
@@ -4084,8 +4228,10 @@ function DockBibleTab({
     applyBrowserQuickSettingsPatch({
       fontSize: nextVerseSize,
       refFontSize: nextReferenceSize,
+      fontWeight: option.fontWeight ?? "bold",
+      refFontWeight: option.refFontWeight ?? "bold",
       lineHeight: preset.lineHeight,
-      refSpacing: preset.refSpacing,
+      refSpacing: option.refSpacing ?? preset.refSpacing, /* refSpacing: preset.refSpacing */
       lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
       lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
@@ -4098,6 +4244,7 @@ function DockBibleTab({
     });
   }, [
     applyBrowserQuickSettingsPatch,
+    browserFontMode,
     browserFontSizeMax,
     browserFontSizeMin,
     browserReferenceFontSizeMax,
@@ -4117,6 +4264,8 @@ function DockBibleTab({
       ? {
         fontSize: draftBrowserQuickThemeSettings.fontSize,
         refFontSize: draftBrowserQuickThemeSettings.refFontSize,
+        fontWeight: draftBrowserQuickThemeSettings.fontWeight,
+        refFontWeight: draftBrowserQuickThemeSettings.refFontWeight,
         lineHeight: draftBrowserQuickThemeSettings.lineHeight,
         refSpacing: draftBrowserQuickThemeSettings.refSpacing,
         compareVerseFontSizeLeft: draftBrowserQuickThemeSettings.compareVerseFontSizeLeft,
@@ -5056,6 +5205,27 @@ function DockBibleTab({
       const refB = `${selectedBook} ${selectedChapter}:${selB.verseRange}`;
       const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
       const theme = liveOverlayMode === "fullscreen" ? effectiveSelectedBibleTheme.id : selectedLowerThirdTheme.id;
+      const baseLiveThemeSettings = (
+        liveOverlayMode === "fullscreen"
+          ? (liveFullscreenThemeSettingsRef.current ?? effectiveSelectedBibleTheme.settings)
+          : (liveLowerThirdThemeSettingsRef.current ?? effectiveSelectedLowerThirdTheme.settings)
+      );
+      const baseLiveSettingsRecord = (baseLiveThemeSettings as unknown as Record<string, unknown>) || {};
+      const activeFontSize = Number(baseLiveThemeSettings.fontSize || 145);
+      const activeRefFontSize = Number(baseLiveThemeSettings.refFontSize || 42);
+      const rawCompSize = Number(baseLiveSettingsRecord.compareVerseFontSizeLeft || 0);
+      const effectiveCompSize = (rawCompSize > 40) ? rawCompSize : activeFontSize;
+      const rawCompRefSize = Number(baseLiveSettingsRecord.compareReferenceFontSizeLeft || 0);
+      const effectiveCompRefSize = (rawCompRefSize > 25) ? rawCompRefSize : activeRefFontSize;
+
+      const liveCompareThemeSettings = {
+        ...baseLiveThemeSettings,
+        compareVerseFontSizeLeft: effectiveCompSize,
+        compareVerseFontSizeRight: effectiveCompSize,
+        compareReferenceFontSizeLeft: effectiveCompRefSize,
+        compareReferenceFontSizeRight: effectiveCompRefSize,
+      };
+
       const stageData = {
         book: selectedBook,
         chapter: selectedChapter,
@@ -5072,11 +5242,7 @@ function DockBibleTab({
         verseText: selA.text,
         overlayMode: liveOverlayMode,
         theme,
-        bibleThemeSettings: (
-          liveOverlayMode === "fullscreen"
-            ? effectiveSelectedBibleTheme.settings
-            : effectiveSelectedLowerThirdTheme.settings
-        ) as unknown as Record<string, unknown>,
+        bibleThemeSettings: liveCompareThemeSettings as unknown as Record<string, unknown>,
         liveOverrides:
           liveOverlayMode === "fullscreen"
             ? (fullscreenLiveOverrides as Record<string, unknown> | null)
@@ -5124,7 +5290,10 @@ function DockBibleTab({
       }
       ensureObsConnected()
         .then(() => pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData))
-        .then(() => trackBiblePresent(selA.text))
+        .then(() => {
+          setBibleOverlayVisible(true);
+          trackBiblePresent(selA.text);
+        })
         .catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
           const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
@@ -5193,6 +5362,27 @@ function DockBibleTab({
         verseText: preview.text,
       };
     });
+    const baseLiveThemeSettings = (
+      liveOverlayMode === "fullscreen"
+        ? (liveFullscreenThemeSettingsRef.current ?? effectiveSelectedBibleTheme.settings)
+        : (liveLowerThirdThemeSettingsRef.current ?? effectiveSelectedLowerThirdTheme.settings)
+    );
+    const baseLiveSettingsRecord = (baseLiveThemeSettings as unknown as Record<string, unknown>) || {};
+    const activeFontSize = Number(baseLiveThemeSettings.fontSize || 145);
+    const activeRefFontSize = Number(baseLiveThemeSettings.refFontSize || 42);
+    const rawCompSize = Number(baseLiveSettingsRecord.compareVerseFontSizeLeft || 0);
+    const effectiveCompSize = (rawCompSize > 40) ? rawCompSize : activeFontSize;
+    const rawCompRefSize = Number(baseLiveSettingsRecord.compareReferenceFontSizeLeft || 0);
+    const effectiveCompRefSize = (rawCompRefSize > 25) ? rawCompRefSize : activeRefFontSize;
+
+    const liveCompareThemeSettings = {
+      ...baseLiveThemeSettings,
+      compareVerseFontSizeLeft: effectiveCompSize,
+      compareVerseFontSizeRight: effectiveCompSize,
+      compareReferenceFontSizeLeft: effectiveCompRefSize,
+      compareReferenceFontSizeRight: effectiveCompRefSize,
+    };
+
     const stageData = {
       book: first.parsed.book,
       chapter: first.parsed.chapter,
@@ -5212,11 +5402,7 @@ function DockBibleTab({
       verseText: first.text,
       overlayMode: liveOverlayMode,
       theme,
-      bibleThemeSettings: (
-        liveOverlayMode === "fullscreen"
-          ? effectiveSelectedBibleTheme.settings
-          : effectiveSelectedLowerThirdTheme.settings
-      ) as unknown as Record<string, unknown>,
+      bibleThemeSettings: liveCompareThemeSettings as unknown as Record<string, unknown>,
       liveOverrides:
         liveOverlayMode === "fullscreen"
           ? (fullscreenLiveOverrides as Record<string, unknown> | null)
@@ -5244,7 +5430,10 @@ function DockBibleTab({
     }
     ensureObsConnected()
       .then(() => pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData))
-      .then(() => trackBiblePresent(first.text))
+      .then(() => {
+        setBibleOverlayVisible(true);
+        trackBiblePresent(first.text);
+      })
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         const isTransient = /scene item|create.*input|create.*scene|failed to create/i.test(message);
@@ -5278,44 +5467,52 @@ function DockBibleTab({
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
 
-    const currentSettings = overlayMode === "fullscreen"
-      ? (fullscreenQuickThemeSettings ?? activeFullscreenQuickThemeSettings)
-      : (lowerThirdQuickThemeSettings ?? activeLowerThirdQuickThemeSettings);
-    const targetSettings = nextMode === "fullscreen"
-      ? fullscreenQuickThemeSettings
-      : lowerThirdQuickThemeSettings;
-    const targetUsesThemeBackground =
-      !targetSettings || targetSettings.backgroundType == null || targetSettings.backgroundType === "theme";
-    const sourceUsesCustomBackground = currentSettings.backgroundType !== undefined
-      && currentSettings.backgroundType !== "theme";
+    setDraftBrowserQuickThemeSettings(null);
+    setDraftBrowserVerseLineCount(null);
 
-    // Fullscreen and lower-third keep separate typography/layout settings, but
-    // a custom background should remain visible when the operator changes mode.
-    if (targetUsesThemeBackground && sourceUsesCustomBackground) {
-      if (nextMode === "fullscreen") {
-        const nextSettings = mergeQuickThemeBackground(defaultFullscreenQuickThemeSettings, currentSettings);
-        setFullscreenQuickThemeSettings(nextSettings);
-        setSavedFullscreenQuickThemeSettings(nextSettings);
-      } else if (!lowerThirdQuickThemeSettingsLinkedToFullscreen) {
-        const nextSettings = mergeQuickThemeBackground(defaultLowerThirdQuickThemeSettings, currentSettings);
-        setLowerThirdQuickThemeSettings(nextSettings);
-        setSavedLowerThirdQuickThemeSettings(nextSettings);
-      }
-    }
-
+    const targetLineCount = nextMode === "fullscreen" ? fullscreenVerseLineCount : lowerThirdVerseLineCount;
+    setVerseLineCount(targetLineCount);
     setOverlayMode(nextMode);
     overlayModeRef.current = nextMode;
     saveDockBibleOverlayMode(nextMode);
-    setModeRefreshNonce((current) => current + 1);
+
+    if (
+      bibleOverlayVisible
+      && selectedBook
+      && selectedChapter !== null
+      && selectedVerse !== null
+    ) {
+      lastModeRefreshNonceRef.current = modeRefreshNonce + 1;
+      setModeRefreshNonce((current) => current + 1);
+
+      void goLiveVerse(selectedBook, selectedChapter, selectedVerse, {
+        translation: activeTranslation,
+        columnIndex: activeColumnIndex,
+        reveal: false,
+        lineCount: targetLineCount,
+        overlayMode: nextMode,
+        referenceFormat,
+        referenceVersionVisible,
+        recordHistory: false,
+        preserveComparePassages: true,
+      });
+    } else {
+      setModeRefreshNonce((current) => current + 1);
+    }
   }, [
-    activeFullscreenQuickThemeSettings,
-    activeLowerThirdQuickThemeSettings,
-    defaultFullscreenQuickThemeSettings,
-    defaultLowerThirdQuickThemeSettings,
-    fullscreenQuickThemeSettings,
-    lowerThirdQuickThemeSettings,
-    lowerThirdQuickThemeSettingsLinkedToFullscreen,
+    activeColumnIndex,
+    activeTranslation,
+    bibleOverlayVisible,
+    fullscreenVerseLineCount,
+    goLiveVerse,
+    lowerThirdVerseLineCount,
+    modeRefreshNonce,
     overlayMode,
+    referenceFormat,
+    referenceVersionVisible,
+    selectedBook,
+    selectedChapter,
+    selectedVerse,
   ]);
 
   const handleToggleFavoritePassage = useCallback(async () => {
@@ -5883,15 +6080,15 @@ function DockBibleTab({
 
   const comparePopoverStyle = {
     position: "fixed" as const,
-    top: comparePopoverPosition?.top ?? 0,
-    left: comparePopoverPosition?.left ?? 0,
+    top: comparePopoverPosition?.top ?? (typeof window !== "undefined" ? Math.max(50, Math.round(window.innerHeight / 2 - 200)) : 60),
+    left: comparePopoverPosition?.left ?? (typeof window !== "undefined" ? Math.max(16, window.innerWidth - 336) : 16),
     right: "auto",
     bottom: "auto",
     width: comparePopoverPosition?.width ?? 320,
     boxSizing: "border-box" as const,
-    maxHeight: comparePopoverPosition?.maxHeight,
+    maxHeight: comparePopoverPosition?.maxHeight ?? 520,
     zIndex: 10000,
-    visibility: comparePopoverPosition ? "visible" as const : "hidden" as const,
+    visibility: "visible" as const,
   };
 
   if (!preferencesHydrated || !translationsLoaded) {
@@ -5972,6 +6169,21 @@ function DockBibleTab({
                 </div>
                 {compareMode === "translations" ? (
                   <>
+                    <div className={`dock-bible-compare-popover__status-banner ${compareEnabled ? "dock-bible-compare-popover__status-banner--on" : "dock-bible-compare-popover__status-banner--off"}`}>
+                      <div className="dock-bible-compare-popover__status-icon">
+                        <Icon name={compareEnabled ? "check_circle" : "info"} size={15} />
+                      </div>
+                      <div className="dock-bible-compare-popover__status-text">
+                        <div className="dock-bible-compare-popover__status-title">
+                          {compareEnabled ? t("dock.compare.statusActive", "Compare is ACTIVE") : t("dock.compare.statusOff", "Compare is OFF")}
+                        </div>
+                        <div className="dock-bible-compare-popover__status-desc">
+                          {compareEnabled
+                            ? t("dock.compare.activeHint", "Both versions will be sent to OBS & screen")
+                            : t("dock.compare.offHint", "Enable below to present translations side-by-side or line-by-line")}
+                        </div>
+                      </div>
+                    </div>
                     <div className="dock-bible-compare-popover__section">
                       <div className="dock-bible-compare-popover__toggle-row">
                         <div className="dock-bible-compare-popover__toggle-copy">
@@ -6045,10 +6257,10 @@ function DockBibleTab({
                       className="dock-bible-compare-popover__send"
                       onClick={() => void handleSendCompareToObs()}
                       disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                      title={t("common.sendToObs", "Send to OBS")}
+                      title={t("common.save", "Save")}
                     >
-                      <Icon name="cast" size={13} />
-                      {t("common.sendToObs", "Send to OBS")}
+                      <Icon name="check" size={15} />
+                      {t("common.save", "Save")}
                     </button>
                   </>
                 ) : (
@@ -6082,26 +6294,16 @@ function DockBibleTab({
                 type="button"
                 className={searchPlacement === "top" ? "dock-bible-actions__top-btn" : "dock-bible-actions__overflow"}
                 onClick={() => {
-                  if (searchPlacement === "top") {
-                    setShowBibleActionsMenu(false);
-                    setShowComparePopover((prev) => !prev);
-                    return;
-                  }
-                  setShowBibleActionsMenu((prev) => !prev);
+                  setShowBibleActionsMenu(false);
+                  setShowComparePopover((prev) => !prev);
                 }}
-                aria-label={searchPlacement === "top"
-                  ? t("dock.compare.toggle", "Compare Translations")
-                  : t("common.moreActions", "More actions")}
-                aria-expanded={searchPlacement === "top" ? showComparePopover : showBibleActionsMenu}
-                aria-haspopup={searchPlacement === "top" ? "dialog" : "menu"}
-                title={searchPlacement === "top"
-                  ? t("dock.compare.toggle", "Compare Translations")
-                  : t("common.moreActions", "More actions")}
+                aria-label={t("dock.compare.toggle", "Compare Translations")}
+                aria-expanded={showComparePopover}
+                aria-haspopup="dialog"
+                title={t("dock.compare.toggle", "Compare Translations")}
               >
-                <Icon name={searchPlacement === "top" ? "swap_horiz" : "more_vert"} size={15} />
-                {searchPlacement === "top" && (
-                  <span>{t("dock.compare.short", "Compare")}</span>
-                )}
+                <Icon name="swap_horiz" size={15} />
+                <span>{t("dock.compare.short", "Compare")}</span>
               </button>
               {searchPlacement !== "top" && showBibleActionsMenu && (
                 <div className="dock-bible-actions__menu" role="menu">
@@ -6148,7 +6350,22 @@ function DockBibleTab({
                     </button>
                   </div>
                   {compareMode === "translations" ? (
-                    <div>
+                    <>
+                      <div className={`dock-bible-compare-popover__status-banner ${compareEnabled ? "dock-bible-compare-popover__status-banner--on" : "dock-bible-compare-popover__status-banner--off"}`}>
+                        <div className="dock-bible-compare-popover__status-icon">
+                          <Icon name={compareEnabled ? "check_circle" : "info"} size={15} />
+                        </div>
+                        <div className="dock-bible-compare-popover__status-text">
+                          <div className="dock-bible-compare-popover__status-title">
+                            {compareEnabled ? t("dock.compare.statusActive", "Compare is ACTIVE") : t("dock.compare.statusOff", "Compare is OFF")}
+                          </div>
+                          <div className="dock-bible-compare-popover__status-desc">
+                            {compareEnabled
+                              ? t("dock.compare.activeHint", "Both versions will be sent to OBS & screen")
+                              : t("dock.compare.offHint", "Enable below to present translations side-by-side or line-by-line")}
+                          </div>
+                        </div>
+                      </div>
                       <div className="dock-bible-compare-popover__section">
                         <div className="dock-bible-compare-popover__toggle-row">
                           <div className="dock-bible-compare-popover__toggle-copy">
@@ -6222,12 +6439,12 @@ function DockBibleTab({
                         className="dock-bible-compare-popover__send"
                         onClick={() => void handleSendCompareToObs()}
                         disabled={!translationsLoaded || !compareEnabled || !selectedBook || !selectedChapter || !selectedVerse}
-                        title={t("common.sendToObs", "Send to OBS")}
+                        title={t("common.save", "Save")}
                       >
-                        <Icon name="cast" size={13} />
-                        {t("common.sendToObs", "Send to OBS")}
+                        <Icon name="check" size={15} />
+                        {t("common.save", "Save")}
                       </button>
-                    </div>
+                    </>
                   ) : (
                     <DockBibleComparePassageControls
                       compareEnabled={compareEnabled}
@@ -6713,11 +6930,16 @@ function DockBibleTab({
                 isFitTextMode={isFitTextMode}
                 browserQuickUpdateImmediately={browserQuickUpdateImmediately}
                 hasPendingBrowserQuickChanges={hasPendingBrowserQuickChanges}
+                mode={browserFontMode}
                 onClose={() => setShowBrowserFontSizePopover(false)}
                 onLowerThirdSizePresetChange={handleLowerThirdSizePresetChange}
                 onLineCountChange={handleBrowserVerseLineCountChange}
                 onUpdateImmediatelyChange={handleBrowserQuickUpdateImmediatelyChange}
                 onSave={saveBrowserQuickSettings}
+                onOpenSettings={() => {
+                  setShowBrowserFontSizePopover(false);
+                  openThemeSettings("background");
+                }}
               />
             </div>
 

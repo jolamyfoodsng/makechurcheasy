@@ -31,7 +31,10 @@ import DockOutputQuickActions, {
   type DockOutputQuickSettingsPatch,
   type DockOutputQuickTextSettings,
 } from "../components/DockOutputQuickActions";
-import { DOCK_QUICK_SIZE_OPTIONS } from "../dockQuickSizePresets";
+import {
+  DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN,
+  DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD,
+} from "../dockQuickSizePresets";
 import DockNotesTextTools from "../components/DockNotesTextTools";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
@@ -403,7 +406,18 @@ export default function DockNotesTab({
   );
   const [fullscreenQuickSettings, setFullscreenQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.fullscreenQuickSettings ?? null);
   const [lowerThirdQuickSettings, setLowerThirdQuickSettings] = useState<DockFullscreenQuickThemeSettings | null>(() => initialPrefs.lowerThirdQuickSettings ?? null);
-  const [notesLinesPerSlide, setNotesLinesPerSlide] = useState(() => clampNoteLinesPerSlide(initialPrefs.linesPerSlide));
+  const [fullscreenLinesPerSlide, setFullscreenLinesPerSlide] = useState(() =>
+    clampNoteLinesPerSlide(initialPrefs.fullscreenLinesPerSlide ?? initialPrefs.linesPerSlide),
+  );
+  const [lowerThirdLinesPerSlide, setLowerThirdLinesPerSlide] = useState(() =>
+    clampNoteLinesPerSlide(initialPrefs.lowerThirdLinesPerSlide ?? initialPrefs.linesPerSlide),
+  );
+  const [notesLinesPerSlide, setNotesLinesPerSlide] = useState(() => {
+    const active = initialPrefs.overlayMode === "fullscreen"
+      ? (initialPrefs.fullscreenLinesPerSlide ?? initialPrefs.linesPerSlide)
+      : (initialPrefs.lowerThirdLinesPerSlide ?? initialPrefs.linesPerSlide);
+    return clampNoteLinesPerSlide(active);
+  });
   const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit !== false);
   const [quickActionsTop, setQuickActionsTop] = useState(() => (
     typeof initialPrefs.quickActionsTop === "number" && Number.isFinite(initialPrefs.quickActionsTop)
@@ -924,51 +938,65 @@ export default function DockNotesTab({
     nextLineCount?: number,
     nextLineMode?: DockOutputLineMode,
   ) => {
+    const isFullscreen = overlayMode === "fullscreen";
     const fullscreenTheme = selectedFSThemeRef.current;
     const lowerThirdTheme = selectedLTThemeRef.current;
-    const fullscreenBase = fullscreenQuickSettings
-      ?? (() => {
-        const settings = getDockNotesThemeForMode(fullscreenTheme, "fullscreen").settings;
-        return {
-          ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: false,
-        };
-      })();
-    const lowerThirdBase = lowerThirdQuickSettings
-      ?? (() => {
-        const settings = getDockNotesThemeForMode(lowerThirdTheme, "lower-third").settings;
-        return {
-          ...(settings as unknown as DockFullscreenQuickThemeSettings),
-          autoFontScale: false,
-        };
-      })();
-    const nextFullscreenSettings = normalizeExplicitOutputFontSettings(
-      { ...fullscreenBase, ...patch, autoFontScale: false },
-      "fullscreen",
-    );
-    const nextLowerThirdSettings = normalizeExplicitOutputFontSettings(
-      { ...lowerThirdBase, ...patch, autoFontScale: false },
-      "lower-third",
-    );
-    setFullscreenQuickSettings(nextFullscreenSettings);
-    setLowerThirdQuickSettings(nextLowerThirdSettings);
-    liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-      fullscreenTheme,
-      "fullscreen",
-      nextFullscreenSettings,
-    ) as unknown as Record<string, unknown>;
-    liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
-      lowerThirdTheme,
-      "lower-third",
-      nextLowerThirdSettings,
-    ) as unknown as Record<string, unknown>;
+    let nextFullscreenSettings = fullscreenQuickSettings;
+    let nextLowerThirdSettings = lowerThirdQuickSettings;
+
+    if (isFullscreen) {
+      const fullscreenBase = fullscreenQuickSettings
+        ?? (() => {
+          const settings = getDockNotesThemeForMode(fullscreenTheme, "fullscreen").settings;
+          return {
+            ...(settings as unknown as DockFullscreenQuickThemeSettings),
+            autoFontScale: false,
+          };
+        })();
+      nextFullscreenSettings = normalizeExplicitOutputFontSettings(
+        { ...fullscreenBase, ...patch, autoFontScale: false },
+        "fullscreen",
+      );
+      setFullscreenQuickSettings(nextFullscreenSettings);
+      liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+        fullscreenTheme,
+        "fullscreen",
+        nextFullscreenSettings,
+      ) as unknown as Record<string, unknown>;
+    } else {
+      const lowerThirdBase = lowerThirdQuickSettings
+        ?? (() => {
+          const settings = getDockNotesThemeForMode(lowerThirdTheme, "lower-third").settings;
+          return {
+            ...(settings as unknown as DockFullscreenQuickThemeSettings),
+            autoFontScale: false,
+          };
+        })();
+      nextLowerThirdSettings = normalizeExplicitOutputFontSettings(
+        { ...lowerThirdBase, ...patch, autoFontScale: false },
+        "lower-third",
+      );
+      setLowerThirdQuickSettings(nextLowerThirdSettings);
+      liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+        lowerThirdTheme,
+        "lower-third",
+        nextLowerThirdSettings,
+      ) as unknown as Record<string, unknown>;
+    }
+
     if (nextLineMode !== undefined) {
       setNotesAutoSplit(nextLineMode !== "original");
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
     }
     if (nextLineCount !== undefined) {
-      setNotesLinesPerSlide(clampNoteLinesPerSlide(nextLineCount));
+      const clamped = clampNoteLinesPerSlide(nextLineCount);
+      setNotesLinesPerSlide(clamped);
+      if (isFullscreen) {
+        setFullscreenLinesPerSlide(clamped);
+      } else {
+        setLowerThirdLinesPerSlide(clamped);
+      }
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
     }
@@ -977,30 +1005,39 @@ export default function DockNotesTab({
       // Publish the exact settings selected by the operator. Waiting for the
       // state update effect here can send the previous font size to OBS when
       // the same note remains live.
-      const nextSettings = overlayMode === "fullscreen"
+      const nextSettings = isFullscreen
         ? nextFullscreenSettings
         : nextLowerThirdSettings;
-      void pushNoteSlide(activeSlideIndex, nextSettings);
+      void pushNoteSlide(activeSlideIndex, nextSettings ?? undefined);
     } else if (overlayVisible && activeSlideIndex !== null) {
       pendingQuickSettingsRefreshRef.current = true;
       setQuickSettingsRefreshNonce((current) => current + 1);
     }
-  }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, overlayVisible, pushNoteSlide, selectedFSTheme, selectedLTTheme]);
+  }, [activeSlideIndex, fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, overlayVisible, pushNoteSlide]);
+
+  const isFullscreen = overlayMode === "fullscreen";
+  const activeNoteSizePresets = isFullscreen
+    ? DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN
+    : DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD;
 
   const activeNoteSizePreset = useMemo(() => {
-    const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
-    const theme = overlayMode === "fullscreen"
+    const quickSettings = isFullscreen ? fullscreenQuickSettings : lowerThirdQuickSettings;
+    const theme = isFullscreen
       ? getDockNotesThemeForMode(selectedFSTheme, "fullscreen")
       : getDockNotesThemeForMode(selectedLTTheme, "lower-third");
     const currentPreset = quickSettings?.lowerThirdSize ?? theme.settings.lowerThirdSize;
-    return DOCK_QUICK_SIZE_OPTIONS.find((option) => option.preset === currentPreset)?.id;
-  }, [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme]);
+    return activeNoteSizePresets.find((option) => option.preset === currentPreset)?.id;
+  }, [activeNoteSizePresets, fullscreenQuickSettings, isFullscreen, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
 
   const getNotesQuickSizePatch = useCallback((id: string): DockOutputQuickSettingsPatch | null => {
-    const option = DOCK_QUICK_SIZE_OPTIONS.find((item) => item.id === id);
+    const isFullscreen = overlayMode === "fullscreen";
+    const sizeOptions = isFullscreen
+      ? DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN
+      : DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD;
+    const option = sizeOptions.find((item) => item.id === id);
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const minFontSize = overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+    const minFontSize = isFullscreen ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
     const minRefFontSize = overlayMode === "fullscreen"
       ? 14
       : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
@@ -1071,10 +1108,20 @@ export default function DockNotesTab({
     if (nextMode === overlayMode) return;
 
     setOverlayMode(nextMode);
+    const targetLineCount = nextMode === "fullscreen" ? fullscreenLinesPerSlide : lowerThirdLinesPerSlide;
+    setNotesLinesPerSlide(targetLineCount);
     const prefs = loadDockNotesPreferences();
     prefs.overlayMode = nextMode;
+    prefs.linesPerSlide = targetLineCount;
+    prefs.fullscreenLinesPerSlide = fullscreenLinesPerSlide;
+    prefs.lowerThirdLinesPerSlide = lowerThirdLinesPerSlide;
     saveDockNotesPreferences(prefs);
-  }, [overlayMode]);
+
+    if (overlayVisible && activeSlideIndex !== null) {
+      pendingQuickSettingsRefreshRef.current = true;
+      setQuickSettingsRefreshNonce((current) => current + 1);
+    }
+  }, [activeSlideIndex, fullscreenLinesPerSlide, lowerThirdLinesPerSlide, overlayMode, overlayVisible]);
 
   // Persist theme preferences on change
   useEffect(() => {
@@ -1091,12 +1138,14 @@ export default function DockNotesTab({
     prefs.fullscreenQuickSettings = fullscreenQuickSettings;
     prefs.lowerThirdQuickSettings = lowerThirdQuickSettings;
     prefs.linesPerSlide = notesLinesPerSlide;
+    prefs.fullscreenLinesPerSlide = fullscreenLinesPerSlide;
+    prefs.lowerThirdLinesPerSlide = lowerThirdLinesPerSlide;
     prefs.autoSplit = notesAutoSplit;
     prefs.quickActionsTop = quickActionsTop;
     prefs.quickActionsLeft = quickActionsLeft;
     prefs.quickUpdateImmediately = quickUpdateImmediately;
     saveDockNotesPreferences(prefs);
-  }, [fullscreenQuickSettings, lowerThirdQuickSettings, notesAutoSplit, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
+  }, [fullscreenLinesPerSlide, fullscreenQuickSettings, lowerThirdLinesPerSlide, lowerThirdQuickSettings, notesAutoSplit, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
 
   // Escape key handler
   useEffect(() => {
@@ -1472,9 +1521,10 @@ export default function DockNotesTab({
               onPositionChange={handleNotesQuickActionsPositionChange}
               onCommit={handleNotesQuickCommit}
               originalLineLabel={t("notes.original", "Original")}
-              sizePresets={DOCK_QUICK_SIZE_OPTIONS}
+              sizePresets={activeNoteSizePresets}
               activeSizePreset={activeNoteSizePreset}
               getSizePresetPatch={getNotesQuickSizePatch}
+              onOpenSettings={() => setShowThemeSettings(true)}
               onUpdateImmediatelyChange={setQuickUpdateImmediately}
             />
           </section>
@@ -1569,6 +1619,15 @@ export default function DockNotesTab({
           }
           if (overlayVisible && activeSlideIndex !== null) {
             await pushNoteSlide(activeSlideIndex, nextSettings);
+          } else {
+            const currentThemeSettings = overlayMode === "fullscreen"
+              ? liveFullscreenThemeSettingsRef.current
+              : liveLowerThirdThemeSettingsRef.current;
+            void dockObsClient.primeNotesOverlay({
+              overlayMode,
+              bibleThemeSettings: currentThemeSettings,
+              backgroundOnly: true,
+            });
           }
           if (overlayMode === "fullscreen") setFullscreenQuickSettings(nextSettings);
           else setLowerThirdQuickSettings(nextSettings);

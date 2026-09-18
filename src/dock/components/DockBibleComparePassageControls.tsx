@@ -47,6 +47,22 @@ export default function DockBibleComparePassageControls({
 
   return (
     <>
+      <div className={`dock-bible-compare-popover__status-banner ${compareEnabled ? "dock-bible-compare-popover__status-banner--on" : "dock-bible-compare-popover__status-banner--off"}`}>
+        <div className="dock-bible-compare-popover__status-icon">
+          <Icon name={compareEnabled ? "check_circle" : "info"} size={15} />
+        </div>
+        <div className="dock-bible-compare-popover__status-text">
+          <div className="dock-bible-compare-popover__status-title">
+            {compareEnabled ? t("dock.compare.passagesActive", "Passage Compare is ACTIVE") : t("dock.compare.passagesOff", "Passage Compare is OFF")}
+          </div>
+          <div className="dock-bible-compare-popover__status-desc">
+            {compareEnabled
+              ? t("dock.compare.passagesActiveHint", "Displaying multiple scripture passages on screen")
+              : t("dock.compare.passagesOffHint", "Enable below to show different Bible references together")}
+          </div>
+        </div>
+      </div>
+
       <div className="dock-bible-compare-popover__section">
         <div className="dock-bible-compare-popover__toggle-row">
           <div className="dock-bible-compare-popover__toggle-copy">
@@ -169,10 +185,10 @@ export default function DockBibleComparePassageControls({
         className="dock-bible-compare-popover__send"
         onClick={onSendToObs}
         disabled={!canSendToObs}
-        title={t("common.sendToObs", "Send to OBS")}
+        title={t("common.save", "Save")}
       >
-        <Icon name="cast" size={13} />
-        {t("common.sendToObs", "Send to OBS")}
+        <Icon name="check" size={15} />
+        {t("common.save", "Save")}
       </button>
     </>
   );

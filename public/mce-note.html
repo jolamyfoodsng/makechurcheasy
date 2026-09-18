@@ -78,6 +78,7 @@
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
+      --word-spacing: 0px;
       --text-align: center;
       --text-shadow: none;
       --outline-width: 0px;
@@ -204,6 +205,7 @@
     }
 
     #verse-text {
+      order: 1;
       width: 100%;
       min-width: 0;
       max-width: 100%;
@@ -214,8 +216,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -240,6 +244,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #reference.top {
@@ -348,8 +355,10 @@
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
@@ -374,6 +383,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     .compare-column__reference.is-above {
@@ -647,6 +659,7 @@
     }
 
     #lt-verse-text {
+      order: 1;
       width: 100%;
       min-width: 0;
       max-width: 100%;
@@ -657,8 +670,11 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
       white-space: pre-line;
       overflow-wrap: anywhere;
@@ -721,6 +737,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #lt-bar #ref-text.top {
@@ -971,7 +990,7 @@
       }
       function mapCompareFontWeight(w) {
         if (!w) return '';
-        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '';
       }
 
@@ -985,12 +1004,13 @@
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
         if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
         var lower = value.toLowerCase();
-        if (lower.indexOf('cmg sans') !== -1 && lower.indexOf('charis sil') === -1) {
-          value = '"Charis SIL","Noto Sans",' + value;
-        } else {
-          if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
-          if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        if (lower.indexOf('cmg sans') !== -1) {
+          if (lower.indexOf('cmg sans black') === -1) {
+            value = '"CMG Sans Black",' + value;
+          }
         }
+        if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+        if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
         return value;
       }
 
@@ -1066,11 +1086,14 @@
           return direct.textContent;
         }
         const styles = document.querySelectorAll('style');
+        let matched = '';
         for (const styleEl of styles) {
           const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
-          if (cssText && cssText.includes('--overlay-data')) return cssText;
+          if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+            matched += '\n' + cssText;
+          }
         }
-        return '';
+        return matched;
       }
 
       function extractCssCustomPropertyValue(cssText, name) {
@@ -1385,8 +1408,11 @@
       /* ═══ FULLSCREEN: Auto-scaling ═══ */
       function isSingleLayoutOverflowing(tw, th) {
         const frameRect = getFrameContentRect(overlay);
+        const w = frameRect.width || tw;
+        const h = frameRect.height || th;
         return isContentOutsideFrame([verseText, reference], overlay) ||
-          isOverflowing(verseContainer, frameRect.width || tw, frameRect.height || th);
+          isOverflowing(verseText, w, h) ||
+          isOverflowing(verseContainer, w, h);
       }
 
       function autoScaleContent() {
@@ -1649,6 +1675,7 @@
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
         root.style.setProperty('--text-shadow', s.textShadow || 'none');
         root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
@@ -1694,12 +1721,16 @@
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
-        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
-        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         // Compare-specific reference font size
-        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
-        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
         // Compare-specific line height
@@ -2192,6 +2223,9 @@
           if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (targetSource) lastTargetSource = targetSource;
+          const data = packet.data || packet.packet || packet.overlayData;
+          const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
+          if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -2199,7 +2233,6 @@
             setActiveLayer(packet.mode);
             return true;
           }
-          const data = packet.data || packet.packet || packet.overlayData;
           if (!data || typeof data !== 'object') return false;
           processOverlayUpdate(data);
           return true;

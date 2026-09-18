@@ -27,6 +27,7 @@ export const DOCK_OUTPUT_FONT_SCALE_OPTIONS = [
   { id: "default", label: "Default (100%)", value: 1 },
   { id: "large", label: "Large (110%)", value: 1.1 },
   { id: "extra-large", label: "Extra large (125%)", value: 1.25 },
+  { id: "xxl", label: "XXL (150%)", value: 1.5 },
 ] as const;
 
 function getMigratedOutputFontFamily(): string {

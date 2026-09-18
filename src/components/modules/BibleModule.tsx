@@ -34,18 +34,28 @@ export interface BiblePresentationSelectionPayload {
   verseCount?: number;
   styleOverrides?: {
     fontSize?: number;
+    fontFamily?: string;
     fontColor?: string;
     refFontColor?: string;
     textAlign?: string;
     lineHeight?: number;
+    letterSpacing?: number;
+    wordSpacing?: number;
     fontWeight?: string;
     textTransform?: string;
+    textShadow?: string;
+    textOutline?: boolean;
+    textOutlineWidth?: number;
+    textOutlineColor?: string;
     backgroundColor?: string;
+    backgroundColorEnd?: string;
+    bgGradientAngle?: number;
     backgroundImage?: string;
     backgroundPattern?: string;
     backgroundVideo?: string;
     backgroundOpacity?: number;
     fullscreenShadeOpacity?: number;
+    fullscreenShadeColor?: string;
   };
 }
 
@@ -82,20 +92,87 @@ function Monitors({
     const verseMatch = item.ref.match(/:(\d+)/);
     const verseNum = verseMatch ? verseMatch[1] : null;
     const settings = theme?.settings;
-    const effectiveColor = quickSettings?.fontColor || settings?.fontColor || "#f0f6fc";
+    const effectiveColor = quickSettings?.fontColor || settings?.fontColor || "#ffffff";
+    const rawRefColor = (quickSettings?.refFontColor || settings?.refFontColor || "").trim().toLowerCase();
+    const isFaint = !rawRefColor || ["#cbd5e1", "#aaaaaa", "#aeb9d1", "#c9d2e5", "#cccccc", "#e0e0e0", "#888888", "#94a3b8", "#64748b"].includes(rawRefColor);
+    const effectiveRefColor = isFaint ? effectiveColor : (quickSettings?.refFontColor || settings?.refFontColor || effectiveColor);
     const effectiveFontFamily = quickSettings?.fontFamily || settings?.fontFamily || "inherit";
     const effectiveTextAlign = (quickSettings?.textAlign || settings?.textAlign || "center") as "left" | "center" | "right";
+    const effectiveTextShadow = quickSettings?.textShadow || settings?.textShadow || "none";
+    const effectiveOutline = quickSettings?.textOutline ?? settings?.textOutline ?? false;
+    const effectiveOutlineWidth = quickSettings?.textOutlineWidth ?? settings?.textOutlineWidth ?? 2;
+    const effectiveOutlineColor = quickSettings?.textOutlineColor || settings?.textOutlineColor || "#000000";
+    const effectiveFontWeight = quickSettings?.fontWeight || settings?.fontWeight || "normal";
+    const effectiveTextTransform = quickSettings?.textTransform || settings?.textTransform || "none";
+    const effectiveLineHeight = quickSettings?.lineHeight || settings?.lineHeight || 1.4;
+    const effectiveLetterSpacing = quickSettings?.letterSpacing ?? settings?.letterSpacing ?? 0;
+    const effectiveWordSpacing = quickSettings?.wordSpacing ?? settings?.wordSpacing ?? 0;
+
+    const bgImage = quickSettings?.backgroundImage || settings?.backgroundImage;
+    const bgPattern = quickSettings?.backgroundPattern || settings?.backgroundPattern;
+    const bgColor = quickSettings?.backgroundColor || settings?.backgroundColor || "#0B1426";
+    const bgColorEnd = quickSettings?.backgroundColorEnd || settings?.backgroundColorEnd;
+    const shadeOpacity = quickSettings?.fullscreenShadeOpacity ?? settings?.fullscreenShadeOpacity ?? 0;
+    const shadeColor = quickSettings?.fullscreenShadeColor || settings?.fullscreenShadeColor || "#000000";
+
+    const containerBg = bgImage
+      ? `url("${bgImage}") center / cover no-repeat`
+      : bgPattern
+        ? `url("${bgPattern}") repeat`
+        : bgColorEnd
+          ? `linear-gradient(135deg, ${bgColor}, ${bgColorEnd})`
+          : bgColor;
+
     return (
       <div
         className="bm-monitor-preview"
         style={{
+          background: containerBg,
           color: effectiveColor,
           fontFamily: effectiveFontFamily,
           textAlign: effectiveTextAlign,
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <span className="bm-monitor-ref">{item.ref}</span>
-        <p className="bm-monitor-text">
+        {shadeOpacity > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: shadeColor,
+              opacity: shadeOpacity,
+              pointerEvents: "none",
+            }}
+          />
+        )}
+        <span
+          className="bm-monitor-ref"
+          style={{
+            position: "relative",
+            zIndex: 1,
+            color: effectiveRefColor,
+            fontWeight: 700,
+            textShadow: effectiveTextShadow !== "none" ? effectiveTextShadow : undefined,
+          }}
+        >
+          {item.ref}
+        </span>
+        <p
+          className="bm-monitor-text"
+          style={{
+            position: "relative",
+            zIndex: 1,
+            fontWeight: effectiveFontWeight === "black" ? 900 : effectiveFontWeight === "extrabold" ? 800 : effectiveFontWeight === "bold" ? 700 : effectiveFontWeight === "light" ? 300 : 400,
+            lineHeight: effectiveLineHeight,
+            textTransform: effectiveTextTransform as any,
+            textShadow: effectiveTextShadow !== "none" ? effectiveTextShadow : undefined,
+            letterSpacing: `${effectiveLetterSpacing * 0.5}px`,
+            wordSpacing: `${effectiveWordSpacing * 0.5}px`,
+            paintOrder: "stroke fill",
+            WebkitTextStroke: effectiveOutline && effectiveOutlineWidth > 0 ? `${Math.max(1, effectiveOutlineWidth * 0.6)}px ${effectiveOutlineColor}` : undefined,
+          }}
+        >
           {verseNum && <sup>{verseNum}</sup>}
           {item.text}
         </p>
@@ -699,13 +776,22 @@ export function BibleModule({
       verseCount: Math.max(1, verseCount),
       styleOverrides: {
         fontSize: quickSettings.fontSize,
+        fontFamily: quickSettings.fontFamily,
         fontColor: quickSettings.fontColor,
         refFontColor: quickSettings.refFontColor,
         textAlign: quickSettings.textAlign,
         lineHeight: quickSettings.lineHeight,
+        letterSpacing: quickSettings.letterSpacing,
+        wordSpacing: quickSettings.wordSpacing,
         fontWeight: quickSettings.fontWeight,
         textTransform: quickSettings.textTransform,
+        textShadow: quickSettings.textShadow,
+        textOutline: quickSettings.textOutline,
+        textOutlineWidth: quickSettings.textOutlineWidth,
+        textOutlineColor: quickSettings.textOutlineColor,
         backgroundColor: quickSettings.backgroundColor,
+        backgroundColorEnd: quickSettings.backgroundColorEnd,
+        bgGradientAngle: quickSettings.bgGradientAngle,
         backgroundImage: quickSettings.backgroundImage,
         backgroundPattern: quickSettings.backgroundType && quickSettings.backgroundType !== "pattern"
           ? ""
@@ -713,6 +799,7 @@ export function BibleModule({
         backgroundVideo: quickSettings.backgroundVideo,
         backgroundOpacity: quickSettings.backgroundOpacity,
         fullscreenShadeOpacity: quickSettings.fullscreenShadeOpacity,
+        fullscreenShadeColor: quickSettings.fullscreenShadeColor,
       },
     };
 

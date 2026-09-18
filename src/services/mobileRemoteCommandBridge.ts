@@ -298,12 +298,9 @@ async function getDockBiblePresentationStyle(requestedMode?: string) {
   const fallbackTheme = BUILTIN_THEMES[0];
   const selectedTheme = (themeId ? themes.get(themeId) : null) ?? fallbackTheme;
   const themed = resolveThemeVariant(selectedTheme, mode);
-  const linkedLowerThird = prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen === true
-    || (prefs.lowerThirdQuickThemeSettingsLinkedToFullscreen === undefined
-      && !prefs.lowerThirdQuickThemeSettings);
   const quickSettings = mode === "fullscreen"
     ? prefs.fullscreenQuickThemeSettings
-    : (linkedLowerThird ? prefs.fullscreenQuickThemeSettings : prefs.lowerThirdQuickThemeSettings);
+    : prefs.lowerThirdQuickThemeSettings;
   const settings = {
     ...themed.settings,
     ...(isRecord(quickSettings) ? quickSettings : {}),

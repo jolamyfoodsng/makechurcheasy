@@ -49,6 +49,7 @@ interface DockOutputQuickActionsProps {
   activeSizePreset?: string;
   getSizePresetPatch?: (id: string) => DockOutputQuickSettingsPatch | null;
   onUpdateImmediatelyChange: (value: boolean) => void;
+  onOpenSettings?: () => void;
 }
 
 interface QuickActionDragState {
@@ -149,6 +150,7 @@ export default function DockOutputQuickActions({
   activeSizePreset,
   getSizePresetPatch,
   onUpdateImmediatelyChange,
+  onOpenSettings,
 }: DockOutputQuickActionsProps) {
   const [open, setOpen] = useState(false);
   const [draftSettings, setDraftSettings] = useState<DockOutputQuickSettingsPatch | null>(null);
@@ -372,6 +374,20 @@ export default function DockOutputQuickActions({
               <span className={`dock-output-quick-actions__live${isLive ? "" : " dock-output-quick-actions__preview"}`}>
                 {isLive ? "LIVE" : "PREVIEW"}
               </span>
+              {onOpenSettings && (
+                <button
+                  type="button"
+                  className="dock-output-quick-actions__settings"
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenSettings();
+                  }}
+                  title="Background & Theme Settings"
+                  aria-label="Background & Theme Settings"
+                >
+                  <Icon name="tune" size={14} />
+                </button>
+              )}
             </div>
           </div>
 
