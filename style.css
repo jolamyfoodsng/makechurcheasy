@@ -1,0 +1,81 @@
+/* Reset margins so the colorful blocks touch the edges of the screen */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: sans-serif;
+  font-weight: bold;
+  text-align: center;
+  color: white;
+}
+
+/* 1. Header (Blue Bar) */
+.lego-header {
+  background-color: #3b82f6;
+  height: 80px;
+  line-height: 80px;
+}
+
+/* 2. Hero Section (Purple Big Box) */
+.lego-hero {
+  background-color: #8b5cf6;
+  height: 250px;
+  line-height: 250px;
+}
+
+/* 3. Main Container (Flexbox aligns children side-by-side) */
+.lego-container {
+  background-color: #1e293b;
+  padding: 40px;
+  display: flex;
+  justify-content: space-around;
+  gap: 20px;
+}
+
+/* Shared styling for the inner Lego blocks */
+.lego-box {
+  flex: 1;
+  height: 200px;
+  line-height: 200px;
+  border-radius: 12px;
+  transition: transform 0.2s;
+}
+
+/* Individual box colors */
+.red {
+  background-color: #ef4444;
+}
+
+.yellow {
+  background-color: #f59e0b;
+  color: #1e293b;
+}
+
+.green {
+  background-color: #10b981;
+}
+
+/* Interactive Hover effect to make it fun */
+.lego-box:hover {
+  transform: scale(1.05);
+  cursor: pointer;
+}
+
+/* 4. Footer (Dark Grey Bar) */
+.lego-footer {
+  background-color: #0f172a;
+  height: 60px;
+  line-height: 60px;
+}
+
+@media (max-width: 700px) {
+  .lego-container {
+    flex-direction: column;
+  }
+
+  .lego-box {
+    width: 100%;
+  }
+}
