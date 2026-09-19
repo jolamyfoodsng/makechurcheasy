@@ -14,6 +14,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PlanPrice {
   monthly: number;
@@ -28,7 +29,6 @@ interface CountryEntry {
   plans: {
     basic: PlanPrice;
     growth: PlanPrice;
-    pro: PlanPrice;
   };
 }
 
@@ -48,11 +48,10 @@ const EMPTY_COUNTRY: CountryEntry = {
   plans: {
     basic: { ...EMPTY_PLAN },
     growth: { ...EMPTY_PLAN },
-    pro: { ...EMPTY_PLAN },
   },
 };
 
-const PLAN_TIERS = ["basic", "growth", "pro"] as const;
+const PLAN_TIERS = ["basic", "growth"] as const;
 
 export function CountryPricingSection() {
   const [pricing, setPricing] = useState<CountryPricingDoc | null>(null);
@@ -234,11 +233,11 @@ export function CountryPricingSection() {
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Globe className="w-5 h-5 text-slate-400" />
-          <h2 className="text-lg font-semibold text-slate-900">Country Pricing</h2>
+          <h2 className="text-lg font-semibold text-white">Country Pricing</h2>
         </div>
         <div className="animate-pulse space-y-4">
-          <div className="h-10 bg-slate-100 rounded-xl" />
-          <div className="h-64 bg-slate-100 rounded-xl" />
+          <div className="h-10 bg-slate-800/60 rounded-xl" />
+          <div className="h-64 bg-slate-800/40 border border-slate-800 rounded-2xl" />
         </div>
       </div>
     );
@@ -249,10 +248,10 @@ export function CountryPricingSection() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Globe className="w-5 h-5 text-slate-400" />
+          <Globe className="w-5 h-5 text-indigo-400" />
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Country Pricing</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-lg font-semibold text-white">Country Pricing</h2>
+            <p className="text-sm text-slate-400">
               Manage regional pricing for each country. Version: {pricing?.version || 1}
             </p>
           </div>
@@ -261,14 +260,14 @@ export function CountryPricingSection() {
           <button
             onClick={handleBumpVersion}
             disabled={bumping}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-slate-300 bg-slate-800/80 border border-slate-700 rounded-xl hover:bg-slate-700 hover:text-white disabled:opacity-50 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${bumping ? "animate-spin" : ""}`} />
             Bump Version
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700"
+            className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
           >
             <Plus className="w-4 h-4" />
             Add Country
@@ -277,71 +276,67 @@ export function CountryPricingSection() {
       </div>
 
       {/* Pricing Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-[#0B101E] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Country</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Currency</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600">Basic (mo)</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600">Growth (mo)</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600">Pro (mo)</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-600">Active</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-600">Actions</th>
+              <tr className="border-b border-slate-800 bg-slate-900/60">
+                <th className="text-left px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Country</th>
+                <th className="text-left px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Currency</th>
+                <th className="text-right px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Basic (mo)</th>
+                <th className="text-right px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Growth (mo)</th>
+                <th className="text-center px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Active</th>
+                <th className="text-right px-4 py-3.5 font-medium text-slate-400 text-xs uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-800/60">
               {pricing?.countries &&
                 Object.entries(pricing.countries)
                   .sort(([, a], [, b]) => a.country.localeCompare(b.country))
                   .map(([code, entry]) => (
                     <tr
                       key={code}
-                      className={`border-b border-slate-50 hover:bg-slate-50 ${!entry.enabled ? "opacity-50" : ""
+                      className={`hover:bg-slate-800/40 transition-colors ${!entry.enabled ? "opacity-40" : ""
                         }`}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900">{code}</span>
-                          <span className="text-slate-500">{entry.country}</span>
+                          <span className="font-semibold text-white">{code}</span>
+                          <span className="text-slate-400">{entry.country}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3.5 text-slate-300">
                         {entry.currencySymbol} {entry.currency}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-slate-700">
+                      <td className="px-4 py-3.5 text-right font-mono text-slate-200">
                         {entry.plans.basic.monthly.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-slate-700">
+                      <td className="px-4 py-3.5 text-right font-mono text-slate-200">
                         {entry.plans.growth.monthly.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-slate-700">
-                        {entry.plans.pro.monthly.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         <button
                           onClick={() => handleToggle(code, !entry.enabled)}
-                          className="text-slate-400 hover:text-slate-600"
+                          className="text-slate-500 hover:text-slate-300 transition-colors inline-flex items-center justify-center"
                         >
                           {entry.enabled ? (
-                            <ToggleRight className="w-6 h-6 text-green-500" />
+                            <ToggleRight className="w-6 h-6 text-emerald-400" />
                           ) : (
-                            <ToggleLeft className="w-6 h-6 text-slate-300" />
+                            <ToggleLeft className="w-6 h-6 text-slate-600" />
                           )}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleEdit(code, entry)}
-                            className="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg"
+                            className="px-2.5 py-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleDelete(code)}
-                            className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg"
+                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -356,57 +351,57 @@ export function CountryPricingSection() {
 
       {/* Edit Modal */}
       {editingCountry && editData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-100">
-              <h3 className="text-lg font-semibold text-slate-900">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0B101E] border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-slate-800">
+              <h3 className="text-lg font-semibold text-white">
                 Edit {editingCountry} — {editData.country}
               </h3>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-slate-400 mt-1">
                 {editData.currencySymbol} {editData.currency}
               </p>
             </div>
             <div className="p-6 space-y-6">
               {PLAN_TIERS.map((tier) => (
                 <div key={tier} className="space-y-2">
-                  <h4 className="text-sm font-medium text-slate-700 capitalize">{tier}</h4>
+                  <h4 className="text-sm font-medium text-slate-300 capitalize">{tier}</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Monthly</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Monthly</label>
                       <input
                         type="number"
                         value={editData.plans[tier].monthly}
                         onChange={(e) => updatePlanPrice(tier, "monthly", e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Yearly</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Yearly</label>
                       <input
                         type="number"
                         value={editData.plans[tier].yearly}
                         onChange={(e) => updatePlanPrice(tier, "yearly", e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                       />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="p-6 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="p-6 border-t border-slate-800 flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setEditingCountry(null);
                   setEditData(null);
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
               >
                 {saving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -422,63 +417,63 @@ export function CountryPricingSection() {
 
       {/* Add Country Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-100">
-              <h3 className="text-lg font-semibold text-slate-900">Add Country</h3>
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0B101E] border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="p-6 border-b border-slate-800">
+              <h3 className="text-lg font-semibold text-white">Add Country</h3>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Country Code (ISO 2)</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Country Code (ISO 2)</label>
                   <input
                     type="text"
                     value={newCountry.code}
                     onChange={(e) => setNewCountry({ ...newCountry, code: e.target.value.toUpperCase() })}
                     placeholder="GH"
                     maxLength={2}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Country Name</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Country Name</label>
                   <input
                     type="text"
                     value={newCountry.country}
                     onChange={(e) => setNewCountry({ ...newCountry, country: e.target.value })}
                     placeholder="Ghana"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Currency</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Currency</label>
                   <input
                     type="text"
                     value={newCountry.currency}
                     onChange={(e) => setNewCountry({ ...newCountry, currency: e.target.value.toUpperCase() })}
                     placeholder="GHS"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Symbol</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Symbol</label>
                   <input
                     type="text"
                     value={newCountry.currencySymbol}
                     onChange={(e) => setNewCountry({ ...newCountry, currencySymbol: e.target.value })}
                     placeholder="GH₵"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                   />
                 </div>
               </div>
               {PLAN_TIERS.map((tier) => (
                 <div key={tier} className="space-y-2">
-                  <h4 className="text-sm font-medium text-slate-700 capitalize">{tier}</h4>
+                  <h4 className="text-sm font-medium text-slate-300 capitalize">{tier}</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Monthly</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Monthly</label>
                       <input
                         type="number"
                         value={newCountry.plans[tier].monthly}
@@ -492,11 +487,11 @@ export function CountryPricingSection() {
                             },
                           });
                         }}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Yearly</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Yearly</label>
                       <input
                         type="number"
                         value={newCountry.plans[tier].yearly}
@@ -510,27 +505,27 @@ export function CountryPricingSection() {
                             },
                           });
                         }}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
                       />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="p-6 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="p-6 border-t border-slate-800 flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setNewCountry({ code: "", ...EMPTY_COUNTRY });
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddCountry}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
               >
                 {saving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -546,15 +541,19 @@ export function CountryPricingSection() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50">
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
           <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-white text-sm font-semibold ${toast.type === "success" ? "bg-green-600" : "bg-red-600"
-              }`}
+            className={cn(
+              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border backdrop-blur-md",
+              toast.type === "success"
+                ? "bg-slate-900/95 border-emerald-500/40 text-emerald-300 shadow-emerald-950/30"
+                : "bg-slate-900/95 border-rose-500/40 text-rose-300 shadow-rose-950/30"
+            )}
           >
             {toast.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
             )}
             <span>{toast.message}</span>
           </div>

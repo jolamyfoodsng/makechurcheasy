@@ -16,13 +16,12 @@ import {
   Check,
   CheckCircle,
   ChevronDown,
+  Clock,
   Copy,
   Download,
-  HelpCircle,
   Lock,
   Mic,
   Radio,
-  RotateCcw,
   ShieldAlert,
   StopCircle,
   Wifi,
@@ -32,14 +31,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
-import SpeechToScriptureTutorial, {
-  isSpeechToScriptureTutorialCompleted,
-  markSpeechToScriptureTutorialCompleted,
-  resetSpeechToScriptureTutorial,
-} from "./SpeechToScriptureTutorial";
 import { bibleObsService } from "../bible/bibleObsService";
 import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
+import MacSelect from "../components/MacSelect";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
 import {
@@ -55,16 +50,23 @@ import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
 import { loadData } from "../services/store";
-import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
-import type { VoiceBibleCandidate, DetectionSpeed } from "../services/voiceBibleTypes";
-import { DETECTION_SPEED_CONFIG, MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
+import { getUserScopedKey } from "../services/userScopedStorage";
+import { trackStsPushToLive, trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
+import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
+import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
+import { loadLmSettings } from "../services/lmSettings";
+import { resolveScriptureProjection } from "../services/scriptureProjection";
+import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import { isConfirmedAppClose } from "../services/appCloseGuard";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
+const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
+const FREE_SPEECH_TO_SCRIPTURE_MINUTES = 15;
+const FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES = 20;
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
@@ -111,46 +113,53 @@ function formatTimestamp(entry: { startTime?: number }, elapsed: number): string
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function loadPreferredMicId(): string {
+  const nativeMic = readNativeDockSetting<string>(PREFERRED_MIC_STORAGE_KEY);
+  if (nativeMic?.trim()) return nativeMic.trim();
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY))?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function savePreferredMicId(micId: string): void {
+  writeNativeDockSetting(PREFERRED_MIC_STORAGE_KEY, micId.trim());
+  if (typeof localStorage === "undefined") return;
+  try {
+    const key = getUserScopedKey(PREFERRED_MIC_STORAGE_KEY);
+    const trimmed = micId.trim();
+    if (trimmed) localStorage.setItem(key, trimmed);
+    else localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
+}
+
 export default function SpeechToScripturePage() {
   const { t } = useTranslation();
 
-  // ── Translated config maps (constants are defined outside component) ──
-  const speedLabelMap = useMemo(() => ({
-    fast: t("verseAi.speedFast"),
-    balanced: t("verseAi.speedBalanced"),
-    accurate: t("verseAi.speedAccurate"),
-  }), [t]);
-
-  const speedDescMap = useMemo(() => ({
-    fast: t("verseAi.speedFastDesc"),
-    balanced: t("verseAi.speedBalancedDesc"),
-    accurate: t("verseAi.speedAccurateDesc"),
-  }), [t]);
+  // The root app keeps the speech service demand-loaded. Initialize it here
+  // when this route is explicitly opened so direct page controls and Dock
+  // commands share the same managed service instance.
+  useEffect(() => {
+    lmDockService.init();
+  }, []);
 
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
   const effectivePlan = getEffectivePlan(user);
 
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // ── Backend access check (declared early for use in useEffects below) ──
   const [checkingAccess, setCheckingAccess] = useState(false);
+  const [sessionLimitSeconds, setSessionLimitSeconds] = useState<number | null>(null);
   const [accessDenied, setAccessDenied] = useState<{
     reason: string;
     requiredPlan?: string;
   } | null>(null);
-
-  // ── Auto-start tutorial on first visit ──
-  useEffect(() => {
-    if (!isSpeechToScriptureTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
@@ -168,12 +177,14 @@ export default function SpeechToScripturePage() {
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
   const [isUnlimited, setIsUnlimited] = useState(false);
-  const isPro = effectivePlan === "pro";
+  const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
 
   useEffect(() => {
-    if (isPro) return;
+    if (hasUnlimitedPlan) return;
     void syncCreditsWithBackend().then((bal) => {
-      if (bal === -1) {
+      if (bal === null) {
+        setIsUnlimited(false);
+      } else if (bal === -1) {
         setIsUnlimited(true);
       } else if (bal >= 0) {
         setIsUnlimited(false);
@@ -182,17 +193,19 @@ export default function SpeechToScripturePage() {
     });
     const unsub = onCreditChange((bal) => setCreditBalance(bal));
     return unsub;
-  }, [isPro]);
+  }, [hasUnlimitedPlan]);
 
-  const hasCredits = isAdmin || isPro || isUnlimited || creditBalance > 0;
+  const hasCredits = isAdmin || hasUnlimitedPlan || isUnlimited || creditBalance > 0;
+  const chargedSessionCreditsRef = useRef(0);
+  const chargingSessionCreditsRef = useRef(false);
+  const stoppedForCreditFailureRef = useRef(false);
+  const limitStopTriggeredRef = useRef(false);
 
   // ── LM state ──
   const [snapshot, setSnapshot] = useState<LmDockSnapshot>(lmDockService.getSnapshot());
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([]);
-  const [selectedMic, setSelectedMic] = useState("");
+  const [selectedMic, setSelectedMic] = useState(() => loadPreferredMicId());
   const [micLoading, setMicLoading] = useState(false);
-  const [micDropdownOpen, setMicDropdownOpen] = useState(false);
-  const micDropdownRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyLine = useCallback(async (id: string, text: string) => {
@@ -201,6 +214,11 @@ export default function SpeechToScripturePage() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1500);
     } catch { /* ignore */ }
+  }, []);
+
+  const selectMic = useCallback((micId: string) => {
+    setSelectedMic(micId);
+    savePreferredMicId(micId);
   }, []);
 
   // ── OBS ──
@@ -222,31 +240,25 @@ export default function SpeechToScripturePage() {
     try {
       const devices = await lmDockService.getMics();
       setMics(devices);
-      if (devices.length > 0 && !selectedMic) {
-        setSelectedMic(devices[0].id);
+      if (devices.length > 0) {
+        const savedMic = loadPreferredMicId();
+        const currentStillAvailable = selectedMic && devices.some((device) => device.id === selectedMic);
+        const savedStillAvailable = savedMic && devices.some((device) => device.id === savedMic);
+        if (!currentStillAvailable) {
+          const nextMicId = savedStillAvailable ? savedMic : devices[0].id;
+          selectMic(nextMicId);
+        }
       }
     } catch (err) {
       console.warn("[SpeechToScripture] Failed to enumerate mics:", err);
     } finally {
       setMicLoading(false);
     }
-  }, [selectedMic]);
+  }, [selectMic, selectedMic]);
 
   useEffect(() => {
     void enumerateMics();
   }, []);
-
-  // Close mic dropdown on outside click
-  useEffect(() => {
-    if (!micDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (micDropdownRef.current && !micDropdownRef.current.contains(e.target as Node)) {
-        setMicDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [micDropdownOpen]);
 
   // ── Connectivity & service states ──
   const isOnline = useOnlineStatus();
@@ -313,10 +325,61 @@ export default function SpeechToScripturePage() {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [generatedTranscriptId, setGeneratedTranscriptId] = useState<string | null>(null);
 
+  const chargeTranscriptionCredits = useCallback(async (
+    targetCredits: number,
+    elapsedSeconds: number,
+    reason: "live" | "final",
+  ): Promise<boolean> => {
+    if (isAdmin || hasUnlimitedPlan || isUnlimited) {
+      chargedSessionCreditsRef.current = Math.max(chargedSessionCreditsRef.current, targetCredits);
+      return true;
+    }
+
+    const delta = targetCredits - chargedSessionCreditsRef.current;
+    if (delta <= 0) return true;
+    if (chargingSessionCreditsRef.current) return true;
+
+    chargingSessionCreditsRef.current = true;
+    try {
+      const ok = await deductCreditsWithSync(
+        user?.id || "device",
+        delta,
+        "transcription",
+        reason === "live"
+          ? `Transcription live charge: ${delta} credit${delta === 1 ? "" : "s"}`
+          : `Transcription final charge: ${Math.round(elapsedSeconds)}s audio`,
+        {
+          durationSec: Math.round(elapsedSeconds),
+          source: "speech_to_scripture",
+          chargeReason: reason,
+          previouslyChargedCredits: chargedSessionCreditsRef.current,
+        },
+        { allowOffline: false },
+      );
+
+      if (!ok) {
+        setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
+        setTimeout(() => setSaveToast(null), 4000);
+        return false;
+      }
+
+      chargedSessionCreditsRef.current += delta;
+      return true;
+    } catch (err) {
+      console.warn("[Credits] Transcription credit deduction error:", err);
+      setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
+      setTimeout(() => setSaveToast(null), 4000);
+      return false;
+    } finally {
+      chargingSessionCreditsRef.current = false;
+    }
+  }, [hasUnlimitedPlan, isAdmin, isUnlimited, t, user?.id]);
+
   const handleStart = useCallback(async () => {
     // Disable button and show checking state
     setCheckingAccess(true);
     setAccessDenied(null);
+    setSessionLimitSeconds(null);
 
     try {
       const deviceId = getDeviceId();
@@ -367,9 +430,13 @@ export default function SpeechToScripturePage() {
 
       // Backend approved — start listening
       console.log("[SpeechToScripture] ✅ Access ALLOWED — calling lmDockService.startListening()");
+      chargedSessionCreditsRef.current = 0;
+      stoppedForCreditFailureRef.current = false;
+      limitStopTriggeredRef.current = false;
+      setSessionLimitSeconds(typeof data.dailyRemainingSeconds === "number" ? data.dailyRemainingSeconds : null);
       track("sts_listening_started", { mic: selectedMic || "default" });
       trackVoiceSessionStarted();
-      void lmDockService.startListening(selectedMic || undefined);
+      await lmDockService.startListening(selectedMic || undefined);
     } catch (err) {
       console.warn("[SpeechToScripture] ❌ Access check FAILED (network/error):", err);
       const isNetworkError = err instanceof TypeError && /fetch|network/i.test(err.message);
@@ -396,15 +463,11 @@ export default function SpeechToScripturePage() {
     void (async () => {
       try {
         const creditsNeeded = await calculateTranscriptionCredits(durationSec);
-        if (creditsNeeded > 0 && !serviceFailed) {
-          const ok = await deductCreditsWithSync(
-            user?.id || "device",
-            creditsNeeded,
-            "transcription",
-            `Transcription: ${Math.round(durationSec)}s audio`,
-            { durationSec: Math.round(durationSec), source: "speech_to_scripture" },
-          );
+        const remainingCredits = Math.max(0, creditsNeeded - chargedSessionCreditsRef.current);
+        if (remainingCredits > 0 && !serviceFailed) {
+          const ok = await chargeTranscriptionCredits(creditsNeeded, durationSec, "final");
           if (!ok) {
+            setAccessDenied({ reason: "insufficient_credits" });
             setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
             setTimeout(() => setSaveToast(null), 4000);
           }
@@ -413,10 +476,6 @@ export default function SpeechToScripturePage() {
         console.warn("[Credits] Transcription credit deduction error:", err);
         setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
         setTimeout(() => setSaveToast(null), 4000);
-      } finally {
-        // Backend deduction is done — clear the pending session offset so
-        // the display reflects the real balance from here on.
-        setPendingSessionCredits(0);
       }
     })();
 
@@ -429,24 +488,28 @@ export default function SpeechToScripturePage() {
         const fallbackTime = prevWords * 0.4;
         return `${formatTimestamp(e, fallbackTime)}\t${e.text}`;
       }).join("\n");
-      const detectedScriptures = [
-        ...snapshot.queue.map((c) => ({
-          id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-          transcriptId: "",
-          reference: c.label,
-          verseText: c.snippet,
-          confidence: c.confidence,
-        })),
-        ...snapshot.suggestions
-          .filter(s => !snapshot.queue.some(q => q.book === s.book && q.chapter === s.chapter && q.verse === s.verse))
-          .map((c) => ({
-            id: `sc-${c.book}-${c.chapter}-${c.verse}`,
-            transcriptId: "",
-            reference: c.label,
-            verseText: c.snippet,
-            confidence: c.confidence,
-          })),
-      ];
+      const persistableCandidates = [
+        ...snapshot.queue,
+        ...snapshot.suggestions.filter(
+          (candidate) => (
+            (candidate.source === "alias" || candidate.source === "keyword") &&
+            candidate.confidence >= 0.90
+          ),
+        ),
+      ].filter((candidate, index, all) => (
+        all.findIndex((other) => (
+          other.book === candidate.book &&
+          other.chapter === candidate.chapter &&
+          other.verse === candidate.verse
+        )) === index
+      ));
+      const detectedScriptures = persistableCandidates.map((c) => ({
+        id: `sc-${c.book}-${c.chapter}-${c.verse}`,
+        transcriptId: "",
+        reference: c.label,
+        verseText: c.snippet,
+        confidence: c.confidence,
+      }));
       const title = new Date().toLocaleDateString("en-US", {
         month: "short", day: "numeric", year: "numeric",
       }) + " — " + (durationSec >= 60
@@ -479,11 +542,12 @@ export default function SpeechToScripturePage() {
 
     lmDockService.stopListening();
     setShowStopConfirm(false);
-  }, [snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
+  }, [chargeTranscriptionCredits, snapshot.entries, snapshot.queue, snapshot.status, snapshot.suggestions, t, user?.id]);
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
-  const isTranscribing = isListening || isConnecting;
+  const canStopListening = isListening || isConnecting;
+  const isTranscribing = canStopListening;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
 
   // ── Guard: warn before closing app while transcribing ──
@@ -504,15 +568,11 @@ export default function SpeechToScripturePage() {
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // After listening stops, hold the session credit count until the backend
-  // deduction is confirmed, preventing the display from jumping back.
-  const [pendingSessionCredits, setPendingSessionCredits] = useState(0);
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
   useEffect(() => {
     if (isTranscribing && snapshot.startedAt) {
-      setPendingSessionCredits(0);
       const updateElapsed = () => {
         setElapsed(Math.max(0, Math.floor((Date.now() - snapshot.startedAt!) / 1000)));
       };
@@ -521,18 +581,41 @@ export default function SpeechToScripturePage() {
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-      if (elapsedRef.current > 0) {
-        // Capture the credit count at the moment listening stopped so the
-        // display stays consistent until the backend deduction is confirmed.
-        setPendingSessionCredits(Math.max(1, Math.ceil(elapsedRef.current / 60)));
-      } else {
-        setPendingSessionCredits(0);
-      }
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isTranscribing, snapshot.startedAt]);
+
+  useEffect(() => {
+    if (!isTranscribing || sessionLimitSeconds === null || sessionLimitSeconds <= 0 || elapsed < sessionLimitSeconds || limitStopTriggeredRef.current) return;
+    limitStopTriggeredRef.current = true;
+    setAccessDenied({ reason: "daily_speech_limit" });
+    confirmStop();
+  }, [confirmStop, elapsed, isTranscribing, sessionLimitSeconds]);
+
+  useEffect(() => {
+    if (!isListening || stoppedForCreditFailureRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      const chargeSeconds = Math.max(1, elapsed);
+      const targetCredits = await calculateTranscriptionCredits(chargeSeconds);
+      if (cancelled || targetCredits <= chargedSessionCreditsRef.current) return;
+
+      const ok = await chargeTranscriptionCredits(targetCredits, chargeSeconds, "live");
+      if (!cancelled && !ok) {
+        stoppedForCreditFailureRef.current = true;
+        lmDockService.stopListening();
+        setShowStopConfirm(false);
+        setAccessDenied({ reason: "insufficient_credits" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chargeTranscriptionCredits, elapsed, isListening]);
 
   // ── Selected candidate (overrides auto top-match when set) ──
   const [selectedCandidate, setSelectedCandidate] = useState<VoiceBibleCandidate | null>(null);
@@ -551,16 +634,19 @@ export default function SpeechToScripturePage() {
     setPushError(null);
     setPushSuccess(null);
     try {
+      const settings = loadLmSettings();
+      candidate = await resolveScriptureProjection(candidate, settings.translation);
       const slide: BibleSlide = {
         id: `speech-${candidate.book}-${candidate.chapter}-${candidate.verse}`,
         text: candidate.snippet || `${candidate.book} ${candidate.chapter}:${candidate.verse}`,
         reference: `${candidate.label} (${candidate.translation})`,
-        verseRange: String(candidate.verse),
+        verseRange: candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse),
         index: 0,
         total: 1,
       };
-      await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
+      await bibleObsService.pushSlide(slide, null, true, false, settings.overlayMode);
       track("sts_push_to_live", { reference: candidate.label, confidence: candidate.confidence });
+      trackStsPushToLive();
       setPushSuccess(t("verseAi.pushedToBroadcast", { reference: candidate.label }));
       setTimeout(() => setPushSuccess(null), 3000);
     } catch (err) {
@@ -579,38 +665,6 @@ export default function SpeechToScripturePage() {
   const [assemblyAIError, setAssemblyAIError] = useState(false);
   const [wasListening, setWasListening] = useState(false);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
-
-  // ── Detection Speed ──
-  const [detectionSpeed, setDetectionSpeedState] = useState<DetectionSpeed>("balanced");
-
-  // Load detection speed from settings on mount
-  useEffect(() => {
-    void (async () => {
-      try {
-        const { getVoiceBibleSettings } = await import("../services/voiceBibleSettings");
-        const settings = await getVoiceBibleSettings();
-        setDetectionSpeedState(settings.detectionSpeed);
-        lmDockService.setDetectionSpeed(settings.detectionSpeed);
-      } catch {
-        // Use default "balanced"
-      }
-    })();
-  }, []);
-
-  const handleDetectionSpeedChange = useCallback((speed: DetectionSpeed) => {
-    setDetectionSpeedState(speed);
-    lmDockService.setDetectionSpeed(speed);
-    // Persist to settings
-    void (async () => {
-      try {
-        const { getVoiceBibleSettings, saveVoiceBibleSettings } = await import("../services/voiceBibleSettings");
-        const current = await getVoiceBibleSettings();
-        await saveVoiceBibleSettings({ ...current, detectionSpeed: speed });
-      } catch {
-        // Best effort — don't block UI
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (isListening) {
@@ -644,7 +698,7 @@ export default function SpeechToScripturePage() {
 
   // Track AssemblyAI errors
   useEffect(() => {
-    if (snapshot.status === "error" && isOnline) {
+    if (snapshot.status === "error") {
       setAssemblyAIError(true);
     }
     if (snapshot.status === "listening" || snapshot.status === "connecting") {
@@ -744,18 +798,16 @@ export default function SpeechToScripturePage() {
     }
   }, [finalizedEntries, downloadFormat, fullTranscript, generateSrt]);
 
-  // ── Top match: selected candidate or first suggestion (auto) ──
+  // ── Top match: manual selection or the newest reference/quotation ──
   const topMatch = useMemo(() => {
     if (selectedCandidate) return selectedCandidate;
-    // Only use suggestions — never queue items.
-    if (snapshot.suggestions.length > 0) return snapshot.suggestions[0];
-    return null;
-  }, [selectedCandidate, snapshot.suggestions]);
+    return snapshot.latestMatch ?? null;
+  }, [selectedCandidate, snapshot.latestMatch]);
 
-  // ── Clear manual selection when new suggestions arrive ──
+  // ── Follow the newest detection when it arrives ──
   useEffect(() => {
-    if (snapshot.suggestions.length > 0) setSelectedCandidate(null);
-  }, [snapshot.suggestions]);
+    setSelectedCandidate(null);
+  }, [snapshot.latestMatch]);
 
   // ── Candidate matches: ONLY suggestions (quote search results) ──
   const candidateMatches = useMemo(() => {
@@ -814,7 +866,7 @@ export default function SpeechToScripturePage() {
   return (
     <div className="sts3-root">
       {/* ── Header ── */}
-      <header className="sts3-header" data-stt-tutorial="welcome">
+      <header className="sts3-header">
         <div className="sts3-header-left">
           <div className="sts3-logo-box">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
@@ -822,30 +874,21 @@ export default function SpeechToScripturePage() {
           <div>
             <div className="sts3-header-title">Verse AI</div>
             <div className="sts3-header-sub">Real-time speech to scripture detection</div>
+            {effectivePlan === "free" && <div className="sts3-header-sub">Free plan: {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes daily · {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays</div>}
           </div>
         </div>
-        <CreditsDisplay userId={user?.id} sessionCreditsUsed={isListening ? Math.ceil(elapsed / 60) : pendingSessionCredits} />
+        <CreditsDisplay userId={user?.id} />
         <div className="sts3-header-right">
-          <button
-            className="production-btn production-btn--ghost"
-            onClick={() => { resetSpeechToScriptureTutorial(); setTourActive(true); setBannerDismissed(false); }}
-            title={t("stt.button.tooltip")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }}
-          >
-            <HelpCircle size={16} /> {t("stt.button")}
-          </button>
-          <div className="sts3-header-mic-group" data-stt-tutorial="start-btn">
+          <div className="sts3-header-mic-group">
             <button
-              className={`sts3-btn ${isListening ? "sts3-btn--red" : ""}`}
-              onClick={isListening ? handleStop : handleStart}
-              disabled={isConnecting || checkingAccess || (!isListening && !hasCredits)}
-              title={!isListening && !hasCredits ? t("verseAi.noCredits") : t("verseAi.startListening")}>
-              {isListening ? (
+              className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
+              onClick={canStopListening ? handleStop : handleStart}
+              disabled={(!canStopListening && checkingAccess) || (!canStopListening && !hasCredits)}
+              title={!canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+              {canStopListening ? (
                 <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
               ) : checkingAccess ? (
                 <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
-              ) : isConnecting ? (
-                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : !hasCredits ? (
                 <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (
@@ -856,25 +899,6 @@ export default function SpeechToScripturePage() {
 
         </div>
       </header>
-
-      {/* ── Incomplete tutorial banner ── */}
-      {!tourActive && !isSpeechToScriptureTutorialCompleted() && !bannerDismissed && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "0 24px 16px", background: "rgba(var(--primary-rgb, 99, 102, 241), 0.08)", border: "1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2)", borderRadius: 8, fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-          <AlertTriangle size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{t("stt.banner")}</span>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }} onClick={() => setTourActive(true)}>
-              {t("stt.banner.continue")}
-            </button>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => { resetSpeechToScriptureTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-              <RotateCcw size={12} /> {t("stt.banner.restart")}
-            </button>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", background: "transparent", cursor: "pointer" }} onClick={() => setBannerDismissed(true)}>
-              {t("stt.banner.dismiss")}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Transcript generated banner ── */}
       {generatedTranscriptId && (
@@ -1027,44 +1051,24 @@ export default function SpeechToScripturePage() {
           {/* ── Left: Live Transcript ── */}
           <aside className="sts3-sidebar">
             <div className="sts3-sidebar-header">
-              <div className="sts3-select-mic-wrapper" ref={micDropdownRef} data-stt-tutorial="mic-select">
-                <div
-                  className="sts3-select-mic"
-                  onClick={() => {
-                    if (isListening || isConnecting) return;
-                    if (!micDropdownOpen) void enumerateMics();
-                    setMicDropdownOpen((o) => !o);
-                  }}
-                >
-                  <span className="sts3-select-mic-label">
-                    <Mic size={14} />
-                    {mics.find((m) => m.id === selectedMic)?.label || (micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophone"))}
-                  </span>
-                  <ChevronDown size={14} />
-                </div>
-                {micDropdownOpen && (
-                  <div className="sts3-mic-dropdown">
-                    {mics.length === 0 && (
-                      <div className="sts3-mic-dropdown-item sts3-mic-dropdown-item--disabled">
-                        {micLoading ? t("verseAi.loadingMics") : t("verseAi.noMicrophonesFound")}
-                      </div>
-                    )}
-                    {mics.map((mic) => (
-                      <div
-                        key={mic.id}
-                        className={`sts3-mic-dropdown-item${mic.id === selectedMic ? " sts3-mic-dropdown-item--active" : ""}`}
-                        onClick={() => {
-                          track("sts_mic_changed", { mic: mic.id });
-                          setSelectedMic(mic.id);
-                          setMicDropdownOpen(false);
-                        }}
-                      >
-                        {mic.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <MacSelect
+                options={mics.map((mic) => ({ value: mic.id, label: mic.label }))}
+                value={selectedMic}
+                onChange={(micId) => {
+                  track("sts_mic_changed", { mic: micId });
+                  selectMic(micId);
+                }}
+                onReload={() => void enumerateMics()}
+                ariaLabel={t("verseAi.selectMicrophone")}
+                quickStartLabel={t("verseAi.quickStart")}
+                allDevicesLabel={t("verseAi.allDevices")}
+                reloadLabel={t("verseAi.reloadDevices")}
+                loadingLabel={t("verseAi.loadingMics")}
+                placeholder={t("verseAi.noMicrophone")}
+                emptyLabel={t("verseAi.noMicrophonesFound")}
+                loading={micLoading}
+                disabled={isListening || isConnecting}
+              />
               <div className="sts3-timer">
                 {formatTimerDisplay(elapsed)}
               </div>
@@ -1099,29 +1103,6 @@ export default function SpeechToScripturePage() {
               </div>
             </div>
 
-            {/* Detection Speed Toggle */}
-            <div className="sts3-detection-speed">
-              <div className="sts3-detection-speed-label">{t("verseAi.detectionSpeed")}</div>
-              <div className="sts3-detection-speed-options">
-                {(["fast", "balanced", "accurate"] as DetectionSpeed[]).map((speed) => {
-                  return (
-                    <button
-                      key={speed}
-                      className={`sts3-detection-speed-btn ${detectionSpeed === speed ? "sts3-detection-speed-btn--active" : ""}`}
-                      onClick={() => handleDetectionSpeedChange(speed)}
-                      title={speedDescMap[speed]}
-                    >
-                      <span className="sts3-detection-speed-icon">{DETECTION_SPEED_CONFIG[speed].icon}</span>
-                      <span className="sts3-detection-speed-name">{speedLabelMap[speed]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="sts3-detection-speed-hint">
-                {speedDescMap[detectionSpeed]}
-              </div>
-            </div>
-
             {/* Search */}
             <div className="sts3-search-box">
               {/* <Search size={14} className="sts3-search-icon" /> */}
@@ -1147,7 +1128,7 @@ export default function SpeechToScripturePage() {
               <ChevronDown size={14} />
             </div>
 
-            <div className={`sts3-transcript-list${transcriptCollapsed ? " sts3-transcript-collapsed" : ""}`} ref={transcriptRef} data-stt-tutorial="transcript">
+            <div className={`sts3-transcript-list${transcriptCollapsed ? " sts3-transcript-collapsed" : ""}`} ref={transcriptRef}>
               {/* Empty state */}
               {filteredEntries.length === 0 && !isListening && (
                 <div className="sts3-transcript-empty">
@@ -1209,7 +1190,7 @@ export default function SpeechToScripturePage() {
           </aside>
 
           {/* ── Center: Current Verse (Top Match) ── */}
-          <div className="sts3-main-card" data-stt-tutorial="top-match">
+          <div className="sts3-main-card">
             <div className="sts3-card-title">
               <span>{t("verseAi.topMatch")}</span>
               {topMatch && (
@@ -1285,7 +1266,7 @@ export default function SpeechToScripturePage() {
         {/* ── Row 2: Full-width section ── */}
         <div className="sts3-main-row2">
           {/* Candidate Matches */}
-          <div className="sts3-candidate-card" data-stt-tutorial="candidates">
+          <div className="sts3-candidate-card">
             <div className="sts3-candidate-header">
               <span className="sts3-candidate-title">{t("verseAi.candidateMatches")}</span>
               {candidateMatches.length > 0 && (
@@ -1359,10 +1340,6 @@ export default function SpeechToScripturePage() {
           <div className="sts3-telemetry-row">
             <span className="sts3-telemetry-label">{t("verseAi.avgLatency")}:</span>
             <span className="sts3-telemetry-value">{snapshot.telemetry.avgLatencyMs}ms</span>
-          </div>
-          <div className="sts3-telemetry-row">
-            <span className="sts3-telemetry-label">{t("verseAi.mode")}:</span>
-            <span className="sts3-telemetry-value">{DETECTION_SPEED_CONFIG[detectionSpeed].icon} {detectionSpeed}</span>
           </div>
         </div>
       )}
@@ -1547,6 +1524,19 @@ export default function SpeechToScripturePage() {
                 </div>
               </>
             )}
+            {accessDenied.reason === "daily_speech_limit" && (
+              <>
+                <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Daily free allowance used</h2>
+                <p className="sts3-lock-desc">
+                  Free accounts can use Speech to Scripture for {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes each day and {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays. Your allowance will be available again tomorrow.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="sts3-btn sts3-btn--primary" onClick={() => navigate("/subscription/plans")} title="View plans">View plans</button>
+                  <button className="sts3-btn sts3-btn--ghost" onClick={() => setAccessDenied(null)} title="Dismiss">Dismiss</button>
+                </div>
+              </>
+            )}
             {accessDenied.reason === "feature_not_available" && (
               <>
                 <Lock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
@@ -1624,6 +1614,11 @@ export default function SpeechToScripturePage() {
             <p className="sts3-lock-desc">
               {t("verseAi.voiceBibleUnavailableDesc")}
             </p>
+            {snapshot.error && (
+              <p className="sts3-lock-desc" role="alert" style={{ color: "var(--error)" }}>
+                {snapshot.error}
+              </p>
+            )}
             <button
               className="sts3-btn sts3-btn--primary"
               onClick={() => {
@@ -1637,12 +1632,6 @@ export default function SpeechToScripturePage() {
         </div>
       )}
 
-      {/* ── Tutorial Tour ── */}
-      <SpeechToScriptureTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markSpeechToScriptureTutorialCompleted(); setTourActive(false); }}
-      />
     </div>
   );
 }

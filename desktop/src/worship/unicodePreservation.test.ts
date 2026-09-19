@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateSlides, parseWorshipLyricSections } from "./slideEngine";
+import {
+  autoSplitLyricsText,
+  extractStructuredTextTitle,
+  generateSlides,
+  parseWorshipLyricSections,
+} from "./slideEngine";
 import {
   unicodeSearchNormalize,
   unicodeStripDiacritics,
@@ -159,6 +164,69 @@ describe("generateSlides preserves Unicode", () => {
     const allContent = slides.map((s) => s.content).join("\n");
     expect(allContent).toContain("Kyerɛ");
     expect(allContent).toContain("Owura");
+  });
+
+  it("promotes bracketed hymn titles and numeric verse headings", () => {
+    const lyrics = "[Orin 969]\n2: Jesu Kristi wa pelu mi,\nJesu Kristi wa pelu mi,\nJesu Kristi wa pelu\n\n[Orin 969].";
+    const title = extractStructuredTextTitle(lyrics);
+    const slides = generateSlides(lyrics, 2, false);
+
+    expect(title.title).toBe("Orin 969");
+    expect(title.body).not.toContain("[Orin 969]");
+    expect(slides).toHaveLength(1);
+    expect(slides[0].label).toBe("Verse 2");
+    expect(slides[0].content).toContain("Jesu Kristi wa pelu mi");
+    expect(slides[0].content).not.toContain("2:");
+  });
+});
+
+describe("autoSplitLyricsText", () => {
+  it("splits long pasted paragraphs into slide-sized blocks", () => {
+    const formatted = autoSplitLyricsText(
+      "PRAYER POINT: MY MIND IS RECEPTIVE TO CUSTOMIZED INSTRUCTIONS AND INSIGHT AS REGARDS MY FAMILY, MY HOME, MY HUSBAND IN THE NAME OF JESUS.",
+      2,
+      { maxLineLength: 42 },
+    );
+    const blocks = formatted.split(/\n\n+/);
+    const slides = generateSlides(formatted, 2, true);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    expect(slides.length).toBe(blocks.length);
+    expect(slides.every((slide) => slide.content.split("\n").length <= 2)).toBe(true);
+  });
+
+  it("preserves explicit worship section labels while splitting", () => {
+    const formatted = autoSplitLyricsText(
+      "Verse 1:\nThis is a very long lyric line that should become smaller lines for the presentation screen\nAnother line for the same verse",
+      2,
+      { maxLineLength: 36 },
+    );
+    const slides = generateSlides(formatted, 2, true);
+
+    expect(formatted).toContain("Verse 1:");
+    expect(formatted).not.toContain("Verse 2:");
+    expect(slides.length).toBeGreaterThan(1);
+    expect(slides.every((slide) => slide.label === "Verse 1")).toBe(true);
+  });
+
+  it("reflows the same original lyrics when changing line counts", () => {
+    const original = [
+      "Line one",
+      "Line two",
+      "Line three",
+      "Line four",
+      "Line five",
+      "Line six",
+      "Line seven",
+      "Line eight",
+    ].join("\n");
+
+    const fourLineBlocks = autoSplitLyricsText(original, 4, { maxLineLength: 80 }).split(/\n\n+/);
+    const twoLineBlocks = autoSplitLyricsText(original, 2, { maxLineLength: 80 }).split(/\n\n+/);
+
+    expect(fourLineBlocks).toHaveLength(2);
+    expect(twoLineBlocks).toHaveLength(4);
+    expect(twoLineBlocks[0]).toBe("Line one\nLine two");
   });
 });
 

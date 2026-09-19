@@ -23,6 +23,7 @@ export interface VoiceBibleDockStateEnvelope {
 }
 
 export const VOICE_BIBLE_DOCK_STATE_NAME = "dock-voice-bible-state";
+export const VOICE_BIBLE_STATUS_EVENT_NAME = "voice-bible-status";
 
 export const VOICE_BIBLE_DOCK_COMMAND_NAMES: Record<VoiceBibleDockCommandType, string> = {
   "voice-bible:start": "dock-voice-bible-start",

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import {
   Loader2,
+  ArrowLeft,
   Check,
   AlertCircle,
   Mail,
@@ -45,6 +46,9 @@ function DeviceAuthContent() {
   const [loading, setLoading] = useState(false);
 
   const [manualCode, setManualCode] = useState("");
+  const displayCode = manualCode.length > 4
+    ? `${manualCode.slice(0, 4)}-${manualCode.slice(4, 8)}`
+    : manualCode;
 
   const [resending, setResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -175,6 +179,14 @@ function DeviceAuthContent() {
           <p className="text-sm text-slate-500">
             {t("device.authorized.description")}
           </p>
+          <button
+            type="button"
+            onClick={() => router.push("/devices")}
+            className="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-bold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-slate-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("common.backTo", { page: t("common.devices") })}
+          </button>
         </div>
       </div>
     );
@@ -488,13 +500,15 @@ function DeviceAuthContent() {
 
         <input
           type="text"
-          value={manualCode}
-          onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+          value={displayCode}
+          onChange={(e) => {
+            const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+            setManualCode(raw);
+          }}
           placeholder="ABCD-1234"
-          maxLength={9}
           onKeyDown={(e) =>
             e.key === "Enter" &&
-            manualCode.length >= 8 &&
+            manualCode.length === 8 &&
             handleConfirmAuthorize()
           }
           className="mb-4 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-center font-mono text-lg font-bold tracking-widest text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -502,7 +516,7 @@ function DeviceAuthContent() {
 
         <button
           onClick={handleConfirmAuthorize}
-          disabled={!manualCode || manualCode.length < 8 || loading}
+          disabled={!manualCode || manualCode.length !== 8 || loading}
           className="h-11 w-full rounded-lg bg-blue-600 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? (

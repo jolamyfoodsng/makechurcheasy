@@ -15,7 +15,7 @@ export function TrialWelcomeModal() {
   const { mongoUser } = useAuth();
   const { isOnTrial, trialEndsAt } = useSubscription();
   const [open, setOpen] = useState(false);
-  const trialDays = mongoUser?.trial?.durationDays ?? 20;
+  const trialDays = mongoUser?.trial?.durationDays ?? 14;
 
   useEffect(() => {
     if (!isOnTrial || !mongoUser) return;

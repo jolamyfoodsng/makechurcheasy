@@ -161,6 +161,7 @@ export async function importSmartSongs(
   songs: SmartImportSongDraft[],
   options: {
     sourceName?: string;
+    saveBatch?: typeof saveSongsBatch;
     linesPerSlide?: number;
     autoSplit?: boolean;
   } = {},
@@ -175,7 +176,7 @@ export async function importSmartSongs(
     const draft = songs[i];
     const lyrics = formatDraftLyrics(draft);
     const song: Song = {
-      id: uid("song-import"),
+      id: `song-import-${draft.id}`,
       metadata: {
         title: draft.title.trim() || "Untitled Song",
         artist: draft.artist?.trim() || "",
@@ -202,7 +203,7 @@ export async function importSmartSongs(
     }
   }
 
-  await saveSongsBatch(imported, { onProgress });
+  await (options.saveBatch ?? saveSongsBatch)(imported, { onProgress });
 
   return imported;
 }

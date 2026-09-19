@@ -12,8 +12,7 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   checkForUpdate,
-  downloadAndInstallUpdate,
-  downloadAndInstallFromGitHub,
+  downloadAndInstallVerifiedUpdate,
   type DownloadProgress,
 } from "../services/updateService";
 import type { Update } from "@tauri-apps/plugin-updater";
@@ -24,6 +23,8 @@ import Icon from "./Icon";
 interface ForcedUpdateOverlayProps {
   state: ForcedUpdateState;
   onDismiss?: () => void;
+  onRefresh?: () => void | Promise<void>;
+  isDock?: boolean;
 }
 
 type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "error";
@@ -40,38 +41,56 @@ function formatCountdownPrecise(hours: number): string {
   if (hours >= 1) {
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
-    return `${h}h ${m}m remaining`;
+    return `${h}h${m > 0 ? ` ${m}m` : ""} remaining`;
   }
-  const m = Math.round(hours * 60);
-  return `${m} minute${m === 1 ? "" : "s"} remaining`;
+  const m = Math.max(1, Math.round(hours * 60));
+  return `${m}m remaining`;
 }
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
 function lockTypeLabel(lockType: LockType | null): string {
-  if (lockType === "emergency-lock") return "Emergency Lock";
+  if (lockType === "emergency-lock") return "Emergency Maintenance";
   return "Update Required";
 }
 
 function lockTypeIcon(lockType: LockType | null): string {
-  if (lockType === "emergency-lock") return "lock";
-  return "warning";
+  if (lockType === "emergency-lock") return "warning";
+  return "lock";
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOverlayProps) {
+export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDock }: ForcedUpdateOverlayProps) {
   const [status, setStatus] = useState<UpdateStatus>("prompt");
   const [progress, setProgress] = useState<DownloadProgress>({
     contentLength: 0,
     downloaded: 0,
   });
   const [errorMsg, setErrorMsg] = useState("");
+  const [dockRefreshing, setDockRefreshing] = useState(false);
+
+  const handleDockRefresh = async () => {
+    setDockRefreshing(true);
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch {
+      // non-critical
+    }
+    try {
+      window.location.reload();
+    } catch {
+      // ignore
+    }
+  };
 
   // Live countdown — tick every 30 seconds for precise display
   const [hoursRemaining, setHoursRemaining] = useState(state.hoursRemaining);
@@ -103,6 +122,13 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
       : 0;
 
   const handleUpdate = useCallback(async () => {
+    const isNativeTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isNativeTauri) {
+      const url = state.downloadUrl || "https://makechurcheazy.com/download";
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     try {
       setStatus("downloading");
       setProgress({ contentLength: 0, downloaded: 0 });
@@ -111,33 +137,34 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
       const result = await checkForUpdate();
       const update = (result as any).update as Update | undefined;
 
-      if (update) {
-        await downloadAndInstallUpdate(
-          update,
-          (p) => setProgress(p),
-          (s) => setStatus(s)
-        );
-        return;
-      }
-
-      await downloadAndInstallFromGitHub(
+      await downloadAndInstallVerifiedUpdate(
+        update,
         (p) => setProgress(p),
-        (s) => setStatus(s)
+        (s) => setStatus(s),
       );
     } catch (err: any) {
-      if (state.downloadUrl) {
-        window.open(state.downloadUrl, "_blank", "noopener,noreferrer");
+      console.error("[ForcedUpdate] Update failed:", err);
+      const fallbackUrl = state.downloadUrl || "https://makechurcheazy.com/download";
+      if (fallbackUrl) {
+        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
         setStatus("prompt");
         return;
       }
-      console.error("[ForcedUpdate] Update failed:", err);
       setErrorMsg(err?.message || "Update failed. Please try again.");
       setStatus("error");
     }
   }, [state.downloadUrl]);
 
   const handleQuit = useCallback(async () => {
-    await exit(0);
+    try {
+      await exit(0);
+    } catch {
+      try {
+        window.close();
+      } catch {
+        // CEF in OBS may ignore window.close()
+      }
+    }
   }, []);
 
   const handleSupport = useCallback(() => {
@@ -191,7 +218,8 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
         className="force-update-modal"
         style={{
           width: 440,
-          maxWidth: "90vw",
+          maxWidth: "min(440px, calc(100vw - 24px))",
+          boxSizing: "border-box",
           background: "var(--surface, #0F172A)",
           borderRadius: 8,
           overflow: "hidden",
@@ -214,8 +242,8 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name={lockTypeIcon(state.lockType)} size={14} />
-            <span>{lockTypeLabel(state.lockType)}</span>
+            <Icon name={isDock ? (isBlocked ? "lock" : lockTypeIcon(state.lockType)) : lockTypeIcon(state.lockType)} size={14} />
+            <span>{isDock ? (isBlocked ? "Dock Blocked" : lockTypeLabel(state.lockType)) : lockTypeLabel(state.lockType)}</span>
           </div>
           {showCountdown && (
             <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
@@ -234,16 +262,18 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
           }}
         >
           <Icon
-            name={statusIcon}
+            name={isDock ? (isBlocked ? "lock" : statusIcon) : statusIcon}
             size={24}
-            className={isBusy ? "force-update-icon--spin" : ""}
+            className={!isDock && isBusy ? "force-update-icon--spin" : ""}
           />
           <div>
             <h2
               className="force-update-title"
               style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}
             >
-              {isBlocked
+              {isDock
+                ? (isBlocked ? "Dock Blocked" : statusLabel)
+                : isBlocked
                 ? isEmergency
                   ? "Emergency Lock Active"
                   : "App Locked"
@@ -263,7 +293,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
         </div>
 
         {/* Body */}
-        <div style={{ padding: "16px 24px" }}>
+        <div style={{ padding: isDock && isBlocked ? "16px 24px 24px" : "16px 24px" }}>
           {status === "prompt" && (
             <>
               <p
@@ -275,7 +305,11 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                   color: "var(--text-secondary)",
                 }}
               >
-                {isEmergency
+                {isDock
+                  ? isBlocked
+                    ? "This has been blocked because you need to update the app. Please open MakeChurchEasy on this computer to update."
+                    : "A new version of MakeChurchEasy is required. Please open MakeChurchEasy on this computer to update before the deadline."
+                  : isEmergency
                   ? state.updateMessage
                   : state.updateMessage ||
                     `A new version of MakeChurchEasy is required. Your version is v${state.currentVersion}. Update to v${state.requiredVersion} or later to continue.`}
@@ -287,7 +321,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                     padding: "10px 12px",
                     borderRadius: 6,
                     background: "var(--surface-hover, rgba(255,255,255,0.05))",
-                    marginBottom: 16,
+                    marginBottom: showCountdown || (!isDock && isBlocked) ? 16 : 0,
                     fontSize: 13,
                     color: "var(--text-secondary)",
                   }}
@@ -304,7 +338,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                     padding: "10px 12px",
                     borderRadius: 6,
                     background: "var(--surface-hover, rgba(255,255,255,0.05))",
-                    marginBottom: 16,
+                    marginBottom: !isDock && isBlocked ? 16 : 0,
                     fontSize: 13,
                     color: "var(--text-secondary)",
                     display: "flex",
@@ -320,7 +354,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 </div>
               )}
 
-              {isBlocked && (
+              {!isDock && isBlocked && (
                 <div
                   style={{
                     padding: "10px 12px",
@@ -431,15 +465,16 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
             padding: "0 24px 20px",
             display: "flex",
             gap: 8,
+            flexWrap: "wrap",
           }}
         >
-          {/* Forced update actions */}
-          {status === "prompt" && !isEmergency && (
+          {isDock ? (
             <button
               className="force-update-btn force-update-btn--primary"
-              onClick={handleUpdate}
+              onClick={handleDockRefresh}
+              disabled={dockRefreshing}
               style={{
-                flex: 1,
+                width: "100%",
                 padding: "10px 16px",
                 borderRadius: 6,
                 border: "none",
@@ -447,112 +482,145 @@ export default function ForcedUpdateOverlay({ state, onDismiss }: ForcedUpdateOv
                 color: "#fff",
                 fontWeight: 600,
                 fontSize: 14,
-                cursor: "pointer",
+                cursor: dockRefreshing ? "default" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
+                opacity: dockRefreshing ? 0.7 : 1,
               }}
-             title="Update now">
-              <Icon name="system_update" size={14} />
-              <span>Update Now</span>
-            </button>
-          )}
-
-          {status === "prompt" && isEmergency && (
-            <button
-              className="force-update-btn force-update-btn--primary"
-              onClick={handleSupport}
-              style={{
-                flex: 1,
-                padding: "10px 16px",
-                borderRadius: 6,
-                border: "none",
-                background: "var(--primary, #8b5cf6)",
-                color: "#fff",
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-              title="Support"
+              title="I Updated, Refresh"
             >
-              <Icon name="support_agent" size={14} />
-              <span>Support</span>
+              <Icon name="refresh" size={16} className={dockRefreshing ? "force-update-icon--spin" : ""} />
+              <span>{dockRefreshing ? "Refreshing…" : "I Updated, Refresh"}</span>
             </button>
-          )}
+          ) : (
+            <>
+              {/* Forced update actions */}
+              {status === "prompt" && !isEmergency && (
+                <button
+                  className="force-update-btn force-update-btn--primary"
+                  onClick={handleUpdate}
+                  style={{
+                    flex: 1,
+                    padding: "10px 16px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "var(--primary, #8b5cf6)",
+                    color: "#fff",
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  title="Update now"
+                >
+                  <Icon name="system_update" size={14} />
+                  <span>Update Now</span>
+                </button>
+              )}
 
-          {/* Retry on error */}
-          {status === "error" && (
-            <button
-              className="force-update-btn force-update-btn--primary"
-              onClick={handleRetry}
-              style={{
-                flex: 1,
-                padding: "10px 16px",
-                borderRadius: 6,
-                border: "none",
-                background: "var(--primary, #8b5cf6)",
-                color: "#fff",
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-             title="Refresh">
-              <Icon name="refresh" size={14} />
-              <span>Try Again</span>
-            </button>
-          )}
+              {status === "prompt" && isEmergency && (
+                <button
+                  className="force-update-btn force-update-btn--primary"
+                  onClick={handleSupport}
+                  style={{
+                    flex: 1,
+                    padding: "10px 16px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "var(--primary, #8b5cf6)",
+                    color: "#fff",
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  title="Support"
+                >
+                  <Icon name="support_agent" size={14} />
+                  <span>Support</span>
+                </button>
+              )}
 
-          {/* Quit app in blocked modes */}
-          {status === "prompt" && isBlocked && (
-            <button
-              className="force-update-btn force-update-btn--secondary"
-              onClick={handleQuit}
-              style={{
-                padding: "10px 16px",
-                borderRadius: 6,
-                border: "1px solid var(--border, rgba(255,255,255,0.1))",
-                background: "transparent",
-                color: "var(--text-secondary)",
-                fontWeight: 500,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-              title="Quit App"
-            >
-              Quit App
-            </button>
-          )}
+              {/* Retry on error */}
+              {status === "error" && (
+                <button
+                  className="force-update-btn force-update-btn--primary"
+                  onClick={handleRetry}
+                  style={{
+                    flex: 1,
+                    padding: "10px 16px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "var(--primary, #8b5cf6)",
+                    color: "#fff",
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  title="Refresh"
+                >
+                  <Icon name="refresh" size={14} />
+                  <span>Try Again</span>
+                </button>
+              )}
 
-          {/* Close — only in countdown mode (not blocked) */}
-          {status === "prompt" && showCountdown && onDismiss && (
-            <button
-              className="force-update-btn force-update-btn--secondary"
-              onClick={onDismiss}
-              style={{
-                padding: "10px 16px",
-                borderRadius: 6,
-                border: "1px solid var(--border, rgba(255,255,255,0.1))",
-                background: "transparent",
-                color: "var(--text-secondary)",
-                fontWeight: 500,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-             title="Close">
-              {isEmergency ? "Learn More Later" : "Remind Me Later"}
-            </button>
+              {/* Quit app in blocked modes */}
+              {status === "prompt" && isBlocked && (
+                <button
+                  className="force-update-btn force-update-btn--secondary"
+                  onClick={handleQuit}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border, rgba(255,255,255,0.1))",
+                    background: "transparent",
+                    color: "var(--text-secondary)",
+                    fontWeight: 500,
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                  title="Quit App"
+                >
+                  Quit App
+                </button>
+              )}
+
+              {/* Close — only in countdown mode (not blocked) */}
+              {status === "prompt" && showCountdown && onDismiss && (
+                <button
+                  className="force-update-btn force-update-btn--secondary"
+                  onClick={onDismiss}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border, rgba(255,255,255,0.1))",
+                    background: "transparent",
+                    color: "var(--text-secondary)",
+                    fontWeight: 500,
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                  title="Close"
+                >
+                  {isEmergency ? "Learn More Later" : "Remind Me Later"}
+                </button>
+              )}
+            </>
           )}
         </div>
-      </div>
     </div>
+  </div>
   );
 }

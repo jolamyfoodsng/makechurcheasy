@@ -73,6 +73,12 @@ describe("Kings", () => {
     it("1st Kings 19:11", () => {
       expect(normalizeScriptureReference("1st Kings 19:11")).toBe("1 Kings 19:11");
     });
+    it("I Kings 19:11", () => {
+      expect(normalizeScriptureReference("I Kings 19:11")).toBe("1 Kings 19:11");
+    });
+    it("ikings 19:11", () => {
+      expect(normalizeScriptureReference("ikings 19:11")).toBe("1 Kings 19:11");
+    });
   });
 
   describe("2 Kings", () => {
@@ -84,6 +90,12 @@ describe("Kings", () => {
     });
     it("2nd Kings 6:17", () => {
       expect(normalizeScriptureReference("2nd Kings 6:17")).toBe("2 Kings 6:17");
+    });
+    it("I-I Kings 6:17", () => {
+      expect(normalizeScriptureReference("I-I Kings 6:17")).toBe("2 Kings 6:17");
+    });
+    it("iikings 6:17", () => {
+      expect(normalizeScriptureReference("iikings 6:17")).toBe("2 Kings 6:17");
     });
   });
 });
@@ -472,5 +484,31 @@ describe("Nigerian speech variants", () => {
   });
   it("to corinthians 13 → 2 Corinthians 13 (chapter only)", () => {
     expect(normalizeScriptureReference("to corinthians 13")).toBe("2 Corinthians 13");
+  });
+});
+
+import { matchVerseAlias, rerankCandidates } from "./scriptureReranker";
+
+describe("quote ranking evidence", () => {
+  it("preserves short words inside matching phrases", () => {
+    const [result] = rerankCandidates("the race is not to the swift", [{
+      book: "Ecclesiastes", chapter: 9, verse: 11, reference: "Ecclesiastes 9:11",
+      text: "the race is not to the swift", semanticScore: 0.8,
+    }]);
+    expect(result.phraseScore).toBe(1);
+  });
+
+  it("boosts the actual story verses rather than every verse in the book", () => {
+    const make = (chapter: number, verse: number) => ({
+      book: "1 Samuel", chapter, verse, reference: `1 Samuel ${chapter}:${verse}`,
+      text: "", semanticScore: 0.5,
+    });
+    const results = rerankCandidates("David Goliath giant sling stone", [make(1, 1), make(17, 49)]);
+    expect(results.find((result) => result.chapter === 1)?.storyScore).toBe(0);
+    expect(results[0].reference).toBe("1 Samuel 17:49");
+  });
+
+  it.each(["of the world", "we have the lord", "my faith is", "and the love"])("does not give generic fragments a confident verse alias: %s", (query) => {
+    expect(matchVerseAlias(query)).toBeNull();
   });
 });

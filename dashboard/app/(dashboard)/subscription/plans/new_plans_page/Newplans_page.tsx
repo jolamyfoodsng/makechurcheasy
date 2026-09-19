@@ -75,8 +75,8 @@ function Breadcrumb() {
     return (
         <nav aria-label="Breadcrumb" className="max-w-7xl mx-auto mb-8 text-sm font-medium text-slate-500 pl-4 pr-4 lg:pl-0 lg:pr-0">
             <ol className="inline-flex items-center space-x-1 md:space-x-2">
-                <li><a className="hover:text-slate-900 transition-colors" href="#">{t('subscription.plans.account')}</a></li>
-                <li><div className="flex items-center"><ChevronRight className="w-3 h-3 mx-2" /><a className="hover:text-slate-900 transition-colors" href="#">{t('subscription.plans.subscription')}</a></div></li>
+                <li><a className="hover:text-slate-900 transition-colors" href="/dashboard">{t('subscription.plans.account')}</a></li>
+                <li><div className="flex items-center"><ChevronRight className="w-3 h-3 mx-2" /><a className="hover:text-slate-900 transition-colors" href="/subscription">{t('subscription.plans.subscription')}</a></div></li>
                 <li aria-current="page"><div className="flex items-center"><ChevronRight className="w-3 h-3 mx-2" /><span className="text-blue-700 font-semibold">{t('subscription.plans.managePlan')}</span></div></li>
             </ol>
         </nav>
@@ -573,6 +573,7 @@ export default function NewPlansPage() {
     // Payment state
     const [emailModal, setEmailModal] = useState<{ open: boolean; plan: PricingPlanConfig | null; amountInSubunit: number; billingCycle?: BillingCycle }>({ open: false, plan: null, amountInSubunit: 0 });
     const [emailInput, setEmailInput] = useState('');
+    const [promoCode, setPromoCode] = useState('');
     const [paymentStatus, setPaymentStatus] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
     const [paymentError, setPaymentError] = useState('');
     const [purchasedPlan, setPurchasedPlan] = useState<PricingPlanConfig | null>(null);
@@ -593,6 +594,13 @@ export default function NewPlansPage() {
             }
         })();
         return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('promo') || params.get('code') || params.get('discount') || '';
+        if (code) setPromoCode(code.toUpperCase().replace(/[^A-Z0-9_-]/g, ''));
     }, []);
 
     useEffect(() => {
@@ -633,7 +641,12 @@ export default function NewPlansPage() {
             const res = await fetch('/api/payments/initialize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ plan: plan.id, billingCycle: cycle, email }),
+                body: JSON.stringify({
+                    plan: plan.id,
+                    billingCycle: cycle,
+                    email,
+                    ...(promoCode.trim() ? { discountCode: promoCode.trim() } : {}),
+                }),
             });
             const data = await res.json();
 
@@ -648,6 +661,7 @@ export default function NewPlansPage() {
                     reference: data.reference,
                     planId: plan.id,
                     billingCycle: cycle,
+                    discountCode: promoCode.trim() || undefined,
                 }));
             } catch { /* best-effort */ }
 
@@ -656,7 +670,7 @@ export default function NewPlansPage() {
             setPaymentStatus('error');
             setPaymentError(t('subscription.plans.couldNotVerify'));
         }
-    }, [billingCycle, t]);
+    }, [billingCycle, promoCode, t]);
 
     useEffect(() => {
         if (autoCheckoutStartedRef.current) return;
@@ -724,15 +738,15 @@ export default function NewPlansPage() {
     }, [emailInput, emailModal, proceedToPayment]);
 
     const handleEarlyAccessPayment = useCallback(() => {
-        const proPlan = pricingPlans.find((plan) => plan.id === 'pro');
-        if (!proPlan || !earlyAccessOffer?.eligible || !earlyAccessOffer.enabled) return;
+        const growthPlan = pricingPlans.find((plan) => plan.id === 'growth');
+        if (!growthPlan || !earlyAccessOffer?.eligible || !earlyAccessOffer.enabled) return;
         const amountInSubunit = Math.round(earlyAccessOffer.price * 100);
         if (!user?.email) {
-            setEmailModal({ open: true, plan: proPlan, amountInSubunit, billingCycle: 'lifetime' });
+            setEmailModal({ open: true, plan: growthPlan, amountInSubunit, billingCycle: 'lifetime' });
             setEmailInput('');
             return;
         }
-        proceedToPayment(proPlan, amountInSubunit, user.email, 'lifetime');
+        proceedToPayment(growthPlan, amountInSubunit, user.email, 'lifetime');
     }, [earlyAccessOffer, pricingPlans, proceedToPayment, user]);
 
     const currentPlan = pricingPlans.find(p => p.id === authPlan) || null;
@@ -821,6 +835,16 @@ export default function NewPlansPage() {
                         </span>
                       )}
                     </div>
+
+                    <label className="inline-flex h-11 items-center rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-600 shadow-sm">
+                        <span className="mr-2 text-[11px] font-semibold uppercase text-slate-400">Code</span>
+                        <input
+                            value={promoCode}
+                            onChange={(event) => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+                            placeholder="DISCOUNT"
+                            className="w-28 bg-transparent text-sm font-semibold uppercase text-slate-900 outline-none placeholder:text-slate-300"
+                        />
+                    </label>
                 </div>
 
                 {/* Toggle helper text */}

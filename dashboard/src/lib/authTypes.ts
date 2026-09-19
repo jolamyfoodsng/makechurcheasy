@@ -11,6 +11,9 @@ export interface MongoUser {
   totalConsumed: number;
   totalAvailable: number;
   plan: string;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
   appId: string;
   emailVerified: boolean;
   provider?: string;

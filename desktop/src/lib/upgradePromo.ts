@@ -6,7 +6,18 @@ export const UPGRADE_ENTRY_PRICE_NGN =
 
 export const UPGRADE_ENTRY_PRICE_LABEL = `₦${UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US")}`;
 
-export const UPGRADE_PROMO_FALLBACK = `Plans start from just ${UPGRADE_ENTRY_PRICE_LABEL} today.`;
+/**
+ * Flexible fallback copy that does not hardcode prices, ensuring discounts
+ * and promotions remain accurate and compelling.
+ */
+export const UPGRADE_PROMO_FALLBACK = "Upgrade your plan to unlock unlimited access and all premium features.";
+
+export function getDiscountUpgradePromo(discountPercent?: number | null): string {
+  if (discountPercent && discountPercent > 0) {
+    return `Special Offer: Get ${discountPercent}% off your upgrade today!`;
+  }
+  return UPGRADE_PROMO_FALLBACK;
+}
 
 export function appendUpgradePromo(message: string, promo = UPGRADE_PROMO_FALLBACK): string {
   const trimmed = message.trim();
@@ -14,3 +25,4 @@ export function appendUpgradePromo(message: string, promo = UPGRADE_PROMO_FALLBA
   if (trimmed.includes(promo)) return trimmed;
   return `${trimmed}${/[.!?]$/.test(trimmed) ? "" : "."} ${promo}`;
 }
+

@@ -30,6 +30,13 @@ export interface SubscriptionCache {
   cachedAt: number;
 }
 
+export interface RefreshSubscriptionStateOptions {
+  apiBases: string[];
+  deviceId: string;
+  deviceSecret?: string | null;
+  appVersion?: string;
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "ocs-subscription-cache";
@@ -80,6 +87,51 @@ export async function saveSubscriptionState(
 }
 
 /**
+ * Fetch and persist the signed subscription snapshot used by offline plan
+ * checks. Failure is non-fatal; the last verified snapshot stays in place.
+ */
+export async function refreshSubscriptionState(
+  options: RefreshSubscriptionStateOptions,
+): Promise<boolean> {
+  const apiBases = Array.from(new Set(
+    options.apiBases.filter(Boolean).map((base) => base.replace(/\/+$/, "")),
+  ));
+
+  for (const apiBase of apiBases) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 5_000);
+
+    try {
+      const response = await fetch(`${apiBase}/api/user/subscription-state`, {
+        headers: {
+          "X-Device-Id": options.deviceId,
+          ...(options.deviceSecret ? { "X-Device-Secret": options.deviceSecret } : {}),
+          ...(options.appVersion ? { "X-App-Version": options.appVersion } : {}),
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json() as {
+        payload?: SubscriptionPayload;
+        signature?: string;
+      };
+
+      if (!data.payload || typeof data.signature !== "string") continue;
+      return await saveSubscriptionState(data.payload, data.signature);
+    } catch {
+      // Try the next configured API base. Existing cached state remains valid.
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  return false;
+}
+
+/**
  * Read the cached subscription state.
  * Returns null if no cache exists.
  */
@@ -112,6 +164,14 @@ export function isOfflineValid(): boolean {
   return Date.now() < offlineExpires;
 }
 
+function isCachedSubscriptionActive(cache: SubscriptionCache): boolean {
+  if (cache.payload.subscriptionStatus !== "active") return false;
+
+  if (!cache.payload.expiresAt) return true;
+  const expiresAt = new Date(cache.payload.expiresAt).getTime();
+  return !Number.isFinite(expiresAt) || Date.now() < expiresAt;
+}
+
 /**
  * Days remaining in the offline verification window.
  * Returns 0 if expired or no cache.
@@ -133,6 +193,7 @@ export function getOfflineDaysRemaining(): number {
 export function getCachedPlan(): string {
   if (!isOfflineValid()) return "free";
   const cache = readCacheRaw();
+  if (!cache || !isCachedSubscriptionActive(cache)) return "free";
   return cache?.payload.plan || "free";
 }
 
@@ -142,6 +203,7 @@ export function getCachedPlan(): string {
 export function getCachedCredits(): number {
   if (!isOfflineValid()) return 0;
   const cache = readCacheRaw();
+  if (!cache || !isCachedSubscriptionActive(cache)) return 0;
   return cache?.payload.creditsRemaining ?? 0;
 }
 

@@ -19,7 +19,6 @@ import { obsService } from "../../services/obsService";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme } from "../../bible/types";
 import { getCustomThemes } from "../../bible/bibleDb";
-import { LT_BIBLE_THEMES, LT_WORSHIP_THEMES, LT_GENERAL_THEMES } from "../../lowerthirds/themes";
 import Icon from "../../components/Icon";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
@@ -44,7 +43,7 @@ export function MVCanvas() {
   // ── Slot picker popover (3-tab: Scenes / Bible / Worship) ──
   const [scenePicker, setScenePicker] = useState<{ x: number; y: number; regionId: RegionId } | null>(null);
   const [pickerScenes, setPickerScenes] = useState<{ sceneName: string; sceneIndex: number; thumbnail: string | null }[]>([]);
-  const [pickerTab, setPickerTab] = useState<"scenes" | "bible" | "worship" | "lower-third">("scenes");
+  const [pickerTab, setPickerTab] = useState<"scenes" | "bible" | "worship">("scenes");
 
   // ── Overwrite confirmation modal ──
   const [overwriteModal, setOverwriteModal] = useState<{ regionId: RegionId; newSceneName: string; newSceneIndex: number } | null>(null);
@@ -925,10 +924,6 @@ export function MVCanvas() {
               onClick={() => setPickerTab("worship")} title="Music">
               <Icon name="music_note" size={14} /> Worship
             </button>
-            <button className={`mv-scene-picker-tab ${pickerTab === "lower-third" ? "mv-scene-picker-tab--active" : ""}`}
-              onClick={() => setPickerTab("lower-third")} title="Subtitles">
-              <Icon name="subtitles" size={14} /> Lower Third
-            </button>
           </div>
 
           {/* Tab: Scenes */}
@@ -1059,51 +1054,6 @@ export function MVCanvas() {
             </div>
           )}
 
-          {/* Tab: Lower Third Themes */}
-          {pickerTab === "lower-third" && (
-            <div className="mv-scene-picker-themes">
-              {[
-                { label: "Bible", themes: LT_BIBLE_THEMES },
-                { label: "Worship", themes: LT_WORSHIP_THEMES },
-                { label: "General", themes: LT_GENERAL_THEMES },
-              ].map((group) => (
-                <div key={group.label} className="mv-scene-picker-theme-section">
-                  <h5 className="mv-scene-picker-theme-heading">{group.label}</h5>
-                  {group.themes.map((theme) => (
-                    <button key={theme.id} className="mv-scene-picker-theme-item"
-                      onClick={() => {
-                        // Build default values from theme variables
-                        const defaults: Record<string, string> = {};
-                        theme.variables.forEach((v) => { defaults[v.key] = v.defaultValue ?? ""; });
-                        updateRegion(scenePicker.regionId, {
-                          name: `LT: ${theme.name}`,
-                          themeId: theme.id,
-                          ltValues: defaults,
-                          ltEnabled: true,
-                          ltSize: "medium",
-                          // Clear any Bible/Worship data
-                          themeSettings: undefined,
-                          fontOverrides: undefined,
-                        } as any);
-                        setScenePicker(null);
-                      }}>
-                      <div className="mv-scene-picker-theme-preview" style={{
-                        background: theme.accentColor || "#333",
-                        color: "#fff",
-                        fontSize: 10, padding: 6, display: "flex", alignItems: "center", gap: 4,
-                      }}>
-                        <Icon name={theme.icon || "subtitles"} size={14} />
-                      </div>
-                      <div className="mv-scene-picker-theme-info">
-                        <span className="mv-scene-picker-theme-name">{theme.name}</span>
-                        <span className="mv-scene-picker-theme-desc">{theme.description}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

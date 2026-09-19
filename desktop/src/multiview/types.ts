@@ -405,12 +405,16 @@ export interface TemplateDefinition {
   tags: string[];
   /** Preview color accent for card display */
   accentColor: string;
+  /** Optional defaults used when this template is shown in the OBS dock. */
+  dockFrameId?: string | null;
+  dockSlotFrames?: Record<string, string>;
 }
 
 export type TemplateCategory =
   | "sermon"
   | "worship"
   | "announcement"
+  | "multimedia"
   | "multi-camera"
   | "ceremony"
   | "youth"

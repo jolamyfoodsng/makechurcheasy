@@ -5,7 +5,6 @@ import { Globe, Check } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { LOCALES, normalizeLanguageValue, type Locale } from "@/i18n/routing";
 import { updateUser } from "@/lib/api";
-import { getUserId } from "@/lib/userId";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +18,7 @@ export function LanguageSwitcher() {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   const currentCode = normalizeLanguageValue(mongoUser?.language || "en", mongoUser?.country);
@@ -37,27 +37,28 @@ export function LanguageSwitcher() {
 
   const handleSelect = useCallback(
     async (locale: Locale) => {
-      if (locale.code === currentCode) {
+      if (locale.code === currentCode && mongoUser?.language) {
         setIsOpen(false);
         return;
       }
 
-      setCookie("NEXT_LOCALE", locale.code);
-
-      const userId = getUserId();
-      if (userId) {
-        try {
-          await updateUser(userId, { language: locale.code });
-          await refreshMongoUser();
-        } catch {
-          // Profile save failed, cookie is still set for this session
-        }
+      if (!mongoUser?._id) {
+        setError("Could not identify your account.");
+        return;
       }
 
-      setIsOpen(false);
-      window.location.reload();
+      setError("");
+      try {
+        await updateUser(mongoUser._id, { language: locale.code });
+        await refreshMongoUser();
+        setCookie("NEXT_LOCALE", locale.code);
+        setIsOpen(false);
+        window.location.reload();
+      } catch {
+        setError("Could not save your language. Please try again.");
+      }
     },
-    [currentCode, refreshMongoUser],
+    [currentCode, mongoUser?._id, mongoUser?.language, refreshMongoUser],
   );
 
   return (
@@ -106,6 +107,11 @@ export function LanguageSwitcher() {
               </button>
             ))}
           </div>
+          {error && (
+            <p role="alert" className="px-3 pb-2 text-xs text-red-500">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </div>

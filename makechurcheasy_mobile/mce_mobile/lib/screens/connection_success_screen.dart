@@ -7,7 +7,8 @@ class ConnectionSuccessScreen extends StatefulWidget {
   const ConnectionSuccessScreen({super.key});
 
   @override
-  State<ConnectionSuccessScreen> createState() => _ConnectionSuccessScreenState();
+  State<ConnectionSuccessScreen> createState() =>
+      _ConnectionSuccessScreenState();
 }
 
 class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
@@ -20,16 +21,17 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: Duration(milliseconds: 800),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+        curve: Interval(0.0, 0.5, curve: Curves.easeIn),
       ),
     );
     _controller.forward();
@@ -42,16 +44,15 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
   }
 
   void _openDashboard() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AppShell()),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => AppShell()));
   }
 
   @override
   Widget build(BuildContext context) {
     final desktop = context.desktopService;
     final desktopInfo = desktop.currentDesktop;
-    final user = context.authService.user;
 
     return Scaffold(
       backgroundColor: MCEColors.background,
@@ -60,7 +61,7 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
           padding: const EdgeInsets.symmetric(horizontal: MCESpacing.xxl),
           child: Column(
             children: [
-              const Spacer(flex: 2),
+              Spacer(flex: 2),
 
               // Animated check
               AnimatedBuilder(
@@ -81,7 +82,7 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
                             width: 3,
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.check_rounded,
                           size: 64,
                           color: MCEColors.success,
@@ -91,13 +92,10 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
                   );
                 },
               ),
-              const SizedBox(height: MCESpacing.xxl),
+              SizedBox(height: MCESpacing.xxl),
 
-              const Text(
-                'Connected!',
-                style: MCETypography.sectionTitle,
-              ),
-              const SizedBox(height: MCESpacing.sm),
+              Text('Connected!', style: MCETypography.sectionTitle),
+              SizedBox(height: MCESpacing.sm),
               Text(
                 'Successfully connected to your church computer',
                 style: MCETypography.body.copyWith(
@@ -106,7 +104,7 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: MCESpacing.xxl * 2),
+              SizedBox(height: MCESpacing.xxl * 2),
 
               // Connection info
               Container(
@@ -121,23 +119,26 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
                   children: [
                     _InfoRow(
                       label: 'Church',
-                      value: desktopInfo?.church ?? user?.church ?? 'Not set',
+                      value: desktopInfo?.church ?? 'Desktop controlled',
                     ),
-                    const SizedBox(height: MCESpacing.md),
+                    SizedBox(height: MCESpacing.md),
                     _InfoRow(
                       label: 'OBS Version',
                       value: desktopInfo?.obsVersion ?? 'Unknown',
                     ),
-                    const SizedBox(height: MCESpacing.md),
+                    SizedBox(height: MCESpacing.md),
                     _InfoRow(
                       label: 'Computer',
-                      value: desktopInfo?.computerName ?? desktopInfo?.name ?? 'Desktop',
+                      value:
+                          desktopInfo?.computerName ??
+                          desktopInfo?.name ??
+                          'Desktop',
                     ),
                   ],
                 ),
               ),
 
-              const Spacer(flex: 2),
+              Spacer(flex: 2),
 
               // Button
               SizedBox(
@@ -153,13 +154,13 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen>
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
+                  child: Text(
                     'Open Dashboard',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
-              const SizedBox(height: MCESpacing.xxl),
+              SizedBox(height: MCESpacing.xxl),
             ],
           ),
         ),

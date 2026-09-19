@@ -1,7 +1,8 @@
 /**
  * overlay_relay.rs — Local WebSocket relay for instant overlay communication.
  *
- * Listens on 127.0.0.1:17891. Both the dock and the overlay HTML (running
+ * Listens on 127.0.0.1:17891 in production. Development builds also allow
+ * LAN clients on port 17891. Both the dock and the overlay HTML (running
  * inside OBS Browser Source) connect once at startup.
  *
  * Features:
@@ -61,12 +62,29 @@ fn extract_channel(text: &str) -> String {
 fn is_mode_change(text: &str) -> bool {
     serde_json::from_str::<Value>(text)
         .ok()
-        .and_then(|v| v.get("type").and_then(|t| t.as_str().map(|s| s == "mode-change")))
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str().map(|s| s == "mode-change"))
+        })
+        .unwrap_or(false)
+}
+
+/// Check whether a packet contains the latest overlay content. Render ACKs
+/// are broadcast to the dock, but must not replace the retained content that
+/// a newly connected browser source needs to render.
+fn is_overlay_update(text: &str) -> bool {
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str().map(|s| s == "overlay-update"))
+        })
         .unwrap_or(false)
 }
 
 pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
-    let addr = format!("127.0.0.1:{}", port);
+    let bind_host = if cfg!(debug_assertions) { "0.0.0.0" } else { "127.0.0.1" };
+    let addr = format!("{}:{}", bind_host, port);
 
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,
@@ -141,7 +159,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                                             if let Ok(mut store) = mode_store2.lock() {
                                                 store.insert(channel, text.to_string());
                                             }
-                                        } else {
+                                        } else if is_overlay_update(&text) {
                                             if let Ok(mut store) = overlay_store2.lock() {
                                                 store.insert(channel, text.to_string());
                                             }
@@ -153,11 +171,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
 
                             // Receive broadcasts from other clients
                             while let Ok(text) = rx.recv().await {
-                                if ws_sender
-                                    .send(Message::Text(text.into()))
-                                    .await
-                                    .is_err()
-                                {
+                                if ws_sender.send(Message::Text(text.into())).await.is_err() {
                                     break;
                                 }
                             }
@@ -165,10 +179,7 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                             let _ = forward_handle.await;
                         }
                         Err(e) => {
-                            eprintln!(
-                                "[OverlayRelay] WS accept error from {}: {}",
-                                peer, e
-                            );
+                            eprintln!("[OverlayRelay] WS accept error from {}: {}", peer, e);
                         }
                     }
                 });
@@ -177,5 +188,30 @@ pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
                 eprintln!("[OverlayRelay] Accept error: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_mode_change, is_overlay_update};
+
+    #[test]
+    fn retains_only_overlay_updates_as_content() {
+        assert!(is_overlay_update(
+            r#"{"channel":"worship","type":"overlay-update","data":{}}"#
+        ));
+        assert!(!is_overlay_update(
+            r#"{"channel":"worship","type":"overlay-render-ack","effectiveFontSize":160}"#
+        ));
+    }
+
+    #[test]
+    fn keeps_mode_changes_separate() {
+        assert!(is_mode_change(
+            r#"{"channel":"worship","type":"mode-change","mode":"fullscreen"}"#
+        ));
+        assert!(!is_mode_change(
+            r#"{"channel":"worship","type":"overlay-update","data":{}}"#
+        ));
     }
 }

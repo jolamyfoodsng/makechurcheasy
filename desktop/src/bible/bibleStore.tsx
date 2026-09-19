@@ -354,6 +354,7 @@ const BibleContext = createContext<BibleContextValue | null>(null);
 
 export function BibleProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(bibleReducer, initialState);
+  const hydrationCompleteRef = useRef(false);
 
   // Load persisted data on mount
   useEffect(() => {
@@ -380,6 +381,9 @@ export function BibleProvider({ children }: { children: ReactNode }) {
           ...(customThemes || []),
         ];
 
+        // Do not let the initial reducer defaults overwrite persisted Bible
+        // and OBS presentation settings while the async load is in flight.
+        hydrationCompleteRef.current = true;
         dispatch({
           type: "INIT",
           state: {
@@ -402,6 +406,7 @@ export function BibleProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn("Failed to load Bible settings (non-fatal):", err);
         // Still dispatch INIT with defaults so the context is available
+        hydrationCompleteRef.current = true;
         dispatch({
           type: "INIT",
           state: {
@@ -446,6 +451,9 @@ export function BibleProvider({ children }: { children: ReactNode }) {
 
   // Persist settings on change
   useEffect(() => {
+    // The first render contains reducer defaults. Persist only after the
+    // saved Bible state has been loaded (or the load has definitively failed).
+    if (!hydrationCompleteRef.current) return;
     saveBibleSettings({
       defaultTranslation: state.translation,
       slideConfig: state.slideConfig,

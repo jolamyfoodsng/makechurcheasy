@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MakeChurchEasy Template</title>
+  <style>
+    html,
+    body,
+    #stage {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mce-template-canvas {
+      position: relative;
+      flex: 0 0 auto;
+      overflow: hidden;
+      transform-origin: center center;
+    }
+
+    .mce-template-layer {
+      position: absolute;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .mce-template-text {
+      padding: 4px;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+
+    .mce-template-error {
+      color: #f8fafc;
+      font: 600 24px/1.4 Inter, Arial, sans-serif;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" aria-label="MakeChurchEasy editable template"></main>
+
+  <script>
+    const stage = document.getElementById("stage");
+    let currentTemplate = null;
+    let canvasElement = null;
+
+    function readPayload() {
+      const raw = window.location.hash.startsWith("#data=")
+        ? window.location.hash.slice(6)
+        : "";
+      if (!raw) return null;
+      try {
+        return JSON.parse(decodeURIComponent(raw));
+      } catch {
+        return null;
+      }
+    }
+
+    function decodeMceTemplatePackage(source) {
+      if (typeof source !== "string") return null;
+      const lines = source.split("\n");
+      if (lines[0] !== "MCE-TEMPLATE-PACKAGE" || lines[1] !== "1") return null;
+      try {
+        const binary = atob(lines[2] || "");
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        const packagePayload = JSON.parse(new TextDecoder().decode(bytes));
+        if (packagePayload.magic !== "MCE-TEMPLATE-PACKAGE"
+          || packagePayload.version !== 1
+          || packagePayload.app !== "MakeChurchEasy"
+          || packagePayload.kind !== "editable-template") return null;
+        return packagePayload.template || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function number(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function text(value) {
+      return typeof value === "string" ? value : "";
+    }
+
+    function validTemplate(template) {
+      return Boolean(template
+        && template.canvas
+        && number(template.canvas.width, 0) > 0
+        && number(template.canvas.height, 0) > 0
+        && Array.isArray(template.layers));
+    }
+
+    function applyLayerBounds(element, layer, template) {
+      const width = number(template.canvas.width, 1600);
+      const height = number(template.canvas.height, 900);
+      element.style.left = `${number(layer.x, 0)}px`;
+      element.style.top = `${number(layer.y, 0)}px`;
+      element.style.width = `${Math.max(1, number(layer.width, 1))}px`;
+      element.style.height = `${Math.max(1, number(layer.height, 1))}px`;
+      element.style.zIndex = String(number(layer.zIndex, 1));
+      element.dataset.canvasWidth = String(width);
+      element.dataset.canvasHeight = String(height);
+    }
+
+    function createLayer(layer, template, index) {
+      if (!layer || typeof layer !== "object") return null;
+      const element = document.createElement(layer.kind === "text" ? "div" : "div");
+      element.className = `mce-template-layer${layer.kind === "text" ? " mce-template-text" : ""}`;
+      applyLayerBounds(element, layer, template);
+      element.style.zIndex = String(index + 1);
+      element.style.background = text(layer.fill) || "transparent";
+      element.style.opacity = String(Math.max(0, Math.min(1, number(layer.opacity, 1))));
+
+      if (layer.kind === "circle") {
+        element.style.borderRadius = "50%";
+      } else if (layer.kind === "rect") {
+        element.style.borderRadius = `${Math.max(0, number(layer.cornerRadius, 0))}px`;
+      } else if (layer.kind === "text") {
+        element.style.background = "transparent";
+        element.style.color = text(layer.fill) || "#ffffff";
+        element.style.fontFamily = text(layer.fontFamily) || "Inter, Arial, sans-serif";
+        element.style.fontSize = `${Math.max(1, number(layer.fontSize, 24))}px`;
+        element.style.fontStyle = text(layer.fontStyle) || "normal";
+        element.style.fontWeight = String(number(layer.fontWeight, 400));
+        element.style.lineHeight = String(Math.max(0.6, number(layer.lineHeight, 1.2)));
+        element.style.textAlign = text(layer.align) || "left";
+        element.style.letterSpacing = `${number(layer.letterSpacing, 0)}px`;
+        element.textContent = text(layer.text);
+      }
+      return element;
+    }
+
+    function layoutCanvas() {
+      if (!canvasElement || !currentTemplate) return;
+      const width = number(currentTemplate.canvas.width, 1600);
+      const height = number(currentTemplate.canvas.height, 900);
+      const scale = Math.min(window.innerWidth / width, window.innerHeight / height);
+      canvasElement.style.transform = `scale(${Math.max(0.01, Math.min(1, scale))})`;
+    }
+
+    function render() {
+      const payload = readPayload();
+      const template = payload && payload.package
+        ? decodeMceTemplatePackage(payload.package)
+        : payload && payload.template;
+      stage.innerHTML = "";
+      canvasElement = null;
+      currentTemplate = validTemplate(template) ? template : null;
+      if (!currentTemplate) {
+        const error = document.createElement("div");
+        error.className = "mce-template-error";
+        error.textContent = "Unable to read this MCE template.";
+        stage.appendChild(error);
+        return;
+      }
+
+      const width = number(currentTemplate.canvas.width, 1600);
+      const height = number(currentTemplate.canvas.height, 900);
+      const canvas = document.createElement("div");
+      canvas.className = "mce-template-canvas";
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      const background = currentTemplate.background || {};
+      canvas.style.background = `linear-gradient(135deg, ${text(background.gradientStart) || "#0f172a"} 0%, ${text(background.base) || "#0f172a"} 58%, ${text(background.gradientEnd) || "#020617"} 100%)`;
+      currentTemplate.layers.forEach((layer, index) => {
+        const element = createLayer(layer, currentTemplate, index);
+        if (element) canvas.appendChild(element);
+      });
+      stage.appendChild(canvas);
+      canvasElement = canvas;
+      layoutCanvas();
+    }
+
+    window.addEventListener("hashchange", render);
+    window.addEventListener("resize", layoutCanvas);
+    render();
+  </script>
+</body>
+</html>

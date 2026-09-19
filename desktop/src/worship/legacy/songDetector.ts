@@ -8,7 +8,7 @@
  */
 
 import { parseBilingualHymns, type ParsedHymn } from "./pdfImportService";
-import { parseWorshipLyricSections } from "./slideEngine";
+import { parseWorshipLyricSections } from "../slideEngine";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

@@ -41,11 +41,40 @@ export interface PlatformSettings {
     sendWelcomeEmail: boolean;
     badgeText: string;
   };
+  notifications: {
+    welcomeEmail: boolean;
+    trialExpiryReminder: boolean;
+    paymentReminder: boolean;
+    securityAlerts: boolean;
+    featureAnnouncements: boolean;
+    creditLowBalance: boolean;
+    weeklyDigest: boolean;
+  };
+  emailBranding: {
+    appName: string;
+    logoUrl: string;
+    logoAlt: string;
+    primaryColor: string;
+    accentColor: string;
+    supportEmail: string;
+    websiteUrl: string;
+    preferencesUrl: string;
+    footerText: string;
+    social: {
+      twitterUrl: string;
+      facebookUrl: string;
+      instagramUrl: string;
+      linkedinUrl: string;
+      youtubeUrl: string;
+      whatsappUrl: string;
+      tiktokUrl: string;
+    };
+  };
   earlyAccess: {
     enabled: boolean;
     offerName: string;
     description: string;
-    plan: "pro";
+    plan: "growth";
     priceNGN: number;
     priceUSD: number;
     allowRegistrationDateEligibility: boolean;
@@ -135,11 +164,41 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     sendWelcomeEmail: true,
     badgeText: "Ambassador",
   },
+  notifications: {
+    welcomeEmail: true,
+    trialExpiryReminder: true,
+    paymentReminder: true,
+    securityAlerts: true,
+    featureAnnouncements: true,
+    creditLowBalance: true,
+    weeklyDigest: false,
+  },
+  emailBranding: {
+    appName: "MakeChurchEasy",
+    logoUrl: "https://makechurcheazy.com/logos/make_church_easy_logo.png",
+    logoAlt: "MakeChurchEasy",
+    primaryColor: "#1D4ED8",
+    accentColor: "#F97316",
+    supportEmail: "support@makechurcheazy.com",
+    websiteUrl: "https://makechurcheazy.com",
+    preferencesUrl: "https://makechurcheazy.com/settings",
+    footerText:
+      "MakeChurchEasy helps churches run presentations, lyrics, Bible, and livestream workflows from one platform.",
+    social: {
+      twitterUrl: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      linkedinUrl: "",
+      youtubeUrl: "https://www.youtube.com/playlist?list=PLRua6gJfgC0o",
+      whatsappUrl: "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t",
+      tiktokUrl: "",
+    },
+  },
   earlyAccess: {
     enabled: false,
     offerName: "Early Access Lifetime",
-    description: "One-time lifetime Pro access for selected early users.",
-    plan: "pro",
+    description: "One-time lifetime Growth access for selected early users.",
+    plan: "growth",
     priceNGN: 50000,
     priceUSD: 99,
     allowRegistrationDateEligibility: true,

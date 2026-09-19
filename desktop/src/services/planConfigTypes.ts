@@ -16,7 +16,7 @@ import { buildLegacyCompatiblePlanConfig } from "../lib/subscriptionSourceOfTrut
 export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
 
 /** Ordered list of tiers from lowest to highest (excludes "trial" — it's a temporary state, not a purchasable tier). */
-export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "pro", "ambassador", "unlimited"];
+export const ALL_TIERS: PlanTier[] = ["free", "basic", "growth", "ambassador", "unlimited"];
 
 /**
  * Entitlements define what a plan tier can access.
@@ -86,12 +86,46 @@ export interface CreditCostConfig {
   description: string;
 }
 
+export interface SpecialOfferConfig {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  badgeText?: string;
+  ctaText?: string;
+  kind: "one_time" | "discounted_subscription";
+  plan: "basic" | "growth";
+  billingCycle: "monthly" | "yearly" | "lifetime";
+  price: {
+    NGN?: number;
+    USD?: number;
+    [currency: string]: number | undefined;
+  };
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  eligibility?: {
+    minAccountAgeDays?: number | null;
+    maxAccountAgeDays?: number | null;
+    allowedPlans?: string[];
+    eligibleUserIds?: string[];
+    eligibleEmails?: string[];
+    includeTrialUsers?: boolean;
+    excludeActivePaidUsers?: boolean;
+  };
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PlanConfig {
   _id?: unknown;
   version: number;
-  plans: Record<PlanTier, PlanTierConfig>;
+  plans: Record<string, PlanTierConfig>;
   creditCosts: CreditCostConfig[];
   translationWordsPerCredit: number;
+  specialOffers?: SpecialOfferConfig[];
   updatedAt: string;
 }
 
@@ -177,7 +211,8 @@ export function deriveFeatureRequiredPlan(
   const allKeys = Object.keys(FEATURE_LABELS) as Array<keyof PlanEntitlements>;
 
   for (const key of allKeys) {
-    let found: PlanTier = "pro"; // default to highest if nothing found
+    let found: PlanTier = "growth"; // default to the highest public plan
+    let matchedPaidTier = false;
     const freeEnt = config.plans.free?.entitlements;
     const freeVal = freeEnt?.[key];
 
@@ -186,21 +221,27 @@ export function deriveFeatureRequiredPlan(
       if (!ent) continue;
       const val = ent[key];
       if (typeof val === "boolean") {
-        if (val) { found = tier; break; }
+        if (val) {
+          found = tier;
+          matchedPaidTier = tier !== "free";
+          break;
+        }
       } else if (typeof val === "number") {
         if (typeof freeVal === "number") {
           if (tier !== "free" && (val === -1 || val > freeVal)) {
             found = tier;
+            matchedPaidTier = true;
             break;
           }
         } else if (val !== 0) {
           found = tier;
+          matchedPaidTier = tier !== "free";
           break;
         }
       }
     }
 
-    if (typeof freeVal === "number" && found === "pro" && freeVal !== 0) {
+    if (typeof freeVal === "number" && !matchedPaidTier && freeVal !== 0) {
       found = "free";
     }
 

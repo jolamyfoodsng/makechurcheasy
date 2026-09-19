@@ -4,9 +4,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/desktop_models.dart';
 
 const int _discoveryPort = 9999;
+const int _mobileWebSocketPort = 8765;
+const String _androidEmulatorHost = '10.0.2.2';
 const _multicastChannel = MethodChannel('com.makechurcheasy/multicast');
 
 class DesktopService extends ChangeNotifier {
@@ -73,11 +76,16 @@ class DesktopService extends ChangeNotifier {
               if (seen.contains(senderIp)) return;
               seen.add(senderIp);
 
-              controller.add(DesktopInfo(
-                desktopId: senderIp,
-                ip: senderIp,
-                wsPort: beacon.port,
-              ));
+              controller.add(
+                DesktopInfo(
+                  desktopId: senderIp,
+                  ip: senderIp,
+                  wsPort: beacon.port,
+                  apiPort: beacon.apiPort,
+                  name: beacon.desktopName,
+                  pairingToken: beacon.pairingToken,
+                ),
+              );
             } catch (_) {
               // Malformed beacon, ignore
             }
@@ -89,6 +97,15 @@ class DesktopService extends ChangeNotifier {
           if (!controller.isClosed) controller.close();
         },
       );
+
+      // Android Emulator traffic is NATed and does not receive the desktop's
+      // LAN UDP broadcast. Ask the host gateway for the same pairing payload
+      // over the mobile WebSocket instead, so emulator testing behaves like a
+      // phone on the local network.
+      final emulatorDesktop = await _discoverAndroidEmulatorHost();
+      if (emulatorDesktop != null && !controller.isClosed) {
+        controller.add(emulatorDesktop);
+      }
     } catch (e) {
       debugPrint('[DesktopService] UDP bind failed: $e');
       if (!controller.isClosed) controller.close();
@@ -102,6 +119,52 @@ class DesktopService extends ChangeNotifier {
     }
 
     yield* controller.stream;
+  }
+
+  Future<DesktopInfo?> _discoverAndroidEmulatorHost() async {
+    if (!Platform.isAndroid) return null;
+
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLinkLocal: false,
+    );
+    final isAndroidEmulator = interfaces.any(
+      (interface) => interface.addresses.any(
+        (address) => address.address.startsWith('10.0.2.'),
+      ),
+    );
+    if (!isAndroidEmulator) return null;
+
+    WebSocketChannel? channel;
+    try {
+      channel = WebSocketChannel.connect(
+        Uri.parse('ws://$_androidEmulatorHost:$_mobileWebSocketPort'),
+      );
+      final messages = channel.stream;
+      channel.sink.add(jsonEncode({'type': 'discover'}));
+      final raw = await messages.first.timeout(const Duration(seconds: 2));
+      final json = jsonDecode(raw as String) as Map<String, dynamic>;
+      if (json['type'] != 'discovery_info') return null;
+
+      final pairingToken = json['pairing_token']?.toString();
+      if (pairingToken == null || pairingToken.isEmpty) return null;
+
+      return DesktopInfo(
+        desktopId: _androidEmulatorHost,
+        name: json['desktop_name']?.toString() ?? 'MakeChurchEasy Desktop',
+        ip: _androidEmulatorHost,
+        wsPort: (json['ws_port'] as num?)?.toInt() ?? _mobileWebSocketPort,
+        apiPort: (json['api_port'] as num?)?.toInt() ?? 45678,
+        pairingToken: pairingToken,
+      );
+    } catch (error) {
+      debugPrint(
+        '[DesktopService] Android Emulator host discovery failed: $error',
+      );
+      return null;
+    } finally {
+      await channel?.sink.close();
+    }
   }
 
   // ── Connection Lifecycle ────────────────────────────────────────────────
@@ -152,9 +215,7 @@ class DesktopService extends ChangeNotifier {
   }
 
   /// Called by WebSocketService after receiving auth_ok.
-  Future<void> markConnected({
-    DesktopInfo? info,
-  }) async {
+  Future<void> markConnected({DesktopInfo? info}) async {
     _connection = _connection!.copyWith(
       info: info ?? _connection!.info,
       status: ConnectionStatus.connected,

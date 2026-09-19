@@ -14,27 +14,19 @@ import {
   Download,
   FileText,
   Globe,
-  HelpCircle,
   LayoutGrid,
   List,
   Lock,
   Mic,
   MoreVertical,
-  RotateCcw,
   Tag,
   Timer,
   Trash2,
   Wand2,
   X,
-  AlertTriangle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import TranscriptTutorial, {
-  isTutorialCompleted,
-  markTutorialCompleted,
-  resetTutorial,
-} from "./TranscriptTutorial";
 import "./TranscriptLibraryPage.css";
 
 import {
@@ -104,11 +96,8 @@ export default function TranscriptLibraryPage({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const perPage = 8;
 
-  // ── Tutorial state ────────────────────────────────────────────────────
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
   // ── Plan enforcement ──────────────────────────────────────────────────
+  const isFreePlan = effectivePlan === "free" || !effectivePlan;
   const entitlementResult = useMemo(
     () => checkEntitlementSync("speechToScripture", effectivePlan),
     [effectivePlan],
@@ -116,13 +105,14 @@ export default function TranscriptLibraryPage({
   const canStartSession = entitlementResult.allowed;
   const requiredPlan = entitlementResult.requiredPlan;
   const [showUpgradeOverlay, setShowUpgradeOverlay] = useState(false);
+  const [upgradeContext, setUpgradeContext] = useState<"session" | "download">("session");
 
   // ── Credits tracking ──────────────────────────────────────────────────
-  const isPro = effectivePlan === "pro";
+  const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
   const [creditRefreshKey, setCreditRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (isPro) return;
+    if (hasUnlimitedPlan) return;
     void syncCreditsWithBackend().then(() => {
       setCreditRefreshKey((k) => k + 1);
     });
@@ -130,7 +120,7 @@ export default function TranscriptLibraryPage({
       setCreditRefreshKey((k) => k + 1);
     });
     return unsub;
-  }, [isPro]);
+  }, [hasUnlimitedPlan]);
 
   // ── Stat card config ──────────────────────────────────────────────────
   const statDefs = useMemo(() => [
@@ -151,15 +141,6 @@ export default function TranscriptLibraryPage({
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
-
-  // ── Auto-start tutorial on first visit ────────────────────────────────
-  useEffect(() => {
-    if (!loading && !isTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
 
   // ── Filtering & sorting ──────────────────────────────────────────────────
 
@@ -203,6 +184,13 @@ export default function TranscriptLibraryPage({
 
   const handleDownload = useCallback(async (e: React.MouseEvent, tr: Transcript) => {
     e.stopPropagation();
+
+    if (isFreePlan) {
+      setUpgradeContext("download");
+      setShowUpgradeOverlay(true);
+      return;
+    }
+
     setDownloadingId(tr.id);
 
     try {
@@ -220,7 +208,7 @@ export default function TranscriptLibraryPage({
       setDoneId(tr.id);
       setTimeout(() => setDoneId(null), 2000);
     }, 800);
-  }, []);
+  }, [isFreePlan]);
 
   const handleDelete = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -249,6 +237,7 @@ export default function TranscriptLibraryPage({
 
   const handleNewSessionClick = useCallback(() => {
     if (!canStartSession) {
+      setUpgradeContext("session");
       setShowUpgradeOverlay(true);
       return;
     }
@@ -268,7 +257,7 @@ export default function TranscriptLibraryPage({
             <p className="tl-subtitle">{t("transcript.subtitle")}</p>
           </div>
           <div className="tl-header-actions">
-            {!isPro && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
+            {!hasUnlimitedPlan && <CreditsDisplay userId={user?.id} refreshKey={creditRefreshKey} />}
             <div className="tl-search-wrapper" data-transcript-tutorial="search">
               <input
                 type="text"
@@ -278,22 +267,15 @@ export default function TranscriptLibraryPage({
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               />
               {filters.search && (
-                <button className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))} title={t("transcript.tooltip.clearSearch")}>
+                <button type="button" className="tl-search-clear" onClick={() => setFilters((f) => ({ ...f, search: "" }))} title={t("transcript.tooltip.clearSearch")}>
                   <X size={14} />
                 </button>
               )}
             </div>
             <button
-              className="tl-btn tl-btn-ghost"
-              onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("transcript.tour.button.tooltip")}
-            >
-              <HelpCircle size={16} /> {t("transcript.tour.button")}
-            </button>
-            <button
+              type="button"
               className={`tl-btn tl-btn-primary${!canStartSession ? " tl-btn--locked" : ""}`}
               onClick={handleNewSessionClick}
-              data-transcript-tutorial="new-session"
               title={canStartSession ? t("transcript.tooltip.newSession") : t("transcript.tooltip.upgradeRequired")}
             >
               {!canStartSession && <Lock size={14} />}
@@ -301,25 +283,6 @@ export default function TranscriptLibraryPage({
             </button>
           </div>
         </header>
-
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isTutorialCompleted() && !bannerDismissed && (
-          <div className="tl-tutorial-banner">
-            <AlertTriangle size={14} />
-            <span>{t("transcript.tour.banner")}</span>
-            <div className="tl-tutorial-banner-actions">
-              <button className="tl-btn tl-btn-sm tl-btn-primary" onClick={() => setTourActive(true)}>
-                {t("transcript.tour.banner.continue")}
-              </button>
-              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => { resetTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("transcript.tour.banner.restart")}
-              </button>
-              <button className="tl-btn tl-btn-sm tl-btn-ghost" onClick={() => setBannerDismissed(true)}>
-                {t("transcript.tour.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ── Stats Grid ── */}
         <section className="tl-stats-grid" data-transcript-tutorial="stats">
@@ -342,17 +305,18 @@ export default function TranscriptLibraryPage({
 
           {/* Filters */}
           <div className="tl-table-filters" data-transcript-tutorial="filters">
-            <button className="tl-filter-btn" title={t("transcript.tooltip.filterLanguage")}>
+            <button type="button" className="tl-filter-btn" title={t("transcript.tooltip.filterLanguage")}>
               <Globe size={14} /> {t("transcript.filter.allLanguages")} <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn" title={t("transcript.tooltip.filterTime")}>
+            <button type="button" className="tl-filter-btn" title={t("transcript.tooltip.filterTime")}>
               <Calendar size={14} /> {t("transcript.filter.allTime")} <ChevronDown size={12} />
             </button>
-            <button className="tl-filter-btn" title={t("transcript.tooltip.filterService")}>
+            <button type="button" className="tl-filter-btn" title={t("transcript.tooltip.filterService")}>
               <Tag size={14} /> {t("transcript.filter.allServices")} <ChevronDown size={12} />
             </button>
             <div className="tl-view-toggles" data-transcript-tutorial="view-toggle">
               <button
+                type="button"
                 className={`tl-view-btn${view === "list" ? " active" : ""}`}
                 onClick={() => setView("list")}
                 title={t("transcript.tooltip.listView")}
@@ -360,6 +324,7 @@ export default function TranscriptLibraryPage({
                 <List size={16} />
               </button>
               <button
+                type="button"
                 className={`tl-view-btn${view === "grid" ? " active" : ""}`}
                 onClick={() => setView("grid")}
                 title={t("transcript.tooltip.gridView")}
@@ -443,8 +408,10 @@ export default function TranscriptLibraryPage({
                   <div className="tl-cell-actions" onClick={(e) => e.stopPropagation()}>
 
                     <button
-                      className="tl-action-icon"
-                      title={t("transcript.tooltip.download")}
+                      type="button"
+                      className={`tl-action-icon${isFreePlan ? " tl-action-icon--locked" : ""}`}
+                      title={isFreePlan ? t("transcript.tooltip.downloadLocked", "Downloading transcripts requires a paid plan. Click to upgrade.") : t("transcript.tooltip.download")}
+                      aria-label={isFreePlan ? "Upgrade to download transcript" : "Download transcript"}
                       data-transcript-tutorial="download"
                       onClick={(e) => handleDownload(e, tr)}
                       style={{ color: doneId === tr.id ? "var(--success)" : undefined }}
@@ -454,6 +421,11 @@ export default function TranscriptLibraryPage({
                         <div className="tl-spinner" />
                       ) : doneId === tr.id ? (
                         <CheckCircle2 size={16} />
+                      ) : isFreePlan ? (
+                        <div className="tl-action-locked-badge-wrap">
+                          <Download size={15} />
+                          <Lock size={9} className="tl-action-lock-badge" />
+                        </div>
                       ) : (
                         <Download size={16} />
                       )}
@@ -461,15 +433,17 @@ export default function TranscriptLibraryPage({
 
                     <div className="tl-menu-wrapper" data-transcript-tutorial="more-actions">
                       <button
+                        type="button"
                         className="tl-action-icon"
                         title={t("transcript.tooltip.moreActions")}
+                        aria-label="More actions"
                         onClick={() => setMenuOpenId(menuOpenId === tr.id ? null : tr.id)}
                       >
                         <MoreVertical size={16} />
                       </button>
                       {menuOpenId === tr.id && (
                         <div className="tl-dropdown">
-                          <button className="tl-dropdown-item" onClick={(e) => handleDelete(e, tr.id)} title={t("transcript.tooltip.delete")}>
+                          <button type="button" className="tl-dropdown-item" onClick={(e) => handleDelete(e, tr.id)} title={t("transcript.tooltip.delete")}>
                             <Trash2 size={14} /> {t("transcript.delete")}
                           </button>
                         </div>
@@ -553,8 +527,8 @@ export default function TranscriptLibraryPage({
                 {t("transcript.deleteConfirm.message")}
               </div>
               <div className="tl-confirm-actions">
-                <button className="tl-btn-cancel" onClick={cancelDelete} title={t("transcript.tooltip.cancelDelete")}>{t("common.cancel")}</button>
-                <button className="tl-btn-danger" onClick={confirmDelete} title={t("transcript.tooltip.confirmDelete")}>{t("transcript.delete")}</button>
+                <button type="button" className="tl-btn-cancel" onClick={cancelDelete} title={t("transcript.tooltip.cancelDelete")}>{t("common.cancel")}</button>
+                <button type="button" className="tl-btn-danger" onClick={confirmDelete} title={t("transcript.tooltip.confirmDelete")}>{t("transcript.delete")}</button>
               </div>
             </div>
           </div>
@@ -565,15 +539,21 @@ export default function TranscriptLibraryPage({
           <div className="tl-confirm-overlay" onClick={() => setShowUpgradeOverlay(false)}>
             <div className="tl-confirm-dialog" onClick={(e) => e.stopPropagation()}>
               <Lock size={32} style={{ color: "var(--primary)", marginBottom: 12 }} />
-              <div className="tl-confirm-title">{t("transcript.upgrade.title")}</div>
+              <div className="tl-confirm-title">
+                {upgradeContext === "download"
+                  ? "Upgrade to Download Transcripts"
+                  : t("transcript.upgrade.title")}
+              </div>
               <div className="tl-confirm-message">
-                {t("transcript.upgrade.message")}
-                {requiredPlan && (
+                {upgradeContext === "download"
+                  ? "Downloading transcripts is a premium feature available on paid plans (Basic, Growth, Pro, or Unlimited). Upgrade your plan to export and download your service transcripts anytime."
+                  : t("transcript.upgrade.message")}
+                {upgradeContext !== "download" && requiredPlan && (
                   <> {t("transcript.upgrade.requiredPlan", { plan: requiredPlan.charAt(0).toUpperCase() + requiredPlan.slice(1) })}</>
                 )}
               </div>
               <div className="tl-confirm-actions">
-                <button className="tl-btn-cancel" onClick={() => setShowUpgradeOverlay(false)} title={t("transcript.tooltip.close")}>
+                <button type="button" className="tl-btn-cancel" onClick={() => setShowUpgradeOverlay(false)} title={t("transcript.tooltip.close")}>
                   {t("common.cancel")}
                 </button>
                 <a href="/subscription/plans" className="tl-btn tl-btn-primary" title={t("transcript.tooltip.managePlan")}>
@@ -585,15 +565,6 @@ export default function TranscriptLibraryPage({
         )}
 
       </div>
-
-      {/* ── Tutorial Tour ── */}
-      <TranscriptTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markTutorialCompleted(); setTourActive(false); }}
-        hasTranscripts={transcripts.length > 0}
-        onStartRecording={handleNewSessionClick}
-      />
     </div>
   );
 }

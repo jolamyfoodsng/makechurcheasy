@@ -1,0 +1,13 @@
+{
+  "source_file": "/Users/pc/Downloads/FAVOUR WITH MEN.mp3",
+  "source_size_bytes": 38974904,
+  "provider": "AssemblyAI",
+  "transcript_id": "3d6b8f38-c344-404d-a75a-d3c8ef142dae",
+  "status": "completed",
+  "speech_model_used": "universal-3-pro",
+  "language_code": "en_us",
+  "audio_duration_seconds": 2513,
+  "paragraph_count": 176,
+  "sentence_count": 813,
+  "created_at": "2026-09-02T22:13:43.109769+00:00"
+}

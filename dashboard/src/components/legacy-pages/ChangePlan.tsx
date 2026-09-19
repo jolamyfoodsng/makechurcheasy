@@ -20,7 +20,6 @@ const PLAN_ICONS: Record<string, React.ReactNode> = {
   free: <ShieldCheck className="w-6 h-6" />,
   basic: <Zap className="w-6 h-6" />,
   growth: <Rocket className="w-6 h-6" />,
-  pro: <ShieldCheck className="w-6 h-6" />,
 };
 
 function getPlanDescription(t: (key: string) => string, tierKey: string): string {
@@ -28,7 +27,6 @@ function getPlanDescription(t: (key: string) => string, tierKey: string): string
     free: t("subscription.changePlan.descriptionFree"),
     basic: t("subscription.changePlan.descriptionBasic"),
     growth: t("subscription.changePlan.descriptionGrowth"),
-    pro: t("subscription.changePlan.descriptionPro"),
   };
   return map[tierKey] || "";
 }
@@ -107,7 +105,7 @@ export default function ChangePlan() {
   }, [loading, currentPlanKey]);
 
   const paidPlans = planConfig
-    ? Object.entries(planConfig.plans).filter(([key]) => key !== "free" && key !== "trial" && key !== "ambassador")
+    ? Object.entries(planConfig.plans).filter(([key]) => key === "basic" || key === "growth")
     : [];
   const isFreeUser = currentPlanKey === "free";
   const selectedIsCurrent = selectedPlan === currentPlanKey;

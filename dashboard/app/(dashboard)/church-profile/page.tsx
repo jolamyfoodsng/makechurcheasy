@@ -36,6 +36,30 @@ import { Card, Button, Badge, EmptyState } from "@/components/ui";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
+const EMPTY_BRANDING: ChurchProfileType["branding"] = {
+  logoUrl: "",
+  primaryColor: "#4F46E5",
+  secondaryColor: "#0F172A",
+  accentColor: "#F59E0B",
+  fontFamily: "Inter",
+  faviconUrl: "",
+};
+
+const EMPTY_PRESENTATION_DEFAULTS: ChurchProfileType["presentationDefaults"] = {
+  defaultTranslation: "King James Version (KJV)",
+  lowerThirdStyle: "Modern - Blue",
+  theme: "Default",
+  language: "English",
+};
+
+const EMPTY_SOCIAL_MEDIA: ChurchSocialMedia = {
+  facebook: "",
+  instagram: "",
+  youtube: "",
+  twitter: "",
+  tiktok: "",
+};
+
 const EMPTY_PROFILE: Partial<ChurchProfileType> = {
   churchName: "",
   tagline: "",
@@ -49,29 +73,39 @@ const EMPTY_PROFILE: Partial<ChurchProfileType> = {
   country: "",
   timezone: "",
   churchSize: "",
-  branding: {
-    logoUrl: "",
-    primaryColor: "#4F46E5",
-    secondaryColor: "#0F172A",
-    accentColor: "#F59E0B",
-    fontFamily: "Inter",
-    faviconUrl: "",
-  },
-  presentationDefaults: {
-    defaultTranslation: "King James Version (KJV)",
-    lowerThirdStyle: "Modern - Blue",
-    theme: "Default",
-    language: "English",
-  },
+  branding: EMPTY_BRANDING,
+  presentationDefaults: EMPTY_PRESENTATION_DEFAULTS,
   speakers: [],
-  socialMedia: {
-    facebook: "",
-    instagram: "",
-    youtube: "",
-    twitter: "",
-    tiktok: "",
-  },
+  socialMedia: EMPTY_SOCIAL_MEDIA,
 };
+
+/**
+ * Keep the form and its comparison baseline structurally consistent.
+ *
+ * The API can return a partial profile (or no profile at all for a first-time
+ * user). A shallow spread leaves nested branding fields undefined, which made
+ * the dirty check unreliable and kept section save buttons disabled.
+ */
+function normalizeProfile(profile?: Partial<ChurchProfileType> | null): Partial<ChurchProfileType> {
+  const source = profile ?? {};
+  return {
+    ...EMPTY_PROFILE,
+    ...source,
+    branding: {
+      ...EMPTY_BRANDING,
+      ...(source.branding ?? {}),
+    },
+    presentationDefaults: {
+      ...EMPTY_PRESENTATION_DEFAULTS,
+      ...(source.presentationDefaults ?? {}),
+    },
+    speakers: source.speakers ? [...source.speakers] : [],
+    socialMedia: {
+      ...EMPTY_SOCIAL_MEDIA,
+      ...(source.socialMedia ?? {}),
+    },
+  };
+}
 
 const SOCIAL_FIELDS: {
   key: keyof ChurchSocialMedia;
@@ -153,7 +187,10 @@ function ProfileCompletionCard({
     const items: { label: string; done: boolean }[] = [
       { label: t("churchProfile.checkChurchName"), done: !!profile.churchName?.trim() },
       { label: t("churchProfile.checkLogo"), done: !!profile.branding?.logoUrl },
-      { label: t("churchProfile.checkMainSpeaker"), done: speakers.some((s) => s.isMain && s.name.trim()) },
+      // A named speaker completes this requirement. The Main toggle is an
+      // optional presentation preference, not a reason to mark a filled form
+      // as incomplete.
+      { label: t("churchProfile.checkMainSpeaker"), done: speakers.some((s) => s.name.trim()) },
       { label: t("churchProfile.checkWebsite"), done: !!profile.website?.trim() },
       { label: t("churchProfile.checkEmail"), done: !!profile.email?.trim() },
       { label: t("churchProfile.checkPhone"), done: !!profile.phone?.trim() },
@@ -424,7 +461,7 @@ export default function ChurchProfile() {
   const { mongoUser } = useAuth();
   const userId = rawUserId || mongoUser?._id || null;
 
-  const [profile, setProfile] = useState<Partial<ChurchProfileType>>(EMPTY_PROFILE);
+  const [profile, setProfile] = useState<Partial<ChurchProfileType>>(() => normalizeProfile(EMPTY_PROFILE));
   const [speakers, setSpeakers] = useState<ChurchSpeaker[]>([]);
   const [socialMedia, setSocialMedia] = useState<ChurchSocialMedia>({
     facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "",
@@ -457,25 +494,54 @@ export default function ChurchProfile() {
   const { Modal } = useUnsavedChanges(dirty);
 
   const [websiteError, setWebsiteError] = useState(false);
+  const fallbackChurchNameRef = useRef(mongoUser?.churchName || "");
+  fallbackChurchNameRef.current = mongoUser?.churchName || "";
 
+  // Load the editable form when the user changes, not whenever AuthContext
+  // refreshes its user object. Rehydrating on those refreshes overwrites
+  // unsaved keystrokes with the last server snapshot.
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
     getChurchProfile(userId)
       .then((p) => {
-        if (p) {
-          setProfile((prev) => ({ ...prev, ...p }));
-          setSpeakers(p.speakers || []);
-          setSocialMedia(p.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
-          setOriginalProfile(p);
-          setOriginalSpeakers(p.speakers || []);
-          setOriginalSocialMedia(p.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
-        } else if (mongoUser) {
-          setProfile((prev) => ({ ...prev, churchName: mongoUser.churchName || prev.churchName || "" }));
-        }
+        if (cancelled) return;
+        // A new user has no profile document yet. Establish an empty baseline
+        // so the first branding edit is considered dirty and can be saved.
+        const baseline = normalizeProfile(p ?? {
+          churchName: fallbackChurchNameRef.current,
+        });
+        setProfile(baseline);
+        setSpeakers(baseline.speakers || []);
+        setSocialMedia(baseline.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
+        setOriginalProfile(baseline);
+        setOriginalSpeakers(baseline.speakers || []);
+        setOriginalSocialMedia(baseline.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
       })
-      .catch(() => { })
-      .finally(() => setLoading(false));
-  }, [userId, mongoUser]);
+      .catch(() => {
+        if (cancelled) return;
+        // Keep the form usable when the initial read is unavailable. The PUT
+        // endpoint is an upsert, so a later save can still create the profile.
+        const baseline = normalizeProfile({ churchName: fallbackChurchNameRef.current });
+        setProfile(baseline);
+        setOriginalProfile(baseline);
+        setOriginalSpeakers([]);
+        setOriginalSocialMedia(baseline.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     getCountries().then(setCountries).catch(() => { });
@@ -493,7 +559,7 @@ export default function ChurchProfile() {
 
   useEffect(() => {
     if (!originalProfile) return;
-    const profileChanged = JSON.stringify(profile) !== JSON.stringify({ ...EMPTY_PROFILE, ...originalProfile });
+    const profileChanged = JSON.stringify(normalizeProfile(profile)) !== JSON.stringify(normalizeProfile(originalProfile));
     const speakersChanged = JSON.stringify(speakers) !== JSON.stringify(originalSpeakers);
     const socialMediaChanged = JSON.stringify(socialMedia) !== JSON.stringify(originalSocialMedia);
     setDirty(profileChanged || speakersChanged || socialMediaChanged);
@@ -501,20 +567,21 @@ export default function ChurchProfile() {
 
   const sectionDirty = useMemo(() => {
     if (!originalProfile) return { info: false, branding: false, speakers: false, social: false };
-    const mergedOriginal = { ...EMPTY_PROFILE, ...originalProfile };
+    const currentProfile = normalizeProfile(profile);
+    const mergedOriginal = normalizeProfile(originalProfile);
     return {
       info: JSON.stringify({
-        churchName: profile.churchName, tagline: profile.tagline, website: profile.website,
-        email: profile.email, phone: profile.phone, address: profile.address,
-        city: profile.city, state: profile.state, postalCode: profile.postalCode,
-        country: profile.country, timezone: profile.timezone, churchSize: profile.churchSize,
+        churchName: currentProfile.churchName, tagline: currentProfile.tagline, website: currentProfile.website,
+        email: currentProfile.email, phone: currentProfile.phone, address: currentProfile.address,
+        city: currentProfile.city, state: currentProfile.state, postalCode: currentProfile.postalCode,
+        country: currentProfile.country, timezone: currentProfile.timezone, churchSize: currentProfile.churchSize,
       }) !== JSON.stringify({
         churchName: mergedOriginal.churchName, tagline: mergedOriginal.tagline, website: mergedOriginal.website,
         email: mergedOriginal.email, phone: mergedOriginal.phone, address: mergedOriginal.address,
         city: mergedOriginal.city, state: mergedOriginal.state, postalCode: mergedOriginal.postalCode,
         country: mergedOriginal.country, timezone: mergedOriginal.timezone, churchSize: mergedOriginal.churchSize,
       }),
-      branding: JSON.stringify(profile.branding) !== JSON.stringify(mergedOriginal.branding),
+      branding: JSON.stringify(currentProfile.branding) !== JSON.stringify(mergedOriginal.branding),
       speakers: JSON.stringify(speakers) !== JSON.stringify(originalSpeakers),
       social: JSON.stringify(socialMedia) !== JSON.stringify(originalSocialMedia),
     };
@@ -548,7 +615,7 @@ export default function ChurchProfile() {
   }, [profile.website, update]);
 
   const addSpeaker = useCallback(() => {
-    setSpeakers((prev) => [...prev, { name: "", role: "", isMain: false }]);
+    setSpeakers((prev) => [...prev, { name: "", role: "", isMain: prev.length === 0 }]);
   }, []);
 
   const updateSpeaker = useCallback((index: number, field: "name" | "role" | "imageUrl", value: string) => {
@@ -650,7 +717,7 @@ export default function ChurchProfile() {
         branding: profile.branding,
       };
       const updated = await updateChurchProfile(userId, updates);
-      const merged = { ...EMPTY_PROFILE, ...profile, ...updated };
+      const merged = normalizeProfile({ ...profile, ...updated });
       setProfile(merged);
       setOriginalProfile(merged);
       setDirty(false);
@@ -666,7 +733,7 @@ export default function ChurchProfile() {
     setSectionSaving((prev) => ({ ...prev, branding: true }));
     try {
       const updated = await updateChurchProfile(userId, { branding: profile.branding });
-      const merged = { ...EMPTY_PROFILE, ...profile, ...updated };
+      const merged = normalizeProfile({ ...profile, ...updated });
       setProfile(merged);
       setOriginalProfile(merged);
       setDirty(false);
@@ -692,7 +759,7 @@ export default function ChurchProfile() {
       const updated = await updateChurchProfile(userId, { speakers: filtered });
       setSpeakers(updated.speakers || []);
       setOriginalSpeakers(updated.speakers || []);
-      const merged = { ...EMPTY_PROFILE, ...profile, ...updated, speakers: updated.speakers || [] };
+      const merged = normalizeProfile({ ...profile, ...updated, speakers: updated.speakers || [] });
       setProfile(merged);
       setOriginalProfile(merged);
       setDirty(false);
@@ -710,7 +777,7 @@ export default function ChurchProfile() {
       const updated = await updateChurchProfile(userId, { socialMedia });
       setSocialMedia(updated.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
       setOriginalSocialMedia(updated.socialMedia || { facebook: "", instagram: "", youtube: "", twitter: "", tiktok: "" });
-      const merged = { ...EMPTY_PROFILE, ...profile, ...updated, socialMedia: updated.socialMedia };
+      const merged = normalizeProfile({ ...profile, ...updated, socialMedia: updated.socialMedia });
       setProfile(merged);
       setOriginalProfile(merged);
       setDirty(false);

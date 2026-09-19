@@ -210,14 +210,14 @@ fn generate_fingerprint_hash() -> Result<String, String> {
     let os_name = std::env::consts::OS;
 
     if hardware_ids.is_empty() {
-        return Err(
-            "Could not read hardware identifier for this platform".to_string(),
-        );
+        return Err("Could not read hardware identifier for this platform".to_string());
     }
 
     let fingerprint_input = format!(
         "{}|{}|{}|mce_hw_seed_v2",
-        hardware_ids.join("|"), machine_model, os_name
+        hardware_ids.join("|"),
+        machine_model,
+        os_name
     );
 
     let mut hasher = Sha256::new();

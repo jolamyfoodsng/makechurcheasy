@@ -38,8 +38,10 @@ interface OverviewData {
   freeUsers: number;
   countries: number;
   devices: number;
-  monthlyRevenue: number;
-  arr: number;
+  paymentAnalytics: {
+    providers: Record<string, { status: string; successfulTransactions: number }>;
+    currencies: Array<{ currency: string; transactionCount: number; amount: number }>;
+  } | null;
   aiHoursUsed: number;
   ambassadorCount: number;
   signupChart: Array<{ date: string; signups: number }>;
@@ -78,7 +80,7 @@ function KPICard({
     return <SkeletonBlock className="min-h-[120px]" />;
   }
   return (
-    <div className="min-h-[120px] rounded-2xl bg-gray-900 border border-slate-700 p-6 flex flex-col justify-between transition-colors hover:border-slate-600">
+    <div className="mce-admin-kpi min-h-[120px] rounded-2xl bg-gray-900 border border-slate-700 p-6 flex flex-col justify-between transition-colors hover:border-slate-600">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-400">{label}</span>
         <div
@@ -88,7 +90,7 @@ function KPICard({
         </div>
       </div>
       <div className="mt-4">
-        <p className="text-3xl font-bold text-slate-50 tracking-tight">
+        <p className="text-2xl xl:text-3xl font-bold text-slate-50 tracking-tight break-words">
           {value}
         </p>
       </div>
@@ -121,8 +123,7 @@ export default function AdminDashboardPage() {
           freeUsers: json.kpis?.freeUsers ?? 0,
           countries: json.kpis?.countries ?? 0,
           devices: json.kpis?.devices ?? 0,
-          monthlyRevenue: json.kpis?.monthlyRevenue ?? 0,
-          arr: json.kpis?.arr ?? 0,
+          paymentAnalytics: json.kpis?.paymentAnalytics ?? null,
           aiHoursUsed: json.kpis?.aiHoursUsed ?? 0,
           ambassadorCount: json.kpis?.ambassadorCount ?? 0,
           signupChart: json.signupChart ?? [],
@@ -141,15 +142,24 @@ export default function AdminDashboardPage() {
       .finally(() => setCountriesLoading(false));
   }, []);
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "NGN",
-      minimumFractionDigits: 0,
-    }).format(value);
-
   const formatNumber = (value: number) =>
     new Intl.NumberFormat("en-US").format(value);
+
+  const paymentSummary = (() => {
+    const paymentAnalytics = data?.paymentAnalytics;
+    if (!paymentAnalytics) return "Unavailable";
+    const totals = paymentAnalytics.currencies
+      .filter((item) => item.transactionCount > 0)
+      .map((item) => `${item.currency} ${new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(item.amount)}`);
+    if (totals.length) {
+      const hasUnavailableProvider = Object.values(paymentAnalytics.providers)
+        .some((provider) => provider.status !== "connected");
+      return `${totals.join(" · ")}${hasUnavailableProvider ? " · Partial sources" : ""}`;
+    }
+    return Object.values(paymentAnalytics.providers).some((provider) => ["connected", "partial"].includes(provider.status))
+      ? "No successful receipts"
+      : "Gateway unavailable";
+  })();
 
   const chartData = (data?.signupChart ?? []).map((d) => ({
     date: d.date.slice(5),
@@ -163,9 +173,9 @@ export default function AdminDashboardPage() {
   }> = [];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
+    <div className="mce-admin-page p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
       {/* Page Header */}
-      <div>
+      <div className="mce-admin-page__header">
         <h1 className="text-2xl font-bold text-slate-50">
           {t("admin.dashboard.title")}
         </h1>
@@ -267,17 +277,10 @@ export default function AdminDashboardPage() {
           loading={loading}
         />
         <KPICard
-          label={t("admin.dashboard.monthlyRevenue")}
-          value={data ? formatCurrency(data.monthlyRevenue) : "—"}
+          label="Transaction amount · last 30 days"
+          value={data ? paymentSummary : "—"}
           icon={BarChart3}
           iconColor="bg-amber-500/15 text-amber-400"
-          loading={loading}
-        />
-        <KPICard
-          label="ARR"
-          value={data ? formatCurrency(data.arr) : "—"}
-          icon={BarChart3}
-          iconColor="bg-lime-500/15 text-lime-400"
           loading={loading}
         />
         <KPICard

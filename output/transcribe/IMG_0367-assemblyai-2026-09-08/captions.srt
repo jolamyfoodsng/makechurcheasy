@@ -1,0 +1,340 @@
+1
+00:00:00,610 --> 00:00:03,259
+So do you use OBS to livestream,
+
+2
+00:00:04,271 --> 00:00:06,856
+or I mean use it on Sundays to
+
+3
+00:00:07,356 --> 00:00:08,975
+project? If you do, then this
+
+4
+00:00:09,088 --> 00:00:10,131
+app is going to be really,
+
+5
+00:00:10,147 --> 00:00:12,909
+really useful for you. It's on
+
+6
+00:00:13,182 --> 00:00:14,322
+Play Store. Don't worry, you can
+
+7
+00:00:14,822 --> 00:00:16,779
+send me a DM or comments down
+
+8
+00:00:16,891 --> 00:00:18,497
+below and I'll share you the
+
+9
+00:00:18,997 --> 00:00:20,488
+link to download it. It's an app
+
+10
+00:00:20,988 --> 00:00:23,442
+where you can control your OBS
+
+11
+00:00:23,699 --> 00:00:25,899
+app with ease. So I'm going to
+
+12
+00:00:26,399 --> 00:00:27,649
+switch to live screen, um, full
+
+13
+00:00:28,149 --> 00:00:30,234
+screen mode. So I get to see
+
+14
+00:00:30,298 --> 00:00:32,257
+this. So I get to see all my
+
+15
+00:00:32,402 --> 00:00:33,767
+scenes. If you notice, the
+
+16
+00:00:34,267 --> 00:00:36,544
+scenes here are the same as the
+
+17
+00:00:37,044 --> 00:00:38,584
+one here. So it lists all your
+
+18
+00:00:39,084 --> 00:00:41,474
+scenes. So currently I'm in MC
+
+19
+00:00:41,538 --> 00:00:44,043
+Presentation, and then we have 4
+
+20
+00:00:44,444 --> 00:00:47,431
+sources right now. I can hold
+
+21
+00:00:47,495 --> 00:00:50,417
+down the MC Presentation card
+
+22
+00:00:51,174 --> 00:00:52,943
+you get to see View Sources,
+
+23
+00:00:53,221 --> 00:00:55,973
+right? Can you see?
+
+24
+00:00:56,151 --> 00:00:57,444
+Do you know that I can
+
+25
+00:00:57,493 --> 00:01:00,047
+literally, from the app, I can
+
+26
+00:01:00,306 --> 00:01:03,388
+turn it off, turn it back on?
+
+27
+00:01:04,934 --> 00:01:07,431
+Can you see that? I can turn it
+
+28
+00:01:07,931 --> 00:01:10,621
+off, I can turn it back on. I
+
+29
+00:01:10,669 --> 00:01:13,909
+can drag sources around. So if
+
+30
+00:01:14,409 --> 00:01:16,005
+you notice, camera is the last
+
+31
+00:01:16,247 --> 00:01:18,278
+source there. I can literally
+
+32
+00:01:18,326 --> 00:01:22,644
+drag the camera source to
+
+33
+00:01:23,144 --> 00:01:25,817
+the top. Guess what happens now?
+
+34
+00:01:26,449 --> 00:01:28,311
+The camera source is at the top,
+
+35
+00:01:28,893 --> 00:01:30,735
+so I don't have to move my mouse
+
+36
+00:01:31,235 --> 00:01:31,752
+for anything. So imagine you
+
+37
+00:01:31,849 --> 00:01:33,238
+have a laptop that is not fast
+
+38
+00:01:33,383 --> 00:01:34,772
+or hangs a lot. You don't have
+
+39
+00:01:35,272 --> 00:01:35,967
+to literally move your mouse
+
+40
+00:01:36,467 --> 00:01:37,679
+every time. I can turn off the
+
+41
+00:01:38,179 --> 00:01:39,753
+camera source, and of course I
+
+42
+00:01:39,819 --> 00:01:43,051
+can delete it. Can you see that?
+
+43
+00:01:44,920 --> 00:01:45,956
+All in this mobile app.
+
+44
+00:01:48,020 --> 00:01:49,642
+So the other beautiful thing is
+
+45
+00:01:49,740 --> 00:01:52,807
+that I can literally, literally
+
+46
+00:01:52,839 --> 00:01:55,663
+control my audio. I can
+
+47
+00:01:56,163 --> 00:01:57,595
+literally control my audio,
+
+48
+00:01:57,871 --> 00:02:00,145
+literally, from the app. So I
+
+49
+00:02:00,210 --> 00:02:03,215
+can pause, I can restart,
+
+50
+00:02:04,646 --> 00:02:06,877
+pause, play,
+
+51
+00:02:07,844 --> 00:02:10,992
+I can restart. I mean, this is
+
+52
+00:02:11,026 --> 00:02:13,914
+beautiful. I can restart.
+
+53
+00:02:15,081 --> 00:02:17,632
+I can increase the volume. I can
+
+54
+00:02:17,972 --> 00:02:20,889
+probably reduce the volume. Can
+
+55
+00:02:21,389 --> 00:02:23,173
+you see that? So you watch,
+
+56
+00:02:23,285 --> 00:02:25,053
+right? Notice that the volume is
+
+57
+00:02:25,553 --> 00:02:28,314
+also reducing, reducing,
+
+58
+00:02:29,471 --> 00:02:32,172
+increasing. You know that I can
+
+59
+00:02:33,508 --> 00:02:36,857
+monitor and output. I can turn
+
+60
+00:02:37,357 --> 00:02:39,286
+off the monitoring, um, Um,
+
+61
+00:02:39,465 --> 00:02:40,772
+function. So when I click on
+
+62
+00:02:41,272 --> 00:02:42,568
+monitor off, notice what happens
+
+63
+00:02:43,068 --> 00:02:44,832
+when I click on monitor off. It
+
+64
+00:02:45,332 --> 00:02:47,209
+goes off from my phone. So I'm
+
+65
+00:02:47,322 --> 00:02:48,422
+using an Android emulator, do
+
+66
+00:02:49,182 --> 00:02:50,379
+you understand? So that you can
+
+67
+00:02:50,492 --> 00:02:54,249
+see both, um, both sides
+
+68
+00:02:54,346 --> 00:02:58,119
+of, um, the app. So I can pause
+
+69
+00:02:58,135 --> 00:03:01,049
+the audio. Guess what? It gets
+
+70
+00:03:01,549 --> 00:03:03,818
+paused. I can play the audio all
+
+71
+00:03:04,027 --> 00:03:06,109
+from my phone. You can literally
+
+72
+00:03:06,125 --> 00:03:08,093
+unmute your mic from your phone.
+
+73
+00:03:08,803 --> 00:03:11,835
+So watch, you see, I'm muting
+
+74
+00:03:11,851 --> 00:03:14,900
+and unmuting. So if you want to
+
+75
+00:03:15,400 --> 00:03:17,535
+have this beauty— and also I
+
+76
+00:03:17,583 --> 00:03:18,779
+forgot to mention, you have
+
+77
+00:03:18,812 --> 00:03:20,428
+access to a lot of quick
+
+78
+00:03:20,928 --> 00:03:22,863
+actions. So you can— okay, let
+
+79
+00:03:22,895 --> 00:03:24,591
+me click on Enable Studio Mode.
+
+80
+00:03:24,656 --> 00:03:26,690
+Guess what happens? It enables
+
+81
+00:03:27,190 --> 00:03:28,660
+studio mode all from your mobile
+
+82
+00:03:28,676 --> 00:03:30,533
+phone. Disable Studio Mode.
+
+83
+00:03:33,974 --> 00:03:35,809
+So if you want to enjoy this
+
+84
+00:03:35,907 --> 00:03:39,235
+beauty, send me a DM or a text
+
+85
+00:03:39,735 --> 00:03:40,145
+and I'll share it with you.
+

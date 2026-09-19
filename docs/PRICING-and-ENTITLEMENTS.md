@@ -29,14 +29,14 @@ All entitlement checks must be enforced consistently across the entire platform.
 - Up to 3 Media Uploads
 - OBS Integration
 - 1 Device
-- 1 Lower Third
+- Verse AI / Speech-to-Scripture for 15 minutes per day (20 minutes on Sundays)
+- Lower Thirds, Tickers, Countdowns, and Multiview are locked
 - Up to 2 Themes
 - 20 Credits
 
 ### Not Available
 
 - Translation
-- Verse AI
 - Sermon Transcription
 - AI Summary
 - Bulk Song Import
@@ -61,7 +61,7 @@ All entitlement checks must be enforced consistently across the entire platform.
 - Bible Display
 - Song Display
 - Media Display
-- Lower Third Display
+- Lower Thirds, Tickers, Countdowns, and Multiview are shown as locked Dock features
 
 ### Not Available
 
@@ -111,24 +111,23 @@ Users cannot:
 
 Everything in Free plus:
 
-- Translation
-- Up to 10 Bible Versions
-- Up to 70 Songs
-- Up to 70 Media Uploads
-- Tickers
-- Additional Lower Thirds
-- Up to 5 Devices
-- 250 Credits
+- Unlimited Bible versions
+- Up to 100 songs, 100 images, and 100 videos
+- Verse AI / Speech-to-Scripture using 100 monthly credits
+- Multi-View with up to 5 templates
+- Up to 3 devices
 
 ### Not Available
 
-- Verse AI
+- Transcript translation
 - Sermon Transcription
 - AI Summary
 - Mobile App Access
 - Remote OBS Control
 - Team Collaboration
-- Multiview
+- Countdowns
+- Tickers
+- Lower Thirds
 - Bulk Song Import
 - Mobile Scene Controller
 
@@ -141,14 +140,15 @@ Everything in Free plus:
 - Bible
 - Songs
 - Media
-- Translation
-- Tickers
-- Lower Thirds
+- Multi-View with up to 5 templates
+- Verse AI / Speech-to-Scripture
 
 ### Not Available
 
-- Verse AI
-- Multiview
+- Transcript translation
+- Countdowns
+- Tickers
+- Lower Thirds
 - Team Collaboration
 - Remote Control
 - Shared Operators
@@ -197,6 +197,8 @@ Everything in Basic plus:
 - Remote OBS Control
 - Team Collaboration
 - Multiview
+- Unlimited multiview templates
+- Countdowns, Tickers, and Lower Thirds
 - Unlimited Songs
 - Unlimited Media Uploads
 - Unlimited Bible Versions
@@ -466,7 +468,7 @@ No restrictions.
 
 ## Verse AI
 
-> Verse AI is available on Growth and Pro plans.
+> Free accounts receive 15 minutes of Verse AI per day (20 minutes on Sundays). Basic and Growth plans receive their configured credit allowance.
 
 ---
 
@@ -502,7 +504,7 @@ No restrictions.
 
 ## Multiview
 
-> Multiview is available on Growth and Pro plans.
+> Multiview is locked on Free, available with up to five templates on Basic, and unlimited on Growth.
 
 ---
 

@@ -70,14 +70,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _goToConnectionWizard() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ConnectionWizardScreen()),
+      MaterialPageRoute(builder: (_) => ConnectionWizardScreen()),
     );
   }
 
   void _goToApp() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AppShell()),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => AppShell()));
   }
 
   @override
@@ -89,13 +89,14 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.symmetric(horizontal: MCESpacing.xxl),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
+              minHeight:
+                  MediaQuery.of(context).size.height -
                   MediaQuery.of(context).padding.vertical,
             ),
             child: IntrinsicHeight(
               child: Column(
                 children: [
-                  const Spacer(flex: 2),
+                  Spacer(flex: 2),
 
                   // Logo
                   Container(
@@ -105,20 +106,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: MCEColors.primaryBlue,
                       borderRadius: BorderRadius.circular(MCERadius.lg),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.play_arrow_rounded,
                       size: 40,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: MCESpacing.lg),
+                  SizedBox(height: MCESpacing.lg),
 
                   // Title
-                  const Text(
-                    'MakeChurchEasy',
-                    style: MCETypography.sectionTitle,
-                  ),
-                  const SizedBox(height: MCESpacing.sm),
+                  Text('MakeChurchEasy', style: MCETypography.sectionTitle),
+                  SizedBox(height: MCESpacing.sm),
                   Text(
                     'Sign in to control your church broadcast',
                     style: MCETypography.body.copyWith(
@@ -126,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const Spacer(flex: 2),
+                  Spacer(flex: 2),
 
                   // Error message
                   if (_error != null) ...[
@@ -148,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(height: MCESpacing.lg),
+                    SizedBox(height: MCESpacing.lg),
                   ],
 
                   // Email field
@@ -161,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: Icons.email_outlined,
                     onSubmitted: (_) => _passwordFocusNode.requestFocus(),
                   ),
-                  const SizedBox(height: MCESpacing.md),
+                  SizedBox(height: MCESpacing.md),
 
                   // Password field
                   _buildTextField(
@@ -173,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: Icons.lock_outline,
                     onSubmitted: (_) => _login(),
                   ),
-                  const SizedBox(height: MCESpacing.xxl),
+                  SizedBox(height: MCESpacing.xxl),
 
                   // Login button
                   SizedBox(
@@ -184,14 +182,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: MCEColors.primaryBlue,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor: MCEColors.primaryBlue.withValues(alpha: 0.5),
+                        disabledBackgroundColor: MCEColors.primaryBlue
+                            .withValues(alpha: 0.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(MCERadius.md),
                         ),
                         elevation: 0,
                       ),
                       child: _isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
@@ -199,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 strokeWidth: 2,
                               ),
                             )
-                          : const Text(
+                          : Text(
                               'Sign In',
                               style: TextStyle(
                                 fontSize: 16,
@@ -209,15 +208,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: MCESpacing.lg),
+                  SizedBox(height: MCESpacing.lg),
 
                   // Onboarding link
                   TextButton(
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const OnboardingScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => OnboardingScreen()),
                       );
                     },
                     child: Text(
@@ -228,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const Spacer(),
+                  Spacer(),
                 ],
               ),
             ),
@@ -252,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: MCETypography.bodyBold),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         Container(
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: MCESpacing.md),
@@ -265,7 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               if (prefixIcon != null) ...[
                 Icon(prefixIcon, size: 18, color: MCEColors.textSecondary),
-                const SizedBox(width: MCESpacing.sm),
+                SizedBox(width: MCESpacing.sm),
               ],
               Expanded(
                 child: TextField(

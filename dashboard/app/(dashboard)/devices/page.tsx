@@ -26,6 +26,7 @@ import {
   getDevices,
   deleteDevice,
   getSecuritySessions,
+  formatPairingCodeForDisplay,
   type Device,
   type SecuritySession,
 } from "@/lib/api";
@@ -188,6 +189,13 @@ export default function DevicesPage() {
         </div>
       )}
 
+      {pairing.error && (
+        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3" role="alert">
+          <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+          <p className="text-sm font-medium text-red-800">{pairing.error}</p>
+        </div>
+      )}
+
       {/* Pairing Code Card */}
       {pairing.isActive && (
         <div className="mb-6 p-6 rounded-2xl border border-amber-200 bg-amber-50/50">
@@ -212,7 +220,7 @@ export default function DevicesPage() {
           <div className="flex items-center gap-3">
             <div className="flex-1 p-4 bg-white rounded-xl border border-amber-200 text-center">
               <p className="font-mono text-2xl font-bold tracking-[0.3em] text-slate-900">
-                {pairing.code}
+                {formatPairingCodeForDisplay(pairing.code)}
               </p>
             </div>
             <button

@@ -1,0 +1,11 @@
+{
+  "id": "5cbb22f9-f25f-49fe-95c2-4b03bb3d3750",
+  "status": "completed",
+  "language_code": "en_us",
+  "language_model": "assemblyai_default",
+  "acoustic_model": "assemblyai_default",
+  "duration": null,
+  "audio_duration": 3555,
+  "confidence": 0.9510132,
+  "completed_at": null
+}

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MCE Time</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+    body { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+
+    #time-card {
+      position: fixed;
+      display: grid;
+      grid-template-columns: 6px minmax(0, 1fr);
+      gap: 16px;
+      min-width: 320px;
+      max-width: min(640px, calc(100vw - 112px));
+      padding: 18px 22px 19px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      color: #f8fafc;
+      background: rgba(12, 18, 30, 0.94);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+      opacity: 0;
+    }
+
+    #time-card.is-ready { opacity: 1; }
+
+    #time-card.mode-lower-third.placement-left { left: 56px; bottom: 88px; }
+    #time-card.mode-lower-third.placement-right { right: 56px; bottom: 88px; }
+
+    #time-card.mode-fullscreen {
+      inset: 0;
+      min-width: 0;
+      max-width: none;
+      padding: 40px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .accent { width: 100%; min-height: 100%; border-radius: 4px; background: #ea580c; }
+    .content { min-width: 0; }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: #cbd5e1;
+      font-size: clamp(14px, 1.15vw, 22px);
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .time-value {
+      margin: 0;
+      color: #ffffff;
+      font-size: clamp(54px, 7.2vw, 128px);
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.045em;
+      line-height: 0.98;
+      text-shadow: 0 3px 18px rgba(0, 0, 0, 0.36);
+      white-space: nowrap;
+    }
+    .date-value {
+      margin: 9px 0 0;
+      color: #cbd5e1;
+      font-size: clamp(15px, 1.4vw, 28px);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .date-value[hidden], .eyebrow[hidden] { display: none; }
+
+    #time-card.mode-fullscreen .accent { display: none; }
+    #time-card.mode-fullscreen .content {
+      display: flex;
+      max-width: 80%;
+      flex-direction: column;
+      align-items: center;
+    }
+    #time-card.mode-fullscreen .time-value {
+      font-size: clamp(80px, 16vw, 360px);
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 0, 0, 0.3);
+    }
+    #time-card.mode-fullscreen .eyebrow {
+      margin-bottom: 14px;
+      color: #ffffff;
+      font-size: clamp(16px, 3vw, 48px);
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.3);
+    }
+    #time-card.mode-fullscreen .date-value {
+      margin-top: 14px;
+      color: #ffffff;
+      font-size: clamp(16px, 3vw, 48px);
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.3);
+    }
+
+    @media (max-width: 720px) {
+      #time-card.mode-lower-third.placement-left { left: 28px; bottom: 56px; }
+      #time-card.mode-lower-third.placement-right { right: 28px; bottom: 56px; }
+      #time-card.mode-fullscreen { min-width: 0; max-width: none; padding: 28px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #time-card { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <section id="time-card" class="mode-fullscreen placement-left" aria-live="off">
+    <div class="accent" aria-hidden="true"></div>
+    <div class="content">
+      <p id="eyebrow" class="eyebrow"></p>
+      <p id="time-value" class="time-value">00:00</p>
+      <p id="date-value" class="date-value" hidden></p>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var card = document.getElementById("time-card");
+      var eyebrow = document.getElementById("eyebrow");
+      var timeValue = document.getElementById("time-value");
+      var dateValue = document.getElementById("date-value");
+      var activePacket = null;
+      var routeSource = "";
+
+      try { routeSource = new URLSearchParams(window.location.search).get("mceSource") || ""; } catch (_) { }
+
+      function parseHashPacket() {
+        try {
+          var marker = "#data=";
+          var hash = window.location.hash || "";
+          if (!hash.startsWith(marker)) return null;
+          return JSON.parse(decodeURIComponent(hash.slice(marker.length)));
+        } catch (_) { return null; }
+      }
+
+      function pad(value) { return String(value).padStart(2, "0"); }
+
+      function formatTimer(totalSeconds) {
+        var safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+        var hours = Math.floor(safe / 3600);
+        var minutes = Math.floor((safe % 3600) / 60);
+        var seconds = safe % 60;
+        return hours > 0
+          ? pad(hours) + ":" + pad(minutes) + ":" + pad(seconds)
+          : pad(minutes) + ":" + pad(seconds);
+      }
+
+      function getTimerSeconds(timer) {
+        var base = Math.max(0, Math.floor(Number(timer && timer.elapsedSeconds) || 0));
+        if (!timer || !timer.running || !timer.startedAt) return base;
+        return base + Math.max(0, Math.floor((Date.now() - Number(timer.startedAt)) / 1000));
+      }
+
+      function formatClock(now, clock) {
+        var options = { hour: "numeric", minute: "2-digit" };
+        if (clock && clock.showSeconds) options.second = "2-digit";
+        options.hour12 = Boolean(clock && clock.hour12);
+        return now.toLocaleTimeString(undefined, options);
+      }
+
+      function formatDate(now) {
+        return now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      }
+
+      function render() {
+        if (!activePacket) return;
+        var tool = activePacket.tool === "clock" ? "clock" : "timer";
+        var mode = activePacket.mode === "lower-third" ? "lower-third" : "fullscreen";
+        var placement = activePacket.placement === "right" ? "right" : "left";
+        var clock = activePacket.clock || {};
+        var label = String(activePacket.label || (tool === "clock" ? "Current time" : "Timer")).trim();
+        var now = new Date();
+
+        card.className = "is-ready mode-" + mode + " placement-" + placement;
+        eyebrow.textContent = label;
+        eyebrow.hidden = !label;
+        timeValue.textContent = tool === "clock"
+          ? formatClock(now, clock)
+          : formatTimer(getTimerSeconds(activePacket.timer || {}));
+        dateValue.textContent = formatDate(now);
+        dateValue.hidden = tool !== "clock" || !clock.showDate;
+      }
+
+      function applyPacket(packet) {
+        if (!packet || typeof packet !== "object") return false;
+        if (packet.tool !== "timer" && packet.tool !== "clock") return false;
+        activePacket = packet;
+        render();
+        return true;
+      }
+
+      function readFromObsBrowserEvent(event) {
+        try {
+          var detail = event && typeof event.detail === "object" ? event.detail : null;
+          var data = detail && typeof detail.event_data === "object" ? detail.event_data : detail;
+          if (!data || typeof data !== "object" || data.tab !== "time") return false;
+          var targetSource = typeof data.targetSource === "string" ? data.targetSource : "";
+          if (routeSource && targetSource !== routeSource) return false;
+          return applyPacket(data.packet || data.overlayData || data.data);
+        } catch (_) { return false; }
+      }
+
+      window.addEventListener("mce-overlay-packet", readFromObsBrowserEvent);
+      window.addEventListener("hashchange", function () { applyPacket(parseHashPacket()); });
+      applyPacket(parseHashPacket());
+      window.setInterval(render, 250);
+    })();
+  </script>
+</body>
+</html>

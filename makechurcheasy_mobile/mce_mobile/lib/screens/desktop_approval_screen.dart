@@ -27,7 +27,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
       if (event.type == WebSocketEventType.authenticated) {
         _cleanup();
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ConnectionSuccessScreen()),
+          MaterialPageRoute(builder: (_) => ConnectionSuccessScreen()),
         );
       } else if (event.type == WebSocketEventType.authFailed) {
         _cleanup();
@@ -36,7 +36,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
     });
 
     // 15-second safety timeout — if nothing happens, let user retry.
-    _timeout = Timer(const Duration(seconds: 15), () {
+    _timeout = Timer(Duration(seconds: 15), () {
       if (!mounted) return;
       _showFailed('Timed out waiting for desktop response.');
     });
@@ -58,7 +58,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Authentication Failed', style: MCETypography.bodyBold),
+        title: Text('Authentication Failed', style: MCETypography.bodyBold),
         content: Text(
           reason,
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
@@ -68,16 +68,14 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
             onPressed: () {
               Navigator.of(context).pop();
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const ConnectionWizardScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => ConnectionWizardScreen()),
               );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: MCEColors.primaryBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Try Again'),
+            child: Text('Try Again'),
           ),
         ],
       ),
@@ -102,7 +100,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
           padding: const EdgeInsets.symmetric(horizontal: MCESpacing.xxl),
           child: Column(
             children: [
-              const Spacer(flex: 2),
+              Spacer(flex: 2),
 
               // Pulsing indicator
               SizedBox(
@@ -113,7 +111,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                   children: [
                     TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0.8, end: 1.2),
-                      duration: const Duration(seconds: 2),
+                      duration: Duration(seconds: 2),
                       builder: (context, value, child) {
                         return Transform.scale(
                           scale: value,
@@ -123,7 +121,9 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: MCEColors.primaryBlue.withValues(alpha: 0.3),
+                                color: MCEColors.primaryBlue.withValues(
+                                  alpha: 0.3,
+                                ),
                                 width: 2,
                               ),
                             ),
@@ -142,7 +142,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                           width: 2,
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.link_rounded,
                         size: 40,
                         color: MCEColors.primaryBlue,
@@ -151,13 +151,10 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: MCESpacing.xxl),
+              SizedBox(height: MCESpacing.xxl),
 
-              const Text(
-                'Authenticating...',
-                style: MCETypography.sectionTitle,
-              ),
-              const SizedBox(height: MCESpacing.sm),
+              Text('Authenticating...', style: MCETypography.sectionTitle),
+              SizedBox(height: MCESpacing.sm),
               Text(
                 'Establishing secure WebSocket connection\nto your desktop.',
                 style: MCETypography.body.copyWith(
@@ -167,7 +164,7 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: MCESpacing.xxl * 2),
+              SizedBox(height: MCESpacing.xxl * 2),
 
               // Desktop info card
               if (desktopInfo != null)
@@ -183,18 +180,22 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                     children: [
                       _InfoRow(
                         label: 'Desktop',
-                        value: desktopInfo.computerName ?? desktopInfo.name ?? 'Desktop',
+                        value:
+                            desktopInfo.computerName ??
+                            desktopInfo.name ??
+                            'Desktop',
                       ),
-                      const SizedBox(height: MCESpacing.md),
+                      SizedBox(height: MCESpacing.md),
                       _InfoRow(
                         label: 'Address',
-                        value: '${desktopInfo.ip}:${desktopInfo.wsPort ?? 8765}',
+                        value:
+                            '${desktopInfo.ip}:${desktopInfo.wsPort ?? 8765}',
                       ),
                     ],
                   ),
                 ),
 
-              const Spacer(flex: 2),
+              Spacer(flex: 2),
 
               // Cancel button
               SizedBox(
@@ -205,25 +206,25 @@ class _DesktopApprovalScreenState extends State<DesktopApprovalScreen> {
                     context.webSocketService.disconnect();
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
-                        builder: (_) => const ConnectionWizardScreen(),
+                        builder: (_) => ConnectionWizardScreen(),
                       ),
                     );
                   },
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text(
+                  icon: Icon(Icons.close, size: 18),
+                  label: Text(
                     'Cancel',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: MCEColors.textSecondary,
-                    side: const BorderSide(color: MCEColors.border),
+                    side: BorderSide(color: MCEColors.border),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(MCERadius.md),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: MCESpacing.xxl),
+              SizedBox(height: MCESpacing.xxl),
             ],
           ),
         ),

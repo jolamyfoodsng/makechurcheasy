@@ -19,21 +19,32 @@
  * Architecture:
  *   - Backend returns a signed license payload during verification
  *   - Payload is normalized (expired paid → free) before caching
- *   - On startup: verify internet → verify with backend → normalize → cache → continue
+ *   - On startup: fetch the authenticated bootstrap → normalize → cache → continue
  *   - Every 6 hours: re-verify while running
- *   - If offline > 14 days: immediately lock
+ *   - Connectivity failures preserve local auth during the configured grace window
+ *   - After the grace window, the user is asked to reconnect and verify
  *
  * Feature gating:
- *   Use hasRequiredPlan("pro") or canUseFeature("multiview") — never isUnlocked()
+ *   Use hasRequiredPlan("growth") or canUseFeature("multiview") — never isUnlocked()
  *   for premium feature checks.
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
-import { getDeviceId, getDeviceSecret, getSession } from "./authService";
+import {
+  getDeviceApiBaseCandidates,
+  getDeviceId,
+  getDeviceSecret,
+  getSession,
+  rememberSessionApiBase,
+} from "./authService";
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
-
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+import { refreshSubscriptionState } from "./subscriptionCache";
+import {
+  cacheDesktopBootstrap,
+  clearDesktopBootstrapCache,
+  readDesktopBootstrap,
+} from "./desktopConfig";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,6 +103,10 @@ export interface LicenseCache {
   cachedAt: number;
 }
 
+type LicenseFetchResult =
+  | { ok: true; payload: LicensePayload }
+  | { ok: false; lockReason: LockReason; transient: boolean };
+
 export interface LicenseGuardState {
   unlocked: boolean;
   lockReason: LockReason;
@@ -99,13 +114,21 @@ export interface LicenseGuardState {
   verifying: boolean;
   lastVerifiedAt: number | null;
   daysOffline: number;
+  offlineDaysRemaining: number;
+  offlineWarning: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+export const OFFLINE_WARNING_DAYS = 14; // 2 weeks: warning asking user to connect
+export const OFFLINE_LOCK_DAYS = 21;    // 3 weeks: blocking modal requiring connection
+const LAST_ONLINE_KEY = "mce-last-online-at";
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_BACKGROUND_REVERIFY_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SUBSCRIPTION_CACHE_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 const FEATURE_ALIAS_MAP: Record<string, FeatureKey> = {
   multiview: "multiview",
@@ -121,7 +144,7 @@ const PLAN_HIERARCHY: Record<string, number> = {
   free: 0,
   basic: 1,
   growth: 2,
-  pro: 3,
+  pro: 2,
 };
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -135,6 +158,7 @@ let _initialized = false;
 let _revalidationTimer: ReturnType<typeof setInterval> | null = null;
 let _listeners: Array<(state: LicenseGuardState) => void> = [];
 let _lastVisibilityVerificationAt = 0;
+let _lastSubscriptionCacheRefreshAt = 0;
 
 // ── Cache Read/Write ─────────────────────────────────────────────────────────
 
@@ -182,54 +206,87 @@ function emit(): void {
   }
 }
 
-// ── Internet Detection ───────────────────────────────────────────────────────
-
-async function checkInternet(): Promise<boolean> {
-  try {
-    // Use a lightweight HEAD request to the API server
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${API_BASE}/api/health`, {
-      method: "HEAD",
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
-    return res.ok || res.status < 500;
-  } catch {
-    return false;
-  }
-}
-
 // ── Backend Verification ─────────────────────────────────────────────────────
 
-async function fetchLicenseFromBackend(): Promise<LicensePayload | null> {
+async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
   const session = getSession();
   const deviceId = getDeviceId();
-  if (!session?.user?.id || !deviceId) return null;
-
-  try {
-    const res = await fetch(
-      `${API_BASE}/api/device/license?deviceId=${encodeURIComponent(deviceId)}`,
-      {
-        headers: {
-          "X-App-Version": APP_VERSION,
-          "X-Device-Secret": getDeviceSecret() || "",
-        },
-      },
-    );
-
-    if (!res.ok) {
-      console.warn(`[licenseGuard] Backend returned ${res.status}`);
-      return null;
-    }
-
-    const data = await res.json();
-    return data?.license ?? null;
-  } catch (err) {
-    console.warn("[licenseGuard] Backend fetch failed:", err);
-    return null;
+  if (!session?.user?.id || !deviceId) {
+    return { ok: false, lockReason: "device_removed", transient: false };
   }
+
+  const cachedBootstrap = readDesktopBootstrap(30_000, deviceId);
+  if (cachedBootstrap?.license) {
+    return { ok: true, payload: cachedBootstrap.license as LicensePayload };
+  }
+
+  const candidates = getDeviceApiBaseCandidates();
+  let sawDeviceMissing = false;
+
+  for (const apiBase of candidates) {
+    try {
+      const res = await fetch(
+        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}&bootstrap=1`,
+        {
+          headers: {
+            "X-App-Version": APP_VERSION,
+            "X-Device-Secret": getDeviceSecret() || "",
+          },
+        },
+      );
+
+      if (!res.ok) {
+        let error = "";
+        try {
+          const data = await res.clone().json();
+          error = typeof data?.error === "string" ? data.error : "";
+        } catch {
+          // keep status-only handling
+        }
+
+        console.warn(`[licenseGuard] Backend returned ${res.status}${error ? `: ${error}` : ""}`);
+
+        if (
+          (res.status === 401 || res.status === 404) &&
+          apiBase !== candidates[candidates.length - 1]
+        ) {
+          sawDeviceMissing = true;
+          console.warn(
+            "[licenseGuard] Device not found on %s; retrying license check on production API.",
+            apiBase,
+          );
+          continue;
+        }
+
+        if (res.status === 401 || res.status === 404) {
+          return { ok: false, lockReason: "device_removed", transient: false };
+        }
+        if (res.status === 403 && /version/i.test(error)) {
+          return { ok: false, lockReason: "forced_upgrade", transient: false };
+        }
+
+        return { ok: false, lockReason: "internet_required", transient: true };
+      }
+
+      const data = await res.json();
+      if (!data?.license) {
+        return { ok: false, lockReason: "internet_required", transient: true };
+      }
+      cacheDesktopBootstrap(data, deviceId);
+      if (sawDeviceMissing || candidates[0] !== apiBase) {
+        await rememberSessionApiBase(apiBase);
+      }
+      return { ok: true, payload: data.license };
+    } catch (err) {
+      console.warn("[licenseGuard] Backend fetch failed:", err);
+      if (apiBase !== candidates[candidates.length - 1]) {
+        continue;
+      }
+      return { ok: false, lockReason: "internet_required", transient: true };
+    }
+  }
+
+  return { ok: false, lockReason: "device_removed", transient: false };
 }
 
 // ── License Normalization ────────────────────────────────────────────────────
@@ -319,24 +376,83 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   return null;
 }
 
-function evaluateOfflineValidity(_cached: LicenseCache): LockReason {
+export function getStoredLastOnlineMs(): number {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(LAST_ONLINE_KEY)) || localStorage.getItem(LAST_ONLINE_KEY);
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  } catch { /* ignore */ }
+  return 0;
+}
+
+export function recordOnlineSuccess(): void {
+  try {
+    const now = Date.now();
+    localStorage.setItem(getUserScopedKey(LAST_ONLINE_KEY), String(now));
+    localStorage.setItem(LAST_ONLINE_KEY, String(now));
+  } catch { /* ignore */ }
+}
+
+function getLastVerifiedMs(cached: LicenseCache | null): number {
+  if (cached) {
+    const fromPayload = new Date(cached.payload.lastVerifiedAt).getTime();
+    if (Number.isFinite(fromPayload) && fromPayload > 0) return fromPayload;
+    if (Number.isFinite(cached.cachedAt) && cached.cachedAt > 0) return cached.cachedAt;
+  }
+  return getStoredLastOnlineMs();
+}
+
+function getOfflineWindowDays(_cached: LicenseCache | null): number {
+  return OFFLINE_LOCK_DAYS;
+}
+
+function evaluateOfflineValidity(cached: LicenseCache | null): LockReason {
+  const lastVerifiedMs = getLastVerifiedMs(cached);
+  if (!lastVerifiedMs) {
+    recordOnlineSuccess();
+    return null;
+  }
+
+  const daysOffline = Math.floor((Date.now() - lastVerifiedMs) / DAY_MS);
+  if (daysOffline >= OFFLINE_LOCK_DAYS) {
+    return "internet_required";
+  }
   return null;
+}
+
+function refreshSubscriptionCacheInBackground(): void {
+  const session = getSession();
+  const deviceId = getDeviceId();
+  if (!session?.user?.id || !deviceId) return;
+
+  const now = Date.now();
+  if (now - _lastSubscriptionCacheRefreshAt < SUBSCRIPTION_CACHE_REFRESH_INTERVAL_MS) return;
+  _lastSubscriptionCacheRefreshAt = now;
+
+  void refreshSubscriptionState({
+    apiBases: getDeviceApiBaseCandidates(),
+    deviceId,
+    deviceSecret: getDeviceSecret(),
+    appVersion: APP_VERSION,
+  }).catch((error) => {
+    console.debug("[licenseGuard] Subscription cache refresh skipped:", error);
+  });
 }
 
 // ── Core State Management ────────────────────────────────────────────────────
 
 function computeState(): void {
   const cached = _cache;
-  if (!cached) {
-    // No cache — not verified yet, allow during initialization
-    _lockReason = null;
-    return;
-  }
-
   // First check offline validity
   const offlineReason = evaluateOfflineValidity(cached);
   if (offlineReason) {
     _lockReason = offlineReason;
+    return;
+  }
+
+  if (!cached) {
+    // No cache — allow during initialization
+    _lockReason = null;
     return;
   }
 
@@ -346,12 +462,14 @@ function computeState(): void {
 
 export function getState(): LicenseGuardState {
   const cached = _cache;
-  const lastVerified = cached
-    ? new Date(cached.payload.lastVerifiedAt).getTime()
-    : null;
+  const lastVerified = getLastVerifiedMs(cached) || null;
   const daysOffline = lastVerified
-    ? Math.floor((Date.now() - lastVerified) / (1000 * 60 * 60 * 24))
+    ? Math.max(0, Math.floor((Date.now() - lastVerified) / DAY_MS))
     : 0;
+  const offlineDaysRemaining = lastVerified
+    ? Math.max(0, Math.ceil((lastVerified + OFFLINE_LOCK_DAYS * DAY_MS - Date.now()) / DAY_MS))
+    : OFFLINE_LOCK_DAYS;
+  const offlineWarning = daysOffline >= OFFLINE_WARNING_DAYS && daysOffline < OFFLINE_LOCK_DAYS;
 
   return {
     unlocked: _lockReason === null,
@@ -360,6 +478,8 @@ export function getState(): LicenseGuardState {
     verifying: _verifying,
     lastVerifiedAt: lastVerified,
     daysOffline,
+    offlineDaysRemaining,
+    offlineWarning,
   };
 }
 
@@ -369,7 +489,7 @@ export function getState(): LicenseGuardState {
  * Returns true if the current plan meets or exceeds the required plan.
  * Use this for premium feature checks — never isUnlocked().
  *
- * Example: hasRequiredPlan("pro")
+ * Example: hasRequiredPlan("growth")
  */
 export function hasRequiredPlan(requiredPlan: string): boolean {
   const currentPlan = _cache?.payload?.plan || "free";
@@ -443,8 +563,20 @@ export function getLicensePayload(): LicensePayload | null {
 export function getDaysOffline(): number {
   const cached = _cache;
   if (!cached) return 0;
-  const lastVerified = new Date(cached.payload.lastVerifiedAt).getTime();
-  return Math.floor((Date.now() - lastVerified) / (1000 * 60 * 60 * 24));
+  const lastVerified = getLastVerifiedMs(cached);
+  if (!lastVerified) return 0;
+  return Math.floor((Date.now() - lastVerified) / DAY_MS);
+}
+
+/**
+ * Get days remaining before offline license verification is required.
+ */
+export function getOfflineDaysRemaining(): number {
+  const cached = _cache;
+  if (!cached) return 0;
+  const lastVerified = getLastVerifiedMs(cached);
+  if (!lastVerified) return 0;
+  return Math.max(0, Math.ceil((lastVerified + getOfflineWindowDays(cached) * DAY_MS - Date.now()) / DAY_MS));
 }
 
 /**
@@ -467,36 +599,39 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
 
 /**
  * Run the full verification flow:
- * 1. Check internet connectivity
- * 2. If online, fetch license from backend
+ * 1. Fetch the authenticated desktop bootstrap from the backend
  * 3. Cache the result
  * 4. Evaluate and update lock state
  *
  * Returns true if verification succeeded, false otherwise.
  */
 export async function verify(): Promise<boolean> {
+  // The license guard starts during app boot, before a user has paired this
+  // installation.  A missing session is not a removed device; treating it as
+  // one leaves a stale lock state that can immediately log a newly paired
+  // Windows session back out of the app.
+  if (!getSession()?.user?.id || !getDeviceId()) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      recordOnlineSuccess();
+    }
+    _lockReason = null;
+    emit();
+    return true;
+  }
+
   if (_verifying) return false;
   _verifying = true;
   emit();
 
   try {
-    const online = await checkInternet();
-
-    if (!online) {
-      // Offline — never lock. Use cached license if available, otherwise
-      // allow the app to proceed unlocked (offline usage is always permitted).
-      if (_cache) {
-        _lockReason = evaluateOfflineValidity(_cache);
-      } else {
-        _lockReason = null;
+    const licenseResult = await fetchLicenseFromBackend();
+    if (!licenseResult.ok) {
+      if (!licenseResult.transient) {
+        _lockReason = licenseResult.lockReason;
+        emit();
+        return false;
       }
-      emit();
-      return _lockReason === null;
-    }
 
-    // Online — fetch from backend
-    const payload = await fetchLicenseFromBackend();
-    if (!payload) {
       // Backend unreachable or invalid response — keep existing cache if valid
       if (_cache) {
         const offlineReason = evaluateOfflineValidity(_cache);
@@ -504,27 +639,32 @@ export async function verify(): Promise<boolean> {
         emit();
         return _lockReason === null;
       }
-      // No cache and can't reach backend — don't lock, let the app proceed
-      // (this is a transient failure, not a license issue)
+      // No cached license means this is an unverified first run or a
+      // transient API outage, not proof that the account is invalid.
       _lockReason = null;
       emit();
       return true;
     }
 
     // Normalize before caching — convert billing expiry to free plan
-    const normalizedPayload = normalizeLicensePayload(payload);
+    const normalizedPayload = normalizeLicensePayload(licenseResult.payload);
     _cache = {
       payload: normalizedPayload,
       cachedAt: Date.now(),
     };
     writeCache(_cache);
+    recordOnlineSuccess();
+    refreshSubscriptionCacheInBackground();
 
     _lockReason = evaluateLicense(normalizedPayload);
     emit();
     return _lockReason === null;
   } catch (err) {
     console.error("[licenseGuard] Verification error:", err);
-    // On error, keep existing state
+    if (!_cache) {
+      _lockReason = null;
+      emit();
+    }
     return _lockReason === null;
   } finally {
     _verifying = false;
@@ -547,6 +687,7 @@ export async function retryVerification(): Promise<boolean> {
 export async function reverifyOnAuth(): Promise<boolean> {
   // Reset initialized flag so initLicenseGuard can run again if needed
   // but the main purpose here is to force a fresh backend check.
+  clearDesktopBootstrapCache();
   return verify();
 }
 
@@ -558,8 +699,8 @@ export async function reverifyOnAuth(): Promise<boolean> {
  * Startup sequence:
  * 1. Load cached license from localStorage
  * 2. Evaluate offline validity
- * 3. If online: verify with backend
- * 4. If offline: use cache if within 14-day window
+ * 3. Fetch the authenticated bootstrap when available
+ * 4. If the request fails: use cache if within the configured offline window
  * 5. Start periodic revalidation (every 6 hours)
  */
 export async function initLicenseGuard(): Promise<void> {
@@ -573,17 +714,9 @@ export async function initLicenseGuard(): Promise<void> {
   computeState();
   emit();
 
-  // Start verification flow (non-blocking)
-  const isOnline = await checkInternet();
-
-  if (isOnline) {
-    // Online — verify with backend
-    await verify();
-  } else {
-    // Offline — never lock the app
-    _lockReason = null;
-    emit();
-  }
+  // Start verification flow (non-blocking). The authenticated license request
+  // is also the desktop heartbeat and carries health/config/announcements.
+  await verify();
 
   // Start periodic revalidation
   startPeriodicVerification();
@@ -598,22 +731,13 @@ function startPeriodicVerification(): void {
   if (_revalidationTimer) return;
 
   const intervalHours = _cache?.payload?.verificationIntervalHours || 6;
-  const intervalMs = intervalHours * 60 * 60 * 1000;
+  const intervalMs = Math.max(
+    30_000,
+    Math.min(intervalHours * 60 * 60 * 1000, MAX_BACKGROUND_REVERIFY_INTERVAL_MS),
+  );
 
   _revalidationTimer = setInterval(async () => {
-    const online = await checkInternet();
-    if (online) {
-      await verify();
-    } else {
-      // Check offline validity
-      if (_cache) {
-        const offlineReason = evaluateOfflineValidity(_cache);
-        if (offlineReason !== _lockReason) {
-          _lockReason = offlineReason;
-          emit();
-        }
-      }
-    }
+    await verify();
   }, intervalMs);
 
   // Re-verify when the user returns to the app (e.g. after sleep/switch)
@@ -657,6 +781,8 @@ export function resetLicenseGuard(): void {
   _verifying = false;
   _initialized = false;
   _lastVisibilityVerificationAt = 0;
+  _lastSubscriptionCacheRefreshAt = 0;
+  clearDesktopBootstrapCache();
   clearCache();
   emit();
 }
@@ -694,11 +820,11 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
     case "internet_required":
       return {
         icon: "wifi_off",
-        title: "Verification Required",
+        title: "Internet Connection Required",
         description:
-          "Your license could not be verified recently. Please ensure you have an internet connection and try again.",
+          "You have not connected to the internet for 3 weeks. Please connect to the internet for a few minutes so MakeChurchEasy can verify your license and synchronize.",
         primaryAction: "retry",
-        primaryLabel: "Retry Verification",
+        primaryLabel: "Check Connection",
       };
 
     case "account_suspended":
@@ -776,7 +902,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "devices",
         title: "Device Limit Reached",
         description:
-          "You have reached the maximum number of devices for your plan. Please remove a device or upgrade your plan.",
+          "Your plan has no device slots available, so MakeChurchEasy cannot verify this device. Open Manage Devices to remove a device you no longer use, then return here and select Retry Verification. If you need to keep all your current devices, upgrade your plan for more device slots.",
         primaryAction: "manage_devices",
         primaryLabel: "Manage Devices",
       };
@@ -792,3 +918,39 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
       };
   }
 }
+
+/**
+ * Test helper for simulating offline durations
+ */
+export function __testSetLastVerifiedMs(ms: number): void {
+  if (!_cache) {
+    _cache = {
+      payload: {
+        accountStatus: "active",
+        subscriptionStatus: "active",
+        plan: "basic",
+        trialActive: false,
+        trialEndsAt: null,
+        subscriptionEndsAt: null,
+        renewalDate: null,
+        paymentStatus: "paid",
+        internetVerificationDays: 21,
+        verificationIntervalHours: 6,
+        lastVerifiedAt: new Date(ms).toISOString(),
+        serverTime: new Date(ms).toISOString(),
+        lockReason: null,
+      },
+      cachedAt: ms,
+    };
+  } else {
+    _cache.cachedAt = ms;
+    _cache.payload.lastVerifiedAt = new Date(ms).toISOString();
+  }
+  try {
+    localStorage.setItem(getUserScopedKey(LAST_ONLINE_KEY), String(ms));
+    localStorage.setItem(LAST_ONLINE_KEY, String(ms));
+  } catch { /* ignore */ }
+  computeState();
+  emit();
+}
+

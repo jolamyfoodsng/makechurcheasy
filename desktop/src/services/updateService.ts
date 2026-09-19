@@ -213,6 +213,27 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
     const update = await check(headers ? { headers } : undefined);
 
     if (update) {
+      // Tauri trusts the endpoint's manifest, but the manifest may be stale
+      // or may advertise a version that was never published. Reconcile it
+      // with the source release before exposing it to the UI.
+      try {
+        const release = await fetchLatestPublishedRelease();
+        if (!isUpdateFromPublishedRelease(update, release)) {
+          console.warn(
+            `[updater] Ignoring unverified update v${update.version}; published release is v${release.version}`,
+          );
+          return {
+            available: false,
+            error: `Updater manifest v${update.version} does not match the published release v${release.version}`,
+          };
+        }
+      } catch (validationError: any) {
+        console.warn("[updater] Could not validate update manifest:", validationError);
+        return {
+          available: false,
+          error: validationError?.message || "Could not verify the published update.",
+        };
+      }
 
       // Cache the release date so we can compute version age even when offline
       if (update.date) {
@@ -311,9 +332,73 @@ export async function downloadAndInstallUpdate(
   await relaunch();
 }
 
-// ── GitHub Releases fallback ──
+// ── Published release source ──
 
-const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
+// The source repository is authoritative for which versions actually exist.
+// The public mirror can lag behind or contain a stale latest.json, so it must
+// not be allowed to invent an installer version on its own.
+export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy/releases/latest";
+
+export interface PublishedReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+export interface PublishedRelease {
+  tag_name: string;
+  version: string;
+  assets: PublishedReleaseAsset[];
+}
+
+/**
+ * Read the latest real, published release from the source repository.
+ * This is the version authority used to validate signed updater metadata and
+ * to choose the installer fallback.
+ */
+export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
+  let response: Response;
+  if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
+    response = await fetch(RELEASES_API);
+  } else {
+    try {
+      response = await tauriFetch(RELEASES_API);
+    } catch {
+      response = await fetch(RELEASES_API);
+    }
+  }
+  if (!response.ok) throw new Error(`Failed to fetch release info (${response.status})`);
+
+  const release = await response.json() as {
+    tag_name?: string;
+    draft?: boolean;
+    prerelease?: boolean;
+    assets?: PublishedReleaseAsset[];
+  };
+  const tagName = String(release.tag_name || "");
+  const version = normalizeVersion(tagName);
+
+  if (!version || release.draft || release.prerelease) {
+    throw new Error("No valid published MakeChurchEasy release is available");
+  }
+
+  return {
+    tag_name: tagName,
+    version,
+    assets: release.assets ?? [],
+  };
+}
+
+/**
+ * A signed update is safe to use only when its advertised version is the
+ * currently published version from the source repository. A stale or dummy
+ * latest.json is therefore rejected before any bytes are downloaded.
+ */
+export function isUpdateFromPublishedRelease(
+  update: Pick<Update, "version">,
+  release: Pick<PublishedRelease, "version">,
+): boolean {
+  return normalizeVersion(update.version) === release.version;
+}
 
 type Platform = "windows" | "macos" | "linux";
 
@@ -330,7 +415,7 @@ const PLATFORM_EXTENSIONS: Record<Platform, string[]> = {
   linux: [".AppImage", ".deb"],
 };
 
-function findPlatformAsset(assets: { name: string; browser_download_url: string }[], platform: Platform): { name: string; browser_download_url: string } | null {
+export function findPlatformAsset(assets: PublishedReleaseAsset[], platform: Platform): PublishedReleaseAsset | null {
   for (const ext of PLATFORM_EXTENSIONS[platform]) {
     const asset = assets.find((a) => a.name?.toLowerCase().endsWith(ext));
     if (asset) return asset;
@@ -339,47 +424,31 @@ function findPlatformAsset(assets: { name: string; browser_download_url: string 
 }
 
 /**
- * Download and install an update directly from GitHub Releases.
- * Used as a fallback when the Tauri auto-updater has no signed binary
- * for the current platform.
- *
- * Downloads the platform installer to a temp file and opens it with
- * the OS default handler (MSI installer, DMG, AppImage, etc.).
- * The app exits after launching the installer so files can be replaced.
+ * Download an installer from an admin-configured URL, launch it with the
+ * operating system, and exit this app so the installer can replace it.
  */
-export async function downloadAndInstallFromGitHub(
+export async function downloadAndInstallFromUrl(
+  url: string,
   onProgress?: (progress: DownloadProgress) => void,
-  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void
+  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void,
 ): Promise<void> {
-  // 1. Fetch latest release metadata from GitHub API
-  const metaRes = await tauriFetch(RELEASES_API);
-  if (!metaRes.ok) throw new Error(`Failed to fetch release info (${metaRes.status})`);
-  const release = await metaRes.json() as {
-    tag_name?: string;
-    assets?: { name: string; browser_download_url: string }[];
-  };
+  const parsedUrl = new URL(url);
+  const fallbackName = `MakeChurchEasy-${Date.now()}.installer`;
+  const filename = decodeURIComponent(parsedUrl.pathname.split("/").pop() || fallbackName)
+    .replace(/[^a-zA-Z0-9._-]/g, "_") || fallbackName;
 
-  // 2. Detect platform and find matching installer asset
-  const platform = detectPlatform();
-  const asset = findPlatformAsset(release.assets ?? [], platform);
-  if (!asset) throw new Error(`No installer available for ${platform}`);
-
-  // 3. Download the binary with progress tracking
   onStatusChange?.("downloading");
-  const binRes = await tauriFetch(asset.browser_download_url);
-  if (!binRes.ok) throw new Error(`Download failed (${binRes.status})`);
+  const response = await tauriFetch(url);
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
 
-  const contentLength = Number(binRes.headers.get("content-length")) || 0;
+  const contentLength = Number(response.headers.get("content-length")) || 0;
   let downloaded = 0;
-
   let buffer: ArrayBuffer;
 
-  if (binRes.body) {
-    // Stream with progress
-    const reader = binRes.body.getReader();
+  if (response.body) {
+    const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
-
-    for (; ;) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
@@ -395,23 +464,76 @@ export async function downloadAndInstallFromGitHub(
     }
     buffer = merged.buffer;
   } else {
-    // Fallback: no streaming support
-    buffer = await binRes.arrayBuffer();
+    buffer = await response.arrayBuffer();
     downloaded = buffer.byteLength;
     onProgress?.({ contentLength: contentLength || downloaded, downloaded });
   }
 
-  // 4. Write installer to temp directory
   const tmpDir = await tempDir();
-  const filePath = await join(tmpDir, asset.name);
+  const filePath = await join(tmpDir, filename);
   await writeFile(filePath, new Uint8Array(buffer));
 
-  // 5. Open the installer with the OS default handler
   onStatusChange?.("installing");
   await open(filePath);
-
-  // 6. Exit the app so the installer can replace files
   onStatusChange?.("relaunching");
-  await new Promise((r) => setTimeout(r, 800));
+  await new Promise((resolve) => setTimeout(resolve, 800));
   await exit(0);
+}
+
+/**
+ * Download and install an update directly from GitHub Releases.
+ * Used as a fallback when the Tauri auto-updater has no signed binary
+ * for the current platform.
+ *
+ * Downloads the platform installer to a temp file and opens it with
+ * the OS default handler (MSI installer, DMG, AppImage, etc.).
+ * The app exits after launching the installer so files can be replaced.
+ */
+export async function downloadAndInstallFromGitHub(
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void
+): Promise<void> {
+  // 1. Fetch the latest real release from the source repository
+  const release = await fetchLatestPublishedRelease();
+
+  // 2. Detect platform and find matching installer asset
+  const platform = detectPlatform();
+  const asset = findPlatformAsset(release.assets ?? [], platform);
+  if (!asset) throw new Error(`No installer available for ${platform}`);
+  await downloadAndInstallFromUrl(asset.browser_download_url, onProgress, onStatusChange);
+}
+
+/**
+ * Install a signed updater result only after it has been reconciled with the
+ * real published release. If the manifest is stale, mismatched, or its URL is
+ * broken, use the verified GitHub installer instead.
+ */
+export async function downloadAndInstallVerifiedUpdate(
+  update: Update | undefined,
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void,
+): Promise<void> {
+  if (update) {
+    try {
+      const release = await fetchLatestPublishedRelease();
+      if (isUpdateFromPublishedRelease(update, release)) {
+        try {
+          await downloadAndInstallUpdate(update, onProgress, onStatusChange);
+          return;
+        } catch (error) {
+          console.warn("[updater] Signed update download failed; using published installer:", error);
+        }
+      } else {
+        console.warn(
+          `[updater] Ignoring stale update manifest v${update.version}; published release is v${release.version}`,
+        );
+      }
+      await update.close().catch(() => undefined);
+    } catch (error) {
+      console.warn("[updater] Could not validate signed update; using published installer:", error);
+      await update.close().catch(() => undefined);
+    }
+  }
+
+  await downloadAndInstallFromGitHub(onProgress, onStatusChange);
 }

@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 import { searchBibleRanked } from "./bibleData";
 
 describe("Bible keyword search", () => {
+  it.each([
+    ["God loved the world", "John", 3, 16],
+    ["shall be called sons of God", "1 John", 3, 1],
+    ["they shall be called children of God", "Matthew", 5, 9],
+    ["blessed are the peacemakers", "Matthew", 5, 9],
+  ])("ranks short spoken wording first: %s", async (query, book, chapter, verse) => {
+    expect((await searchBibleRanked(String(query), "KJV", 5))[0]).toMatchObject({ book, chapter, verse, endVerse: undefined });
+  });
+
+  it("returns distinct actual verses for a phrase shared by many passages", async () => {
+    const results = await searchBibleRanked("sons of men", "KJV", 5);
+    expect(results).toHaveLength(5);
+    expect(new Set(results.map((r) => `${r.book} ${r.chapter}:${r.verse}`)).size).toBe(5);
+    expect(results.every((r) => r.text.toLowerCase().includes("sons of men") && !r.endVerse)).toBe(true);
+  });
+
+  it("keeps cached results isolated from callers and book/chapter filters", async () => {
+    const first = await searchBibleRanked("sons of men", "KJV", 5);
+    first[0].text = "modified by caller";
+    expect((await searchBibleRanked("sons of men", "KJV", 5))[0].text).not.toBe("modified by caller");
+    const scoped = await searchBibleRanked("sons of men", "KJV", 5, { book: "Psalms", chapter: 33 });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((r) => r.book === "Psalms" && r.chapter === 33)).toBe(true);
+  });
   it("finds adjacent verse matches for phrase fragments", async () => {
     const results = await searchBibleRanked("all things must bow confess", "KJV", 5);
     const top = results[0];
@@ -21,6 +45,17 @@ describe("Bible keyword search", () => {
       book: "Genesis",
       chapter: 3,
       verse: 7,
+    });
+    expect(results[0].score).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("finds KJV phrases from the corpus without a verse-specific alias", async () => {
+    const results = await searchBibleRanked("Let him ask God if he lack wisdom.", "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "James",
+      chapter: 1,
+      verse: 5,
     });
     expect(results[0].score).toBeGreaterThanOrEqual(0.9);
   });
@@ -63,5 +98,66 @@ describe("Bible keyword search", () => {
       chapter: 2,
       verse: 7,
     });
+  });
+
+  it("finds Romans 9:13 from the modern wording of the KJV quote", async () => {
+    const results = await searchBibleRanked("JACOB I LOVE, ESAU I HATE", "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "Romans",
+      chapter: 9,
+      verse: 13,
+    });
+  });
+
+  it.each([
+    ["I love Jacob", 13],
+    ["Jacob loved", 13],
+    ["Esau hated", 13],
+  ])("finds Romans 9:%s from a short natural-language fragment", async (query, verse) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results[0]).toMatchObject({
+      book: "Romans",
+      chapter: 9,
+      verse,
+    });
+  });
+
+  it.each([
+    ["by his stripes I am healed", "Isaiah", 53, 5],
+    ["greater is he that is in me", "1 John", 4, 4],
+    ["God will never leave you", "Hebrews", 13, 5],
+    ["the race is not to the swift", "Ecclesiastes", 9, 11],
+  ])("finds natural-language Bible wording: %s", async (query, book, chapter, verse) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+    expect(results[0]).toMatchObject({ book, chapter, verse });
+  });
+
+  it.each([
+    "favor in the sight of men",
+    "favour in the sight of men",
+  ])("matches British and American spelling variants: %s", async (query) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results.some((result) =>
+      result.book === "Proverbs" &&
+      result.chapter === 3 &&
+      result.verse === 4,
+    )).toBe(true);
+  });
+
+  it.each(["30", "30%", "3"])("keeps numeric searches searchable: %s", async (query) => {
+    const results = await searchBibleRanked(query, "KJV", 5);
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.some(
+        (result) =>
+          /thirty/i.test(result.text) ||
+          result.chapter === Number(query.replace(/%/g, "")) ||
+          result.verse === Number(query.replace(/%/g, "")),
+      ),
+    ).toBe(true);
   });
 });

@@ -1,16 +1,16 @@
 /**
  * dockOverlayBridge.ts — Persistent local WebSocket bridge to overlay HTML.
  *
- * Connects once to the local relay (ws://127.0.0.1:17891) and keeps the
+ * Connects once to the development relay and keeps the
  * connection open. Live control messages (mode-change, verse updates, etc.)
  * are published through this bridge instead of OBS WebSocket, reducing
  * latency from hundreds of milliseconds to single-digit milliseconds.
  *
  * The relay is owned by the MakeChurchEasy Rust backend and all connections
- * are local (127.0.0.1), so there is no security risk from exposing it.
+ * In production the relay remains loopback-only. Development LAN links may
+ * connect back to the host laptop's relay address.
  */
 
-const RELAY_URL = "ws://127.0.0.1:17891";
 const RELAY_FAILURE_COOLDOWN_MS = 60_000;
 const MAX_FAST_RECONNECT_ATTEMPTS = 3;
 
@@ -35,9 +35,18 @@ class DockOverlayBridge {
   private connected = false;
   private senderId = generateSenderId();
   private pendingPackets: Map<string, BridgePacket> = new Map();
+  private latestRenderAcks: Map<string, BridgePacket> = new Map();
   private reconnectAttempts = 0;
   private nextConnectAt = 0;
   private disabledUntil = 0;
+
+  private getRelayUrl(): string {
+    const host = window.location.hostname;
+    if (import.meta.env.DEV && host && host !== "localhost" && host !== "127.0.0.1") {
+      return `ws://${host}:17891`;
+    }
+    return "ws://127.0.0.1:17891";
+  }
 
   private shouldAttemptLocalRelay(): boolean {
     if (Date.now() < this.disabledUntil) return false;
@@ -46,6 +55,7 @@ class DockOverlayBridge {
       if (params.get("mceRelay") === "1") return true;
       if (params.get("mceRelay") === "0") return false;
       const host = window.location.hostname;
+      if (import.meta.env.DEV && host && host !== "tauri.localhost") return true;
       return host === "tauri.localhost"
         || host === "localhost"
         || host === "127.0.0.1"
@@ -68,7 +78,7 @@ class DockOverlayBridge {
     }
 
     try {
-      const ws = new WebSocket(RELAY_URL);
+      const ws = new WebSocket(this.getRelayUrl());
       ws.onopen = () => {
         this.connected = true;
         this.reconnectAttempts = 0;
@@ -82,6 +92,10 @@ class DockOverlayBridge {
       ws.onmessage = (event) => {
         try {
           const packet = JSON.parse(event.data) as BridgePacket;
+          if (packet.type === "overlay-render-ack") {
+            const key = `${String(packet.channel ?? "general")}:${String(packet.targetSource ?? "")}`;
+            this.latestRenderAcks.set(key, packet);
+          }
           // Ignore our own messages
           if (packet.senderId === this.senderId) return;
           for (const handler of this.handlers) {
@@ -159,6 +173,10 @@ class DockOverlayBridge {
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  getLatestRenderAck(channel: string, targetSource: string): BridgePacket | null {
+    return this.latestRenderAcks.get(`${channel}:${targetSource}`) ?? null;
   }
 }
 

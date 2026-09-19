@@ -22,9 +22,17 @@ import {
   Play,
   Clock,
   Monitor as MonitorIcon,
+  MoreHorizontal,
+  Mail,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { getPlanConfig, type PlanConfig } from "@/lib/planConfigService";
+import {
+  formatPlanCredits,
+  getAdminManagedPlanAmount,
+  getAdminManagedPlanCredits,
+} from "@/lib/adminManagedSubscriptionForm";
 
 interface AdminUser {
   id: string;
@@ -40,6 +48,7 @@ interface AdminUser {
   plan: string;
   createdAt: string | null;
   lastLogin: string | null;
+  lastActive: string | null;
   isActive: boolean;
   trial?: { active: boolean; expiresAt?: string } | null;
   ambassador?: {
@@ -72,7 +81,8 @@ interface AdminUser {
   scheduledDowngradeAt?: string | null;
 }
 
-type SortField = "name" | "email" | "plan" | "credits" | "createdAt" | "lastLogin";
+type SortField = "name" | "email" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive";
+type ActivityFilter = "all" | "1d" | "3d" | "7d" | "14d" | "30d" | "inactive";
 type SortDir = "asc" | "desc";
 type AdminUserAction =
   | "suspend"
@@ -97,12 +107,53 @@ function SkeletonBlock({ className }: { className?: string }) {
   );
 }
 
+function formatLastActive(timestamp: string | null | undefined): {
+  text: string;
+  full: string;
+  tone: "recent" | "warm" | "cool" | "muted";
+} {
+  if (!timestamp) return { text: "Never", full: "No recorded activity", tone: "muted" };
+  const date = new Date(timestamp);
+  const time = date.getTime();
+  if (Number.isNaN(time) || time <= 0) return { text: "Never", full: "No recorded activity", tone: "muted" };
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - time);
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+
+  const full = date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (diffSec < 60) return { text: "Just now", full, tone: "recent" };
+  if (diffMin < 60) return { text: `${diffMin}m ago`, full, tone: "recent" };
+  if (diffHr < 24) return { text: `${diffHr}h ago`, full, tone: "recent" };
+  if (diffDays === 1) return { text: "Yesterday", full, tone: "warm" };
+  if (diffDays <= 3) return { text: `${diffDays}d ago`, full, tone: "warm" };
+  if (diffDays <= 7) return { text: `${diffDays}d ago`, full, tone: "cool" };
+  if (diffDays <= 30) return { text: `${diffDays}d ago`, full, tone: "muted" };
+
+  return {
+    text: date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+    full,
+    tone: "muted",
+  };
+}
+
 export default function AdminUsersPage() {
   const t = useTranslations();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -122,6 +173,7 @@ export default function AdminUsersPage() {
   const [subscriptionReference, setSubscriptionReference] = useState("");
   const [subscriptionNote, setSubscriptionNote] = useState("");
   const [notifySubscriptionUser, setNotifySubscriptionUser] = useState(true);
+  const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
 
   const [showTemporaryPlan, setShowTemporaryPlan] = useState<string | null>(null);
   const [temporaryPlan, setTemporaryPlan] = useState("growth");
@@ -137,6 +189,8 @@ export default function AdminUsersPage() {
   const [defaultAmbassadorCredits, setDefaultAmbassadorCredits] = useState<number | null>(null);
   const [ambassadorNotes, setAmbassadorNotes] = useState("");
   const [grantingAmbassador, setGrantingAmbassador] = useState(false);
+  const [showRevokeAmbassador, setShowRevokeAmbassador] = useState<string | null>(null);
+  const [revokingAmbassador, setRevokingAmbassador] = useState(false);
 
   const [showCancelTrial, setShowCancelTrial] = useState<string | null>(null);
   const [cancellingTrial, setCancellingTrial] = useState(false);
@@ -165,9 +219,63 @@ export default function AdminUsersPage() {
         if (typeof credits === "number" && credits > 0) {
           setDefaultAmbassadorCredits(credits);
         }
+        const configuredTrialDays = Number(data?.trial?.defaultDurationDays);
+        if (Number.isInteger(configuredTrialDays) && configuredTrialDays > 0) {
+          setTrialDuration(String(configuredTrialDays));
+        }
       })
       .catch(() => { });
+
+    fetch("/api/admin/plan-config", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((data) => setPlanConfig(data))
+      .catch(() => {
+        getPlanConfig()
+          .then((data) => setPlanConfig(data))
+          .catch(() => { });
+      });
   }, []);
+
+  useEffect(() => {
+    if (!showChangePlan) return;
+    setSubscriptionAmount(
+      getAdminManagedPlanAmount(
+        planConfig,
+        newPlan,
+        subscriptionBillingCycle,
+        subscriptionCurrency,
+      ),
+    );
+  }, [newPlan, planConfig, showChangePlan, subscriptionBillingCycle, subscriptionCurrency]);
+
+  const activityCounts = useMemo(() => {
+    const counts = {
+      all: users.length,
+      "1d": 0,
+      "3d": 0,
+      "7d": 0,
+      "14d": 0,
+      "30d": 0,
+      inactive: 0,
+    };
+    const now = Date.now();
+    for (const u of users) {
+      const ts = u.lastActive || u.lastLogin;
+      const time = ts ? new Date(ts).getTime() : NaN;
+      if (Number.isFinite(time) && time > 0) {
+        const diffDays = (now - time) / (24 * 60 * 60 * 1000);
+        if (diffDays <= 1) counts["1d"]++;
+        if (diffDays <= 3) counts["3d"]++;
+        if (diffDays <= 7) counts["7d"]++;
+        if (diffDays <= 14) counts["14d"]++;
+        if (diffDays <= 30) counts["30d"]++;
+        else counts.inactive++;
+      } else {
+        counts.inactive++;
+      }
+    }
+    return counts;
+  }, [users]);
 
   const filtered = useMemo(() => {
     let result = users;
@@ -190,11 +298,30 @@ export default function AdminUsersPage() {
     else if (filter === "inactive") result = result.filter((u) => !u.isActive);
     else if (filter === "paid") result = result.filter((u) => u.plan !== "free");
     else if (filter === "free") result = result.filter((u) => u.plan === "free");
-    else if (filter === "trial") result = result.filter((u) => u.trial?.active);
+    else if (filter === "trial") result = result.filter((u) => u.plan === "free" && u.trial?.active);
     else if (filter === "ambassador") result = result.filter((u) => u.ambassador?.active);
     else if (filter === "temporary") result = result.filter((u) => u.adminTemporaryPlan?.active);
     else if (filter === "admin") result = result.filter((u) => u.role === "admin");
     else if (filter === "suspended") result = result.filter((u) => u.accountStatus === "suspended");
+
+    // Activity window filter
+    if (activityFilter !== "all") {
+      const now = Date.now();
+      result = result.filter((u) => {
+        const ts = u.lastActive || u.lastLogin;
+        const time = ts ? new Date(ts).getTime() : NaN;
+        const hasTime = Number.isFinite(time) && time > 0;
+        const diffDays = hasTime ? (now - time) / (24 * 60 * 60 * 1000) : Infinity;
+
+        if (activityFilter === "1d") return diffDays <= 1;
+        if (activityFilter === "3d") return diffDays <= 3;
+        if (activityFilter === "7d") return diffDays <= 7;
+        if (activityFilter === "14d") return diffDays <= 14;
+        if (activityFilter === "30d") return diffDays <= 30;
+        if (activityFilter === "inactive") return !hasTime || diffDays > 30;
+        return true;
+      });
+    }
 
     result.sort((a, b) => {
       let av: string | number = "";
@@ -205,17 +332,25 @@ export default function AdminUsersPage() {
       else if (sortField === "credits") { av = a.credits; bv = b.credits; }
       else if (sortField === "createdAt") { av = a.createdAt || ""; bv = b.createdAt || ""; }
       else if (sortField === "lastLogin") { av = a.lastLogin || ""; bv = b.lastLogin || ""; }
+      else if (sortField === "lastActive") {
+        av = a.lastActive || a.lastLogin || "";
+        bv = b.lastActive || b.lastLogin || "";
+      }
       if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
 
     return result;
-  }, [users, search, filter, sortField, sortDir]);
+  }, [users, search, filter, activityFilter, sortField, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paged = filtered.slice((page - 1) * perPage, page * perPage);
+  const selectedSubscriptionCredits = getAdminManagedPlanCredits(planConfig, newPlan);
+  const revokeAmbassadorUser = showRevokeAmbassador
+    ? users.find((u) => u.id === showRevokeAmbassador) ?? null
+    : null;
 
-  useEffect(() => { setPage(1); }, [search, filter]);
+  useEffect(() => { setPage(1); }, [search, filter, activityFilter]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -277,6 +412,7 @@ export default function AdminUsersPage() {
         adminManagedSubscription: data.adminManagedSubscription,
         subscriptionExpiresAt: data.subscriptionExpiresAt,
         scheduledDowngradeAt: data.scheduledDowngradeAt,
+        ...(data.trial !== undefined ? { trial: data.trial } : {}),
         ...(data.plan !== "free" ? { adminTemporaryPlan: { ...(u.adminTemporaryPlan || {}), active: false } } : {}),
       } : u));
       flash("success", data.emailSent ? t('admin.users.flash.planChangedEmail', { plan: data.plan || newPlan }) : t('admin.users.flash.planChanged', { plan: data.plan || newPlan }));
@@ -366,7 +502,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setUsers((prev) => prev.map((u) => u.id === userId ? {
         ...u,
-        plan: "pro",
+        plan: "growth",
         credits: data.ambassador?.creditsGranted ?? u.credits,
         ambassador: data.ambassador,
       } : u));
@@ -380,6 +516,7 @@ export default function AdminUsersPage() {
   }
 
   async function handleRevokeAmbassador(userId: string) {
+    setRevokingAmbassador(true);
     try {
       const res = await fetch(`/api/admin/users/${userId}/ambassador`, {
         method: "DELETE",
@@ -394,8 +531,11 @@ export default function AdminUsersPage() {
         ambassador: { ...(u.ambassador || {}), active: false },
       } : u));
       flash("success", t('admin.users.flash.ambassadorRevoked', { plan: data.revertedPlan }));
+      setShowRevokeAmbassador(null);
     } catch (err: any) {
       flash("error", err?.message || t('admin.users.errors.ambassadorRevokeFailed'));
+    } finally {
+      setRevokingAmbassador(false);
     }
   }
 
@@ -429,6 +569,9 @@ export default function AdminUsersPage() {
     setGrantingTrial(true);
     try {
       const days = parseInt(trialDuration, 10);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        throw new Error("Trial duration must be between 1 and 365 days");
+      }
       const res = await fetch(`/api/admin/users/${userId}/trial`, {
         method: "POST",
         credentials: "include",
@@ -568,7 +711,6 @@ export default function AdminUsersPage() {
       free: "bg-gray-800 text-slate-400",
       basic: "bg-sky-900/50 text-sky-300 border border-sky-700/50",
       growth: "bg-amber-900/50 text-amber-300 border border-amber-700/50",
-      pro: "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50",
       ambassador: "bg-purple-900/50 text-purple-300 border border-purple-700/50",
       unlimited: "bg-yellow-900/50 text-yellow-300 border border-yellow-700/50",
     };
@@ -582,7 +724,7 @@ export default function AdminUsersPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
           <SkeletonBlock className="h-8 w-48 mb-2" />
           <SkeletonBlock className="h-4 w-32" />
@@ -594,7 +736,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-50">{t('admin.users.title')}</h1>
         <p className="text-sm text-slate-400 mt-1">{t('admin.users.totalUsers', { count: users.length })}</p>
@@ -606,6 +748,66 @@ export default function AdminUsersPage() {
           {actionMsg.text}
         </div>
       )}
+
+      {/* Activity Cohort Filter Pills */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            Activity Cohorts
+          </span>
+          {activityFilter !== "all" && (
+            <button
+              onClick={() => setActivityFilter("all")}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+            >
+              Reset to all
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+          {[
+            { id: "all", label: "All Users", count: activityCounts.all },
+            { id: "1d", label: "Past 24h", count: activityCounts["1d"], live: true },
+            { id: "3d", label: "Past 3 Days", count: activityCounts["3d"] },
+            { id: "7d", label: "Past 7 Days", count: activityCounts["7d"] },
+            { id: "14d", label: "Past 14 Days", count: activityCounts["14d"] },
+            { id: "30d", label: "Past 30 Days", count: activityCounts["30d"] },
+            { id: "inactive", label: "Inactive (>30d)", count: activityCounts.inactive },
+          ].map((item) => {
+            const isActive = activityFilter === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActivityFilter(item.id as ActivityFilter)}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-1 ring-indigo-400/50"
+                    : "bg-gray-900 text-slate-300 hover:bg-gray-800 hover:text-slate-100 border border-slate-800"
+                }`}
+              >
+                {item.live && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
+                <span>{item.label}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-300"
+                  }`}
+                >
+                  {item.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -659,6 +861,11 @@ export default function AdminUsersPage() {
                   </button>
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden lg:table-cell">{t('admin.users.tableHeaders.status')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden md:table-cell">
+                  <button onClick={() => toggleSort("lastActive")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
+                    Last Active <SortIcon field="lastActive" />
+                  </button>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden xl:table-cell">
                   <button onClick={() => toggleSort("createdAt")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
                     {t('admin.users.tableHeaders.created')} <SortIcon field="createdAt" />
@@ -710,7 +917,7 @@ export default function AdminUsersPage() {
                     <div className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full ${user.isActive ? "bg-emerald-400" : "bg-slate-600"}`} />
                       <span className="text-xs text-slate-400">{user.isActive ? t('admin.users.active') : t('admin.users.inactive')}</span>
-                      {user.trial?.active && (
+                      {user.plan === "free" && user.trial?.active && (
                         <span className="ml-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-700/50">
                           {t('admin.users.trial')}
                         </span>
@@ -727,176 +934,71 @@ export default function AdminUsersPage() {
                       )}
                     </div>
                   </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {(() => {
+                      const activeInfo = formatLastActive(user.lastActive || user.lastLogin);
+                      return (
+                        <div className="flex items-center gap-1.5" title={activeInfo.full}>
+                          {activeInfo.tone === "recent" && (
+                            <span className="relative flex h-1.5 w-1.5 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                            </span>
+                          )}
+                          <span
+                            className={`text-xs font-medium ${
+                              activeInfo.tone === "recent"
+                                ? "text-emerald-300 font-semibold"
+                                : activeInfo.tone === "warm"
+                                ? "text-amber-300 font-medium"
+                                : activeInfo.tone === "cool"
+                                ? "text-sky-300 font-medium"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            {activeInfo.text}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3 hidden xl:table-cell">
                     <span className="text-xs text-slate-500">
                       {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
+                      <a
+                        href={"mailto:" + encodeURIComponent(user.email)}
+                        className="hidden sm:inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium text-slate-300 hover:bg-gray-800 hover:text-slate-100"
+                      >
+                        <Mail className="h-4 w-4" /> Email
+                      </a>
                       <Link
-                        href={`/admin/users/${user.id}`}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
-                        title={t('admin.users.actions.viewUser')}
+                        href={"/admin/users/" + user.id}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20"
                       >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="h-4 w-4" /> View profile
                       </Link>
-                      <button
-                        onClick={() => { setShowGrantCredits(user.id); setCreditsAmount(""); }}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                        title={t('admin.users.actions.grantCredits')}
-                      >
-                        <CreditCard className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowChangePlan(user.id);
-                          setNewPlan(user.plan === "free" ? "growth" : user.plan);
-                          setSubscriptionBillingCycle(user.adminManagedSubscription?.billingCycle || "monthly");
-                          setSubscriptionAmount("");
-                          setSubscriptionCurrency(user.adminManagedSubscription?.currency || "NGN");
-                          setSubscriptionReference("");
-                          setSubscriptionNote("");
-                          setNotifySubscriptionUser(true);
-                        }}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
-                        title={t('admin.users.actions.changePlan')}
-                      >
-                        <ArrowUpDown className="w-4 h-4" />
-                      </button>
-                      {!user.trial?.active && (
-                        <button
-                          onClick={() => { setShowGrantTrial(user.id); setTrialDuration("14"); }}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                          title="Grant trial"
-                        >
-                          <Play className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          if (user.adminTemporaryPlan?.active) {
-                            setShowEndTemporaryPlan(user.id);
-                            return;
-                          }
-                          setShowTemporaryPlan(user.id);
-                          setTemporaryPlan(user.plan === "free" ? "growth" : "free");
-                          setTemporaryDurationDays("30");
-                          setTemporaryReason("");
-                        }}
-                        className={`p-1.5 rounded-xl transition-colors ${user.adminTemporaryPlan?.active
-                          ? "text-amber-400 hover:text-red-400 hover:bg-red-500/10"
-                          : "text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10"
-                          }`}
-                        title={user.adminTemporaryPlan?.active ? t('admin.users.actions.endTemporaryPlan') : t('admin.users.actions.setTemporaryPlan')}
-                      >
-                        <Clock className="w-4 h-4" />
-                      </button>
-                      {user.ambassador?.active ? (
-                        <button
-                          onClick={() => handleRevokeAmbassador(user.id)}
-                          className="p-1.5 rounded-xl text-amber-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title={t('admin.users.actions.revokeAmbassador')}
-                        >
-                          <Crown className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { setShowAmbassador(user.id); setAmbassadorDuration("6"); setAmbassadorCredits(""); setAmbassadorNotes(""); }}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                          title={t('admin.users.actions.grantAmbassador')}
-                        >
-                          <Crown className="w-4 h-4" />
-                        </button>
-                      )}
-                      {user.trial?.active && (
-                        <>
-                          <button
-                            onClick={() => { setShowExtendTrial(user.id); setExtendTrialDays("30"); }}
-                            className="p-1.5 rounded-xl text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                            title="Extend trial"
-                          >
-                            <Clock className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setShowCancelTrial(user.id)}
-                            className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title={t('admin.users.actions.cancelTrial')}
-                          >
-                            <StopCircle className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      {user.accountStatus === "suspended" ? (
-                        <button
-                          onClick={() => openAdminAction(user, "unsuspend", "Unsuspend user")}
-                          disabled={runningAction === `${user.id}:unsuspend`}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                          title="Unsuspend user"
-                        >
-                          <UserCheck className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => openAdminAction(user, "suspend", "Suspend user")}
-                          disabled={runningAction === `${user.id}:suspend`}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Suspend user"
-                        >
-                          <UserX className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openAdminAction(user, "force_logout", "Force logout")}
-                        disabled={runningAction === `${user.id}:force_logout`}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-sky-400 hover:bg-sky-500/10 transition-colors"
-                        title="Force logout"
-                      >
-                        <LogOut className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openAdminAction(user, "reset_credits", "Reset credits")}
-                        disabled={runningAction === `${user.id}:reset_credits`}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
-                        title="Reset credits"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                      {user.role === "admin" ? (
-                        <button
-                          onClick={() => openAdminAction(user, "remove_admin", "Remove admin")}
-                          disabled={runningAction === `${user.id}:remove_admin`}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Remove admin"
-                        >
-                          <ShieldOff className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => openAdminAction(user, "make_admin", "Make admin")}
-                          disabled={runningAction === `${user.id}:make_admin`}
-                          className="p-1.5 rounded-xl text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
-                          title="Make admin"
-                        >
-                          <Shield className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openAdminAction(user, "reset_devices", "Reset devices")}
-                        disabled={runningAction === `${user.id}:reset_devices`}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-yellow-400 hover:bg-yellow-500/10 transition-colors"
-                        title="Reset devices"
-                      >
-                        <MonitorIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openAdminAction(user, "delete", "Delete user")}
-                        disabled={runningAction === `${user.id}:delete`}
-                        className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Delete user"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <details className="relative">
+                        <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-700 px-2.5 text-xs font-medium text-slate-300 hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+                          <MoreHorizontal className="h-4 w-4" /> Actions
+                        </summary>
+                        <div className="absolute right-0 z-30 mt-2 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-slate-700 bg-gray-900 p-1.5 shadow-2xl">
+                          <button type="button" onClick={() => { setShowGrantCredits(user.id); setCreditsAmount(""); }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">Grant credits</button>
+                          <button type="button" onClick={() => { setShowChangePlan(user.id); setNewPlan(user.plan === "free" ? "growth" : user.plan); setSubscriptionBillingCycle(user.adminManagedSubscription?.billingCycle || "monthly"); setSubscriptionAmount(""); setSubscriptionCurrency(user.adminManagedSubscription?.currency || "NGN"); setSubscriptionReference(""); setSubscriptionNote(""); setNotifySubscriptionUser(true); }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">Change plan</button>
+                          {!(user.plan === "free" && user.trial?.active) && <button type="button" onClick={() => { setShowGrantTrial(user.id); setTrialDuration("14"); }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">Grant trial</button>}
+                          <button type="button" onClick={() => { if (user.adminTemporaryPlan?.active) { setShowEndTemporaryPlan(user.id); return; } setShowTemporaryPlan(user.id); setTemporaryPlan(user.plan === "free" ? "growth" : "free"); setTemporaryDurationDays("30"); setTemporaryReason(""); }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">{user.adminTemporaryPlan?.active ? "End temporary plan" : "Set temporary plan"}</button>
+                          <button type="button" onClick={() => { if (user.ambassador?.active) setShowRevokeAmbassador(user.id); else { setShowAmbassador(user.id); setAmbassadorDuration("6"); setAmbassadorCredits(""); setAmbassadorNotes(""); } }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">{user.ambassador?.active ? "Revoke ambassador" : "Grant ambassador"}</button>
+                          {user.plan === "free" && user.trial?.active && <>
+                            <button type="button" onClick={() => { setShowExtendTrial(user.id); setExtendTrialDays("30"); }} className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800">Extend trial</button>
+                            <button type="button" onClick={() => setShowCancelTrial(user.id)} className="w-full rounded-lg px-3 py-2 text-left text-xs text-red-300 hover:bg-red-950/40">Cancel trial</button>
+                          </>}
+                          <div className="my-1 border-t border-slate-800" />
+                          <Link href={"/admin/users/" + user.id} className="block rounded-lg px-3 py-2 text-xs font-medium text-indigo-300 hover:bg-indigo-500/10">Access and account controls</Link>
+                        </div>
+                      </details>
                     </div>
                   </td>
                 </tr>
@@ -1030,8 +1132,6 @@ export default function AdminUsersPage() {
                 <option value="free">Free</option>
                 <option value="basic">Basic</option>
                 <option value="growth">Growth</option>
-                <option value="pro">Pro</option>
-                <option value="ambassador">Ambassador</option>
               </select>
             </div>
             {newPlan !== "free" && (
@@ -1075,14 +1175,22 @@ export default function AdminUsersPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.reference')}</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('common.credits')}</label>
                     <input
-                      value={subscriptionReference}
-                      onChange={(e) => setSubscriptionReference(e.target.value)}
-                      placeholder={t('admin.users.changePlan.referencePlaceholder')}
-                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                      value={formatPlanCredits(selectedSubscriptionCredits)}
+                      readOnly
+                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800/60 text-slate-100 focus:outline-none"
                     />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.reference')}</label>
+                  <input
+                    value={subscriptionReference}
+                    onChange={(e) => setSubscriptionReference(e.target.value)}
+                    placeholder={t('admin.users.changePlan.referencePlaceholder')}
+                    className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.note')}</label>
@@ -1138,7 +1246,6 @@ export default function AdminUsersPage() {
                   <option value="free">Free</option>
                   <option value="basic">Basic</option>
                   <option value="growth">Growth</option>
-                  <option value="pro">Pro</option>
                 </select>
               </div>
               <div>
@@ -1267,6 +1374,41 @@ export default function AdminUsersPage() {
         </Modal>
       )}
 
+      {/* Revoke Ambassador Modal */}
+      {showRevokeAmbassador && revokeAmbassadorUser && (
+        <Modal onClose={() => !revokingAmbassador && setShowRevokeAmbassador(null)} title={t('admin.users.actions.revokeAmbassador')}>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-700 bg-gray-800/60 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">User</p>
+              <p className="mt-1 text-sm font-medium text-slate-100">{revokeAmbassadorUser.name || t('common.unnamed')}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{revokeAmbassadorUser.email}</p>
+            </div>
+            <p className="text-sm text-slate-300">
+              Are you sure you want to revoke ambassador access for this user?
+            </p>
+            <p className="text-xs text-slate-500">
+              This will remove the ambassador badge, return the account to the server-selected previous plan, and update their credits from the revoke result.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowRevokeAmbassador(null)}
+                disabled={revokingAmbassador}
+                className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={() => handleRevokeAmbassador(showRevokeAmbassador)}
+                disabled={revokingAmbassador}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {revokingAmbassador ? "Revoking..." : t('admin.users.actions.revokeAmbassador')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Cancel Trial Modal */}
       {showCancelTrial && (
         <Modal onClose={() => setShowCancelTrial(null)} title={t('admin.users.cancelTrial.title')}>
@@ -1297,16 +1439,35 @@ export default function AdminUsersPage() {
         <Modal onClose={() => setShowGrantTrial(null)} title="Grant Trial">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Duration</label>
-              <select
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Duration (days)</label>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                step={1}
                 value={trialDuration}
                 onChange={(e) => setTrialDuration(e.target.value)}
+                autoFocus
                 className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-              >
-                <option value="7">7 days</option>
-                <option value="14">14 days</option>
-                <option value="30">30 days</option>
-              </select>
+              />
+              <div className="flex flex-wrap gap-2 mt-2">
+                {[7, 14, 20, 30].map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setTrialDuration(String(days))}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${trialDuration === String(days)
+                      ? "border-indigo-500 bg-indigo-500/15 text-indigo-300"
+                      : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                      }`}
+                  >
+                    {days} days
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                This is an explicit admin grant. Signing in again will not restart the trial automatically.
+              </p>
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowGrantTrial(null)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">

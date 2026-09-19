@@ -3,8 +3,37 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>MCE Notes Overlay</title>
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
+  <script>
+    (function () {
+      var W = 1920, H = 1080;
+      var stage = null;
+      function fit() {
+        stage = stage || document.getElementById('overlay-stage');
+        if (!stage) return;
+        stage.style.width = W + 'px';
+        stage.style.height = H + 'px';
+        stage.style.transformOrigin = '0 0';
+        stage.style.position = 'absolute';
+        stage.style.top = '0';
+        stage.style.left = '0';
+        var viewportWidth = window.innerWidth || document.documentElement.clientWidth || W;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || H;
+        var s = Math.min(viewportWidth / W, viewportHeight / H);
+        stage.style.transform = 'scale(' + Math.max(0.01, s) + ')';
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fit, { once: true });
+      } else {
+        fit();
+      }
+      window.addEventListener('resize', fit);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+    })();
+  </script>
   <style>
     /* ── Shared: Font-face ── */
     @font-face {
@@ -36,23 +65,24 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
-      --font-weight: 400;
+      --font-weight: 900;
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
+      --word-spacing: 0px;
       --text-align: center;
-      --text-shadow: none;
-      --outline-width: 0px;
-      --outline-color: transparent;
+      --text-shadow: 4px 5px 2px rgba(0, 0, 0, 0.95);
+      --outline-width: 4px;
+      --outline-color: #000000;
       --ref-font-size: 24px;
       --ref-font-family: var(--font-family);
       --ref-font-weight: 400;
@@ -175,6 +205,10 @@
     }
 
     #verse-text {
+      order: 1;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -182,12 +216,16 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
-      overflow-wrap: break-word;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     #reference {
@@ -206,6 +244,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #reference.top {
@@ -299,7 +340,14 @@
       overflow: hidden;
     }
 
+    body,
+    body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]) {
+      font-family: var(--mce-output-font-family, var(--font-family)) !important;
+    }
+
     .compare-column__verse {
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--compare-font-size, 36px);
       font-family: var(--compare-font-family, var(--font-family));
       color: var(--font-color, #ffffff);
@@ -307,12 +355,16 @@
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
-      overflow-wrap: break-word;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .compare-column__reference {
@@ -331,6 +383,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     .compare-column__reference.is-above {
@@ -391,6 +446,11 @@
     }
     .lt-compare-col {
       display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: pre-line;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -406,7 +466,7 @@
       bottom: 0;
       transform: translateX(-50%);
       z-index: 3;
-      width: calc(100vw - var(--lt-h-margin, 120px));
+      width: calc(100% - var(--lt-h-margin, 120px));
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
       padding: var(--lt-card-padding, 28px 48px);
@@ -417,6 +477,54 @@
       align-items: var(--text-align, center);
       justify-content: center;
       transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    #lt-bar.lt-edge-bottom {
+      top: auto;
+      right: auto;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-top {
+      top: 0;
+      right: auto;
+      bottom: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-left,
+    #lt-bar.lt-edge-right {
+      top: 50%;
+      bottom: auto;
+      width: var(--lt-side-width, 168px);
+      height: calc(100vh - var(--lt-v-margin, 0px));
+      max-width: none;
+      max-height: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #lt-bar.lt-edge-left {
+      right: auto;
+      left: 0;
+      transform: translateY(-50%);
+    }
+
+    #lt-bar.lt-edge-right {
+      right: 0;
+      left: auto;
+      transform: translateY(-50%);
     }
 
     /* ══════════════════════════════════════════════════════
@@ -448,6 +556,70 @@
       pointer-events: auto;
     }
 
+    /* Slide changes animate the text only, keeping the selected background
+       mounted and avoiding a costly full-canvas repaint. */
+    @keyframes mce-preview-text-exit {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    @keyframes mce-preview-text-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes mce-preview-text-slide-up-in {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes mce-preview-text-slide-left-in {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes mce-preview-text-scale-in {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .mce-preview-text-exit {
+      animation: mce-preview-text-exit var(--anim-duration, 152ms) cubic-bezier(0.4, 0, 1, 1) both;
+      will-change: opacity;
+    }
+
+    .mce-preview-text-enter--fade,
+    .mce-preview-text-enter--reveal-bg-then-text {
+      animation: mce-preview-text-fade-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity;
+    }
+
+    .mce-preview-text-enter--slide-up {
+      animation: mce-preview-text-slide-up-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--slide-left {
+      animation: mce-preview-text-slide-left-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--scale-in {
+      animation: mce-preview-text-scale-in var(--anim-duration, 152ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mce-preview-text-exit,
+      .mce-preview-text-enter--fade,
+      .mce-preview-text-enter--reveal-bg-then-text,
+      .mce-preview-text-enter--slide-up,
+      .mce-preview-text-enter--slide-left,
+      .mce-preview-text-enter--scale-in {
+        animation: none;
+      }
+    }
+
     #lt-bar.hidden,
     #lt-bar.blank {
       opacity: 0 !important;
@@ -465,12 +637,32 @@
       z-index: 0;
     }
 
+    #lt-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, var(--lt-bg-shade-opacity, 0));
+      pointer-events: none;
+      transition: background-color var(--anim-duration, 152ms) ease;
+      z-index: 2;
+    }
+
     #lt-bar > * {
       position: relative;
       z-index: 1;
     }
 
+    #lt-bar > #lt-verse-text,
+    #lt-bar > #ref-text,
+    #lt-bar > #lt-translation-text {
+      z-index: 3;
+    }
+
     #lt-verse-text {
+      order: 1;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -478,9 +670,62 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      transform-origin: center;
+    }
+
+    /* Horizontal lower-thirds use the full fixed overlay stage. Do not let a
+       legacy width preset cap the verse inside that full-width card. */
+    #lt-bar.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-edge-top #lt-verse-text {
+      width: 100%;
+      max-width: none;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text,
+    #lt-bar.lt-edge-right #lt-verse-text {
+      width: max-content;
+      max-width: calc(100vh - 120px);
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-right #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-text-inverted.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-bottom #ref-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #ref-text {
+      transform: rotate(180deg);
+      transform-origin: center;
+    }
+
+    #lt-bar.lt-edge-left.lt-text-inverted #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-edge-right.lt-text-inverted #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-left #ref-text,
+    #lt-bar.lt-edge-right #ref-text {
+      display: none;
     }
 
     #lt-bar #ref-text {
@@ -492,6 +737,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #lt-bar #ref-text.top {
@@ -582,9 +830,11 @@
       let currentBibleRevision = 0;
       let hasReceivedLiveOverlayUpdate = false;
 
-      const FONT_SIZE_MIN = 12;
+      const FONT_SIZE_MIN = 28;
+      const LOWER_THIRD_FONT_SIZE_MIN = 45;
       const REF_FONT_SIZE_MIN = 10;
-      const COMPARE_TEXT_MIN = 16;
+      const LOWER_THIRD_REF_FONT_SIZE_MIN = 16;
+      const COMPARE_TEXT_MIN = 28;
       const COMPARE_REF_MIN = 12;
       const COMPARE_META_MIN = 10;
       const COMPARE_PADDING_MIN = 16;
@@ -669,9 +919,11 @@
       const lowerThirdLayer = document.getElementById('lower-third-layer');
 
       const _tabParam = 'notes';
-      const _storageKey = 'notes-overlay-data';
-      const _ackStorageKey = 'notes-overlay-render-ack';
-      const _channelName = 'obs-church-studio-notes-overlay';
+      const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
+      const _routeSuffix = _routeSource ? `:${_routeSource}` : '';
+      const _storageKey = 'notes-overlay-data' + _routeSuffix;
+      const _ackStorageKey = 'notes-overlay-render-ack' + _routeSuffix;
+      const _channelName = 'obs-church-studio-notes-overlay' + _routeSuffix;
 
       function readInitialMode() {
         try {
@@ -700,7 +952,14 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
-      let lastAppliedThemeKey = '';
+      let overlayRelaySocket = null;
+      let latestRenderAck = null;
+      let lastRenderAckPacket = null;
+      let lastTargetSource = _routeSource;
+      const lastAppliedThemeKeyByMode = {
+        fullscreen: '',
+        'lower-third': '',
+      };
       let fitRafId = 0;
       let lastBgFingerprint = '';
       let lastBgType = 'none';
@@ -715,6 +974,7 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
+      let autoFontScaleEnabled = true;
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -730,7 +990,7 @@
       }
       function mapCompareFontWeight(w) {
         if (!w) return '';
-        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '';
       }
 
@@ -740,8 +1000,22 @@
         return m[t.toLowerCase()] || 'none';
       }
 
+      function scriptureFontFamily(fontFamily) {
+        var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
+        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        var lower = value.toLowerCase();
+        if (lower.indexOf('cmg sans') !== -1) {
+          if (lower.indexOf('cmg sans black') === -1) {
+            value = '"CMG Sans Black",' + value;
+          }
+        }
+        if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+        if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        return value;
+      }
+
       function ensureCmgSansFont() {
-        body.style.fontFamily = '"CMG Sans","Noto Sans","Charis SIL",Arial,sans-serif';
+        body.style.fontFamily = scriptureFontFamily();
       }
 
       function parseColorToRgb(c) {
@@ -812,11 +1086,14 @@
           return direct.textContent;
         }
         const styles = document.querySelectorAll('style');
+        let matched = '';
         for (const styleEl of styles) {
           const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
-          if (cssText && cssText.includes('--overlay-data')) return cssText;
+          if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+            matched += '\n' + cssText;
+          }
         }
-        return '';
+        return matched;
       }
 
       function extractCssCustomPropertyValue(cssText, name) {
@@ -988,10 +1265,94 @@
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
 
+      function getVisualScale(node, rect) {
+        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect?.width || 1;
+        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect?.height || 1;
+        return {
+          x: rect?.width > 0 && layoutWidth > 0 ? rect.width / layoutWidth : 1,
+          y: rect?.height > 0 && layoutHeight > 0 ? rect.height / layoutHeight : 1,
+        };
+      }
+
+      function getFrameContentRect(frame) {
+        if (!frame) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        const rect = frame.getBoundingClientRect();
+        const scale = getVisualScale(frame, rect);
+        const style = getComputedStyle(frame);
+        const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+        const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+        const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+        const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+        const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+        const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
+        const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+        const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+        const left = rect.left + (borderLeft + paddingLeft) * scale.x;
+        const top = rect.top + (borderTop + paddingTop) * scale.y;
+        const right = Math.max(left, rect.right - (borderRight + paddingRight) * scale.x);
+        const bottom = Math.max(top, rect.bottom - (borderBottom + paddingBottom) * scale.y);
+        return { left, top, right, bottom, width: right - left, height: bottom - top };
+      }
+
+      function getVisualContentSize(node, rect) {
+        const scale = getVisualScale(node, rect);
+        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect.width || 1;
+        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect.height || 1;
+        return {
+          width: Math.max(rect.width, (node.scrollWidth || layoutWidth) * scale.x),
+          height: Math.max(rect.height, (node.scrollHeight || layoutHeight) * scale.y),
+        };
+      }
+
+      function getVisualBoxSize(node, fallbackWidth, fallbackHeight) {
+        const rect = node?.getBoundingClientRect();
+        return {
+          width: rect?.width || fallbackWidth,
+          height: rect?.height || fallbackHeight,
+        };
+      }
+
+      function getRenderedBounds(node) {
+        if (!node || getComputedStyle(node).display === 'none') return null;
+        const rect = node.getBoundingClientRect();
+        const content = getVisualContentSize(node, rect);
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.left + content.width,
+          bottom: rect.top + content.height,
+        };
+      }
+
+      function isContentOutsideFrame(nodes, frame) {
+        const frameRect = getFrameContentRect(frame);
+        const bounds = nodes
+          .map(getRenderedBounds)
+          .filter(Boolean)
+          .reduce((combined, current) => ({
+            left: Math.min(combined.left, current.left),
+            top: Math.min(combined.top, current.top),
+            right: Math.max(combined.right, current.right),
+            bottom: Math.max(combined.bottom, current.bottom),
+          }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+        if (!Number.isFinite(bounds.left)) return false;
+        return bounds.left < frameRect.left - 1 ||
+          bounds.top < frameRect.top - 1 ||
+          bounds.right > frameRect.right + 1 ||
+          bounds.bottom > frameRect.bottom + 1;
+      }
+
       function isOverflowing(node, w, h) {
         if (!node) return false;
-        return Math.max(node.scrollWidth, node.getBoundingClientRect().width) > w + 1 ||
-          Math.max(node.scrollHeight, node.getBoundingClientRect().height) > h + 1;
+        const rect = node.getBoundingClientRect();
+        const content = getVisualContentSize(node, rect);
+        return content.width > w + 1 || content.height > h + 1;
+      }
+
+      function resolveAutoFontFloor(baseSize, fallback) {
+        const base = Math.max(fallback, Math.round(Number(baseSize) || fallback));
+        const fixedFloor = Math.max(fallback, 16);
+        return Math.min(base, fixedFloor);
       }
 
       /* ── Seamless video loop ── */
@@ -1040,34 +1401,41 @@
         lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
         activeMode = mode;
         body.dataset.mode = mode;
+        lastAppliedThemeKeyByMode[mode] = '';
         console.log('[Mode] ' + mode);
       }
 
       /* ═══ FULLSCREEN: Auto-scaling ═══ */
       function isSingleLayoutOverflowing(tw, th) {
-        return isOverflowing(verseContainer, tw, th) ||
-          isOverflowing(verseText, verseText.clientWidth || tw, th) ||
-          (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || tw, th));
+        const frameRect = getFrameContentRect(overlay);
+        const w = frameRect.width || tw;
+        const h = frameRect.height || th;
+        return isContentOutsideFrame([verseText, reference], overlay) ||
+          isOverflowing(verseText, w, h) ||
+          isOverflowing(verseContainer, w, h);
       }
 
       function autoScaleContent() {
         if (!verseContainer) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) {
-          verseText.style.fontSize = Math.round(baseFontSize) + 'px';
-          reference.style.fontSize = Math.round(baseRefFontSize) + 'px';
-          verseText.style.lineHeight = String(Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          verseText.style.fontSize = '';
+          reference.style.fontSize = '';
+          verseText.style.lineHeight = '';
+          verseContainer.style.padding = '';
+          reference.style.marginTop = '';
+          reference.style.marginBottom = '';
           return;
         }
-        let vs = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
+        const textFloor = resolveAutoFontFloor(baseFontSize, FONT_SIZE_MIN);
+        let vs = Math.max(textFloor, Math.round(baseFontSize));
         let rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
         let pd = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
         let lh = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
         let sp = reference.classList.contains('top') ? 24 : 24;
         const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
-        const sa = resolveSafeArea();
-        const vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
-        const tw = Math.max(420, vw - sa * 2), th = Math.max(260, vh - sa * 2);
+        const frameRect = getFrameContentRect(overlay);
+        const tw = Math.max(420, frameRect.width), th = Math.max(260, frameRect.height);
         const apply = () => {
           verseText.style.fontSize = vs + 'px'; reference.style.fontSize = rs + 'px';
           verseText.style.lineHeight = String(lh); verseContainer.style.padding = pd + 'px';
@@ -1076,8 +1444,8 @@
         };
         apply();
         let g = 0;
-        while (isSingleLayoutOverflowing(tw, th) && (vs > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
-          if (vs > FONT_SIZE_MIN) vs -= 1;
+        while (isSingleLayoutOverflowing(tw, th) && (vs > textFloor || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
+          if (vs > textFloor) vs -= 1;
           rs = Math.max(REF_FONT_SIZE_MIN, Math.round(vs * ratio));
           if (isSingleLayoutOverflowing(tw, th) && pd > CONTENT_PADDING_MIN) pd = Math.max(CONTENT_PADDING_MIN, pd - 2);
           if (isSingleLayoutOverflowing(tw, th) && lh > CONTENT_LINE_HEIGHT_MIN) lh = Math.max(CONTENT_LINE_HEIGHT_MIN, +(lh - 0.02).toFixed(2));
@@ -1088,12 +1456,20 @@
 
       function autoScaleCompareContent() {
         if (!compareLayout || !compareTextLeft || !compareTextRight) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) return;
+        if (!compareLayout.classList.contains('is-visible')) return;
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          [compareTextLeft, compareTextRight].forEach((node) => { node.style.fontSize = ''; node.style.lineHeight = ''; });
+          [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => { if (node) node.style.fontSize = ''; });
+          compareLayout.style.padding = '';
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => { column.style.padding = ''; });
+          return;
+        }
         const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
         const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
         const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
         const bM = Math.max(12, Math.round(bR * 0.62));
+        const textFloor = resolveAutoFontFloor(baseCompareFontSize, COMPARE_TEXT_MIN);
         let ts = bT, rs2 = bR, ms = bM;
         let cp = Math.max(COMPARE_PADDING_MIN, Math.round(baseComparePanelInnerPadding));
         let lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.top));
@@ -1118,14 +1494,90 @@
           rn.forEach(n => n.style.fontSize = rs2 + 'px');
           trn.forEach(n => n.style.fontSize = ms + 'px');
         };
-        const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
+        const ov = () => {
+          const layoutOverflow = compareLayout.scrollWidth > compareLayout.clientWidth + 1 || compareLayout.scrollHeight > compareLayout.clientHeight + 1;
+          if (layoutOverflow) return true;
+          return cols.some((c, i) => {
+            const w = wr[i];
+            const columnBox = getVisualBoxSize(c, tw, th);
+            const wordBox = getVisualBoxSize(w, tw, th);
+            const textBox = getVisualBoxSize(tn[i], tw, th);
+            return isOverflowing(c, columnBox.width, columnBox.height) ||
+              (w && isOverflowing(w, wordBox.width, wordBox.height)) ||
+              isOverflowing(tn[i], textBox.width, textBox.height);
+          });
+        };
         apply(); let g = 0;
-        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
-          if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
+        while (ov() && (ts > textFloor || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
+          if (ts > textFloor) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
           if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
           if (ov() && hasLayoutPaddingRoom()) shrinkLayoutPadding();
           if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
           apply(); g++;
+        }
+      }
+
+      function autoScaleLowerThirdContent() {
+        if (!ltBar || !ltVerseText || !ltRefText) return;
+        if (ltBar.classList.contains('hidden') || ltBar.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          ltVerseText.style.fontSize = '';
+          ltVerseText.style.lineHeight = '';
+          ltRefText.style.fontSize = '';
+          ltBar.style.padding = '';
+          return;
+        }
+
+        const textFloor = resolveAutoFontFloor(baseFontSize, LOWER_THIRD_FONT_SIZE_MIN);
+        const minFitSize = 18;
+        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        let textSize = Math.max(minFitSize, Math.round(baseFontSize));
+        let referenceSize = Math.max(LOWER_THIRD_REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
+        const frameRect = getFrameContentRect(ltBar);
+        const targetWidth = Math.max(280, frameRect.width || document.body?.clientWidth || window.innerWidth || 1920);
+        const targetHeight = Math.max(100, frameRect.height || Math.min(barMaxHeight, document.body?.clientHeight || window.innerHeight || 1080));
+        const apply = () => {
+          ltVerseText.style.fontSize = `${textSize}px`;
+          ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
+          ltRefText.style.fontSize = `${referenceSize}px`;
+        };
+        const overflowing = () => isContentOutsideFrame(
+          [ltVerseText, ltRefText],
+          ltBar,
+        ) || isOverflowing(ltBar, targetWidth, targetHeight);
+
+        apply();
+        let guard = 0;
+        while (overflowing() && textSize > minFitSize && guard < 180) {
+          textSize -= 1;
+          referenceSize = Math.max(LOWER_THIRD_REF_FONT_SIZE_MIN, Math.round(textSize * ratio));
+          apply();
+          guard += 1;
+        }
+      }
+
+      function requestAutoScaleActiveContent() {
+        requestAnimationFrame(() => {
+          if (activeMode === 'lower-third') autoScaleLowerThirdContent();
+          else if (compareLayout.classList.contains('is-visible')) autoScaleCompareContent();
+          else autoScaleContent();
+        });
+      }
+
+      function requestAutoScaleAfterRender() {
+        requestAutoScaleActiveContent();
+        const publishFinalFitAck = () => {
+          requestAutoScaleActiveContent();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (lastRenderAckPacket) writeRenderAck(lastRenderAckPacket, true);
+            });
+          });
+        };
+        if (document.fonts?.ready) {
+          document.fonts.ready.then(publishFinalFitAck).catch(publishFinalFitAck);
+        } else {
+          publishFinalFitAck();
         }
       }
 
@@ -1165,15 +1617,50 @@
         if (_animateOutResolve) { _animateOutResolve(); _animateOutResolve = null; }
         try { const bc = new BroadcastChannel(_channelName); bc.postMessage({ type: 'lower-third-animation-complete' }); bc.close(); } catch { }
       }
-      function writeRenderAck(packet) {
+      function getEffectiveFontMeasurement() {
+        const readSize = (node) => {
+          if (!node) return undefined;
+          const value = Number.parseFloat(getComputedStyle(node).fontSize || node.style.fontSize || '');
+          return Number.isFinite(value) && value > 0 ? Math.round(value) : undefined;
+        };
+        if (activeMode === 'lower-third') {
+          return {
+            effectiveFontSize: readSize(ltVerseText),
+            effectiveRefFontSize: readSize(ltRefText),
+          };
+        }
+        if (compareLayout?.classList.contains('is-visible')) {
+          return {
+            effectiveFontSize: readSize(compareTextLeft),
+            effectiveRefFontSize: readSize(compareReferenceLeft),
+            effectiveTranslationFontSize: readSize(compareTranslationLeft),
+          };
+        }
+        return {
+          effectiveFontSize: readSize(verseText),
+          effectiveRefFontSize: readSize(reference),
+        };
+      }
+      function writeRenderAck(packet, fontFitReady = false) {
         try {
           const timestamp = Number(packet && packet.timestamp) || 0;
           if (!timestamp) return;
-          localStorage.setItem(_ackStorageKey, JSON.stringify({
+          lastRenderAckPacket = packet;
+          const ack = {
+            channel: _tabParam,
+            type: 'overlay-render-ack',
+            targetSource: lastTargetSource || '',
             timestamp,
             mode: packet.mode || activeMode,
             transitionId: packet.transitionId,
-          }));
+            fontFitReady,
+            ...getEffectiveFontMeasurement(),
+          };
+          latestRenderAck = ack;
+          localStorage.setItem(_ackStorageKey, JSON.stringify(ack));
+          if (overlayRelaySocket && overlayRelaySocket.readyState === WebSocket.OPEN) {
+            overlayRelaySocket.send(JSON.stringify(ack));
+          }
         } catch { }
       }
 
@@ -1181,19 +1668,24 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
+        autoFontScaleEnabled = s.autoFontScale !== false;
         root.style.setProperty('--font-size', baseFontSize + 'px');
-        root.style.setProperty('--font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
-        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight || 'black'));
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
-        root.style.setProperty('--text-shadow', s.textShadow || 'none');
-        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
-        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--text-shadow', s.textShadow || '4px 5px 2px rgba(0, 0, 0, 0.95)');
+        const outlineEnabled = s.textOutline !== false;
+        const outlineWidth = outlineEnabled ? (s.textOutlineWidth != null ? Number(s.textOutlineWidth) : 4) : 0;
+        const outlineColor = outlineEnabled ? (s.textOutlineColor || '#000000') : 'transparent';
+        root.style.setProperty('--outline-width', outlineWidth + 'px');
+        root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.style.setProperty('--ref-font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
         root.style.setProperty('--ref-font-style', 'normal');
         root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
@@ -1212,7 +1704,12 @@
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
-        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        const configuredAnimationDuration = Number(s.animationDuration);
+        const ead = Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configuredAnimationDuration) && configuredAnimationDuration > 0
+            ? configuredAnimationDuration
+            : 400,
+        )));
         root.style.setProperty('--anim-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
@@ -1228,12 +1725,16 @@
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
-        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
-        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         // Compare-specific reference font size
-        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
-        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
         // Compare-specific line height
@@ -1309,7 +1810,12 @@
         applyThemeBase(s);
         baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        if (!s.fontSize) {
+          baseFontSize = preset.fontSize;
+          baseRefFontSize = preset.refFontSize;
+          root.style.setProperty('--font-size', baseFontSize + 'px');
+          root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
         if (targetMode === 'lower-third') {
@@ -1327,15 +1833,24 @@
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
         root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
-        root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        const cardRadius = Math.max(0, Math.min(64, Number(s.lowerThirdCardRadius ?? 18)));
+        root.style.setProperty('--lt-card-radius', cardRadius + 'px');
+        const edge = s.lowerThirdEdge === 'top' || s.lowerThirdEdge === 'left' || s.lowerThirdEdge === 'right' ? s.lowerThirdEdge : 'bottom';
+        const sideWidth = Math.max(96, Math.min(360, Number(s.lowerThirdSideWidth) || Math.round((Number(s.fontSize) || preset.fontSize) + (baseBarPadding * 2) + 36)));
+        root.style.setProperty('--lt-side-width', sideWidth + 'px');
+        root.style.setProperty('--lt-v-margin', (s.lowerThirdVMargin || 0) + 'px');
+        ltBar.classList.remove('lt-edge-top', 'lt-edge-bottom', 'lt-edge-left', 'lt-edge-right');
+        ltBar.classList.add('lt-edge-' + edge);
+        ltBar.classList.toggle('lt-text-inverted', s.lowerThirdTextDirection === 'inverted' || s.lowerThirdTextInverted === true || s.textInverted === true);
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
+        root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
         if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else ltBarBg.style.display = 'none';
+        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -1353,13 +1868,16 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKey) return;
+        const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode];
+        if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
-        lastAppliedThemeKey = themeKey;
+        lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */
       var lastProcessedPacketKey = '';
+      let pendingOverlayPacket = null;
+      let overlayTransitionInFlight = false;
 
       function hasRenderableSlide(data) {
         return Boolean(data && data.slide && data.blanked !== true);
@@ -1375,6 +1893,98 @@
         ].join('|');
       }
 
+      function getOverlaySlideKey(data) {
+        if (!hasRenderableSlide(data)) return '';
+        try {
+          return JSON.stringify({ mode: data.mode || '', slide: data.slide });
+        } catch {
+          return [
+            data.mode || '',
+            data.slide && data.slide.id || '',
+            data.verseText || '',
+            data.referenceText || data.referenceLabel || '',
+          ].join('|');
+        }
+      }
+
+      function getOverlayAnimationName(data) {
+        const animation = data && data.theme && data.theme.animation
+          || currentOverlayData && currentOverlayData.theme && currentOverlayData.theme.animation
+          || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
+        const configuredAnimation = String(animation || '').trim();
+        if (configuredAnimation === 'none') return 'none';
+        const allowed = ['fade', 'slide-up', 'slide-left', 'scale-in', 'reveal-bg-then-text'];
+        return allowed.includes(configuredAnimation) ? configuredAnimation : 'fade';
+      }
+
+      function prefersReducedMotion() {
+        try {
+          return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch {
+          return false;
+        }
+      }
+
+      function isOverlayAnimationEnabled(data) {
+        return getOverlayAnimationName(data) !== 'none' && !prefersReducedMotion();
+      }
+
+      function getOverlayAnimationDurationMs(data) {
+        const theme = data && data.theme && typeof data.theme === 'object'
+          ? data.theme
+          : currentOverlayData && currentOverlayData.theme && typeof currentOverlayData.theme === 'object'
+            ? currentOverlayData.theme
+            : currentBibleState && currentBibleState.theme && typeof currentBibleState.theme === 'object'
+              ? currentBibleState.theme
+              : {};
+        const configured = Number(theme.animationDuration);
+        return Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configured) && configured > 0 ? configured : 400,
+        )));
+      }
+
+      function getVerseAnimationTargets(mode) {
+        const targetMode = mode === 'lower-third' || mode === 'fullscreen' ? mode : activeMode;
+        const targets = targetMode === 'lower-third'
+          ? [ltVerseText, ltRefText]
+          : compareLayout && compareLayout.classList.contains('is-visible')
+            ? [compareLayout]
+            : [verseContainer];
+        return targets.filter(Boolean);
+      }
+
+      function clearVerseAnimationClasses(targets) {
+        const classes = [
+          'mce-preview-text-exit',
+          'mce-preview-text-enter--fade',
+          'mce-preview-text-enter--slide-up',
+          'mce-preview-text-enter--slide-left',
+          'mce-preview-text-enter--scale-in',
+          'mce-preview-text-enter--reveal-bg-then-text',
+        ];
+        targets.forEach((target) => target.classList.remove(...classes));
+      }
+
+      function playVerseExitAnimation(mode) {
+        const targets = getVerseAnimationTargets(mode);
+        if (!targets.length) return;
+        clearVerseAnimationClasses(targets);
+        void targets[0].offsetWidth;
+        targets.forEach((target) => target.classList.add('mce-preview-text-exit'));
+      }
+
+      function playVerseEnterAnimation(mode, animation) {
+        const targets = getVerseAnimationTargets(mode);
+        if (!targets.length || animation === 'none' || prefersReducedMotion()) return;
+        clearVerseAnimationClasses(targets);
+        void targets[0].offsetWidth;
+        targets.forEach((target) => target.classList.add(`mce-preview-text-enter--${animation}`));
+      }
+
+      function waitForOverlayAnimation(duration) {
+        return new Promise((resolve) => window.setTimeout(resolve, duration));
+      }
+
       function renderBothBibleLayers(state) {
         if (!state) return;
         processSlideFullscreen(state);
@@ -1382,10 +1992,70 @@
         console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision });
       }
 
+      function commitOverlayPacket(packet, animateIn) {
+        const revision = Number(packet.revision ?? packet.timestamp ?? 0);
+        const mode = packet.mode === 'fullscreen' || packet.mode === 'lower-third'
+          ? packet.mode
+          : activeMode;
+        clearVerseAnimationClasses([
+          ...getVerseAnimationTargets('fullscreen'),
+          ...getVerseAnimationTargets('lower-third'),
+        ]);
+        currentBibleRevision = revision;
+        currentBibleState = packet;
+        currentOverlayData = packet;
+        hasReceivedLiveOverlayUpdate = true;
+
+        if (mode === 'fullscreen' || mode === 'lower-third') {
+          setActiveLayer(mode);
+        }
+
+        renderBothBibleLayers(currentBibleState);
+        if (animateIn) playVerseEnterAnimation(mode, getOverlayAnimationName(packet));
+        writeRenderAck(packet);
+      }
+
+      async function runOverlayTransitionQueue() {
+        if (overlayTransitionInFlight) return;
+        overlayTransitionInFlight = true;
+        try {
+          while (pendingOverlayPacket) {
+            const firstPacket = pendingOverlayPacket;
+            pendingOverlayPacket = null;
+            const exitMode = activeMode || initialMode;
+            const exitPacket = currentOverlayData || currentBibleState || firstPacket;
+            const animateOut = hasShownOnce && isOverlayAnimationEnabled(exitPacket);
+            const exitDuration = getOverlayAnimationDurationMs(exitPacket);
+
+            if (animateOut) {
+              playVerseExitAnimation(exitMode);
+              await waitForOverlayAnimation(exitDuration);
+            }
+
+            // If another slide arrived during the exit, render only the newest one.
+            const packet = pendingOverlayPacket || firstPacket;
+            pendingOverlayPacket = null;
+            const animateIn = hasRenderableSlide(packet) && isOverlayAnimationEnabled(packet);
+            commitOverlayPacket(packet, animateIn);
+
+            if (animateIn) {
+              await waitForOverlayAnimation(getOverlayAnimationDurationMs(packet));
+            }
+          }
+        } finally {
+          overlayTransitionInFlight = false;
+          if (pendingOverlayPacket) void runOverlayTransitionQueue();
+        }
+      }
+
       function processOverlayUpdate(packet) {
         if (!packet) return;
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
         if (packet.theme && (!packet.slide && !packet.blanked)) {
+          const themedPacket = { ...(currentOverlayData || currentBibleState || {}), ...packet };
+          currentBibleState = themedPacket;
+          currentOverlayData = themedPacket;
+          hasReceivedLiveOverlayUpdate = true;
           applyThemeIfChanged(packet.theme, true, packet.mode || activeMode);
           if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
             setActiveLayer(packet.mode);
@@ -1394,6 +2064,7 @@
           overlay.classList.remove('hidden');
           ltBar.classList.remove('hidden');
           writeRenderAck(packet);
+          requestAutoScaleAfterRender();
           return;
         }
         if (!packet.slide && !packet.blanked) return;
@@ -1407,18 +2078,12 @@
           packet.timestamp ??
           0
         );
-        if (revision && revision < currentBibleRevision) return;
-        currentBibleRevision = revision;
-        currentBibleState = packet;
-        currentOverlayData = packet;
-        hasReceivedLiveOverlayUpdate = true;
-
-        if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
-          setActiveLayer(packet.mode);
-        }
-
-        renderBothBibleLayers(currentBibleState);
-        writeRenderAck(packet);
+        const pendingRevision = pendingOverlayPacket
+          ? Number(pendingOverlayPacket.revision ?? pendingOverlayPacket.timestamp ?? 0)
+          : 0;
+        if (revision && revision < Math.max(currentBibleRevision, pendingRevision)) return;
+        pendingOverlayPacket = packet;
+        void runOverlayTransitionQueue();
       }
 
       function processSlideFullscreen(data) {
@@ -1454,9 +2119,10 @@
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-note-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1486,7 +2152,9 @@
           ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
         }
 
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }
+        autoScaleLowerThirdContent();
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1509,15 +2177,33 @@
       function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
       function applyObsBrowserEventCss(cssText) {
-        if (typeof cssText !== 'string') return;
+        if (typeof cssText !== 'string') return false;
         let styleEl = document.getElementById('obs-cssoverride');
         if (!styleEl) {
           styleEl = document.createElement('style');
           styleEl.id = 'obs-cssoverride';
           document.head.appendChild(styleEl);
         }
+        const backgroundPropertyNames = [
+          '--bg-image',
+          '--bg-pattern-data',
+          '--box-bg-image',
+          '--logo-data-uri',
+        ];
+        const previousCssText = styleEl.textContent || '';
+        const backgroundChanged = backgroundPropertyNames.some((name) => (
+          extractCssCustomPropertyValue(previousCssText, name)
+          !== extractCssCustomPropertyValue(cssText, name)
+        ));
         styleEl.textContent = cssText;
+        if (backgroundChanged) {
+          // The packet uses __FROM_CSS__ for large assets, so the serialized
+          // theme can stay identical while the actual image/pattern changes.
+          lastAppliedThemeKeyByMode.fullscreen = '';
+          lastAppliedThemeKeyByMode['lower-third'] = '';
+        }
         lastCssOverlayData = '';
+        return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
         try {
@@ -1525,8 +2211,14 @@
           const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
+          const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
+          if (_routeSource && targetSource !== _routeSource) return false;
+          if (targetSource) lastTargetSource = targetSource;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
+          // Background images and SVG patterns may be represented by the
+          // __FROM_CSS__ marker. Install their CSS variables before applying
+          // the theme so the packet renders the newly saved background.
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
           processOverlayUpdate(packet);
           return true;
@@ -1536,7 +2228,13 @@
       function readFromOverlayRelayPacket(packet) {
         try {
           if (!packet || typeof packet !== 'object') return false;
+          const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
+          if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
+          if (targetSource) lastTargetSource = targetSource;
+          const data = packet.data || packet.packet || packet.overlayData;
+          const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
+          if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -1544,7 +2242,6 @@
             setActiveLayer(packet.mode);
             return true;
           }
-          const data = packet.data || packet.packet || packet.overlayData;
           if (!data || typeof data !== 'object') return false;
           processOverlayUpdate(data);
           return true;
@@ -1584,11 +2281,20 @@
           if (Date.now() < disabledUntil) return;
           try {
             var ws = new WebSocket('ws://127.0.0.1:17891');
-            ws.onopen = function () { attempts = 0; };
+            overlayRelaySocket = ws;
+            ws.onopen = function () {
+              attempts = 0;
+              if (latestRenderAck) {
+                try { ws.send(JSON.stringify(latestRenderAck)); } catch { }
+              }
+            };
             ws.onmessage = function (event) {
               try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
             };
-            ws.onclose = schedule;
+            ws.onclose = function () {
+              if (overlayRelaySocket === ws) overlayRelaySocket = null;
+              schedule();
+            };
             ws.onerror = function () {
               try { ws.close(); } catch { }
             };
@@ -1646,7 +2352,16 @@
         _cssObserver.observe(_cssObserverTarget, { childList: true, subtree: true, characterData: true });
       }
 
-      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (activeMode === 'fullscreen') requestAnimationFrame(autoScaleContent); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => requestAutoScaleActiveContent());
+        ro.observe(document.body);
+        ro.observe(verseContainer);
+        ro.observe(compareLayout);
+        ro.observe(ltBar);
+        [verseText, reference, compareTextLeft, compareTextRight, compareReferenceLeft, compareReferenceRight, ltVerseText, ltRefText]
+          .filter(Boolean)
+          .forEach((node) => ro.observe(node));
+      }
 
       /* ═══ INITIAL ═══
          Both layers start hidden (opacity 0). Reveal the correct one.

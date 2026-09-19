@@ -9,9 +9,92 @@
  * Never sends Bible content, lyrics, transcript text, or personal info.
  */
 
-import { getSession } from "./authService";
+import {
+  getDeviceId,
+  getDeviceSecret,
+  getSession,
+  getSessionApiBase,
+} from "./authService";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const FIRST_PRESENTATION_KEY = "mce_first_presentation_done";
+const FIRST_APP_OPEN_KEY = "mce_first_app_open_done";
+
+let trialActivationAttempted = false;
+
+function isFirstPresentationDone(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(FIRST_PRESENTATION_KEY) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function markFirstPresentationDone(): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(FIRST_PRESENTATION_KEY, "true");
+    }
+  } catch {}
+}
+
+/**
+ * Background async capture and upload of OBS screenshot on first presentation.
+ * Silently catches errors — never interrupts presentation or blocks UI.
+ */
+async function captureAndUploadFirstPresentationScreenshot(
+  type: "bible" | "worship" | "media",
+  details: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    // Settle delay for OBS to render overlay frame
+    await new Promise((r) => setTimeout(r, 650));
+    const { dockObsClient } = await import("../dock/dockObsClient");
+    const screenshot = await dockObsClient.captureScreenshot();
+    if (!screenshot) return;
+
+    const session = getSession();
+    const userId =
+      session?.user?.id ||
+      (typeof localStorage !== "undefined"
+        ? localStorage.getItem("mce-dock-auth-user-id") ||
+          localStorage.getItem("mce_auth_user_id")
+        : null) ||
+      null;
+    const deviceId =
+      getDeviceId() ||
+      session?.deviceId ||
+      (typeof localStorage !== "undefined"
+        ? localStorage.getItem("mce-device-id")
+        : null) ||
+      null;
+    const deviceSecret = getDeviceSecret() || session?.deviceSecret || null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (deviceId) headers["X-Device-Id"] = deviceId;
+    if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
+
+    const apiBase = getSessionApiBase();
+    if (!apiBase) return;
+
+    await fetch(`${apiBase}/api/tracking/first-presentation-screenshot`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        screenshot,
+        type,
+        details,
+        userId,
+      }),
+    });
+  } catch (err) {
+    console.warn("[tracking] First presentation screenshot capture error:", err);
+  }
+}
 
 // ── Core ───────────────────────────────────────────────────────────────────
 
@@ -23,16 +106,32 @@ export function trackEvent(
   event: string,
   properties?: Record<string, unknown>,
 ): void {
-  // Skip tracking in local/dev contexts — Vercel API blocks CORS from localhost/127.0.0.1
-  const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1") return;
-
   const session = getSession();
-  const userId = session?.user?.id || null;
+  const userId =
+    session?.user?.id ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-dock-auth-user-id") ||
+        localStorage.getItem("mce_auth_user_id")
+      : null) ||
+    null;
+  const deviceId =
+    getDeviceId() ||
+    session?.deviceId ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-device-id")
+      : null) ||
+    null;
+  const deviceSecret = getDeviceSecret() || session?.deviceSecret || null;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (deviceId) headers["X-Device-Id"] = deviceId;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
 
-  void fetch(`${API_BASE}/api/tracking/event`, {
+  const apiBase = getSessionApiBase();
+  if (!apiBase) return;
+
+  void fetch(`${apiBase}/api/tracking/event`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       event,
       userId,
@@ -42,6 +141,51 @@ export function trackEvent(
     keepalive: true,
   }).catch(() => {
     // Tracking should never break the app
+  });
+}
+
+function activateTrial(
+  event: "obs_connected" | "first_use_started" | "first_presentation" | "first_use",
+): void {
+  if (event === "first_presentation" && isFirstPresentationDone()) {
+    return;
+  }
+  if (trialActivationAttempted) return;
+  const session = getSession();
+  const deviceId =
+    getDeviceId() ||
+    session?.deviceId ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-device-id")
+      : null) ||
+    null;
+  const userId =
+    session?.user?.id ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem("mce-dock-auth-user-id") ||
+        localStorage.getItem("mce_auth_user_id")
+      : null);
+  if (!userId || !deviceId) return;
+  trialActivationAttempted = true;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Device-Id": deviceId,
+  };
+  const deviceSecret = getDeviceSecret() || session?.deviceSecret;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
+
+  const apiBase = getSessionApiBase();
+  if (!apiBase) return;
+
+  void fetch(`${apiBase}/api/trial/activate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {
+    // Trial activation is retried by the next app session if the request fails.
+    trialActivationAttempted = false;
   });
 }
 
@@ -65,9 +209,48 @@ export function trackBibleSearch(version?: string): void {
   trackEvent("bible_search", { version });
 }
 
-export function trackBiblePresent(ref?: string): void {
-  // Don't send the verse text, just that something was presented
-  trackEvent("bible_present", { hasRef: !!ref });
+export function trackBiblePresent(
+  params?:
+    | string
+    | {
+        ref?: string;
+        translation?: string;
+        overlayMode?: "fullscreen" | "lower-third";
+        book?: string;
+        chapter?: number;
+        verse?: number;
+        verseRange?: string;
+      },
+): void {
+  const isObject = typeof params === "object" && params !== null;
+  const ref = isObject ? params.ref : params;
+  const translation = isObject ? params.translation : undefined;
+  const overlayMode = isObject ? params.overlayMode : undefined;
+  const book = isObject ? params.book : undefined;
+  const chapter = isObject ? params.chapter : undefined;
+  const verse = isObject ? params.verse : undefined;
+  const verseRange = isObject ? params.verseRange : undefined;
+
+  trackEvent("bible_present", {
+    hasRef: Boolean(ref),
+    ref: ref || "",
+    translation: translation || "",
+    overlayMode: overlayMode || "fullscreen",
+    book: book || "",
+    chapter: chapter || undefined,
+    verse: verse || undefined,
+    verseRange: verseRange || "",
+  });
+
+  if (!isFirstPresentationDone()) {
+    activateTrial("first_presentation");
+    markFirstPresentationDone();
+    void captureAndUploadFirstPresentationScreenshot("bible", {
+      ref: ref || "",
+      translation: translation || "",
+      overlayMode: overlayMode || "fullscreen",
+    });
+  }
 }
 
 // ── Worship Events ─────────────────────────────────────────────────────────
@@ -80,8 +263,38 @@ export function trackWorshipSongImported(): void {
   trackEvent("worship_song_imported");
 }
 
-export function trackWorshipSongPresented(): void {
-  trackEvent("worship_song_presented");
+export function trackWorshipSongPresented(
+  params?:
+    | string
+    | {
+        songTitle?: string;
+        overlayMode?: "fullscreen" | "lower-third";
+        hasLyrics?: boolean;
+      },
+): void {
+  const isObject = typeof params === "object" && params !== null;
+  const songTitle = isObject
+    ? params.songTitle
+    : typeof params === "string"
+      ? params
+      : undefined;
+  const overlayMode = isObject ? params.overlayMode : undefined;
+  const hasLyrics = isObject ? params.hasLyrics : true;
+
+  trackEvent("worship_song_presented", {
+    songTitle: songTitle || "",
+    overlayMode: overlayMode || "fullscreen",
+    hasLyrics: Boolean(hasLyrics),
+  });
+
+  if (!isFirstPresentationDone()) {
+    activateTrial("first_presentation");
+    markFirstPresentationDone();
+    void captureAndUploadFirstPresentationScreenshot("worship", {
+      songTitle: songTitle || "",
+      overlayMode: overlayMode || "fullscreen",
+    });
+  }
 }
 
 // ── Media Events ───────────────────────────────────────────────────────────
@@ -90,8 +303,44 @@ export function trackMediaUploaded(type: string = "unknown"): void {
   trackEvent("media_uploaded", { type });
 }
 
-export function trackMediaPresented(type: string = "unknown"): void {
-  trackEvent("media_presented", { type });
+export function trackMediaPresented(
+  params?:
+    | string
+    | {
+        type?: string;
+        mediaName?: string;
+      },
+): void {
+  const isObject = typeof params === "object" && params !== null;
+  const type = isObject
+    ? params.type
+    : typeof params === "string"
+      ? params
+      : "unknown";
+  const mediaName = isObject ? params.mediaName : undefined;
+
+  trackEvent("media_presented", {
+    type: type || "unknown",
+    mediaName: mediaName || "",
+  });
+
+  if (!isFirstPresentationDone()) {
+    activateTrial("first_presentation");
+    markFirstPresentationDone();
+    void captureAndUploadFirstPresentationScreenshot("media", {
+      type: type || "unknown",
+      mediaName: mediaName || "",
+    });
+  }
+}
+
+// ── Mode Switch Events ─────────────────────────────────────────────────────
+
+export function trackOverlayModeSwitched(
+  module: "bible" | "worship" | "notes" | "sermon" | string,
+  mode: "fullscreen" | "lower-third",
+): void {
+  trackEvent("overlay_mode_switched", { module, mode });
 }
 
 // ── Voice / Transcription Events ───────────────────────────────────────────
@@ -112,8 +361,12 @@ export function trackTranscriptExported(format: string): void {
   trackEvent("transcript_exported", { format });
 }
 
-export function trackTranslationGenerated(wordCount: number, targetLang?: string): void {
+export function trackTranslationGenerated(
+  wordCount: number,
+  targetLang?: string,
+): void {
   trackEvent("translation_generated", { wordCount, targetLang });
+  activateTrial("first_use");
 }
 
 // ── Theme Events ───────────────────────────────────────────────────────────
@@ -128,8 +381,19 @@ export function trackThemeApplied(type: string): void {
 
 // ── App Lifecycle ──────────────────────────────────────────────────────────
 
-export function trackAppStarted(): void {
-  trackEvent("app_started");
+export function trackFirstAppOpen(properties?: Record<string, unknown>): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (localStorage.getItem(FIRST_APP_OPEN_KEY) === "true") return;
+      localStorage.setItem(FIRST_APP_OPEN_KEY, "true");
+    }
+  } catch {}
+  trackEvent("first_app_open", properties);
+}
+
+export function trackAppStarted(extraProps?: Record<string, unknown>): void {
+  trackFirstAppOpen(extraProps);
+  trackEvent("app_started", extraProps);
 }
 
 export function trackAppClosed(sessionDurationSeconds: number): void {
@@ -138,4 +402,15 @@ export function trackAppClosed(sessionDurationSeconds: number): void {
 
 export function trackObsConnected(): void {
   trackEvent("obs_connected");
+  activateTrial("obs_connected");
+}
+
+export function trackFirstUseStarted(): void {
+  trackEvent("first_use_started");
+  activateTrial("first_use_started");
+}
+
+export function trackStsPushToLive(): void {
+  trackEvent("sts_push_to_live");
+  activateTrial("first_use");
 }

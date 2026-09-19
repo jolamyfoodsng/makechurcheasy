@@ -9,6 +9,19 @@ export interface VerseAliasEntry {
 
 export const VERSE_ALIASES: VerseAliasEntry[] = [
   // Tier 1: Universally quoted
+  {
+    phrases: [
+      "jacob have i loved but esau have i hated",
+      "jacob i loved but esau i hated",
+      "jacob i love but esau i hate",
+      "i love jacob",
+      "jacob loved",
+      "esau hated",
+      "jacob loved esau hated",
+      "jacob i loved esau i hated",
+    ],
+    reference: "Romans 9:13",
+  },
   { phrases: ["for god so loved the world", "god so loved the world", "for god so loved"], reference: "John 3:16" },
   { phrases: ["the lord is my shepherd", "lord is my shepherd", "the lord is my shepherd i shall not want"], reference: "Psalm 23:1" },
   { phrases: ["faith is the substance of things hoped for", "faith is the substance of things hoped for the evidence of things not seen", "now faith is the substance of things hoped for"], reference: "Hebrews 11:1" },
@@ -63,6 +76,7 @@ export const VERSE_ALIASES: VerseAliasEntry[] = [
   { phrases: ["surely goodness and mercy shall follow me"], reference: "Psalm 23:6" },
   { phrases: ["if god is for us who can be against us", "if god be for us who can be against us"], reference: "Romans 8:31" },
   { phrases: ["to everything there is a season", "to every thing there is a season"], reference: "Ecclesiastes 3:1" },
+  { phrases: ["for everything there is a time", "for every purpose under heaven", "there is a time for every purpose"], reference: "Ecclesiastes 3:1" },
   { phrases: ["a time to be born and a time to die"], reference: "Ecclesiastes 3:2" },
   { phrases: ["there is a time for everything"], reference: "Ecclesiastes 3:1" },
   { phrases: ["the lord is my strength and my song"], reference: "Exodus 15:2" },
@@ -88,6 +102,9 @@ export const VERSE_ALIASES: VerseAliasEntry[] = [
   { phrases: ["prepare the way of the lord"], reference: "Matthew 3:3" },
   { phrases: ["the battle is not yours but gods"], reference: "2 Chronicles 20:15" },
   { phrases: ["the blood of jesus"], reference: "1 John 1:7" },
+  { phrases: ["we wrestle not against flesh and blood", "we wrestle not against flesh and blood but against principalities and powers"], reference: "Ephesians 6:12" },
+  { phrases: ["mercy rejoiceth against judgment", "mercy triumphs over judgment", "mercy triumphs over judgement", "mercy prevails over judgment", "mercy prevails over judgement"], reference: "James 2:13" },
+  { phrases: ["and god remembered noah", "god remembered noah"], reference: "Genesis 8:1" },
   { phrases: ["the lord will fight for you"], reference: "Exodus 14:14" },
   { phrases: ["the Spirit of the lord is upon me"], reference: "Luke 4:18" },
   { phrases: ["taste and see that the lord is good"], reference: "Psalm 34:8" },

@@ -33,6 +33,7 @@ import {
 import type { SpeakerProfileSetting } from "../../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
+import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ import Icon from "../DockIcon";
 // ---------------------------------------------------------------------------
 
 const SPEAKER_FIRST_TIME_KEY = "ocs-dock-lt-speaker-hint-seen";
+const LT_APPEARANCE_PANEL_ID = "dock-lt-appearance-panel";
 
 interface DockLTEditorProps {
   theme: LowerThirdTheme;
@@ -48,10 +50,90 @@ interface DockLTEditorProps {
   onSend: (url: string) => void;
   onBlank: (url: string) => void;
   onAnimateOut?: (url: string) => void;
-  onUpdate?: (url: string) => void;
   sending: boolean;
   size?: LTSize;
-  live?: boolean;
+}
+
+type LTAppearanceColorKey = "bgColor" | "textColor" | "accentColor";
+
+const LT_APPEARANCE_COLOR_CONTROLS: Array<{ key: LTAppearanceColorKey; label: string; fallback: string }> = [
+  { key: "bgColor", label: "Background", fallback: "#111827" },
+  { key: "textColor", label: "Text", fallback: "#ffffff" },
+  { key: "accentColor", label: "Accent", fallback: "#1d4ed8" },
+];
+
+function sanitizeLtColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, 80);
+  if (!trimmed || /[;{}<>]/.test(trimmed)) return undefined;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function ltColorInputValue(value: unknown, fallback: string): string {
+  const color = sanitizeLtColor(value);
+  const hex = color?.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return fallback;
+  if (hex.length === 3) return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
+  return `#${hex}`.toLowerCase();
+}
+
+function getLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey): string {
+  if (key === "bgColor") return styles.bgColor || styles.bgColor1 || styles.bgColor2 || "";
+  if (key === "textColor") return styles.textColor || styles.nameColor || styles.infoColor || "";
+  return styles.accentColor || styles.borderColor1 || styles.borderColor2 || "";
+}
+
+function withLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey, value: string): LTCustomStyle {
+  const color = sanitizeLtColor(value) ?? "";
+  if (key === "bgColor") {
+    return {
+      ...styles,
+      bgColor: color,
+      bgColor1: color,
+      bgColor2: color,
+    };
+  }
+  if (key === "textColor") {
+    return {
+      ...styles,
+      textColor: color,
+      nameColor: color,
+      infoColor: color,
+    };
+  }
+  return {
+    ...styles,
+    accentColor: color,
+    borderColor1: color,
+    borderColor2: color,
+  };
+}
+
+function withoutLtAppearanceColors(styles: LTCustomStyle): LTCustomStyle {
+  return {
+    ...styles,
+    bgColor: "",
+    bgColor1: "",
+    bgColor2: "",
+    textColor: "",
+    nameColor: "",
+    infoColor: "",
+    accentColor: "",
+    borderColor1: "",
+    borderColor2: "",
+  };
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read image."));
+    reader.readAsDataURL(file);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -139,19 +221,66 @@ export default function DockLowerThirdEditor({
     [theme],
   );
   const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const imagePreviewUrlRef = useRef<string | null>(null);
+  const imageUploadIdRef = useRef(0);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [imageHovered, setImageHovered] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
 
-  const handleImageFileSelect = useCallback((file: File) => {
+  const clearImagePreview = useCallback(() => {
+    const previous = imagePreviewUrlRef.current;
+    if (previous) URL.revokeObjectURL(previous);
+    imagePreviewUrlRef.current = null;
+    setImagePreviewUrl(null);
+  }, []);
+
+  const handleImageFileSelect = useCallback(async (file: File) => {
     if (!imageVariable) return;
     if (!file.type.startsWith("image/")) return;
-    const url = URL.createObjectURL(file);
-    setVariableValues((prev) => ({ ...prev, [imageVariable.key]: url }));
-  }, [imageVariable, setVariableValues]);
+    const uploadId = ++imageUploadIdRef.current;
+    clearImagePreview();
+    const previewUrl = URL.createObjectURL(file);
+    imagePreviewUrlRef.current = previewUrl;
+    setImagePreviewUrl(previewUrl);
+    setImageUploading(true);
+
+    try {
+      // Blob URLs only live for the current browser session. Save the image
+      // first, then persist a stable uploads URL in the content slot so a
+      // refreshed Dock can restore the logo.
+      const safeName = `lt_logo_${Date.now()}_${getSafeFileName(file.name)}`;
+      const savedPath = await saveToDisk(file, safeName);
+      if (uploadId !== imageUploadIdRef.current) return;
+      const persistedUrl = resolveOverlayAssetUrl(savedPath);
+      if (!persistedUrl || persistedUrl.startsWith("blob:")) {
+        throw new Error("A persistent image URL was not returned.");
+      }
+      setVariableValues((prev) => ({ ...prev, [imageVariable.key]: persistedUrl }));
+    } catch (err) {
+      if (uploadId !== imageUploadIdRef.current) return;
+      // Keep the editor usable in a browser without the local upload API.
+      // The data URL is durable in the existing content-slot storage, unlike
+      // the object URL used only for the temporary preview.
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (uploadId === imageUploadIdRef.current) {
+          setVariableValues((prev) => ({ ...prev, [imageVariable.key]: dataUrl }));
+        }
+      } catch (fallbackErr) {
+        console.warn("[LowerThirdEditor] Could not persist selected image:", err, fallbackErr);
+      }
+    } finally {
+      if (uploadId === imageUploadIdRef.current) {
+        setImageUploading(false);
+        clearImagePreview();
+      }
+    }
+  }, [clearImagePreview, imageVariable]);
 
   const handleImageFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleImageFileSelect(file);
+    if (file) void handleImageFileSelect(file);
     e.target.value = "";
   }, [handleImageFileSelect]);
 
@@ -159,17 +288,42 @@ export default function DockLowerThirdEditor({
     e.preventDefault();
     setImageDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleImageFileSelect(file);
+    if (file) void handleImageFileSelect(file);
   }, [handleImageFileSelect]);
 
   const handleImageRemove = useCallback(() => {
     if (!imageVariable) return;
+    imageUploadIdRef.current += 1;
+    setImageUploading(false);
+    clearImagePreview();
     // For text-type logo variables, reset to the theme's default URL; otherwise clear
     setVariableValues((prev) => ({
       ...prev,
       [imageVariable.key]: imageVariable.type === "text" ? (imageVariable.defaultValue ?? "") : "",
     }));
-  }, [imageVariable, setVariableValues]);
+  }, [clearImagePreview, imageVariable]);
+
+  // Older slots may contain a session-only blob URL from before uploads were
+  // persisted. It cannot be recovered after refresh, so fall back cleanly to
+  // the theme default/global branding instead of showing a broken image.
+  useEffect(() => {
+    if (!imageVariable) return;
+    setVariableValues((prev) => {
+      const current = prev[imageVariable.key];
+      if (typeof current !== "string" || !current.startsWith("blob:")) return prev;
+      return {
+        ...prev,
+        [imageVariable.key]: imageVariable.type === "text" ? (imageVariable.defaultValue ?? "") : "",
+      };
+    });
+  }, [imageVariable]);
+
+  useEffect(() => () => {
+    imageUploadIdRef.current += 1;
+    const previous = imagePreviewUrlRef.current;
+    if (previous) URL.revokeObjectURL(previous);
+    imagePreviewUrlRef.current = null;
+  }, []);
 
   const [speakers, setSpeakers] = useState<SpeakerProfileSetting[]>([]);
   const [selectedSpeakerIdx, setSelectedSpeakerIdx] = useState<number | null>(null);
@@ -345,11 +499,11 @@ export default function DockLowerThirdEditor({
 
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
 
   const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
   const skipFirstSaveRef = useRef(true);
-  const suppressLiveUpdateRef = useRef(false);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -366,7 +520,6 @@ export default function DockLowerThirdEditor({
 
   // ── Slot handlers ──
   const handleRecallSlot = useCallback((slot: ContentSlot) => {
-    suppressLiveUpdateRef.current = true;
     const resolved = resolveSlotState(slot);
     setVariableValues({ ...resolved.variableValues });
     setCustomStyles({ ...resolved.customStyles });
@@ -374,7 +527,6 @@ export default function DockLowerThirdEditor({
     setAnimationIn(resolved.animationIn);
     setExitStyle(resolved.exitStyle);
     setActiveSlotIndex(slot.index);
-    requestAnimationFrame(() => { suppressLiveUpdateRef.current = false; });
   }, []);
 
   const handleDeleteSlot = useCallback((index: number) => {
@@ -670,10 +822,11 @@ export default function DockLowerThirdEditor({
                     onDrop={handleImageDrop}
                     onMouseEnter={() => setImageHovered(true)}
                     onMouseLeave={() => setImageHovered(false)}
+                    aria-busy={imageUploading}
                   >
-                    {variableValues[imageVariable.key] ? (
+                    {(imagePreviewUrl || variableValues[imageVariable.key]) ? (
                       <>
-                        <img src={variableValues[imageVariable.key]} alt="" />
+                        <img src={imagePreviewUrl || variableValues[imageVariable.key]} alt="" />
                         {imageHovered && (
                           <div className="dock-lt-image-picker-overlay">
                             <button
@@ -682,7 +835,7 @@ export default function DockLowerThirdEditor({
                               onClick={(e) => { e.stopPropagation(); imageFileInputRef.current?.click(); }}
                             >
                               <span className="material-icons" style={{ fontSize: 14 }}>photo_camera</span>
-                              <span>Change</span>
+                              <span>{t("common.change", "Change")}</span>
                             </button>
                             <button
                               type="button"
@@ -690,7 +843,7 @@ export default function DockLowerThirdEditor({
                               onClick={(e) => { e.stopPropagation(); handleImageRemove(); }}
                             >
                               <span className="material-icons" style={{ fontSize: 14 }}>close</span>
-                              <span>Remove</span>
+                              <span>{t("common.remove", "Remove")}</span>
                             </button>
                           </div>
                         )}
@@ -700,7 +853,7 @@ export default function DockLowerThirdEditor({
                         <span className="material-icons" style={{ fontSize: 20, color: "var(--dock-text-dim)" }}>
                           add_photo_alternate
                         </span>
-                        <span className="dock-lt-image-picker-empty-text">Drop image or click</span>
+                        <span className="dock-lt-image-picker-empty-text">{t("lowerThird.dropImageOrClick", "Drop image or click")}</span>
                       </div>
                     )}
                   </div>
@@ -764,6 +917,111 @@ export default function DockLowerThirdEditor({
                     </div>
                   ))}
               </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 6,
+                padding: 8,
+                border: "1px solid var(--dock-border)",
+                borderRadius: 4,
+                background: "var(--dock-surface)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 8, marginBottom: appearanceOpen ? 7 : 0 }}>
+                <button
+                  type="button"
+                  aria-expanded={appearanceOpen}
+                  aria-controls={LT_APPEARANCE_PANEL_ID}
+                  onClick={() => setAppearanceOpen((open) => !open)}
+                  style={{
+                    display: "flex",
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    minWidth: 0,
+                    padding: 0,
+                    border: 0,
+                    background: "transparent",
+                    color: "inherit",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                      {t("lowerThird.appearance", "Appearance")}
+                    </div>
+                    <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
+                      {t("lowerThird.appearanceDesc", "Adjust the live lower-third colors.")}
+                    </div>
+                  </div>
+                  <Icon name={appearanceOpen ? "expand_less" : "expand_more"} size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomStyles((prev) => withoutLtAppearanceColors(prev))}
+                  style={{
+                    border: "1px solid var(--dock-border)",
+                    borderRadius: 3,
+                    background: "var(--dock-input-bg)",
+                    color: "var(--dock-text-dim)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    padding: "2px 6px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {t("common.reset", "Reset")}
+                </button>
+              </div>
+              {appearanceOpen && (
+                <div
+                  id={LT_APPEARANCE_PANEL_ID}
+                  role="region"
+                  aria-label={t("lowerThird.appearance", "Appearance")}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}
+                >
+                  {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
+                    const explicitColor = getLtAppearanceColor(customStyles, control.key);
+                    const baseColor = control.key === "accentColor" ? theme.accentColor : control.fallback;
+                    const effectiveColor = sanitizeLtColor(explicitColor) ?? sanitizeLtColor(baseColor) ?? control.fallback;
+                    return (
+                      <label
+                        key={control.key}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 26px",
+                          alignItems: "center",
+                          gap: 5,
+                          minWidth: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {t(`lowerThird.color.${control.key}`, control.label)}
+                        </span>
+                        <input
+                          type="color"
+                          value={ltColorInputValue(explicitColor || effectiveColor, control.fallback)}
+                          onChange={(event) => setCustomStyles((prev) => withLtAppearanceColor(prev, control.key, event.target.value))}
+                          title={control.label}
+                          style={{
+                            width: 26,
+                            height: 22,
+                            border: "1px solid var(--dock-border)",
+                            borderRadius: 3,
+                            background: "transparent",
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Panel Bottom: Memory + Time Controls */}
@@ -831,9 +1089,9 @@ export default function DockLowerThirdEditor({
           onClick={handleSend}
           disabled={sending}
           style={{ flex: 1 }}
-          title={t("lowerThird.goLive")}>
+          title={t("common.sendToObs", "Send to OBS")}>
           <Icon name="play_arrow" size={14} />
-          <span>{t("lowerThird.goLive")}</span>
+          <span>{t("common.sendToObs", "Send to OBS")}</span>
         </button>
         {onAnimateOut && (
           <button

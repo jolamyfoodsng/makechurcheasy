@@ -18,6 +18,7 @@ import {
   Music,
   RefreshCw,
 } from "lucide-react";
+import { trackProductEvent } from "@/lib/productTracking";
 
 // ─── Plan feature maps ─────────────────────────────────────────────────────
 
@@ -39,14 +40,6 @@ const PLAN_FEATURES: Record<string, { icon: React.ElementType; label: string }[]
     { icon: RefreshCw, label: "Unlimited themes, devices, and cloud sync" },
     { icon: Zap, label: "2,000 AI credits per month" },
   ],
-  pro: [
-    { icon: MonitorPlay, label: "Everything in Growth, plus:" },
-    { icon: Zap, label: "Unlimited AI credits — never hit a limit" },
-    { icon: Download, label: "200 GB cloud storage for your media library" },
-    { icon: Crown, label: "Custom reports and full API access" },
-    { icon: Smartphone, label: "Team & multi-campus management" },
-    { icon: Shield, label: "Dedicated onboarding and priority support" },
-  ],
 };
 
 // ─── Verify result type ────────────────────────────────────────────────────
@@ -59,6 +52,9 @@ interface VerifyResult {
   credits: number;
   expiresAt: string;
   billingCycle: string;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
   currency: string;
   lockedPrice: number;
   billingTransaction?: {
@@ -73,9 +69,12 @@ interface VerifyResult {
 
 interface PendingPayment {
   type?: "subscription" | "credits";
+  paymentMethod?: "paystack" | "mtn_momo" | "nowpayments" | "flutterwave";
   reference?: string;
   planId?: string;
   billingCycle?: "monthly" | "yearly" | "lifetime";
+  offerId?: string;
+  purchaseKind?: "subscription" | "one_time";
   creditPackId?: string;
 }
 
@@ -84,8 +83,10 @@ interface PendingPayment {
 function SuccessPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const reference = searchParams.get("reference") || searchParams.get("trxref") || "";
+  const reference = searchParams.get("reference") || searchParams.get("trxref") || searchParams.get("tx_ref") || "";
   const paymentType = searchParams.get("type") || "";
+  const transactionId = searchParams.get("transaction_id") || "";
+  const providerStatus = searchParams.get("status") || "";
 
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -101,34 +102,34 @@ function SuccessPageContent() {
     // Check localStorage for plan info (stored before Paystack redirect)
     let planId = "";
     let billingCycle: "monthly" | "yearly" | "lifetime" | undefined;
+    let offerId = "";
     let pendingType = paymentType === "credits" ? "credits" : "";
+    let pendingPaymentMethod: PendingPayment["paymentMethod"];
     try {
       const pending = JSON.parse(localStorage.getItem("mce_pending_payment") || "null") as PendingPayment | null;
       if (pending?.reference === reference) {
         pendingType = pending.type || pendingType;
+        pendingPaymentMethod = pending.paymentMethod;
         planId = pending.planId || "";
         billingCycle = pending.billingCycle;
-        localStorage.removeItem("mce_pending_payment");
+        offerId = pending.offerId || "";
       }
     } catch { /* empty */ }
 
     try {
-      const res = await fetch(pendingType === "credits" ? "/api/credits/purchase/verify" : "/api/payments/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: pendingType === "credits"
-          ? JSON.stringify({ reference })
-          : JSON.stringify({
-              reference,
-              ...(planId ? { planId } : {}),
-              ...(billingCycle ? { billingCycle } : {}),
-            }),
-      });
-      const data: VerifyResult & { error?: string } = await res.json();
-
-      if (data.success) {
+      const isNowPayments = paymentType === "nowpayments" || pendingPaymentMethod === "nowpayments";
+      const markSuccess = (data: VerifyResult) => {
         setResult(data);
         setStatus("success");
+        trackProductEvent("payment_completed", {
+          plan: data.plan,
+          billingCycle: data.billingCycle,
+          purchaseKind: data.purchaseKind,
+          paymentType: pendingPaymentMethod || paymentType || "paystack",
+        });
+        try {
+          localStorage.removeItem("mce_pending_payment");
+        } catch { /* best-effort */ }
         // Trigger PremiumWelcomeModal on dashboard load
         if (pendingType !== "credits") try {
           localStorage.setItem(
@@ -138,18 +139,104 @@ function SuccessPageContent() {
               plan: data.plan,
               planName: data.planName,
               billingCycle: data.billingCycle,
+              purchaseKind: data.purchaseKind,
+              oneTimeOfferName: data.oneTimeOfferName,
             })
           );
         } catch { /* best-effort */ }
+      };
+
+      if (isNowPayments) {
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          const res = await fetch(`/api/payments/nowpayments/status?reference=${encodeURIComponent(reference)}`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          const data = await res.json().catch(() => ({})) as VerifyResult & { status?: string; error?: string };
+          if (data.success) {
+            markSuccess(data);
+            return;
+          }
+          if (data.status === "FAILED" || (!res.ok && res.status !== 202)) {
+            setStatus("error");
+            setErrorMsg(data.error || "The crypto payment was not completed.");
+            return;
+          }
+          if (attempt < 39) {
+            await new Promise((resolve) => window.setTimeout(resolve, 3000));
+          }
+        }
+        setStatus("error");
+        setErrorMsg("Your crypto payment is still processing. Check Billing in a moment; access is added when the blockchain payment is finished.");
+        return;
+      }
+
+      const isFlutterwave = paymentType === "flutterwave" || pendingPaymentMethod === "flutterwave";
+      if (isFlutterwave) {
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const params = new URLSearchParams({ reference });
+          if (transactionId) params.set("transaction_id", transactionId);
+          if (providerStatus) params.set("status", providerStatus);
+          const res = await fetch(`/api/payments/flutterwave/status?${params.toString()}`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          const data = await res.json().catch(() => ({})) as VerifyResult & { status?: string; error?: string };
+          if (data.success) {
+            markSuccess(data);
+            return;
+          }
+          if (data.status === "FAILED" || (!res.ok && res.status !== 202)) {
+            setStatus("error");
+            setErrorMsg(data.error || "The Flutterwave payment was not completed.");
+            return;
+          }
+          if (attempt < 4) await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+        setStatus("error");
+        setErrorMsg("Flutterwave is still confirming the payment. Check Billing in a moment; access is added after verification.");
+        return;
+      }
+
+      const isMtnMomo = paymentType === "mtn_momo";
+      const verificationUrl = isMtnMomo
+        ? `/api/payments/mtn-momo/status?reference=${encodeURIComponent(reference)}`
+        : pendingType === "credits"
+          ? "/api/credits/purchase/verify"
+          : "/api/payments/verify";
+      const res = await fetch(verificationUrl, {
+        method: isMtnMomo ? "GET" : "POST",
+        headers: isMtnMomo ? undefined : { "Content-Type": "application/json" },
+        body: isMtnMomo
+          ? undefined
+          : pendingType === "credits"
+          ? JSON.stringify({ reference })
+          : JSON.stringify({
+              reference,
+              ...(planId ? { planId } : {}),
+              ...(billingCycle ? { billingCycle } : {}),
+              ...(offerId ? { offerId } : {}),
+            }),
+      });
+      const data: VerifyResult & { error?: string } = await res.json();
+
+      if (data.success) {
+        markSuccess(data);
       } else {
         setStatus("error");
         setErrorMsg(data.error || "Payment verification failed. Please try again.");
       }
     } catch {
       setStatus("error");
-      setErrorMsg("Something went wrong while verifying your payment. Your card was not charged.");
+      setErrorMsg(
+        paymentType === "nowpayments"
+          ? "Something went wrong while checking your crypto payment. Check Billing before trying again."
+          : paymentType === "flutterwave"
+            ? "Something went wrong while checking your Flutterwave payment. Check Billing before trying again."
+          : "Something went wrong while verifying your payment. Your card was not charged.",
+      );
     }
-  }, [reference]);
+  }, [paymentType, providerStatus, reference, transactionId]);
 
   useEffect(() => {
     verifyPayment();
@@ -188,7 +275,7 @@ function SuccessPageContent() {
               Go Back
             </button>
             <button
-              onClick={() => { setStatus("verifying"); verifyPayment(); }}
+              onClick={() => router.push("/subscription/plans")}
               className="px-6 h-11 py-2.5 rounded-xl font-semibold bg-blue-700 text-white hover:bg-blue-800 transition-colors text-sm"
             >
               Try Again
@@ -206,6 +293,7 @@ function SuccessPageContent() {
   const features = PLAN_FEATURES[result.plan] || [];
   const isCreditPurchase = result.type === "credits";
   const renewDate = result.billingCycle === "lifetime"
+    || result.purchaseKind === "one_time"
     ? "Lifetime"
     : result.expiresAt
     ? new Date(result.expiresAt).toLocaleDateString("en-US", {
@@ -290,6 +378,7 @@ function SuccessPageContent() {
               <p className="font-bold text-slate-900 text-lg">{paidAmount}</p>
               <p className="text-xs">
                 {result.billingCycle === "lifetime"
+                  || result.purchaseKind === "one_time"
                   ? "one-time"
                   : result.billingCycle === "yearly"
                     ? "per year"
@@ -303,6 +392,7 @@ function SuccessPageContent() {
               <p className="font-bold text-slate-900 text-lg">{renewDate}</p>
               <p className="text-xs">
                 {result.billingCycle === "lifetime"
+                  || result.purchaseKind === "one_time"
                   ? "lifetime access"
                   : result.billingCycle === "yearly"
                     ? "next renewal"

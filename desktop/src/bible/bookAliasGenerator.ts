@@ -35,6 +35,22 @@ const NUMBER_FORMS: Record<string, string[]> = {
   "3": ["3", "3rd", "third", "three", "tree", "free"],
 };
 
+/**
+ * Convert written Roman-number forms used in Bible references to a digit
+ * prefix. This also handles speech-to-text output such as "I-I Kings".
+ */
+export function normalizeRomanNumberedBookPrefix(value: string): string {
+  const match = value.match(
+    /^((?:i{1,3})(?:(?:\s*[-–—]\s*|\s+)i{1,3}){0,2})(?=\s|$)/i,
+  );
+  if (!match) return value;
+
+  const roman = match[1].replace(/[^i]/gi, "").toLowerCase();
+  if (!/^i{1,3}$/.test(roman)) return value;
+
+  return `${roman.length}${value.slice(match[1].length)}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Numbered book definitions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +85,66 @@ const NUMBERED_BOOKS: NumberedBookDef[] = [
   { num: "2", base: "John",      singular: "John",      abbreviations: ["jn", "jo", "joh", "johh"] },
   { num: "3", base: "John",      singular: "John",      abbreviations: ["jn", "jo", "joh", "johh"] },
 ];
+
+const COMPACT_NUMBERED_BOOK_SUFFIXES = new Set(
+  NUMBERED_BOOKS.flatMap((def) => [
+    def.base.toLowerCase(),
+    def.singular.toLowerCase(),
+    ...def.abbreviations.map((abbr) => abbr.toLowerCase()),
+  ]),
+);
+
+const NUMBERED_SUFFIX_TO_BASE = new Map(
+  NUMBERED_BOOKS.flatMap((def) => [def.base, def.singular, ...def.abbreviations]
+    .map((suffix) => [suffix.toLowerCase(), def.base] as const)),
+);
+const BOOK_NUMBER_FORMS = new Map([
+  ...Object.entries(NUMBER_FORMS).flatMap(([digit, forms]) => forms.map((form) => [form, digit] as const)),
+  ["i", "1"], ["ii", "2"], ["iii", "3"],
+] as [string, string][]);
+const BOOK_NUMBER_PATTERN = [...BOOK_NUMBER_FORMS.keys()]
+  .sort((a, b) => b.length - a.length).join("|");
+const NUMBERED_NAME_RE = new RegExp(
+  `\\b((?:(?:${BOOK_NUMBER_PATTERN})[\\s.,–—-]*){1,4})` +
+  `(${[...NUMBERED_SUFFIX_TO_BASE.keys()].sort((a, b) => b.length - a.length).join("|")})(?=\\b|\\d)`,
+  "gi",
+);
+
+/**
+ * Normalize complete numbered book names before punctuation or chapter aliases
+ * are stripped. This preserves "1 Ch", "firstcor", and repeated ASR ordinals
+ * such as "second 2nd Kings" without changing numbers elsewhere in a sermon.
+ */
+export function normalizeNumberedBookNames(value: string): string {
+  return value.replace(/\b([123])\s+(st|nd|rd)\b/gi, "$1$2")
+    .replace(NUMBERED_NAME_RE, (match, prefix: string, suffix: string, offset: number) => {
+      // "Isa" is the standard abbreviation for Isaiah. Require a separator
+      // for the otherwise ambiguous Roman-number form "I Sa" (1 Samuel).
+      if (match.toLowerCase() === "isa") return match;
+      const forms = prefix.toLowerCase().match(new RegExp(BOOK_NUMBER_PATTERN, "g")) ?? [];
+      const numbers = forms.map((form) => BOOK_NUMBER_FORMS.get(form)!);
+      const roman = prefix.replace(/[\s.,–—-]/g, "").toLowerCase();
+      const digit = /^i{1,3}$/.test(roman) ? String(roman.length) : numbers[0];
+      if (!digit || (!/^i{1,3}$/.test(roman) && numbers.some((number) => number !== digit))) return match;
+      const base = NUMBERED_SUFFIX_TO_BASE.get(suffix.toLowerCase())!;
+      // "turn to John" contains a preposition; "to kings" can be ASR for
+      // "two Kings" because there is no unnumbered book of Kings.
+      if (base === "John" && forms.length === 1 && forms[0] === "to" && offset > 0) return match;
+      return `${digit} ${base} `;
+    });
+}
+
+/** Convert compact forms such as "ikings" and "iikings" to book prefixes. */
+export function normalizeCompactNumberedBookPrefix(value: string): string {
+  const match = value.match(/^([123]|i{1,3})([a-z]+)(?=\s|$)/i);
+  if (!match) return value;
+
+  const suffix = match[2].toLowerCase();
+  if (!COMPACT_NUMBERED_BOOK_SUFFIXES.has(suffix)) return value;
+
+  const number = /^\d$/.test(match[1]) ? match[1] : String(match[1].length);
+  return `${number} ${value.slice(match[1].length)}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Non-numbered book definitions with speech-to-text variants

@@ -11,6 +11,7 @@
 
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { buildVersionedOverlayUrl } from "../services/overlayVersion";
 import {
   registerInput,
   registerSceneItem,
@@ -33,6 +34,13 @@ const SLOT_INPUT = "worship-browser-source";
 const SLOT_BG_INPUT = "worship-bg-source";
 const SLOT_BG_ITEM = `${SLOT_SCENE}:${SLOT_BG_INPUT}`;
 const FULLSCREEN_CLEAR_WAIT_MS = 240;
+
+function cssFontWeight(value: unknown): string {
+  if (value === "light") return "300";
+  if (value === "bold") return "700";
+  if (value === "extrabold") return "900";
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "normal";
+}
 
 class WorshipObsService {
   private sceneItemId: number | null = null;
@@ -296,7 +304,7 @@ class WorshipObsService {
     await presentationSceneManager.ensurePresentationScene();
 
     // ── 2. Update the browser source URL ──
-    const overlayUrl = `${getOverlayBaseUrlSync()}/mce-worship-overlay.html`;
+    const overlayUrl = buildVersionedOverlayUrl(getOverlayBaseUrlSync(), "mce-worship-overlay.html");
 
     let currentSourceName: string = WORSHIP_SOURCE_NAME;
     const regInput = await getInputBySlot(SLOT_INPUT);
@@ -768,7 +776,7 @@ class WorshipObsService {
 
       const packet = { slide, theme: themeForHash, live, blanked, timestamp: Date.now() };
       const base = getOverlayBaseUrlSync();
-      const baseUrl = `${base}/mce-worship-overlay.html`;
+      const baseUrl = buildVersionedOverlayUrl(base, "mce-worship-overlay.html");
       const overlayCss = this.buildOverlayDataCss(
         packet as unknown as Record<string, unknown>,
         customCss || "",
@@ -1100,7 +1108,7 @@ class WorshipObsService {
     const cssParts: string[] = [];
     if (theme.fontFamily) cssParts.push(`--font-family: ${theme.fontFamily};`);
     if (theme.fontSize) cssParts.push(`--font-size: ${theme.fontSize}px;`);
-    if (theme.fontWeight) cssParts.push(`--font-weight: ${theme.fontWeight};`);
+    if (theme.fontWeight) cssParts.push(`--font-weight: ${cssFontWeight(theme.fontWeight)};`);
     if (theme.fontColor) cssParts.push(`--text-color: ${theme.fontColor};`);
     if (theme.textShadow) cssParts.push(`--text-shadow: ${theme.textShadow};`);
     if (theme.textAlign) cssParts.push(`--text-align: ${theme.textAlign};`);

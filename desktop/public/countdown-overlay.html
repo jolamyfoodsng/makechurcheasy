@@ -54,6 +54,25 @@
       letter-spacing: -0.05em;
       user-select: none;
       text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+    }
+
+    .timer-display.visible {
+      opacity: 1;
+    }
+
+    .timer-display.reveal {
+      animation: countdown-text-fade-in 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+
+    @keyframes countdown-text-fade-in {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
     }
 
     .message-display {
@@ -66,7 +85,6 @@
       max-width: 80%;
       user-select: none;
       opacity: 0;
-      transition: opacity 0.5s ease-in-out;
       overflow-wrap: break-word;
       word-wrap: break-word;
       white-space: normal;
@@ -77,8 +95,24 @@
       opacity: 1;
     }
 
+    .message-display.reveal {
+      animation: countdown-text-fade-in 0.45s cubic-bezier(0.25, 1, 0.5, 1) 0.08s forwards;
+    }
+
     .message-display.hidden {
       opacity: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .timer-display.reveal {
+        animation: none;
+        opacity: 1;
+      }
+
+      .message-display {
+        animation: none !important;
+        opacity: 1;
+      }
     }
   </style>
 </head>
@@ -95,6 +129,7 @@
     let startedAt = 0;
     let currentCfg = {};
     let lastSyncState = null;
+    let revealTimer = null;
 
     const timerEl = document.getElementById("timer");
     const messageEl = document.getElementById("message");
@@ -157,7 +192,7 @@
         messageEl.textContent = msg.text;
         messageEl.style.color = msg.color || "#ffffff";
         messageEl.classList.remove("hidden");
-        messageEl.classList.add("visible");
+        messageEl.classList.remove("visible");
         // Position: above or below timer
         if (msg.position === "above") {
           container.insertBefore(messageEl, timerEl);
@@ -169,6 +204,37 @@
         messageEl.classList.remove("visible");
         messageEl.classList.add("hidden");
       }
+    }
+
+    function showTextImmediately() {
+      if (revealTimer) {
+        clearTimeout(revealTimer);
+        revealTimer = null;
+      }
+      timerEl.classList.remove("reveal");
+      timerEl.classList.add("visible");
+      if (currentCfg.message && currentCfg.message.text && currentCfg.message.text.trim()) {
+        messageEl.classList.remove("hidden", "reveal");
+        messageEl.classList.add("visible");
+      }
+    }
+
+    function scheduleTextReveal() {
+      if (revealTimer) clearTimeout(revealTimer);
+      timerEl.classList.remove("visible", "reveal");
+      messageEl.classList.remove("visible");
+      messageEl.classList.add("hidden");
+
+      // The background is a separate OBS browser source. Keep the text hidden
+      // long enough for that source to paint, then reveal it gently.
+      revealTimer = window.setTimeout(() => {
+        timerEl.classList.add("reveal");
+        if (currentCfg.message && currentCfg.message.text && currentCfg.message.text.trim()) {
+          messageEl.classList.remove("hidden", "visible");
+          messageEl.classList.add("reveal");
+        }
+        revealTimer = null;
+      }, 220);
     }
 
     function render() {
@@ -183,6 +249,7 @@
       currentCfg = payload.config;
       const timer = currentCfg.timer || {};
       const sync = payload.sync;
+      let paused = false;
 
       // If sync state provided, use remaining directly instead of calculating
       if (sync && typeof sync.remaining === "number") {
@@ -190,10 +257,7 @@
         startedAt = Date.now();
 
         if (sync.paused) {
-          // Paused: show static time, do not start interval
-          tick();
-          lastSyncState = sync;
-          return;
+          paused = true;
         }
       } else {
         // No sync state — calculate from timer settings
@@ -209,6 +273,9 @@
       lastSyncState = sync || null;
       tick();
       renderMessage();
+      if (payload.reveal === false) showTextImmediately();
+      else scheduleTextReveal();
+      if (paused) return;
       countdownTimer = setInterval(tick, 250);
     }
 

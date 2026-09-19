@@ -24,11 +24,14 @@ import {
 import { getUserScopedKey } from "../services/userScopedStorage";
 import {
   getEffectivePlan as resolveCanonicalPlan,
+  isActiveTrial,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
+import { getStoredLocalDevPlanOverride } from "../services/localDevPlanOverride";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
+export const TRIAL_ACTIVE_KEY = "ocs-dock-trial-active";
 
 /** Module-level callback set by DockPage to show the upgrade modal. */
 let _showUpgrade: ((message: string) => void) | null = null;
@@ -44,10 +47,32 @@ export function registerUpgradeModal(trigger: (message: string) => void): void {
 }
 
 /**
+ * Read whether the dock session is currently in an active trial period.
+ */
+export function isDockTrialActive(): boolean {
+  try {
+    const localDevOverride = getStoredLocalDevPlanOverride();
+    if (localDevOverride) return false;
+    return localStorage.getItem(getUserScopedKey(TRIAL_ACTIVE_KEY)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether the dock user is on a Free plan and NOT on an active free trial.
+ */
+export function isDockFreePlan(): boolean {
+  return getDockPlan() === "free" && !isDockTrialActive();
+}
+
+/**
  * Read the plan tier bridged from the main app.
  */
 export function getDockPlan(): string {
   try {
+    const localDevOverride = getStoredLocalDevPlanOverride();
+    if (localDevOverride) return localDevOverride;
     return normalizePlanId(localStorage.getItem(getUserScopedKey(PLAN_KEY)) || "free");
   } catch {
     return "free";
@@ -75,16 +100,29 @@ function checkWithServerLimits(
   plan: string,
   currentCount: number,
 ): EntitlementResult {
+  const localDevOverride = getStoredLocalDevPlanOverride();
+  const storedEntitlements = getStoredEntitlements();
+  const localDevEntitlements = localDevOverride
+    ? DEFAULT_PLAN_CONFIG.plans[normalizePlanId(plan)]?.entitlements as unknown as Record<string, number | boolean> | undefined
+    : null;
   // If we have server-provided entitlements, use them directly
-  const serverLimits = _serverEntitlements || getStoredEntitlements();
-  const source = _serverEntitlements ? "server" : getStoredEntitlements() ? "localStorage" : "defaultConfig";
+  // A local plan override must win over the admin account's server entitlements
+  // so switching to Free actually exercises Free limits in the Dock too.
+  const serverLimits = localDevEntitlements || _serverEntitlements || storedEntitlements;
+  const source = localDevEntitlements
+    ? "localDevOverride"
+    : _serverEntitlements
+      ? "server"
+      : storedEntitlements
+        ? "localStorage"
+        : "defaultConfig";
 
   if (serverLimits) {
     const limit = serverLimits[feature];
     if (limit !== undefined) {
       // Boolean feature
       if (typeof limit === "boolean") {
-        const requiredPlan = getRequiredPlan(feature);
+        const requiredPlan = getRequiredPlan(feature, currentCount);
         const result: EntitlementResult = {
           allowed: limit,
           limit: limit ? -1 : 0,
@@ -99,7 +137,7 @@ function checkWithServerLimits(
         const isUnlimited = limit === -1 || limit === Infinity;
         const allowed = isUnlimited || currentCount < limit;
         const remaining = isUnlimited ? -1 : Math.max(0, limit - currentCount);
-        const requiredPlan = getRequiredPlan(feature);
+        const requiredPlan = getRequiredPlan(feature, currentCount);
         const result: EntitlementResult = {
           allowed,
           limit,
@@ -119,19 +157,45 @@ function checkWithServerLimits(
   return result;
 }
 
+/**
+ * Read a resource limit for UI visibility without requiring an AuthProvider.
+ * Dock surfaces can mount in detached roots, so they must use the same cached
+ * server entitlements as the action guards instead of React auth context.
+ */
+export function getDockEntitlementLimit(feature: FeatureKey): number {
+  const plan = getDockPlan();
+  const localDevOverride = getStoredLocalDevPlanOverride();
+  const storedEntitlements = getStoredEntitlements();
+  const localDevEntitlements = localDevOverride
+    ? DEFAULT_PLAN_CONFIG.plans[normalizePlanId(plan)]?.entitlements as unknown as Record<string, number | boolean> | undefined
+    : null;
+  const limits = localDevEntitlements || _serverEntitlements || storedEntitlements;
+  const limit = limits?.[feature];
+
+  if (typeof limit === "number") return limit;
+  if (typeof limit === "boolean") return limit ? -1 : 0;
+  return checkEntitlementSync(feature, plan).limit;
+}
+
 // ── Feature metadata ─────────────────────────────────────────────────────────
 
 // FEATURE_LABELS imported from planConfigTypes.ts (single source of truth)
 
 // Derive feature→tier mapping from the default config (runtime, not hardcoded).
 const _featureRequiredPlan = deriveFeatureRequiredPlan(DEFAULT_PLAN_CONFIG);
+const PURCHASED_PLAN_HIERARCHY = ["free", "basic", "growth"] as const;
 
 function getFeatureLabel(feature: string): string {
   return FEATURE_LABELS[feature] || feature;
 }
 
-function getRequiredPlan(feature: string): string {
-  return _featureRequiredPlan[feature] || "basic";
+function getRequiredPlan(feature: string, currentCount: number = 0): string {
+  for (const tier of PURCHASED_PLAN_HIERARCHY) {
+    const value = DEFAULT_PLAN_CONFIG.plans[tier]?.entitlements?.[feature as FeatureKey];
+    if (typeof value === "boolean" && value) return tier;
+    if (typeof value === "number" && (value === -1 || currentCount < value)) return tier;
+  }
+  return _featureRequiredPlan[feature] || "growth";
 }
 
 function capitalize(s: string): string {
@@ -154,6 +218,11 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
         _serverEntitlements = null;
         return;
       }
+      const trialActive = Boolean(data.user && isActiveTrial(data.user as any));
+      try {
+        localStorage.setItem(getUserScopedKey(TRIAL_ACTIVE_KEY), trialActive ? "true" : "false");
+      } catch { /* storage full */ }
+
       if (data.user?.plan) {
         const effectivePlan = normalizePlanId(
           data.user.effectivePlan || resolveCanonicalPlan(data.user as any)
@@ -173,6 +242,15 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
             localStorage.setItem(getUserScopedKey(ENTITLEMENTS_KEY), JSON.stringify(effectiveEntitlements));
           } catch { /* storage full */ }
         }
+      }
+
+      // If on Free plan (not free trial), clean up MCE-created sources from OBS
+      if (isDockFreePlan()) {
+        void import("./dockObsClient").then(({ dockObsClient }) => {
+          if (dockObsClient.isConnected) {
+            void dockObsClient.clearMCESourcesForFreePlan();
+          }
+        }).catch(() => { /* ignore */ });
       }
     }
   } catch {

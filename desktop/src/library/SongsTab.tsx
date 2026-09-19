@@ -4,7 +4,7 @@
  * Features:
  *   • Search by title / artist
  *   • Song list with lyrics preview, slide count, key badge
- *   • Add Song modal (title, key, leader, lyrics, auto-split)
+ *   • Add Song modal (title, artist, lyrics, and slide layout)
  *   • Edit Song modal (same fields, pre-filled)
  *   • Archive with confirmation
  *   • ESC closes modals
@@ -13,7 +13,7 @@
  *
  * Plan enforcement:
  *   • Free: max 3 songs, no bulk import
- *   • Basic: max 70 songs, bulk import, translation, tickers
+ *   • Basic: max 50 songs, tickers, lower thirds, and multiview
  *   • Growth+: unlimited songs, unlimited multiview
  *   • Existing songs are NEVER hidden or deleted on downgrade.
  */
@@ -48,6 +48,7 @@ import {
   getArchivedSongs,
   restoreSong,
   saveSong,
+  WORSHIP_SONGS_UPDATED_EVENT,
 } from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
@@ -158,6 +159,15 @@ export function SongsTab() {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  // Keep the Library list current when the Dock creates or edits a song.
+  useEffect(() => {
+    const handleSongsUpdated = () => {
+      void reload();
+    };
+    window.addEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
+    return () => window.removeEventListener(WORSHIP_SONGS_UPDATED_EVENT, handleSongsUpdated);
   }, [reload]);
 
   // Recompute song limits whenever the song list or plan changes
@@ -487,7 +497,7 @@ export function SongsTab() {
             type="button"
             className="lib-toolbar-btn lib-toolbar-btn--secondary"
             onClick={handleBulkImport}
-            title="Import DOCX, PDF, or TXT"
+            title="Import songs from a document"
           >
             <Icon name="upload_file" size={18} />
             Import File
@@ -573,7 +583,7 @@ export function SongsTab() {
                   <Icon name="add" size={20} />
                   Add Song
                 </button>
-                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import DOCX, PDF, or TXT">
+                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import songs from a document">
                   <Icon name="upload_file" size={18} />
                   Import File
                 </button>
@@ -979,7 +989,7 @@ export function SongsTab() {
               <button
                 className="ssm-btn-upgrade"
                 onClick={() => {
-                  window.open("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans", "_blank");
+                  window.open("https://makechurcheazy.com/subscription/plans", "_blank");
                   setShowSongLimitModal(false);
                 }}
                 title="Upgrade to Growth">
@@ -995,7 +1005,7 @@ export function SongsTab() {
           open={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
           feature="songs"
-          requiredPlan={effectivePlan === "free" ? "basic" : effectivePlan === "basic" ? "growth" : "pro"}
+          requiredPlan={effectivePlan === "free" ? "basic" : "growth"}
           currentPlan={effectivePlan}
           message={`Your ${effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} plan allows up to ${songLimit} songs. Upgrade for more.`}
         />

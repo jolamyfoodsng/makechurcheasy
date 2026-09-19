@@ -16,6 +16,8 @@ import { obsService } from "./services/obsService";
 import { serviceStore } from "./services/serviceStore";
 import {
   SHORTCUTS,
+  SHORTCUT_MAP,
+  matchesShortcut,
   shortcutLabel,
   type ShortcutCategory,
 } from "./multiview/shortcuts";
@@ -28,8 +30,9 @@ import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
+import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
+import { safeTauriListen } from "./services/tauriSafe";
 import type { ConnectionStatus } from "./services/obsService";
-
 
 
 export function AppShell() {
@@ -39,6 +42,8 @@ export function AppShell() {
   const svc = useServiceStore();
 
   const isServiceEnded = svc.status === "ended";
+  const isTranscriptDetailRoute = /^\/transcripts\/[^/]+\/?$/.test(location.pathname);
+  const isFixedViewportRoute = isTranscriptDetailRoute || location.pathname === "/speech-to-scripture";
 
   // ── Sidebar ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -64,14 +69,51 @@ export function AppShell() {
   // ── Command Palette ──
   const [showCommandPalette, setShowCommandPalette] = useState(false);
 
-  type ShortcutsTab = "dashboard" | "bible" | "graphics" | "ticker";
+  type ShortcutsTab = "dashboard" | "bible" | "graphics";
   const SHORTCUTS_TABS: { key: ShortcutsTab; label: string; icon: string; categories: ShortcutCategory[] }[] = [
     { key: "dashboard", label: t("appShell.shortcutsTab.dashboard"), icon: "dashboard", categories: ["navigation", "file", "edit", "selection", "view", "canvas", "slots", "alignment"] },
     { key: "bible", label: t("appShell.shortcutsTab.bible"), icon: "menu_book", categories: ["bible"] },
-    { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["lowerthirds", "quickmerge", "worship"] },
-    { key: "ticker", label: t("appShell.shortcutsTab.ticker"), icon: "text_rotation_none", categories: ["ticker"] },
+    { key: "graphics", label: t("appShell.shortcutsTab.graphics"), icon: "palette", categories: ["quickmerge", "worship"] },
   ];
   const [shortcutsTab, setShortcutsTab] = useState<ShortcutsTab>("dashboard");
+
+  // Open Settings from the conventional app shortcut on both platforms:
+  // Cmd+, on macOS and Ctrl+, on Windows/Linux. This lives in the shared
+  // shell so it works from every normal app page, not only the editor.
+  useEffect(() => {
+    const shortcut = SHORTCUT_MAP.get("open-settings")?.keys;
+    if (!shortcut) return;
+
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      if (!matchesShortcut(event, shortcut)) return;
+      event.preventDefault();
+      navigate("/settings");
+    };
+
+    window.addEventListener("keydown", handleSettingsShortcut);
+    return () => window.removeEventListener("keydown", handleSettingsShortcut);
+  }, [navigate]);
+
+  // The native tray menu uses the same navigation path as the keyboard
+  // shortcut. This listener is a no-op in browser/dock contexts.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void safeTauriListen("open-settings", () => {
+      if (!cancelled) navigate("/settings");
+    }).then((cleanup) => {
+      if (cancelled) cleanup();
+      else unlisten = cleanup;
+    }).catch(() => {
+      // Tauri events are unavailable when running the web app directly.
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [navigate]);
 
   // ── Command Palette handlers ──
   const handleCommandPaletteSelectBibleVerse = useCallback((book: string, chapter: number, verse: number) => {
@@ -111,6 +153,7 @@ export function AppShell() {
 
   const handleNav = useCallback(
     (path: string) => {
+      if (!confirmStopVoiceBibleForPresentation(path)) return;
       navigate(path);
     },
     [navigate],
@@ -123,7 +166,8 @@ export function AppShell() {
     location.pathname.startsWith("/bible") ||
     location.pathname.startsWith("/hub") ||
     location.pathname.startsWith("/service-hub") ||
-    location.pathname.startsWith("/presentation/console") ||
+    location.pathname.startsWith("/presentation/link") ||
+    location.pathname.startsWith("/presentation/remote-obs") ||
     location.pathname === "/new";
 
   // ── Cancel confirmation modal ──
@@ -155,7 +199,11 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-container">
+    <BibleProvider>
+      <div className="app-container">
+      <a className="mce-skip-link" href="#app-main-content">
+        {t("mvShell.skipToContent")}
+      </a>
       <DashboardSidebar
         currentPath={location.pathname + location.search}
         obsStatus={obsStatus}
@@ -165,10 +213,13 @@ export function AppShell() {
         onNavigate={handleNav}
       />
 
-      <main className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}`}>
+      <main
+        id="app-main-content"
+        tabIndex={-1}
+        className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}${isTranscriptDetailRoute ? " app-main--transcript-detail" : ""}${isFixedViewportRoute ? " app-main--fixed-viewport" : ""}`}>
         <LiveStatusBar />
         <div className="app-glow" />
-        <div className="app-content">
+        <div className={`app-content${isTranscriptDetailRoute ? " app-content--transcript-detail" : ""}${isFixedViewportRoute ? " app-content--fixed-viewport" : ""}`}>
           <VoiceBibleResumeBanner />
           <Outlet />
         </div>
@@ -177,8 +228,13 @@ export function AppShell() {
       {/* ── End Service Confirmation ── */}
       {showEndConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowEndConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("appShell.endService.title")}</h2>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="end-service-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="end-service-confirm-title">{t("appShell.endService.title")}</h2>
             <p>{t("appShell.endService.description")}</p>
             <div className="end-confirm-actions">
               <button
@@ -198,8 +254,13 @@ export function AppShell() {
       {/* ── Cancel Service Confirmation ── */}
       {showCancelConfirm && (
         <div className="end-confirm-backdrop" onClick={() => setShowCancelConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("appShell.cancelService.title")}</h2>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-service-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="cancel-service-confirm-title">{t("appShell.cancelService.title")}</h2>
             <p>{t("appShell.cancelService.description")}</p>
             <div className="end-confirm-actions">
               <button
@@ -230,18 +291,26 @@ export function AppShell() {
       {/* ── Keyboard Shortcuts Modal (Tabbed) ── */}
       {showShortcuts && (
         <div className="end-confirm-backdrop" onClick={() => setShowShortcuts(false)}>
-          <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="shortcuts-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="app-shortcuts-title"
+            onClick={(e) => e.stopPropagation()}>
             <div className="shortcuts-modal-head">
-              <h2>{t("appShell.keyboardShortcuts.title")}</h2>
-              <button className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title={t("appShell.keyboardShortcuts.close")}>
+              <h2 id="app-shortcuts-title">{t("appShell.keyboardShortcuts.title")}</h2>
+              <button type="button" className="shortcuts-modal-close" onClick={() => setShowShortcuts(false)} title={t("appShell.keyboardShortcuts.close")} aria-label={t("appShell.keyboardShortcuts.close")}>
                 <Icon name="close" size={20} />
               </button>
             </div>
 
-            <div className="shortcuts-modal-tabs">
+            <div className="shortcuts-modal-tabs" role="tablist" aria-label={t("appShell.keyboardShortcuts.title")}>
               {SHORTCUTS_TABS.map((tab) => (
                 <button
                   key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={shortcutsTab === tab.key}
                   className={`shortcuts-modal-tab${shortcutsTab === tab.key ? " is-active" : ""}`}
                   onClick={() => setShortcutsTab(tab.key)}
                 >
@@ -269,10 +338,8 @@ export function AppShell() {
                                     cat === "slots" ? t("appShell.shortcutsCategory.slots") :
                                       cat === "alignment" ? t("appShell.shortcutsCategory.alignment") :
                                         cat === "bible" ? t("appShell.shortcutsCategory.bible") :
-                                          cat === "lowerthirds" ? t("appShell.shortcutsCategory.lowerThirds") :
-                                            cat === "quickmerge" ? t("appShell.shortcutsCategory.quickMerge") :
-                                              cat === "worship" ? t("appShell.shortcutsCategory.speaker") :
-                                                cat === "ticker" ? t("appShell.shortcutsCategory.ticker") : cat
+                                          cat === "quickmerge" ? t("appShell.shortcutsCategory.quickMerge") :
+                                            cat === "worship" ? t("appShell.shortcutsCategory.speaker") : cat
                       }</h4>
                       {items.map((s) => (
                         <div className="shortcuts-modal-row" key={s.id}>
@@ -289,8 +356,7 @@ export function AppShell() {
         </div>
       )}
 
-      {/* ── Global Command Palette ── */}
-      <BibleProvider>
+        {/* ── Global Command Palette ── */}
         <BibleCommandPalette
           open={showCommandPalette}
           initialQuery=""
@@ -299,7 +365,7 @@ export function AppShell() {
           onSelectTemplate={handleCommandPaletteSelectTemplate}
           onNavigate={navigate}
         />
-      </BibleProvider>
-    </div>
+      </div>
+    </BibleProvider>
   );
 }

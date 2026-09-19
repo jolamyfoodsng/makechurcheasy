@@ -10,8 +10,17 @@ import { useTranslation } from "react-i18next";
 import { ALL_THEMES, canonicalizeLowerThirdThemeId, type ThemeLike } from "../../lowerthirds/themes";
 import { loadDockLTFavorites } from "../dockThemeData";
 import { requireEntitlement } from "../dockEntitlement";
+import { dockClient, type DockStateMessage } from "../../services/dockBridge";
+import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import DockIcon from "../DockIcon";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  remoteThemeToLowerThird,
+  type RemoteProductionTheme,
+} from "../../services/remoteProductionThemes";
 
 /** Compact label for the theme card */
 function shortName(theme: ThemeLike): string {
@@ -52,7 +61,18 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
   const [open, setOpen] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const allThemes = useMemo(() => {
+    const merged = new Map<string, ThemeLike>();
+    for (const theme of ALL_THEMES) merged.set(theme.id, theme);
+    for (const remoteTheme of remoteProductionThemes) {
+      const theme = remoteThemeToLowerThird(remoteTheme);
+      if (theme) merged.set(theme.id, theme as unknown as ThemeLike);
+    }
+    return [...merged.values()];
+  }, [remoteProductionThemes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,11 +85,27 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
       });
     };
     refreshFavorites();
-    const timer = window.setInterval(refreshFavorites, getRecommendedPollingInterval(2000));
+    const handleLocalFavoritesUpdate = () => refreshFavorites();
+    const handleDockState = (msg: DockStateMessage) => {
+      if (msg.type === "state:favorite-themes-updated") refreshFavorites();
+    };
+    window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, handleLocalFavoritesUpdate);
+    const unsubDock = dockClient.onState(handleDockState);
+    const timer = window.setInterval(refreshFavorites, getRecommendedPollingInterval(60_000));
     return () => {
       cancelled = true;
+      window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, handleLocalFavoritesUpdate);
+      unsubDock();
       window.clearInterval(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then(setRemoteProductionThemes);
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
   }, []);
 
   // Close dropdown when clicking outside
@@ -94,7 +130,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
     }
     const hints = [...hintSet];
 
-    let list = ALL_THEMES.filter((t) => t.html && t.css);
+    let list = allThemes.filter((t) => t.html && t.css);
     if (normalizedCategory) {
       list = list.filter((t) => normalizeToken(String(t.category || "")) === normalizedCategory);
     }
@@ -109,7 +145,7 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
       if (aFav !== bFav) return bFav - aFav;
       return (a.name || a.id).localeCompare(b.name || b.id);
     });
-  }, [category, favoriteIds, tag, tags]);
+  }, [allThemes, category, favoriteIds, tag, tags]);
 
   const canonicalSelectedThemeId = useMemo(
     () => canonicalizeLowerThirdThemeId(selectedThemeId ?? ""),

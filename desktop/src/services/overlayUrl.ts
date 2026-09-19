@@ -13,14 +13,22 @@
 import { invoke } from "@tauri-apps/api/core";
 
 let _cachedBaseUrl: string | null = null;
+let _overrideBaseUrl: string | null = null;
+let _devDockBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
 const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
 const DEV_VITE_PORT = "1420";
+export const DEV_DOCK_BASE_URL_READY_EVENT = "mce-dev-dock-base-url-ready";
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
   return normalized === "127.0.0.1" || normalized === "localhost";
+}
+
+function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "tauri:" || "__TAURI_INTERNALS__" in window;
 }
 
 export function toStoredOverlayAssetUrl(value: string | undefined): string {
@@ -77,6 +85,11 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
   return trimmed;
 }
 
+export function setOverlayBaseUrlOverride(baseUrl: string | null): void {
+  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  _overrideBaseUrl = trimmed || null;
+}
+
 /**
  * Get the base URL for overlay HTML files that OBS can access.
  *
@@ -84,6 +97,7 @@ export function resolveOverlayAssetUrl(value: string | undefined): string {
  * - Development: http://localhost:1420 (served by Vite)
  */
 export async function getOverlayBaseUrl(): Promise<string> {
+  if (_overrideBaseUrl) return _overrideBaseUrl;
   if (_cachedBaseUrl) return _cachedBaseUrl;
 
   // In Vite dev mode (port 1420), try to resolve the actual overlay server
@@ -94,6 +108,13 @@ export async function getOverlayBaseUrl(): Promise<string> {
     const isHttpLocalOrigin =
       (protocol === "http:" || protocol === "https:")
       && (hostname === "localhost" || hostname === "127.0.0.1");
+    if (isHttpLocalOrigin && !isTauriRuntime()) {
+      // OBS loads the dock in a normal Chromium/CEF page from the local
+      // overlay server. There is no Tauri IPC bridge in that context, and the
+      // page origin is already the correct asset server.
+      _cachedBaseUrl = window.location.origin;
+      return _cachedBaseUrl;
+    }
     if (isHttpLocalOrigin && port === DEV_VITE_PORT) {
       const viteFallback = (): string => {
         _cachedBaseUrl = window.location.origin;
@@ -109,6 +130,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
         return viteFallback();
       }
     }
+
   }
 
   // Cooldown: don't hammer invoke on repeated failures
@@ -119,6 +141,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
   _lastInvokeAttempt = now;
 
   try {
+    if (!isTauriRuntime()) return getOverlayBaseUrlSync();
     const port = await invoke<number>("get_overlay_port");
     if (port > 0) {
       _cachedBaseUrl = `http://127.0.0.1:${port}`;
@@ -161,6 +184,7 @@ export async function getOverlayBaseUrl(): Promise<string> {
  * Call getOverlayBaseUrl() first to ensure it's initialized.
  */
 export function getOverlayBaseUrlSync(): string {
+  if (_overrideBaseUrl) return _overrideBaseUrl;
   if (_cachedBaseUrl) return _cachedBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
     const { protocol, hostname } = window.location;
@@ -178,6 +202,7 @@ export function getOverlayBaseUrlSync(): string {
 }
 
 export function getDockBaseUrl(): string {
+  if (import.meta.env.DEV && _devDockBaseUrl) return _devDockBaseUrl;
   if (typeof window !== "undefined" && window.location?.origin) {
     const { protocol, hostname } = window.location;
     const isHttpLocalOrigin =
@@ -194,5 +219,13 @@ export function getDockBaseUrl(): string {
  * Initialize the overlay URL cache. Call this once at app startup.
  */
 export async function initOverlayUrl(): Promise<void> {
+  if (import.meta.env.DEV && isTauriRuntime()) {
+    try {
+      _devDockBaseUrl = await invoke<string>("get_dev_dock_base_url");
+      window.dispatchEvent(new Event(DEV_DOCK_BASE_URL_READY_EVENT));
+    } catch {
+      // A pure browser Vite session does not have Tauri IPC; use its origin.
+    }
+  }
   await getOverlayBaseUrl();
 }

@@ -1,0 +1,117 @@
+{
+  "date": "2026-09-06",
+  "kind": "generated audio through live transcription provider, followed by real scripture engine and KJV projection resolver",
+  "provider": "AssemblyAI",
+  "model": "universal-3-5-pro",
+  "voice": "Daniel",
+  "audioSecondsPerRun": 15.85,
+  "samples": [
+    {
+      "input": "First Cor chapter thirteen verse four.",
+      "expected": "1 Corinthians 13:4",
+      "audioStartMs": 0,
+      "audioEndMs": 4900
+    },
+    {
+      "input": "Second Kings chapter six verse seventeen.",
+      "expected": "2 Kings 6:17",
+      "audioStartMs": 4900,
+      "audioEndMs": 10200
+    },
+    {
+      "input": "Second Corinthians chapter five verse seventeen.",
+      "expected": "2 Corinthians 5:17",
+      "audioStartMs": 10200,
+      "audioEndMs": 15850
+    }
+  ],
+  "before": {
+    "minTurnSilenceMs": 80,
+    "maxTurnSilenceMs": 500,
+    "forcedEndAfterWords": 4,
+    "keyterms": 0,
+    "finalTranscripts": [
+      "First Paul chapter 13.",
+      "From verse 4.",
+      "Second Kings chapter 6 verse 17.",
+      "Second Corinthians chapter 5 verse 7.",
+      "17."
+    ],
+    "passed": false,
+    "expected": [
+      "1 Corinthians 13:4",
+      "2 Kings 6:17",
+      "2 Corinthians 5:17"
+    ],
+    "missing": [
+      "1 Corinthians 13:4"
+    ],
+    "unexpected": [
+      "2 Corinthians 5:7"
+    ],
+    "emitted": [
+      {
+        "transcript": "Second Kings chapter 6 verse 17.",
+        "reference": "2 Kings 6:17",
+        "text": "And Elisha prayed, and said, LORD, I pray thee, open his eyes, that he may see. And the LORD opened the eyes of the young man; and he saw: and, behold, the mountain full of horses and chariots of fire round about Elisha.",
+        "confidence": 1
+      },
+      {
+        "transcript": "Second Corinthians chapter 5 verse 7.",
+        "reference": "2 Corinthians 5:7",
+        "text": "(For we walk by faith, not by sight:)",
+        "confidence": 1
+      },
+      {
+        "transcript": "17.",
+        "reference": "2 Corinthians 5:17",
+        "text": "Therefore if any man in Christ, a new creature: old things are passed away; behold, all things are become new.",
+        "confidence": 1
+      }
+    ]
+  },
+  "after": {
+    "minTurnSilenceMs": 200,
+    "maxTurnSilenceMs": 1000,
+    "forcedEndAfterWords": null,
+    "keyterms": 93,
+    "finalTranscripts": [
+      "First Cor chapter 13 verse 4.",
+      "2 Kings chapter 6 verse 17.",
+      "Second Corinthians chapter 5 verse 17."
+    ],
+    "passed": true,
+    "expected": [
+      "1 Corinthians 13:4",
+      "2 Kings 6:17",
+      "2 Corinthians 5:17"
+    ],
+    "missing": [],
+    "unexpected": [],
+    "emitted": [
+      {
+        "transcript": "First Cor chapter 13 verse 4.",
+        "reference": "1 Corinthians 13:4",
+        "text": "Charity suffereth long, is kind; charity envieth not; charity vaunteth not itself, is not puffed up,",
+        "confidence": 1
+      },
+      {
+        "transcript": "2 Kings chapter 6 verse 17.",
+        "reference": "2 Kings 6:17",
+        "text": "And Elisha prayed, and said, LORD, I pray thee, open his eyes, that he may see. And the LORD opened the eyes of the young man; and he saw: and, behold, the mountain full of horses and chariots of fire round about Elisha.",
+        "confidence": 1
+      },
+      {
+        "transcript": "Second Corinthians chapter 5 verse 17.",
+        "reference": "2 Corinthians 5:17",
+        "text": "Therefore if any man in Christ, a new creature: old things are passed away; behold, all things are become new.",
+        "confidence": 1
+      }
+    ]
+  },
+  "boundaries": [
+    "Synthetic speech; not a real microphone or accent evaluation",
+    "Projection text was resolved from the actual bundled KJV; no OBS output was changed",
+    "Three samples demonstrate the reproduced defect and fix; they are not a general accuracy benchmark"
+  ]
+}

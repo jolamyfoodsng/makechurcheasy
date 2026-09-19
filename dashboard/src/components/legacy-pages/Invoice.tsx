@@ -85,7 +85,7 @@ export default function Invoice() {
                   <tbody>
                     <tr className="border-b border-slate-100">
                       <td className="py-6">
-                        <p className="font-bold text-sm text-slate-900 mb-1">{t("invoice.proPlanMonthly")}</p>
+                        <p className="font-bold text-sm text-slate-900 mb-1">Growth Plan - Monthly</p>
                         <p className="text-xs font-medium text-slate-500">{t("invoice.billingPeriod")}</p>
                       </td>
                       <td className="py-6 text-center text-sm font-medium text-slate-700">1</td>
@@ -121,7 +121,7 @@ export default function Invoice() {
             <h3 className="text-lg font-bold text-slate-900 mb-6">{t("invoice.summary")}</h3>
             <div className="space-y-4">
               <div className="flex justify-between text-sm font-medium">
-                <span className="text-slate-600">Pro Plan - Monthly</span>
+                <span className="text-slate-600">Growth Plan - Monthly</span>
                 <span className="text-slate-900">$19.00</span>
               </div>
               <div className="flex justify-between text-sm font-medium">

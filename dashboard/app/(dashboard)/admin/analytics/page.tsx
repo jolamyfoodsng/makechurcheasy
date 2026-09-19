@@ -42,7 +42,6 @@ interface BusinessAnalytics {
     ambassadors: number;
     totalChurches: number;
     countriesRepresented: number;
-    monthlyRevenue: number;
     conversionRate: number;
   };
   countryDistribution: { country: string; count: number; percentage: number }[];
@@ -67,7 +66,6 @@ interface BusinessAnalytics {
     plan: string;
     tier: string;
     count: number;
-    revenue: number;
   }[];
   credits: {
     totalConsumed: number;
@@ -83,7 +81,34 @@ interface BusinessAnalytics {
   };
   userGrowthChart: { month: string; count: number }[];
   churchGrowthChart: { month: string; count: number }[];
-  revenueTrend: { month: string; revenue: number }[];
+}
+
+type PaymentProviderStatus =
+  | "connected"
+  | "partial"
+  | "not_configured"
+  | "test_mode"
+  | "unauthorized"
+  | "unavailable";
+
+interface GatewayPayments {
+  periodDays: number;
+  historyStart: string;
+  updatedAt: string;
+  providers: Record<"flutterwave" | "paystack", {
+    status: PaymentProviderStatus;
+    successfulTransactions: number;
+  }>;
+  currencies: Array<{
+    currency: string;
+    transactionCount: number;
+    amount: number;
+    settledTransactionCount: number;
+    settledAmount: number | null;
+    byProvider: Record<"flutterwave" | "paystack", { transactionCount: number; amount: number }>;
+    settlementByProvider: Record<"flutterwave" | "paystack", { transactionCount: number; amount: number | null }>;
+    monthly: Array<{ month: string; transactionCount: number; amount: number; settledTransactionCount: number; settledAmount: number | null }>;
+  }>;
 }
 
 interface ProductAnalytics {
@@ -121,6 +146,7 @@ interface ProductAnalytics {
 interface AnalyticsResponse {
   business: BusinessAnalytics;
   product: ProductAnalytics;
+  payments: GatewayPayments;
 }
 
 // ── Reusable sub-components ──────────────────────────────────────────────────
@@ -166,13 +192,11 @@ function OverviewCard({
   iconColor,
   label,
   value,
-  suffix,
 }: {
   icon: React.ElementType;
   iconColor: string;
   label: string;
-  value: number;
-  suffix?: string;
+  value: number | undefined;
 }) {
   return (
     <div className="rounded-2xl bg-gray-900 border border-slate-700 p-5 transition-colors hover:border-slate-600">
@@ -187,8 +211,7 @@ function OverviewCard({
         </span>
       </div>
       <p className="text-2xl font-bold text-slate-50 tracking-tight">
-        {value.toLocaleString()}
-        {suffix && <span className="text-lg">{suffix}</span>}
+        {value != null ? value.toLocaleString() : "—"}
       </p>
     </div>
   );
@@ -218,15 +241,17 @@ function BarChartSimple({
   height = 280,
   barColor = "#818CF8",
 }: {
-  data: { [key: string]: string | number }[];
+  data?: { [key: string]: string | number }[];
   dataKey: string;
   labelKey: string;
   height?: number;
   barColor?: string;
 }) {
+  const chartData = data ?? [];
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data}>
+      <BarChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
         <XAxis
           dataKey={labelKey}
@@ -254,7 +279,7 @@ function BarChartSimple({
           cursor={{ fill: "rgba(129,140,248,0.08)" }}
         />
         <Bar dataKey={dataKey} radius={[6, 6, 0, 0]} maxBarSize={32}>
-          {data.map((_, i) => (
+          {chartData.map((_, i) => (
             <Cell key={i} fill={barColor} />
           ))}
         </Bar>
@@ -307,8 +332,14 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatPercent(value: number): string {
-  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatPercent(value: unknown): string {
+  const percent = toFiniteNumber(value);
+  return `${Number.isInteger(percent) ? percent : percent.toFixed(1)}%`;
 }
 
 function DistributionPanel({
@@ -320,7 +351,7 @@ function DistributionPanel({
 }: {
   title: string;
   subtitle?: string;
-  items: { label: string; count: number; percentage: number }[];
+  items: { label: string; count?: number | null; percentage?: number | null }[];
   emptyLabel: string;
   barClassName?: string;
 }) {
@@ -334,22 +365,27 @@ function DistributionPanel({
         <p className="text-sm text-slate-500 text-center py-8">{emptyLabel}</p>
       ) : (
         <div className="space-y-3">
-          {items.slice(0, 10).map((item) => (
-            <div key={item.label} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-300 truncate">{item.label}</span>
-                <span className="text-xs font-semibold text-slate-50 shrink-0">
-                  {item.count.toLocaleString()} · {formatPercent(item.percentage)}
-                </span>
+          {items.slice(0, 10).map((item) => {
+            const count = toFiniteNumber(item.count);
+            const percentage = toFiniteNumber(item.percentage);
+
+            return (
+              <div key={item.label} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-300 truncate">{item.label}</span>
+                  <span className="text-xs font-semibold text-slate-50 shrink-0">
+                    {count.toLocaleString()} · {formatPercent(percentage)}
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${barClassName}`}
+                    style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${barClassName}`}
-                  style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -400,6 +436,35 @@ export default function AdminAnalyticsPage() {
 
   const biz = data?.business;
   const prod = data?.product;
+  const payments = data?.payments;
+  const hasData = biz != null;
+
+  const formatPaymentAmount = (amount: number, currency: string) => {
+    const currencyDigits = new Intl.NumberFormat("en", { style: "currency", currency })
+      .resolvedOptions().maximumFractionDigits ?? 2;
+    return new Intl.NumberFormat("en", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: Math.max(2, currencyDigits),
+    }).format(amount);
+  };
+
+  const providerStatusLabel: Record<PaymentProviderStatus, string> = {
+    connected: "Connected",
+    partial: "History limit reached",
+    not_configured: "Not configured",
+    test_mode: "Test key ignored",
+    unauthorized: "Key rejected",
+    unavailable: "Unavailable",
+  };
+
+  const providerStatuses = payments ? [
+    ["Flutterwave", payments.providers.flutterwave],
+    ["Paystack", payments.providers.paystack],
+  ] as const : [];
+  const hasGatewayData = providerStatuses.some(([, provider]) =>
+    provider.status === "connected" || provider.status === "partial",
+  );
 
   const featureUsage = prod?.featureUsage;
   const featureMax = featureUsage
@@ -416,7 +481,8 @@ export default function AdminAnalyticsPage() {
     biz &&
     (biz.overview.totalUsers > 0 ||
       biz.overview.totalChurches > 0 ||
-      biz.overview.paidSubscribers > 0);
+      biz.overview.paidSubscribers > 0 ||
+      (payments?.currencies.length ?? 0) > 0);
 
   return (
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
@@ -480,38 +546,31 @@ export default function AdminAnalyticsPage() {
                   icon={Users}
                   iconColor="bg-indigo-500/15 text-indigo-400"
                   label={t("admin.analytics.totalUsers")}
-                  value={biz!.overview.totalUsers}
+                  value={biz?.overview?.totalUsers}
                 />
                 <OverviewCard
                   icon={Church}
                   iconColor="bg-emerald-500/15 text-emerald-400"
                   label={t("admin.analytics.totalChurches")}
-                  value={biz!.overview.totalChurches}
+                  value={biz?.overview?.totalChurches}
                 />
                 <OverviewCard
                   icon={Globe}
                   iconColor="bg-cyan-500/15 text-cyan-400"
                   label={t("admin.analytics.countries")}
-                  value={biz!.overview.countriesRepresented}
+                  value={biz?.overview?.countriesRepresented}
                 />
                 <OverviewCard
                   icon={CreditCard}
                   iconColor="bg-amber-500/15 text-amber-400"
                   label={t("admin.analytics.paidSubscribers")}
-                  value={biz!.overview.paidSubscribers}
-                />
-                <OverviewCard
-                  icon={TrendingUp}
-                  iconColor="bg-violet-500/15 text-violet-400"
-                  label={t("admin.analytics.revenue")}
-                  value={biz!.overview.monthlyRevenue}
-                  suffix="$"
+                  value={biz?.overview?.paidSubscribers}
                 />
                 <OverviewCard
                   icon={Award}
                   iconColor="bg-rose-500/15 text-rose-400"
                   label={t("admin.analytics.ambassadors")}
-                  value={biz!.overview.ambassadors}
+                  value={biz?.overview?.ambassadors}
                 />
               </>
             )}
@@ -519,7 +578,7 @@ export default function AdminAnalyticsPage() {
 
           {/* ── KPI Row ────────────────────────────────────────────── */}
           {!loading && biz && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
               <div className="rounded-2xl bg-gray-900 border border-slate-700 p-4">
                 <p className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">
                   {t("admin.analytics.activeUsers30d")}
@@ -536,22 +595,6 @@ export default function AdminAnalyticsPage() {
                   {biz.overview.conversionRate}%
                 </p>
               </div>
-              <div className="rounded-2xl bg-gray-900 border border-slate-700 p-4">
-                <p className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">
-                  {t("admin.analytics.monthlyRevenue")}
-                </p>
-                <p className="text-xl font-bold text-emerald-400 mt-1">
-                  ${biz.overview.monthlyRevenue.toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-gray-900 border border-slate-700 p-4">
-                <p className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">
-                  {t("admin.analytics.mrr")}
-                </p>
-                <p className="text-xl font-bold text-slate-50 mt-1">
-                  ${biz.overview.monthlyRevenue.toLocaleString()}
-                </p>
-              </div>
             </div>
           )}
 
@@ -562,7 +605,7 @@ export default function AdminAnalyticsPage() {
               loading={loading}
             >
               <BarChartSimple
-                data={biz!.userGrowthChart}
+                data={biz?.userGrowthChart}
                 dataKey="count"
                 labelKey="month"
               />
@@ -572,7 +615,7 @@ export default function AdminAnalyticsPage() {
               loading={loading}
             >
               <BarChartSimple
-                data={biz!.churchGrowthChart}
+                data={biz?.churchGrowthChart}
                 dataKey="count"
                 labelKey="month"
                 barColor="#34D399"
@@ -580,62 +623,106 @@ export default function AdminAnalyticsPage() {
             </ChartCard>
           </div>
 
-          {/* ── Revenue Trend ──────────────────────────────────────── */}
-          <ChartCard title={t("admin.analytics.revenueTrend")} loading={loading}>
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={biz!.revenueTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis
-                  dataKey="month"
-                  stroke="#64748B"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#64748B"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `$${v}`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1F2937",
-                    border: "1px solid #334155",
-                    borderRadius: "12px",
-                    color: "#F8FAFC",
-                    fontSize: "13px",
-                  }}
-                  labelStyle={{ color: "#94A3B8" }}
-                  formatter={(v) => [
-                    `$${Number(v).toLocaleString()}`,
-                    "Revenue",
-                  ]}
-                />
-                <defs>
-                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#818CF8" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#818CF8" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#818CF8"
-                  strokeWidth={2.5}
-                  fill="url(#revGrad)"
-                  dot={false}
-                  activeDot={{
-                    r: 5,
-                    fill: "#818CF8",
-                    stroke: "#0F172A",
-                    strokeWidth: 2,
-                  }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartCard>
+          {/* ── Gateway Payments ───────────────────────────────────── */}
+          <section className="space-y-4">
+            <div className="rounded-2xl bg-gray-900 border border-slate-700 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-50">Successful payment amounts</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Successful transaction amounts in the last {payments?.periodDays ?? period} days. Totals stay separate by currency.
+                  </p>
+                </div>
+                {payments?.updatedAt && (
+                  <span className="text-[11px] text-slate-500">
+                    Updated {new Date(payments.updatedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              {loading ? (
+                <SkeletonBlock className="h-[100px]" />
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    {providerStatuses.map(([name, provider]) => (
+                      <div key={name} className="flex items-center justify-between rounded-xl bg-gray-800/70 px-4 py-3">
+                        <span className="text-sm text-slate-300">{name}</span>
+                        <span className={`text-xs font-medium ${provider.status === "connected" ? "text-emerald-400" : provider.status === "partial" ? "text-amber-300" : "text-slate-400"}`}>
+                          {providerStatusLabel[provider.status]} · {provider.successfulTransactions.toLocaleString()} successful in 12 months
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {payments?.currencies.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {payments.currencies.map((summary) => (
+                        <div key={summary.currency} className="rounded-xl border border-slate-700 bg-gray-800/40 p-4">
+                          <p className="text-xs text-slate-400">{summary.currency} · {summary.transactionCount} payments</p>
+                          <p className="text-xl font-bold text-emerald-400 mt-1">
+                            {formatPaymentAmount(summary.amount, summary.currency)}
+                          </p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-500">
+                            <span>Flutterwave {formatPaymentAmount(summary.byProvider.flutterwave.amount, summary.currency)}</span>
+                            <span>Paystack {formatPaymentAmount(summary.byProvider.paystack.amount, summary.currency)}</span>
+                          </div>
+                          {summary.settledTransactionCount > 0 && (
+                            <p className="text-[11px] text-slate-400 mt-2">
+                              Flutterwave net settlement reported: {formatPaymentAmount(summary.settlementByProvider.flutterwave.amount ?? 0, summary.currency)} ({summary.settlementByProvider.flutterwave.transactionCount} transactions)
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl bg-gray-800/60 px-4 py-3 text-sm text-slate-400">
+                      {hasGatewayData ? "No successful payments were found for this period." : "Live payment data is unavailable until a valid live key is configured for each provider."}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-500 mt-4">
+                    Amounts use each gateway's transaction amount field. Settlement values are shown separately when reported; refunds and chargebacks are not subtracted.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {payments?.currencies.filter((summary) => summary.monthly.some((month) => month.amount > 0)).map((summary) => (
+              <ChartCard key={summary.currency} title={`${summary.currency} transaction amounts · last 12 months`} loading={loading}>
+                <ResponsiveContainer width="100%" height={250}>
+                  <AreaChart data={summary.monthly}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis
+                      dataKey="month"
+                      stroke="#64748B"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => new Date(`${value}-01T00:00:00`).toLocaleDateString("en", { month: "short", year: "2-digit" })}
+                    />
+                    <YAxis
+                      stroke="#64748B"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => formatPaymentAmount(Number(value), summary.currency)}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1F2937", border: "1px solid #334155", borderRadius: "12px", color: "#F8FAFC", fontSize: "13px" }}
+                      labelStyle={{ color: "#94A3B8" }}
+                      labelFormatter={(value) => new Date(`${value}-01T00:00:00`).toLocaleDateString("en", { month: "long", year: "numeric" })}
+                      formatter={(value) => [formatPaymentAmount(Number(value), summary.currency), "Successful payments"]}
+                    />
+                    <defs>
+                      <linearGradient id={`paymentGrad-${summary.currency}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34D399" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#34D399" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="amount" stroke="#34D399" strokeWidth={2.5} fill={`url(#paymentGrad-${summary.currency})`} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            ))}
+          </section>
 
           {/* ── Demographics ───────────────────────────────────────── */}
           {loading ? (
@@ -648,34 +735,34 @@ export default function AdminAnalyticsPage() {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
               <DistributionPanel
                 title={t("admin.analytics.countryDistribution")}
-                subtitle={`${biz!.countryCoverage.represented.toLocaleString()} of ${biz!.countryCoverage.supported.toLocaleString()} supported countries represented · ${formatPercent(biz!.countryCoverage.percentage)} coverage`}
-                items={biz!.countryDistribution.map((c) => ({
+                subtitle={`${biz?.countryCoverage?.represented?.toLocaleString() ?? "—"} of ${biz?.countryCoverage?.supported?.toLocaleString() ?? "—"} supported countries · ${biz?.countryCoverage?.percentage != null ? formatPercent(biz.countryCoverage.percentage) : "—"} coverage`}
+                items={biz?.countryDistribution?.map((c) => ({
                   label: getCountryDisplayName(c.country),
                   count: c.count,
                   percentage: c.percentage,
-                }))}
+                })) ?? []}
                 emptyLabel="No country data yet"
                 barClassName="bg-cyan-500"
               />
               <DistributionPanel
                 title="Gender breakdown"
-                subtitle={`${biz!.dataHealth.usersWithGender.toLocaleString()} known · ${biz!.dataHealth.usersWithoutGender.toLocaleString()} unknown`}
-                items={biz!.genderDistribution.map((g) => ({
+                subtitle={`${biz?.dataHealth?.usersWithGender?.toLocaleString() ?? "—"} known · ${biz?.dataHealth?.usersWithoutGender?.toLocaleString() ?? "—"} unknown`}
+                items={biz?.genderDistribution?.map((g) => ({
                   label: g.gender,
                   count: g.count,
                   percentage: g.percentage,
-                }))}
+                })) ?? []}
                 emptyLabel="No gender data yet"
                 barClassName="bg-violet-500"
               />
               <DistributionPanel
                 title="Church size"
-                subtitle={`${biz!.dataHealth.churchProfiles.toLocaleString()} church profiles contributing data`}
-                items={biz!.churchSizeDistribution.map((s) => ({
+                subtitle={`${biz?.dataHealth?.churchProfiles?.toLocaleString() ?? "—"} church profiles contributing data`}
+                items={biz?.churchSizeDistribution?.map((s) => ({
                   label: s.range,
                   count: s.count,
                   percentage: s.percentage,
-                }))}
+                })) ?? []}
                 emptyLabel="No church size data yet"
                 barClassName="bg-emerald-500"
               />
@@ -700,15 +787,15 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-2.5">
                   <InfoRow
                     label={t("admin.analytics.totalChurches")}
-                    value={String(biz!.church.total)}
+                    value={String(biz?.church?.total ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.newThisMonth")}
-                    value={String(biz!.church.newThisMonth)}
+                    value={String(biz?.church?.newThisMonth ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.growth")}
-                    value={`${biz!.church.growth >= 0 ? "+" : ""}${biz!.church.growth}%`}
+                    value={biz?.church?.growth != null ? `${biz.church.growth >= 0 ? "+" : ""}${biz.church.growth}%` : "—"}
                   />
                 </div>
               )}
@@ -730,15 +817,15 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-2.5">
                   <InfoRow
                     label={t("admin.analytics.active")}
-                    value={String(biz!.ambassadors.active)}
+                    value={String(biz?.ambassadors?.active ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.expired")}
-                    value={String(biz!.ambassadors.expired)}
+                    value={String(biz?.ambassadors?.expired ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.expiringSoon")}
-                    value={String(biz!.ambassadors.expiringSoon)}
+                    value={String(biz?.ambassadors?.expiringSoon ?? "—")}
                   />
                 </div>
               )}
@@ -758,13 +845,11 @@ export default function AdminAnalyticsPage() {
                 <SkeletonBlock className="h-[80px]" />
               ) : (
                 <div className="space-y-2.5">
-                  {biz!.subscriptions.map((s) => (
+                  {biz?.subscriptions?.map((s) => (
                     <InfoRow
                       key={s.tier}
-                      label={`${s.plan} (${s.count})`}
-                      value={
-                        s.revenue > 0 ? `$${s.revenue.toLocaleString()}` : "—"
-                      }
+                      label={s.plan}
+                      value={String(s.count)}
                     />
                   ))}
                 </div>
@@ -790,19 +875,19 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-2.5">
                   <InfoRow
                     label={t("admin.analytics.totalConsumed")}
-                    value={String(biz!.credits.totalConsumed)}
+                    value={String(biz?.credits?.totalConsumed ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.totalGranted")}
-                    value={String(biz!.credits.totalGranted)}
+                    value={String(biz?.credits?.totalGranted ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.totalRefunded")}
-                    value={String(biz!.credits.totalRefunded)}
+                    value={String(biz?.credits?.totalRefunded ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.totalTransactions")}
-                    value={String(biz!.credits.transactionCount)}
+                    value={String(biz?.credits?.transactionCount ?? "—")}
                   />
                 </div>
               )}
@@ -824,15 +909,15 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-2.5">
                   <InfoRow
                     label={t("admin.analytics.totalSongs")}
-                    value={String(biz!.content.totalSongs)}
+                    value={String(biz?.content?.totalSongs ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.totalMedia")}
-                    value={String(biz!.content.totalMedia)}
+                    value={String(biz?.content?.totalMedia ?? "—")}
                   />
                   <InfoRow
                     label={t("admin.analytics.totalThemes")}
-                    value={String(biz!.content.totalThemes)}
+                    value={String(biz?.content?.totalThemes ?? "—")}
                   />
                 </div>
               )}
@@ -1005,10 +1090,10 @@ export default function AdminAnalyticsPage() {
                       <InfoRow
                         label={t("admin.analytics.totalSessions")}
                         value={String(
-                          prod?.bibleAnalytics.totalBibleSessions ?? 0,
+                          prod?.bibleAnalytics?.totalBibleSessions ?? 0,
                         )}
                       />
-                      {(prod?.bibleAnalytics.mostUsedVersions || [])
+                      {(prod?.bibleAnalytics?.mostUsedVersions || [])
                         .slice(0, 3)
                         .map((v) => (
                           <InfoRow
@@ -1027,19 +1112,19 @@ export default function AdminAnalyticsPage() {
                       <InfoRow
                         label={t("admin.analytics.songsCreated")}
                         value={String(
-                          prod?.worshipAnalytics.songsCreated ?? 0,
+                          prod?.worshipAnalytics?.songsCreated ?? 0,
                         )}
                       />
                       <InfoRow
                         label={t("admin.analytics.songsImported")}
                         value={String(
-                          prod?.worshipAnalytics.songsImported ?? 0,
+                          prod?.worshipAnalytics?.songsImported ?? 0,
                         )}
                       />
                       <InfoRow
                         label={t("admin.analytics.totalSlidesPresented")}
                         value={String(
-                          prod?.worshipAnalytics.totalWorshipSlides ?? 0,
+                          prod?.worshipAnalytics?.totalWorshipSlides ?? 0,
                         )}
                       />
                     </div>
@@ -1052,13 +1137,13 @@ export default function AdminAnalyticsPage() {
                       <InfoRow
                         label={t("admin.analytics.imagesUploaded")}
                         value={String(
-                          prod?.mediaAnalytics.imagesUploaded ?? 0,
+                          prod?.mediaAnalytics?.imagesUploaded ?? 0,
                         )}
                       />
                       <InfoRow
                         label={t("admin.analytics.mediaPresentations")}
                         value={String(
-                          prod?.mediaAnalytics.mediaPresentations ?? 0,
+                          prod?.mediaAnalytics?.mediaPresentations ?? 0,
                         )}
                       />
                     </div>
@@ -1071,19 +1156,19 @@ export default function AdminAnalyticsPage() {
                       <InfoRow
                         label={t("admin.analytics.totalTranscripts")}
                         value={String(
-                          prod?.transcriptAnalytics.totalTranscripts ?? 0,
+                          prod?.transcriptAnalytics?.totalTranscripts ?? 0,
                         )}
                       />
                       <InfoRow
                         label={t("admin.analytics.exports")}
                         value={String(
-                          prod?.transcriptAnalytics.exportsGenerated ?? 0,
+                          prod?.transcriptAnalytics?.exportsGenerated ?? 0,
                         )}
                       />
                       <InfoRow
                         label={t("admin.analytics.translations")}
                         value={String(
-                          prod?.transcriptAnalytics.translationsGenerated ?? 0,
+                          prod?.transcriptAnalytics?.translationsGenerated ?? 0,
                         )}
                       />
                     </div>

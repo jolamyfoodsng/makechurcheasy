@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AppLogo } from "./AppLogo";
 import {
@@ -22,6 +23,8 @@ import {
   FileText,
   LayoutGrid,
   Tv,
+  Zap,
+  GraduationCap,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
@@ -85,7 +88,9 @@ export default function DashboardSidebar({
   );
 
   return (
-    <nav className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+    <nav
+      className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}
+      aria-label={t("sidebar.navigation")}>
       <div className="sidebar-header">
         <AppLogo alt={appName} className="sidebar-logo" />
         <div className="sidebar-header-text">
@@ -124,6 +129,8 @@ export default function DashboardSidebar({
 
       <div className="sidebar-section-bottom">
         <div className="sidebar-nav-list sidebar-nav-list--bottom">
+          {navItem("/tutorials", GraduationCap, "Tutorials")}
+          {navItem("/credits", Zap, t("sidebar.credits", { defaultValue: "Credits" }))}
           {navItem("/settings", Settings, t("sidebar.settings"))}
         </div>
 
@@ -149,6 +156,7 @@ export default function DashboardSidebar({
               className="sidebar-user-signout"
               onClick={() => setShowLogoutConfirm(true)}
               title={t("sidebar.signOut")}
+              aria-label={t("sidebar.signOut")}
             >
               <LogOut className="sidebar-user-signout-icon" />
             </button>
@@ -156,14 +164,23 @@ export default function DashboardSidebar({
         )}
       </div>
 
-      {showLogoutConfirm && (
-        <div className="end-confirm-backdrop" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="end-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("sidebar.signOutConfirm")}</h2>
+      {showLogoutConfirm && typeof document !== "undefined" && createPortal(
+        <div
+          className="end-confirm-backdrop"
+          onClick={() => setShowLogoutConfirm(false)}
+          onKeyDown={(event) => { if (event.key === "Escape") setShowLogoutConfirm(false); }}>
+          <div
+            className="end-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sidebar-signout-confirm-title"
+            onClick={(e) => e.stopPropagation()}>
+            <h2 id="sidebar-signout-confirm-title">{t("sidebar.signOutConfirm")}</h2>
             <p>{t("sidebar.signOutDesc")}</p>
             <div className="end-confirm-actions">
               <button
                 className="end-confirm-btn-cancel"
+                autoFocus
                 onClick={() => setShowLogoutConfirm(false)}
                 title={t("sidebar.cancel")}>
                 {t("sidebar.cancel")}
@@ -176,7 +193,8 @@ export default function DashboardSidebar({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </nav>
   );

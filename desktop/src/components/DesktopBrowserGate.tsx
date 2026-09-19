@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import LoadingScreen from "./LoadingScreen";
 
 type GateStatus = "checking" | "allowed" | "blocked";
 
@@ -119,9 +120,10 @@ export default function DesktopBrowserGate({ children }: { children: ReactNode }
 
   if (status === "checking") {
     return (
-      <FullscreenMessage
-        title="Checking Desktop Session"
-        description="Waiting for the local MakeChurchEasy session."
+      <LoadingScreen
+        variant="fullscreen"
+        label="Connecting to MakeChurchEasy…"
+        sublabel="Waiting for the local desktop session…"
       />
     );
   }

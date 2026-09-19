@@ -100,7 +100,7 @@
           "group": "Content"
         }
       ],
-      "html": "<div class=\"lt pos-br in-up\" data-state=\"{{state}}\">\n  <div class=\"panel quote-panel\" style=\"--bg:#FFFDFB;--fg:#3C2E2A;--accent:#7D3D2E;--bd:rgba(125,61,46,.22);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">\"{{quote}}\"</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
+      "html": "<div class=\"lt pos-br in-up\" data-state=\"{{state}}\">\n  <div class=\"panel quote-panel\" style=\"--bg:#FFFDFB;--fg:#3C2E2A;--accent:#7D3D2E;--bd:rgba(125,61,46,.22);\">\n    <span class=\"kicker\">{{label}}</span>\n    <p class=\"quote-text\">{{quote}}</p>\n    <p class=\"quote-ref\">{{reference}}</p>\n  </div>\n</div>",
       "usesTailwind": false,
       "fontImports": [
         "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Serif+4:wght@400;600;700&display=swap"

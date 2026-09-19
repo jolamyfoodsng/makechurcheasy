@@ -1,14 +1,13 @@
 /**
  * OnboardingPage — Desktop onboarding wizard for MakeChurchEasy.
  *
- * Flow: Welcome → Connect OBS → Present First Verse →
- *       Create Theme → Install Dock → Run Diagnostics → Ready
+ * Flow: Welcome → Connect OBS → Install Dock → Run Diagnostics → Ready
  *
  * Every step fires a milestone to the backend.
  * Persisted in localStorage so future launches skip straight to dashboard.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -22,18 +21,25 @@ import {
   CheckCircle,
   Loader2,
   AlertTriangle,
+  ArrowDown,
+  ArrowUpRight,
+  Maximize2,
+  Minimize2,
   Play,
   LayoutDashboard,
   Library,
   ListMusic,
-  Video,
   Users,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
-import { getDockBaseUrl } from "../services/overlayUrl";
-
+import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { track } from "../services/analytics";
+import {
+  trackEvent as trackProductEvent,
+  trackObsConnected as trackObsConnectedBackend,
+  trackFirstUseStarted,
+} from "../services/tracking";
 import { getDefaultOBSPort } from "../services/desktopConfig";
 import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import "./OnboardingPage.css";
@@ -41,15 +47,10 @@ import "./OnboardingPage.css";
 /* ── Constants ── */
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
+const FLOW_VERSION_KEY = "mce-onboarding-flow-version";
+const FLOW_VERSION = 3;
 const TOTAL_STEPS = 5;
 
-const TUTORIAL_URLS: Record<number, string> = {
-  1: "https://youtu.be/i-WnFFnuCMA",
-  2: "https://youtu.be/i-WnFFnuCMA?si=RyzpJxRJSDB-ONJ8&t=15",
-  3: "https://youtu.be/i-WnFFnuCMA?si=QKb3Tv7hDN8jR5LY&t=83",
-  4: "https://www.youtube.com/watch?v=STEP4_TEST",
-  5: "https://www.youtube.com/watch?v=STEP5_READY",
-};
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
@@ -58,9 +59,38 @@ const STEP_NAMES = [
   "Welcome",
   "OBS",
   "Dock",
-  "Test",
+  "First Win",
   "Ready",
 ];
+
+type OnboardingTutorial = {
+  title: string;
+  description: string;
+  videoId: string;
+  watchUrl: string;
+  startAt?: number;
+};
+
+/**
+ * Keep onboarding videos in one place so they can be replaced without
+ * changing the step components or the tutorial panel layout.
+ */
+const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
+  2: {
+    title: "Connect MakeChurchEasy to OBS",
+    description: "Follow the OBS connection setup before moving on.",
+    videoId: "i-WnFFnuCMA",
+    watchUrl: "https://youtu.be/i-WnFFnuCMA?si=bnyZ0huirCa_oIaZ&t=16",
+    startAt: 16,
+  },
+  3: {
+    title: "Install MakeChurchEasy Dock",
+    description: "Learn how to add the MakeChurchEasy Dock to OBS.",
+    videoId: "i-WnFFnuCMA",
+    watchUrl: "https://youtu.be/i-WnFFnuCMA?si=LwLanAr5wZmXxVyR&t=83",
+    startAt: 83,
+  },
+};
 
 /* ── Helpers ── */
 function isOnboardingComplete(): boolean {
@@ -69,15 +99,35 @@ function isOnboardingComplete(): boolean {
 
 function getSavedStep(): number {
   const raw = localStorage.getItem(STEP_KEY);
+  let savedStep = 1;
   if (raw != null) {
     const n = parseInt(raw, 10);
-    if (n >= 1) return Math.min(n, TOTAL_STEPS);
+    if (n >= 1) savedStep = n;
   }
-  return 1;
+
+  // Migrate the earlier five-step flow, then remove the optional Move step that
+  // was briefly inserted after OBS. A user stopped on that step should continue
+  // at Dock instead of seeing it again.
+  const savedVersion = parseInt(
+    localStorage.getItem(FLOW_VERSION_KEY) || "1",
+    10,
+  );
+  if (raw != null && savedVersion < 2 && savedStep >= 3) {
+    savedStep += 1;
+  }
+  if (raw != null && savedVersion < FLOW_VERSION && savedStep >= 3) {
+    savedStep = savedStep === 3 ? 3 : savedStep - 1;
+  }
+
+  const normalizedStep = Math.min(savedStep, TOTAL_STEPS);
+  localStorage.setItem(FLOW_VERSION_KEY, String(FLOW_VERSION));
+  localStorage.setItem(STEP_KEY, String(normalizedStep));
+  return normalizedStep;
 }
 
 function saveStep(step: number) {
   localStorage.setItem(STEP_KEY, String(step));
+  localStorage.setItem(FLOW_VERSION_KEY, String(FLOW_VERSION));
 }
 
 function completeOnboarding() {
@@ -118,6 +168,137 @@ function fireMilestone(milestone: string) {
   }
 }
 
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && (
+    window.location.protocol === "tauri:" ||
+    "__TAURI_INTERNALS__" in window
+  );
+}
+
+function OnboardingTutorialPanel({ step }: { step: number }) {
+  const tutorial = ONBOARDING_TUTORIALS[step] ?? ONBOARDING_TUTORIALS[2];
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [embedFailed, setEmbedFailed] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === iframeRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    setIsFullscreen(false);
+    setEmbedFailed(false);
+  }, [tutorial.videoId]);
+
+  const openTutorial = useCallback(() => {
+    void openUrl(tutorial.watchUrl).catch(() => {
+      window.open(tutorial.watchUrl, "_blank", "noopener,noreferrer");
+    });
+  }, [tutorial.watchUrl]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await iframe.requestFullscreen();
+    } catch {
+      openTutorial();
+    }
+  }, [openTutorial]);
+
+  const directEmbedUrl =
+    `https://www.youtube-nocookie.com/embed/${tutorial.videoId}` +
+    `?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1${
+      tutorial.startAt ? `&start=${tutorial.startAt}` : ""
+    }`;
+  const embedUrl = isTauriRuntime()
+    ? `${getOverlayBaseUrlSync()}/youtube-tutorial?video=${encodeURIComponent(tutorial.videoId)}${
+      tutorial.startAt ? `&start=${tutorial.startAt}` : ""
+    }`
+    : directEmbedUrl;
+
+  return (
+    <aside className="ob-tutorial-panel" aria-label={`Step ${step} tutorial`}>
+      <div className="ob-tutorial-header">
+        <div className="ob-tutorial-heading">
+          <span className="ob-tutorial-kicker">
+            <ArrowUpRight size={13} />
+            Step {step} tutorial
+          </span>
+          <h2>{tutorial.title}</h2>
+          <p>{tutorial.description}</p>
+        </div>
+        <button
+          className="ob-tutorial-icon-btn"
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
+          aria-label={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
+        >
+          {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      </div>
+
+      <div className="ob-tutorial-guide" aria-label="Watch tutorial for this step">
+        <ArrowDown size={16} aria-hidden="true" />
+        <span>Watch tutorial for this step</span>
+        <ArrowDown size={16} aria-hidden="true" />
+      </div>
+
+      <div className="ob-tutorial-video-shell">
+        <iframe
+          key={tutorial.videoId}
+          ref={iframeRef}
+          src={embedUrl}
+          title={tutorial.title}
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+          onError={() => setEmbedFailed(true)}
+          allowFullScreen
+        />
+      </div>
+
+      {embedFailed && (
+        <p className="ob-tutorial-embed-fallback" role="status">
+          The embedded tutorial could not load here.{" "}
+          <button type="button" onClick={openTutorial}>
+            Open it on YouTube <ExternalLink size={12} />
+          </button>
+        </p>
+      )}
+
+      <div className="ob-tutorial-footer">
+        <span className="ob-tutorial-playing">
+          <span className="ob-tutorial-live-dot" />
+          Playing for this step
+        </span>
+        <button
+          className="ob-tutorial-watch-btn"
+          type="button"
+          onClick={openTutorial}
+          title="Watch tutorial on YouTube"
+        >
+          Watch tutorial
+          <ExternalLink size={13} />
+        </button>
+      </div>
+      <p className="ob-tutorial-note">Autoplay starts muted. Turn sound on in the player.</p>
+    </aside>
+  );
+}
+
 /* ── Resume Banner (exported for dashboard) ── */
 export function OnboardingResumeBanner() {
   const navigate = useNavigate();
@@ -146,6 +327,7 @@ export function OnboardingResumeBanner() {
 export default function OnboardingPage() {
   const [step, setStep] = useState(() => getSavedStep());
   const [showSkipModal, setShowSkipModal] = useState(false);
+  const showTutorial = step === 2 || step === 3;
 
   const goNext = useCallback(() => {
     if (step < TOTAL_STEPS) {
@@ -153,6 +335,9 @@ export default function OnboardingPage() {
       setStep(next);
       saveStep(next);
       track("onboarding_step_completed", {
+        step: STEP_NAMES[next - 1] ?? String(next),
+      });
+      trackProductEvent("onboarding_step_completed", {
         step: STEP_NAMES[next - 1] ?? String(next),
       });
     }
@@ -169,22 +354,21 @@ export default function OnboardingPage() {
   const finish = useCallback(() => {
     fireMilestone("desktopOnboardingCompletedAt");
     track("onboarding_completed");
+    trackProductEvent("onboarding_completed");
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
   const skip = useCallback(() => {
     track("onboarding_skipped");
+    trackProductEvent("onboarding_skipped");
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
-  const openTutorial = useCallback((url: string) => {
-    openUrl(url);
-  }, []);
-
   useEffect(() => {
     track("onboarding_started");
+    trackProductEvent("onboarding_started");
     fireMilestone("desktopOnboardingStartedAt");
   }, []);
 
@@ -230,24 +414,20 @@ export default function OnboardingPage() {
 
       {/* Content */}
       <div className="ob-content">
-        {step === 1 && (
-          <StepWelcome onNext={goNext} tutorialUrl={TUTORIAL_URLS[1]} onTutorial={openTutorial} />
-        )}
-        {step === 2 && (
-          <StepConnectOBS onNext={goNext} onBack={goPrev} tutorialUrl={TUTORIAL_URLS[2]} onTutorial={openTutorial} />
-        )}
-        {step === 3 && (
-          <StepInstallDock
-            onNext={goNext}
-            onBack={goPrev}
-            tutorialUrl={TUTORIAL_URLS[3]}
-            onTutorial={openTutorial}
-          />
-        )}
-        {step === 4 && (
-          <StepTest onFinish={finish} onBack={goPrev} tutorialUrl={TUTORIAL_URLS[4]} onTutorial={openTutorial} />
-        )}
-        {step === 5 && <StepReady onFinish={finish} tutorialUrl={TUTORIAL_URLS[5]} />}
+        <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}`}>
+          <main className="ob-step-stage">
+            {step === 1 && <StepWelcome onNext={goNext} />}
+            {step === 2 && (
+              <StepConnectOBS onNext={goNext} onBack={goPrev} />
+            )}
+            {step === 3 && (
+              <StepInstallDock onNext={goNext} onBack={goPrev} />
+            )}
+            {step === 4 && <StepTest onFinish={finish} onBack={goPrev} />}
+            {step === 5 && <StepReady onFinish={finish} />}
+          </main>
+          {showTutorial && <OnboardingTutorialPanel step={step} />}
+        </div>
       </div>
 
       {/* Skip modal */}
@@ -286,12 +466,8 @@ export default function OnboardingPage() {
 
 function StepWelcome({
   onNext,
-  onTutorial,
-  tutorialUrl,
 }: {
   onNext: () => void;
-  onTutorial: (url: string) => void;
-  tutorialUrl: string;
 }) {
   return (
     <div className="ob-card ob-card--dock-install">
@@ -308,14 +484,9 @@ function StepWelcome({
       </div>
 
       <div className="ob-actions">
-        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Get started">
-          Get Started
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
+          Continue
           <ArrowRight size={16} />
-        </button>
-        <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial(tutorialUrl)} title="Open in new tab">
-          <Play size={14} />
-          Watch Tutorial
-          <ExternalLink size={12} style={{ marginLeft: "auto" }} />
         </button>
       </div>
     </div>
@@ -329,13 +500,9 @@ function StepWelcome({
 function StepConnectOBS({
   onNext,
   onBack,
-  onTutorial,
-  tutorialUrl,
 }: {
   onNext: () => void;
   onBack: () => void;
-  onTutorial?: (url: string) => void;
-  tutorialUrl?: string;
 }) {
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(getDefaultOBSPort());
@@ -355,6 +522,7 @@ function StepConnectOBS({
       if (obsService.isConnected) {
         await persistOBSWebSocketConfig(url, password || undefined, true);
         setStatus("connected");
+        trackObsConnectedBackend();
         fireMilestone("firstDesktopLoginAt");
       } else {
         setStatus("error");
@@ -441,10 +609,6 @@ function StepConnectOBS({
           <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial?.(tutorialUrl!)} title="Watch tutorial">
-            <Play size={14} />
-            Watch Tutorial
-          </button>
           <button
             className="ob-btn ob-btn--secondary"
             onClick={testConnection}
@@ -480,13 +644,9 @@ function StepConnectOBS({
 function StepInstallDock({
   onNext,
   onBack,
-  onTutorial,
-  tutorialUrl,
 }: {
   onNext: () => void;
   onBack: () => void;
-  onTutorial: (url: string) => void;
-  tutorialUrl: string;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
   const base = getDockBaseUrl();
@@ -578,10 +738,6 @@ function StepInstallDock({
           <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
             Back
           </button>
-          <button className="ob-btn ob-btn--secondary" onClick={() => onTutorial(tutorialUrl)} title="Play">
-            <Play size={14} />
-            Watch Tutorial
-          </button>
           <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
             Continue
             <ArrowRight size={16} />
@@ -593,7 +749,7 @@ function StepInstallDock({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 6 — Run Diagnostics
+   Step 5 — Confirm Your First Win
    ══════════════════════════════════════════════════════════════ */
 
 interface DiagItem {
@@ -605,19 +761,15 @@ interface DiagItem {
 function StepTest({
   onFinish,
   onBack,
-  onTutorial,
-  tutorialUrl,
 }: {
   onFinish: () => void;
   onBack: () => void;
-  onTutorial?: (url: string) => void;
-  tutorialUrl?: string;
 }) {
   const [diags, setDiags] = useState<DiagItem[]>([
     { label: "OBS Connected", status: "pending", detail: "" },
     { label: "MakeChurchEasy Dock", status: "pending", detail: "" },
     { label: "AI Dock", status: "pending", detail: "" },
-    { label: "Voice Bible", status: "pending", detail: "" },
+    { label: "Speech to Scripture", status: "pending", detail: "" },
   ]);
   const [running, setRunning] = useState(false);
 
@@ -666,24 +818,24 @@ function StepTest({
     }
     setDiags([...results]);
 
-    // 4. Voice Bible (check if mic permission is available)
+    // 4. Speech to Scripture (check if mic permission is available)
     try {
       if (navigator.mediaDevices) {
         results.push({
-          label: "Voice Bible",
+          label: "Speech to Scripture",
           status: "ok",
           detail: "Microphone available",
         });
       } else {
         results.push({
-          label: "Voice Bible",
+          label: "Speech to Scripture",
           status: "warn",
           detail: "Microphone API not available",
         });
       }
     } catch {
       results.push({
-        label: "Voice Bible",
+        label: "Speech to Scripture",
         status: "warn",
         detail: "Could not verify",
       });
@@ -696,9 +848,9 @@ function StepTest({
   return (
     <div className="ob-card">
       <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Run Diagnostics</h1>
+        <h1>Confirm Your First Win</h1>
         <p>
-          Run a quick check to make sure all components are working correctly.
+          Run a quick check, then present your first Bible verse to OBS from the Ready step.
         </p>
       </div>
 
@@ -752,10 +904,16 @@ function StepTest({
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 7 — Ready
+   Step 5 — Ready
    ══════════════════════════════════════════════════════════════ */
 
-function StepReady({ onFinish, tutorialUrl }: { onFinish: () => void; tutorialUrl: string }) {
+function StepReady({ onFinish }: { onFinish: () => void }) {
+  const openFirstWin = useCallback(() => {
+    trackFirstUseStarted();
+    completeOnboarding();
+    window.location.href = "/resources?tab=bible";
+  }, []);
+
   return (
     <div className="ob-card">
       <div className="ob-success-hero">
@@ -781,11 +939,28 @@ function StepReady({ onFinish, tutorialUrl }: { onFinish: () => void; tutorialUr
         </div>
         <div className="ob-summary-item">
           <CheckCircle size={16} className="ob-summary-check" />
-          Voice Bible Ready
+          Speech to Scripture Ready
         </div>
       </div>
 
       <p className="ob-section-title">Quick Actions</p>
+
+      <div className="ob-info-banner" style={{ alignItems: "flex-start" }}>
+        <Play size={16} />
+        <span>
+          <strong>Get your first win now:</strong> open Bible, choose a verse, and
+          push it to OBS. This is the fastest way to confirm the setup works.
+          <button
+            className="ob-btn ob-btn--primary"
+            onClick={openFirstWin}
+            title="Try your first Bible presentation"
+            style={{ marginTop: 10 }}
+          >
+            Try a Bible presentation
+            <ArrowRight size={16} />
+          </button>
+        </span>
+      </div>
 
       <div className="ob-quick-actions">
         <button className="ob-quick-btn" onClick={onFinish} title="Open">
@@ -811,10 +986,6 @@ function StepReady({ onFinish, tutorialUrl }: { onFinish: () => void; tutorialUr
           title="Open">
           <ListMusic size={16} />
           Open Worship
-        </button>
-        <button className="ob-quick-btn" onClick={() => openUrl(tutorialUrl)} title="Watch Tutorials">
-          <Video size={16} />
-          Watch
         </button>
         <button
           className="ob-quick-btn"

@@ -1,8 +1,8 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense, useCallback } from "react";
-import { Loader2, Check, AlertCircle, Smartphone } from "lucide-react";
+import { ArrowLeft, Loader2, Check, AlertCircle, Smartphone } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { authorizePairingCode } from "@/lib/api";
@@ -19,6 +19,7 @@ type AuthMethod = "google" | "email";
 
 function MobilePairContent() {
   const t = useTranslations();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
   const { mongoUser, loading: authLoading, signInWithEmail, signInWithGoogle } = useAuth();
@@ -170,6 +171,14 @@ function MobilePairContent() {
           <p className="text-[13px] text-slate-400">
             {t("pair.mobile.deviceAuthorizedDescription")}
           </p>
+          <button
+            type="button"
+            onClick={() => router.push("/devices")}
+            className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-[13px] font-bold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("common.backTo", { page: t("common.devices") })}
+          </button>
         </div>
       </div>
     );

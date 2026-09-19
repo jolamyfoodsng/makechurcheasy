@@ -21,8 +21,8 @@ export function StorageSection({ data, onChange, onSave, saving }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{t("title")}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-white">{t("title")}</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
           {t("description")}
         </p>
       </div>

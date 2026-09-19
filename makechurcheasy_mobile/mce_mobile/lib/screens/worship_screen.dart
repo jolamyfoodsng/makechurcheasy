@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../models/dock_models.dart';
+import '../services/mce_provider.dart';
+import '../services/websocket_service.dart';
 import '../theme/mce_theme.dart';
-import '../models/sample_data.dart';
 
 class WorshipScreen extends StatefulWidget {
   const WorshipScreen({super.key});
@@ -10,175 +15,461 @@ class WorshipScreen extends StatefulWidget {
 }
 
 class _WorshipScreenState extends State<WorshipScreen> {
+  final _searchController = TextEditingController();
   String _searchQuery = '';
-  String _selectedMode = 'Browse'; // Browse or Perform
-
-  // Setlist
-  final List<SongData> _setlist = [];
-
-  // Perform mode state
-  SongData? _performingSong;
+  int _textSubTab = 0;
+  bool _loading = true;
+  bool _loadingNotes = true;
+  String? _error;
+  String? _notesError;
+  List<DockSong> _songs = const [];
+  List<Map<String, dynamic>> _notes = const [];
+  DockSong? _performingSong;
   int _currentSlideIndex = 0;
-  String _outputMode = 'Full';
+  String _outputMode = 'fullscreen';
+  bool _sending = false;
+  StreamSubscription<WebSocketEvent>? _webSocketSub;
+  bool _loadedAfterAuthentication = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _webSocketSub = context.webSocketService.events.listen((event) {
+        if (!mounted || event.type != WebSocketEventType.authenticated) return;
+        _loadAfterAuthentication();
+      });
+      _loadAfterAuthentication();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _webSocketSub?.cancel();
+    super.dispose();
+  }
+
+  void _loadAfterAuthentication() {
+    if (!mounted || _loadedAfterAuthentication) return;
+    if (!context.webSocketService.isAuthenticated) return;
+    _loadedAfterAuthentication = true;
+    unawaited(_loadSongs());
+    unawaited(_loadNotes());
+  }
+
+  Future<void> _loadNotes() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingNotes = true;
+      _notesError = null;
+    });
+    final webSocket = context.webSocketService;
+    if (!webSocket.isAuthenticated) {
+      if (!mounted) return;
+      setState(() {
+        _notes = const [];
+        _loadingNotes = false;
+        _notesError = 'Connect to the desktop to load notes.';
+      });
+      return;
+    }
+    try {
+      final raw = await webSocket.getNotes();
+      if (!mounted) return;
+      setState(() {
+        _notes = raw;
+        _loadingNotes = false;
+        if (_notes.isEmpty) {
+          _notesError = 'No notes have been saved in the Dock yet.';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _notes = const [];
+        _loadingNotes = false;
+        _notesError = 'Desktop notes are unavailable: $error';
+      });
+    }
+  }
+
+  Future<void> _createNote() async {
+    final draft = await _showNoteEditor();
+    if (draft == null || !mounted) return;
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final saved = await context.webSocketService.saveNotes([
+        {
+          ...draft,
+          'id': 'note-$now',
+          'updatedAt': now,
+          'splitOnLineBreaks': false,
+        },
+        ..._notes,
+      ]);
+      if (!mounted) return;
+      setState(() => _notes = saved);
+    } catch (error) {
+      if (mounted) _showMessage('Could not save note: $error', danger: true);
+    }
+  }
+
+  Future<void> _editNote(Map<String, dynamic> note) async {
+    final draft = await _showNoteEditor(
+      title: note['title']?.toString() ?? '',
+      content: note['content']?.toString() ?? '',
+    );
+    if (draft == null || !mounted) return;
+    final next = _notes.map((item) {
+      if (item['id']?.toString() != note['id']?.toString()) return item;
+      return {
+        ...item,
+        ...draft,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+    }).toList();
+    try {
+      final saved = await context.webSocketService.saveNotes(next);
+      if (!mounted) return;
+      setState(() => _notes = saved);
+    } catch (error) {
+      if (mounted) _showMessage('Could not update note: $error', danger: true);
+    }
+  }
+
+  Future<Map<String, String>?> _showNoteEditor({
+    String title = '',
+    String content = '',
+  }) async {
+    return showDialog<Map<String, String>>(
+      context: context,
+      builder: (_) => _NoteEditorDialog(title: title, content: content),
+    );
+  }
+
+  Future<void> _showNote(Map<String, dynamic> note) async {
+    try {
+      await context.webSocketService.showNote(note);
+      if (mounted) {
+        _showMessage('${note['title'] ?? 'Note'} is live');
+      }
+    } catch (error) {
+      if (mounted) _showMessage('Could not show note: $error', danger: true);
+    }
+  }
+
+  Future<void> _clearNotes() async {
+    try {
+      await context.webSocketService.clearNotes();
+      if (mounted) {
+        _showMessage('Notes output cleared');
+      }
+    } catch (error) {
+      if (mounted) _showMessage('Could not clear notes: $error', danger: true);
+    }
+  }
+
+  Future<void> _loadSongs() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final webSocket = context.webSocketService;
+      final isAuthenticated = webSocket.isAuthenticated;
+      final raw = isAuthenticated
+          ? await webSocket.getWorshipLibrary()
+          : const <Map<String, dynamic>>[];
+      final songs = raw
+          .map(DockSong.fromJson)
+          .where((song) => song.id.isNotEmpty && song.slides.isNotEmpty)
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _songs = songs;
+        _loading = false;
+        if (songs.isEmpty) {
+          _error = isAuthenticated
+              ? 'No songs have been saved on the desktop yet.'
+              : 'Connect to the desktop to load songs.';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _songs = const [];
+        _loading = false;
+        _error = 'Desktop song library unavailable: $error';
+      });
+    }
+  }
+
+  List<DockSong> get _filteredSongs {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _songs;
+    return _songs
+        .where(
+          (song) =>
+              song.title.toLowerCase().contains(query) ||
+              song.artist.toLowerCase().contains(query) ||
+              song.slides.any(
+                (slide) => slide.text.toLowerCase().contains(query),
+              ),
+        )
+        .toList();
+  }
+
+  void _openSong(DockSong song) {
+    setState(() {
+      _performingSong = song;
+      _currentSlideIndex = 0;
+    });
+  }
+
+  Future<void> _pushCurrentSlide() async {
+    final song = _performingSong;
+    if (song == null || song.slides.isEmpty || _sending) return;
+    final slide = song.slides[_currentSlideIndex];
+
+    setState(() => _sending = true);
+    try {
+      await context.webSocketService.showSlide(
+        song.id,
+        _currentSlideIndex,
+        songTitle: song.title,
+        artist: song.artist,
+        slideText: slide.text,
+        sectionLabel: slide.label,
+        overlayMode: _outputMode,
+      );
+      if (!mounted) return;
+      _showMessage('${song.title} · ${slide.label} is live');
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('Could not send slide: $error', danger: true);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _clearWorship() async {
+    try {
+      await context.webSocketService.clearWorship();
+      if (mounted) _showMessage('Text output cleared');
+    } catch (error) {
+      if (mounted) {
+        _showMessage('Could not clear text output: $error', danger: true);
+      }
+    }
+  }
+
+  Future<void> _moveSlide(int delta) async {
+    final song = _performingSong;
+    if (song == null || song.slides.isEmpty) return;
+    final next = (_currentSlideIndex + delta).clamp(0, song.slides.length - 1);
+    if (next == _currentSlideIndex) return;
+    setState(() => _currentSlideIndex = next);
+    await _pushCurrentSlide();
+  }
+
+  void _showMessage(String message, {bool danger = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: danger ? MCEColors.danger : MCEColors.elevated,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_selectedMode == 'Perform' && _performingSong != null) {
-      return _buildPerformMode();
-    }
-    return _buildBrowseMode();
-  }
-
-  // ── BROWSE MODE ──────────────────────────────────────────────
-
-  Widget _buildBrowseMode() {
-    final filtered = _searchQuery.isEmpty
-        ? sampleWorshipLibrary
-        : sampleWorshipLibrary
-            .where((s) =>
-                s.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                s.artist.toLowerCase().contains(_searchQuery.toLowerCase()))
-            .toList();
-
+    final song = _performingSong;
     return Column(
       children: [
+        _buildTextSubtabs(),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(MCESpacing.lg),
-            children: [
-              // Search
-              Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: MCEColors.surface.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(MCERadius.pill),
-                  border: Border.all(color: MCEColors.border),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.search, color: MCEColors.textSecondary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        onChanged: (v) => setState(() => _searchQuery = v),
-                        style: MCETypography.body.copyWith(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Search songs...',
-                          hintStyle: MCETypography.body.copyWith(
-                            color: MCEColors.textTertiary,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: MCESpacing.xl),
-
-              // Library list
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Library', style: MCETypography.sectionTitle),
-                  ),
-                  if (_setlist.isNotEmpty)
-                    Text(
-                      '${_setlist.length} in setlist',
-                      style: MCETypography.caption.copyWith(
-                        color: MCEColors.primaryPurple,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: MCESpacing.md),
-              ...filtered.map((song) {
-                final inSetlist = _setlist.contains(song);
-                return _songCard(song, inSetlist: inSetlist);
-              }),
-            ],
-          ),
+          child: _textSubTab == 1
+              ? _buildNotesMode()
+              : song != null
+              ? _buildPerformMode(song)
+              : _buildBrowseMode(),
         ),
-
-        // Bottom bar with setlist + start button
-        _buildBrowseBottomBar(),
       ],
     );
   }
 
-  Widget _songCard(SongData song, {required bool inSetlist}) {
+  Widget _buildTextSubtabs() {
     return Container(
-      margin: const EdgeInsets.only(bottom: MCESpacing.sm),
+      margin: const EdgeInsets.fromLTRB(
+        MCESpacing.lg,
+        MCESpacing.md,
+        MCESpacing.lg,
+        0,
+      ),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: MCEColors.surface.withValues(alpha: 0.6),
+        color: MCEColors.elevated,
         borderRadius: BorderRadius.circular(MCERadius.md),
-        border: Border.all(
-          color: inSetlist
-              ? MCEColors.primaryPurple.withValues(alpha: 0.4)
-              : MCEColors.border,
-        ),
+        border: Border.all(color: MCEColors.border),
       ),
       child: Row(
-        children: [
-          // Purple music icon
-          Container(
-            width: 44,
-            height: 44,
-            margin: const EdgeInsets.all(MCESpacing.md),
-            decoration: BoxDecoration(
-              color: MCEColors.primaryPurple.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(MCERadius.md),
-            ),
-            child: const Icon(Icons.music_note, color: MCEColors.primaryPurple, size: 24),
-          ),
-          // Song info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(song.title, style: MCETypography.bodyBold),
-                Text(song.artist, style: MCETypography.caption),
-              ],
-            ),
-          ),
-          // Add / Remove button
-          GestureDetector(
-            onTap: () => setState(() {
-              if (inSetlist) {
-                _setlist.remove(song);
-              } else {
-                _setlist.add(song);
-              }
-            }),
-            child: Container(
-              margin: const EdgeInsets.all(MCESpacing.md),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: inSetlist
-                    ? MCEColors.danger.withValues(alpha: 0.15)
-                    : MCEColors.primaryPurple.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+        children: ['Worship', 'Notes'].asMap().entries.map((entry) {
+          final selected = entry.key == _textSubTab;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _textSubTab = entry.key;
+                if (entry.key == 1) _performingSong = null;
+              }),
+              child: Container(
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected ? MCEColors.primaryBlue : Colors.transparent,
+                  borderRadius: BorderRadius.circular(MCERadius.sm),
+                ),
+                child: Text(
+                  entry.value,
+                  style: TextStyle(
+                    color: selected ? Colors.white : MCEColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    inSetlist ? Icons.remove : Icons.add,
-                    size: 14,
-                    color: inSetlist ? MCEColors.danger : MCEColors.primaryPurple,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    inSetlist ? 'Remove' : 'Add',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: inSetlist ? MCEColors.danger : MCEColors.primaryPurple,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildNotesMode() {
+    return RefreshIndicator(
+      color: MCEColors.primaryBlue,
+      backgroundColor: MCEColors.surface,
+      onRefresh: _loadNotes,
+      child: ListView(
+        physics: AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          MCESpacing.lg,
+          MCESpacing.lg,
+          MCESpacing.lg,
+          MCESpacing.xl,
+        ),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Notes', style: MCETypography.sectionTitle),
+                    SizedBox(height: MCESpacing.xs),
+                    Text(
+                      'Notes saved in the desktop Dock',
+                      style: MCETypography.sectionSubtitle,
                     ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'New note',
+                onPressed: _createNote,
+                icon: Icon(Icons.add),
+                color: MCEColors.primaryBlue,
+              ),
+              IconButton(
+                tooltip: 'Refresh notes',
+                onPressed: _loadingNotes ? null : _loadNotes,
+                icon: Icon(Icons.refresh),
+                color: MCEColors.textSecondary,
+              ),
+            ],
+          ),
+          SizedBox(height: MCESpacing.sm),
+          if (_notesError != null) _buildNotesInfoBanner(_notesError!),
+          SizedBox(height: MCESpacing.md),
+          if (_loadingNotes)
+            Center(child: CircularProgressIndicator())
+          else if (_notes.isEmpty)
+            _buildNotesEmptyState()
+          else
+            ..._notes.map(_buildNoteCard),
+          if (_notes.isNotEmpty) ...[
+            SizedBox(height: MCESpacing.lg),
+            SizedBox(
+              height: 52,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _clearNotes,
+                icon: Icon(Icons.clear),
+                label: Text('Clear Notes Output'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MCEColors.danger,
+                  side: BorderSide(
+                    color: MCEColors.danger.withValues(alpha: 0.5),
                   ),
-                ],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(MCERadius.md),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoteCard(Map<String, dynamic> note) {
+    final title = note['title']?.toString() ?? 'Note';
+    final content = note['content']?.toString() ?? '';
+    return Container(
+      margin: const EdgeInsets.only(bottom: MCESpacing.sm),
+      padding: const EdgeInsets.all(MCESpacing.md),
+      decoration: BoxDecoration(
+        color: MCEColors.surface,
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(color: MCEColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(title, style: MCETypography.bodyBold)),
+              IconButton(
+                tooltip: 'Edit note',
+                onPressed: () => _editNote(note),
+                icon: Icon(Icons.edit_outlined, size: 19),
+                color: MCEColors.textSecondary,
+              ),
+            ],
+          ),
+          Text(
+            content,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: MCETypography.caption.copyWith(height: 1.35),
+          ),
+          SizedBox(height: MCESpacing.md),
+          SizedBox(
+            height: 46,
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _showNote(note),
+              icon: Icon(Icons.visibility, size: 18),
+              label: Text('Show in OBS'),
+              style: FilledButton.styleFrom(
+                backgroundColor: MCEColors.primaryBlue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(MCERadius.md),
+                ),
               ),
             ),
           ),
@@ -187,290 +478,318 @@ class _WorshipScreenState extends State<WorshipScreen> {
     );
   }
 
-  Widget _buildBrowseBottomBar() {
+  Widget _buildNotesInfoBanner(String message) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: MCESpacing.lg, vertical: MCESpacing.md),
-      decoration: const BoxDecoration(
-        color: MCEColors.surface,
-        border: Border(top: BorderSide(color: MCEColors.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Setlist summary
-            Expanded(
-              child: _setlist.isEmpty
-                  ? Text(
-                      'Add songs to start',
-                      style: MCETypography.body.copyWith(
-                        color: MCEColors.textTertiary,
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${_setlist.length} songs in setlist',
-                          style: MCETypography.bodyBold.copyWith(fontSize: 13),
-                        ),
-                        Text(
-                          _setlist.map((s) => s.title).join(' • '),
-                          style: MCETypography.caption.copyWith(
-                            color: MCEColors.textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-            ),
-            // Start Session button
-            ElevatedButton(
-              onPressed: _setlist.isNotEmpty
-                  ? () => setState(() {
-                      _performingSong = _setlist.first;
-                      _currentSlideIndex = 0;
-                      _selectedMode = 'Perform';
-                    })
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: MCEColors.primaryBlue,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: MCEColors.elevated,
-                disabledForegroundColor: MCEColors.textTertiary,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(MCERadius.md),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Start Session',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+      margin: const EdgeInsets.only(top: MCESpacing.md),
+      padding: const EdgeInsets.all(MCESpacing.md),
+      decoration: BoxDecoration(
+        color: MCEColors.primaryBlue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(
+          color: MCEColors.primaryBlue.withValues(alpha: 0.35),
         ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: MCEColors.primaryBlue),
+          SizedBox(width: MCESpacing.sm),
+          Expanded(child: Text(message, style: MCETypography.caption)),
+        ],
       ),
     );
   }
 
-  // ── PERFORM MODE ─────────────────────────────────────────────
+  Widget _buildNotesEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(MCESpacing.xxl),
+      decoration: BoxDecoration(
+        color: MCEColors.surface,
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(color: MCEColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.notes_outlined, size: 36, color: MCEColors.textTertiary),
+          SizedBox(height: MCESpacing.md),
+          Text('No notes saved', style: MCETypography.bodyBold),
+          SizedBox(height: MCESpacing.xs),
+          Text(
+            'Create a note here or in the desktop Dock.',
+            textAlign: TextAlign.center,
+            style: MCETypography.caption,
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildPerformMode() {
-    final song = _performingSong!;
-    final currentSlide = song.slides[_currentSlideIndex];
-
+  Widget _buildBrowseMode() {
     return Column(
       children: [
-        // Top bar
-        _buildPerformTopBar(),
-
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(MCESpacing.lg),
+          child: RefreshIndicator(
+            color: MCEColors.primaryBlue,
+            backgroundColor: MCEColors.surface,
+            onRefresh: _loadSongs,
+            child: ListView(
+              physics: AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                MCESpacing.lg,
+                MCESpacing.lg,
+                MCESpacing.lg,
+                MCESpacing.xl,
+              ),
+              children: [
+                _buildTitleRow(),
+                SizedBox(height: MCESpacing.lg),
+                _buildSearchField(),
+                SizedBox(height: MCESpacing.lg),
+                if (_error != null) _buildInfoBanner(),
+                _buildLibraryHeader(),
+                SizedBox(height: MCESpacing.md),
+                if (_loading)
+                  Padding(
+                    padding: EdgeInsets.all(MCESpacing.xxl),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_filteredSongs.isEmpty)
+                  _buildEmptyState()
+                else
+                  ..._filteredSongs.map(_buildSongCard),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTitleRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Slide preview
+              Text('Text', style: MCETypography.sectionTitle),
+              SizedBox(height: MCESpacing.xs),
+              Text(
+                'Worship lyrics, notes, and song slides',
+                style: MCETypography.sectionSubtitle,
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Refresh library',
+          onPressed: _loading ? null : _loadSongs,
+          icon: Icon(Icons.refresh),
+          color: MCEColors.textSecondary,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: MCESpacing.md),
+      decoration: BoxDecoration(
+        color: MCEColors.surface,
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(color: MCEColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search, color: MCEColors.textSecondary),
+          SizedBox(width: MCESpacing.sm),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _searchQuery = value),
+              style: MCETypography.body,
+              decoration: InputDecoration(
+                hintText: 'Search songs or lyrics',
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          if (_searchQuery.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear search',
+              onPressed: () {
+                _searchController.clear();
+                setState(() => _searchQuery = '');
+              },
+              icon: Icon(Icons.close, size: 20),
+              color: MCEColors.textSecondary,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: MCESpacing.lg),
+      padding: const EdgeInsets.all(MCESpacing.md),
+      decoration: BoxDecoration(
+        color: MCEColors.primaryBlue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(
+          color: MCEColors.primaryBlue.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: MCEColors.primaryBlue),
+          SizedBox(width: MCESpacing.sm),
+          Expanded(
+            child: Text(
+              _error!,
+              style: MCETypography.caption.copyWith(height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryHeader() {
+    return Row(
+      children: [
+        Expanded(child: Text('Library', style: MCETypography.cardTitle)),
+        Text(
+          '${_filteredSongs.length} ${_filteredSongs.length == 1 ? 'song' : 'songs'}',
+          style: MCETypography.caption,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSongCard(DockSong song) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: MCESpacing.sm),
+      decoration: BoxDecoration(
+        color: MCEColors.surface,
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(color: MCEColors.border),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        onTap: () => _openSong(song),
+        child: Padding(
+          padding: const EdgeInsets.all(MCESpacing.md),
+          child: Row(
+            children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(MCESpacing.xxl),
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1E1B4B), Color(0xFF312E81)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(MCERadius.lg),
-                  border: Border.all(color: MCEColors.borderLight),
+                  color: MCEColors.primaryPurple.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(MCERadius.md),
                 ),
+                child: Icon(Icons.music_note, color: MCEColors.primaryPurple),
+              ),
+              SizedBox(width: MCESpacing.md),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(song.title, style: MCETypography.bodyBold),
+                    SizedBox(height: MCESpacing.xs),
                     Text(
-                      currentSlide.text,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.4,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black54,
-                            blurRadius: 12,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
+                      song.artist.isEmpty ? 'Text slide set' : song.artist,
+                      style: MCETypography.caption,
                     ),
-                    const SizedBox(height: MCESpacing.md),
+                    SizedBox(height: MCESpacing.xs),
                     Text(
-                      'Slide ${currentSlide.number} of ${song.slides.length}',
-                      style: MCETypography.caption.copyWith(
-                        color: MCEColors.textSecondary,
+                      '${song.slides.length} slides',
+                      style: MCETypography.tiny.copyWith(
+                        color: MCEColors.textTertiary,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: MCESpacing.lg),
-
-              // Slide navigator
-              SizedBox(
-                height: 72,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: song.slides.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: MCESpacing.sm),
-                  itemBuilder: (context, i) {
-                    final isActive = i == _currentSlideIndex;
-                    return GestureDetector(
-                      onTap: () => setState(() => _currentSlideIndex = i),
-                      child: Container(
-                        width: 60,
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? MCEColors.primaryBlue.withValues(alpha: 0.2)
-                              : MCEColors.surface.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(MCERadius.sm),
-                          border: Border.all(
-                            color: isActive
-                                ? MCEColors.primaryBlue
-                                : MCEColors.border,
-                            width: isActive ? 2 : 1,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: isActive
-                                  ? MCEColors.primaryBlue
-                                  : MCEColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: MCESpacing.lg),
-
-              // Song list within session
-              ..._setlist.map((s) {
-                final isCurrent = s == _performingSong;
-                return GestureDetector(
-                  onTap: () => setState(() {
-                    _performingSong = s;
-                    _currentSlideIndex = 0;
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.all(MCESpacing.md),
-                    margin: const EdgeInsets.only(bottom: MCESpacing.sm),
-                    decoration: BoxDecoration(
-                      color: isCurrent
-                          ? MCEColors.primaryPurple.withValues(alpha: 0.15)
-                          : MCEColors.surface.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(MCERadius.md),
-                      border: Border.all(
-                        color: isCurrent
-                            ? MCEColors.primaryPurple.withValues(alpha: 0.3)
-                            : MCEColors.border,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: isCurrent
-                                ? MCEColors.primaryPurple
-                                : MCEColors.elevated,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${_setlist.indexOf(s) + 1}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isCurrent ? Colors.white : MCEColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: MCESpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                s.title,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isCurrent
-                                      ? MCEColors.textPrimary
-                                      : MCEColors.textSecondary,
-                                ),
-                              ),
-                              Text(
-                                s.artist,
-                                style: MCETypography.caption.copyWith(
-                                  color: MCEColors.textTertiary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isCurrent)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: MCEColors.primaryPurple.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'NOW',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: MCEColors.primaryPurple,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(height: MCESpacing.xxl),
+              Icon(Icons.chevron_right, color: MCEColors.textTertiary),
             ],
           ),
         ),
+      ),
+    );
+  }
 
-        // Bottom toolbar
-        _buildPerformBottomToolbar(),
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(MCESpacing.xxl),
+      decoration: BoxDecoration(
+        color: MCEColors.surface,
+        borderRadius: BorderRadius.circular(MCERadius.md),
+        border: Border.all(color: MCEColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.search_off, size: 36, color: MCEColors.textTertiary),
+          SizedBox(height: MCESpacing.md),
+          Text('No matching songs', style: MCETypography.bodyBold),
+          SizedBox(height: MCESpacing.xs),
+          Text(
+            'Try a different title, artist, or lyric search.',
+            style: MCETypography.caption,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPerformMode(DockSong song) {
+    final slide = song.slides[_currentSlideIndex];
+    return Column(
+      children: [
+        _buildPerformHeader(song),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              MCESpacing.lg,
+              MCESpacing.lg,
+              MCESpacing.lg,
+              MCESpacing.xl,
+            ),
+            children: [
+              SizedBox(height: MCESpacing.sm),
+              _buildLiveSlideCard(song, slide),
+              SizedBox(height: MCESpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Slides', style: MCETypography.cardTitle),
+                  ),
+                  Text(
+                    '${_currentSlideIndex + 1} of ${song.slides.length}',
+                    style: MCETypography.caption,
+                  ),
+                ],
+              ),
+              SizedBox(height: MCESpacing.md),
+              _buildSlideGrid(song),
+            ],
+          ),
+        ),
+        _buildPerformToolbar(song),
       ],
     );
   }
 
-  Widget _buildPerformTopBar() {
+  Widget _buildPerformHeader(DockSong song) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: MCESpacing.lg,
-        vertical: MCESpacing.md,
+        vertical: MCESpacing.sm,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: MCEColors.surface,
         border: Border(bottom: BorderSide(color: MCEColors.border)),
       ),
@@ -478,39 +797,31 @@ class _WorshipScreenState extends State<WorshipScreen> {
         bottom: false,
         child: Row(
           children: [
-            GestureDetector(
-              onTap: () => setState(() {
-                _performingSong = null;
-                _selectedMode = 'Browse';
-              }),
-              child: const Icon(Icons.arrow_back, color: MCEColors.textSecondary, size: 24),
+            IconButton(
+              tooltip: 'Back to library',
+              onPressed: () => setState(() => _performingSong = null),
+              icon: Icon(Icons.arrow_back),
+              color: MCEColors.textSecondary,
             ),
-            const SizedBox(width: MCESpacing.md),
-            const Expanded(
-              child: Text(
-                'Worship Session',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: MCEColors.textPrimary,
-                ),
+            SizedBox(width: MCESpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(song.title, style: MCETypography.bodyBold),
+                  Text(
+                    song.artist.isEmpty ? 'Text presentation' : song.artist,
+                    style: MCETypography.caption,
+                  ),
+                ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: MCEColors.success.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                'LIVE',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: MCEColors.success,
-                  letterSpacing: 0.5,
-                ),
-              ),
+            _LivePill(),
+            IconButton(
+              tooltip: 'Clear text output',
+              onPressed: _clearWorship,
+              icon: Icon(Icons.clear),
+              color: MCEColors.danger,
             ),
           ],
         ),
@@ -518,219 +829,198 @@ class _WorshipScreenState extends State<WorshipScreen> {
     );
   }
 
-  Widget _buildPerformBottomToolbar() {
-    final song = _performingSong!;
-
+  Widget _buildLiveSlideCard(DockSong song, DockSlide slide) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MCESpacing.lg,
-        vertical: MCESpacing.md,
+      width: double.infinity,
+      constraints: BoxConstraints(minHeight: 220),
+      padding: const EdgeInsets.all(MCESpacing.xl),
+      decoration: BoxDecoration(
+        color: MCEColors.elevated,
+        borderRadius: BorderRadius.circular(MCERadius.lg),
+        border: Border.all(
+          color: MCEColors.primaryPurple.withValues(alpha: 0.65),
+        ),
       ),
-      decoration: const BoxDecoration(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.music_note, size: 16, color: MCEColors.primaryPurple),
+              SizedBox(width: MCESpacing.xs),
+              Text(
+                slide.label.toUpperCase(),
+                style: MCETypography.tiny.copyWith(
+                  color: MCEColors.primaryPurple,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: MCESpacing.lg),
+          Text(
+            slide.text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+              color: MCEColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: MCESpacing.lg),
+          Text(song.title, style: MCETypography.caption),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlideGrid(DockSong song) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      itemCount: song.slides.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: MCESpacing.sm,
+        mainAxisSpacing: MCESpacing.sm,
+        childAspectRatio: 1.55,
+      ),
+      itemBuilder: (context, index) {
+        final item = song.slides[index];
+        final selected = index == _currentSlideIndex;
+        return InkWell(
+          borderRadius: BorderRadius.circular(MCERadius.md),
+          onTap: () {
+            setState(() => _currentSlideIndex = index);
+            _pushCurrentSlide();
+          },
+          child: Container(
+            padding: const EdgeInsets.all(MCESpacing.md),
+            decoration: BoxDecoration(
+              color: selected
+                  ? MCEColors.primaryBlue.withValues(alpha: 0.16)
+                  : MCEColors.surface,
+              borderRadius: BorderRadius.circular(MCERadius.md),
+              border: Border.all(
+                color: selected ? MCEColors.primaryBlue : MCEColors.border,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${index + 1} · ${item.label}',
+                  style: MCETypography.tiny.copyWith(
+                    color: selected
+                        ? MCEColors.primaryBlue
+                        : MCEColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: MCESpacing.sm),
+                Expanded(
+                  child: Text(
+                    item.text,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: MCETypography.caption.copyWith(height: 1.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPerformToolbar(DockSong song) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        MCESpacing.lg,
+        MCESpacing.md,
+        MCESpacing.lg,
+        MCESpacing.sm,
+      ),
+      decoration: BoxDecoration(
         color: MCEColors.surface,
         border: Border(top: BorderSide(color: MCEColors.border)),
       ),
       child: SafeArea(
         top: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Navigation: prev / push / next
             Row(
               children: [
-                // Previous slide
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _currentSlideIndex > 0
-                        ? () => setState(() => _currentSlideIndex--)
+                  child: _ToolbarButton(
+                    icon: Icons.skip_previous,
+                    label: 'Prev',
+                    onPressed: _currentSlideIndex > 0
+                        ? () => _moveSlide(-1)
                         : null,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _currentSlideIndex > 0
-                            ? MCEColors.elevated
-                            : MCEColors.surface,
-                        borderRadius: BorderRadius.circular(MCERadius.md),
-                        border: Border.all(
-                          color: _currentSlideIndex > 0
-                              ? MCEColors.border
-                              : MCEColors.border.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.skip_previous,
-                            size: 18,
-                            color: _currentSlideIndex > 0
-                                ? MCEColors.textPrimary
-                                : MCEColors.textTertiary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Prev',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _currentSlideIndex > 0
-                                  ? MCEColors.textPrimary
-                                  : MCEColors.textTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ),
-                const SizedBox(width: MCESpacing.sm),
-                // Push Live (wide)
+                SizedBox(width: MCESpacing.sm),
                 Expanded(
                   flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: MCEColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(MCERadius.md),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.broadcast_on_home, size: 18),
-                        SizedBox(width: 6),
-                        Text(
-                          'Push Live',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
+                  child: SizedBox(
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: _sending ? null : _pushCurrentSlide,
+                      icon: Icon(_sending ? Icons.sync : Icons.visibility),
+                      label: Text(_sending ? 'Sending…' : 'Send to OBS'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: MCEColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: MCEColors.elevated,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(MCERadius.md),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: MCESpacing.sm),
-                // Next slide
+                SizedBox(width: MCESpacing.sm),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _currentSlideIndex < song.slides.length - 1
-                        ? () => setState(() => _currentSlideIndex++)
+                  child: _ToolbarButton(
+                    icon: Icons.skip_next,
+                    label: 'Next',
+                    onPressed: _currentSlideIndex < song.slides.length - 1
+                        ? () => _moveSlide(1)
                         : null,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _currentSlideIndex < song.slides.length - 1
-                            ? MCEColors.elevated
-                            : MCEColors.surface,
-                        borderRadius: BorderRadius.circular(MCERadius.md),
-                        border: Border.all(
-                          color: _currentSlideIndex < song.slides.length - 1
-                              ? MCEColors.border
-                              : MCEColors.border.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Next',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _currentSlideIndex < song.slides.length - 1
-                                  ? MCEColors.textPrimary
-                                  : MCEColors.textTertiary,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.skip_next,
-                            size: 18,
-                            color: _currentSlideIndex < song.slides.length - 1
-                                ? MCEColors.textPrimary
-                                : MCEColors.textTertiary,
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: MCESpacing.sm),
-            // Bottom row: mode toggle + stop
+            SizedBox(height: MCESpacing.sm),
             Row(
               children: [
-                // Full/LT toggle
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: MCEColors.elevated,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: MCEColors.border),
-                  ),
-                  child: Row(
-                    children: ['Full', 'LT'].map((mode) {
-                      final isActive = _outputMode == mode;
-                      return GestureDetector(
-                        onTap: () => setState(() => _outputMode = mode),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? MCEColors.primaryBlue
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            mode,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: isActive
-                                  ? Colors.white
-                                  : MCEColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const Spacer(),
-                // Clear Output
-                GestureDetector(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: MCEColors.danger.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.stop, size: 14, color: MCEColors.danger),
-                        SizedBox(width: 4),
-                        Text(
-                          'Clear',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: MCEColors.danger,
-                          ),
-                        ),
-                      ],
+                Text('Output', style: MCETypography.caption),
+                SizedBox(width: MCESpacing.md),
+                Expanded(
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'fullscreen', label: Text('Full')),
+                      ButtonSegment(
+                        value: 'lower-third',
+                        label: Text('Lower third'),
+                      ),
+                    ],
+                    selected: {_outputMode},
+                    onSelectionChanged: (value) =>
+                        setState(() => _outputMode = value.first),
+                    style: ButtonStyle(
+                      minimumSize: WidgetStatePropertyAll(Size.fromHeight(48)),
+                      foregroundColor: WidgetStatePropertyAll(
+                        MCEColors.textSecondary,
+                      ),
+                      side: WidgetStatePropertyAll(
+                        BorderSide(color: MCEColors.border),
+                      ),
                     ),
                   ),
                 ),
@@ -739,6 +1029,138 @@ class _WorshipScreenState extends State<WorshipScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LivePill extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: MCESpacing.sm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: MCEColors.success.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(MCERadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 8, color: MCEColors.success),
+          SizedBox(width: MCESpacing.xs),
+          Text('LIVE', style: MCETypography.tiny),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  const _ToolbarButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: onPressed == null
+              ? MCEColors.textTertiary
+              : MCEColors.textPrimary,
+          side: BorderSide(
+            color: onPressed == null ? MCEColors.border : MCEColors.borderLight,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(MCERadius.md),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteEditorDialog extends StatefulWidget {
+  final String title;
+  final String content;
+
+  const _NoteEditorDialog({required this.title, required this.content});
+
+  @override
+  State<_NoteEditorDialog> createState() => _NoteEditorDialogState();
+}
+
+class _NoteEditorDialogState extends State<_NoteEditorDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _contentController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.title);
+    _contentController = TextEditingController(text: widget.content);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: MCEColors.surface,
+      title: Text(widget.title.isEmpty ? 'New note' : 'Edit note'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: InputDecoration(labelText: 'Title'),
+            ),
+            SizedBox(height: MCESpacing.md),
+            TextField(
+              controller: _contentController,
+              minLines: 4,
+              maxLines: 8,
+              decoration: InputDecoration(labelText: 'Note content'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final nextTitle = _titleController.text.trim();
+            final nextContent = _contentController.text.trim();
+            if (nextTitle.isEmpty || nextContent.isEmpty) return;
+            Navigator.of(
+              context,
+            ).pop({'title': nextTitle, 'content': nextContent});
+          },
+          child: Text('Save'),
+        ),
+      ],
     );
   }
 }

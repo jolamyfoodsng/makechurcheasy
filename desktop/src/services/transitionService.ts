@@ -6,12 +6,13 @@
  */
 
 import { obsService } from "./obsService";
+import { ensureMoveTransition } from "./obsMovePlugin";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type TransitionKind = "Cut" | "Fade" | "Swipe" | "Slide" | "Stinger";
+export type TransitionKind = "Cut" | "Fade" | "Swipe" | "Slide" | "Stinger" | "Move";
 
 export interface TransitionConfig {
     kind: TransitionKind;
@@ -30,6 +31,7 @@ export const TRANSITION_OPTIONS: { kind: TransitionKind; label: string; icon: st
     { kind: "Fade", label: "Fade", icon: "gradient" },
     { kind: "Swipe", label: "Swipe", icon: "swipe" },
     { kind: "Slide", label: "Slide", icon: "slideshow" },
+    { kind: "Move", label: "Move", icon: "animation" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -43,21 +45,30 @@ export const TRANSITION_OPTIONS: { kind: TransitionKind; label: string; icon: st
 export async function setTransition(config: TransitionConfig): Promise<void> {
     const transitionName = `${config.kind} Transition`;
 
-    try {
-        // Try to set as current transition
-        await obsService.call("SetCurrentSceneTransition", {
-            transitionName: config.kind === "Cut" ? "Cut" : transitionName,
-        });
-    } catch {
-        // Transition may not exist — some are built-in, some need to be available
-        // Fall back to Cut for safety
-        console.warn(`[TransitionService] Transition "${config.kind}" not available, falling back to Cut`);
+    if (config.kind === "Move") {
+        const ready = await ensureMoveTransition();
+        if (!ready) {
+            throw new Error("Move Transition is not installed or OBS has not loaded the MCE bridge.");
+        }
+    }
+
+    if (config.kind !== "Move") {
         try {
+            // Try to set as current transition
             await obsService.call("SetCurrentSceneTransition", {
-                transitionName: "Cut",
+                transitionName: config.kind === "Cut" ? "Cut" : transitionName,
             });
-        } catch (err) {
-            console.error("[TransitionService] Failed to set Cut transition:", err);
+        } catch {
+            // Transition may not exist — some are built-in, some need to be available
+            // Fall back to Cut for safety
+            console.warn(`[TransitionService] Transition "${config.kind}" not available, falling back to Cut`);
+            try {
+                await obsService.call("SetCurrentSceneTransition", {
+                    transitionName: "Cut",
+                });
+            } catch (err) {
+                console.error("[TransitionService] Failed to set Cut transition:", err);
+            }
         }
     }
 
@@ -85,7 +96,8 @@ export async function getCurrentTransition(): Promise<TransitionConfig> {
 
         // Map OBS transition name back to our kind
         let kind: TransitionKind = "Cut";
-        if (name?.toLowerCase().includes("fade")) kind = "Fade";
+        if (name?.toLowerCase().includes("move")) kind = "Move";
+        else if (name?.toLowerCase().includes("fade")) kind = "Fade";
         else if (name?.toLowerCase().includes("swipe")) kind = "Swipe";
         else if (name?.toLowerCase().includes("slide")) kind = "Slide";
         else if (name?.toLowerCase().includes("stinger")) kind = "Stinger";

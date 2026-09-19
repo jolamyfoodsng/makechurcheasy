@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createScriptureSpeechState, parseScriptureIntent, parseScriptureReference, resolveScriptureSpeech } from "./scriptureParser";
+import {
+  createScriptureSpeechState,
+  isLikelyScriptureReferenceAttempt,
+  parseScriptureIntent,
+  parseScriptureReference,
+  resolveScriptureSpeech,
+} from "./scriptureParser";
 
 /**
  * Helper: convert ParsedReference to a display string for easy assertion.
@@ -342,6 +348,33 @@ describe("Speech context resolver", () => {
       verse: 4,
     });
   });
+
+  it("keeps ordinals attached to every numbered book with fuzzy suffixes", () => {
+    const cases = [
+      ["1st samual 17 45", "1 Samuel 17:45"],
+      ["second samual 22 1", "2 Samuel 22:1"],
+      ["first kingz 3 9", "1 Kings 3:9"],
+      ["2nd kingz 6 17", "2 Kings 6:17"],
+      ["first chronicals 7 14", "1 Chronicles 7:14"],
+      ["second chronicals 7 14", "2 Chronicles 7:14"],
+      ["1st coritihans 13 4", "1 Corinthians 13:4"],
+      ["first coritihans 13 4", "1 Corinthians 13:4"],
+      ["second coritihans 5 17", "2 Corinthians 5:17"],
+      ["first thesalonians 5 17", "1 Thessalonians 5:17"],
+      ["second thesalonians 3 3", "2 Thessalonians 3:3"],
+      ["first timoty 4 12", "1 Timothy 4:12"],
+      ["second timoty 1 7", "2 Timothy 1:7"],
+      ["first petter 5 7", "1 Peter 5:7"],
+      ["second petter 3 9", "2 Peter 3:9"],
+      ["first jhon 4 8", "1 John 4:8"],
+      ["second jhon 1 6", "2 John 1:6"],
+      ["third jhon 1 2", "3 John 1:2"],
+    ] as const;
+
+    for (const [input, expected] of cases) {
+      expect(fmt(parseScriptureReference(input))).toBe(expected);
+    }
+  });
 });
 
 describe("Speech command matrix", () => {
@@ -455,6 +488,32 @@ describe("Speech state matrix", () => {
     resolveScriptureSpeech("Genesis 1:2", state, 1000);
 
     expect(resolveScriptureSpeech("3", state, 10_500)).toBeNull();
+  });
+
+  it("rejects malformed book-number-chapter speech without updating context", () => {
+    const state = createScriptureSpeechState();
+    const chapter = resolveScriptureSpeech("Ecclesiastes chapter 5", state, 1000);
+    expect(chapter).toMatchObject({
+      kind: "chapter_reference",
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: null,
+      shouldProject: false,
+    });
+
+    expect(parseScriptureReference("James 7, chapter 5")).toBeNull();
+    expect(parseScriptureIntent("James 7, chapter 5")).toBeNull();
+    expect(resolveScriptureSpeech("James 7, chapter 5", state, 1500)).toBeNull();
+    expect(isLikelyScriptureReferenceAttempt("James 7, chapter 5")).toBe(true);
+
+    const continuation = resolveScriptureSpeech("Verse 2", state, 2000);
+    expect(continuation).toMatchObject({
+      kind: "verse_reference",
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: 2,
+      shouldProject: true,
+    });
   });
 });
 
@@ -604,6 +663,10 @@ describe("Standard references through parser", () => {
   });
   it("turn to romans 8 28 → Romans 8:28", () => {
     expect(fmt(parseScriptureReference("turn to romans 8 28"))).toBe("Romans 8:28");
+  });
+  it("keeps a later from-verse phrase attached to the spoken chapter", () => {
+    expect(fmt(parseScriptureReference("And the Lord— Exodus 34, I'll read from verse 5."))).toBe("Exodus 34:5");
+    expect(fmt(parseScriptureReference("Romans chapter 9. Praise God. Let me read from verse 10."))).toBe("Romans 9:10");
   });
 });
 

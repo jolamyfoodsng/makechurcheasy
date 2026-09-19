@@ -5,8 +5,12 @@
  * Contains SVG-based patterns with optional SMIL animations.
  */
 
-const makeSvgBackground = (svg: string) =>
+export const makeSvgBackground = (svg: string) =>
   `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+export const QUIET_CLOUDS_SVG_RAW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><defs><linearGradient id="bg" y1="0" y2="1"><stop stop-color="#ede9fe"/><stop offset="1" stop-color="#94a3b8"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="10"/></filter></defs><rect width="320" height="180" fill="url(#bg)"/><g filter="url(#blur)" fill="#ffffff" opacity=".42"><ellipse cx="70" cy="70" rx="58" ry="20"><animate attributeName="cx" values="50;92;50" dur="18s" repeatCount="indefinite"/></ellipse><ellipse cx="210" cy="110" rx="82" ry="26"><animate attributeName="cx" values="190;236;190" dur="22s" repeatCount="indefinite"/></ellipse><ellipse cx="280" cy="54" rx="54" ry="18"><animate attributeName="cx" values="260;300;260" dur="20s" repeatCount="indefinite"/></ellipse></g><rect width="320" height="180" fill="#0f172a" opacity=".18"/></svg>`;
+
+export const QUIET_CLOUDS_PATTERN_SRC = makeSvgBackground(QUIET_CLOUDS_SVG_RAW);
 
 export type BackgroundPattern = {
   label: string;
@@ -156,6 +160,6 @@ export const BACKGROUND_PATTERNS: BackgroundPattern[] = [
   },
   {
     label: "Quiet Clouds",
-    src: makeSvgBackground(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><defs><linearGradient id="bg" y1="0" y2="1"><stop stop-color="#ede9fe"/><stop offset="1" stop-color="#94a3b8"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="10"/></filter></defs><rect width="320" height="180" fill="url(#bg)"/><g filter="url(#blur)" fill="#ffffff" opacity=".42"><ellipse cx="70" cy="70" rx="58" ry="20"><animate attributeName="cx" values="50;92;50" dur="18s" repeatCount="indefinite"/></ellipse><ellipse cx="210" cy="110" rx="82" ry="26"><animate attributeName="cx" values="190;236;190" dur="22s" repeatCount="indefinite"/></ellipse><ellipse cx="280" cy="54" rx="54" ry="18"><animate attributeName="cx" values="260;300;260" dur="20s" repeatCount="indefinite"/></ellipse></g><rect width="320" height="180" fill="#0f172a" opacity=".18"/></svg>`),
+    src: QUIET_CLOUDS_PATTERN_SRC,
   },
 ];

@@ -14,13 +14,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 
 const PRICING_URL =
-  "https://makechurcheasy.creatorstudioslabs.stream/subscription/plans";
+  "https://makechurcheazy.com/subscription/plans";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
   basic: "Basic",
   growth: "Growth",
-  pro: "Pro",
   trial: "Trial",
   ambassador: "Ambassador",
 };
@@ -29,7 +28,7 @@ const PLAN_LABELS: Record<string, string> = {
 const NEXT_PLAN: Record<string, string> = {
   free: "basic",
   basic: "growth",
-  growth: "pro",
+  growth: "growth",
 };
 
 interface FeatureGuardProps {
@@ -54,7 +53,10 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
   // Determine correct upgrade target — never suggest a plan the user
   // already has or a lower tier.
   const currentPlan = effectivePlan;
-  const nextPlanKey = NEXT_PLAN[currentPlan] || "growth";
+  const nextPlanKey =
+    info.requiredPlan && info.requiredPlan !== currentPlan
+      ? info.requiredPlan
+      : NEXT_PLAN[currentPlan] || "growth";
   const upgradeLabel =
     PLAN_LABELS[nextPlanKey] ||
     nextPlanKey.charAt(0).toUpperCase() + nextPlanKey.slice(1);

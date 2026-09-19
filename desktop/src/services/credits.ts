@@ -5,7 +5,7 @@
  *   Voice → Transcript:  1 credit = 1 minute of processed audio
  *   Transcript → Translation: 1 credit = 150 words
  *
- * Pro users bypass all credit checks.
+ * Full-access users bypass all credit checks.
  * Credits are deducted only on successful completion.
  *
  * RULE: The backend (MongoDB) is the single source of truth.
@@ -23,7 +23,7 @@ export { isProUnlocked };
 import { getPlanConfig } from "./planConfig";
 import { getUserScopedKey } from "./userScopedStorage";
 import type { PlanConfig } from "./planConfig";
-import { getDeviceId } from "./authService";
+import { getDeviceId, getDeviceSecret } from "./authService";
 import { requestJsonWithRetry } from "./requestDedup";
 import {
   queueDeduction,
@@ -64,7 +64,9 @@ const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
   if (deviceId) headers["X-Device-Id"] = deviceId;
+  if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
   return headers;
 }
 
@@ -135,6 +137,15 @@ function emitCreditChange(balance: number): void {
   }
 }
 
+export interface CreditDeductionOptions {
+  /**
+   * Queue the deduction locally when the backend is unreachable.
+   * Use false for credit-gated AI work that must not continue unless the
+   * backend confirms the charge.
+   */
+  allowOffline?: boolean;
+}
+
 /**
  * Deduct credits with backend sync. Atomically decrements in MongoDB,
  * logs a transaction, and updates the local cache.
@@ -150,9 +161,11 @@ export async function deductCreditsWithSync(
   amount: number,
   source: string,
   description: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  options?: CreditDeductionOptions,
 ): Promise<boolean> {
   if (amount <= 0) return true;
+  const allowOffline = options?.allowOffline !== false;
 
   try {
     const res = await fetch(`${API_BASE}/api/credit-transactions/deduct`, {
@@ -177,6 +190,11 @@ export async function deductCreditsWithSync(
       return false;
     }
 
+    if (!allowOffline) {
+      console.warn(`[Credits] Server error (${res.status}) — strict deduction refused`);
+      return false;
+    }
+
     // Server error — queue for later
     const tx = queueDeduction(source, amount, description);
     console.warn(`[Credits] Server error (${res.status}) — queued transaction ${tx.id}`);
@@ -185,6 +203,11 @@ export async function deductCreditsWithSync(
     emitCreditChange(offlineBalance);
     return true;
   } catch {
+    if (!allowOffline) {
+      console.warn("[Credits] Offline — strict deduction refused");
+      return false;
+    }
+
     // Network failure — queue for later
     const tx = queueDeduction(source, amount, description);
     console.warn(`[Credits] Offline — queued transaction ${tx.id}`);
@@ -203,7 +226,9 @@ export interface CreditDetails {
   totalConsumed: number;
   planAllocation: number;
   adminGranted: number;
+  effectivePlan?: string;
   isAdmin: boolean;
+  unlimited?: boolean;
 }
 
 /**
@@ -227,7 +252,9 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         totalConsumed: data.totalConsumed ?? 0,
         planAllocation: data.planAllocation ?? 0,
         adminGranted: data.adminGranted ?? 0,
+        effectivePlan: data.effectivePlan,
         isAdmin: data.isAdmin ?? false,
+        unlimited: data.unlimited ?? data.credits === -1,
       };
     }
     return null;
@@ -238,26 +265,26 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
 
 /**
  * Fetch credits from the backend API. Returns the dynamically-calculated
- * balance, or -1 on failure.
+ * balance, or null when the balance could not be verified.
  * This is the ONLY way to read credits — never use localStorage for feature gating.
  * Auth is via X-Device-Id header — no userId param needed.
  */
-export async function fetchCreditsFromBackend(): Promise<number> {
+export async function fetchCreditsFromBackend(): Promise<number | null> {
   const details = await fetchCreditDetails();
-  return details?.credits ?? -1;
+  return details?.credits ?? null;
 }
 
 /**
  * Sync credits with the backend. The backend is the single source of truth.
  * Local localStorage cache is updated to match what the backend reports.
  */
-export async function syncCreditsWithBackend(options?: { force?: boolean }): Promise<number> {
+export async function syncCreditsWithBackend(options?: { force?: boolean }): Promise<number | null> {
   if (!options?.force && hasFreshRemoteCache()) {
     return getCreditsBalance();
   }
 
   const backendCredits = await fetchCreditsFromBackend();
-  if (backendCredits < 0) return -1;
+  if (backendCredits === null) return null;
 
   applyCreditSnapshotFromServer(backendCredits);
   return backendCredits;
@@ -347,9 +374,11 @@ export interface CreditTransaction {
  * Fetch recent credit transactions from the backend.
  * Returns an array of transactions, most recent first.
  */
-export async function fetchCreditTransactions(limit = 10): Promise<CreditTransaction[]> {
+export async function fetchCreditTransactions(limit = 10, skip = 0): Promise<CreditTransaction[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/credit-transactions?limit=${limit}`, {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (skip > 0) params.set("skip", String(skip));
+    const res = await fetch(`${API_BASE}/api/credit-transactions?${params.toString()}`, {
       headers: authHeaders(),
     });
     if (!res.ok) return [];
@@ -454,7 +483,7 @@ export async function commitTranslationCredits(reservationId: string): Promise<b
 /**
  * Refund a previously reserved translation — restores credits on failure.
  */
-export async function refundTranslationCredits(reservationId: string): Promise<{ refunded: boolean; credits: number } | null> {
+export async function refundTranslationCredits(reservationId: string): Promise<{ refunded: boolean; credits: number; refundedAmount?: number } | null> {
   try {
     const res = await fetch(`${API_BASE}/api/credit-transactions/refund`, {
       method: "POST",
@@ -467,7 +496,7 @@ export async function refundTranslationCredits(reservationId: string): Promise<{
       setCreditsBalance(data.credits);
       emitCreditChange(data.credits);
     }
-    return { refunded: data.refunded, credits: data.credits };
+    return { refunded: Boolean(data.refunded), credits: data.credits, refundedAmount: data.refundedAmount };
   } catch {
     return null;
   }

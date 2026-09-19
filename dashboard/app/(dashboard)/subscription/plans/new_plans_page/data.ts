@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gift, Leaf, Star, TrendingUp, Crown, Music, Monitor, Globe2, Shield } from 'lucide-react';
+import { Gift, Leaf, Star, TrendingUp, Music, Monitor, Globe2, Shield } from 'lucide-react';
 
 export type TranslationFunction = (key: string, values?: Record<string, any>) => string;
 
@@ -91,11 +91,11 @@ export function getPlansData(t: TranslationFunction): PricingPlan[] {
                 USD: { monthly: '$1.67', yearly: '$16.67' }
             },
             features: [
-                { text: 'Add Lower Thirds & Tickers to your sermon' },
-                { text: 'Upload 30 songs, 20 images, and 10 videos' },
-                { text: 'Run on 1 device with 4 Bible versions' },
-                { text: '50 AI credits per month for Speech-to-Scripture' },
-                { text: 'Community support to get you started' },
+                { text: 'Upload 100 songs, 100 images, and 100 videos' },
+                { text: 'Unlimited Bible versions on 3 devices' },
+                { text: 'Bible, Worship, Media, and Countdowns' },
+                { text: 'Verse AI with 100 monthly credits' },
+                { text: 'No Tickers, Lower Thirds, Multiview, or transcript translation' },
             ],
             buttonText: t('subscription.plans.choosePlan', { plan: t('subscription.data.plans.basic.name') })
         },
@@ -126,33 +126,6 @@ export function getPlansData(t: TranslationFunction): PricingPlan[] {
                 { text: 'Priority support for your team' },
             ],
             buttonText: t('subscription.plans.choosePlan', { plan: t('subscription.data.plans.growth.name') })
-        },
-        {
-            id: 'pro',
-            name: t('subscription.data.plans.pro.name'),
-            target: t('subscription.data.plans.pro.target'),
-            iconName: 'crown',
-            styles: {
-                iconBg: 'bg-yellow-50',
-                iconColor: 'text-brand-yellow',
-                border: 'border-brand-border border',
-                button: 'text-brand-yellow border border-brand-yellow',
-                buttonHover: 'hover:bg-yellow-50',
-                checkColor: 'text-brand-yellow'
-            },
-            pricing: {
-                NGN: { monthly: '₦34,000', yearly: '₦340,000' },
-                USD: { monthly: '$22.67', yearly: '$226.67' }
-            },
-            features: [
-                { text: 'Everything in Growth, plus:' },
-                { text: 'Unlimited AI credits — never hit a limit' },
-                { text: '200 GB cloud storage for your media library' },
-                { text: 'Custom reports and full API access' },
-                { text: 'Team & multi-campus management' },
-                { text: 'Dedicated onboarding and priority support' },
-            ],
-            buttonText: t('subscription.plans.choosePlan', { plan: t('subscription.data.plans.pro.name') })
         }
     ];
 }

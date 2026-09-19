@@ -14,8 +14,6 @@ import {
   RefreshCw,
   Download,
   Zap,
-  Shield,
-  Users,
 } from "lucide-react";
 
 const STORAGE_KEY = "mce_premium_welcome";
@@ -51,19 +49,6 @@ const PLAN_DISPLAY: Record<
       { icon: Crown, label: "MultiView for multi-camera" },
     ],
   },
-  pro: {
-    name: "Pro",
-    icon: Crown,
-    gradient: "from-indigo-600 to-purple-700",
-    features: [
-      { icon: Zap, label: "Unlimited AI credits" },
-      { icon: Download, label: "200 GB cloud storage" },
-      { icon: Users, label: "Team & campus management" },
-      { icon: Crown, label: "Custom reports & API access" },
-      { icon: Shield, label: "Priority support & onboarding" },
-      { icon: Smartphone, label: "Everything in Growth" },
-    ],
-  },
 };
 
 interface PendingWelcome {
@@ -71,6 +56,8 @@ interface PendingWelcome {
   plan: string;
   planName?: string;
   billingCycle?: string;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferName?: string | null;
 }
 
 export function PremiumWelcomeModal() {
@@ -107,6 +94,7 @@ export function PremiumWelcomeModal() {
   }
 
   const Icon = display.icon;
+  const isOneTime = planData.purchaseKind === "one_time" || planData.billingCycle === "lifetime";
 
   return (
     <div
@@ -132,10 +120,10 @@ export function PremiumWelcomeModal() {
             Payment Confirmed
           </p>
           <h2 className="text-xl font-bold text-white">
-            Thank you for subscribing to {display.name}
+            {isOneTime ? `Your ${display.name} access is active` : `Thank you for subscribing to ${display.name}`}
           </h2>
           <p className="text-sm text-blue-100 mt-1">
-            Your premium access is active now.
+            {isOneTime ? "Your one-time purchase has been applied to this account." : "Your premium access is active now."}
           </p>
         </div>
 

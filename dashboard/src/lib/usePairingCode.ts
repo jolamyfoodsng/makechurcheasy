@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ApiError, createPairingCode } from "./api";
+import { ApiError, createPairingCode, normalizePairingCode } from "./api";
 
 const STORAGE_KEY = "mce-active-pairing";
 const POLL_INTERVAL = 5000;
@@ -21,6 +21,7 @@ function loadStoredPairing(): StoredPairing | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data: StoredPairing = JSON.parse(raw);
+    data.code = normalizePairingCode(String(data.code || ""));
     // Check expiry using elapsed time, not absolute clock comparison
     if (data.generatedAt && data.ttl) {
       const elapsed = (Date.now() - data.generatedAt) / 1000;
@@ -147,7 +148,10 @@ export function usePairingCode({ onPaired }: UsePairingCodeOptions = {}) {
     const poll = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const res = await fetch(`/api/pairing/poll?code=${encodeURIComponent(code)}`);
+        const res = await fetch(`/api/pairing/poll?code=${encodeURIComponent(normalizePairingCode(code))}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
         const data = await res.json();
         if (stopped) return;
 
@@ -167,6 +171,14 @@ export function usePairingCode({ onPaired }: UsePairingCodeOptions = {}) {
           generatedAtRef.current = 0;
           ttlRef.current = 0;
           clearPairing();
+        } else if (data.status === "error" || data.status === "device_limit_reached") {
+          setCode("");
+          setExpiresAt("");
+          setCountdown("");
+          generatedAtRef.current = 0;
+          ttlRef.current = 0;
+          clearPairing();
+          setError(data.message || data.error || "Device pairing failed. Please generate a new code and try again.");
         }
       } catch {
         // ignore network errors during polling

@@ -67,7 +67,10 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $e'), backgroundColor: MCEColors.danger),
+        SnackBar(
+          content: Text('Failed to save: $e'),
+          backgroundColor: MCEColors.danger,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -88,7 +91,7 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                 horizontal: MCESpacing.lg,
                 vertical: MCESpacing.md,
               ),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: MCEColors.surface,
                 border: Border(bottom: BorderSide(color: MCEColors.border)),
               ),
@@ -96,18 +99,18 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(
+                    child: Icon(
                       Icons.arrow_back,
                       color: MCEColors.textSecondary,
                       size: 24,
                     ),
                   ),
-                  const SizedBox(width: MCESpacing.md),
+                  SizedBox(width: MCESpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'New Schedule',
                           style: TextStyle(
                             fontSize: 18,
@@ -142,35 +145,37 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                 children: [
                   // Name
                   _buildSectionTitle('Schedule Name'),
-                  const SizedBox(height: MCESpacing.md),
+                  SizedBox(height: MCESpacing.md),
                   TextField(
                     controller: _nameController,
                     style: MCETypography.body,
                     decoration: InputDecoration(
                       hintText: 'e.g. Daily Opening Song',
-                      hintStyle: MCETypography.body.copyWith(color: MCEColors.textSecondary),
+                      hintStyle: MCETypography.body.copyWith(
+                        color: MCEColors.textSecondary,
+                      ),
                       filled: true,
                       fillColor: MCEColors.elevated,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(MCERadius.md),
-                        borderSide: const BorderSide(color: MCEColors.border),
+                        borderSide: BorderSide(color: MCEColors.border),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(MCERadius.md),
-                        borderSide: const BorderSide(color: MCEColors.border),
+                        borderSide: BorderSide(color: MCEColors.border),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(MCERadius.md),
-                        borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                        borderSide: BorderSide(color: MCEColors.primaryPurple),
                       ),
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(height: MCESpacing.xl),
+                  SizedBox(height: MCESpacing.xl),
 
                   // Time
                   _buildSectionTitle('Time'),
-                  const SizedBox(height: MCESpacing.md),
+                  SizedBox(height: MCESpacing.md),
                   GestureDetector(
                     onTap: () async {
                       final time = await showTimePicker(
@@ -191,27 +196,30 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.schedule, color: MCEColors.textSecondary),
-                          const SizedBox(width: MCESpacing.md),
+                          Icon(Icons.schedule, color: MCEColors.textSecondary),
+                          SizedBox(width: MCESpacing.md),
                           Text(
                             _time.format(context),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                               color: MCEColors.textPrimary,
                             ),
                           ),
-                          const Spacer(),
-                          const Icon(Icons.chevron_right, color: MCEColors.textSecondary),
+                          Spacer(),
+                          Icon(
+                            Icons.chevron_right,
+                            color: MCEColors.textSecondary,
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: MCESpacing.xl),
+                  SizedBox(height: MCESpacing.xl),
 
                   // Days
                   _buildSectionTitle('Days'),
-                  const SizedBox(height: MCESpacing.md),
+                  SizedBox(height: MCESpacing.md),
                   Row(
                     children: List.generate(7, (i) {
                       final isSelected = _selectedDays.contains(i);
@@ -231,12 +239,12 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? const Color(0xFF7C3AED)
+                                  ? MCEColors.primaryPurple
                                   : MCEColors.elevated,
                               borderRadius: BorderRadius.circular(MCERadius.sm),
                               border: Border.all(
                                 color: isSelected
-                                    ? const Color(0xFF7C3AED)
+                                    ? MCEColors.primaryPurple
                                     : MCEColors.border,
                               ),
                             ),
@@ -257,11 +265,11 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                       );
                     }),
                   ),
-                  const SizedBox(height: MCESpacing.xl),
+                  SizedBox(height: MCESpacing.xl),
 
                   // Action
                   _buildSectionTitle('Action'),
-                  const SizedBox(height: MCESpacing.md),
+                  SizedBox(height: MCESpacing.md),
                   ...AutomationActionType.values.map((type) {
                     final isSelected = _selectedAction == type;
                     return GestureDetector(
@@ -279,12 +287,12 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                         padding: const EdgeInsets.all(MCESpacing.md),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFF7C3AED).withValues(alpha: 0.15)
+                              ? MCEColors.primaryPurple.withValues(alpha: 0.15)
                               : MCEColors.elevated,
                           borderRadius: BorderRadius.circular(MCERadius.md),
                           border: Border.all(
                             color: isSelected
-                                ? const Color(0xFF7C3AED)
+                                ? MCEColors.primaryPurple
                                 : MCEColors.border,
                           ),
                         ),
@@ -293,11 +301,11 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                             Icon(
                               type.icon,
                               color: isSelected
-                                  ? const Color(0xFF7C3AED)
+                                  ? MCEColors.primaryPurple
                                   : MCEColors.textSecondary,
                               size: 20,
                             ),
-                            const SizedBox(width: MCESpacing.md),
+                            SizedBox(width: MCESpacing.md),
                             Expanded(
                               child: Text(
                                 type.label,
@@ -309,24 +317,28 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
                               ),
                             ),
                             if (isSelected)
-                              const Icon(Icons.check_circle, color: Color(0xFF7C3AED), size: 18),
+                              Icon(
+                                Icons.check_circle,
+                                color: MCEColors.primaryPurple,
+                                size: 18,
+                              ),
                           ],
                         ),
                       ),
                     );
                   }),
 
-                  const SizedBox(height: MCESpacing.xl),
+                  SizedBox(height: MCESpacing.xl),
 
                   // Enabled toggle
                   Row(
                     children: [
                       Text('Start enabled', style: MCETypography.body),
-                      const Spacer(),
+                      Spacer(),
                       Switch(
                         value: _enabled,
                         onChanged: (v) => setState(() => _enabled = v),
-                        activeThumbColor: const Color(0xFF7C3AED),
+                        activeThumbColor: MCEColors.primaryPurple,
                       ),
                     ],
                   ),
@@ -356,12 +368,16 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
         final picked = await showModalBottomSheet<Map<String, dynamic>>(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => _ParamPickerSheet(
             title: 'Select Scene',
-            items: scenes.map((s) => _PickerItem(id: s.id, label: s.name)).toList(),
+            items: scenes
+                .map((s) => _PickerItem(id: s.id, label: s.name))
+                .toList(),
           ),
         );
         if (picked != null) setState(() => _actionParams = picked);
@@ -375,12 +391,16 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
         final picked = await showModalBottomSheet<Map<String, dynamic>>(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => _ParamPickerSheet(
             title: 'Select Media',
-            items: media.map((m) => _PickerItem(id: m.id, label: m.name)).toList(),
+            items: media
+                .map((m) => _PickerItem(id: m.id, label: m.name))
+                .toList(),
           ),
         );
         if (picked != null) setState(() => _actionParams = picked);
@@ -394,12 +414,16 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
         final picked = await showModalBottomSheet<Map<String, dynamic>>(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => _ParamPickerSheet(
             title: 'Select Macro',
-            items: macros.map((m) => _PickerItem(id: m.id, label: m.name)).toList(),
+            items: macros
+                .map((m) => _PickerItem(id: m.id, label: m.name))
+                .toList(),
           ),
         );
         if (picked != null) setState(() => _actionParams = picked);
@@ -414,12 +438,16 @@ class _AutomationScheduleScreenState extends State<AutomationScheduleScreen> {
         final picked = await showModalBottomSheet<Map<String, dynamic>>(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => _ParamPickerSheet(
             title: 'Select Lower Third',
-            items: lowers.map((l) => _PickerItem(id: l.id, label: l.title)).toList(),
+            items: lowers
+                .map((l) => _PickerItem(id: l.id, label: l.title))
+                .toList(),
           ),
         );
         if (picked != null) setState(() => _actionParams = picked);
@@ -460,24 +488,34 @@ class _ParamPickerSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: MCETypography.cardTitle),
-          const SizedBox(height: MCESpacing.lg),
-          ...items.map((item) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.circle, color: MCEColors.textSecondary, size: 8),
-                title: Text(item.label, style: MCETypography.body),
-                onTap: () {
-                  Navigator.pop(context, {
-                    '${title.toLowerCase().replaceAll('select ', '').replaceAll(' ', '')}Id': item.id,
-                    '${title.toLowerCase().replaceAll('select ', '').replaceAll(' ', '')}Name': item.label,
-                  });
-                },
-              )),
+          SizedBox(height: MCESpacing.lg),
+          ...items.map(
+            (item) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.circle,
+                color: MCEColors.textSecondary,
+                size: 8,
+              ),
+              title: Text(item.label, style: MCETypography.body),
+              onTap: () {
+                Navigator.pop(context, {
+                  '${title.toLowerCase().replaceAll('select ', '').replaceAll(' ', '')}Id':
+                      item.id,
+                  '${title.toLowerCase().replaceAll('select ', '').replaceAll(' ', '')}Name':
+                      item.label,
+                });
+              },
+            ),
+          ),
           if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: MCESpacing.xl),
               child: Text(
                 'No items available',
-                style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
+                style: MCETypography.body.copyWith(
+                  color: MCEColors.textSecondary,
+                ),
               ),
             ),
         ],

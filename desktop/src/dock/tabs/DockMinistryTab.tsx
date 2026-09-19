@@ -3,37 +3,66 @@
  *
  * Sub-tabs:
  *   1. Lower Thirds — send/blank lower-third overlays via OBS
- *   2. Countdowns — countdown timers
+ *   2. Time — countdowns, timers, and clocks
  *   3. Tickers — push scrolling ticker announcements to OBS
  *
  * Uses dockObsClient for OBS communication (same WebSocket
  * connection shared across all dock tabs).
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockStagedItem } from "../dockTypes";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
-import {
-  TICKER_THEMES,
-  generateTickerHTML,
-} from "../../components/modules/tickerThemes";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
-import { loadDockLTFavorites, loadDockFavoriteBibleThemes, loadDockTickerFavorites } from "../dockThemeData";
+import { loadDockLTFavorites, loadDockTickerFavorites } from "../dockThemeData";
+import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
+import { dockClient } from "../../services/dockBridge";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
-import { LT_SIZE_LABELS, LT_SIZE_SCALE } from "../../lowerthirds/types";
+import { LT_SIZE_FONT_SCALE, LT_SIZE_LABELS } from "../../lowerthirds/types";
 import type { BibleTheme } from "../../bible/types";
+import type { BibleThemeSettings } from "../../bible/types";
+import type { TickerThemeColors } from "../../components/modules/tickerThemes";
 import allThemesData from "../../../lower_thirds/all_themes.json";
+import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
-import DockCountdownsTab from "./DockCountdownsTab";
+import DockTimeTab from "./DockTimeTab";
 import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { checkEntitlementSync } from "../../services/entitlementClient";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+import { loadDockOutputFontFamily } from "../dockOutputTypography";
+import {
+  clearPresentationScreen,
+  publishTickerToPresentation,
+} from "../../services/presentationPublish";
+import {
+  DEFAULT_DOCK_TICKER_THEME_OPTION,
+  formatDockTickerMessages,
+  getDockTickerThemeOptionsForFavorites,
+  renderDockTickerThemeHtml,
+  resolveDockTickerDividerChar,
+  resolveDockTickerThemeOption,
+  type DockTickerDivider,
+} from "../tickerThemeCatalog";
+import {
+  REMOTE_PRODUCTION_THEMES_UPDATED_EVENT,
+  fetchRemoteProductionThemes,
+  getCachedRemoteProductionThemes,
+  mergeRemoteLowerThirdThemes,
+  type RemoteProductionTheme,
+} from "../../services/remoteProductionThemes";
+import { useDockSceneRoute } from "../dockSceneRouting";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -57,11 +86,32 @@ interface BibleThemeEntry {
 }
 type MixedLTThemeEntry = LTThemeEntry | BibleThemeEntry;
 
+const MINISTRY_LT_SIZE_OPTIONS: LTSize[] = ["xs", "sm", "md", "lg"];
+const DEFAULT_MINISTRY_LT_SIZE: LTSize = "sm";
+const MINISTRY_BIBLE_LT_SIZE_PRESETS: Record<LTSize, string> = {
+  xs: "smallest",
+  sm: "small",
+  md: "medium",
+  lg: "bigger",
+  xl: "big",
+  "2xl": "bigger",
+  "3xl": "biggest",
+  x2: "biggest",
+  x3: "biggest",
+};
+
+function resolveMinistryLtSize(value: unknown): LTSize {
+  return MINISTRY_LT_SIZE_OPTIONS.includes(value as LTSize) ? (value as LTSize) : DEFAULT_MINISTRY_LT_SIZE;
+}
+
 interface TickerMessage {
   id: string;
   text: string;
   active: boolean;
 }
+
+type TickerColorOverrides = Partial<TickerThemeColors>;
+type TickerColorKey = keyof TickerThemeColors;
 
 interface TickerSettings {
   speed: number;
@@ -69,18 +119,73 @@ interface TickerSettings {
   loop: boolean;
   themeId: string;
   heading: string;
+  messageSpacing: number;
+  divider: DockTickerDivider;
+  colors: TickerColorOverrides;
 }
+
+interface TickerBranding {
+  logoUrl: string;
+  brandName: string;
+  brandColor: string;
+}
+
+type BibleLtColorKey =
+  | "fontColor"
+  | "refFontColor"
+  | "backgroundColor"
+  | "boxBackground"
+  | "referenceBackgroundColor";
+type BibleLtColorOverrides = Partial<Pick<BibleThemeSettings, BibleLtColorKey>>;
+type BibleLtColorOverrideMap = Record<string, BibleLtColorOverrides>;
 
 interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
-  tickerOutputMode?: "source" | "scene";
+  presentationOutputTarget?: DockPresentationOutputTarget;
+  hideTickerControls?: boolean;
+  hideLowerThirdControls?: boolean;
 }
 
 const STORAGE_KEY = "dock-ticker-messages";
 const SETTINGS_KEY = "dock-ticker-settings";
+const BIBLE_LT_COLOR_OVERRIDES_KEY = "dock-bible-lt-color-overrides";
+const MINISTRY_LT_SIZE_STORAGE_KEY = "dock-ministry-lower-third-size";
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
+const TICKER_MESSAGE_SPACING_MAX = 100;
+const TICKER_COLOR_POPOVER_WIDTH = 270;
+const COLOR_INPUT_FALLBACK = "#1d4ed8";
+const TICKER_COLOR_INPUT_FALLBACKS: Record<TickerColorKey, string> = {
+  accent: "#1d4ed8",
+  accentText: "#ffffff",
+  barBg: "#0f172a",
+  barText: "#ffffff",
+  separator: "#f97316",
+};
+const TICKER_COLOR_CONTROLS: Array<{ key: TickerColorKey; label: string }> = [
+  { key: "accent", label: "Heading background" },
+  { key: "accentText", label: "Heading text" },
+  { key: "barText", label: "Ticker text" },
+  { key: "barBg", label: "Ticker background" },
+  { key: "separator", label: "Separator" },
+];
+const TICKER_DIVIDER_OPTIONS: Array<{ value: DockTickerDivider; label: string; icon: string }> = [
+  { value: "theme", label: "Theme default", icon: "palette" },
+  { value: "none", label: "No divider", icon: "close" },
+  { value: "dot", label: "Dot", icon: "fiber_manual_record" },
+  { value: "line", label: "Line", icon: "remove" },
+  { value: "diamond", label: "Diamond", icon: "diamond" },
+  { value: "spark", label: "Spark", icon: "auto_awesome" },
+];
+const BIBLE_LT_COLOR_CONTROLS: Array<{ key: BibleLtColorKey; label: string; fallback: string }> = [
+  { key: "fontColor", label: "Text", fallback: "#ffffff" },
+  { key: "refFontColor", label: "Reference", fallback: "#f8fafc" },
+  { key: "backgroundColor", label: "Screen background", fallback: "#000000" },
+  { key: "boxBackground", label: "Lower-third bar", fallback: "#111827" },
+  { key: "referenceBackgroundColor", label: "Reference badge", fallback: "#f97316" },
+];
+const EMPTY_BIBLE_LT_OVERRIDES: BibleLtColorOverrides = {};
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -98,32 +203,131 @@ function saveMessages(msgs: TickerMessage[]) {
   try { localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(msgs)); } catch { /* ignore */ }
 }
 
-function loadSettings(): TickerSettings {
+function sanitizeCssColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, 80);
+  if (!trimmed) return undefined;
+  if (/[;{}<>]/.test(trimmed)) return undefined;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function colorInputValue(value: unknown, fallback: string = COLOR_INPUT_FALLBACK): string {
+  const color = sanitizeCssColor(value);
+  if (!color) return fallback;
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return fallback;
+  if (hex.length === 3) {
+    return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
+  }
+  return `#${hex}`.toLowerCase();
+}
+
+function loadTickerColorOverrides(raw: unknown): TickerColorOverrides {
+  if (!raw || typeof raw !== "object") return {};
+  const source = raw as Record<string, unknown>;
+  const next: TickerColorOverrides = {};
+  for (const { key } of TICKER_COLOR_CONTROLS) {
+    const color = sanitizeCssColor(source[key]);
+    if (color) next[key] = color;
+  }
+  return next;
+}
+
+function loadBibleLtColorOverrides(): BibleLtColorOverrideMap {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(SETTINGS_KEY));
-    if (raw) return JSON.parse(raw);
+    const raw = readNativeDockSetting<unknown>(BIBLE_LT_COLOR_OVERRIDES_KEY);
+    if (!raw) return {};
+    const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    const next: BibleLtColorOverrideMap = {};
+    for (const [themeId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") continue;
+      const source = value as Record<string, unknown>;
+      const overrides: BibleLtColorOverrides = {};
+      for (const { key } of BIBLE_LT_COLOR_CONTROLS) {
+        const color = sanitizeCssColor(source[key]);
+        if (color) overrides[key] = color;
+      }
+      if (Object.keys(overrides).length > 0) next[themeId] = overrides;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function saveBibleLtColorOverrides(value: BibleLtColorOverrideMap) {
+  writeNativeDockSetting(BIBLE_LT_COLOR_OVERRIDES_KEY, value);
+}
+
+function loadMinistryLtSize(): LTSize {
+  const saved = readNativeDockSetting<unknown>(MINISTRY_LT_SIZE_STORAGE_KEY);
+  if (MINISTRY_LT_SIZE_OPTIONS.includes(saved as LTSize)) return saved as LTSize;
+  return resolveMinistryLtSize(getSettings().defaultSpeakerSize);
+}
+
+function loadSettings(): TickerSettings {
+  const defaultTheme = DEFAULT_DOCK_TICKER_THEME_OPTION;
+  try {
+    const raw = readNativeDockSetting<unknown>(SETTINGS_KEY);
+    if (raw) {
+      const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<TickerSettings>;
+      const parsedTheme = resolveDockTickerThemeOption(parsed.themeId) ?? defaultTheme;
+      return {
+        speed: typeof parsed.speed === "number" ? parsed.speed : 50,
+        position: parsed.position === "top" ? "top" : "bottom",
+        loop: typeof parsed.loop === "boolean" ? parsed.loop : true,
+        themeId: parsedTheme?.id ?? "",
+        heading: typeof parsed.heading === "string" && parsed.heading.trim()
+          ? parsed.heading.slice(0, 20)
+          : parsedTheme?.defaultHeading ?? "LIVE",
+        messageSpacing: typeof parsed.messageSpacing === "number"
+          ? Math.max(0, Math.min(TICKER_MESSAGE_SPACING_MAX, Math.round(parsed.messageSpacing)))
+          : 0,
+        divider: TICKER_DIVIDER_OPTIONS.some((option) => option.value === parsed.divider)
+          ? parsed.divider as DockTickerDivider
+          : "theme",
+        colors: loadTickerColorOverrides(parsed.colors),
+      };
+    }
   } catch { /* ignore */ }
   return {
     speed: 50,
     position: "bottom",
     loop: true,
-    themeId: TICKER_THEMES[0]?.id ?? "",
-    heading: TICKER_THEMES[0]?.defaultHeading ?? "LIVE",
+    themeId: defaultTheme?.id ?? "",
+    heading: defaultTheme?.defaultHeading ?? "LIVE",
+    messageSpacing: 0,
+    divider: "theme",
+    colors: {},
   };
 }
 
 function saveSettings(s: TickerSettings) {
-  try { localStorage.setItem(getUserScopedKey(SETTINGS_KEY), JSON.stringify(s)); } catch { /* ignore */ }
+  writeNativeDockSetting(SETTINGS_KEY, s);
 }
 
-type MinistrySubTab = "ticker" | "lower-thirds" | "countdowns";
+function loadInitialTickerBranding(): TickerBranding {
+  const settings = getSettings();
+  return {
+    logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
+    brandName: settings.churchName || "MakeChurchEasy",
+    brandColor: settings.brandColor || "#6A34DE",
+  };
+}
+
+type MinistrySubTab = "ticker" | "lower-thirds" | "time";
 
 const MINISTRY_TAB_KEY = "dock-ministry-active-tab";
 
 function loadMinistryTab(): MinistrySubTab {
   try {
-    const raw = localStorage.getItem(MINISTRY_TAB_KEY);
-    if (raw === "ticker" || raw === "lower-thirds" || raw === "countdowns") return raw;
+    const raw = readNativeDockSetting<unknown>(MINISTRY_TAB_KEY);
+    if (raw === "ticker" || raw === "lower-thirds" || raw === "time") return raw;
+    // Keep the former Countdowns tab selected after upgrading to Time.
+    if (raw === "countdowns") return "time";
   } catch { /* ignore */ }
   return "ticker";
 }
@@ -132,8 +336,17 @@ function loadMinistryTab(): MinistrySubTab {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function DockMinistryTab({ staged: _staged, onStage: _onStage, tickerOutputMode }: Props) {
+export default function DockMinistryTab({
+  staged: _staged,
+  onStage: _onStage,
+  presentationOutputTarget = "obs",
+  hideTickerControls = false,
+  hideLowerThirdControls = false,
+}: Props) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const showTickerTab = !hideTickerControls;
+  const showLowerThirdTab = !hideLowerThirdControls;
   const [subTab, setSubTab] = useState<MinistrySubTab>(loadMinistryTab);
   const [messages, setMessages] = useState<TickerMessage[]>(loadMessages);
   const [newText, setNewText] = useState("");
@@ -147,7 +360,22 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
+  const tickerEntitlement = checkEntitlementSync("tickers", dockPlan);
+  const lowerThirdEntitlement = checkEntitlementSync("lowerThirds", dockPlan);
+  const timeEntitlement = checkEntitlementSync("countdowns", dockPlan);
+  // Keep locked tabs visible so Free and Basic users can see what is available
+  // after upgrading. The content and actions remain guarded below.
+  const showTimeTab = true;
+  const [tickerSceneRoute, updateTickerSceneRoute] = useDockSceneRoute("ticker");
+  const [lowerThirdSceneRoute, updateLowerThirdSceneRoute] = useDockSceneRoute("lower-third");
+  const hasTickerSceneRoute = tickerSceneRoute.enabled && tickerSceneRoute.targets.length > 0;
+  const hasLowerThirdSceneRoute = lowerThirdSceneRoute.enabled && lowerThirdSceneRoute.targets.length > 0;
   const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
+  const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
+  const [tickerBranding, setTickerBranding] = useState<TickerBranding>(loadInitialTickerBranding);
+  const [tickerColorPopoverOpen, setTickerColorPopoverOpen] = useState(false);
+  const [tickerColorPopoverPosition, setTickerColorPopoverPosition] = useState({ top: 0, left: 0 });
+  const [bibleLtColorOverrides, setBibleLtColorOverrides] = useState<BibleLtColorOverrideMap>(loadBibleLtColorOverrides);
 
   // Lower-thirds state — mixed LowerThirdTheme + BibleTheme entries
   const [ltFavorites, setLtFavorites] = useState<MixedLTThemeEntry[]>([]);
@@ -155,21 +383,83 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const [ltSending, setLtSending] = useState(false);
   const [ltFeedback, setLtFeedback] = useState<string | null>(null);
   const [ltFeedbackTone, setLtFeedbackTone] = useState<"success" | "error">("success");
-  const [ltSize, setLtSize] = useState<LTSize>(() => {
-    const saved = getSettings().defaultSpeakerSize;
-    return (saved && LT_SIZE_LABELS[saved as LTSize]) ? (saved as LTSize) : "xl";
-  });
+  const [ltSize, setLtSize] = useState<LTSize>(loadMinistryLtSize);
   const [ltLive, setLtLive] = useState(false);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tickerColorPopoverRef = useRef<HTMLDivElement | null>(null);
+  const tickerColorPopoverPanelRef = useRef<HTMLDivElement | null>(null);
   const mountedRef = useRef(true);
+  const availableLtThemes = useMemo(
+    () => mergeRemoteLowerThirdThemes(ALL_LT_THEMES, remoteProductionThemes),
+    [remoteProductionThemes],
+  );
+
+  const updateTickerColorPopoverPosition = useCallback(() => {
+    const anchor = tickerColorPopoverRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const margin = 8;
+    const viewportWidth = window.innerWidth || 320;
+    const viewportHeight = window.innerHeight || 480;
+    const left = Math.max(
+      margin,
+      Math.min(rect.right - TICKER_COLOR_POPOVER_WIDTH, viewportWidth - TICKER_COLOR_POPOVER_WIDTH - margin),
+    );
+    const estimatedHeight = 224;
+    const top = rect.bottom + estimatedHeight + margin > viewportHeight
+      ? Math.max(margin, rect.top - estimatedHeight - 4)
+      : rect.bottom + 4;
+    setTickerColorPopoverPosition({ top, left });
+  }, []);
 
   // Persist
   useEffect(() => { saveMessages(messages); }, [messages]);
   useEffect(() => { saveSettings(settings); }, [settings]);
-  useEffect(() => { try { localStorage.setItem(MINISTRY_TAB_KEY, subTab); } catch { /* ignore */ } }, [subTab]);
+  useEffect(() => { saveBibleLtColorOverrides(bibleLtColorOverrides); }, [bibleLtColorOverrides]);
+  useEffect(() => { writeNativeDockSetting(MINISTRY_TAB_KEY, subTab); }, [subTab]);
+  useEffect(() => {
+    const tabHidden =
+      (subTab === "ticker" && !showTickerTab) ||
+      (subTab === "lower-thirds" && !showLowerThirdTab) ||
+      (subTab === "time" && !showTimeTab);
+    if (!tabHidden) return;
+    const fallback = showTickerTab
+      ? "ticker"
+      : showLowerThirdTab
+        ? "lower-thirds"
+        : showTimeTab
+          ? "time"
+          : null;
+    if (fallback && fallback !== subTab) setSubTab(fallback);
+  }, [showTimeTab, showLowerThirdTab, showTickerTab, subTab]);
+
+  useEffect(() => {
+    if (!tickerColorPopoverOpen) return;
+    updateTickerColorPopoverPosition();
+    const closeOnPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (tickerColorPopoverRef.current?.contains(target)) return;
+      if (tickerColorPopoverPanelRef.current?.contains(target)) return;
+      setTickerColorPopoverOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTickerColorPopoverOpen(false);
+    };
+    const reposition = () => updateTickerColorPopoverPosition();
+    document.addEventListener("mousedown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [tickerColorPopoverOpen, updateTickerColorPopoverPosition]);
 
   // OBS connection
   useEffect(() => {
@@ -189,19 +479,46 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     return () => clearInterval(id);
   }, []);
 
-  // Enforce free plan: delete MCE Ticker source from OBS when user is free/downgraded
   useEffect(() => {
-    if (dockPlan !== "free") return;
-    if (!obsConnected) return;
+    let cancelled = false;
+    const localBranding = loadInitialTickerBranding();
+    fetch(`/uploads/dock-branding.json?_=${Date.now()}`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((branding: unknown) => {
+        if (cancelled || !branding || typeof branding !== "object") return;
+        const data = branding as Record<string, unknown>;
+        const logoFileName = typeof data.brandLogoFileName === "string" ? data.brandLogoFileName.trim() : "";
+        const brandLogoPath = typeof data.brandLogoPath === "string" ? data.brandLogoPath.trim() : "";
+        const logoUrl = logoFileName
+          ? resolveOverlayAssetUrl(`/uploads/${encodeURIComponent(logoFileName)}`)
+          : resolveOverlayAssetUrl(brandLogoPath || localBranding.logoUrl);
+        setTickerBranding({
+          logoUrl,
+          brandName: typeof data.churchName === "string" && data.churchName.trim()
+            ? data.churchName.trim()
+            : localBranding.brandName,
+          brandColor: typeof data.brandColor === "string" && data.brandColor.trim()
+            ? data.brandColor.trim()
+            : localBranding.brandColor,
+        });
+      })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, []);
 
-    (async () => {
-      try {
-        // Remove "MCE Ticker" input — OBS auto-removes all scene items referencing it
-        await dockObsClient.call("RemoveInput", { inputName: "MCE Ticker" }).catch(() => { });
-        console.log("[DockMinistry] Free plan enforced: removed MCE Ticker source");
-      } catch { /* OBS may not be connected, source may not exist */ }
-    })();
-  }, [dockPlan, obsConnected]);
+  useEffect(() => {
+    const syncCachedRemoteThemes = () => setRemoteProductionThemes(getCachedRemoteProductionThemes());
+    syncCachedRemoteThemes();
+    void fetchRemoteProductionThemes().then((themes) => {
+      if (mountedRef.current) setRemoteProductionThemes(themes);
+    });
+    window.addEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+    return () => window.removeEventListener(REMOTE_PRODUCTION_THEMES_UPDATED_EVENT, syncCachedRemoteThemes);
+  }, []);
+
+  // Free-plan enforcement is read-only. Never delete or rewrite an existing
+  // OBS source when a user downgrades; the shared Dock OBS mutation policy
+  // blocks all scene/source writes for Free users.
 
   // Clear feedback after 3s
   useEffect(() => {
@@ -217,68 +534,137 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     return () => clearTimeout(t);
   }, [ltFeedback]);
 
-  // Load favorite LT themes (both LowerThirdTheme and BibleTheme lower-thirds)
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      loadDockLTFavorites().catch(() => new Set<string>()),
-      loadDockFavoriteBibleThemes().catch(() => [] as BibleTheme[]),
-    ]).then(([ltIdSet, bibleThemes]) => {
-      if (cancelled) return;
+  const refreshLtFavorites = useCallback(async () => {
+    try {
+      const ltIdSet = await loadDockLTFavorites().catch(() => new Set<string>());
       const entries: MixedLTThemeEntry[] = [];
 
       // LowerThirdTheme favorites — only show themes favorited/added to OBS
-      const ltThemes = ALL_LT_THEMES.filter((t) => ltIdSet.has(t.id));
+      const ltThemes = availableLtThemes.filter((t) => ltIdSet.has(t.id));
       for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
       }
 
-      // BibleTheme lower-third favorites (custom themes from ProductionThemeSettingsPage)
-      for (const bt of bibleThemes) {
-        entries.push({ kind: "bible", theme: bt, label: `✦ ${bt.name}` });
-      }
-
       setLtFavorites(entries);
-    }).catch((err) => {
+    } catch (err) {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
-      if (!cancelled) {
-        setLtFavorites([]);
-      }
-    });
-    return () => { cancelled = true; };
-  }, []);
+      setLtFavorites([]);
+    }
+  }, [availableLtThemes]);
+
+  const refreshTickerFavorites = useCallback(async () => {
+    try {
+      const favIds = await loadDockTickerFavorites();
+      setTickerFavIds(favIds);
+      const available = getDockTickerThemeOptionsForFavorites(favIds, remoteProductionThemes);
+      setSettings((current) => {
+        const currentTheme = available.find((option) => option.id === current.themeId);
+        if (currentTheme) return current;
+        const fallback = available[0];
+        return fallback
+          ? { ...current, themeId: fallback.id, heading: fallback.defaultHeading }
+          : current;
+      });
+    } catch {
+      // Keep the current ticker theme list if favorites cannot be read.
+    }
+  }, [remoteProductionThemes]);
+
+  // Load favorite LT themes (both LowerThirdTheme and BibleTheme lower-thirds)
+  useEffect(() => {
+    void refreshLtFavorites();
+  }, [refreshLtFavorites]);
 
   // Load ticker favorites
   useEffect(() => {
-    let cancelled = false;
-    loadDockTickerFavorites().then((favIds) => {
-      if (cancelled) return;
-      setTickerFavIds(favIds);
-      const available = TICKER_THEMES.filter((t) => favIds.has(t.id));
-      const currentInList = available.some((t) => t.id === settings.themeId);
-      if (!currentInList && available.length > 0) {
-        setSettings((s) => ({ ...s, themeId: available[0].id, heading: available[0].defaultHeading }));
-      }
-    }).catch(() => { });
-    return () => { cancelled = true; };
-  }, []);
+    void refreshTickerFavorites();
+  }, [refreshTickerFavorites]);
 
-  const tickerThemeList = TICKER_THEMES.filter((t) => tickerFavIds.has(t.id));
-  const effectiveThemeList = tickerThemeList.length > 0 ? tickerThemeList : TICKER_THEMES;
-  const theme = effectiveThemeList.find((t) => t.id === settings.themeId) ?? effectiveThemeList[0];
+  useEffect(() => {
+    const refreshAll = () => {
+      void refreshLtFavorites();
+      void refreshTickerFavorites();
+    };
+    window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key.includes("ocs-fav-")) {
+        refreshAll();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    const unsubscribe = dockClient.onState((msg) => {
+      if (msg.type === "state:favorite-themes-updated") {
+        refreshAll();
+      }
+    });
+    return () => {
+      window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+      window.removeEventListener("storage", onStorage);
+      unsubscribe();
+    };
+  }, [refreshLtFavorites, refreshTickerFavorites]);
+
+  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(tickerFavIds, remoteProductionThemes);
+  const selectedTickerTheme =
+    effectiveThemeList.find((option) => option.id === settings.themeId) ??
+    effectiveThemeList[0] ??
+    DEFAULT_DOCK_TICKER_THEME_OPTION;
   const activeMessages = messages.filter((m) => m.active);
 
-  // Derive branded ticker colors from the app's brand color
-  const brandedColors = (() => {
-    const brandColor = normalizeBrandColor(getSettings().brandColor);
+  const tickerColors: TickerThemeColors | undefined = (() => {
+    if (!selectedTickerTheme) return undefined;
+    const brandColor = normalizeBrandColor(tickerBranding.brandColor);
+    const baseColors: TickerThemeColors = selectedTickerTheme.source === "dock" || selectedTickerTheme.source === "remote"
+      ? {
+        ...selectedTickerTheme.theme.defaultColors,
+        accent: brandColor,
+        separator: brandColor,
+      }
+      : {
+        accent: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
+        accentText: "#ffffff",
+        barBg: "#0f172a",
+        barText: "#ffffff",
+        separator: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
+      };
     return {
-      ...theme?.defaultColors ?? {},
-      accent: brandColor,
-      separator: brandColor,
+      ...baseColors,
+      ...loadTickerColorOverrides(settings.colors),
     };
   })();
+  const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock" || selectedTickerTheme?.source === "remote"
+    ? tickerBranding.logoUrl
+    : "";
+  const tickerBrandName = tickerBranding.brandName || "MakeChurchEasy";
+  const obsFontFamily = loadDockOutputFontFamily();
 
-  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: ALL_LT_THEMES[0], label: ALL_LT_THEMES[0]?.name ?? "Speaker" };
+  const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
+  const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: fallbackLtTheme, label: fallbackLtTheme?.name ?? "Speaker" };
+  const selectedBibleLtSettings = ltSelectedEntry.kind === "bible"
+    ? (ltSelectedEntry.theme.variants?.lowerThird?.settings ?? ltSelectedEntry.theme.settings)
+    : null;
+  const selectedBibleLtOverrides = ltSelectedEntry.kind === "bible"
+    ? (bibleLtColorOverrides[ltSelectedEntry.theme.id] ?? EMPTY_BIBLE_LT_OVERRIDES)
+    : EMPTY_BIBLE_LT_OVERRIDES;
+  const selectedBibleLtEffectiveSettings = useMemo<Record<string, unknown> | null>(
+    () => selectedBibleLtSettings
+      ? {
+        ...(selectedBibleLtSettings as unknown as Record<string, unknown>),
+        ...selectedBibleLtOverrides,
+        lowerThirdSize: MINISTRY_BIBLE_LT_SIZE_PRESETS[ltSize],
+        ...(Number(selectedBibleLtSettings.fontSize) > 0
+          ? { fontSize: Math.max(1, Math.round(Number(selectedBibleLtSettings.fontSize) * (LT_SIZE_FONT_SCALE[ltSize] ?? 1))) }
+          : {}),
+        ...(Number(selectedBibleLtSettings.refFontSize) > 0
+          ? { refFontSize: Math.max(1, Math.round(Number(selectedBibleLtSettings.refFontSize) * (LT_SIZE_FONT_SCALE[ltSize] ?? 1))) }
+          : {}),
+      }
+      : null,
+    [selectedBibleLtSettings, selectedBibleLtOverrides, ltSize],
+  );
+  const selectedBibleLtAnimationDuration = selectedBibleLtEffectiveSettings
+    ? Number(selectedBibleLtEffectiveSettings.animationDuration) || 800
+    : 800;
 
   // Reset selected index when favorites change
   useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
@@ -286,6 +672,38 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
   const handleSelectLtTheme = useCallback((entryIdx: number) => {
     if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
   }, [ltFavorites]);
+
+  const setTickerColorOverride = useCallback((key: TickerColorKey, value: string) => {
+    setSettings((current) => {
+      const nextColors = { ...(current.colors ?? {}) };
+      const color = sanitizeCssColor(value);
+      if (color) {
+        nextColors[key] = color;
+      } else {
+        delete nextColors[key];
+      }
+      return { ...current, colors: nextColors };
+    });
+  }, []);
+
+  const setBibleLtColorOverride = useCallback((themeId: string, key: BibleLtColorKey, value: string) => {
+    setBibleLtColorOverrides((current) => {
+      const themeOverrides = { ...(current[themeId] ?? {}) };
+      const color = sanitizeCssColor(value);
+      if (color) {
+        themeOverrides[key] = color;
+      } else {
+        delete themeOverrides[key];
+      }
+      const next = { ...current };
+      if (Object.keys(themeOverrides).length > 0) {
+        next[themeId] = themeOverrides;
+      } else {
+        delete next[themeId];
+      }
+      return next;
+    });
+  }, []);
 
   // ── Add message ──
   const handleAdd = useCallback(async () => {
@@ -337,104 +755,131 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       setError(t("ministry.addAtLeastOne"));
       return;
     }
-    if (!theme) return;
+    if (!selectedTickerTheme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
     try {
+      if (presentationLinkMode) {
+        await publishTickerToPresentation({
+          text: formatDockTickerMessages(
+            activeMessages.map((m) => m.text),
+            settings.divider,
+            settings.messageSpacing,
+          ),
+          divider: resolveDockTickerDividerChar(settings.divider),
+          messageSpacing: settings.messageSpacing,
+          position: settings.position,
+          speed: settings.speed,
+          textColor: tickerColors?.barText,
+          backgroundColor: tickerColors?.barBg,
+          fontFamily: obsFontFamily,
+          paused: false,
+        });
+        setRunning(true);
+        setIsPaused(false);
+        setSuccess(t("ministry.tickerLive"));
+        return;
+      }
+
       await ensureObsConnected();
-      const html = generateTickerHTML(
-        theme,
-        brandedColors,
-        settings.heading,
-        activeMessages.map((m) => m.text),
-        settings.speed,
-        settings.position,
-        settings.loop,
-        false,
-      );
+      const html = renderDockTickerThemeHtml({
+        option: selectedTickerTheme,
+        heading: settings.heading,
+        messages: activeMessages.map((m) => m.text),
+        speed: settings.speed,
+        position: settings.position,
+        loop: settings.loop,
+        paused: false,
+        colors: tickerColors,
+        fontFamily: obsFontFamily,
+        brandLogoUrl: tickerBrandLogoUrl,
+        brandName: tickerBrandName,
+        divider: settings.divider,
+        messageSpacing: settings.messageSpacing,
+      });
 
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const canvasW = video.baseWidth;
       const canvasH = video.baseHeight;
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
-      const sourceName = "MCE Ticker";
       const presentationSceneName = "MCE Presentation";
-
-      // Always route MCE Ticker to MCE Presentation scene
-      const targetScene = presentationSceneName;
-
-      // Ensure MCE Presentation scene exists
       const scenes = await dockObsClient.call("GetSceneList") as { scenes: Array<{ sceneName: string }> };
-      const sceneExists = scenes.scenes.some((s) => s.sceneName === presentationSceneName);
-      if (!sceneExists) {
-        await dockObsClient.call("CreateScene", { sceneName: presentationSceneName });
-        await new Promise((r) => setTimeout(r, 100));
-      }
+      const targets = hasTickerSceneRoute
+        ? [
+          ...tickerSceneRoute.targets.map((target) => ({
+            sceneName: target.sceneName,
+            sourceName: dockObsClient.getSceneRouteSourceName("ticker", target.sceneName),
+          })),
+          ...(tickerSceneRoute.syncPresentation
+            ? [{ sceneName: presentationSceneName, sourceName: "MCE Ticker" }]
+            : []),
+        ]
+        : [{ sceneName: presentationSceneName, sourceName: "MCE Ticker" }];
 
-      // In scene mode, switch preview to MCE Presentation for user to transition
-      const currentProgramScene = (await dockObsClient.call("GetCurrentProgramScene") as { currentProgramSceneName: string }).currentProgramSceneName;
-      if (tickerOutputMode === "scene") {
-        try { localStorage.setItem("dock-ticker-original-scene", currentProgramScene); } catch { /* ignore */ }
-        const studioMode = await dockObsClient.call("GetStudioModeEnabled").then((r: unknown) => (r as { studioModeEnabled: boolean }).studioModeEnabled).catch(() => false);
-        if (studioMode) {
-          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: presentationSceneName });
+      for (const { sceneName: targetScene, sourceName } of targets) {
+        const sceneExists = scenes.scenes.some((scene) => scene.sceneName === targetScene);
+        if (!sceneExists) {
+          if (targetScene !== presentationSceneName) {
+            throw new Error(`The selected OBS scene “${targetScene}” is no longer available.`);
+          }
+          await dockObsClient.call("CreateScene", { sceneName: targetScene });
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
-      }
 
-      // Create or update MCE Ticker browser source in target scene
-      const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
-      const inputExists = inputs.inputs.some((i) => i.inputName === sourceName);
-
-      let sceneItemId: number;
-      if (inputExists) {
-        await dockObsClient.call("SetInputSettings", {
-          inputName: sourceName,
-          inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, shutdown: false, restart_when_active: false },
-        });
-        const items = await dockObsClient.call("GetSceneItemList", { sceneName: targetScene }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-        const existing = items.sceneItems.find((i) => i.sourceName === sourceName);
-        if (existing) {
-          sceneItemId = existing.sceneItemId;
-          await dockObsClient.call("SetSceneItemEnabled", { sceneName: targetScene, sceneItemId, sceneItemEnabled: true });
+        const inputs = await dockObsClient.call("GetInputList") as { inputs: Array<{ inputName: string }> };
+        const inputExists = inputs.inputs.some((input) => input.inputName === sourceName);
+        let sceneItemId: number;
+        if (inputExists) {
+          await dockObsClient.call("SetInputSettings", {
+            inputName: sourceName,
+            inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, shutdown: false, restart_when_active: false },
+          });
+          const items = await dockObsClient.call("GetSceneItemList", { sceneName: targetScene }) as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
+          const existing = items.sceneItems.find((item) => item.sourceName === sourceName);
+          if (existing) {
+            sceneItemId = existing.sceneItemId;
+            await dockObsClient.call("SetSceneItemEnabled", { sceneName: targetScene, sceneItemId, sceneItemEnabled: true });
+          } else {
+            const created = await dockObsClient.call("CreateSceneItem", { sceneName: targetScene, sourceName, sceneItemEnabled: true }) as { sceneItemId: number };
+            sceneItemId = created.sceneItemId;
+          }
         } else {
-          const created = await dockObsClient.call("CreateSceneItem", { sceneName: targetScene, sourceName, sceneItemEnabled: true }) as { sceneItemId: number };
+          const created = await dockObsClient.call("CreateInput", {
+            sceneName: targetScene,
+            inputName: sourceName,
+            inputKind: "browser_source",
+            inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, css: "", shutdown: false, restart_when_active: false },
+            sceneItemEnabled: true,
+          }) as { sceneItemId: number };
           sceneItemId = created.sceneItemId;
         }
-      } else {
-        const created = await dockObsClient.call("CreateInput", {
-          sceneName: targetScene,
-          inputName: sourceName,
-          inputKind: "browser_source",
-          inputSettings: { url: dataUrl, width: canvasW, height: TICKER_HEIGHT, css: "", shutdown: false, restart_when_active: false },
-          sceneItemEnabled: true,
-        }) as { sceneItemId: number };
-        sceneItemId = created.sceneItemId;
-      }
 
-      // Position ticker
-      const posY = settings.position === "top" ? 0 : canvasH - TICKER_HEIGHT;
-      await dockObsClient.call("SetSceneItemTransform", {
-        sceneName: targetScene,
-        sceneItemId,
-        sceneItemTransform: {
-          positionX: 0,
-          positionY: posY,
-          scaleX: 1,
-          scaleY: 1,
-          rotation: 0,
-          boundsType: "OBS_BOUNDS_STRETCH",
-          boundsWidth: canvasW,
-          boundsHeight: TICKER_HEIGHT,
-          boundsAlignment: 0,
-          cropLeft: 0,
-          cropTop: 0,
-          cropRight: 0,
-          cropBottom: 0,
-        },
-      });
-      await dockObsClient.ensureTickerAboveSource(targetScene, sourceName).catch(() => { });
-      await dockObsClient.syncLowerThirdTickerClearance(targetScene).catch(() => { });
+        const posY = settings.position === "top" ? 0 : canvasH - TICKER_HEIGHT;
+        await dockObsClient.call("SetSceneItemTransform", {
+          sceneName: targetScene,
+          sceneItemId,
+          sceneItemTransform: {
+            positionX: 0,
+            positionY: posY,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            boundsType: "OBS_BOUNDS_STRETCH",
+            boundsWidth: canvasW,
+            boundsHeight: TICKER_HEIGHT,
+            boundsAlignment: 0,
+            cropLeft: 0,
+            cropTop: 0,
+            cropRight: 0,
+            cropBottom: 0,
+          },
+        });
+        await dockObsClient.ensureTickerAboveSource(targetScene, sourceName).catch(() => { });
+        if (targetScene === presentationSceneName) {
+          await dockObsClient.syncLowerThirdTickerClearance(targetScene).catch(() => { });
+        }
+      }
 
       const projectionSettings = loadProjectionSettings();
       if (projectionSettings.tickerLayerPriority !== "ticker-above") {
@@ -444,42 +889,78 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
         });
       }
 
-      await dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch(() => { });
+      if (targets.some((target) => target.sceneName === presentationSceneName)) {
+        await dockObsClient.applyProjectionSettings({ allowSceneMutation: true }).catch(() => { });
+      }
 
       setRunning(true);
       setIsPaused(false);
-      setSuccess(tickerOutputMode === "scene" ? t("ministry.tickerLiveScene") : t("ministry.tickerLive"));
+      setSuccess(t("ministry.tickerLive"));
     } catch (err) {
       console.warn("[DockMinistry] Push failed:", err);
       setError(err instanceof Error ? err.message : t("ministry.pushFailed"));
     } finally {
       setSending(false);
     }
-  }, [activeMessages, theme, settings, tickerOutputMode]);
+  }, [activeMessages, hasTickerSceneRoute, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
-    if (!theme) return;
+    if (!selectedTickerTheme) return;
     setSending(true);
     setError(null);
     setSuccess(null);
     try {
-      const html = generateTickerHTML(
-        theme,
-        brandedColors,
-        settings.heading,
-        activeMessages.map((m) => m.text),
-        settings.speed,
-        settings.position,
-        settings.loop,
-        !isPaused,
-      );
+      if (presentationLinkMode) {
+        await publishTickerToPresentation({
+          text: formatDockTickerMessages(
+            activeMessages.map((m) => m.text),
+            settings.divider,
+            settings.messageSpacing,
+          ),
+          divider: resolveDockTickerDividerChar(settings.divider),
+          messageSpacing: settings.messageSpacing,
+          position: settings.position,
+          speed: settings.speed,
+          textColor: tickerColors?.barText,
+          backgroundColor: tickerColors?.barBg,
+          fontFamily: obsFontFamily,
+          paused: !isPaused,
+        });
+        setIsPaused((p) => !p);
+        setSuccess(isPaused ? t("ministry.resumed") : t("ministry.paused"));
+        return;
+      }
+
+      const html = renderDockTickerThemeHtml({
+        option: selectedTickerTheme,
+        heading: settings.heading,
+        messages: activeMessages.map((m) => m.text),
+        speed: settings.speed,
+        position: settings.position,
+        loop: settings.loop,
+        paused: !isPaused,
+        colors: tickerColors,
+        fontFamily: obsFontFamily,
+        brandLogoUrl: tickerBrandLogoUrl,
+        brandName: tickerBrandName,
+        divider: settings.divider,
+        messageSpacing: settings.messageSpacing,
+      });
       const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
       const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
-      await dockObsClient.call("SetInputSettings", {
-        inputName: "MCE Ticker",
-        inputSettings: { url: dataUrl, width: video.baseWidth, height: TICKER_HEIGHT },
-      });
+      const sourceNames = hasTickerSceneRoute
+        ? [
+          ...tickerSceneRoute.targets.map((target) => dockObsClient.getSceneRouteSourceName("ticker", target.sceneName)),
+          ...(tickerSceneRoute.syncPresentation ? ["MCE Ticker"] : []),
+        ]
+        : ["MCE Ticker"];
+      await Promise.all(sourceNames.map((inputName) =>
+        dockObsClient.call("SetInputSettings", {
+          inputName,
+          inputSettings: { url: dataUrl, width: video.baseWidth, height: TICKER_HEIGHT },
+        }),
+      ));
       setIsPaused((p) => !p);
       setSuccess(isPaused ? t("ministry.resumed") : t("ministry.paused"));
     } catch (err) {
@@ -487,7 +968,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     } finally {
       setSending(false);
     }
-  }, [theme, settings, activeMessages, isPaused]);
+  }, [activeMessages, hasTickerSceneRoute, isPaused, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   // ── Clear ticker (hide in OBS) ──
   const handleClear = useCallback(async () => {
@@ -495,6 +976,26 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     setError(null);
     setSuccess(null);
     try {
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+        setRunning(false);
+        setIsPaused(false);
+        setSuccess(t("ministry.tickerCleared"));
+        return;
+      }
+
+      if (hasTickerSceneRoute) {
+        await Promise.all(tickerSceneRoute.targets.map((target) => (
+          dockObsClient.clearSceneRouteSource("ticker", target.sceneName)
+        )));
+        if (!tickerSceneRoute.syncPresentation) {
+          setRunning(false);
+          setIsPaused(false);
+          setSuccess(t("ministry.tickerCleared"));
+          return;
+        }
+      }
+
       // Turn off MCE Ticker wherever it lives — MCE Presentation + current program scene
       const scenesToCheck = new Set<string>();
       scenesToCheck.add("MCE Presentation");
@@ -518,16 +1019,6 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       }
       await dockObsClient.syncLowerThirdTickerClearance("MCE Presentation").catch(() => { });
 
-      // Restore original scene in preview if we had switched away
-      if (tickerOutputMode === "scene") {
-        let originalScene = "";
-        try { originalScene = localStorage.getItem("dock-ticker-original-scene") || ""; } catch { /* ignore */ }
-        if (originalScene) {
-          await dockObsClient.call("SetCurrentPreviewScene", { sceneName: originalScene }).catch(() => { });
-        }
-        try { localStorage.removeItem("dock-ticker-original-scene"); } catch { /* ignore */ }
-      }
-
       setRunning(false);
       setIsPaused(false);
       setSuccess(t("ministry.tickerCleared"));
@@ -536,64 +1027,93 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
     } finally {
       setSending(false);
     }
-  }, [tickerOutputMode]);
+  }, [hasTickerSceneRoute, presentationLinkMode, t, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
-   
+
 
       {/* ── Sub-Tab Switcher ── */}
       <div className="dock-ministry-tabs">
-        <button
-          type="button"
-          className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
-          onClick={() => setSubTab("ticker")}
-          title={t("ministry.ticker")}>
-          <Icon name="campaign" size={12} />
-          <span>{t("ministry.ticker")}</span>
-        </button>
-        <button
-          type="button"
-          className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
-          onClick={() => setSubTab("lower-thirds")}
-          title={t("ministry.lowerThirds")}>
-          <Icon name="subtitles" size={12} />
-          <span>{t("ministry.lowerThirds")}</span>
-        </button>
-        {dockPlan !== "free" && (
+        {showTickerTab && (
           <button
             type="button"
-            className={`dock-ministry-tab${subTab === "countdowns" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => setSubTab("countdowns")}
-            title={t("ministry.countdowns")}>
-            <Icon name="timer" size={12} />
-            <span>{t("ministry.countdowns")}</span>
+            className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => tickerEntitlement.allowed ? setSubTab("ticker") : showUpgradeModal(tickerEntitlement.reason || "Upgrade to Growth to enable Ticker.")}
+            aria-label={t("ministry.ticker")}
+            title={t("ministry.ticker")}>
+            <Icon name="campaign" size={12} />
+            <span>{t("ministry.tickerShort", "Ticker")}</span>
           </button>
+        )}
+        {showLowerThirdTab && (
+          <button
+            type="button"
+            className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => lowerThirdEntitlement.allowed ? setSubTab("lower-thirds") : showUpgradeModal(lowerThirdEntitlement.reason || "Upgrade to Growth to enable Lower Thirds.")}
+            aria-label={t("ministry.lowerThirds")}
+            title={t("ministry.lowerThirds")}>
+            <Icon name="subtitles" size={12} />
+            <span>{t("ministry.lowerThirdsShort", "Low")}</span>
+          </button>
+        )}
+        {showTimeTab && (
+          <button
+            type="button"
+            className={`dock-ministry-tab${subTab === "time" ? " dock-ministry-tab--active" : ""}`}
+            onClick={() => timeEntitlement.allowed ? setSubTab("time") : showUpgradeModal(timeEntitlement.reason || "Upgrade to Growth to enable Time tools.")}
+            aria-label={t("ministry.time", "Time")}
+            title={t("ministry.time", "Time")}>
+            <Icon name="schedule" size={12} />
+            <span>{t("ministry.timeShort", "Time")}</span>
+          </button>
+        )}
+        {subTab === "ticker" && tickerEntitlement.allowed && (
+          <span style={{ marginLeft: "auto", display: "inline-flex" }}>
+            <DockSceneRoutingControl
+              module="ticker"
+              route={tickerSceneRoute}
+              onRouteChange={updateTickerSceneRoute}
+              disabled={presentationLinkMode}
+              title={t("sceneRouting.tickerOutput", "Ticker output")}
+            />
+          </span>
+        )}
+        {subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
+          <span style={{ marginLeft: "auto", display: "inline-flex" }}>
+            <DockSceneRoutingControl
+              module="lower-third"
+              route={lowerThirdSceneRoute}
+              onRouteChange={updateLowerThirdSceneRoute}
+              disabled={presentationLinkMode}
+              title={t("sceneRouting.lowerThirdOutput", "Lower-third output")}
+            />
+          </span>
         )}
       </div>
 
       {/* ── Ticker Tab ── */}
-      {subTab === "ticker" && dockPlan === "free" && (
+      {showTickerTab && subTab === "ticker" && !tickerEntitlement.allowed && (
         <div style={{ padding: "24px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <Icon name="lock" size={32} />
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-            {t("upgrade.tickerRequired", "Ticker requires Basic plan or higher")}
+            {t("upgrade.tickerRequired", "Ticker requires Growth plan")}
           </div>
           <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
             {t("upgrade.tickerDescription", "Live-updating scripture, prayer points, and announcements for your congregation.")}
           </div>
           <button
             type="button"
-            className="dock-btn dock-btn--primary dock-btn--sm"
-            onClick={() => showUpgradeModal("Upgrade to Basic or higher to enable the Ticker feature.")}
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
+            onClick={() => showUpgradeModal(t("upgrade.tickerRequiredMessage", "Upgrade to Growth to enable the Ticker feature."))}
           >
             <Icon name="upgrade" size={14} />
             <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
           </button>
         </div>
       )}
-      {subTab === "ticker" && dockPlan !== "free" && (
+      {showTickerTab && subTab === "ticker" && tickerEntitlement.allowed && (
         <>
           {/* Feedback */}
           {error && (
@@ -612,15 +1132,20 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             </div>
           )}
 
-          <div className="dock-mv-tab__list">
+          <div className="dock-mv-tab__list dock-mv-tab__list--ticker">
             {/* Theme Picker */}
-            <div className="dock-mv-tab__section">
+            <div className="dock-mv-tab__section dock-mv-tab__section--ticker-theme">
               <div style={{ padding: "4px 0" }}>
                 <select
-                  value={theme?.id ?? ''}
+                  value={selectedTickerTheme?.id ?? ""}
                   onChange={(e) => {
-                    const t = TICKER_THEMES.find((x) => x.id === e.target.value);
-                    setSettings((s) => ({ ...s, themeId: e.target.value, heading: t?.defaultHeading ?? s.heading }));
+                    const nextTheme = resolveDockTickerThemeOption(e.target.value, remoteProductionThemes);
+                    setSettings((s) => ({
+                      ...s,
+                      themeId: e.target.value,
+                      heading: nextTheme?.defaultHeading ?? s.heading,
+                      colors: {},
+                    }));
                   }}
                   style={{
                     width: "100%",
@@ -643,12 +1168,23 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             </div>
 
             {/* Settings */}
-            <div className="dock-mv-tab__section">
+            <div className="dock-mv-tab__section dock-mv-tab__section--ticker-settings">
               <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
               <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "block", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.heading")}</label>
-                  <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", flex: "0 0 50px" }}>{t("ministry.heading")}</label>
+                  <div
+                    ref={tickerColorPopoverRef}
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      flex: 1,
+                      minWidth: 0,
+                      zIndex: tickerColorPopoverOpen ? 1000 : "auto",
+                    }}
+                  >
                     <input
                       type="text"
                       value={settings.heading}
@@ -657,8 +1193,8 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                       maxLength={20}
                       style={{
                         minHeight: '30px',
-                        width: "90%",
                         flex: 1,
+                        minWidth: 0,
                         background: "var(--dock-surface)",
                         border: "1px solid var(--dock-border)",
                         borderRadius: 3,
@@ -667,6 +1203,36 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         color: "var(--dock-text)",
                       }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTickerColorPopoverOpen((open) => {
+                          const next = !open;
+                          if (next) {
+                            updateTickerColorPopoverPosition();
+                            requestAnimationFrame(updateTickerColorPopoverPosition);
+                          }
+                          return next;
+                        });
+                      }}
+                      title={t("ministry.colors", "Colors")}
+                      aria-label={t("ministry.colors", "Colors")}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        borderRadius: 3,
+                        border: "1px solid var(--dock-border)",
+                        background: tickerColorPopoverOpen ? "var(--dock-accent)" : "var(--dock-surface)",
+                        color: tickerColorPopoverOpen ? "#fff" : "var(--dock-text)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="palette" size={15} />
+                    </button>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -680,6 +1246,53 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     style={{ flex: 1 }}
                   />
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }} title="Extra space before the next message">
+                    Space
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={TICKER_MESSAGE_SPACING_MAX}
+                    value={settings.messageSpacing}
+                    onChange={(e) => setSettings((s) => ({ ...s, messageSpacing: Number(e.target.value) }))}
+                    aria-label="Extra space before the next message"
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 32, textAlign: "right" }}>{settings.messageSpacing}px</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50, paddingTop: 7 }}>Divider</span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }} role="group" aria-label="Ticker divider">
+                    {TICKER_DIVIDER_OPTIONS.map((option) => {
+                      const isActive = settings.divider === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setSettings((s) => ({ ...s, divider: option.value }))}
+                          aria-label={option.label}
+                          title={option.label}
+                          style={{
+                            width: 28,
+                            height: 28,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                            borderRadius: 4,
+                            border: `1px solid ${isActive ? "var(--dock-accent)" : "var(--dock-border)"}`,
+                            background: isActive ? "var(--dock-accent)" : "var(--dock-surface)",
+                            color: isActive ? "#fff" : "var(--dock-text-dim)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Icon name={option.icon} size={13} />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
                   <div style={{ display: "block", alignItems: "center", gap: 6 }}>
@@ -725,7 +1338,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             </div>
 
             {/* Compose */}
-            <div className="dock-mv-tab__section">
+            <div className="dock-mv-tab__section dock-mv-tab__section--ticker-messages">
               <div className="dock-mv-tab__section-label">{t("ministry.messages")}</div>
               {/* <div className="dock-mv-tab__section-desc">{t("ministry.messagesDesc")}</div> */}
               <div style={{ padding: "4px 0" }}>
@@ -757,7 +1370,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                     disabled={!newText.trim()}
                     style={{ height: 30, whiteSpace: "nowrap" }}
                     title={t("common.add")}>
-                    Add Message
+                    {t("ministry.addMessage", "Add Message")}
                     <Icon name="add" size={14} />
                   </button>
                 </div>
@@ -884,18 +1497,18 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             </div>
 
             {/* Live Control */}
-            <div className="dock-mv-tab__section">
+            <div className="dock-mv-tab__section dock-mv-tab__section--ticker-live">
               <div style={{ display: "flex", gap: 6, padding: "4px 0" }}>
-                {/* Go Live — always shown */}
+                {/* Send to OBS — always shown */}
                 <button
                   type="button"
                   className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
                   onClick={handlePush}
-                  disabled={sending || activeMessages.length === 0 || !obsConnected}
+                  disabled={sending || activeMessages.length === 0 || (!obsConnected && !presentationLinkMode)}
                   style={{ flex: 1 }}
-                  title={t("ministry.goLive")}>
+                  title={t("common.sendToObs", "Send to OBS")}>
                   <Icon name="play_arrow" size={14} />
-                  <span>{t("ministry.goLive")}</span>
+                  <span>{t("common.sendToObs", "Send to OBS")}</span>
                 </button>
 
                 {/* Pause / Resume — only when running */}
@@ -924,7 +1537,7 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                   </button>
                 )}
               </div>
-              {!obsConnected && (
+              {!obsConnected && !presentationLinkMode && (
                 <div style={{ fontSize: 10, color: "var(--dock-red)", textAlign: "center" }}>
                   {t("ministry.connectToObs")}
                 </div>
@@ -935,7 +1548,26 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
       )}
 
       {/* ── Lower Thirds Tab ── */}
-      {subTab === "lower-thirds" && (
+      {showLowerThirdTab && subTab === "lower-thirds" && !lowerThirdEntitlement.allowed && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <Icon name="lock" size={32} />
+          <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>
+            {t("upgrade.lowerThirdRequired", "Lower Thirds require Growth plan")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.lowerThirdDescription", "Show speaker names, scripture, and announcements over your broadcast.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
+            onClick={() => showUpgradeModal(t("upgrade.lowerThirdRequiredMessage", "Upgrade to Growth to enable Lower Thirds."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {showLowerThirdTab && subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
         <>
           {/* LT Feedback */}
           {ltFeedback && (
@@ -952,7 +1584,9 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
             {/* Theme Picker */}
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
-              <div className="dock-mv-tab__section-desc">{t("ministry.themeDesc")}</div>
+              <div className="dock-mv-tab__section-desc">
+                {t("ministry.lowerThirdThemeHelp", "For Scripture, choose the lower-third theme in Bible.")}
+              </div>
               <div style={{ padding: "4px 0" }}>
                 {ltFavorites.length > 0 ? (
                   <select
@@ -998,57 +1632,299 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
 
             {/* Size Multiplier */}
             <div className="dock-mv-tab__section">
-                  <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
-                  <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div>
-                  <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
-                    {(["xl", "x2"] as LTSize[]).map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setLtSize(s)}
-                        style={{
-                          flex: 1,
-                          padding: "4px 0",
-                          fontSize: 11,
-                          fontWeight: 600,
-                          fontFamily: "inherit",
-                          borderRadius: 3,
-                          border: `1px solid ${ltSize === s ? "var(--dock-accent)" : "var(--dock-border)"}`,
-                          background: ltSize === s ? "var(--dock-accent)" : "transparent",
-                          color: ltSize === s ? "#fff" : "var(--dock-text-dim)",
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {LT_SIZE_LABELS[s]}
-                      </button>
-                    ))}
-                  </div>
+              <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
+              {/* <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div> */}
+              <div style={{ padding: "4px 0", display: "flex", gap: 4 }}>
+                {MINISTRY_LT_SIZE_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setLtSize(s);
+                      writeNativeDockSetting(MINISTRY_LT_SIZE_STORAGE_KEY, s);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "4px 0",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      fontFamily: "inherit",
+                      borderRadius: 3,
+                      border: `1px solid ${ltSize === s ? "var(--dock-accent)" : "var(--dock-border)"}`,
+                      background: ltSize === s ? "var(--dock-accent)" : "transparent",
+                      color: ltSize === s ? "#fff" : "var(--dock-text-dim)",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {LT_SIZE_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Render editor based on selected theme type */}
+            {ltSelectedEntry?.kind === "lt" ? (
+              <DockLowerThirdEditor
+                theme={ltSelectedEntry.theme}
+                themes={ltFavorites.filter((e) => e.kind === "lt").map((e) => (e as LTThemeEntry).theme)}
+                onSelectTheme={(themeId) => {
+                  const idx = ltFavorites.findIndex((e) => e.kind === "lt" && (e as LTThemeEntry).theme.id === themeId);
+                  if (idx >= 0) setLtSelectedIdx(idx);
+                }}
+                sending={ltSending}
+                size={ltSize}
+                onSend={async (url) => {
+                  if (!(await requireEntitlement("lowerThirds", 0))) return;
+                  setLtSending(true);
+                  setLtFeedback(null);
+                  try {
+                    await ensureObsConnected();
+                    // Keep the OBS browser viewport stable. The selected
+                    // size is rendered by lower-third-overlay.html so it
+                    // also works when the live source is reused.
+                    const sourceSize = {
+                      sourceWidth: 1920,
+                      sourceHeight: 1080,
+                    };
+                    if (hasLowerThirdSceneRoute) {
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName, sourceSize)
+                      )));
+                      if (lowerThirdSceneRoute.syncPresentation) {
+                        if (ltLive) {
+                          const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                          await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);
+                        } else {
+                          await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);
+                        }
+                      }
+                    } else if (ltLive) {
+                      const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                      await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);
+                    } else {
+                      await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);
+                    }
+                    setLtLive(true);
+                    setLtFeedbackTone("success");
+                    setLtFeedback(t("ministry.lowerThirdLive"));
+                  } catch (err) {
+                    setLtFeedbackTone("error");
+                    setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
+                  } finally {
+                    setLtSending(false);
+                  }
+                }}
+                onBlank={async (url) => {
+                  setLtSending(true);
+                  setLtFeedback(null);
+                  try {
+                    await ensureObsConnected();
+                    const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                    if (hasLowerThirdSceneRoute) {
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
+                      )));
+                      await new Promise((resolve) => setTimeout(resolve, exitDuration));
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                      )));
+                      if (lowerThirdSceneRoute.syncPresentation) {
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                      }
+                    } else {
+                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                    }
+                    setLtLive(false);
+                    setLtFeedbackTone("success");
+                    setLtFeedback(t("ministry.lowerThirdCleared"));
+                  } catch (err) {
+                    setLtFeedbackTone("error");
+                    setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));
+                  } finally {
+                    setLtSending(false);
+                  }
+                }}
+                onAnimateOut={async (url) => {
+                  setLtSending(true);
+                  setLtFeedback(null);
+                  try {
+                    await ensureObsConnected();
+                    const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                    if (hasLowerThirdSceneRoute) {
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
+                      )));
+                      await new Promise((resolve) => setTimeout(resolve, exitDuration));
+                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                      )));
+                      if (lowerThirdSceneRoute.syncPresentation) {
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                      }
+                    } else {
+                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                    }
+                    setLtLive(false);
+                    setLtFeedbackTone("success");
+                    setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
+                  } catch (err) {
+                    setLtFeedbackTone("error");
+                    setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
+                  } finally {
+                    setLtSending(false);
+                  }
+                }}
+              />
+            ) : ltSelectedEntry?.kind === "bible" ? (
+              /* BibleTheme lower-third: simple text input + send via pushBible */
+              <div className="dock-mv-tab__section">
+                <div className="dock-mv-tab__section-label">{t("ministry.content")}</div>
+                <div className="dock-mv-tab__section-desc">{t("ministry.contentDesc")}</div>
+                <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <textarea
+                    value={bibleLtText}
+                    onChange={(e) => setBibleLtText(e.target.value)}
+                    placeholder={t("ministry.typeText")}
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      background: "var(--dock-surface)",
+                      border: "1px solid var(--dock-border)",
+                      borderRadius: 3,
+                      padding: "4px 6px",
+                      fontSize: 11,
+                      color: "var(--dock-text)",
+                      resize: "none",
+                      fontFamily: "inherit",
+                    }}
+                  />
                 </div>
 
-                {/* Render editor based on selected theme type */}
-                {ltSelectedEntry?.kind === "lt" ? (
-                  <DockLowerThirdEditor
-                    theme={ltSelectedEntry.theme}
-                    themes={ltFavorites.filter((e) => e.kind === "lt").map((e) => (e as LTThemeEntry).theme)}
-                    onSelectTheme={(themeId) => {
-                      const idx = ltFavorites.findIndex((e) => e.kind === "lt" && (e as LTThemeEntry).theme.id === themeId);
-                      if (idx >= 0) setLtSelectedIdx(idx);
+                {/* BibleTheme preview note */}
+                <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 4 }}>
+                  {t("ministry.usingCustomTheme")} {ltSelectedEntry.theme.name}
+                </div>
+
+                {selectedBibleLtSettings && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      border: "1px solid var(--dock-border)",
+                      borderRadius: 4,
+                      background: "var(--dock-surface)",
                     }}
-                    sending={ltSending}
-                    size={ltSize}
-                    live={ltLive}
-                    onSend={async (url) => {
-                      if (!(await requireEntitlement("lowerThirds", 0))) return;
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                          {t("lowerThird.appearance", "Appearance")}
+                        </div>
+                        <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 2 }}>
+                          {t("lowerThird.appearanceDesc", "Adjust colors for this lower-third theme.")}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (ltSelectedEntry.kind === "bible") {
+                            setBibleLtColorOverrides((current) => {
+                              const next = { ...current };
+                              delete next[ltSelectedEntry.theme.id];
+                              return next;
+                            });
+                          }
+                        }}
+                        style={{
+                          border: "1px solid var(--dock-border)",
+                          borderRadius: 3,
+                          background: "var(--dock-input-bg)",
+                          color: "var(--dock-text-dim)",
+                          cursor: "pointer",
+                          fontSize: 10,
+                          padding: "2px 6px",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {t("common.reset", "Reset")}
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                      {BIBLE_LT_COLOR_CONTROLS.map((control) => {
+                        const explicitColor = selectedBibleLtOverrides[control.key] ?? "";
+                        const baseColor = String(selectedBibleLtSettings[control.key] || control.fallback);
+                        const effectiveColor = sanitizeCssColor(explicitColor) ?? sanitizeCssColor(baseColor) ?? control.fallback;
+                        return (
+                          <label
+                            key={control.key}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 26px",
+                              alignItems: "center",
+                              gap: 5,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span style={{ fontSize: 9, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {t(`lowerThird.color.${control.key}`, control.label)}
+                            </span>
+                            <input
+                              type="color"
+                              value={colorInputValue(explicitColor || effectiveColor, control.fallback)}
+                              onChange={(event) => setBibleLtColorOverride(ltSelectedEntry.theme.id, control.key, event.target.value)}
+                              title={t(`lowerThird.color.${control.key}`, control.label)}
+                              style={{
+                                width: 26,
+                                height: 22,
+                                border: "1px solid var(--dock-border)",
+                                borderRadius: 3,
+                                background: "transparent",
+                                padding: 0,
+                                cursor: "pointer",
+                              }}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: 6, padding: "6px 0" }}>
+                  <button
+                    type="button"
+                    className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : "dock-btn--primary"}`}
+                    disabled={ltSending || !bibleLtText.trim() || !obsConnected}
+                    onClick={async () => {
+                      if (!bibleLtText.trim() || ltSelectedEntry?.kind !== "bible") return;
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const scale = LT_SIZE_SCALE[ltSize] ?? 1;
-                        await dockObsClient.pushLowerThirdOverlayUrl(url, {
-                          sourceWidth: Math.round(1920 / scale),
-                          sourceHeight: Math.round(1080 / scale),
-                        });
+                        const bibleLowerThirdData = {
+                          book: "",
+                          chapter: 0,
+                          verse: 0,
+                          verseRange: "",
+                          referenceLabel: "",
+                          displayReferenceLabel: "",
+                          translation: "",
+                          verseText: bibleLtText.trim(),
+                          overlayMode: "lower-third",
+                          bibleThemeSettings: selectedBibleLtEffectiveSettings,
+                        } as const;
+                        if (hasLowerThirdSceneRoute) {
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                          )));
+                          if (lowerThirdSceneRoute.syncPresentation) {
+                            await dockObsClient.pushBible(bibleLowerThirdData);
+                          }
+                        } else {
+                          await dockObsClient.pushBible(bibleLowerThirdData);
+                        }
                         setLtLive(true);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdLive"));
@@ -1059,24 +1935,117 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         setLtSending(false);
                       }
                     }}
-                    onUpdate={async (url) => {
-                      try {
-                        await ensureObsConnected();
-                        await dockObsClient.call("SetInputSettings", {
-                          inputName: "MCE Lower Third",
-                          inputSettings: { url },
-                        });
-                      } catch (err) {
-                        console.warn("[DockMinistry] LT update failed:", err);
-                      }
-                    }}
-                    onBlank={async (url) => {
+                    style={{ flex: 1 }}
+                  >
+                    <Icon name="play_arrow" size={14} />
+                    <span>{t("common.sendToObs", "Send to OBS")}</span>
+                  </button>
+                  {ltLive && (
+                    <button
+                      type="button"
+                      className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
+                      disabled={ltSending || !obsConnected}
+                      onClick={async () => {
+                        setLtSending(true);
+                        setLtFeedback(null);
+                        try {
+                          await ensureObsConnected();
+                          const bibleLowerThirdData = {
+                            book: "",
+                            chapter: 0,
+                            verse: 0,
+                            verseRange: "",
+                            referenceLabel: "",
+                            displayReferenceLabel: "",
+                            translation: "",
+                            verseText: "",
+                            overlayMode: "lower-third",
+                            bibleThemeSettings: selectedBibleLtEffectiveSettings,
+                          } as const;
+                          if (hasLowerThirdSceneRoute) {
+                            await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                              dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                            )));
+                            if (lowerThirdSceneRoute.syncPresentation) {
+                              await dockObsClient.pushBible(bibleLowerThirdData);
+                            }
+                          } else {
+                            await dockObsClient.pushBible(bibleLowerThirdData);
+                          }
+                          // Wait for exit animation (use theme's animation duration), then disable the source
+                          const animDuration = selectedBibleLtAnimationDuration;
+                          await new Promise((r) => setTimeout(r, animDuration + 100));
+                          if (hasLowerThirdSceneRoute) {
+                            await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                              dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                            )));
+                            if (lowerThirdSceneRoute.syncPresentation) await dockObsClient.clearBible();
+                          } else {
+                            await dockObsClient.clearBible();
+                          }
+                          setLtLive(false);
+                          setLtFeedbackTone("success");
+                          setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
+                        } catch (err) {
+                          setLtFeedbackTone("error");
+                          setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
+                        } finally {
+                          setLtSending(false);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        background: "transparent",
+                        border: "1px solid var(--dock-border)",
+                        color: "var(--dock-text-dim)",
+                      }}
+                    >
+                      <Icon name="animation" size={14} />
+                      <span>{t("ministry.animateOut")}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
+                    disabled={ltSending || !obsConnected}
+                    onClick={async () => {
                       setLtSending(true);
                       setLtFeedback(null);
                       try {
                         await ensureObsConnected();
-                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                        const bibleLowerThirdData = {
+                          book: "",
+                          chapter: 0,
+                          verse: 0,
+                          verseRange: "",
+                          referenceLabel: "",
+                          displayReferenceLabel: "",
+                          translation: "",
+                          verseText: "",
+                          overlayMode: "lower-third",
+                          bibleThemeSettings: selectedBibleLtEffectiveSettings,
+                        } as const;
+                        if (hasLowerThirdSceneRoute) {
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
+                          )));
+                          if (lowerThirdSceneRoute.syncPresentation) {
+                            await dockObsClient.pushBible(bibleLowerThirdData);
+                          }
+                        } else {
+                          await dockObsClient.pushBible(bibleLowerThirdData);
+                        }
+                        // Wait for exit animation (use theme's animation duration), then disable the source
+                        const animDuration = selectedBibleLtAnimationDuration;
+                        await new Promise((r) => setTimeout(r, animDuration + 100));
+                        if (hasLowerThirdSceneRoute) {
+                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                            dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                          )));
+                          if (lowerThirdSceneRoute.syncPresentation) await dockObsClient.clearBible();
+                        } else {
+                          await dockObsClient.clearBible();
+                        }
                         setLtLive(false);
                         setLtFeedbackTone("success");
                         setLtFeedback(t("ministry.lowerThirdCleared"));
@@ -1087,186 +2056,141 @@ export default function DockMinistryTab({ staged: _staged, onStage: _onStage, ti
                         setLtSending(false);
                       }
                     }}
-                    onAnimateOut={async (url) => {
-                      setLtSending(true);
-                      setLtFeedback(null);
-                      try {
-                        await ensureObsConnected();
-                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
-                        setLtLive(false);
-                        setLtFeedbackTone("success");
-                        setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
-                      } catch (err) {
-                        setLtFeedbackTone("error");
-                        setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
-                      } finally {
-                        setLtSending(false);
-                      }
+                    style={{
+                      flex: 1,
+                      background: "transparent",
+                      border: "1px solid var(--dock-border)",
+                      color: "var(--dock-text-dim)",
                     }}
-                  />
-                ) : ltSelectedEntry?.kind === "bible" ? (
-                  /* BibleTheme lower-third: simple text input + send via pushBible */
-                  <div className="dock-mv-tab__section">
-                    <div className="dock-mv-tab__section-label">{t("ministry.content")}</div>
-                    <div className="dock-mv-tab__section-desc">{t("ministry.contentDesc")}</div>
-                    <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <textarea
-                        value={bibleLtText}
-                        onChange={(e) => setBibleLtText(e.target.value)}
-                        placeholder={t("ministry.typeText")}
-                        rows={3}
-                        style={{
-                          width: "100%",
-                          background: "var(--dock-surface)",
-                          border: "1px solid var(--dock-border)",
-                          borderRadius: 3,
-                          padding: "4px 6px",
-                          fontSize: 11,
-                          color: "var(--dock-text)",
-                          resize: "none",
-                          fontFamily: "inherit",
-                        }}
-                      />
-                    </div>
-
-                    {/* BibleTheme preview note */}
-                    <div style={{ fontSize: 9, color: "var(--dock-text-dim)", marginTop: 4 }}>
-                      {t("ministry.usingCustomTheme")} {ltSelectedEntry.theme.name}
-                    </div>
-
-                    {/* Action buttons */}
-                    <div style={{ display: "flex", gap: 6, padding: "6px 0" }}>
-                      <button
-                        type="button"
-                        className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : "dock-btn--primary"}`}
-                        disabled={ltSending || !bibleLtText.trim() || !obsConnected}
-                        onClick={async () => {
-                          if (!bibleLtText.trim() || ltSelectedEntry?.kind !== "bible") return;
-                          setLtSending(true);
-                          setLtFeedback(null);
-                          try {
-                            await ensureObsConnected();
-                            await dockObsClient.pushBible({
-                              book: "",
-                              chapter: 0,
-                              verse: 0,
-                              translation: "",
-                              verseText: bibleLtText.trim(),
-                              overlayMode: "lower-third",
-                              bibleThemeSettings: ltSelectedEntry.theme.settings as unknown as Record<string, unknown>,
-                            });
-                            setLtLive(true);
-                            setLtFeedbackTone("success");
-                            setLtFeedback(t("ministry.lowerThirdLive"));
-                          } catch (err) {
-                            setLtFeedbackTone("error");
-                            setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
-                          } finally {
-                            setLtSending(false);
-                          }
-                        }}
-                        style={{ flex: 1 }}
-                      >
-                        <Icon name="play_arrow" size={14} />
-                        <span>{t("ministry.goLive")}</span>
-                      </button>
-                      {ltLive && (
-                        <button
-                          type="button"
-                          className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
-                          disabled={ltSending || !obsConnected}
-                          onClick={async () => {
-                            setLtSending(true);
-                            setLtFeedback(null);
-                            try {
-                              await ensureObsConnected();
-                              await dockObsClient.pushBible({
-                                book: "",
-                                chapter: 0,
-                                verse: 0,
-                                translation: "",
-                                verseText: "",
-                                overlayMode: "lower-third",
-                                bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
-                              });
-                              // Wait for exit animation (use theme's animation duration), then disable the source
-                              const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
-                              await new Promise((r) => setTimeout(r, animDuration + 100));
-                              await dockObsClient.clearBible();
-                              setLtLive(false);
-                              setLtFeedbackTone("success");
-                              setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
-                            } catch (err) {
-                              setLtFeedbackTone("error");
-                              setLtFeedback(err instanceof Error ? err.message : t("ministry.animateOutFailed"));
-                            } finally {
-                              setLtSending(false);
-                            }
-                          }}
-                          style={{
-                            flex: 1,
-                            background: "transparent",
-                            border: "1px solid var(--dock-border)",
-                            color: "var(--dock-text-dim)",
-                          }}
-                        >
-                          <Icon name="animation" size={14} />
-                          <span>{t("ministry.animateOut")}</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : ""}`}
-                        disabled={ltSending || !obsConnected}
-                        onClick={async () => {
-                          setLtSending(true);
-                          setLtFeedback(null);
-                          try {
-                            await ensureObsConnected();
-                            await dockObsClient.pushBible({
-                              book: "",
-                              chapter: 0,
-                              verse: 0,
-                              translation: "",
-                              verseText: "",
-                              overlayMode: "lower-third",
-                              bibleThemeSettings: ltSelectedEntry?.kind === "bible" ? ltSelectedEntry.theme.settings as unknown as Record<string, unknown> : null,
-                            });
-                            // Wait for exit animation (use theme's animation duration), then disable the source
-                            const animDuration = ltSelectedEntry?.kind === "bible" ? Number(ltSelectedEntry.theme.settings?.animationDuration) || 800 : 800;
-                            await new Promise((r) => setTimeout(r, animDuration + 100));
-                            await dockObsClient.clearBible();
-                            setLtLive(false);
-                            setLtFeedbackTone("success");
-                            setLtFeedback(t("ministry.lowerThirdCleared"));
-                          } catch (err) {
-                            setLtFeedbackTone("error");
-                            setLtFeedback(err instanceof Error ? err.message : t("ministry.blankFailed"));
-                          } finally {
-                            setLtSending(false);
-                          }
-                        }}
-                        style={{
-                          flex: 1,
-                          background: "transparent",
-                          border: "1px solid var(--dock-border)",
-                          color: "var(--dock-text-dim)",
-                        }}
-                      >
-                        <Icon name="visibility_off" size={14} />
-                        <span>{t("ministry.blank")}</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                  >
+                    <Icon name="visibility_off" size={14} />
+                    <span>{t("ministry.blank")}</span>
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </>
       )}
 
-      {/* ── Countdowns Tab ── */}
-      {subTab === "countdowns" && dockPlan !== "free" && (
-        <DockCountdownsTab />
+      {/* ── Time Tab ── */}
+      {showTimeTab && subTab === "time" && !timeEntitlement.allowed && (
+        <div style={{ padding: "24px 16px", textAlign: "center" }}>
+          <Icon name="lock" size={32} />
+          <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>
+            {t("upgrade.timeRequired", "Time tools require Growth plan")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
+            {t("upgrade.timeDescription", "Keep your services on time with countdowns, timers, and clocks.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
+            onClick={() => showUpgradeModal(t("upgrade.timeRequiredMessage", "Upgrade to Growth to enable Time tools."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      )}
+      {showTimeTab && subTab === "time" && timeEntitlement.allowed && (
+        <DockTimeTab presentationOutputTarget={presentationOutputTarget} />
+      )}
+
+      {tickerColorPopoverOpen && tickerColors && createPortal(
+        <div
+          ref={tickerColorPopoverPanelRef}
+          role="dialog"
+          aria-label={t("ministry.tickerColors", "Ticker colors")}
+          style={{
+            position: "fixed",
+            top: tickerColorPopoverPosition.top,
+            left: tickerColorPopoverPosition.left,
+            zIndex: 10000,
+            width: TICKER_COLOR_POPOVER_WIDTH,
+            padding: 10,
+            background: "var(--dock-surface-alt, #1f2937)",
+            border: "1px solid var(--dock-border, #334155)",
+            borderRadius: 4,
+            boxShadow: "0 18px 50px rgba(0,0,0,0.36)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: "var(--dock-text, #f8fafc)", textTransform: "uppercase", letterSpacing: 0.3 }}>
+              {t("ministry.tickerColors", "Ticker colors")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettings((s) => ({ ...s, colors: {} }))}
+              style={{
+                border: "1px solid var(--dock-border, #334155)",
+                borderRadius: 3,
+                background: "var(--dock-surface, #111827)",
+                color: "var(--dock-text-dim, #cbd5e1)",
+                cursor: "pointer",
+                fontSize: 10,
+                padding: "2px 6px",
+              }}
+            >
+              {t("common.reset", "Reset")}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {TICKER_COLOR_CONTROLS.map(({ key, label }) => {
+              const explicitColor = settings.colors?.[key] ?? "";
+              const effectiveColor = sanitizeCssColor(explicitColor) ?? tickerColors[key];
+              return (
+                <label
+                  key={key}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "92px 28px 1fr",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 10,
+                    color: "var(--dock-text-dim, #cbd5e1)",
+                  }}
+                >
+                  <span>{t(`ministry.tickerColor.${key}`, label)}</span>
+                  <input
+                    type="color"
+                    value={colorInputValue(explicitColor || effectiveColor, TICKER_COLOR_INPUT_FALLBACKS[key])}
+                    onChange={(e) => setTickerColorOverride(key, e.target.value)}
+                    title={t(`ministry.tickerColor.${key}`, label)}
+                    style={{
+                      width: 28,
+                      height: 24,
+                      border: "1px solid var(--dock-border, #334155)",
+                      borderRadius: 3,
+                      background: "transparent",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={explicitColor}
+                    onChange={(e) => setTickerColorOverride(key, e.target.value)}
+                    placeholder={effectiveColor}
+                    spellCheck={false}
+                    style={{
+                      minWidth: 0,
+                      height: 24,
+                      background: "var(--dock-surface, #111827)",
+                      border: "1px solid var(--dock-border, #334155)",
+                      borderRadius: 3,
+                      color: "var(--dock-text, #f8fafc)",
+                      fontFamily: "inherit",
+                      fontSize: 10,
+                      padding: "0 6px",
+                    }}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
       )}
 
     </div>

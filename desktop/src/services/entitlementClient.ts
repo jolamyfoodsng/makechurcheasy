@@ -101,7 +101,7 @@ export function checkEntitlementSync(
   const entitlements = getLegacyCompatibleEntitlementsForPlan(planKey);
   const limit = entitlements[feature];
   const label = FEATURE_LABELS[feature] || feature;
-  const requiredPlan = findRequiredPlanForLegacyFeature(feature);
+  const requiredPlan = findRequiredPlanForLegacyFeature(feature, currentCount);
 
   // Boolean feature
   if (typeof limit === "boolean") {

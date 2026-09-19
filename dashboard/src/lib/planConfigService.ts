@@ -9,7 +9,7 @@ import { buildLegacyCompatiblePlanConfig } from "@/lib/subscriptionSourceOfTruth
 
 // ── Canonical Types (mirror desktop/src/services/planConfigTypes.ts) ──────────
 
-export type PlanTier = "free" | "trial" | "basic" | "growth" | "pro" | "ambassador" | "unlimited";
+export type PlanTier = "free" | "trial" | "basic" | "growth" | "ambassador" | "unlimited";
 
 export interface PlanEntitlements {
   // Numeric resource limits (-1 = unlimited)
@@ -72,6 +72,39 @@ export interface CreditCostConfig {
   description: string;
 }
 
+export interface SpecialOfferConfig {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  badgeText?: string;
+  ctaText?: string;
+  kind: "one_time" | "discounted_subscription";
+  plan: "basic" | "growth";
+  billingCycle: "monthly" | "yearly" | "lifetime";
+  price: {
+    NGN?: number;
+    USD?: number;
+    [currency: string]: number | undefined;
+  };
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  eligibility?: {
+    minAccountAgeDays?: number | null;
+    maxAccountAgeDays?: number | null;
+    allowedPlans?: string[];
+    eligibleUserIds?: string[];
+    eligibleEmails?: string[];
+    includeTrialUsers?: boolean;
+    excludeActivePaidUsers?: boolean;
+  };
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PlanConfig {
   _id?: unknown;
   version: number;
@@ -80,6 +113,7 @@ export interface PlanConfig {
   translationWordsPerCredit: number;
   pricingPlans?: PricingPlanConfig[];
   featureBanners?: PricingFeatureBanner[];
+  specialOffers?: SpecialOfferConfig[];
   updatedAt: string;
 }
 
@@ -150,6 +184,23 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
+function normalizeCachedConfig(config: PlanConfig): PlanConfig {
+  if ((config.version ?? 0) >= 10 || !config.plans?.free) return config;
+  return {
+    ...config,
+    plans: {
+      ...config.plans,
+      free: {
+        ...config.plans.free,
+        entitlements: {
+          ...config.plans.free.entitlements,
+          speechToScripture: true,
+        },
+      },
+    },
+  };
+}
+
 function readCacheEntry(): CacheEntry | null {
   if (typeof window === "undefined") return null;
   try {
@@ -157,7 +208,7 @@ function readCacheEntry(): CacheEntry | null {
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS * 10) return null;
-    return entry;
+    return { ...entry, config: normalizeCachedConfig(entry.config) };
   } catch {
     return null;
   }
@@ -200,7 +251,7 @@ async function doFetch(): Promise<PlanConfig> {
       const data = await res.json();
       if (data && data.plans) {
         writeCache(data);
-        return data;
+        return normalizeCachedConfig(data);
       }
     }
   } catch { /* fall through */ }

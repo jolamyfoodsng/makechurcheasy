@@ -1,10 +1,5 @@
 /**
- * useCountryPricing.ts — Fetches pricing for the desktop app.
- *
- * Uses the 3-region model API:
- * - "nigeria": NGN pricing with introductory rates
- * - "africa": USD Africa pricing
- * - "global": USD Global pricing
+ * useCountryPricing.ts — Fetches admin-managed pricing for the desktop app.
  *
  * Supports manual region override via localStorage.
  */
@@ -29,11 +24,10 @@ export interface CountryPricing {
   plans: {
     basic: PlanPrice;
     growth: PlanPrice;
-    pro: PlanPrice;
   };
   pricingVersion: number;
   region: "nigeria" | "africa" | "global";
-  source: "country" | "override" | "fallback";
+  source: "country" | "regional" | "global" | "override" | "fallback";
   detectedCountry?: string;
 }
 
@@ -122,14 +116,14 @@ interface UseCountryPricingResult {
   retry: () => void;
   formatPrice: (amount: number) => string;
   getPlanPrice: (
-    planId: "basic" | "growth" | "pro",
+    planId: "basic" | "growth",
     cycle: "monthly" | "yearly"
   ) => number;
   getFormattedPlanPrice: (
-    planId: "basic" | "growth" | "pro",
+    planId: "basic" | "growth",
     cycle: "monthly" | "yearly"
   ) => string;
-  getIntroPrice: (planId: "basic" | "growth" | "pro") => number | undefined;
+  getIntroPrice: (planId: "basic" | "growth") => number | undefined;
   currency: string;
   currencySymbol: string;
   region: "nigeria" | "africa" | "global";
@@ -210,7 +204,7 @@ export function useCountryPricing(): UseCountryPricingResult {
 
   const getPlanPrice = useCallback(
     (
-      planId: "basic" | "growth" | "pro",
+      planId: "basic" | "growth",
       cycle: "monthly" | "yearly"
     ): number => {
       if (!pricing) return 0;
@@ -221,7 +215,7 @@ export function useCountryPricing(): UseCountryPricingResult {
 
   const getFormattedPlanPrice = useCallback(
     (
-      planId: "basic" | "growth" | "pro",
+      planId: "basic" | "growth",
       cycle: "monthly" | "yearly"
     ): string => {
       const amount = getPlanPrice(planId, cycle);
@@ -231,7 +225,7 @@ export function useCountryPricing(): UseCountryPricingResult {
   );
 
   const getIntroPrice = useCallback(
-    (planId: "basic" | "growth" | "pro"): number | undefined => {
+    (planId: "basic" | "growth"): number | undefined => {
       return pricing?.plans[planId]?.introductoryMonthly;
     },
     [pricing]

@@ -1,27 +1,26 @@
 /**
- * UpdateNotification.tsx — Non-blocking floating update notification card.
+ * UpdateNotification.tsx — Centered update dialog for optional releases.
  *
  * Behavior:
- * - Appears in bottom-right corner like VSCode / OpenCode
- * - Never blocks the app UI
- * - Dismissible with "Later" or close button
- * - Remembers dismissed state and re-shows subtly after grace period
- * - Supports progressive urgency (Day 1-2 subtle, Day 3-4 persistent, Day 5+ stronger)
+ * - Shows the release notes before the user chooses an action
+ * - Offers "Update Now" or "Remind me later"
+ * - Remembers the reminder choice and re-shows after the reminder window
  * - Shows download progress inline when updating
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import {
-  downloadAndInstallUpdate,
   type UpdateCheckResult,
-  type DownloadProgress,
 } from "../services/updateService";
+import {
+  updateDownloadManager,
+  useUpdateDownload,
+} from "../services/updateDownloadManager";
 import type { Update } from "@tauri-apps/plugin-updater";
 import Icon from "./Icon";
 
 interface UpdateNotificationProps {
   result: UpdateCheckResult;
-  onDismiss: () => void;
   onRemindLater: () => void;
   manualDownloadUrl?: string;
   releaseNotesUrl?: string;
@@ -64,29 +63,68 @@ function shouldShowNotification(result: UpdateCheckResult): boolean {
   return true;
 }
 
+function renderReleaseNotes(notes: string): ReactNode {
+  const lines = notes.slice(0, 12_000).split(/\r?\n/);
+
+  return lines.map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return <div key={`space-${index}`} className="update-notification__note-space" />;
+
+    const heading = trimmed.match(/^#{1,3}\s+(.+)$/);
+    if (heading) {
+      return <h3 key={`heading-${index}`}>{heading[1]}</h3>;
+    }
+
+    const bullet = trimmed.match(/^[-*•]\s+(.+)$/);
+    if (bullet) {
+      return (
+        <div key={`bullet-${index}`} className="update-notification__note-bullet">
+          <span aria-hidden="true">•</span>
+          <span>{bullet[1]}</span>
+        </div>
+      );
+    }
+
+    return <p key={`paragraph-${index}`}>{trimmed}</p>;
+  });
+}
+
 export default function UpdateNotification({
   result,
-  onDismiss,
   onRemindLater,
   manualDownloadUrl,
   releaseNotesUrl,
   message,
 }: UpdateNotificationProps) {
-  const [status, setStatus] = useState<UpdateStatus>("prompt");
-  const [progress, setProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
-  const [errorMsg, setErrorMsg] = useState("");
-  const [showChangelog, setShowChangelog] = useState(false);
-  const [visible, setVisible] = useState(() => shouldShowNotification(result));
+  const downloadState = useUpdateDownload();
 
-  // Re-check visibility when update result changes (e.g., from polling)
+  // Register available update with central manager
   useEffect(() => {
-    setVisible(shouldShowNotification(result));
-  }, [result.version, result.available]);
+    if (result.available) {
+      updateDownloadManager.registerAvailableUpdate(
+        (result.update as Update) ?? null,
+        result.version ?? "",
+        result.currentVersion ?? "",
+        manualDownloadUrl,
+        shouldShowNotification(result),
+      );
+    }
+  }, [result, manualDownloadUrl]);
 
-  const percentComplete =
-    progress.contentLength > 0
-      ? Math.round((progress.downloaded / progress.contentLength) * 100)
-      : 0;
+  const rawStatus = downloadState.status;
+  const status: UpdateStatus =
+    rawStatus === "downloading" ||
+    rawStatus === "installing" ||
+    rawStatus === "relaunching" ||
+    rawStatus === "error"
+      ? rawStatus
+      : "prompt";
+
+  const progress = downloadState.progress;
+  const errorMsg = downloadState.errorMsg;
+  const percentComplete = progress.percent;
+
+  const isBusy = status === "downloading" || status === "installing" || status === "relaunching";
 
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return "0 B";
@@ -101,43 +139,21 @@ export default function UpdateNotification({
         window.open(manualDownloadUrl, "_blank", "noopener,noreferrer");
         return;
       }
-      setErrorMsg("No update package is available for this device yet.");
-      setStatus("error");
-      return;
     }
-    try {
-      setStatus("downloading");
-      await downloadAndInstallUpdate(
-        result.update as Update,
-        (p) => setProgress(p),
-        (s) => setStatus(s)
-      );
-    } catch (err: any) {
-      console.error("[UpdateNotification] Update failed:", err);
-      setErrorMsg(err?.message || "Update failed. Please try again.");
-      setStatus("error");
-    }
-  }, [manualDownloadUrl, result.update]);
+    await updateDownloadManager.startDownload((result.update as Update) ?? null, result.version);
+  }, [manualDownloadUrl, result.update, result.version]);
 
   const handleRetry = useCallback(() => {
-    setStatus("prompt");
-    setProgress({ contentLength: 0, downloaded: 0 });
-    setErrorMsg("");
+    updateDownloadManager.retry();
   }, []);
 
-  const handleDismiss = useCallback(() => {
-    setVisible(false);
-    savePrefs({
-      dismissedVersion: result.version,
-      dismissedAt: Date.now(),
-      ignoredCount: (loadPrefs().ignoredCount ?? 0) + 1,
-    });
-    setTimeout(() => onDismiss(), 300);
-  }, [result.version, onDismiss]);
-
   const handleRemindLater = useCallback(() => {
-    setVisible(false);
-    // Remind again after 4 hours
+    if (updateDownloadManager.isBusy()) {
+      updateDownloadManager.dismissModal();
+      return;
+    }
+
+    updateDownloadManager.dismissModal();
     savePrefs({
       ...loadPrefs(),
       remindLaterAt: Date.now() + 4 * 60 * 60 * 1000,
@@ -145,46 +161,53 @@ export default function UpdateNotification({
     setTimeout(() => onRemindLater(), 300);
   }, [onRemindLater]);
 
-  const statusConfig: Record<UpdateStatus, { icon: string; label: string }> = {
-    prompt: { icon: "system_update", label: "Update Available" },
-    downloading: { icon: "downloading", label: "Downloading..." },
-    installing: { icon: "refresh", label: "Installing..." },
-    relaunching: { icon: "restart_alt", label: "Relaunching..." },
-    error: { icon: "error_outline", label: "Update Failed" },
+  const statusConfig: Record<UpdateStatus, string> = {
+    prompt: "system_update",
+    downloading: "downloading",
+    installing: "refresh",
+    relaunching: "restart_alt",
+    error: "error_outline",
   };
 
-  const { icon, label } = statusConfig[status];
-  const isBusy = status === "downloading" || status === "installing" || status === "relaunching";
+  const icon = statusConfig[status];
 
-  if (!visible) return null;
+  if (!downloadState.isModalVisible) return null;
 
   return (
-    <div className="update-notification update-notification--visible">
+    <div
+      className="update-notification update-notification--visible"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="update-notification-title"
+    >
       <div className="update-notification__card">
-        {/* Close button */}
+        <div className="update-notification__titlebar">
+          <div className="update-notification__titlebar-label">
+            <Icon name={icon} size={14} className={isBusy ? "update-notification__icon--spin" : ""} />
+            <span>New update available</span>
+          </div>
+        </div>
+
         <button
           type="button"
           className="update-notification__close"
-          onClick={handleDismiss}
-          aria-label="Dismiss update notification"
-          title="Dismiss"
+          onClick={handleRemindLater}
+          aria-label="Remind me later"
+          title="Remind me later"
         >
           <Icon name="close" size={14} />
         </button>
 
-        {/* Header */}
-        <div className="update-notification__header">
-          <Icon name={icon} size={16} className={`update-notification__icon ${isBusy ? "update-notification__icon--spin" : ""}`} />
-          <span className="update-notification__title">{label}</span>
-        </div>
-
-        {/* Body */}
         <div className="update-notification__body">
           {status === "prompt" && (
             <>
-              <p className="update-notification__message">
-                {message || `A new version of MakeChurchEasy (${result.version}) is ready to install.`}
+              <p className="update-notification__eyebrow">
+                {message || "There is a new update available:"}
               </p>
+
+              <h2 id="update-notification-title" className="update-notification__release-title">
+                MakeChurchEasy {result.version || "update"}
+              </h2>
 
               <div className="update-notification__versions">
                 <span className="update-notification__version-current">v{result.currentVersion}</span>
@@ -192,26 +215,30 @@ export default function UpdateNotification({
                 <span className="update-notification__version-new">v{result.version}</span>
               </div>
 
-              {(releaseNotesUrl || result.notes) && (
-                <button
-                  type="button"
-                  className="update-notification__changelog-btn"
-                  onClick={() => {
-                    if (releaseNotesUrl) {
-                      window.open(releaseNotesUrl, "_blank", "noopener,noreferrer");
-                      return;
-                    }
-                    setShowChangelog(!showChangelog);
-                  }}
-                 title="What's New">
-                  <Icon name={releaseNotesUrl ? "open_in_new" : showChangelog ? "expand_less" : "expand_more"} size={12} />
-                  {releaseNotesUrl ? "Release Notes" : "What's New"}
-                </button>
+              {(result.notes || releaseNotesUrl) && (
+                <section className="update-notification__release-notes" aria-label="Release notes">
+                  <div className="update-notification__release-notes-scroll">
+                    {result.notes ? renderReleaseNotes(result.notes) : (
+                      <p>No release notes are available for this update.</p>
+                    )}
+                  </div>
+                  {releaseNotesUrl && (
+                    <button
+                      type="button"
+                      className="update-notification__changelog-btn"
+                      onClick={() => window.open(releaseNotesUrl, "_blank", "noopener,noreferrer")}
+                      title="Open full release notes"
+                    >
+                      <Icon name="open_in_new" size={12} />
+                      Open full release notes
+                    </button>
+                  )}
+                </section>
               )}
 
-              {showChangelog && result.notes && (
-                <div className="update-notification__changelog">
-                  <p>{result.notes.slice(0, 400)}</p>
+              {!result.notes && !releaseNotesUrl && (
+                <div className="update-notification__release-notes update-notification__release-notes--empty">
+                  <p>No release notes are available for this update.</p>
                 </div>
               )}
             </>
@@ -251,22 +278,35 @@ export default function UpdateNotification({
           )}
         </div>
 
-        {/* Actions */}
         {status === "prompt" && (
           <div className="update-notification__actions">
-            <button
-              type="button"
-              className="update-notification__btn update-notification__btn--later"
-              onClick={handleRemindLater}
-             title="Later">
-              Later
-            </button>
             <button
               type="button"
               className="update-notification__btn update-notification__btn--update"
               onClick={handleUpdate}
              title="Update now">
               Update Now
+            </button>
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--later"
+              onClick={handleRemindLater}
+              title="Remind me later"
+            >
+              Remind me later
+            </button>
+          </div>
+        )}
+
+        {(status === "downloading" || status === "installing") && (
+          <div className="update-notification__actions">
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--later"
+              onClick={handleRemindLater}
+              title="Continue in background"
+            >
+              Continue in Background
             </button>
           </div>
         )}
@@ -276,9 +316,10 @@ export default function UpdateNotification({
             <button
               type="button"
               className="update-notification__btn update-notification__btn--later"
-              onClick={handleDismiss}
-             title="Dismiss">
-              Dismiss
+              onClick={handleRemindLater}
+              title="Remind me later"
+            >
+              Remind me later
             </button>
             <button
               type="button"

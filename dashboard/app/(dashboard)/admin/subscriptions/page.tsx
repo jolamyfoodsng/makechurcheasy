@@ -50,7 +50,6 @@ interface SubscriptionsResponse {
     active: number;
     cancelled: number;
     adminManaged: number;
-    monthlyRevenue: number;
   };
   subscriptions: SubscriptionEntry[];
 }
@@ -181,12 +180,7 @@ export default function AdminSubscriptionsPage() {
         <StatCard icon={ReceiptText} label="Total subscriptions" value={data?.stats.total ?? 0} />
         <StatCard icon={Activity} label="Active" value={data?.stats.active ?? 0} tone="emerald" />
         <StatCard icon={ShieldCheck} label="Admin-managed" value={data?.stats.adminManaged ?? 0} tone="indigo" />
-        <StatCard
-          icon={CreditCard}
-          label="Monthly revenue"
-          value={formatMoney(data?.stats.monthlyRevenue ?? 0, "NGN")}
-          tone="amber"
-        />
+        <StatCard icon={CalendarClock} label="Cancelled or expired" value={data?.stats.cancelled ?? 0} tone="amber" />
       </div>
 
       <div className="flex flex-col lg:flex-row gap-3">

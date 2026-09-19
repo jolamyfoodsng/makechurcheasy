@@ -95,7 +95,6 @@ export default function AdminChurchesPage() {
     free: "bg-slate-500/15 text-slate-400",
     basic: "bg-sky-500/15 text-sky-400",
     growth: "bg-green-500/15 text-green-400",
-    pro: "bg-violet-500/15 text-violet-400",
     ambassador: "bg-purple-500/15 text-purple-400",
     unlimited: "bg-amber-500/15 text-amber-400",
   };

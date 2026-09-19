@@ -47,6 +47,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     if (pathname.startsWith('/error')) return t("pageTitles.actionRequired");
     if (pathname === '/settings/deactivate') return t("pageTitles.deactivateAccount");
     if (pathname === '/credits/history') return t("pageTitles.creditsHistory");
+    if (pathname.startsWith('/referrals')) return "Referrals";
 
     switch (pathname) {
       case "/": return t("pageTitles.overview");
@@ -66,7 +67,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   };
 
   return (
-    <header className={`sticky top-0 z-40 w-full h-[72px] backdrop-blur-md border-b flex justify-between items-center px-4 md:px-6 shrink-0 ${isAdmin ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-slate-200"}`}>
+    <header className={`mce-dashboard-topbar sticky top-0 z-40 w-full h-[72px] backdrop-blur-md border-b flex justify-between items-center px-4 md:px-6 shrink-0 ${isAdmin ? "mce-dashboard-topbar--admin bg-slate-900/80 border-slate-700" : "bg-white/80 border-slate-200"}`}>
       {/* Left: Mobile menu + page title */}
       <div className="flex items-center gap-3">
         <button

@@ -9,12 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { X, Smartphone, Wifi, WifiOff, RefreshCw } from "lucide-react";
-
-interface PairingInfo {
-  ip: string;
-  port: number;
-  pairingToken: string;
-}
+import {
+  buildMobilePairingPayload,
+  resolveMobilePairingPorts,
+  type MobilePairingInfo,
+} from "../../services/mobilePairing";
 
 interface MobileServerStatus {
   running: boolean;
@@ -76,7 +75,7 @@ interface MobileCompanionModalProps {
 
 export default function MobileCompanionModal({ onClose }: MobileCompanionModalProps) {
   const { t } = useTranslation();
-  const [pairing, setPairing] = useState<PairingInfo | null>(null);
+  const [pairing, setPairing] = useState<MobilePairingInfo | null>(null);
   const [status, setStatus] = useState<MobileServerStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -85,8 +84,11 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
     try {
       setLoading(true);
       setError("");
-      const info = await invoke<PairingInfo>("get_mobile_pairing_info");
+      const info = await invoke<MobilePairingInfo>("get_mobile_pairing_info");
       setPairing(info);
+      if (!resolveMobilePairingPorts(info)) {
+        setError("Mobile services are still starting. Try again in a moment.");
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -104,14 +106,18 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
   }, []);
 
   useEffect(() => {
-    void fetchPairingInfo();
-    void fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
+    const refresh = () => {
+      void fetchPairingInfo();
+      void fetchStatus();
+    };
+    refresh();
+    const interval = setInterval(refresh, 3000);
     return () => clearInterval(interval);
   }, [fetchPairingInfo, fetchStatus]);
 
-  const wsUrl = pairing ? `ws://${pairing.ip}:${pairing.port}` : "";
-  const pairingUrl = pairing ? `${wsUrl}?token=${pairing.pairingToken}` : "";
+  const pairingPorts = pairing ? resolveMobilePairingPorts(pairing) : null;
+  const wsUrl = pairing && pairingPorts ? `ws://${pairing.ip}:${pairingPorts.wsPort}` : "";
+  const pairingPayload = pairing ? buildMobilePairingPayload(pairing) : "";
 
   return (
     <div className="mc-modal-backdrop" onMouseDown={onClose}>
@@ -149,14 +155,14 @@ export default function MobileCompanionModal({ onClose }: MobileCompanionModalPr
                 {t("dock.mobileCompanion.retry")}
               </button>
             </div>
-          ) : pairing ? (
+          ) : pairing && pairingPayload ? (
             <>
               {/* QR Code */}
               <div className="mc-qr-section">
                 <p className="mc-qr-instruction">
                   {t("dock.mobileCompanion.scanQrInstruction")}
                 </p>
-                <QrCodeDisplay value={pairingUrl} size={180} />
+                <QrCodeDisplay value={pairingPayload} size={180} />
                 <button className="mc-btn-refresh" onClick={fetchPairingInfo} title={t("dock.mobileCompanion.generateNewCode")}>
                   <RefreshCw size={14} />
                   {t("dock.mobileCompanion.newCode")}

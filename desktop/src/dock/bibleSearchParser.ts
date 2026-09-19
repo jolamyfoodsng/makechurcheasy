@@ -16,8 +16,14 @@
  */
 
 import { OT_BOOKS, NT_BOOKS, BOOK_CHAPTERS } from "./dockTypes";
+import { normalizeRomanNumberedBookPrefix } from "../bible/bookAliasGenerator";
 
 const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
+
+// Psalm 119 is the longest chapter in the Bible at 176 verses. Keeping this
+// parser-level guard prevents compact input such as "j1633" from becoming the
+// impossible reference "John 1:633" while preserving every canonical verse.
+const MAX_BIBLE_VERSE_NUMBER = 176;
 
 const ROMAN_NUMERAL_PREFIX: Record<"1" | "2" | "3", string> = {
   "1": "i",
@@ -96,9 +102,9 @@ const BOOK_ALIASES: BookAlias[] = [
   { book: "James", aliases: ["jas", "ja", "jm"] },
   { book: "1 Peter", aliases: ["1pet", "1pe", "1pt", "1p"] },
   { book: "2 Peter", aliases: ["2pet", "2pe", "2pt", "2p"] },
-  { book: "1 John", aliases: ["1jn", "1jo", "1joh", "1john"] },
-  { book: "2 John", aliases: ["2jn", "2jo", "2joh", "2john"] },
-  { book: "3 John", aliases: ["3jn", "3jo", "3joh", "3john"] },
+  { book: "1 John", aliases: ["1jn", "1jo", "1joh", "1jhn", "1john"] },
+  { book: "2 John", aliases: ["2jn", "2jo", "2joh", "2jhn", "2john"] },
+  { book: "3 John", aliases: ["3jn", "3jo", "3joh", "3jhn", "3john"] },
   { book: "Jude", aliases: ["jude", "jud", "jd"] },
   { book: "Revelation", aliases: ["rev", "re", "rv"] },
 ];
@@ -230,7 +236,7 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
   if (!raw) return [];
 
   // Normalize: lowercase, collapse whitespace
-  const q = raw.toLowerCase().replace(/\s+/g, " ");
+  const q = normalizeRomanNumberedBookPrefix(raw.toLowerCase().replace(/\s+/g, " "));
 
   // ── Strategy 1: Split into book-part and numbers ──
   // Try to extract a leading book identifier and trailing numbers
@@ -451,7 +457,10 @@ function recoverInvalidExplicitCandidates(
 
   const pushRecovered = (nextChapter: number, nextVerse: number | null, penalty: number) => {
     if (!Number.isFinite(nextChapter) || nextChapter < 1 || nextChapter > maxChapter) return;
-    if (nextVerse !== null && (!Number.isFinite(nextVerse) || nextVerse < 1)) return;
+    if (
+      nextVerse !== null &&
+      (!Number.isFinite(nextVerse) || nextVerse < 1 || nextVerse > MAX_BIBLE_VERSE_NUMBER)
+    ) return;
     const key = `${nextChapter}:${nextVerse ?? ""}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -494,14 +503,23 @@ function parseSingleChapterVerseCandidates(numPart: string): ChapterVerseCandida
   if (parts.length >= 2) {
     const chapter = parseInt(parts[0], 10);
     const verse = parseInt(parts[1], 10);
-    if (chapter === 1 && Number.isFinite(verse) && verse >= 1) {
+    if (
+      chapter === 1 &&
+      Number.isFinite(verse) &&
+      verse >= 1 &&
+      verse <= MAX_BIBLE_VERSE_NUMBER
+    ) {
       return [{ chapter: 1, verse, endVerse: null, confidence: 32 }];
     }
   }
 
   if (parts.length === 1) {
     const verse = parseInt(parts[0], 10);
-    if (Number.isFinite(verse) && verse >= 1) {
+    if (
+      Number.isFinite(verse) &&
+      verse >= 1 &&
+      verse <= MAX_BIBLE_VERSE_NUMBER
+    ) {
       return [{ chapter: 1, verse, endVerse: null, confidence: parts[0].length === 1 ? 26 : 23 }];
     }
   }
@@ -539,6 +557,11 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
     const vs = parseInt(parts[1], 10);
     const endVs = parts.length >= 3 ? parseInt(parts[2], 10) : null;
     if (isNaN(ch)) return [];
+    if (!isNaN(vs) && (vs < 1 || vs > MAX_BIBLE_VERSE_NUMBER)) return [];
+    if (
+      endVs !== null &&
+      (!Number.isFinite(endVs) || endVs < vs || endVs > MAX_BIBLE_VERSE_NUMBER)
+    ) return [];
     return [{
       chapter: ch,
       verse: isNaN(vs) ? null : vs,
@@ -564,7 +587,7 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
 
     const ch = parseInt(chStr, 10);
     const vs = parseInt(vsStr, 10);
-    if (ch < 1 || vs < 1) continue;
+    if (ch < 1 || vs < 1 || vs > MAX_BIBLE_VERSE_NUMBER) continue;
 
     // For 3+ digit numbers (like "316"), the ch:vs split is almost certainly
     // intended → give high confidence to early splits.

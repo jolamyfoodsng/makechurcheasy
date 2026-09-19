@@ -171,7 +171,7 @@ export default function AdminCreditsPage() {
           <p className="mt-2 text-3xl font-black text-slate-50 tabular-nums">
             {formatCurrency(ASSEMBLYAI_PRO_REALTIME_USD_PER_HOUR, "USD")}/hr
           </p>
-          <p className="mt-1 text-sm text-slate-400">AssemblyAI realtime pro reference</p>
+          <p className="mt-1 text-sm text-slate-400">AssemblyAI realtime reference</p>
         </div>
       </div>
 

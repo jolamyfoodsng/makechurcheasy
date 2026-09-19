@@ -16,11 +16,13 @@ export function TrialExpiredUpgradeModal() {
   const pathname = usePathname();
   const { mongoUser, loading } = useAuth();
   const [dismissed, setDismissed] = useState(false);
+  const dismissKey = mongoUser?._id ? `${DISMISSED_KEY}:${mongoUser._id}` : DISMISSED_KEY;
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(DISMISSED_KEY);
+    const stored = sessionStorage.getItem(dismissKey);
     if (stored === "true") setDismissed(true);
-  }, []);
+    else setDismissed(false);
+  }, [dismissKey]);
 
   const shouldShow = useMemo(() => {
     if (loading || !mongoUser || dismissed) return false;
@@ -32,8 +34,8 @@ export function TrialExpiredUpgradeModal() {
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
-    sessionStorage.setItem(DISMISSED_KEY, "true");
-  }, []);
+    sessionStorage.setItem(dismissKey, "true");
+  }, [dismissKey]);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -46,13 +48,12 @@ export function TrialExpiredUpgradeModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="false"
+      className="pointer-events-none fixed inset-x-4 bottom-4 z-[1000] flex justify-center sm:inset-x-auto sm:right-6 sm:w-[min(32rem,calc(100vw-3rem))]"
+      role="status"
       aria-labelledby="trial-expired-title"
       onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="pointer-events-auto relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <button
           type="button"
           onClick={handleDismiss}
@@ -71,11 +72,11 @@ export function TrialExpiredUpgradeModal() {
             id="trial-expired-title"
             className="text-2xl font-bold tracking-tight text-slate-950"
           >
-            Upgrade to continue using MakeChurchEasy
+            Your trial has ended. You are now on the Free plan.
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Your free trial has ended. Choose Growth to keep presentation,
-            broadcast, library, and team tools active for your church.
+            Your account remains available with Free plan limits. Upgrade when
+            you need more presentation, broadcast, library, or team capacity.
           </p>
         </div>
 
@@ -88,8 +89,8 @@ export function TrialExpiredUpgradeModal() {
               <div>
                 <p className="font-semibold text-slate-950">Growth plan</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Clicking upgrade opens the secure Paystack checkout so your
-                  account can continue immediately after payment.
+                  Upgrade opens the secure Paystack checkout. Your account stays
+                  usable on Free until you choose to upgrade.
                 </p>
               </div>
             </div>
@@ -100,7 +101,7 @@ export function TrialExpiredUpgradeModal() {
             onClick={() => router.push(TRIAL_EXPIRED_CHECKOUT_PATH)}
             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            Upgrade to continue
+            View upgrade plans
             <ArrowRight className="h-4 w-4" />
           </button>
 

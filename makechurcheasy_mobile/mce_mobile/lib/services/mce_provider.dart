@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'desktop_service.dart';
 import 'api_service.dart';
 import 'websocket_service.dart';
+import 'mobile_preferences.dart';
 
 /// Simple InheritedWidget-based service locator.
 /// Wrap MaterialApp with MCEProvider to make services available throughout the tree.
@@ -12,20 +15,21 @@ class MCEProvider extends StatefulWidget {
   const MCEProvider({super.key, required this.child});
 
   @override
-  State<MCEProvider> createState() => _MCEProviderState();
+  State<MCEProvider> createState() => MCEProviderState();
 
-  static _MCEProviderState of(BuildContext context) {
-    final state = context.findAncestorStateOfType<_MCEProviderState>();
+  static MCEProviderState of(BuildContext context) {
+    final state = context.findAncestorStateOfType<MCEProviderState>();
     assert(state != null, 'No MCEProvider found in context');
     return state!;
   }
 }
 
-class _MCEProviderState extends State<MCEProvider> {
+class MCEProviderState extends State<MCEProvider> {
   late final AuthService authService;
   late final DesktopService desktopService;
   late final ApiService apiService;
   late final WebSocketService webSocketService;
+  late final MobilePreferences mobilePreferences;
 
   @override
   void initState() {
@@ -37,6 +41,8 @@ class _MCEProviderState extends State<MCEProvider> {
       desktopService: desktopService,
     );
     webSocketService = WebSocketService(desktopService: desktopService);
+    mobilePreferences = MobilePreferences();
+    unawaited(mobilePreferences.load());
   }
 
   @override
@@ -44,20 +50,18 @@ class _MCEProviderState extends State<MCEProvider> {
     webSocketService.dispose();
     authService.dispose();
     desktopService.dispose();
+    mobilePreferences.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return _MCEProviderScope(
-      state: this,
-      child: widget.child,
-    );
+    return _MCEProviderScope(state: this, child: widget.child);
   }
 }
 
 class _MCEProviderScope extends InheritedWidget {
-  final _MCEProviderState state;
+  final MCEProviderState state;
 
   const _MCEProviderScope({required this.state, required super.child});
 
@@ -69,5 +73,8 @@ extension MCEProviderExtension on BuildContext {
   AuthService get authService => MCEProvider.of(this).authService;
   DesktopService get desktopService => MCEProvider.of(this).desktopService;
   ApiService get apiService => MCEProvider.of(this).apiService;
-  WebSocketService get webSocketService => MCEProvider.of(this).webSocketService;
+  WebSocketService get webSocketService =>
+      MCEProvider.of(this).webSocketService;
+  MobilePreferences get mobilePreferences =>
+      MCEProvider.of(this).mobilePreferences;
 }

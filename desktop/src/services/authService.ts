@@ -10,51 +10,111 @@ import {
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { requestJsonWithRetry } from "./requestDedup";
+import {
+  isLocalDevAdmin,
+  isLocalDevelopment,
+  type LocalDevPlanId,
+} from "./localDevPlanOverride";
 
 const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
-const PRODUCTION_DASHBOARD_BASE = "https://makechurcheasy.creatorstudioslabs.stream";
+const PRODUCTION_DASHBOARD_BASE = "https://makechurcheazy.com";
 const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
+const DEFAULT_OVERLAY_PORT = 45678;
+const SESSION_SYNC_TIMEOUT_MS = 1200;
 
 function normalizeApiBase(value: string | undefined): string {
   return (value || PRODUCTION_API_BASE).replace(/\/+$/, "");
 }
 
+/** Pairing codes may be copied with spaces, hyphens, or other visual separators. */
+export function normalizePairingCode(raw: string): string {
+  return raw.normalize("NFKC").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function formatPairingCodeForDisplay(raw: string): string {
+  const normalized = normalizePairingCode(raw);
+  return normalized.length > 4
+    ? `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}`
+    : normalized;
+}
+
 const API_BASE = normalizeApiBase(import.meta.env.VITE_AUTH_API_URL);
 let _activePairingApiBase = API_BASE;
+
+/**
+ * Reset the active pairing API base back to the env-configured API.
+ * Call this when starting a new pairing attempt to ensure the SSE
+ * stream and API calls all target the same server.
+ */
+export function resetPairingApiBase(): void {
+  _activePairingApiBase = API_BASE;
+}
 
 function isLocalApiBase(apiBase: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
 }
 
-function shouldRetryOnProduction(apiBase: string, response?: Response): boolean {
-  if (!isLocalApiBase(apiBase) || apiBase === PRODUCTION_API_BASE) return false;
+function shouldTryNextApiBase(response?: Response): boolean {
   if (!response) return true;
   return response.status === 404 || response.status >= 500;
 }
 
-async function fetchAuthApi(path: string, init?: RequestInit): Promise<{ response: Response; apiBase: string }> {
-  let primaryResponse: Response | null = null;
+function authApiCandidates(): string[] {
+  // An explicit local API is an isolated development environment. Do not
+  // silently authenticate against production when that local server is down.
+  if (isLocalApiBase(API_BASE)) return [API_BASE];
+  return Array.from(new Set([API_BASE, PRODUCTION_API_BASE].map(normalizeApiBase)));
+}
 
-  try {
-    primaryResponse = await fetch(`${API_BASE}${path}`, init);
-    if (!shouldRetryOnProduction(API_BASE, primaryResponse)) {
-      _activePairingApiBase = API_BASE;
-      return { response: primaryResponse, apiBase: API_BASE };
-    }
-  } catch {
-    if (!shouldRetryOnProduction(API_BASE)) {
-      throw new Error("auth_api_unavailable");
+export function resolvePairingApiBaseCandidates(configuredApiBase: string): string[] {
+  // A dashboard-generated code can be created through the dashboard's API
+  // proxy. If the direct API deployment is briefly out of sync, retry the
+  // same request through that proxy before reporting the code as invalid.
+  if (isLocalApiBase(configuredApiBase)) {
+    return Array.from(new Set([configuredApiBase, LOCAL_DASHBOARD_BASE].map(normalizeApiBase)));
+  }
+
+  return Array.from(new Set([
+    configuredApiBase,
+    PRODUCTION_API_BASE,
+    PRODUCTION_DASHBOARD_BASE,
+  ].map(normalizeApiBase)));
+}
+
+function pairingRedeemApiCandidates(): string[] {
+  return resolvePairingApiBaseCandidates(API_BASE);
+}
+
+async function fetchAuthApi(
+  path: string,
+  init?: RequestInit,
+  candidates: string[] = authApiCandidates(),
+): Promise<{ response: Response; apiBase: string }> {
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const apiBase = candidates[index];
+    try {
+      const response = await fetch(`${apiBase}${path}`, init);
+      lastResponse = response;
+      if (!shouldTryNextApiBase(response) || index === candidates.length - 1) {
+        _activePairingApiBase = apiBase;
+        return { response, apiBase };
+      }
+      console.warn("[authService] Auth API %s returned %s; trying fallback.", apiBase, response.status);
+    } catch (error) {
+      lastError = error;
+      if (index === candidates.length - 1) break;
+      console.warn("[authService] Auth API %s unavailable; trying fallback.", apiBase);
     }
   }
 
-  const response = await fetch(`${PRODUCTION_API_BASE}${path}`, init);
-  _activePairingApiBase = PRODUCTION_API_BASE;
-  if (primaryResponse) {
-    console.warn("[authService] Local auth API returned %s; using production auth API.", primaryResponse.status);
-  } else {
-    console.warn("[authService] Local auth API unavailable; using production auth API.");
+  if (lastResponse) {
+    _activePairingApiBase = candidates[candidates.length - 1];
+    return { response: lastResponse, apiBase: _activePairingApiBase };
   }
-  return { response, apiBase: PRODUCTION_API_BASE };
+  throw lastError instanceof Error ? lastError : new Error("auth_api_unavailable");
 }
 
 export function getDashboardBaseForAuth(): string {
@@ -79,6 +139,15 @@ export interface AuthUser {
   plan?: PlanTier;
   effectivePlan?: PlanTier;
   entitlements?: Record<string, number | boolean>;
+  ambassador?: {
+    active?: boolean;
+    grantedBy?: string | null;
+    grantedAt?: string | null;
+    expiresAt?: string | null;
+    creditsGranted?: number;
+    previousPlan?: string;
+    notes?: string;
+  } | null;
   adminTemporaryPlan?: {
     active?: boolean;
     plan?: string;
@@ -98,6 +167,9 @@ export interface AuthUser {
     paymentReference?: string;
   } | null;
   subscriptionExpiresAt?: string | null;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
   trial?: {
     active?: boolean;
     status?: string;
@@ -112,6 +184,7 @@ interface AuthSession {
   user: AuthUser;
   deviceId: string;
   deviceSecret?: string;
+  apiBase?: string;
   expiresAt: number;
 }
 
@@ -132,9 +205,13 @@ interface DeviceBootstrapResponse {
       plan?: string;
       effectivePlan?: string;
       entitlements?: Record<string, number | boolean>;
+      ambassador?: AuthUser["ambassador"];
       adminTemporaryPlan?: AuthUser["adminTemporaryPlan"];
       adminManagedSubscription?: AuthUser["adminManagedSubscription"];
       subscriptionExpiresAt?: string | null;
+      purchaseKind?: AuthUser["purchaseKind"];
+      oneTimeOfferId?: string | null;
+      oneTimeOfferName?: string | null;
       trial?: AuthUser["trial"];
     };
     credits: {
@@ -167,6 +244,24 @@ export type RefreshPlanResult =
   | { status: "network_error" };
 
 const SESSION_KEY = "mce-auth-session";
+// The native Dock settings database is shared by the desktop app and the OBS
+// browser dock. Keep the authenticated user id available to both contexts so
+// they resolve the same settings scope even when the desktop session itself
+// lives in Tauri's secure store instead of page localStorage.
+const DOCK_AUTH_USER_ID_KEY = "mce-dock-auth-user-id";
+
+function syncDockAuthUserId(userId: string | null | undefined): void {
+  try {
+    const normalized = typeof userId === "string" ? userId.trim() : "";
+    if (normalized) {
+      localStorage.setItem(DOCK_AUTH_USER_ID_KEY, normalized);
+    } else {
+      localStorage.removeItem(DOCK_AUTH_USER_ID_KEY);
+    }
+  } catch {
+    // The Dock can still use its device scope if browser storage is restricted.
+  }
+}
 
 // ── Tauri secure store (IPC-backed, not accessible to page JS) ──────────────
 // Session is loaded once from the store into a module-level cache on init().
@@ -227,17 +322,23 @@ export async function initAuthStore(): Promise<void> {
     }
   }
 
+  // Keep the page-visible scope hint in sync even when the real session was
+  // loaded from Tauri's secure store. Without this, the main window used the
+  // device scope while the OBS Dock used the user scope.
+  syncDockAuthUserId(_session?.user?.id);
+
   // Refresh plan from server in the background — never block startup on network.
   // The cached session (with potentially stale plan) is available synchronously
   // from getSession() so the UI renders immediately regardless of connectivity.
   if (_session) {
     if (_session.deviceId) {
       void refreshPlanFromServer().then(() => {
-        syncSessionToOverlay(_session);
+        if (_session) void syncSessionToOverlay(_session);
       });
-    } else {
-      syncSessionToOverlay(_session);
     }
+    // Do not let plan refresh timing decide whether the dock can authenticate.
+    // The cached session itself must reach the local overlay immediately.
+    await syncSessionToOverlay(_session);
   }
 }
 
@@ -253,6 +354,89 @@ export function getDeviceSecret(): string | null {
   return _session?.deviceSecret ?? null;
 }
 
+export function setAuthSession(session: AuthSession | null): void {
+  _session = session;
+  if (session) {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch { /* ignore */ }
+    syncDockAuthUserId(session.user?.id);
+  } else {
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch { /* ignore */ }
+    syncDockAuthUserId(null);
+  }
+}
+
+/**
+ * Push the local simulated plan to the local API backend. The backend keeps
+ * this override in memory and applies it to status, bootstrap, credits, and
+ * entitlement checks. It is never sent to a production API.
+ */
+export async function syncLocalDevPlanOverride(plan: LocalDevPlanId | null): Promise<void> {
+  const session = _session;
+  if (!session || !isLocalDevelopment() || !isLocalDevAdmin(session.user)) return;
+
+  const apiBase = getSessionApiBase();
+  if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase)) return;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Device-Id": session.deviceId,
+  };
+  if (session.deviceSecret) headers["X-Device-Secret"] = session.deviceSecret;
+
+  const response = await fetch(`${apiBase}/api/dev/local-plan`, {
+    method: plan ? "POST" : "DELETE",
+    headers,
+    body: plan ? JSON.stringify({ plan }) : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Local plan backend returned ${response.status}`);
+  }
+
+  // The Dock reads /api/auth/status from the overlay/Vite session, not the
+  // API process's private in-memory override map. Re-sync that session after
+  // the override succeeds so the Dock receives the new plan immediately.
+  await syncSessionToOverlay({
+    ...session,
+    user: {
+      ...session.user,
+      plan: plan ?? session.user.plan,
+      effectivePlan: plan ?? undefined,
+    },
+  });
+}
+
+export function resolveDeviceApiBaseCandidates(sessionApiBase?: string | null): string[] {
+  const primary = normalizeApiBase(sessionApiBase || API_BASE);
+  if (isLocalApiBase(API_BASE) && isLocalApiBase(primary)) return [primary];
+  return Array.from(new Set([
+    primary,
+    PRODUCTION_API_BASE,
+  ].map(normalizeApiBase)));
+}
+
+export function getSessionApiBase(): string {
+  return normalizeApiBase(_session?.apiBase || API_BASE);
+}
+
+export function getDeviceApiBaseCandidates(): string[] {
+  return resolveDeviceApiBaseCandidates(_session?.apiBase);
+}
+
+export async function rememberSessionApiBase(apiBase: string): Promise<void> {
+  if (!_session) return;
+  const normalized = normalizeApiBase(apiBase);
+  if (_session.apiBase === normalized) return;
+  await saveSession({
+    ..._session,
+    apiBase: normalized,
+  });
+}
+
 export async function clearDeviceSecretForRecovery(): Promise<void> {
   if (!_session?.deviceSecret) return;
   await saveSession({
@@ -263,6 +447,7 @@ export async function clearDeviceSecretForRecovery(): Promise<void> {
 
 async function saveSession(session: AuthSession) {
   _session = session;
+  syncDockAuthUserId(session.user?.id);
 
   if (_store) {
     await _store.set(SESSION_KEY, JSON.stringify(session));
@@ -270,7 +455,12 @@ async function saveSession(session: AuthSession) {
   } else {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   }
-  syncSessionToOverlay(session);
+  // The desktop session is ready as soon as it is persisted. The OBS dock
+  // runs in a separate context, so hand off its session in the background; a
+  // missing local overlay endpoint must never hold the desktop on LoginPage.
+  void syncSessionToOverlay(session).catch((error) => {
+    console.warn("[authService] Background overlay session sync failed:", error);
+  });
 }
 
 /**
@@ -313,37 +503,66 @@ export async function syncSessionToOverlay(session: AuthSession | null): Promise
 
   // On logout, clear BOTH the Tauri overlay server AND the Vite file-based
   // server so the dock is blocked regardless of which server it reads from.
-  const clearSession = async (url: string) => {
+  const syncTarget = async (url: string): Promise<boolean> => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), SESSION_SYNC_TIMEOUT_MS);
     try {
-      await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        signal: controller.signal,
       });
-    } catch { /* server may not be running — not critical */ }
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   };
 
-  // Try Tauri first (production)
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const port = await invoke<number>("get_overlay_port");
-    if (port > 0) {
-      // Always sync to BOTH servers — the Tauri overlay server (for dock
-      // running on the Tauri port) AND the Vite file-based server (for dock
-      // running on localhost:1420). Without both, the dock may hit the
-      // server that doesn't have the session.
-      await Promise.allSettled([
-        clearSession(`http://127.0.0.1:${port}/api/auth/session`),
-        clearSession(`${window.location.origin}/api/auth/session`),
-      ]);
-      return;
-    }
-  } catch {
-    // Not running in Tauri
+  const targets = new Set<string>();
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const isHttpLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  if (isHttpLocalOrigin) {
+    // Dev dock pages are served by Vite. Never POST to a tauri:// origin: it
+    // is not an HTTP server and silently loses the handoff.
+    targets.add(`${origin}/api/auth/session`);
   }
 
-  // Fallback: same origin (Vite dev server plugin or production overlay)
-  await clearSession(`${window.location.origin}/api/auth/session`);
+  // Try Tauri first (production). The overlay server can still be starting
+  // while the webview restores the secure store, so retry the command briefly
+  // before falling back to its fixed port.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const port = await invoke<number>("get_overlay_port");
+      if (port > 0) {
+        targets.add(`http://127.0.0.1:${port}/api/auth/session`);
+        break;
+      }
+    } catch {
+      // The OBS browser dock is not a Tauri webview; use the local HTTP
+      // targets above instead.
+      break;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 150 * (attempt + 1)));
+  }
+
+  // Production currently uses a fixed port. This also covers the short
+  // startup window where get_overlay_port has not been populated yet.
+  targets.add(`http://127.0.0.1:${DEFAULT_OVERLAY_PORT}/api/auth/session`);
+
+  const targetList = [...targets];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const results = await Promise.all(targetList.map((target) => syncTarget(target)));
+    if (results.some(Boolean)) return;
+    if (attempt < 2) {
+      await new Promise((resolve) => window.setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+
+  console.warn("[authService] Could not sync the desktop session to the local overlay server");
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -357,6 +576,7 @@ export function isAuthenticated(): boolean {
 export function logout() {
   console.debug("[authService] logout: clearing session (deviceId=%s)", _session?.deviceId);
   _session = null;
+  syncDockAuthUserId(null);
   if (_store) {
     _store.delete(SESSION_KEY).then(() => _store.save()).catch(() => { });
   } else {
@@ -396,31 +616,62 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
   }
 
   try {
-    const bootstrapUrl = `${API_BASE}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
-    const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
-      requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
-        dedupeKey: `account-bootstrap:${_session?.deviceId}:${dedupeSuffix}`,
-        headers: {
-          "X-App-Version": APP_VERSION,
-          ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
-        },
-        retryDelaysMs: [1000, 3000],
-      });
+    const candidates = getDeviceApiBaseCandidates();
+    let response: Response | null = null;
+    let data: DeviceBootstrapResponse | null = null;
+    let successfulApiBase = "";
 
-    let { response, data } = await requestBootstrap(_session.deviceSecret, "primary");
+    for (const apiBase of candidates) {
+      const bootstrapUrl = `${apiBase}/api/device/bootstrap?deviceId=${encodeURIComponent(_session.deviceId)}`;
+      const requestBootstrap = (deviceSecret?: string, dedupeSuffix = "primary") =>
+        requestJsonWithRetry<DeviceBootstrapResponse>(bootstrapUrl, {
+          dedupeKey: `account-bootstrap:${apiBase}:${_session?.deviceId}:${dedupeSuffix}`,
+          headers: {
+            "X-App-Version": APP_VERSION,
+            ...(deviceSecret ? { "X-Device-Secret": deviceSecret } : {}),
+          },
+          retryDelaysMs: [1000, 3000],
+        });
 
-    if (response.status === 401 && _session.deviceSecret) {
-      const message = typeof data?.error === "string" ? data.error : "";
-      if (/invalid device secret/i.test(message)) {
-        const retry = await requestBootstrap(undefined, "secret-recovery");
-        if (retry.response.ok) {
-          await clearDeviceSecretForRecovery();
-          response = retry.response;
-          data = retry.data;
-        } else if (retry.response.status >= 500) {
-          return { status: "network_error" };
+      const primary = await requestBootstrap(_session.deviceSecret, "primary");
+      response = primary.response;
+      data = primary.data;
+
+      if (response.status === 401 && _session.deviceSecret) {
+        const message = typeof data?.error === "string" ? data.error : "";
+        if (/invalid device secret/i.test(message)) {
+          const retry = await requestBootstrap(undefined, "secret-recovery");
+          if (retry.response.ok) {
+            await clearDeviceSecretForRecovery();
+            response = retry.response;
+            data = retry.data;
+          } else if (retry.response.status >= 500) {
+            return { status: "network_error" };
+          }
         }
       }
+
+      if (response.ok) {
+        successfulApiBase = apiBase;
+        break;
+      }
+
+      if (
+        (response.status === 401 || response.status === 404) &&
+        apiBase !== candidates[candidates.length - 1]
+      ) {
+        console.warn(
+          "[authService] Device not found on %s; retrying account bootstrap on production API.",
+          apiBase,
+        );
+        continue;
+      }
+
+      break;
+    }
+
+    if (!response) {
+      return { status: "network_error" };
     }
 
     if (response.status === 403) {
@@ -434,7 +685,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       return { status: "device_removed" };
     }
 
-    if (!response.ok) {
+    if (!response.ok || !data) {
       return { status: "network_error" };
     }
 
@@ -448,6 +699,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
     const normalizedPlan = normalizePlanId(
       remote.effectivePlan || remote.plan || current.effectivePlan || current.plan || "free",
     ) as PlanTier;
+    const remoteHas = (key: keyof typeof remote) => Object.prototype.hasOwnProperty.call(remote, key);
 
     const updatedUser: AuthUser = {
       ...current,
@@ -459,12 +711,16 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       churchName: remote.churchName || current.churchName,
       createdAt: remote.createdAt || current.createdAt,
       role: remote.role || current.role,
-      plan: normalizePlanId(remote.plan || current.plan || normalizedPlan) as PlanTier,
+      plan: normalizedPlan,
       effectivePlan: normalizedPlan,
       entitlements: remote.entitlements || current.entitlements,
-      adminTemporaryPlan: remote.adminTemporaryPlan ?? current.adminTemporaryPlan,
-      adminManagedSubscription: remote.adminManagedSubscription ?? current.adminManagedSubscription,
-      subscriptionExpiresAt: remote.subscriptionExpiresAt ?? current.subscriptionExpiresAt,
+      ambassador: remoteHas("ambassador") ? remote.ambassador ?? null : current.ambassador ?? null,
+      adminTemporaryPlan: remoteHas("adminTemporaryPlan") ? remote.adminTemporaryPlan ?? null : current.adminTemporaryPlan ?? null,
+      adminManagedSubscription: remoteHas("adminManagedSubscription") ? remote.adminManagedSubscription ?? null : current.adminManagedSubscription ?? null,
+      subscriptionExpiresAt: remoteHas("subscriptionExpiresAt") ? remote.subscriptionExpiresAt ?? null : current.subscriptionExpiresAt ?? null,
+      purchaseKind: remoteHas("purchaseKind") ? remote.purchaseKind ?? "subscription" : current.purchaseKind ?? "subscription",
+      oneTimeOfferId: remoteHas("oneTimeOfferId") ? remote.oneTimeOfferId ?? null : current.oneTimeOfferId ?? null,
+      oneTimeOfferName: remoteHas("oneTimeOfferName") ? remote.oneTimeOfferName ?? null : current.oneTimeOfferName ?? null,
       trial: resolveBootstrappedTrial(remote, current),
     };
 
@@ -480,8 +736,11 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       );
       await saveSession({
         ..._session,
+        apiBase: successfulApiBase || getSessionApiBase(),
         user: updatedUser,
       });
+    } else if (successfulApiBase) {
+      await rememberSessionApiBase(successfulApiBase);
     }
 
     if (typeof remoteAccount?.credits?.remaining === "number") {
@@ -559,16 +818,22 @@ export async function createPairingCode(
         fingerprintHash,
       }),
     });
-    if (res.status === 403) {
+    if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      if (body.error === "VERSION_TOO_OLD") {
+      if (res.status === 403 && body.error === "VERSION_TOO_OLD") {
         return { error: body.message || "This version is no longer supported. Please update.", versionBlocked: true };
       }
+      return {
+        error:
+          body.message ||
+          body.error ||
+          `Failed to create pairing code. Please try again. (${res.status})`,
+      };
     }
-    if (!res.ok) return { error: "Failed to create pairing code" };
     const data = await res.json();
-    _lastPairingCode = data.code;
-    return data;
+    const normalizedCode = normalizePairingCode(data.code || "");
+    _lastPairingCode = normalizedCode;
+    return { ...data, code: normalizedCode };
   } catch {
     return { error: "Connection failed. Is the server running?" };
   }
@@ -588,22 +853,39 @@ export async function redeemPairingCode(
 > {
   try {
     const os = detectOS();
+    let installationId: string | undefined;
+    let fingerprintHash: string | undefined;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const fp = await invoke<{ installationId: string; fingerprintHash: string }>("get_device_fingerprint");
+      installationId = fp.installationId;
+      fingerprintHash = fp.fingerprintHash;
+    } catch {
+      // Browser/dev fallback: the server will refuse to start a new trial
+      // without the durable desktop identity, but pairing can still proceed.
+    }
     const { response: res } = await fetchAuthApi("/api/pairing/redeem", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-App-Version": APP_VERSION,
       },
-      body: JSON.stringify({ code: code.toUpperCase(), deviceName: os }),
-    });
+      body: JSON.stringify({
+        code: normalizePairingCode(code),
+        deviceName: os,
+        installationId,
+        fingerprintHash,
+      }),
+    }, pairingRedeemApiCandidates());
 
     const data = await res.json();
 
     if (!res.ok) {
-      if (res.status === 404) return { success: false, error: "Invalid code. Please check and try again.", code: "invalid" };
+      if (res.status === 404) return { success: false, error: "Pairing code not found on the connected server. Generate a new code and try again.", code: "invalid" };
       if (res.status === 410) return { success: false, error: data.error === "Code already used" ? "This code has already been used. Generate a new one." : "This code has expired. Generate a new one.", code: data.error === "Code already used" ? "already_used" : "expired" };
       if (res.status === 403 && data.error === "email_not_verified") return { success: false, error: "Please verify your email address before pairing.", code: "email_not_verified" };
       if (res.status === 403 && data.error === "device_limit_reached") return { success: false, error: data.message || "Device limit reached.", code: "device_limit_reached" };
+      if (res.status === 403 && data.error === "trial_already_claimed") return { success: false, error: data.message || "This device has already used its free trial. Please subscribe to continue.", code: "trial_already_claimed" };
       return { success: false, error: data.error || "Failed to pair device. Please try again." };
     }
 
@@ -621,7 +903,15 @@ export async function redeemPairingCode(
         plan: data.user.plan || "free",
         role: data.user.role || "user",
         trial: data.user.trial || undefined,
+        ambassador: data.user.ambassador || undefined,
+        adminTemporaryPlan: data.user.adminTemporaryPlan || undefined,
+        adminManagedSubscription: data.user.adminManagedSubscription || undefined,
+        subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
       }) as PlanTier,
+      ambassador: data.user.ambassador || null,
+      adminTemporaryPlan: data.user.adminTemporaryPlan || null,
+      adminManagedSubscription: data.user.adminManagedSubscription || null,
+      subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
     };
 
@@ -629,6 +919,7 @@ export async function redeemPairingCode(
       user: authUser,
       deviceId: data.deviceId,
       deviceSecret: data.deviceSecret || undefined,
+      apiBase: _activePairingApiBase,
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 
@@ -658,18 +949,29 @@ export function watchPairingStatus(
   }
 ): () => void {
   const os = detectOS();
-  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(code)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const url = `${_activePairingApiBase}/api/pairing/stream?code=${encodeURIComponent(normalizedCode)}&v=${encodeURIComponent(APP_VERSION)}&os=${encodeURIComponent(os)}`;
+  console.log("[authService] watchPairingStatus connecting to:", url);
   const es = new EventSource(url);
   let settled = false;
+
+  es.onopen = () => console.log("[authService] EventSource onopen — readyState:", es.readyState);
+  es.onerror = (e) => console.log("[authService] EventSource onerror — readyState:", es.readyState, "event:", e.type);
 
   function finish(callback: () => void): void {
     if (settled) return;
     settled = true;
+    console.log("[authService] finish() — closing EventSource");
     es.close();
     callback();
   }
 
-  es.addEventListener("authorized", (e: MessageEvent) => {
+  es.addEventListener("connected", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'connected' event:", e.data);
+  });
+
+  es.addEventListener("authorized", async (e: MessageEvent) => {
+    console.log("[authService] SSE received authorized event");
     const data = JSON.parse(e.data);
     const authUser: AuthUser = {
       id: data.user.id,
@@ -685,16 +987,31 @@ export function watchPairingStatus(
         plan: data.user.plan || "free",
         role: data.user.role || "user",
         trial: data.user.trial || undefined,
+        ambassador: data.user.ambassador || undefined,
+        adminTemporaryPlan: data.user.adminTemporaryPlan || undefined,
+        adminManagedSubscription: data.user.adminManagedSubscription || undefined,
+        subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
       }) as PlanTier,
+      ambassador: data.user.ambassador || null,
+      adminTemporaryPlan: data.user.adminTemporaryPlan || null,
+      adminManagedSubscription: data.user.adminManagedSubscription || null,
+      subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
     };
 
-    saveSession({
-      user: authUser,
-      deviceId: data.deviceId,
-      deviceSecret: data.deviceSecret || undefined,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    try {
+      // Persist the desktop session before notifying the UI. The overlay handoff
+      // continues in the background and is independent of desktop navigation.
+      await saveSession({
+        user: authUser,
+        deviceId: data.deviceId,
+        deviceSecret: data.deviceSecret || undefined,
+        apiBase: _activePairingApiBase,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
+    } catch (error) {
+      console.error("[authService] Failed to sync authorized session to the dock:", error);
+    }
 
     // Code consumed — clear tracked reference
     _lastPairingCode = null;
@@ -702,11 +1019,13 @@ export function watchPairingStatus(
     finish(() => callbacks.onAuthorized(authUser, data.deviceId));
   });
 
-  es.addEventListener("expired", () => {
+  es.addEventListener("expired", (e) => {
+    console.log("[authService] SSE received 'expired' event:", e);
     finish(callbacks.onExpired);
   });
 
   es.addEventListener("version-blocked", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'version-blocked' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onVersionBlocked?.(data.message || "This version is no longer supported. Please update.");
@@ -714,6 +1033,7 @@ export function watchPairingStatus(
   });
 
   es.addEventListener("verification_required", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'verification_required' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onVerificationRequired?.(
@@ -725,10 +1045,17 @@ export function watchPairingStatus(
   });
 
   es.addEventListener("device_limit_reached", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'device_limit_reached' event:", e.data);
     const data = JSON.parse(e.data);
     finish(() => {
       callbacks.onError(data.message || "Device limit reached. Remove an old device or upgrade your plan.");
     });
+  });
+
+  es.addEventListener("trial_unavailable", (e: MessageEvent) => {
+    console.log("[authService] SSE received 'trial_unavailable' event:", e.data);
+    const data = JSON.parse(e.data);
+    finish(() => callbacks.onError(data.message || "This device has already used its free trial. Please subscribe to continue."));
   });
 
   es.addEventListener("error", (e: MessageEvent | Event) => {
@@ -736,6 +1063,7 @@ export function watchPairingStatus(
     const msg = "data" in e
       ? JSON.parse(e.data).message || "Connection lost"
       : "Connection lost";
+    console.log("[authService] SSE error:", msg);
     finish(() => callbacks.onError(msg));
   });
 
@@ -770,7 +1098,7 @@ export async function resendVerificationEmail(
     const { response: res } = await fetchAuthApi("/api/pairing/resend-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, "") }),
     });
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Failed to resend" };
@@ -792,7 +1120,7 @@ export async function checkVerificationStatus(
     const { response: res } = await fetchAuthApi("/api/pairing/check-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code: code.toUpperCase().replace(/[^A-Z0-9]/g, "") }),
     });
     const data = await res.json();
     if (!res.ok) return { verified: false, error: data.error || "Failed to check" };

@@ -68,8 +68,10 @@ import {
   Droplets,
   Eye,
   EyeOff,
+  File,
   Film,
   Filter,
+  Folder,
   Gauge,
   Globe,
   GripHorizontal,
@@ -84,8 +86,10 @@ import {
   Image,
   ImageMinus,
   ImagePlus,
+  Inbox,
   Infinity,
   Info,
+  Italic,
   Keyboard,
   Layers,
   LayoutDashboard,
@@ -205,6 +209,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   cancel: CircleX,
   open_in_new: Globe,
   home: Home,
+  language: Globe,
 
   /* CRUD */
   add: Plus,
@@ -214,10 +219,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   add_photo_alternate: ImagePlus,
   edit: Pencil,
   edit_note: Pencil,
-  delete: Delete,
-  delete_outline: Delete,
+  delete: Trash2,
+  delete_outline: Trash2,
   delete_forever: Trash2,
   delete_sweep: Trash2,
+  backspace: Delete,
   archive: Archive,
   remove: Minus,
   save: Save,
@@ -281,6 +287,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   format_align_left: AlignLeft,
   format_align_center: AlignCenter,
   format_align_right: AlignRight,
+  format_color_text: Palette,
+  format_italic: Italic,
 
   /* Media */
   play_arrow: Play,
@@ -301,6 +309,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   no_photography: ImageMinus,
   perm_media: ImagePlus,
   photo_library: Image,
+  move_to_inbox: Inbox,
   wallpaper: Wallpaper,
   music_note: Music,
   music_off: MicOff,
@@ -316,6 +325,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   /* Monitor / Preview */
   monitor: Monitor,
   monitor_heart: MonitorSmartphone,
+  phonelink_ring: MonitorSmartphone,
   desktop_access_disabled: MonitorOff,
   tv: Tv,
   tv_off: MonitorOff,
@@ -392,6 +402,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   install_desktop: Download,
 
   /* Files */
+  folder: Folder,
+  insert_drive_file: File,
+  description: File,
   content_copy: Copy,
   content_paste: Clipboard,
   cloud_upload: CloudUpload,
@@ -444,6 +457,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   podcasts: Podcast,
   record_voice_over: Podcast,
   wifi: Wifi,
+  wifi_off: WifiOff,
   wifi_tethering: WifiOff,
 
   /* Specialised */

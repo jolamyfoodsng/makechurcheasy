@@ -8,10 +8,180 @@
 
 import type { MediaItem } from "./libraryTypes";
 import { getCurrentUserId } from "../services/db";
+import { getOverlayBaseUrl } from "../services/overlayUrl";
+import { isInternalDockUploadFile } from "../dock/internalMediaAssets";
+import { compareMediaItemsNewest, getUploadTimestampFromFileName } from "./mediaOrdering";
 
 const DB_NAME = "obs-church-studio-media-library";
 const STORE_NAME = "media";
 const DB_VERSION = 2;
+const MEDIA_UPLOAD_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp",
+  "mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv",
+  "mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus",
+]);
+const AUDIO_UPLOAD_EXTENSIONS = new Set([
+  "mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus",
+]);
+const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
+
+function getUploadMediaType(fileName: string): MediaItem["type"] | null {
+  const extension = fileName.split(".").pop()?.toLowerCase() || "";
+  if (!MEDIA_UPLOAD_EXTENSIONS.has(extension)) return null;
+  if (["mp4", "m4v", "webm", "mov", "avi", "mkv", "wmv", "flv"].includes(extension)) {
+    return "video";
+  }
+  if (AUDIO_UPLOAD_EXTENSIONS.has(extension)) return "audio";
+  return "image";
+}
+
+function isInternalUploadFile(fileName: string): boolean {
+  const normalized = fileName.split(/[\\/]/).pop()?.toLowerCase() || "";
+  return isInternalDockUploadFile(fileName)
+    || INTERNAL_UPLOAD_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function normalizeManagedUploadFileName(fileName: string | undefined): string | null {
+  const candidate = String(fileName || "").trim();
+  if (!candidate || candidate === "." || candidate === "..") return null;
+  if (candidate.includes("/") || candidate.includes("\\") || candidate.includes("\0")) return null;
+  if (isInternalUploadFile(candidate)) return null;
+  return candidate;
+}
+
+/**
+ * Return the exact basename for a user-uploaded file managed by MCE.
+ * Only files in the root uploads folder are eligible here; generated template
+ * assets and arbitrary local paths must never be removed by a media delete.
+ */
+export function getManagedUploadFileName(
+  item: Pick<MediaItem, "diskFileName" | "filePath" | "source">,
+): string | null {
+  if (item.source === "template-cloudflare") return null;
+
+  if (item.diskFileName?.trim()) {
+    return normalizeManagedUploadFileName(item.diskFileName);
+  }
+
+  const normalizedPath = String(item.filePath || "").trim().replace(/\\/g, "/");
+  const match = normalizedPath.match(/(?:^|\/)uploads\/([^/]+)$/i);
+  return normalizeManagedUploadFileName(match?.[1]);
+}
+
+/** Delete a user-uploaded media file from the shared uploads folder. */
+export async function deleteUploadedMediaFile(fileName: string): Promise<void> {
+  const safeName = normalizeManagedUploadFileName(fileName);
+  if (!safeName) return;
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("delete_upload_file", { fileName: safeName });
+    return;
+  } catch {
+    // The OBS dock runs outside Tauri. Use the shared overlay server there.
+  }
+
+  const baseUrl = await getOverlayBaseUrl();
+  const response = await fetch(
+    `${baseUrl}/api/delete-upload?fileName=${encodeURIComponent(safeName)}`,
+    { method: "DELETE", cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Could not delete uploaded media (${response.status})`);
+  }
+}
+
+function getUploadDisplayName(fileName: string): string {
+  return fileName.replace(/^media_\d{10,13}_/, "");
+}
+
+function getUploadCreatedAt(fileName: string, fallback: string): string {
+  return getUploadTimestampFromFileName(fileName) || fallback;
+}
+
+/**
+ * Dock uploads are written from an OBS browser origin, so that origin has a
+ * separate IndexedDB database from the main desktop window. The uploads
+ * folder is the shared physical source of truth; discover its media files so
+ * every surface can reconcile the same library.
+ */
+interface UploadedMediaDiscovery {
+  items: MediaItem[];
+  listingAvailable: boolean;
+}
+
+async function discoverUploadedMedia(): Promise<UploadedMediaDiscovery> {
+  try {
+    const baseUrl = await getOverlayBaseUrl();
+    const [uploadsResponse, directoryResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/uploads`, { cache: "no-store" }),
+      fetch(`${baseUrl}/api/uploads-dir`, { cache: "no-store" }),
+    ]);
+    if (!uploadsResponse.ok) return { items: [], listingAvailable: false };
+
+    const files = await uploadsResponse.json();
+    if (!Array.isArray(files)) return { items: [], listingAvailable: false };
+    const directoryPayload = directoryResponse.ok
+      ? await directoryResponse.json() as { path?: string }
+      : {};
+    const directory = typeof directoryPayload.path === "string"
+      ? directoryPayload.path.trim()
+      : "";
+    const separator = directory.includes("\\") ? "\\" : "/";
+
+    const discoveredAt = Date.now();
+    const items = files
+      .filter((value): value is string => typeof value === "string")
+      .filter((fileName) => Boolean(getUploadMediaType(fileName)) && !isInternalUploadFile(fileName))
+      .map((fileName, index) => {
+        const type = getUploadMediaType(fileName)!;
+        const fallbackCreatedAt = new Date(discoveredAt - index).toISOString();
+        const uploadedAt = getUploadCreatedAt(fileName, fallbackCreatedAt);
+        return {
+          id: `upload:${fileName}`,
+          name: getUploadDisplayName(fileName),
+          type,
+          url: `${baseUrl}/uploads/${encodeURIComponent(fileName)}`,
+          ...(directory ? { filePath: `${directory}${separator}${fileName}` } : {}),
+          diskFileName: fileName,
+          createdAt: uploadedAt,
+          uploadedAt,
+          source: "local" as const,
+        } satisfies MediaItem;
+      });
+    return { items, listingAvailable: true };
+  } catch (error) {
+    console.warn("[libraryDb] Failed to discover shared uploads:", error);
+    return { items: [], listingAvailable: false };
+  }
+}
+
+function mergeMediaItems(
+  stored: MediaItem[],
+  discovered: MediaItem[],
+  listingAvailable: boolean,
+): MediaItem[] {
+  const result = new Map<string, MediaItem>();
+  const discoveredFileNames = new Set(discovered.map((item) => item.diskFileName).filter(Boolean));
+  const reconciledStored = listingAvailable
+    ? stored.filter((item) => (
+      !item.diskFileName
+      || !getManagedUploadFileName(item)
+      || discoveredFileNames.has(item.diskFileName)
+    ))
+    : stored;
+  for (const item of [...reconciledStored, ...discovered]) {
+    const key = item.diskFileName || item.filePath || item.id;
+    const existing = result.get(key);
+    // A record may arrive from both IndexedDB and the shared uploads folder.
+    // Keep the one with the real upload marker/date instead of whichever
+    // async source happened to be processed first.
+    if (!existing || compareMediaItemsNewest(item, existing) < 0) {
+      result.set(key, item);
+    }
+  }
+  return Array.from(result.values()).sort(compareMediaItemsNewest);
+}
 
 // ---------------------------------------------------------------------------
 // IndexedDB Helpers
@@ -117,10 +287,11 @@ export async function getAllMedia(): Promise<MediaItem[]> {
   // Fire migration in background - don't block on it
   migrateFromLocalStorageIfNeeded().catch(() => { });
 
+  let storedItems: MediaItem[] = [];
   try {
     const db = await openDb();
     const uid = getCurrentUserId();
-    const items = await new Promise<MediaItem[]>((resolve, reject) => {
+    storedItems = await new Promise<MediaItem[]>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       let request: IDBRequest;
@@ -133,14 +304,16 @@ export async function getAllMedia(): Promise<MediaItem[]> {
       request.onsuccess = () => resolve(request.result as MediaItem[]);
       request.onerror = () => reject(request.error);
     });
-
-    return items.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
   } catch (err) {
     console.warn("[libraryDb] Failed to read media from IndexedDB:", err);
-    return [];
   }
+
+  // Dock uploads can be created from a separate browser origin and therefore
+  // do not necessarily have an IndexedDB record in this window. Reconcile the
+  // shared uploads folder on every read so the desktop library, Dock, and
+  // mobile companion all see the same media inventory.
+  const discovered = await discoverUploadedMedia();
+  return mergeMediaItems(storedItems, discovered.items, discovered.listingAvailable);
 }
 
 /** Save (create or update) a media item — auto-injects userId */
@@ -162,6 +335,17 @@ export async function saveMedia(item: MediaItem): Promise<void> {
 
 /** Delete a media item by id */
 export async function deleteMedia(id: string): Promise<void> {
+  const items = await getAllMedia();
+  const target = items.find((item) => item.id === id);
+  const uploadFileName = target
+    ? getManagedUploadFileName(target)
+    : id.startsWith("upload:")
+      ? normalizeManagedUploadFileName(id.slice("upload:".length))
+      : null;
+  if (uploadFileName) {
+    await deleteUploadedMediaFile(uploadFileName);
+  }
+
   await withStore("readwrite", (store) => store.delete(id));
 
   // Sync to dock (fire-and-forget, non-blocking)
@@ -211,6 +395,14 @@ export async function syncMediaToDock(): Promise<void> {
 
 /** Clear all media items for the current user (scoped by userId) */
 export async function clearAllMedia(): Promise<void> {
+  const items = await getAllMedia();
+  await Promise.all(
+    items.flatMap((item) => {
+      const fileName = getManagedUploadFileName(item);
+      return fileName ? [deleteUploadedMediaFile(fileName)] : [];
+    }),
+  );
+
   const db = await openDb();
   const uid = getCurrentUserId();
   await new Promise<void>((resolve, reject) => {

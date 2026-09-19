@@ -10,6 +10,10 @@ export interface ConceptEntry {
 
 export const CONCEPT_INDEX: ConceptEntry[] = [
   {
+    keywords: ["jacob", "esau", "election", "chosen", "predestination", "hated", "hate"],
+    verses: ["Romans 9:10", "Romans 9:11", "Romans 9:12", "Romans 9:13", "Malachi 1:2", "Malachi 1:3"],
+  },
+  {
     keywords: ["future", "plans", "hope", "tomorrow", "destiny", "purpose"],
     verses: ["Jeremiah 29:11", "Isaiah 43:18", "Isaiah 43:19", "Philippians 3:13", "Philippians 3:14", "Ephesians 2:10"],
   },
@@ -58,7 +62,7 @@ export const CONCEPT_INDEX: ConceptEntry[] = [
     verses: ["Proverbs 3:5", "Psalm 119:105", "Psalm 32:8", "Isaiah 30:21", "John 16:13"],
   },
   {
-    keywords: ["healing", "heal", "restore", "recovery", "wholeness"],
+    keywords: ["healing", "heal", "healed", "restore", "recovery", "wholeness", "stripes", "wounded"],
     verses: ["Jeremiah 30:17", "Psalm 103:3", "Isaiah 53:5", "James 5:16", "3 John 1:2"],
   },
   {
@@ -98,7 +102,7 @@ export const CONCEPT_INDEX: ConceptEntry[] = [
     verses: ["Matthew 6:33", "Jeremiah 29:13", "Proverbs 8:17", "Deuteronomy 4:29", "Matthew 7:7"],
   },
   {
-    keywords: ["separate", "separated", "apart", "distance", "abandon", "forsake"],
+    keywords: ["separate", "separated", "apart", "distance", "abandon", "forsake", "leave", "never leave"],
     verses: ["Romans 8:38", "Romans 8:39", "Hebrews 13:5", "Deuteronomy 31:6", "Psalm 27:10"],
   },
   {

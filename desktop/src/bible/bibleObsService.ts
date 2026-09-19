@@ -11,6 +11,7 @@
 import { obsService } from "../services/obsService";
 import { obsSyncService } from "../services/obsSyncService";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { buildVersionedOverlayUrl } from "../services/overlayVersion";
 import {
   registerInput,
   registerSceneItem,
@@ -116,6 +117,13 @@ class BibleObsService {
     const modeVar = displayMode ? ` --display-mode: "${displayMode}";` : "";
     const overlayCss = `:root { --overlay-data: "${encodedPacket}";${modeVar} }`;
     return customCss ? `${overlayCss}\n${customCss}` : overlayCss;
+  }
+
+  private getBibleOverlayUrl(templateType?: BibleTemplateType): string {
+    return buildVersionedOverlayUrl(getOverlayBaseUrlSync(), "mce-bible-overlay.html", {
+      tab: "bible",
+      mode: templateType,
+    });
   }
 
   private buildThemePayload(theme: BibleThemeSettings | null): {
@@ -922,9 +930,11 @@ class BibleObsService {
     blanked: boolean,
     templateType?: BibleTemplateType
   ): Promise<void> {
+    const effectiveTheme = theme ?? this._liveTheme;
+
     // ── Track live state in singleton (survives React unmounts) ──
     this._liveSlide = slide;
-    this._liveTheme = theme;
+    this._liveTheme = effectiveTheme;
     this._isLive = live;
     this._isBlanked = blanked;
     if (templateType) this._liveTemplateType = templateType;
@@ -935,7 +945,7 @@ class BibleObsService {
     }
 
     // Push to overlay broadcaster (for same-origin windows / BroadcastChannel)
-    overlayBroadcaster.pushSlide(slide, theme, live, blanked);
+    overlayBroadcaster.pushSlide(slide, effectiveTheme, live, blanked);
 
     // If OBS is connected, update the browser source content without forcing
     // a page reload on every verse change.
@@ -955,7 +965,7 @@ class BibleObsService {
       // Instead, we let the SetInputSettings call below fail naturally, and only
       // attempt recovery if it indicates the source is missing.
       try {
-        const { themeForHash, customCss } = this.buildThemePayload(theme);
+        const { themeForHash, customCss } = this.buildThemePayload(effectiveTheme);
 
         const packet = {
           slide,
@@ -964,9 +974,7 @@ class BibleObsService {
           blanked,
           timestamp: Date.now(),
         };
-        const base = getOverlayBaseUrlSync();
-        const overlayFile = "mce-bible-overlay.html";
-        const baseUrl = `${base}/${overlayFile}`;
+        const baseUrl = this.getBibleOverlayUrl(this.currentTemplateType);
         const overlayCss = this.buildOverlayDataCss(
           packet as unknown as Record<string, unknown>,
           customCss || "",
@@ -1027,16 +1035,16 @@ class BibleObsService {
         // • Image background → save to disk, use OBS image_source
         // • Solid color → use OBS color_source_v3
         // Switches source type when needed (e.g. color → image or vice versa).
-        if (theme) {
+        if (effectiveTheme) {
           try {
-            const isSvgDataImage = !!(theme.backgroundImage && /^data:image\/svg\+xml/i.test(theme.backgroundImage));
-            const hasImage = !!(theme.backgroundImage && theme.backgroundImage.startsWith("data:") && !isSvgDataImage);
-            const hasGradient = !!(theme.backgroundColorEnd && theme.backgroundColorEnd !== theme.backgroundColor);
+            const isSvgDataImage = !!(effectiveTheme.backgroundImage && /^data:image\/svg\+xml/i.test(effectiveTheme.backgroundImage));
+            const hasImage = !!(effectiveTheme.backgroundImage && effectiveTheme.backgroundImage.startsWith("data:") && !isSvgDataImage);
+            const hasGradient = !!(effectiveTheme.backgroundColorEnd && effectiveTheme.backgroundColorEnd !== effectiveTheme.backgroundColor);
             const bgFingerprint = hasImage
-              ? `image:${this._simpleHash(theme.backgroundImage)}`
+              ? `image:${this._simpleHash(effectiveTheme.backgroundImage)}`
               : isSvgDataImage
-                ? `css-image:${this._simpleHash(theme.backgroundImage || "")}`
-                : `color:${(theme.backgroundColor || "#000000").toLowerCase()}:${theme.backgroundOpacity ?? 1}:${hasGradient ? "gradient" : "solid"}`;
+                ? `css-image:${this._simpleHash(effectiveTheme.backgroundImage || "")}`
+                : `color:${(effectiveTheme.backgroundColor || "#000000").toLowerCase()}:${effectiveTheme.backgroundOpacity ?? 1}:${hasGradient ? "gradient" : "solid"}`;
 
             if (bgFingerprint !== this._lastBgFingerprint) {
               // BG source lives inside the overlay scene, not the target scene
@@ -1046,7 +1054,7 @@ class BibleObsService {
                 // ── IMAGE BACKGROUND ──
                 // Save the base64 data URL to disk, get the absolute file path,
                 // then point an OBS image_source at it.
-                const filePath = await this.saveBgImageToDisk(theme.backgroundImage);
+                const filePath = await this.saveBgImageToDisk(effectiveTheme.backgroundImage);
 
                 if (this._currentBgKind !== "image") {
                   // Need to switch from color_source_v3 → image_source
@@ -1069,12 +1077,12 @@ class BibleObsService {
                 // ── SOLID COLOR BACKGROUND ──
                 // When gradient mode is active, the browser source renders the
                 // gradient via CSS — the OBS color source must be transparent.
-                const gradientActive = !!(theme.backgroundColorEnd && theme.backgroundColorEnd !== theme.backgroundColor);
+                const gradientActive = !!(effectiveTheme.backgroundColorEnd && effectiveTheme.backgroundColorEnd !== effectiveTheme.backgroundColor);
                 const obsColor = gradientActive
                   ? 0x00000000
                   : this.hexToObsColor(
-                    theme.backgroundColor || "#000000",
-                    theme.backgroundOpacity ?? 1
+                    effectiveTheme.backgroundColor || "#000000",
+                    effectiveTheme.backgroundOpacity ?? 1
                   );
 
                 if (this._currentBgKind !== "color") {
@@ -1109,7 +1117,7 @@ class BibleObsService {
 
           // ── Update dup BG safety source to match theme color ──
           try {
-            await this.updateDupBgColor(BIBLE_SCENE_NAME, theme);
+            await this.updateDupBgColor(BIBLE_SCENE_NAME, effectiveTheme);
           } catch (dupErr) {
             console.warn("[BibleOBS] Failed to update dup BG:", dupErr);
           }

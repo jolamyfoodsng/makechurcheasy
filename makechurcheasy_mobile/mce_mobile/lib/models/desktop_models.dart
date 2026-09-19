@@ -8,6 +8,7 @@ class DesktopInfo {
   final String? obsVersion;
   final String? computerName;
   final String? church;
+  final String? pairingToken;
 
   const DesktopInfo({
     required this.desktopId,
@@ -18,6 +19,7 @@ class DesktopInfo {
     this.obsVersion,
     this.computerName,
     this.church,
+    this.pairingToken,
   });
 
   factory DesktopInfo.fromJson(Map<String, dynamic> json) {
@@ -30,19 +32,21 @@ class DesktopInfo {
       obsVersion: json['obsVersion'] as String?,
       computerName: json['computerName'] as String?,
       church: json['church'] as String?,
+      pairingToken: json['pairingToken'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'desktopId': desktopId,
-        if (name != null) 'name': name,
-        if (ip != null) 'ip': ip,
-        if (wsPort != null) 'wsPort': wsPort,
-        if (apiPort != null) 'apiPort': apiPort,
-        if (obsVersion != null) 'obsVersion': obsVersion,
-        if (computerName != null) 'computerName': computerName,
-        if (church != null) 'church': church,
-      };
+    'desktopId': desktopId,
+    if (name != null) 'name': name,
+    if (ip != null) 'ip': ip,
+    if (wsPort != null) 'wsPort': wsPort,
+    if (apiPort != null) 'apiPort': apiPort,
+    if (obsVersion != null) 'obsVersion': obsVersion,
+    if (computerName != null) 'computerName': computerName,
+    if (church != null) 'church': church,
+    if (pairingToken != null) 'pairingToken': pairingToken,
+  };
 
   /// Backward compat — the generic `port` maps to wsPort.
   int? get port => wsPort;
@@ -67,18 +71,18 @@ class DesktopPairingData {
   factory DesktopPairingData.fromJson(Map<String, dynamic> json) {
     return DesktopPairingData(
       ip: json['ip'] as String,
-      wsPort: json['wsPort'] as int? ?? 8765,
+      wsPort: (json['wsPort'] as int?) ?? (json['port'] as int?) ?? 8765,
       apiPort: json['apiPort'] as int? ?? 45678,
-      pairingToken: json['pairingToken'] as String,
+      pairingToken: (json['pairingToken'] ?? json['pairingCode']) as String,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'ip': ip,
-        'wsPort': wsPort,
-        'apiPort': apiPort,
-        'pairingToken': pairingToken,
-      };
+    'ip': ip,
+    'wsPort': wsPort,
+    'apiPort': apiPort,
+    'pairingToken': pairingToken,
+  };
 }
 
 /// UDP beacon payload broadcast by the desktop on port 9999.
@@ -86,11 +90,17 @@ class UdpBeacon {
   final String service;
   final int port;
   final String? version;
+  final int? apiPort;
+  final String? desktopName;
+  final String? pairingToken;
 
   const UdpBeacon({
     required this.service,
     required this.port,
     this.version,
+    this.apiPort,
+    this.desktopName,
+    this.pairingToken,
   });
 
   factory UdpBeacon.fromJson(Map<String, dynamic> json) {
@@ -98,6 +108,9 @@ class UdpBeacon {
       service: json['service'] as String? ?? '',
       port: json['port'] as int? ?? 8765,
       version: json['version'] as String?,
+      apiPort: json['apiPort'] as int?,
+      desktopName: json['desktopName'] as String?,
+      pairingToken: json['pairingToken'] as String?,
     );
   }
 }

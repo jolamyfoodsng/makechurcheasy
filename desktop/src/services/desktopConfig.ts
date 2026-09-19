@@ -1,22 +1,44 @@
 /**
- * desktopConfig.ts — Fetches desktop-specific platform configuration from the API.
+ * desktopConfig.ts — Fetches desktop bootstrap configuration from the API.
  *
  * Follows the same caching pattern as planConfig.ts:
  * - Serves from cache if fresh (5 min TTL)
  * - Stale-while-revalidate: serves cache, refreshes in background
- * - Falls back to DEFAULT_DESKTOP_CONFIG when offline
+ * - Uses the authenticated license heartbeat when a device is paired so one
+ *   response also carries license, health, and announcements
+ * - Falls back to the public config endpoint and DEFAULT_DESKTOP_CONFIG when offline
  * - Deduplicates concurrent fetches via module-level promise
  */
 
 import { DEFAULT_DESKTOP_CONFIG, type DesktopConfig } from "./desktopConfigTypes";
+import { APP_VERSION, getDeviceApiBaseCandidates, getDeviceId, getDeviceSecret } from "./authService";
+import type { DesktopAnnouncement, ActiveDiscountInfo } from "./announcementService";
 
 // Re-export for backward compatibility
-export type { DesktopConfig };
+export type { DesktopConfig, ActiveDiscountInfo };
 export { DEFAULT_DESKTOP_CONFIG };
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
 const CACHE_KEY = "mce_desktop_config";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export interface DesktopBootstrapResponse {
+  health?: { status?: string };
+  license?: unknown;
+  config?: DesktopConfig | null;
+  announcement?: DesktopAnnouncement | null;
+  nextAvailableAt?: string | null;
+}
+
+interface BootstrapCacheEntry {
+  response: DesktopBootstrapResponse;
+  deviceId: string;
+  fetchedAt: number;
+}
+
+const BOOTSTRAP_CACHE_TTL_MS = 30 * 1000;
+let bootstrapCache: BootstrapCacheEntry | null = null;
+let bootstrapListeners: Array<(announcement: DesktopAnnouncement | null) => void> = [];
 
 // ── Cache helpers ────────────────────────────────────────────────────────────
 
@@ -55,6 +77,97 @@ function writeCache(config: DesktopConfig): void {
   } catch { /* quota exceeded — ignore */ }
 }
 
+export function cacheDesktopBootstrap(
+  response: DesktopBootstrapResponse,
+  deviceId = getDeviceId() || "",
+): void {
+  bootstrapCache = { response, deviceId, fetchedAt: Date.now() };
+  if (response.config?.obs && response.config.storage) {
+    writeCache(response.config);
+  }
+  const announcement = response.announcement || null;
+  for (const listener of bootstrapListeners) {
+    try {
+      listener(announcement);
+    } catch {
+      // A listener must not interrupt the bootstrap request.
+    }
+  }
+}
+
+export function readDesktopBootstrap(
+  maxAgeMs = BOOTSTRAP_CACHE_TTL_MS,
+  expectedDeviceId = getDeviceId() || "",
+): DesktopBootstrapResponse | null {
+  if (!bootstrapCache) return null;
+  if (bootstrapCache.deviceId !== expectedDeviceId) return null;
+  if (Date.now() - bootstrapCache.fetchedAt > maxAgeMs) return null;
+  return bootstrapCache.response;
+}
+
+export function getCachedDesktopAnnouncement(): DesktopAnnouncement | null {
+  if (!bootstrapCache || bootstrapCache.deviceId !== (getDeviceId() || "")) return null;
+  return bootstrapCache.response.announcement || null;
+}
+
+export function getActiveDiscount(): ActiveDiscountInfo | null {
+  const announcement = getCachedDesktopAnnouncement();
+  if (!announcement) return null;
+  const isDiscount = Boolean(
+    announcement.offerDiscountPercent ||
+    announcement.offerCode ||
+    announcement.tags?.some((t) => t.toLowerCase().includes("discount") || t.toLowerCase().includes("offer")) ||
+    ["offer", "upgrade"].includes(announcement.tone)
+  );
+  if (!isDiscount) return null;
+
+  return {
+    id: announcement.id,
+    title: announcement.title,
+    code: announcement.offerCode ?? null,
+    discountPercent: announcement.offerDiscountPercent ?? null,
+    durationMonths: announcement.offerDurationMonths ?? null,
+    applicableBillingCycles: announcement.offerApplicableBillingCycles ?? [],
+    claimUrl: announcement.ctaUrl ?? null,
+    expiresAt: announcement.expiresAt ?? null,
+  };
+}
+
+export function subscribeToDesktopAnnouncement(
+  listener: (announcement: DesktopAnnouncement | null) => void,
+): () => void {
+  bootstrapListeners.push(listener);
+  return () => {
+    bootstrapListeners = bootstrapListeners.filter((candidate) => candidate !== listener);
+  };
+}
+
+export function clearCachedDesktopAnnouncement(): void {
+  if (!bootstrapCache) return;
+  bootstrapCache = {
+    ...bootstrapCache,
+    response: { ...bootstrapCache.response, announcement: null, nextAvailableAt: null },
+  };
+  for (const listener of bootstrapListeners) {
+    try {
+      listener(null);
+    } catch {
+      // A listener must not interrupt dismissal.
+    }
+  }
+}
+
+export function clearDesktopBootstrapCache(): void {
+  bootstrapCache = null;
+  for (const listener of bootstrapListeners) {
+    try {
+      listener(null);
+    } catch {
+      // A listener must not interrupt logout or re-authentication.
+    }
+  }
+}
+
 // ── Fetch with cache ─────────────────────────────────────────────────────────
 
 let inflight: Promise<DesktopConfig> | null = null;
@@ -81,8 +194,43 @@ async function fetchConfig(): Promise<DesktopConfig> {
 }
 
 async function doFetch(): Promise<DesktopConfig> {
+  const deviceId = getDeviceId();
+
+  if (deviceId) {
+    const candidates = getDeviceApiBaseCandidates();
+    for (const apiBase of candidates) {
+      try {
+        const res = await fetch(
+          `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}&bootstrap=1`,
+          {
+            cache: "no-store",
+            headers: {
+              "X-App-Version": APP_VERSION,
+              "X-Device-Secret": getDeviceSecret() || "",
+            },
+          },
+        );
+        if (!res.ok) continue;
+
+        const data = (await res.json()) as DesktopBootstrapResponse | null;
+        if (!data || typeof data !== "object") continue;
+        cacheDesktopBootstrap(data, deviceId);
+        if (data.config && data.config.obs && data.config.storage) {
+          writeCache(data.config);
+          return data.config;
+        }
+        break;
+      } catch {
+        // Try the next configured API candidate, then use the public fallback.
+      }
+    }
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/api/config/desktop`);
+    // Update policy changes must reach running clients promptly. The admin
+    // screen can publish a forced update at any time, so browser/WebView HTTP
+    // caching must not hide the new minimum version or installer URL.
+    const res = await fetch(`${API_BASE}/api/config/desktop`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       if (data && data.obs && data.storage) {
@@ -144,38 +292,6 @@ export function getDefaultOBSPort(): string {
 }
 
 /**
- * Synchronous helper to get the image compression target size in bytes.
- */
-export function getDefaultImageTargetBytes(): number {
-  const cached = readCache();
-  return cached?.storage.imageTargetSizeBytes ?? DEFAULT_DESKTOP_CONFIG.storage.imageTargetSizeBytes;
-}
-
-/**
- * Synchronous helper to get the video compression target size in bytes.
- */
-export function getDefaultVideoTargetBytes(): number {
-  const cached = readCache();
-  return cached?.storage.videoTargetSizeBytes ?? DEFAULT_DESKTOP_CONFIG.storage.videoTargetSizeBytes;
-}
-
-/**
- * Synchronous helper to get the image max dimension (width/height cap).
- */
-export function getDefaultImageMaxDimension(): number {
-  const cached = readCache();
-  return cached?.storage.imageMaxDimension ?? DEFAULT_DESKTOP_CONFIG.storage.imageMaxDimension;
-}
-
-/**
- * Synchronous helper to get the video max width.
- */
-export function getDefaultVideoMaxWidth(): number {
-  const cached = readCache();
-  return cached?.storage.videoMaxWidth ?? DEFAULT_DESKTOP_CONFIG.storage.videoMaxWidth;
-}
-
-/**
  * Synchronous helper to get allowed image extensions.
  */
 export function getDefaultImageExtensions(): string[] {
@@ -189,14 +305,6 @@ export function getDefaultImageExtensions(): string[] {
 export function getDefaultVideoExtensions(): string[] {
   const cached = readCache();
   return cached?.storage.allowedVideoExtensions ?? DEFAULT_DESKTOP_CONFIG.storage.allowedVideoExtensions;
-}
-
-/**
- * Synchronous helper to check if compression is enabled.
- */
-export function isCompressionEnabled(): boolean {
-  const cached = readCache();
-  return cached?.storage.compressionEnabled ?? DEFAULT_DESKTOP_CONFIG.storage.compressionEnabled;
 }
 
 // ── Theme sync helpers ──────────────────────────────────────────────────────

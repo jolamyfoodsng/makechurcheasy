@@ -25,9 +25,9 @@ export function EarlyAccessSection({ data, onChange, onSave, saving }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Early Access Lifetime</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
-          Configure the one-time lifetime Pro offer for selected early users.
+        <h2 className="text-lg font-semibold text-white">Early Access Lifetime</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
+          Configure the one-time lifetime Growth offer for selected early users.
         </p>
       </div>
 
@@ -54,7 +54,7 @@ export function EarlyAccessSection({ data, onChange, onSave, saving }: Props) {
           <div className="px-6 py-4">
             <Toggle
               label="Enable lifetime offer"
-              description="Eligible users will see a one-time lifetime Pro payment option."
+              description="Eligible users will see a one-time lifetime Growth payment option."
               checked={data.enabled}
               onChange={(v) => update({ enabled: v })}
             />
@@ -68,7 +68,7 @@ export function EarlyAccessSection({ data, onChange, onSave, saving }: Props) {
             />
             <Input
               label="Plan granted"
-              value="Pro"
+              value="Growth"
               disabled
             />
             <Input

@@ -12,6 +12,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import type { MediaItem } from "./libraryTypes";
 import { getAllMedia, saveMedia, deleteMedia, renameMedia } from "./libraryDb";
 import { resolveOverlayAssetUrl, getOverlayBaseUrl } from "../services/overlayUrl";
@@ -19,10 +21,37 @@ import Icon from "../components/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
-import { isSupportedMediaFile } from "../services/mediaValidation";
+import { DOCK_MEDIA_ACCEPT, getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
+import {
+  convertDocumentToPageFiles,
+  isSupportedDocumentFile,
+  type DocumentPageFile,
+} from "../dock/documentConversion";
+import {
+  completeReceiverFile,
+  downloadReceiverFile,
+  formatReceiverFileSize,
+  formatReceiverFileTime,
+  getPendingReceiverFiles,
+  saveReceiverFileToFolder,
+  type ReceiverFile,
+} from "../services/receiverService";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import { MediaShareTab } from "./MediaShareTab";
+import {
+  downloadTemplatePictureToLibrary,
+  fetchTemplatePictures,
+  type TemplatePictureAsset,
+} from "../services/templateVideos";
 
 type FilterType = "all" | "image" | "video";
+type AddMediaCategory = "image" | "video" | "audio" | "document";
+type MediaView = "library" | "share";
+
+export interface LibraryMediaImportItem {
+  file: File;
+  documentPage?: DocumentPageFile;
+}
 
 function fuzzyMatch(query: string, target: string): boolean {
   const q = query.toLowerCase();
@@ -35,7 +64,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return qi === q.length;
 }
 
-export const MEDIA_FILE_ACCEPT = "image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.mov,.m4v,.avi,.mkv,.webm,.wmv,.flv";
+export const MEDIA_FILE_ACCEPT = DOCK_MEDIA_ACCEPT;
 
 /* ---------- helpers ---------- */
 
@@ -53,6 +82,31 @@ function fmtFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function isSupportedLibraryImportFile(file: File): boolean {
+  return isSupportedMediaFile(file) || isSupportedDocumentFile(file);
+}
+
+export async function expandLibraryMediaImportFiles(
+  files: FileList | File[],
+  onProgress?: (status: string) => void,
+): Promise<LibraryMediaImportItem[]> {
+  const queue: LibraryMediaImportItem[] = [];
+
+  for (const file of Array.from(files)) {
+    if (isSupportedMediaFile(file)) {
+      queue.push({ file });
+      continue;
+    }
+
+    if (isSupportedDocumentFile(file)) {
+      const pages = await convertDocumentToPageFiles(file, onProgress);
+      queue.push(...pages.map((documentPage) => ({ file: documentPage.file, documentPage })));
+    }
+  }
+
+  return queue;
 }
 
 function timeAgo(iso: string): string {
@@ -158,16 +212,33 @@ function generateImageThumbnail(src: string): Promise<string> {
   });
 }
 
-export async function saveLibraryMediaFile(file: File, overrideName?: string): Promise<void> {
+export async function saveLibraryMediaItem(
+  item: LibraryMediaImportItem,
+  overrideName?: string,
+): Promise<void> {
+  const { file, documentPage } = item;
   if (!isSupportedMediaFile(file)) {
     throw new Error(`Unsupported file type. Only image and video files are allowed.`);
   }
-  const fileName = (overrideName ?? file.name).trim();
-  const category = file.type.startsWith("video") ? "video" : "image";
+  const documentBaseName = documentPage
+    ? (overrideName || documentPage.sourceName).replace(/\.[^.]+$/, "").trim()
+    : "";
+  const fileName = documentPage
+    ? i18n.t("library.mediaTab.documentPage", {
+        name: documentBaseName || i18n.t("library.mediaTab.addModal.document"),
+        pageNumber: documentPage.pageNumber,
+      })
+    : (overrideName ?? file.name).trim();
+  const category = getMediaKind(file);
+  if (!category) {
+    throw new Error(`Unsupported file type. Only image and video files are allowed.`);
+  }
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const safeName = `media_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const uploadStartedAt = Date.now();
+    const uploadedAt = new Date(uploadStartedAt).toISOString();
+    const safeName = `media_${uploadStartedAt}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const diskPath = await invoke<string>("save_upload_file", {
       fileName: safeName,
       fileData: Array.from(bytes),
@@ -207,7 +278,13 @@ export async function saveLibraryMediaFile(file: File, overrideName?: string): P
       durationSec: durationSec ? Math.round(durationSec) : undefined,
       fileSize: file.size,
       mimeType: file.type,
-      createdAt: new Date().toISOString(),
+      createdAt: uploadedAt,
+      uploadedAt,
+      source: documentPage ? "document-conversion" : "local",
+      documentSourceName: documentPage ? (overrideName || documentPage.sourceName) : undefined,
+      documentId: documentPage?.documentId,
+      documentPageNumber: documentPage?.pageNumber,
+      documentPageCount: documentPage?.pageCount,
     };
 
     await saveMedia(item);
@@ -217,11 +294,24 @@ export async function saveLibraryMediaFile(file: File, overrideName?: string): P
   }
 }
 
+export async function saveLibraryMediaFile(file: File, overrideName?: string): Promise<void> {
+  if (isSupportedDocumentFile(file)) {
+    const pages = await convertDocumentToPageFiles(file);
+    for (const documentPage of pages) {
+      await saveLibraryMediaItem({ file: documentPage.file, documentPage }, overrideName);
+    }
+    return;
+  }
+
+  await saveLibraryMediaItem({ file }, overrideName);
+}
+
 /* ========================================================================= */
 /* MediaTab                                                                  */
 /* ========================================================================= */
 
-export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
+export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?: string; openReceiver?: boolean }) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -231,15 +321,18 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [showFilter, setShowFilter] = useState(false);
   const [pageDragging, setPageDragging] = useState(false);
   const [pageUploading, setPageUploading] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [showMediaLimitModal, setShowMediaLimitModal] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
+  const [mediaView, setMediaView] = useState<MediaView>("library");
+  const [starterPictures, setStarterPictures] = useState<TemplatePictureAsset[]>([]);
+  const [starterPicturesLoading, setStarterPicturesLoading] = useState(false);
+  const [starterPictureDownloading, setStarterPictureDownloading] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+  const starterPicturesAttemptedRef = useRef(false);
   const autoOpenedMediaIdRef = useRef<string | null>(null);
   const renameSubmittingRef = useRef(false);
 
@@ -282,6 +375,24 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
   }, [reload]);
 
   useEffect(() => {
+    if (loading || items.length > 0 || starterPicturesAttemptedRef.current || starterPicturesLoading || starterPictures.length > 0) return;
+    starterPicturesAttemptedRef.current = true;
+    let cancelled = false;
+    setStarterPicturesLoading(true);
+    void fetchTemplatePictures()
+      .then((pictures) => {
+        if (!cancelled) setStarterPictures(pictures.slice(0, 4));
+      })
+      .catch(() => {
+        if (!cancelled) setStarterPictures([]);
+      })
+      .finally(() => {
+        if (!cancelled) setStarterPicturesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [items.length, loading, starterPictures.length, starterPicturesLoading]);
+
+  useEffect(() => {
     if (!focusMediaId) {
       autoOpenedMediaIdRef.current = null;
       return;
@@ -301,12 +412,13 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     }, 0);
   }, [focusMediaId, items]);
 
+  useEffect(() => {
+    if (openReceiver) setMediaView("share");
+  }, [openReceiver]);
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setShowFilter(false);
-      }
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpenId(null);
       }
@@ -324,7 +436,6 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         if (renameId) { setRenameId(null); return; }
         if (showMediaLimitModal) { setShowMediaLimitModal(false); return; }
         setMenuOpenId(null);
-        setShowFilter(false);
       }
     };
     window.addEventListener("keydown", handler);
@@ -342,14 +453,19 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     });
   }, [items, filter, search]);
 
+  const isFreshMediaLibrary = items.length === 0 && !search.trim() && filter === "all";
+
   /* ---- actions ---- */
 
   const handleDelete = useCallback(
-    (id: string) => {
-      deleteMedia(id);
-      reload();
-      setDeleteConfirmId(null);
-      setMenuOpenId(null);
+    async (id: string) => {
+      try {
+        await deleteMedia(id);
+        await reload();
+      } finally {
+        setDeleteConfirmId(null);
+        setMenuOpenId(null);
+      }
     },
     [reload]
   );
@@ -376,15 +492,41 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     setShowAddModal(false);
   }, [reload]);
 
+  const handleDownloadStarterPicture = useCallback(async (asset: TemplatePictureAsset) => {
+    const entitlement = checkEntitlementSync("images", effectivePlan);
+    if (!entitlement.allowed) {
+      setShowMediaLimitModal(true);
+      return;
+    }
+
+    setStarterPictureDownloading(asset.id);
+    try {
+      const item = await downloadTemplatePictureToLibrary(asset);
+      setItems((current) => [item, ...current.filter((candidate) => candidate.id !== item.id)]);
+    } catch (error) {
+      console.error("[MediaTab] Failed to download starter picture:", error);
+      alert(t("library.mediaTab.failedToSaveMultiple"));
+    } finally {
+      setStarterPictureDownloading(null);
+    }
+  }, [effectivePlan, t]);
+
   const handleDirectUpload = useCallback(async (files: FileList | File[]) => {
     const allFiles = Array.from(files);
     // Validate file types — reject unsupported files with clear error
-    const rejected = allFiles.filter((f) => !isSupportedMediaFile(f));
+    const rejected = allFiles.filter((f) => !isSupportedLibraryImportFile(f));
     for (const f of rejected) {
-      alert(`Unsupported file type: "${f.name}". Please upload an image or video file.`);
+      alert(`${t("library.mediaTab.unsupportedFileType")}: "${f.name}"`);
     }
-    const queue = allFiles.filter((f) => isSupportedMediaFile(f));
-    if (queue.length === 0) return;
+    const sourceQueue = allFiles.filter((f) => isSupportedLibraryImportFile(f));
+    if (sourceQueue.length === 0) return;
+
+    setPageUploading(true);
+    const queueItems = await expandLibraryMediaImportFiles(sourceQueue);
+    if (queueItems.length === 0) {
+      setPageUploading(false);
+      return;
+    }
 
     // ── Per-file-type quota enforcement ──
     // Use live entitlements from server (checkEntitlementSync reads latest)
@@ -405,9 +547,10 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     let videosToUpload = 0;
 
     // Pre-count incoming files by type
-    for (const file of queue) {
-      if (file.type.startsWith("image/")) imagesToUpload++;
-      else if (file.type.startsWith("video/")) videosToUpload++;
+    for (const { file } of queueItems) {
+      const kind = getMediaKind(file);
+      if (kind === "image") imagesToUpload++;
+      else if (kind === "video") videosToUpload++;
     }
 
     // Check if each type exceeds quota
@@ -417,16 +560,18 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
     // Both types over limit → block entirely
     if (imageExceeded && videoExceeded) {
       setShowMediaLimitModal(true);
+      setPageUploading(false);
       return;
     }
 
-    setPageUploading(true);
     try {
       let imagesUploaded = 0;
       let videosUploaded = 0;
-      for (const file of queue) {
-        const isImage = file.type.startsWith("image/");
-        const isVideo = file.type.startsWith("video/");
+      for (const queueItem of queueItems) {
+        const { file } = queueItem;
+        const kind = getMediaKind(file);
+        const isImage = kind === "image";
+        const isVideo = kind === "video";
 
         // Check per-file quota — skip over-limit files, continue with valid ones
         if (isImage && liveImageLimit !== -1 && currentImageCount + imagesUploaded >= liveImageLimit) {
@@ -436,14 +581,14 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
           continue;
         }
 
-        await saveLibraryMediaFile(file);
+        await saveLibraryMediaItem(queueItem);
         if (isImage) imagesUploaded++;
         else if (isVideo) videosUploaded++;
       }
 
       // Show limit modal if any files were rejected
       const uploadedCount = imagesUploaded + videosUploaded;
-      const rejectedCount = queue.length - uploadedCount;
+      const rejectedCount = queueItems.length - uploadedCount;
       if (rejectedCount > 0) {
         setShowMediaLimitModal(true);
       }
@@ -451,14 +596,12 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
       reload();
     } catch (error) {
       console.error("[MediaTab] Failed to save dropped media:", error);
-      alert("Failed to save one or more media files. Please try again.");
+      alert(t("library.mediaTab.failedToSaveMultiple"));
     } finally {
       setPageUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [reload, effectivePlan]);
-
-  const filterLabel = filter === "all" ? "All" : filter === "image" ? "Images" : "Videos";
+  }, [effectivePlan, reload, t]);
 
   return (
     <div
@@ -489,10 +632,39 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
         }
       }}
     >
+      <div className="lib-media-view-switcher" role="tablist" aria-label={t("library.share.mediaViews")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mediaView === "library"}
+          className={`lib-media-view-btn${mediaView === "library" ? " is-active" : ""}`}
+          onClick={() => setMediaView("library")}
+        >
+          <Icon name="perm_media" size={16} />
+          <span>{t("library.receiver.mediaLibrary")}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mediaView === "share"}
+          className={`lib-media-view-btn${mediaView === "share" ? " is-active" : ""}`}
+          onClick={() => setMediaView("share")}
+        >
+          <Icon name="send" size={16} />
+          <span className="lib-media-view-btn__copy">
+            <span>{t("library.share.openShare")}</span>
+            <small>{t("library.share.receiveTab")} / {t("library.share.sendTab")}</small>
+          </span>
+        </button>
+      </div>
+
+      {mediaView === "share" && <MediaShareTab initialMode={openReceiver ? "receive" : "send"} onMediaChanged={reload} />}
+
+      {mediaView === "library" && (
+        <>
       <input
         ref={fileInputRef}
         type="file"
-        accept={MEDIA_FILE_ACCEPT}
         multiple
         style={{ display: "none" }}
         onChange={(event) => {
@@ -511,47 +683,46 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             <input
               className="lib-search-input"
               type="text"
-              placeholder="Search media..."
+              placeholder={t("library.mediaTab.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search media"
+              aria-label={t("library.mediaTab.searchPlaceholder")}
             />
             {search && (
               <button
                 type="button"
                 className="lib-search-clear"
                 onClick={() => setSearch("")}
-                aria-label="Clear media search"
-                title="Clear media search"
+                aria-label={t("library.mediaTab.clearSearch")}
+                title={t("library.mediaTab.clearSearch")}
               >
                 <Icon name="close" size={14} />
               </button>
             )}
           </div>
 
-          {/* Filter dropdown */}
-          <div className="lib-filter-wrap" ref={filterRef}>
-            <button
-              className="lib-filter-btn"
-              onClick={() => setShowFilter((v) => !v)}
-              title="Filter">
-              <Icon name="filter_list" size={18} />
-              <span>Filter: {filterLabel}</span>
-              <Icon name="arrow_drop_down" size={18} />
-            </button>
-            {showFilter && (
-              <div className="lib-filter-dropdown">
-                {(["all", "image", "video"] as FilterType[]).map((f) => (
-                  <button
-                    key={f}
-                    className={`lib-filter-option${filter === f ? " is-active" : ""}`}
-                    onClick={() => { setFilter(f); setShowFilter(false); }}
-                    title="Images">
-                    {f === "all" ? "All" : f === "image" ? "Images" : "Videos"}
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Direct media filters */}
+          <div className="lib-media-filter-tabs" role="tablist" aria-label={t("library.mediaTab.filter")}>
+            {(["all", "image", "video"] as FilterType[]).map((f) => {
+              const label = f === "all"
+                ? t("common.all")
+                : f === "image"
+                  ? t("library.mediaTab.preview.image")
+                  : t("library.mediaTab.preview.video");
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === f}
+                  className={`lib-media-filter-tab${filter === f ? " is-active" : ""}`}
+                  onClick={() => setFilter(f)}
+                  title={label}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -569,9 +740,9 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
             // Always open file picker — per-file quota is enforced after file selection
             fileInputRef.current?.click();
           }}
-          title="Upload">
+          title={t("library.mediaTab.addMedia")}>
           <Icon name="add" size={20} />
-          {pageUploading ? "Uploading..." : "Add Media"}
+          {pageUploading ? `${t("library.mediaTab.uploading")}...` : t("library.mediaTab.addMedia")}
         </button>
       </div>
 
@@ -579,22 +750,63 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
       {loading ? (
         <div className="lib-media-loading">
           <Icon name="sync" size={24} className="spin" />
-          <p>Loading media...</p>
+          <p>{t("library.mediaTab.loading")}...</p>
         </div>
       ) : (
         <div className="lib-media-grid">
           {visible.length === 0 && (
-            <div className="lib-empty">
-              <Icon name="perm_media" size={48} style={{ opacity: 0.3 }} />
-              <p>No media found</p>
-              <button className="lib-add-btn" onClick={() => {
-                // Always open file picker — per-file quota is enforced after file selection
-                fileInputRef.current?.click();
-              }} title="Add">
-                <Icon name="add" size={20} />
-                Add Media
-              </button>
-            </div>
+            isFreshMediaLibrary ? (
+              <div className="lib-empty lib-empty--rich">
+                <Icon name="image" size={48} style={{ opacity: 0.3 }} />
+                <p className="lib-empty-title">{t("library.mediaTab.getStarted", "Get started with worship pictures")}</p>
+                <p className="lib-empty-copy">{t("library.mediaTab.getStartedDescription", "Download these pictures and project them, or add your own media to the library.")}</p>
+                {starterPicturesLoading && <p className="lib-empty-copy">{t("library.mediaTab.loadingTemplates", "Loading starter pictures…")}</p>}
+                {starterPictures.length > 0 && (
+                  <div className="lib-template-starter-grid">
+                    {starterPictures.map((asset) => {
+                      const downloading = starterPictureDownloading === asset.id;
+                      return (
+                        <article key={asset.id} className="lib-template-starter-card">
+                          <img src={asset.imageUrl} alt={asset.fileName} loading="lazy" />
+                          <div className="lib-template-starter-card__footer">
+                            <span title={asset.fileName}>{asset.fileName}</span>
+                            <button
+                              type="button"
+                              className="lib-template-starter-card__download"
+                              onClick={() => void handleDownloadStarterPicture(asset)}
+                              disabled={downloading}
+                              title={t("library.mediaTab.downloadTemplate", "Download and add")}
+                              aria-label={`${t("library.mediaTab.downloadTemplate", "Download and add")}: ${asset.fileName}`}
+                            >
+                              <Icon name={downloading ? "sync" : "download"} size={16} className={downloading ? "spin" : undefined} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="lib-empty-actions">
+                  <button className="lib-add-btn" onClick={() => {
+                    fileInputRef.current?.click();
+                  }} title={t("library.mediaTab.addMedia")}>
+                    <Icon name="add" size={20} />
+                    {t("library.mediaTab.addMedia")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="lib-empty">
+                <Icon name="perm_media" size={48} style={{ opacity: 0.3 }} />
+                <p>{t("library.mediaTab.noMediaFound")}</p>
+                <button className="lib-add-btn" onClick={() => {
+                  fileInputRef.current?.click();
+                }} title={t("library.mediaTab.addMedia")}>
+                  <Icon name="add" size={20} />
+                  {t("library.mediaTab.addMedia")}
+                </button>
+              </div>
+            )
           )}
 
           {visible.map((m) => (
@@ -646,7 +858,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                 <div className="lib-media-thumb-overlay" />
                 {/* Type badge */}
                 <span className="lib-media-badge-type">
-                  {m.type === "video" ? "VIDEO" : "IMAGE"}
+                  {(m.type === "video" ? t("library.mediaTab.preview.video") : t("library.mediaTab.preview.image")).toUpperCase()}
                 </span>
                 {/* Duration badge */}
                 {m.type === "video" && m.durationSec != null && (
@@ -712,10 +924,10 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                     e.stopPropagation();
                     setPreviewItem(m);
                   }}
-                  aria-label={`View ${m.name}`}
-                  title="Show">
+                  aria-label={`${t("library.mediaTab.view")} ${m.name}`}
+                  title={t("library.mediaTab.view")}>
                   <Icon name="visibility" size={16} />
-                  View
+                  {t("library.mediaTab.view")}
                 </button>
                 {/* 3-dot menu */}
                 <div className="lib-media-menu-wrap" ref={menuOpenId === m.id ? menuRef : undefined}>
@@ -725,7 +937,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                       e.stopPropagation();
                       setMenuOpenId(menuOpenId === m.id ? null : m.id);
                     }}
-                    title="More options">
+                    title={t("library.mediaTab.filter")}>
                     <Icon name="more_vert" size={20} />
                   </button>
                   {menuOpenId === m.id && (
@@ -738,9 +950,9 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setRenameValue(m.name);
                           setMenuOpenId(null);
                         }}
-                        title="Edit">
+                        title={t("library.mediaTab.rename")}>
                         <Icon name="edit" size={16} />
-                        Rename
+                        {t("library.mediaTab.rename")}
                       </button>
                       <button
                         className="lib-media-menu-action lib-media-menu-action--danger"
@@ -749,9 +961,9 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
                           setDeleteConfirmId(m.id);
                           setMenuOpenId(null);
                         }}
-                        title="Delete">
+                        title={t("common.delete")}>
                         <Icon name="delete" size={16} />
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </div>
                   )}
@@ -774,11 +986,11 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
       {deleteConfirmId && (
         <div className="lib-modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
           <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete Media?</h3>
-            <p>This media item will be permanently removed from your library.</p>
+            <h3>{t("library.mediaTab.deleteConfirm.title")}</h3>
+            <p>{t("library.mediaTab.deleteConfirm.message")}</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)} title="Cancel">Cancel</button>
-              <button className="lib-confirm-delete" onClick={() => handleDelete(deleteConfirmId)} title="Delete">Delete</button>
+              <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)} title={t("common.cancel")}>{t("common.cancel")}</button>
+              <button className="lib-confirm-delete" onClick={() => handleDelete(deleteConfirmId)} title={t("common.delete")}>{t("common.delete")}</button>
             </div>
           </div>
         </div>
@@ -797,17 +1009,22 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
       {showMediaLimitModal && (
         <div className="lib-modal-backdrop" onClick={() => setShowMediaLimitModal(false)}>
           <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Media Limit Reached</h3>
+            <h3>{t("library.mediaTab.limitReached.title")}</h3>
             <p>
-              Your {effectivePlan} plan allows {imageLimit} images and {videoLimit} videos.
-              {hasReachedImageLimit && ` You've reached the image limit (${imageCount}/${imageLimit}).`}
-              {hasReachedVideoLimit && ` You've reached the video limit (${videoCount}/${videoLimit}).`}
+              {t("library.mediaTab.limitReached.planMessage")}
             </p>
-            <p>Upgrade your plan to upload more media. {UPGRADE_PROMO_FALLBACK}</p>
+            {(hasReachedImageLimit || hasReachedVideoLimit) && (
+              <p>
+                {hasReachedImageLimit && `${t("library.mediaTab.limitReached.imageLimitReached")} (${imageCount}/${imageLimit})`}
+                {hasReachedImageLimit && hasReachedVideoLimit && " · "}
+                {hasReachedVideoLimit && `${t("library.mediaTab.limitReached.videoLimitReached")} (${videoCount}/${videoLimit})`}
+              </p>
+            )}
+            <p>{t("library.mediaTab.limitReached.upgradeHint")} {UPGRADE_PROMO_FALLBACK}</p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title="Close">Close</button>
-              <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
-                Upgrade Plan
+              <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title={t("common.close")}>{t("common.close")}</button>
+              <a href="https://makechurcheazy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+                {t("library.mediaTab.limitReached.upgradePlan")}
               </a>
             </div>
           </div>
@@ -819,11 +1036,296 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
           <div className="lib-media-drop-overlay__card">
             <Icon name="cloud_upload" size={22} />
             <div className="lib-media-drop-overlay__title">Drag to add</div>
-            <div className="lib-media-drop-overlay__text">Drop image or video files to save them directly into the library.</div>
+            <div className="lib-media-drop-overlay__text">Drop images, videos, PDFs, DOCX, or PPTX files to save them into the library.</div>
           </div>
         </div>
       )}
+        </>
+      )}
     </div>
+  );
+}
+
+interface ReceiverDirectoryHandle {
+  getFileHandle: (name: string, options: { create: boolean }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+}
+
+type ReceiverDirectoryWindow = Window & {
+  showDirectoryPicker?: (options?: { mode?: "readwrite" }) => Promise<ReceiverDirectoryHandle>;
+};
+
+interface MediaReceiverPanelProps {
+  visible: boolean;
+  onPendingCountChange: (count: number) => void;
+  onIncomingFile: (file: ReceiverFile) => void;
+  onMediaChanged: () => void;
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function isReceiverAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function receiverFileIcon(file: ReceiverFile): string {
+  if (file.fileType.startsWith("image/")) return "image";
+  if (file.fileType.startsWith("video/")) return "movie";
+  return "insert_drive_file";
+}
+
+function receiverFileTypeIsVideo(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return ["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv", "flv"].includes(
+    file.name.split(".").pop()?.toLowerCase() || "",
+  );
+}
+
+function receiverFileTypeLabel(file: ReceiverFile): string {
+  if (file.fileType.startsWith("image/")) return "Image";
+  if (file.fileType.startsWith("video/")) return "Video";
+  return file.fileName.split(".").pop()?.toUpperCase() || "FILE";
+}
+
+function receiverCanSaveToMce(file: ReceiverFile): boolean {
+  if (file.fileType.startsWith("image/") || file.fileType.startsWith("video/")) return true;
+  return ["pdf", "docx", "pptx"].includes(file.fileName.split(".").pop()?.toLowerCase() || "");
+}
+
+export function MediaReceiverPanel({
+  visible,
+  onPendingCountChange,
+  onIncomingFile,
+  onMediaChanged,
+}: MediaReceiverPanelProps) {
+  const { t } = useTranslation();
+  const { user: receiverUser } = useAuth();
+  const receiverPlan = getEffectivePlan(receiverUser);
+  const [files, setFiles] = useState<ReceiverFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const knownIdsRef = useRef<Set<string> | null>(null);
+
+  const refresh = useCallback(async (quiet = false) => {
+    if (!quiet) setRefreshing(true);
+    try {
+      const nextFiles = await getPendingReceiverFiles();
+      const knownIds = knownIdsRef.current;
+      if (knownIds) {
+        const incoming = nextFiles.find((file) => !knownIds.has(file.pendingId));
+        if (incoming) onIncomingFile(incoming);
+      }
+      knownIdsRef.current = new Set(nextFiles.map((file) => file.pendingId));
+      setFiles(nextFiles);
+      onPendingCountChange(nextFiles.length);
+      if (!quiet) setStatus(null);
+    } catch (error) {
+      if (visible) {
+        setStatus({
+          tone: "error",
+          message: error instanceof Error ? error.message : t("library.receiver.unavailable"),
+        });
+      }
+    } finally {
+      setLoading(false);
+      if (!quiet) setRefreshing(false);
+    }
+  }, [onIncomingFile, onPendingCountChange, t, visible]);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(true), 1800);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const removeFile = useCallback((pendingId: string) => {
+    setFiles((current) => {
+      const next = current.filter((file) => file.pendingId !== pendingId);
+      onPendingCountChange(next.length);
+      knownIdsRef.current = new Set(next.map((file) => file.pendingId));
+      return next;
+    });
+  }, [onPendingCountChange]);
+
+  const handleSaveToFolder = useCallback(async (file: ReceiverFile) => {
+    setBusyId(file.pendingId);
+    setStatus(null);
+    try {
+      if (isTauriRuntime()) {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const folderPath = await open({
+          directory: true,
+          multiple: false,
+          title: t("library.receiver.chooseFolder"),
+        });
+        if (typeof folderPath !== "string" || !folderPath.trim()) return;
+        const result = await saveReceiverFileToFolder(file, folderPath);
+        removeFile(file.pendingId);
+        setStatus({ tone: "success", message: `${result.fileName} saved to the selected folder.` });
+        return;
+      }
+
+      const picker = (window as ReceiverDirectoryWindow).showDirectoryPicker;
+      if (typeof picker !== "function") {
+        throw new Error(t("library.receiver.openDesktopApp"));
+      }
+      const directory = await picker({ mode: "readwrite" });
+      const blob = await downloadReceiverFile(file);
+      const target = await directory.getFileHandle(file.fileName, { create: true });
+      const writable = await target.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      await completeReceiverFile(file);
+      removeFile(file.pendingId);
+      setStatus({ tone: "success", message: `${file.fileName} saved to the selected folder.` });
+    } catch (error) {
+      if (!isReceiverAbortError(error)) {
+        setStatus({
+          tone: "error",
+          message: error instanceof Error ? error.message : t("library.receiver.saveFolderFailed"),
+        });
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }, [removeFile, t]);
+
+  const handleSaveToMce = useCallback(async (file: ReceiverFile) => {
+    setBusyId(file.pendingId);
+    setStatus(null);
+    try {
+      if (!receiverCanSaveToMce(file)) {
+        throw new Error(t("library.receiver.mceTypeHint"));
+      }
+
+      const blob = await downloadReceiverFile(file);
+      const sourceFile = new File([blob], file.fileName, {
+        type: file.fileType || blob.type || "application/octet-stream",
+      });
+      const queue = await expandLibraryMediaImportFiles([sourceFile]);
+      if (queue.length === 0) throw new Error(t("library.receiver.mceTypeHint"));
+
+      const existingItems = await getAllMedia();
+      const incomingImages = queue.filter(({ file: item }) => !receiverFileTypeIsVideo(item)).length;
+      const incomingVideos = queue.length - incomingImages;
+      const imageEntitlement = checkEntitlementSync("images", receiverPlan).limit;
+      const videoEntitlement = checkEntitlementSync("videos", receiverPlan).limit;
+      const existingImages = existingItems.filter((item) => item.type === "image").length;
+      const existingVideos = existingItems.filter((item) => item.type === "video").length;
+
+      if ((imageEntitlement !== -1 && existingImages + incomingImages > imageEntitlement)
+        || (videoEntitlement !== -1 && existingVideos + incomingVideos > videoEntitlement)) {
+        throw new Error(t("library.receiver.mediaLimitHint"));
+      }
+
+      for (const item of queue) {
+        await saveLibraryMediaItem(item);
+      }
+      await completeReceiverFile(file);
+      removeFile(file.pendingId);
+      onMediaChanged();
+      setStatus({ tone: "success", message: `${file.fileName} is now ready in Media.` });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : t("library.receiver.saveMceFailed"),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }, [onMediaChanged, receiverPlan, removeFile, t]);
+
+  if (!visible) return null;
+
+  return (
+    <section className="lib-media-receiver" aria-labelledby="lib-media-receiver-title">
+      <header className="lib-media-receiver__header">
+        <div>
+          <div className="lib-media-receiver__eyebrow">{t("library.receiver.eyebrow")}</div>
+          <h2 id="lib-media-receiver-title">{t("library.receiver.title")}</h2>
+          <p>{t("library.receiver.description")}</p>
+        </div>
+        <button
+          type="button"
+          className="lib-icon-btn"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          aria-label={t("library.receiver.refresh")}
+          title={t("library.receiver.refresh")}
+        >
+          <Icon name="refresh" size={18} />
+        </button>
+      </header>
+
+      <div className="lib-media-receiver__ready" role="status" aria-live="polite">
+        <span className="lib-media-receiver__ready-icon"><Icon name="phonelink_ring" size={19} /></span>
+        <span>
+          <strong>{t("library.receiver.ready")}</strong>
+          <small>{files.length === 0 ? t("library.receiver.waitingForPhone") : `${files.length} file${files.length === 1 ? "" : "s"} waiting for a save choice`}</small>
+        </span>
+        <span className="lib-media-receiver__ready-dot" aria-hidden="true" />
+      </div>
+
+      <div className="lib-media-receiver__hint">
+        <Icon name="info" size={16} />
+        <span>{t("library.receiver.anyFileHint")}</span>
+      </div>
+
+      {status && (
+        <div className={`lib-media-receiver__status lib-media-receiver__status--${status.tone}`} role={status.tone === "error" ? "alert" : "status"}>
+          <Icon name={status.tone === "error" ? "error" : "check_circle"} size={16} />
+          <span>{status.message}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="lib-media-receiver__empty">
+          <span className="lib-media-receiver__spinner" aria-hidden="true" />
+          <strong>{t("library.receiver.loading")}</strong>
+        </div>
+      ) : files.length === 0 ? (
+        <div className="lib-media-receiver__empty">
+          <div className="lib-media-receiver__empty-icon"><Icon name="move_to_inbox" size={34} /></div>
+          <strong>{t("library.receiver.emptyTitle")}</strong>
+          <p>{t("library.receiver.emptyDescription")}</p>
+        </div>
+      ) : (
+        <div className="lib-media-receiver__list" aria-label={t("library.receiver.incomingFiles")}>
+          {files.map((file) => {
+            const busy = busyId === file.pendingId;
+            return (
+              <article key={file.pendingId} className="lib-media-receiver-card">
+                <div className="lib-media-receiver-card__identity">
+                  <span className="lib-media-receiver-card__icon"><Icon name={receiverFileIcon(file)} size={23} /></span>
+                  <span className="lib-media-receiver-card__copy">
+                    <strong title={file.fileName}>{file.fileName}</strong>
+                    <small>{receiverFileTypeLabel(file)} · {formatReceiverFileSize(file.fileSize)} · {formatReceiverFileTime(file.receivedAt)}</small>
+                  </span>
+                </div>
+                <div className="lib-media-receiver-card__actions">
+                  <button type="button" className="lib-receiver-action lib-receiver-action--secondary" onClick={() => void handleSaveToFolder(file)} disabled={busy}>
+                    <Icon name="folder" size={15} />
+                    {busy ? t("library.receiver.saving") : t("library.receiver.saveToFolder")}
+                  </button>
+                  <button type="button" className="lib-receiver-action lib-receiver-action--primary" onClick={() => void handleSaveToMce(file)} disabled={busy}>
+                    <Icon name="save" size={15} />
+                    {t("library.receiver.saveToMce")}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -832,6 +1334,7 @@ export function MediaTab({ focusMediaId }: { focusMediaId?: string }) {
 /* ========================================================================= */
 
 function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
@@ -883,6 +1386,30 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
     };
   }, [resolvedUrl]);
 
+  // Chromium/CEF can ignore the autoPlay attribute even for muted previews.
+  // Start playback explicitly after the blob has loaded so clicking View
+  // consistently opens a playing video in the desktop app and the browser.
+  useEffect(() => {
+    if (item.type !== "video" || !mediaSrc) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const startPlayback = () => {
+      video.muted = true;
+      void video.play().catch((playError) => {
+        console.warn("[MediaPreview] Could not start video playback:", playError);
+      });
+    };
+
+    if (video.readyState >= 2) {
+      startPlayback();
+      return;
+    }
+
+    video.addEventListener("canplay", startPlayback, { once: true });
+    return () => video.removeEventListener("canplay", startPlayback);
+  }, [item.type, mediaSrc]);
+
   return (
     <div className="lib-preview-backdrop" onClick={onClose}>
       <div className="lib-preview-modal" onClick={(e) => e.stopPropagation()}>
@@ -892,7 +1419,7 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
             <Icon name={item.type === "video" ? "movie" : "image"} size={20} />
             <span>{item.name}</span>
           </div>
-          <button className="lib-preview-close" onClick={onClose} aria-label="Close preview" title="Close">
+          <button className="lib-preview-close" onClick={onClose} aria-label={t("library.mediaTab.preview.close")} title={t("library.mediaTab.preview.close")}>
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -902,7 +1429,7 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
           {loading ? (
             <div className="lib-preview-loading">
               <Icon name="sync" size={32} className="spin" />
-              <p>Loading media...</p>
+              <p>{t("library.mediaTab.loading")}...</p>
             </div>
           ) : error ? (
             <div className="lib-preview-error">
@@ -933,7 +1460,7 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
         {/* Footer */}
         <div className="lib-preview-footer">
           <span className="lib-preview-meta">
-            {item.type === "video" ? "Video" : "Image"}
+            {item.type === "video" ? t("library.mediaTab.preview.video") : t("library.mediaTab.preview.image")}
             {item.width && item.height && ` · ${item.width}×${item.height}`}
             {item.durationSec && ` · ${fmtDuration(item.durationSec)}`}
             {item.fileSize && ` · ${fmtFileSize(item.fileSize)}`}
@@ -949,9 +1476,10 @@ function MediaPreviewModal({ item, onClose }: { item: MediaItem; onClose: () => 
 /* ========================================================================= */
 
 function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void; onSave: () => void; effectivePlan: string }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
-  const [category, setCategory] = useState<"image" | "video">("video");
+  const [category, setCategory] = useState<AddMediaCategory>("video");
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -965,14 +1493,14 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
   }, [onClose]);
 
   const handleFile = useCallback((f: File) => {
-    if (!isSupportedMediaFile(f)) {
-      alert(`Unsupported file type: "${f.name}". Please upload an image or video file.`);
+    if (!isSupportedLibraryImportFile(f)) {
+      alert(`${t("library.mediaTab.unsupportedFileType")}: "${f.name}"`);
       return;
     }
     setFile(f);
     setFileName(f.name);
-    setCategory(f.type.startsWith("video") ? "video" : "image");
-  }, []);
+    setCategory(isSupportedDocumentFile(f) ? "document" : getMediaKind(f) ?? "image");
+  }, [t]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -987,45 +1515,45 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
   const handleSave = useCallback(async () => {
     if (!file || !fileName.trim()) return;
 
-    // Per-file quota check before saving
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    const { limit: imgLimit } = checkEntitlementSync("images", effectivePlan);
-    const { limit: vidLimit } = checkEntitlementSync("videos", effectivePlan);
-
-    // Get fresh count from DB
-    const currentItems = await getAllMedia();
-    const imgCount = currentItems.filter((m) => m.type === "image").length;
-    const vidCount = currentItems.filter((m) => m.type === "video").length;
-
-    if (isImage && imgLimit !== -1 && imgCount >= imgLimit) {
-      alert(`Image limit reached (${imgCount}/${imgLimit}). Upgrade your plan to upload more images.`);
-      return;
-    }
-    if (isVideo && vidLimit !== -1 && vidCount >= vidLimit) {
-      alert(`Video limit reached (${vidCount}/${vidLimit}). Upgrade your plan to upload more videos.`);
-      return;
-    }
-
     setSaving(true);
     try {
-      await saveLibraryMediaFile(file, fileName.trim());
+      const queueItems = await expandLibraryMediaImportFiles([file]);
+      const imagesToSave = queueItems.filter((item) => getMediaKind(item.file) === "image").length;
+      const videosToSave = queueItems.filter((item) => getMediaKind(item.file) === "video").length;
+      const { limit: imgLimit } = checkEntitlementSync("images", effectivePlan);
+      const { limit: vidLimit } = checkEntitlementSync("videos", effectivePlan);
+      const currentItems = await getAllMedia();
+      const imgCount = currentItems.filter((m) => m.type === "image").length;
+      const vidCount = currentItems.filter((m) => m.type === "video").length;
+
+      if (imagesToSave > 0 && imgLimit !== -1 && imgCount + imagesToSave > imgLimit) {
+        alert(`${t("library.mediaTab.limitReached.imageLimitReached")} (${imgCount}/${imgLimit}). ${t("library.mediaTab.limitReached.upgradeHint")}`);
+        return;
+      }
+      if (videosToSave > 0 && vidLimit !== -1 && vidCount + videosToSave > vidLimit) {
+        alert(`${t("library.mediaTab.limitReached.videoLimitReached")} (${vidCount}/${vidLimit}). ${t("library.mediaTab.limitReached.upgradeHint")}`);
+        return;
+      }
+
+      for (const queueItem of queueItems) {
+        await saveLibraryMediaItem(queueItem, fileName.trim());
+      }
       onSave();
     } catch (err) {
       console.error("[MediaTab] Failed to save media:", err);
-      alert("Failed to save media. Please try again.");
+      alert(t("library.mediaTab.failedToSave"));
     } finally {
       setSaving(false);
     }
-  }, [file, fileName, category, onSave, effectivePlan]);
+  }, [effectivePlan, file, fileName, onSave, t]);
 
   return (
     <div className="lib-modal-backdrop" onClick={onClose}>
       <div className="lib-add-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="lib-add-modal-header">
-          <h3>Add Media to Library</h3>
-          <button className="lib-modal-close-btn" onClick={onClose} title="Close">
+          <h3>{t("library.mediaTab.addModal.title")}</h3>
+          <button className="lib-modal-close-btn" onClick={onClose} title={t("common.close")}>
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -1048,16 +1576,17 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
               ) : (
                 <>
                   <p className="lib-dropzone-text">
-                    Drag & drop media here or <span className="lib-dropzone-browse">browse</span>
+                    {t("library.mediaTab.addModal.dropText").replace(/ click to /i, " ")}
+                    {" "}
+                    <span className="lib-dropzone-browse">{t("library.mediaTab.addModal.browse").toLowerCase()}</span>
                   </p>
-                  <p className="lib-dropzone-hint">PNG, JPG, MP4, MOV up to 50MB</p>
+                  <p className="lib-dropzone-hint">PNG, JPG, MP4, MOV, PDF, DOCX, PPTX</p>
                 </>
               )}
             </div>
             <input
               ref={inputRef}
               type="file"
-              accept={MEDIA_FILE_ACCEPT}
               className="lib-dropzone-file-input"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -1068,12 +1597,12 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
 
           {/* File name */}
           <div className="lib-field">
-            <label className="lib-field-label">File Name</label>
+            <label className="lib-field-label">{t("library.mediaTab.addModal.fileName")}</label>
             <div className="lib-field-input-wrap">
               <input
                 className="lib-field-input"
                 type="text"
-                placeholder="Enter file name"
+                placeholder={t("library.mediaTab.addModal.fileNamePlaceholder")}
                 value={fileName}
                 onChange={(e) => setFileName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
@@ -1084,7 +1613,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
 
           {/* Category toggle */}
           <div className="lib-field">
-            <label className="lib-field-label">Category</label>
+            <label className="lib-field-label">{t("library.mediaTab.addModal.category")}</label>
             <div className="lib-category-toggle">
               <label className={`lib-category-opt${category === "image" ? " is-active" : ""}`}>
                 <input
@@ -1095,7 +1624,7 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
                   onChange={() => setCategory("image")}
                 />
                 <Icon name="image" size={16} />
-                Image
+                {t("library.mediaTab.addModal.image")}
               </label>
               <label className={`lib-category-opt${category === "video" ? " is-active" : ""}`}>
                 <input
@@ -1106,7 +1635,18 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
                   onChange={() => setCategory("video")}
                 />
                 <Icon name="videocam" size={16} />
-                Video
+                {t("library.mediaTab.addModal.video")}
+              </label>
+              <label className={`lib-category-opt${category === "document" ? " is-active" : ""}`}>
+                <input
+                  type="radio"
+                  name="media-category"
+                  className="sr-only"
+                  checked={category === "document"}
+                  onChange={() => setCategory("document")}
+                />
+                <Icon name="description" size={16} />
+                {t("library.mediaTab.addModal.document")}
               </label>
             </div>
           </div>
@@ -1114,13 +1654,13 @@ function AddMediaModal({ onClose, onSave, effectivePlan }: { onClose: () => void
 
         {/* Footer */}
         <div className="lib-add-modal-footer">
-          <button className="lib-modal-cancel-btn" onClick={onClose} title="Cancel">Cancel</button>
+          <button className="lib-modal-cancel-btn" onClick={onClose} title={t("common.cancel")}>{t("common.cancel")}</button>
           <button
             className="lib-modal-save-btn"
             disabled={!file || !fileName.trim() || saving}
             onClick={handleSave}
-            title="Save">
-            {saving ? "Saving…" : "Save to Library"}
+            title={t("common.save")}>
+            {saving ? `${t("library.mediaTab.addModal.saving")}…` : t("library.mediaTab.addModal.saveToLibrary")}
           </button>
         </div>
       </div>

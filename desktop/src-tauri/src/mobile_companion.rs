@@ -12,12 +12,17 @@
  */
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::OnceLock;
+use tauri::Emitter;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use tokio::time::Duration;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+use uuid::Uuid;
 
 // ── Public state shared with the rest of the app ────────────────────────────
 
@@ -30,6 +35,38 @@ pub fn mobile_server_port() -> u16 {
 fn pairing_token_store() -> &'static RwLock<Option<String>> {
     static STORE: OnceLock<RwLock<Option<String>>> = OnceLock::new();
     STORE.get_or_init(|| RwLock::new(None))
+}
+
+#[derive(Clone, Debug)]
+struct MobileAccessPolicy {
+    allowed: bool,
+    plan: String,
+    reason: String,
+}
+
+fn mobile_access_policy_store() -> &'static RwLock<MobileAccessPolicy> {
+    static STORE: OnceLock<RwLock<MobileAccessPolicy>> = OnceLock::new();
+    STORE.get_or_init(|| {
+        RwLock::new(MobileAccessPolicy {
+            allowed: false,
+            plan: "free".into(),
+            reason: "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEasy on your desktop.".into(),
+        })
+    })
+}
+
+pub async fn set_mobile_access_policy(allowed: bool, plan: String, reason: Option<String>) {
+    let mut policy = mobile_access_policy_store().write().await;
+    policy.allowed = allowed;
+    policy.plan = if plan.trim().is_empty() { "free".into() } else { plan };
+    policy.reason = reason.unwrap_or_else(|| {
+        "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEasy on your desktop.".into()
+    });
+}
+
+pub async fn mobile_access_error() -> Option<String> {
+    let policy = mobile_access_policy_store().read().await;
+    if policy.allowed { None } else { Some(policy.reason.clone()) }
 }
 
 /// OBS connection details provided by the dock.
@@ -57,11 +94,32 @@ fn state_broadcast() -> &'static broadcast::Sender<String> {
     })
 }
 
+fn pending_commands() -> &'static Mutex<HashMap<String, oneshot::Sender<MobileCommandCompletion>>> {
+    static STORE: OnceLock<Mutex<HashMap<String, oneshot::Sender<MobileCommandCompletion>>>> =
+        OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn app_data_dir() -> Result<PathBuf, String> {
+    let base = dirs::data_dir().ok_or("Could not determine app data directory")?;
+    let dir = base.join("MakeChurchEasy");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    Ok(dir)
+}
+
+fn pairing_token_path() -> Result<PathBuf, String> {
+    Ok(app_data_dir()?.join("mobile-pairing-token.txt"))
+}
+
 // ── Messages from Flutter ───────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MobileCommand {
+    /// Request pairing details from a trusted local discovery connection.
+    /// UDP discovery is not delivered through the Android Emulator NAT, so
+    /// the mobile client uses this only through the emulator host gateway.
+    Discover,
     Auth {
         token: String,
     },
@@ -71,20 +129,275 @@ pub enum MobileCommand {
         translation: Option<String>,
         #[serde(default)]
         verse_text: Option<String>,
+        #[serde(default)]
+        display_reference_label: Option<String>,
+        #[serde(default)]
+        overlay_mode: Option<String>,
+        #[serde(default)]
+        compare_enabled: Option<bool>,
+        #[serde(default)]
+        compare_layout: Option<String>,
+        #[serde(default)]
+        compare_mode: Option<String>,
+        #[serde(default)]
+        translation_a: Option<String>,
+        #[serde(default)]
+        translation_b: Option<String>,
+        #[serde(default)]
+        compare_verse_text_a: Option<String>,
+        #[serde(default)]
+        compare_verse_text_b: Option<String>,
+        #[serde(default)]
+        compare_passages: Option<serde_json::Value>,
     },
     ClearScripture,
     ShowSlide {
         song_id: String,
         slide_index: usize,
+        #[serde(default)]
+        song_title: Option<String>,
+        #[serde(default)]
+        artist: Option<String>,
+        #[serde(default)]
+        slide_text: Option<String>,
+        #[serde(default)]
+        section_label: Option<String>,
+        #[serde(default)]
+        overlay_mode: Option<String>,
     },
-    NextSlide,
-    PrevSlide,
+    NextSlide {
+        #[serde(default)]
+        song_id: Option<String>,
+        #[serde(default)]
+        slide_index: Option<usize>,
+    },
+    PrevSlide {
+        #[serde(default)]
+        song_id: Option<String>,
+        #[serde(default)]
+        slide_index: Option<usize>,
+    },
     ClearWorship,
     ShowLowerThird {
         name: String,
         title: String,
+        #[serde(default)]
+        theme_id: Option<String>,
+        #[serde(default)]
+        values: Option<serde_json::Value>,
+        #[serde(default)]
+        size: Option<String>,
+    },
+    GetLowerThirdThemes,
+    GetSceneRoute {
+        module: String,
+    },
+    SaveSceneRoute {
+        module: String,
+        route: serde_json::Value,
     },
     ClearLowerThird,
+    BlankLowerThird,
+    GetBibleTranslations,
+    GetBibleChapter {
+        book: String,
+        chapter: usize,
+        translation: String,
+    },
+    GetBiblePresentationStyle,
+    GetTextPresentationStyle {
+        surface: String,
+    },
+    SavePresentationBackground {
+        surface: String,
+        #[serde(default)]
+        overlay_mode: Option<String>,
+        background_type: String,
+        #[serde(default)]
+        background_color: Option<String>,
+        #[serde(default)]
+        background_color_end: Option<String>,
+        #[serde(default)]
+        background_pattern: Option<String>,
+        #[serde(default)]
+        background_image: Option<String>,
+        #[serde(default)]
+        background_image_file_path: Option<String>,
+        #[serde(default)]
+        background_video: Option<String>,
+        #[serde(default)]
+        background_video_file_path: Option<String>,
+    },
+    SaveTextPresentationControls {
+        surface: String,
+        #[serde(default)]
+        patch: Option<serde_json::Value>,
+        #[serde(default)]
+        line_count: Option<usize>,
+        #[serde(default)]
+        line_mode: Option<String>,
+        #[serde(default)]
+        quick_alignment: Option<String>,
+    },
+    GetBibleSearchSuggestions {
+        #[serde(default)]
+        query: Option<String>,
+        #[serde(default)]
+        translation: Option<String>,
+    },
+    RecordBibleSearch {
+        label: String,
+    },
+    GetWorshipLibrary,
+    GetNotes,
+    SaveNotes {
+        notes: serde_json::Value,
+    },
+    ShowNote {
+        note: serde_json::Value,
+    },
+    ClearNotes,
+    GetMediaLibrary,
+    GetMediaThumbnail {
+        media_id: String,
+    },
+    RegisterUploadedMedia {
+        media_id: String,
+        name: String,
+        media_type: String,
+        disk_file_name: String,
+        #[serde(default)]
+        file_size: Option<u64>,
+        #[serde(default)]
+        mime_type: Option<String>,
+    },
+    ShowMedia {
+        media_id: String,
+        #[serde(default)]
+        muted: Option<bool>,
+        #[serde(default)]
+        looping: Option<bool>,
+        #[serde(default)]
+        fit_mode: Option<String>,
+        #[serde(default)]
+        transition: Option<String>,
+    },
+    SendMediaToScene {
+        media_id: String,
+        scene_name: String,
+        #[serde(default)]
+        muted: Option<bool>,
+        #[serde(default)]
+        looping: Option<bool>,
+        #[serde(default)]
+        fit_mode: Option<String>,
+    },
+    ClearMedia,
+    ShowTicker {
+        #[serde(default)]
+        badge: Option<String>,
+        ticker_text: String,
+        #[serde(default)]
+        messages: Option<Vec<String>>,
+        #[serde(default)]
+        speed: Option<f64>,
+        #[serde(default)]
+        position: Option<String>,
+        #[serde(default)]
+        looping: Option<bool>,
+        #[serde(default)]
+        divider: Option<String>,
+        #[serde(default)]
+        message_spacing: Option<u32>,
+        #[serde(default)]
+        text_color: Option<String>,
+        #[serde(default)]
+        background_color: Option<String>,
+        #[serde(default)]
+        paused: Option<bool>,
+    },
+    ClearTicker,
+    GetTickerMessages,
+    GetTickerPresentationStyle,
+    SaveTickerMessages {
+        messages: serde_json::Value,
+    },
+    SaveTickerSettings {
+        #[serde(default)]
+        speed: Option<f64>,
+        #[serde(default)]
+        position: Option<String>,
+        #[serde(default)]
+        looping: Option<bool>,
+        #[serde(default)]
+        theme_id: Option<String>,
+        #[serde(default)]
+        heading: Option<String>,
+        #[serde(default)]
+        message_spacing: Option<u32>,
+        #[serde(default)]
+        divider: Option<String>,
+        #[serde(default)]
+        colors: Option<serde_json::Value>,
+    },
+    GetCountdowns,
+    ShowCountdown {
+        config: serde_json::Value,
+        #[serde(default)]
+        sync: Option<serde_json::Value>,
+    },
+    ClearCountdown,
+    GetMultiviewCards,
+    ClearMultiview {
+        scene_name: String,
+        #[serde(default)]
+        multiview_id: Option<String>,
+    },
+    GetCurrentState,
+    GetScenes,
+    SwitchScene {
+        scene_name: String,
+    },
+    SetPreviewScene {
+        scene_name: String,
+    },
+    SetStudioMode {
+        enabled: bool,
+    },
+    GetSceneScreenshot {
+        scene_name: String,
+        #[serde(default)]
+        image_width: Option<u32>,
+    },
+    ToggleStreaming,
+    ToggleRecording,
+    ToggleMic,
+    GetMacros,
+    SaveMacro {
+        macro_data: serde_json::Value,
+    },
+    DeleteMacro {
+        macro_id: String,
+    },
+    ExecuteMacro {
+        macro_id: String,
+    },
+    ExecuteAutomation {
+        macro_id: String,
+    },
+    GetAutomationRules,
+    SaveAutomationRule {
+        rule_data: serde_json::Value,
+    },
+    DeleteAutomationRule {
+        rule_id: String,
+    },
+    ToggleAutomationRule {
+        rule_id: String,
+        enabled: bool,
+    },
+    GetAutomationLogs,
+    ClearAutomationLogs,
     Ping,
 }
 
@@ -93,6 +406,12 @@ pub enum MobileCommand {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MobileResponse {
+    DiscoveryInfo {
+        ws_port: u16,
+        api_port: u16,
+        pairing_token: String,
+        desktop_name: String,
+    },
     AuthOk,
     AuthFailed {
         reason: String,
@@ -108,6 +427,28 @@ pub enum MobileResponse {
     Error {
         message: String,
     },
+    CommandResult {
+        command_id: String,
+        ok: bool,
+        payload: serde_json::Value,
+        error: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileCommandEvent {
+    pub command_id: String,
+    pub command: MobileCommand,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MobileCommandCompletion {
+    pub ok: bool,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 // ── Global state broadcast to all connected mobile clients ───────────────────
@@ -186,7 +527,36 @@ pub async fn generate_new_pairing_token() -> String {
     let token = generate_pairing_token();
     let mut stored = pairing_token_store().write().await;
     *stored = Some(token.clone());
+    if let Ok(path) = pairing_token_path() {
+        if let Err(error) = fs::write(path, &token) {
+            eprintln!(
+                "[MobileCompanion] Failed to persist pairing token: {}",
+                error
+            );
+        }
+    }
     token
+}
+
+pub async fn get_or_create_pairing_token() -> String {
+    if let Some(token) = get_pairing_token().await {
+        if !token.trim().is_empty() {
+            return token;
+        }
+    }
+
+    if let Ok(path) = pairing_token_path() {
+        if let Ok(token) = fs::read_to_string(path) {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                let mut stored = pairing_token_store().write().await;
+                *stored = Some(token.clone());
+                return token;
+            }
+        }
+    }
+
+    generate_new_pairing_token().await
 }
 
 pub async fn get_pairing_token() -> Option<String> {
@@ -201,153 +571,80 @@ pub async fn set_obs_connection(info: ObsConnectionInfo) {
     println!("[MobileCompanion] OBS connection details updated");
 }
 
-// ── OBS WebSocket client (connects to OBS to forward commands) ──────────────
-
-async fn forward_command_to_obs(
-    command: &MobileCommand,
-    obs_url: &str,
-    obs_password: &str,
+pub async fn complete_mobile_command(
+    command_id: String,
+    completion: MobileCommandCompletion,
 ) -> Result<(), String> {
-    let (ws_stream, _) = tokio_tungstenite::connect_async(obs_url)
+    let sender = pending_commands()
+        .lock()
         .await
-        .map_err(|e| format!("Failed to connect to OBS: {}", e))?;
+        .remove(&command_id)
+        .ok_or_else(|| "Mobile command is no longer pending".to_string())?;
 
-    let (mut write, mut read) = ws_stream.split();
+    sender
+        .send(completion)
+        .map_err(|_| "Mobile command receiver is gone".to_string())
+}
 
-    // Authenticate with OBS
-    let auth_msg = serde_json::json!({
-        "op": 1,
-        "d": { "rpcVersion": 1, "authentication": obs_password }
-    });
-    write
-        .send(Message::Text(auth_msg.to_string().into()))
+async fn dispatch_command_to_desktop(
+    app_handle: &tauri::AppHandle,
+    command_id: String,
+    command: MobileCommand,
+) -> MobileResponse {
+    let (tx, rx) = oneshot::channel();
+    pending_commands()
+        .lock()
         .await
-        .map_err(|e| format!("Failed to send auth: {}", e))?;
+        .insert(command_id.clone(), tx);
 
-    // Wait for auth response
-    if let Some(Ok(Message::Text(text))) = read.next().await {
-        let _: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("Failed to parse auth response: {}", e))?;
-    }
-
-    // Send the actual command as an OBS WebSocket request (op 6 = Request)
-    let rpc_msg = match command {
-        MobileCommand::ShowScripture {
-            reference,
-            translation,
-            verse_text,
-        } => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": true,
-                    }
-                },
-                "mce": {
-                    "action": "show_scripture",
-                    "reference": reference,
-                    "translation": translation.as_deref().unwrap_or("KJV"),
-                    "verseText": verse_text.as_deref().unwrap_or(""),
-                    "overlayMode": "fullscreen"
-                }
-            })
-        }
-        MobileCommand::ClearScripture => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": false
-                    }
-                },
-                "mce": { "action": "clear_bible" }
-            })
-        }
-        MobileCommand::ShowSlide {
-            song_id,
-            slide_index,
-        } => {
-            serde_json::json!({
-                "op": 6,
-                "d": {
-                    "requestType": "SetSceneItemEnabled",
-                    "requestData": {
-                        "sceneName": "MCE Presentation",
-                        "sceneItemId": 0,
-                        "sceneItemEnabled": true
-                    }
-                },
-                "mce": {
-                    "action": "show_slide",
-                    "songId": song_id,
-                    "slideIndex": slide_index
-                }
-            })
-        }
-        MobileCommand::NextSlide => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "next_slide" }
-            })
-        }
-        MobileCommand::PrevSlide => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "prev_slide" }
-            })
-        }
-        MobileCommand::ClearWorship => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "clear_worship" }
-            })
-        }
-        MobileCommand::ShowLowerThird { name, title } => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": {
-                    "action": "show_lower_third",
-                    "name": name,
-                    "title": title
-                }
-            })
-        }
-        MobileCommand::ClearLowerThird => {
-            serde_json::json!({
-                "op": 6,
-                "d": { "requestType": "GetSceneList" },
-                "mce": { "action": "clear_lower_third" }
-            })
-        }
-        MobileCommand::Ping | MobileCommand::Auth { .. } => {
-            return Ok(());
-        }
+    let event = MobileCommandEvent {
+        command_id: command_id.clone(),
+        command,
     };
 
-    write
-        .send(Message::Text(rpc_msg.to_string().into()))
-        .await
-        .map_err(|e| format!("Failed to send command to OBS: {}", e))?;
+    if let Err(error) = app_handle.emit("mobile-companion-command", event) {
+        pending_commands().lock().await.remove(&command_id);
+        return MobileResponse::CommandResult {
+            command_id,
+            ok: false,
+            payload: serde_json::Value::Null,
+            error: Some(format!("Failed to dispatch to desktop: {}", error)),
+        };
+    }
 
-    // Brief wait for response
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    Ok(())
+    match tokio::time::timeout(Duration::from_secs(12), rx).await {
+        Ok(Ok(completion)) => MobileResponse::CommandResult {
+            command_id,
+            ok: completion.ok,
+            payload: completion.payload,
+            error: completion.error,
+        },
+        Ok(Err(_)) => MobileResponse::CommandResult {
+            command_id,
+            ok: false,
+            payload: serde_json::Value::Null,
+            error: Some("Desktop command handler disconnected".into()),
+        },
+        Err(_) => {
+            pending_commands().lock().await.remove(&command_id);
+            MobileResponse::CommandResult {
+                command_id,
+                ok: false,
+                payload: serde_json::Value::Null,
+                error: Some("Desktop command timed out".into()),
+            }
+        }
+    }
 }
 
 // ── Handle a single mobile client WebSocket connection ──────────────────────
 
-async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<String>) {
+async fn handle_mobile_client(
+    stream: TcpStream,
+    state_tx: broadcast::Sender<String>,
+    app_handle: tauri::AppHandle,
+    api_port: u16,
+) {
     let ws = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
@@ -361,15 +658,33 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
     let mut authenticated = false;
 
     let pairing_token = get_pairing_token().await.unwrap_or_default();
-    let obs_conn = obs_connection_store().read().await.clone();
-
     loop {
         tokio::select! {
             // Messages from the mobile client
             msg = read.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        let cmd: MobileCommand = match serde_json::from_str(&text) {
+                        let raw: serde_json::Value = match serde_json::from_str(&text) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                let _ = write.send(Message::Text(
+                                    serde_json::to_string(&MobileResponse::Error {
+                                        message: format!("Invalid JSON: {}", e),
+                                    })
+                                    .unwrap()
+                                    .into(),
+                                )).await;
+                                continue;
+                            }
+                        };
+
+                        let command_id = raw
+                            .get("command_id")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+                        let cmd: MobileCommand = match serde_json::from_value(raw) {
                             Ok(c) => c,
                             Err(e) => {
                                 let _ = write.send(Message::Text(
@@ -384,8 +699,28 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
                         };
 
                         match &cmd {
+                            MobileCommand::Discover => {
+                                let _ = write.send(Message::Text(
+                                    serde_json::to_string(&MobileResponse::DiscoveryInfo {
+                                        ws_port: mobile_server_port(),
+                                        api_port,
+                                        pairing_token: pairing_token.clone(),
+                                        desktop_name: "MakeChurchEasy Desktop".into(),
+                                    })
+                                    .unwrap()
+                                    .into(),
+                                )).await;
+                            }
                             MobileCommand::Auth { token } => {
                                 if token == &pairing_token && !pairing_token.is_empty() {
+                                    if let Some(reason) = mobile_access_error().await {
+                                        let _ = write.send(Message::Text(
+                                            serde_json::to_string(&MobileResponse::AuthFailed { reason })
+                                                .unwrap()
+                                                .into(),
+                                        )).await;
+                                        return;
+                                    }
                                     authenticated = true;
                                     let _ = write.send(Message::Text(
                                         serde_json::to_string(&MobileResponse::AuthOk)
@@ -435,56 +770,57 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
                                 )).await;
                             }
                             _ => {
-                                if let Some(ref conn) = obs_conn {
-                                    match forward_command_to_obs(&cmd, &conn.url, &conn.password).await {
-                                        Ok(()) => {
-                                            set_obs_connected(true).await;
-                                            // Update local state based on command
-                                            match &cmd {
-                                                MobileCommand::ShowScripture { reference, .. } => {
-                                                    set_current_scripture(Some(reference.clone())).await;
-                                                    set_current_song(None).await;
-                                                    set_current_slide(None).await;
-                                                }
-                                                MobileCommand::ClearScripture => {
-                                                    set_current_scripture(None).await;
-                                                }
-                                                MobileCommand::ShowSlide { slide_index, .. } => {
-                                                    set_current_slide(Some(*slide_index)).await;
-                                                }
-                                                MobileCommand::ClearWorship => {
-                                                    set_current_song(None).await;
-                                                    set_current_slide(None).await;
-                                                }
-                                                MobileCommand::ShowLowerThird { name, .. } => {
-                                                    set_current_lower_third(Some(name.clone())).await;
-                                                }
-                                                MobileCommand::ClearLowerThird => {
-                                                    set_current_lower_third(None).await;
-                                                }
-                                                _ => {}
-                                            }
+                                if let Some(reason) = mobile_access_error().await {
+                                    let response = MobileResponse::CommandResult {
+                                        command_id,
+                                        ok: false,
+                                        payload: serde_json::Value::Null,
+                                        error: Some(reason),
+                                    };
+                                    let _ = write.send(Message::Text(
+                                        serde_json::to_string(&response).unwrap().into(),
+                                    )).await;
+                                    continue;
+                                }
+                                let response = dispatch_command_to_desktop(&app_handle, command_id, cmd.clone()).await;
+                                let ok = matches!(&response, MobileResponse::CommandResult { ok: true, .. });
+                                if ok {
+                                    set_obs_connected(true).await;
+                                    match &cmd {
+                                        MobileCommand::ShowScripture { reference, .. } => {
+                                            set_current_scripture(Some(reference.clone())).await;
+                                            set_current_song(None).await;
+                                            set_current_slide(None).await;
                                         }
-                                        Err(e) => {
-                                            set_obs_connected(false).await;
-                                            let _ = write.send(Message::Text(
-                                                serde_json::to_string(&MobileResponse::Error {
-                                                    message: format!("OBS command failed: {}", e),
-                                                })
-                                                .unwrap()
-                                                .into(),
-                                            )).await;
+                                        MobileCommand::ClearScripture => {
+                                            set_current_scripture(None).await;
                                         }
+                                        MobileCommand::ShowSlide { slide_index, song_title, .. } => {
+                                            set_current_song(song_title.clone()).await;
+                                            set_current_slide(Some(*slide_index)).await;
+                                        }
+                                        MobileCommand::ClearWorship => {
+                                            set_current_song(None).await;
+                                            set_current_slide(None).await;
+                                        }
+                                        MobileCommand::ShowLowerThird { name, .. } => {
+                                            set_current_lower_third(Some(name.clone())).await;
+                                        }
+                                        MobileCommand::ClearLowerThird => {
+                                            set_current_lower_third(None).await;
+                                        }
+                                        MobileCommand::BlankLowerThird => {
+                                            set_current_lower_third(None).await;
+                                        }
+                                        _ => {}
                                     }
                                 } else {
-                                    let _ = write.send(Message::Text(
-                                        serde_json::to_string(&MobileResponse::Error {
-                                            message: "OBS not connected to desktop".into(),
-                                        })
-                                        .unwrap()
-                                        .into(),
-                                    )).await;
+                                    set_obs_connected(false).await;
                                 }
+
+                                let _ = write.send(Message::Text(
+                                    serde_json::to_string(&response).unwrap().into(),
+                                )).await;
                             }
                         }
                     }
@@ -508,7 +844,7 @@ async fn handle_mobile_client(stream: TcpStream, state_tx: broadcast::Sender<Str
 
 const DISCOVERY_PORT: u16 = 9999;
 
-async fn run_discovery_beacon(ws_port: u16) {
+async fn run_discovery_beacon(ws_port: u16, api_port: u16) {
     use std::net::SocketAddr;
     use tokio::net::UdpSocket;
 
@@ -529,19 +865,22 @@ async fn run_discovery_beacon(ws_port: u16) {
         .parse()
         .unwrap();
 
-    let payload = serde_json::json!({
-        "service": "makechurcheasy",
-        "port": ws_port,
-        "version": "1",
-    })
-    .to_string();
-
     println!(
         "[MobileCompanion] Discovery beacon started on UDP port {}",
         DISCOVERY_PORT
     );
 
     loop {
+        let pairing_token = get_or_create_pairing_token().await;
+        let payload = serde_json::json!({
+            "service": "makechurcheasy",
+            "port": ws_port,
+            "apiPort": api_port,
+            "desktopName": "MakeChurchEasy Desktop",
+            "pairingToken": pairing_token,
+            "version": "1",
+        })
+        .to_string();
         let _ = socket.send_to(payload.as_bytes(), broadcast_addr).await;
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
@@ -549,27 +888,55 @@ async fn run_discovery_beacon(ws_port: u16) {
 
 // ── Main server loop ────────────────────────────────────────────────────────
 
-pub async fn start_mobile_server(port: u16) -> Result<(), String> {
-    let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr)
-        .await
-        .map_err(|e| format!("Failed to bind mobile server on {}: {}", addr, e))?;
+pub async fn start_mobile_server(
+    preferred_port: u16,
+    api_port: u16,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let preferred_addr = format!("0.0.0.0:{}", preferred_port);
+    let listener = match TcpListener::bind(&preferred_addr).await {
+        Ok(listener) => listener,
+        Err(preferred_error) => {
+            eprintln!(
+                "[MobileCompanion] Port {} unavailable: {}. Trying an available LAN port.",
+                preferred_port, preferred_error
+            );
+            TcpListener::bind("0.0.0.0:0").await.map_err(|fallback_error| {
+                format!(
+                    "Failed to bind mobile server on {} ({}) or its fallback port: {}",
+                    preferred_addr, preferred_error, fallback_error
+                )
+            })?
+        }
+    };
 
-    MOBILE_SERVER_PORT.store(port, Ordering::Relaxed);
+    let bound_port = listener
+        .local_addr()
+        .map_err(|e| format!("Could not determine mobile server port: {}", e))?
+        .port();
+    if bound_port == 0 {
+        return Err("Mobile server bound to an invalid port 0".to_string());
+    }
+
+    MOBILE_SERVER_PORT.store(bound_port, Ordering::Relaxed);
     let state_tx = state_broadcast().clone();
 
     // Start UDP discovery beacon for auto-connect
-    tokio::spawn(run_discovery_beacon(port));
+    tokio::spawn(run_discovery_beacon(bound_port, api_port));
 
-    println!("[MobileCompanion] WebSocket server started on {}", addr);
+    println!(
+        "[MobileCompanion] WebSocket server started on 0.0.0.0:{}",
+        bound_port
+    );
 
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
                 println!("[MobileCompanion] New connection from {}", peer);
                 let tx = state_tx.clone();
+                let handle = app_handle.clone();
                 tokio::spawn(async move {
-                    handle_mobile_client(stream, tx).await;
+                    handle_mobile_client(stream, tx, handle, api_port).await;
                 });
             }
             Err(e) => {

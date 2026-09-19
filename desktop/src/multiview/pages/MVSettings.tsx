@@ -2,7 +2,7 @@
  * MVSettings.tsx — Unified Settings (Redesigned)
  *
  * Tabbed layout with header and tab navigation.
- * Tabs: General, OBS Connection, Appearance, Branding, Bible, Free Usage, Pro License
+ * Tabs: General, OBS Connection, Appearance, Branding, Bible, Free Usage
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,14 +12,18 @@ import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from ".
 import { useBible } from "../../bible/bibleStore";
 import type { BibleTranslation } from "../../bible/types";
 import { AppLogo } from "../../components/AppLogo";
+import { AccountSummaryCards } from "../../components/AccountSummaryCards";
+import { LocalDevPlanSwitcher } from "../../components/LocalDevPlanSwitcher";
 import { UpgradeModal } from "../../components/UpgradeModal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   INTERFACE_LOCALES,
 } from "../../i18n/localeCatalog";
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
+import { useAppTheme } from "../../hooks/useAppTheme";
+import { APP_APPEARANCE_PALETTES } from "../../services/appAppearance";
 import { applyBrandingSettingsToDom } from "../../services/branding";
-import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditTransaction } from "../../services/credits";
+import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditDetails, type CreditTransaction } from "../../services/credits";
 import {
   applyInterfaceLanguagePreference,
   getInterfaceLanguageLabel,
@@ -36,12 +40,29 @@ import { isProUnlocked } from "../../services/proLicense";
 import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
+import { AutomationSettingsPanel } from "../components/AutomationSettingsPanel";
 import * as db from "../mvStore";
+import { copyTextToClipboard } from "../../dock/bibleClipboard";
+import {
+  buildMobilePairingPayload,
+  buildMobileWebUrl,
+  resolveMobilePairingPorts,
+  type MobilePairingInfo,
+} from "../../services/mobilePairing";
 import {
   DEFAULT_SETTINGS,
   type MVSettings as MVSettingsType,
   type SpeakerProfileSetting
 } from "../mvStore";
+import {
+  checkForUpdate,
+  type DownloadProgress,
+  type Update,
+} from "../../services/updateService";
+import {
+  updateDownloadManager,
+  useUpdateDownload,
+} from "../../services/updateDownloadManager";
 
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -68,32 +89,25 @@ import {
   Smartphone,
   Sun,
   Trash2,
-  Users,
   Zap,
 } from "lucide-react";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import QRCode from "qrcode";
 
 import "./MVSettings.css";
 
 /* ── Constants ── */
-const SWATCHES = [
-  { id: "purple", hex: "#1D4ED8", rgb: "29, 78, 216", name: "Purple" },
-  { id: "blue", hex: "#3B82F6", rgb: "59, 130, 246", name: "Blue" },
-  { id: "cyan", hex: "#06B6D4", rgb: "6, 182, 212", name: "Cyan" },
-  { id: "green", hex: "#10B981", rgb: "16, 185, 129", name: "Green" },
-  { id: "yellow", hex: "#F59E0B", rgb: "245, 158, 11", name: "Yellow" },
-  { id: "orange", hex: "#F97316", rgb: "249, 115, 22", name: "Orange" },
-  { id: "pink", hex: "#EC4899", rgb: "236, 72, 153", name: "Pink" },
-  { id: "deeppurple", hex: "#1D4ED8", rgb: "168, 85, 247", name: "Deep Purple" },
-];
-
 const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "mobile" | "appearance" | "branding" | "bible" | "usage" | "audio";
+type SettingsTab = "general" | "obs" | "mobile" | "automation" | "appearance" | "branding" | "bible" | "usage" | "audio";
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
+const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
+
+type ManualUpdateStatus = "idle" | "checking" | "available" | "downloading" | "installing" | "relaunching" | "up-to-date" | "error";
 
 /* ── Helpers ── */
 function resolveLogoPreviewSrc(path: string): string {
@@ -128,11 +142,18 @@ function resolveSpeakerProfiles(settings: MVSettingsType): SpeakerProfileSetting
   return parseLegacyPastorNames(settings.pastorNames);
 }
 
+function formatUpdateBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /* ── Main Component ── */
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "appearance", "branding", "bible", "usage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "automation", "appearance", "branding", "bible", "usage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
@@ -156,6 +177,11 @@ export function MVSettings() {
   });
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [brandingProfileFound, setBrandingProfileFound] = useState<boolean | null>(null);
+  const [manualUpdateStatus, setManualUpdateStatus] = useState<ManualUpdateStatus>("idle");
+  const [manualUpdateMessage, setManualUpdateMessage] = useState("");
+  const [manualUpdate, setManualUpdate] = useState<Update | null>(null);
+  const [manualUpdateProgress, setManualUpdateProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
 
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
@@ -171,7 +197,7 @@ export function MVSettings() {
   const [_bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
   const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
 
-  // ── Pro License state ──
+  // ── Full access key state ──
   const [proUnlocked] = useState(() => isProUnlocked());
 
   // ── Credits state (fetched from backend) ──
@@ -179,28 +205,59 @@ export function MVSettings() {
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
-  const [, setCreditBalance] = useState<number>(0);
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [creditDetails, setCreditDetails] = useState<CreditDetails | null>(null);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
-  const userPlan = proUnlocked ? "pro" as const : getUserPlan(authUser);
-  const trialActive = !proUnlocked && isInTrial(authUser);
+  const userPlan = proUnlocked ? "growth" as const : getUserPlan(authUser);
+  const storedPlan = String(authUser?.plan || "free").trim().toLowerCase();
+  const trialActive = !proUnlocked && storedPlan === "free" && isInTrial(authUser);
   // During trial, user gets Growth-level credits — use the trial config tier for lookup
   const effectivePlanForCredits = trialActive ? "trial" as const : userPlan;
-  const planCredits = planConfig ? getPlanCredits(planConfig, effectivePlanForCredits) : (proUnlocked ? -1 : 1000);
+  const serverPlan = creditDetails?.effectivePlan;
+  const serverTrialActive = serverPlan === "trial";
+  const displayPlan = serverPlan && serverPlan !== "trial"
+    ? serverPlan
+    : effectivePlanForCredits;
+  const planCredits = proUnlocked
+    ? -1
+    : (creditDetails?.planAllocation ?? (planConfig ? getPlanCredits(planConfig, displayPlan) : 0));
+  const creditsRemaining = proUnlocked ? -1 : (creditDetails?.credits ?? creditBalance);
+  const displayTrialActive = serverPlan ? serverTrialActive : trialActive;
   const trialDaysLeft = trialActive ? getTrialDaysRemaining(authUser) : 0;
   const trialEndDate = trialActive && authUser?.trial?.endsAt
     ? new Date(authUser.trial.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
-  const planLabel = trialActive
+  const planLabel = displayTrialActive
     ? "Growth Trial"
-    : (planConfig ? getPlanLabel(planConfig, userPlan) : (proUnlocked ? "Pro" : "Free"));
+    : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, displayPlan) : "Free"));
   const isUnlimited = planCredits === -1;
   const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
 
   useEffect(() => {
     getPlanConfig().then(setPlanConfig);
   }, []);
+
+  // Settings is often the first place an upgraded user checks their account.
+  // Refresh the device bootstrap here so the displayed plan is not limited to
+  // the background heartbeat or the Usage tab.
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+
+    void refreshAccountBootstrapFromServer()
+      .then((result) => {
+        if (!cancelled && result.status === "ok") refreshUser();
+      })
+      .catch(() => {
+        // Keep the settings screen usable when the account service is offline.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, refreshUser]);
 
   // Fetch transactions after auth is ready
   useEffect(() => {
@@ -213,10 +270,12 @@ export function MVSettings() {
     fetchCreditDetails().then((details) => {
       if (details) {
         setCreditBalance(details.credits);
+        setCreditDetails(details);
         setCreditsUsedThisMonth(details.totalConsumed);
       }
     }).catch(() => {
       setCreditBalance(0);
+      setCreditDetails(null);
       setCreditsUsedThisMonth(0);
     });
   }, [authUser?.id, planConfig]);
@@ -227,7 +286,10 @@ export function MVSettings() {
       setCreditBalance(newBalance);
       // Re-fetch full details to get accurate totalConsumed
       fetchCreditDetails().then((details) => {
-        if (details) setCreditsUsedThisMonth(details.totalConsumed);
+        if (details) {
+          setCreditDetails(details);
+          setCreditsUsedThisMonth(details.totalConsumed);
+        }
       });
       fetchCreditTransactions(10).then(setRecentTransactions);
     });
@@ -241,18 +303,10 @@ export function MVSettings() {
 
     const loadUsageState = async () => {
       try {
-        await refreshAccountBootstrapFromServer();
-        if (!cancelled) {
-          refreshUser();
-        }
-      } catch {
-        // Keep the settings screen usable even if bootstrap refresh fails.
-      }
-
-      try {
         const details = await fetchCreditDetails();
         if (!cancelled && details) {
           setCreditBalance(details.credits);
+          setCreditDetails(details);
           setCreditsUsedThisMonth(details.totalConsumed);
         }
       } catch {
@@ -277,10 +331,13 @@ export function MVSettings() {
   }, [activeTab, authUser?.id, refreshUser]);
 
   // ── Appearance customization state ──
-  const [theme, setTheme] = useState<"light" | "dark" | "system">(
-    () => (settings.theme as "light" | "dark" | "system") || "dark"
-  );
-  const [accentColor, setAccentColor] = useState<string>("purple");
+  const {
+    preference: theme,
+    effective: effectiveTheme,
+    setTheme,
+    appearance,
+    setAppearance,
+  } = useAppTheme();
   const [density, setDensity] = useState<"comfortable" | "balanced" | "compact">("balanced");
   const [fontSizeRange, setFontSizeRange] = useState<number>(2);
   const [highContrastUI, setHighContrastUI] = useState<boolean>(settings.highContrast ?? false);
@@ -289,6 +346,31 @@ export function MVSettings() {
   const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+  const downloadState = useUpdateDownload();
+
+  const isGlobalDownloading =
+    downloadState.status === "downloading" ||
+    downloadState.status === "installing" ||
+    downloadState.status === "relaunching";
+
+  const effectiveUpdateStatus: ManualUpdateStatus = isGlobalDownloading
+    ? downloadState.status
+    : manualUpdateStatus;
+
+  const effectiveUpdateProgress = isGlobalDownloading
+    ? downloadState.progress
+    : manualUpdateProgress;
+
+  const manualUpdateBusy =
+    effectiveUpdateStatus === "checking" ||
+    effectiveUpdateStatus === "downloading" ||
+    effectiveUpdateStatus === "installing" ||
+    effectiveUpdateStatus === "relaunching";
+
+  const manualUpdatePercent =
+    effectiveUpdateProgress.contentLength > 0
+      ? Math.round((effectiveUpdateProgress.downloaded / effectiveUpdateProgress.contentLength) * 100)
+      : (isGlobalDownloading ? downloadState.progress.percent : 0);
 
   // ── Toast system ──
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
@@ -364,18 +446,14 @@ export function MVSettings() {
 
   /* ── Dynamic CSS theming ── */
   useEffect(() => {
-    let appliedTheme = theme;
-    if (theme === "system") {
-      appliedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    document.documentElement.setAttribute("data-theme", appliedTheme);
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
     document.documentElement.setAttribute("data-contrast", highContrastUI ? "high" : "standard");
     document.documentElement.setAttribute("data-reduced-motion", reduceMotion ? "true" : "false");
     document.documentElement.setAttribute("data-roundness", roundedCorners ? "standard" : "none");
 
     // Sync .light / .dark classes so App.css :root.light overrides activate
     const root = document.documentElement;
-    if (appliedTheme === "light") {
+    if (effectiveTheme === "light") {
       root.classList.add("light");
     } else {
       root.classList.remove("light");
@@ -386,11 +464,7 @@ export function MVSettings() {
     root.classList.add(`density-${density}`);
     root.classList.remove("font-scale-small", "font-scale-medium", "font-scale-large");
     root.classList.add(`font-scale-${fontSizeRange === 1 ? "small" : fontSizeRange === 2 ? "medium" : "large"}`);
-
-    const swatch = SWATCHES.find((s) => s.id === accentColor) || SWATCHES[0];
-    document.documentElement.style.setProperty("--accent-color", swatch.hex);
-    document.documentElement.style.setProperty("--accent-rgb", swatch.rgb);
-  }, [theme, accentColor, density, fontSizeRange, highContrastUI, reduceMotion, roundedCorners]);
+  }, [effectiveTheme, density, fontSizeRange, highContrastUI, reduceMotion, roundedCorners]);
 
   /* ── Settings update helper ── */
   const update = useCallback(
@@ -422,6 +496,7 @@ export function MVSettings() {
     try {
       const { syncChurchProfile } = await import("../../services/churchProfileSync");
       const result = await syncChurchProfile();
+      setBrandingProfileFound(result.profileFound);
       // Re-read settings after sync to reflect updated values
       const fresh = db.getSettings();
       setSettings(fresh);
@@ -429,6 +504,7 @@ export function MVSettings() {
       setSpeakerProfiles(profiles.length > 0 ? profiles : [{ ...EMPTY_SPEAKER_PROFILE }]);
       setSyncStatus(result.message);
     } catch {
+      setBrandingProfileFound(false);
       setSyncStatus("Sync failed unexpectedly.");
     } finally {
       setSyncing(false);
@@ -474,11 +550,21 @@ export function MVSettings() {
     setObsTestResult(null);
     setObsStatus("connecting");
     try {
+      if (obsMethod !== "WebSocket") {
+        setObsStatus("disconnected");
+        setObsTestResult("Alternative Remote API is not available for OBS connections yet. Select WebSocket.");
+        return;
+      }
+
       const obsUrl = normalizeOBSWebSocketUrl(settings.obsUrl);
       if (obsUrl !== settings.obsUrl) {
         update({ obsUrl });
       }
-      if (!obsService.isConnected) await obsService.connect(obsUrl, obsPasswordDraft || undefined);
+
+      // Always reconnect for an explicit test. If OBS is already connected to
+      // the old target, skipping connect would silently ignore a new host,
+      // port, or password and keep reporting the old connection as valid.
+      await obsService.connect(obsUrl, obsPasswordDraft || undefined);
       const version = await obsService.call("GetVersion");
       await persistOBSWebSocketConfig(obsUrl, obsPasswordDraft || undefined, settings.obsAutoReconnect);
       setObsTestResult(t("mvSettings.obs.testResultConnected", { obsVersion: version.obsVersion, wsVersion: version.obsWebSocketVersion }));
@@ -517,6 +603,61 @@ export function MVSettings() {
     _setBrandLogoStatus(null);
     triggerToast(t("mvSettings.toast.brandingSettingsReset"), "success");
   };
+
+  const handleOpenChurchProfile = useCallback(() => {
+    window.open(CHURCH_PROFILE_URL, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    setManualUpdateStatus("checking");
+    setManualUpdateMessage("");
+    setManualUpdate(null);
+    setManualUpdateProgress({ contentLength: 0, downloaded: 0 });
+    triggerToast(t("mvSettings.toast.checkingForUpdates"), "accent");
+
+    const result = await checkForUpdate();
+    if (result.available) {
+      setManualUpdate(result.update ?? null);
+      setManualUpdateStatus("available");
+      setManualUpdateMessage(
+        t("mvSettings.general.updateAvailableMessage", {
+          version: result.version ?? "latest",
+        }),
+      );
+      updateDownloadManager.registerAvailableUpdate(
+        result.update ?? null,
+        result.version ?? "",
+        result.currentVersion ?? "",
+        undefined,
+        false,
+      );
+      triggerToast(t("mvSettings.toast.updateAvailable"), "success");
+      return;
+    }
+
+    if (result.error) {
+      setManualUpdateStatus("error");
+      setManualUpdateMessage(result.error);
+      triggerToast(t("mvSettings.toast.updateCheckFailed"), "accent");
+      return;
+    }
+
+    setManualUpdateStatus("up-to-date");
+    setManualUpdateMessage(t("mvSettings.general.upToDateMessage"));
+    triggerToast(t("mvSettings.toast.upToDate"), "success");
+  }, [t, triggerToast]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (manualUpdateBusy) return;
+    try {
+      await updateDownloadManager.startDownload(manualUpdate || downloadState.update);
+    } catch (err) {
+      console.error("[MVSettings] Manual update failed:", err);
+      setManualUpdateStatus("error");
+      setManualUpdateMessage(err instanceof Error ? err.message : t("mvSettings.general.updateFailedMessage"));
+      triggerToast(t("mvSettings.toast.updateInstallFailed"), "accent");
+    }
+  }, [manualUpdate, downloadState.update, manualUpdateBusy, t, triggerToast]);
 
   const handleResetChurchOnboarding = useCallback(() => {
     update({ churchProfileOnboardingCompleted: false });
@@ -557,7 +698,7 @@ export function MVSettings() {
   /* ── Appearance helpers ── */
   const handleResetAppearance = useCallback(() => {
     setTheme("dark");
-    setAccentColor("purple");
+    setAppearance({ palette: "classic-blue", customAccent: "#1D4ED8" });
     setDensity("balanced");
     setFontSizeRange(2);
     setHighContrastUI(false);
@@ -585,6 +726,7 @@ export function MVSettings() {
       case "general": return t("mvSettings.tabDesc.general");
       case "obs": return t("mvSettings.tabDesc.obs");
       case "mobile": return t("mvSettings.tabDesc.mobile");
+      case "automation": return "Create, run, and store desktop automations for OBS.";
       case "appearance": return t("mvSettings.tabDesc.appearance");
       case "branding": return t("mvSettings.tabDesc.branding");
       case "bible": return t("mvSettings.tabDesc.bible");
@@ -595,66 +737,121 @@ export function MVSettings() {
 
   /* ── Mobile Remote state & handlers ── */
   const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
-  const [mobilePairingInfo, setMobilePairingInfo] = useState<{ ip: string; port: number; pairingToken: string } | null>(null);
+  const [mobilePairingInfo, setMobilePairingInfo] = useState<MobilePairingInfo | null>(null);
+  const [mobilePairingQrDataUrl, setMobilePairingQrDataUrl] = useState("");
+  const [mobileStatusBusy, setMobileStatusBusy] = useState(false);
+  const [mobilePairingBusy, setMobilePairingBusy] = useState(false);
+  const [isPrintingMobileQr, setIsPrintingMobileQr] = useState(false);
   const [mobileConnectedDevices, _setMobileConnectedDevices] = useState(0);
   const [mobileApprovedDevices, setMobileApprovedDevices] = useState<{ id: string; name: string; lastConnected: string }[]>([]);
   const [mobileDeviceRequests, setMobileDeviceRequests] = useState<{ id: string; name: string; model: string }[]>([]);
   const [mobilePermissions, setMobilePermissions] = useState([
     { key: "slides", icon: Monitor, nameKey: "mvSettings.mobile.permSlides", descKey: "mvSettings.mobile.permSlidesDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "bible", icon: Globe, nameKey: "mvSettings.mobile.permBible", descKey: "mvSettings.mobile.permBibleDesc", enabled: true, locked: false, requiredPlan: "" },
-    { key: "lowerThird", icon: Users, nameKey: "mvSettings.mobile.permLowerThird", descKey: "mvSettings.mobile.permLowerThirdDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "songLyrics", icon: Music, nameKey: "mvSettings.mobile.permSongLyrics", descKey: "mvSettings.mobile.permSongLyricsDesc", enabled: true, locked: false, requiredPlan: "" },
     { key: "automation", icon: Zap, nameKey: "mvSettings.mobile.permAutomation", descKey: "mvSettings.mobile.permAutomationDesc", enabled: false, locked: true, requiredPlan: "Growth" },
   ]);
 
   const mobilePairingPayload = useMemo(() => {
     if (!mobilePairingInfo) return "";
-    return JSON.stringify({
-      desktopName: settings.mobileDesktopName || "My Church",
-      ip: mobilePairingInfo.ip,
-      wsPort: mobilePairingInfo.port,
-      apiPort: 45678,
-      pairingCode: mobilePairingInfo.pairingToken,
-    });
+    return buildMobilePairingPayload(
+      mobilePairingInfo,
+      settings.mobileDesktopName || "My Church",
+    );
   }, [mobilePairingInfo, settings.mobileDesktopName]);
 
-  const handleMobileRestart = useCallback(async () => {
-    try {
-      await invoke("restart_mobile_companion");
-      triggerToast(t("mvSettings.toast.mobileServerStarted"), "success");
-    } catch {
-      triggerToast(t("mvSettings.toast.mobileServerFailed"), "accent");
-    }
-  }, [triggerToast, t]);
+  const mobilePairingPorts = useMemo(
+    () => (mobilePairingInfo ? resolveMobilePairingPorts(mobilePairingInfo) : null),
+    [mobilePairingInfo],
+  );
 
-  const handleMobileLogs = useCallback(() => {
-    // Placeholder: open logs panel
-    triggerToast(t("mvSettings.mobile.logsPanelSoon"), "accent");
-  }, [triggerToast, t]);
+  const mobileWebUrl = useMemo(() => {
+    return mobilePairingInfo ? buildMobileWebUrl(mobilePairingInfo) : "";
+  }, [mobilePairingInfo]);
+
+  const handleMobileRefreshStatus = useCallback(async () => {
+    setMobileStatusBusy(true);
+    try {
+      const [status, info] = await Promise.all([
+        invoke<{ running: boolean; port: number }>("get_mobile_server_status"),
+        invoke<MobilePairingInfo>("get_mobile_pairing_info"),
+      ]);
+      setMobileServerStatus(status);
+      setMobilePairingInfo(info);
+      triggerToast(
+        status.running
+          ? "Mobile connection is ready on this Wi-Fi."
+          : "Mobile connection is not running yet.",
+        status.running ? "success" : "accent",
+      );
+    } catch (error) {
+      console.error("[MVSettings] Could not refresh mobile status", error);
+      triggerToast("Could not refresh mobile connection status.", "accent");
+    } finally {
+      setMobileStatusBusy(false);
+    }
+  }, [triggerToast]);
 
   const handleMobileRefreshPairing = useCallback(async () => {
+    setMobilePairingBusy(true);
     try {
-      const info = await invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info");
+      const info = await invoke<MobilePairingInfo>("get_mobile_pairing_info");
       setMobilePairingInfo(info);
-    } catch { /* ignore */ }
-  }, []);
+      triggerToast("Pairing code refreshed.", "success");
+    } catch (error) {
+      console.error("[MVSettings] Could not refresh pairing code", error);
+      triggerToast("Could not refresh the pairing code.", "accent");
+    } finally {
+      setMobilePairingBusy(false);
+    }
+  }, [triggerToast]);
 
   const handleMobileCopyPayload = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(mobilePairingPayload);
+    if (!mobilePairingPayload) {
+      triggerToast("Pairing payload is not ready yet.", "accent");
+      return;
+    }
+    const copied = await copyTextToClipboard(mobilePairingPayload);
+    if (copied) {
       triggerToast(t("mvSettings.toast.mobileCopied"), "success");
-    } catch { /* ignore */ }
+    } else {
+      triggerToast("Could not copy the pairing payload.", "accent");
+    }
   }, [mobilePairingPayload, triggerToast, t]);
 
-  const handleMobilePrintQR = useCallback(() => {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mobilePairingPayload)}`;
-    const w = window.open("", "_blank", "width=400,height=500");
-    if (w) {
-      w.document.write(`<html><head><title>${t("mvSettings.mobile.qrPrintTitle")}</title><style>body{display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding:20px}img{margin:16px 0}p{font-size:12px;color:#666}</style></head><body><img src="${qrUrl}" width="300" height="300"/><p>${mobilePairingInfo?.pairingToken ?? ""}</p></body></html>`);
-      w.document.close();
-      w.print();
+  const handleMobileCopyWebUrl = useCallback(async () => {
+    if (!mobileWebUrl) {
+      triggerToast("Start Mobile Remote to generate a link.", "accent");
+      return;
     }
-  }, [mobilePairingPayload, mobilePairingInfo, t]);
+    const copied = await copyTextToClipboard(mobileWebUrl);
+    if (copied) {
+      triggerToast("iPhone link copied.", "success");
+    } else {
+      triggerToast("Could not copy the iPhone link.", "accent");
+    }
+  }, [mobileWebUrl, triggerToast]);
+
+  const handleMobilePrintQR = useCallback(() => {
+    if (!mobilePairingQrDataUrl) {
+      triggerToast("The QR code is still loading.", "accent");
+      return;
+    }
+    setIsPrintingMobileQr(true);
+  }, [mobilePairingQrDataUrl, triggerToast]);
+
+  const handleMobileOpenWebUrl = useCallback(async () => {
+    if (!mobileWebUrl) {
+      triggerToast("Start Mobile Remote to generate a link.", "accent");
+      return;
+    }
+    try {
+      await openUrl(mobileWebUrl);
+    } catch {
+      const opened = window.open(mobileWebUrl, "_blank", "noopener,noreferrer");
+      if (!opened) triggerToast("Could not open the iPhone link.", "accent");
+    }
+  }, [mobileWebUrl, triggerToast]);
 
   const handleMobileRenameDevice = useCallback(async (device: { id: string; name: string }) => {
     const newName = prompt(t("mvSettings.mobile.renamePrompt"), device.name);
@@ -689,33 +886,92 @@ export function MVSettings() {
     setMobilePermissions((prev) => prev.map((p) => p.key === key ? { ...p, enabled } : p));
   }, []);
 
-  /* Fetch pairing info once when remote is enabled */
+  /* Fetch pairing info whenever the Mobile settings tab is opened. */
   useEffect(() => {
-    if (!settings.mobileRemoteEnabled) return;
+    if (activeTab !== "mobile") return;
     let mounted = true;
-    invoke<{ ip: string; port: number; pairingToken: string }>("get_mobile_pairing_info")
+    invoke<MobilePairingInfo>("get_mobile_pairing_info")
       .then((info) => { if (mounted) setMobilePairingInfo(info); })
       .catch(() => { });
     return () => { mounted = false; };
-  }, [settings.mobileRemoteEnabled]);
+  }, [activeTab]);
 
-  /* Poll server status every 3s when remote is enabled */
+  /* Poll server status every 3s while Mobile settings is open. */
   useEffect(() => {
-    if (!settings.mobileRemoteEnabled) return;
+    if (activeTab !== "mobile") return;
     let mounted = true;
     const poll = async () => {
       try {
-        const status = await invoke<{ running: boolean; port: number }>("get_mobile_server_status");
-        if (mounted) setMobileServerStatus(status);
+        const [status, info] = await Promise.all([
+          invoke<{ running: boolean; port: number }>("get_mobile_server_status"),
+          invoke<MobilePairingInfo>("get_mobile_pairing_info"),
+        ]);
+        if (mounted) {
+          setMobileServerStatus(status);
+          setMobilePairingInfo(info);
+        }
       } catch { /* backend not available */ }
     };
     poll();
     const id = setInterval(poll, 3000);
     return () => { mounted = false; clearInterval(id); };
-  }, [settings.mobileRemoteEnabled]);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!mobilePairingPayload) {
+      setMobilePairingQrDataUrl("");
+      return;
+    }
+    let mounted = true;
+    void QRCode.toDataURL(mobilePairingPayload, {
+      width: 240,
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0B1426", light: "#FFFFFF" },
+    }).then((dataUrl) => {
+      if (mounted) setMobilePairingQrDataUrl(dataUrl);
+    }).catch(() => {
+      if (mounted) setMobilePairingQrDataUrl("");
+    });
+    return () => { mounted = false; };
+  }, [mobilePairingPayload]);
+
+  useEffect(() => {
+    if (!isPrintingMobileQr) return;
+
+    const handleAfterPrint = () => setIsPrintingMobileQr(false);
+    window.addEventListener("afterprint", handleAfterPrint);
+    const printTimer = window.setTimeout(() => {
+      try {
+        window.print();
+      } catch (error) {
+        console.error("[MVSettings] Could not open QR print dialog", error);
+        setIsPrintingMobileQr(false);
+        triggerToast("Could not open the print dialog.", "accent");
+      }
+    }, 100);
+
+    return () => {
+      window.clearTimeout(printTimer);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [isPrintingMobileQr, triggerToast]);
 
   return (
-    <div className="app-container">
+    <div
+      className={`settings-page density-${density} font-scale-${fontSizeRange === 1 ? "small" : fontSizeRange === 2 ? "medium" : "large"}`}
+      data-theme={effectiveTheme}
+      data-contrast={highContrastUI ? "high" : "standard"}
+      data-reduced-motion={reduceMotion ? "true" : "false"}
+      data-roundness={roundedCorners ? "standard" : "none"}
+    >
+      {isPrintingMobileQr && mobilePairingQrDataUrl && (
+        <div className="mr-qr-print-view" aria-hidden="true">
+          <h1>MakeChurchEasy</h1>
+          <img src={mobilePairingQrDataUrl} alt="QR Pairing Code" />
+          <p>{t("mvSettings.mobile.qrCode")} {mobilePairingInfo?.pairingToken ?? ""}</p>
+        </div>
+      )}
       {/* Toast stack */}
       <div className="toast-container">
         {toasts.map((toast) => (
@@ -773,9 +1029,10 @@ export function MVSettings() {
             ["appearance", Palette, t("mvSettings.tabs.appearance")],
             ["usage", History, t("mvSettings.tabs.usage")],
             ["obs", Radio, t("mvSettings.tabs.obs")],
-            // ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
+            ["automation", Zap, "Automations"],
             // ["audio", Mic, t("mvSettings.tabs.audio")],
-            // ["pro", ShieldCheck, "Pro License"],
+            // ["full-access", ShieldCheck, "Full Access"],
             // ["developer", Key, "Developer"],
           ] as const).map(([id, IconComp, label]) => (
             <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
@@ -786,6 +1043,8 @@ export function MVSettings() {
 
         {/* Scrollable content */}
         <div className="main-scroll-pane">
+          <AccountSummaryCards className="settings-summary-cards" />
+          <LocalDevPlanSwitcher />
           <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
             {/* Left: main form column */}
             <div className="settings-form-column">
@@ -816,75 +1075,6 @@ export function MVSettings() {
                   </div>
 
                   {/* ── Global Module Defaults ── */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.general.globalModuleDefaults")}</h3>
-                      <p className="section-desc">{t("mvSettings.general.globalModuleDefaultsDesc")}</p>
-                    </div>
-                    <div className="settings-card fields-rows-stack">
-                      <div className="flex-between-center">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultBibleOverlayMode")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultBibleOverlayModeDesc")}</span>
-                        </div>
-                        <div className="form-select-container" style={{ width: "180px" }}>
-                          <select
-                            className="custom-select"
-                            value={settings.defaultBibleOverlayMode}
-                            onChange={(e) => update({ defaultBibleOverlayMode: e.target.value as "fullscreen" | "lower-third" })}
-                          >
-                            <option value="fullscreen">{t("mvSettings.general.fullscreen")}</option>
-                            <option value="lower-third">{t("mvSettings.general.lowerThird")}</option>
-                          </select>
-                          <span className="select-arrow"><ChevronDown size={14} /></span>
-                        </div>
-                      </div>
-
-                      <div className="flex-between-center">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultSpeakerSize")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultSpeakerSizeDesc")}</span>
-                        </div>
-                        <div className="form-select-container" style={{ width: "180px" }}>
-                          <select
-                            className="custom-select"
-                            value={settings.defaultSpeakerSize}
-                            onChange={(e) => update({ defaultSpeakerSize: e.target.value })}
-                          >
-                            <option value="s">{t("mvSettings.general.smallS")}</option>
-                            <option value="m">{t("mvSettings.general.mediumM")}</option>
-                            <option value="l">{t("mvSettings.general.largeL")}</option>
-                            <option value="xl">{t("mvSettings.general.extraLargeXL")}</option>
-                            <option value="2xl">{t("mvSettings.general.xxl")}</option>
-                            <option value="3xl">{t("mvSettings.general.xxxl")}</option>
-                          </select>
-                          <span className="select-arrow"><ChevronDown size={14} /></span>
-                        </div>
-                      </div>
-
-                      <div className="flex-between-center">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.general.defaultTickerScrollSpeed")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.general.defaultTickerScrollSpeedDesc")}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={settings.defaultTickerScrollSpeed}
-                            onChange={(e) => update({ defaultTickerScrollSpeed: Number(e.target.value) })}
-                            style={{ width: 100, accentColor: settings.brandColor }}
-                          />
-                          <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 20, textAlign: "center" }}>
-                            {settings.defaultTickerScrollSpeed}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* About */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
@@ -902,6 +1092,64 @@ export function MVSettings() {
                         {t("mvSettings.general.aboutDescription")}
                       </p>
                       <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("mvSettings.general.aboutBuiltWith")}</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+                        <button
+                          className="action-btn"
+                          onClick={handleCheckForUpdates}
+                          disabled={manualUpdateBusy}
+                          title={t("mvSettings.general.checkForUpdates")}
+                        >
+                          <RefreshCw size={14} className={effectiveUpdateStatus === "checking" ? "animate-spin" : ""} />
+                          <span>
+                            {effectiveUpdateStatus === "checking"
+                              ? t("mvSettings.general.checkingForUpdates")
+                              : t("mvSettings.general.checkForUpdates")}
+                          </span>
+                        </button>
+                        {effectiveUpdateStatus === "available" && (
+                          <button
+                            className="action-btn btn-primary"
+                            onClick={handleInstallUpdate}
+                            title={t("mvSettings.general.installUpdate")}
+                          >
+                            <ExternalLink size={14} />
+                            <span>{t("mvSettings.general.installUpdate")}</span>
+                          </button>
+                        )}
+                      </div>
+                      {(downloadState.errorMsg || manualUpdateMessage) && (
+                        <p style={{
+                          color: effectiveUpdateStatus === "error" ? "var(--danger-color)" : "var(--text-muted)",
+                          fontSize: 12,
+                          margin: "10px 0 0",
+                        }}>
+                          {downloadState.errorMsg || manualUpdateMessage}
+                        </p>
+                      )}
+                      {(effectiveUpdateStatus === "downloading" || effectiveUpdateStatus === "installing" || effectiveUpdateStatus === "relaunching") && (
+                        <div className="progress-container">
+                          <div className="progress-info">
+                            <span>
+                              {effectiveUpdateStatus === "downloading"
+                                ? t("mvSettings.general.downloadingUpdate")
+                                : effectiveUpdateStatus === "installing"
+                                  ? t("mvSettings.general.installingUpdate")
+                                  : t("mvSettings.general.relaunchingUpdate")}
+                            </span>
+                            <span>
+                              {effectiveUpdateStatus === "downloading"
+                                ? `${manualUpdatePercent}% · ${formatUpdateBytes(effectiveUpdateProgress.downloaded)} / ${formatUpdateBytes(effectiveUpdateProgress.contentLength)}`
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="progress-track-bg">
+                            <div
+                              className="progress-track-fill"
+                              style={{ width: effectiveUpdateStatus === "downloading" ? `${manualUpdatePercent}%` : "100%" }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -962,7 +1210,7 @@ export function MVSettings() {
                       <label className="form-label">{t("mvSettings.obs.connectionMethod")}</label>
                       <div className="grid-2-col" style={{ marginTop: "4px" }}>
                         <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => setObsMethod("WebSocket")} />
+                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => { setObsMethod("WebSocket"); setObsTestResult(null); setObsStatus(obsService.isConnected ? "connected" : "disconnected"); }} />
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
@@ -973,7 +1221,7 @@ export function MVSettings() {
                           </div>
                         </label>
                         <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => setObsMethod("Remote")} />
+                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => { setObsMethod("Remote"); setObsTestResult(null); setObsStatus("disconnected"); }} />
                           <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
                             <div className="checked-indicator"><Check size={10} /></div>
                             <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
@@ -1053,179 +1301,255 @@ export function MVSettings() {
               {/* ══════════════ MOBILE REMOTE TAB ══════════════ */}
               {activeTab === "mobile" && (
                 hasMobileAccess ? (
-                  <div className="settings-section">
-                    {/* ── Section 1: Enable Mobile Remote ── */}
-                    <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <div className="switch-row">
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
-                        </div>
-                        <label className="switch-toggle-label">
-                          <input
-                            type="checkbox"
-                            checked={settings.mobileRemoteEnabled}
-                            onChange={(e) => {
-                              const next = e.target.checked;
-                              db.updateSettings({ mobileRemoteEnabled: next });
-                              setSettings(db.getSettings());
-                            }}
-                          />
-                          <span className="switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* ── Section 2: Connection Status ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <div className="mr-status-grid">
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
-                          <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
-                            {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
-                          </span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
-                          <span className="mr-status-value">8765</span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
-                          <span className="mr-status-value">45678</span>
-                        </div>
-                        <div className="mr-status-item">
-                          <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
-                          <span className="mr-status-value">{mobileConnectedDevices}</span>
-                        </div>
-                      </div>
-                      <div className="mr-status-actions">
-                        <button className="action-btn secondary" onClick={handleMobileRestart}>
-                          <RefreshCw size={14} /> {t("mvSettings.mobile.statusRestart")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobileLogs}>
-                          <Monitor size={14} /> {t("mvSettings.mobile.statusLogs")}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* ── Section 3: QR Pairing ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
-                      <div className="mr-qr-container">
-                        <div className="mr-qr-box">
-                          {mobilePairingInfo ? (
-                            <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobilePairingPayload)}`}
-                              alt="QR Code"
-                              className="mr-qr-image"
-                              onError={(e) => {
-                                // Fallback: generate SVG locally
-                                const target = e.currentTarget;
-                                target.style.display = "none";
-                                const fallback = target.nextElementSibling as HTMLElement;
-                                if (fallback) fallback.style.display = "flex";
-                              }}
-                            />
-                          ) : null}
-                          <div className="mr-qr-fallback" style={{ display: mobilePairingInfo ? "none" : "flex" }}>
-                            <Smartphone size={48} />
+                  <div className="settings-section mr-mobile-settings-section">
+                    <div className="mr-mobile-primary-grid">
+                      <div className="mr-mobile-primary-stack">
+                        {/* ── Section 1: Enable Mobile Remote ── */}
+                        <div className="mr-mobile-primary-section">
+                          <div className="section-header">
+                            <h3 className="section-title">{t("mvSettings.mobile.enable")}</h3>
+                          </div>
+                          <div className="settings-card">
+                            <div className="switch-row">
+                              <div className="switch-left">
+                                <span className="switch-title">{t("mvSettings.mobile.enableDesc")}</span>
+                                <span className="switch-subtitle">{t("mvSettings.mobile.enableHint")}</span>
+                              </div>
+                              <label className="switch-toggle-label">
+                                <input
+                                  type="checkbox"
+                                  checked={settings.mobileRemoteEnabled}
+                                  onChange={(e) => {
+                                    const next = e.target.checked;
+                                    db.updateSettings({ mobileRemoteEnabled: next });
+                                    setSettings(db.getSettings());
+                                  }}
+                                />
+                                <span className="switch-slider"></span>
+                              </label>
+                            </div>
                           </div>
                         </div>
-                        <div className="mr-qr-info">
-                          <div className="mr-qr-code-display">
-                            <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
-                            <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+
+                        {/* ── Section 2: Connection Status ── */}
+                        <div className="mr-mobile-primary-section">
+                          <div className="section-header">
+                            <h3 className="section-title">{t("mvSettings.mobile.status")}</h3>
+                          </div>
+                          <div className="settings-card">
+                            <div className="mr-status-grid">
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusServer")}</span>
+                                <span className={`mr-status-badge ${mobileServerStatus?.running ? "mr-status-on" : "mr-status-off"}`}>
+                                  {mobileServerStatus?.running ? t("mvSettings.mobile.statusRunning") : t("mvSettings.mobile.statusStopped")}
+                                </span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusWsPort")}</span>
+                                <span className="mr-status-value">
+                                  {mobilePairingPorts?.wsPort ?? mobileServerStatus?.port ?? "—"}
+                                </span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusApiPort")}</span>
+                                <span className="mr-status-value">{mobilePairingPorts?.apiPort ?? "—"}</span>
+                              </div>
+                              <div className="mr-status-item">
+                                <span className="mr-status-label">{t("mvSettings.mobile.statusDevices")}</span>
+                                <span className="mr-status-value">{mobileConnectedDevices}</span>
+                              </div>
+                            </div>
+                            <div className="mr-status-actions">
+                              <button
+                                type="button"
+                                className="action-btn secondary"
+                                onClick={handleMobileRefreshStatus}
+                                disabled={mobileStatusBusy}
+                              >
+                                <RefreshCw size={14} className={mobileStatusBusy ? "animate-spin" : ""} />
+                                {mobileStatusBusy ? "Refreshing..." : "Refresh status"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div className="mr-qr-actions">
-                        <button className="action-btn secondary" onClick={handleMobileRefreshPairing}>
-                          <RefreshCw size={14} /> {t("mvSettings.mobile.qrRefresh")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobileCopyPayload}>
-                          <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
-                        </button>
-                        <button className="action-btn secondary" onClick={handleMobilePrintQR}>
-                          <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
-                        </button>
+
+                      {/* ── Section 3: QR Pairing ── */}
+                      <div className="mr-mobile-primary-section mr-mobile-primary-section--qr">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.qrTitle")}</h3>
+                        </div>
+                        <div className="settings-card mr-mobile-qr-card">
+                          <p className="section-desc">{t("mvSettings.mobile.qrDesc")}</p>
+                          <div className="mr-qr-container">
+                            <div className="mr-qr-box">
+                              {mobilePairingQrDataUrl ? (
+                                <img
+                                  src={mobilePairingQrDataUrl}
+                                  alt="QR Code"
+                                  className="mr-qr-image"
+                                />
+                              ) : null}
+                              <div className="mr-qr-fallback" style={{ display: mobilePairingQrDataUrl ? "none" : "flex" }}>
+                                <Smartphone size={48} />
+                              </div>
+                            </div>
+                            <div className="mr-qr-info">
+                              <div className="mr-qr-code-display">
+                                <span className="mr-qr-code-label">{t("mvSettings.mobile.qrCode")}</span>
+                                <span className="mr-qr-code-value">{mobilePairingInfo?.pairingToken ?? "------"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mr-qr-actions">
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobileRefreshPairing}
+                              disabled={mobilePairingBusy}
+                            >
+                              <RefreshCw size={14} className={mobilePairingBusy ? "animate-spin" : ""} />
+                              {mobilePairingBusy ? "Refreshing..." : t("mvSettings.mobile.qrRefresh")}
+                            </button>
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobileCopyPayload}
+                              disabled={!mobilePairingPayload}
+                            >
+                              <Copy size={14} /> {t("mvSettings.mobile.qrCopy")}
+                            </button>
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={handleMobilePrintQR}
+                              disabled={!mobilePairingQrDataUrl || isPrintingMobileQr}
+                            >
+                              <Printer size={14} /> {t("mvSettings.mobile.qrPrint")}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* ── Section 4: Approved Devices ── */}
+                    {/* ── Section 4: iPhone / iPad PWA ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
+                      <h3 className="section-title">iPhone / iPad Web App</h3>
                     </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
-                      {mobileApprovedDevices.length === 0 ? (
-                        <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
-                      ) : (
-                        <div className="mr-device-list">
-                          {mobileApprovedDevices.map((device) => (
-                            <div key={device.id} className="mr-device-item">
-                              <div className="mr-device-info">
-                                <Smartphone size={16} className="mr-device-icon" />
-                                <span className="mr-device-name">{device.name}</span>
-                                <span className="mr-device-last">{device.lastConnected}</span>
-                              </div>
-                              <div className="mr-device-actions">
-                                <button className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
-                                  {t("mvSettings.mobile.rename")}
-                                </button>
-                                <button className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
-                                  {t("mvSettings.mobile.disconnect")}
-                                </button>
-                                <button className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
-                                  {t("mvSettings.mobile.remove")}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    <div className="settings-card mr-pwa-card">
+                      <div className="mr-pwa-heading">
+                        <div className="mr-pwa-icon">
+                          <Smartphone size={18} />
                         </div>
-                      )}
+                        <div>
+                          <h4 className="mr-pwa-title">Use MakeChurchEasy in Safari</h4>
+                          <p className="section-desc">
+                            On the same Wi-Fi, paste this local link into Safari. Then use Share → Add to Home Screen.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mr-pwa-url-row">
+                        <input
+                          className="mr-pwa-url"
+                          value={mobileWebUrl || "Start Mobile Remote to generate a link"}
+                          readOnly
+                          onFocus={(event) => event.currentTarget.select()}
+                          aria-label="Local iPhone web app link"
+                        />
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={handleMobileCopyWebUrl}
+                          disabled={!mobileWebUrl}
+                        >
+                          <Copy size={14} /> Copy link
+                        </button>
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={handleMobileOpenWebUrl}
+                          disabled={!mobileWebUrl}
+                        >
+                          <ExternalLink size={14} /> Open
+                        </button>
+                      </div>
+                      <p className="mr-pwa-hint">
+                        This link is local to this desktop and includes the current pairing code. Keep both devices on the same Wi-Fi.
+                      </p>
                     </div>
 
-                    {/* ── Section 5: Device Requests ── */}
-                    <div className="section-header" style={{ marginTop: 24 }}>
-                      <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
-                    </div>
-                    <div className="settings-card">
-                      <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
-                      {mobileDeviceRequests.length === 0 ? (
-                        <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
-                      ) : (
-                        <div className="mr-device-list">
-                          {mobileDeviceRequests.map((request) => (
-                            <div key={request.id} className="mr-device-item mr-device-pending">
-                              <div className="mr-device-info">
-                                <Bell size={16} className="mr-device-icon" />
-                                <span className="mr-device-name">{request.name}</span>
-                                <span className="mr-device-model">{request.model}</span>
-                              </div>
-                              <div className="mr-device-actions">
-                                <button className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
-                                  {t("mvSettings.mobile.approve")}
-                                </button>
-                                <button className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
-                                  {t("mvSettings.mobile.reject")}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                    <div className="mr-device-panels">
+                      {/* ── Section 5: Approved Devices ── */}
+                      <div className="mr-device-panel">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.approvedDevices")}</h3>
                         </div>
-                      )}
+                        <div className="settings-card">
+                          <p className="section-desc">{t("mvSettings.mobile.approvedDevicesDesc")}</p>
+                          {mobileApprovedDevices.length === 0 ? (
+                            <p className="mr-empty-state">{t("mvSettings.mobile.noDevices")}</p>
+                          ) : (
+                            <div className="mr-device-list">
+                              {mobileApprovedDevices.map((device) => (
+                                <div key={device.id} className="mr-device-item">
+                                  <div className="mr-device-info">
+                                    <Smartphone size={16} className="mr-device-icon" />
+                                    <span className="mr-device-name">{device.name}</span>
+                                    <span className="mr-device-last">{device.lastConnected}</span>
+                                  </div>
+                                  <div className="mr-device-actions">
+                                    <button type="button" className="action-btn small secondary" onClick={() => handleMobileRenameDevice(device)}>
+                                      {t("mvSettings.mobile.rename")}
+                                    </button>
+                                    <button type="button" className="action-btn small secondary" onClick={() => handleMobileDisconnectDevice(device)}>
+                                      {t("mvSettings.mobile.disconnect")}
+                                    </button>
+                                    <button type="button" className="action-btn small danger" onClick={() => handleMobileRemoveDevice(device)}>
+                                      {t("mvSettings.mobile.remove")}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Section 6: Device Requests ── */}
+                      <div className="mr-device-panel">
+                        <div className="section-header">
+                          <h3 className="section-title">{t("mvSettings.mobile.deviceRequests")}</h3>
+                        </div>
+                        <div className="settings-card">
+                          <p className="section-desc">{t("mvSettings.mobile.deviceRequestsDesc")}</p>
+                          {mobileDeviceRequests.length === 0 ? (
+                            <p className="mr-empty-state">{t("mvSettings.mobile.noRequests")}</p>
+                          ) : (
+                            <div className="mr-device-list">
+                              {mobileDeviceRequests.map((request) => (
+                                <div key={request.id} className="mr-device-item mr-device-pending">
+                                  <div className="mr-device-info">
+                                    <Bell size={16} className="mr-device-icon" />
+                                    <span className="mr-device-name">{request.name}</span>
+                                    <span className="mr-device-model">{request.model}</span>
+                                  </div>
+                                  <div className="mr-device-actions">
+                                    <button type="button" className="action-btn small primary" onClick={() => handleMobileApproveRequest(request)}>
+                                      {t("mvSettings.mobile.approve")}
+                                    </button>
+                                    <button type="button" className="action-btn small danger" onClick={() => handleMobileRejectRequest(request)}>
+                                      {t("mvSettings.mobile.reject")}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* ── Section 6: Mobile Permissions ── */}
+                    {/* ── Section 7: Mobile Permissions ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
                       <h3 className="section-title">{t("mvSettings.mobile.permissions")}</h3>
                     </div>
@@ -1258,7 +1582,7 @@ export function MVSettings() {
                       </div>
                     </div>
 
-                    {/* ── Section 7: Security ── */}
+                    {/* ── Section 8: Security ── */}
                     <div className="section-header" style={{ marginTop: 24 }}>
                       <h3 className="section-title">{t("mvSettings.mobile.security")}</h3>
                     </div>
@@ -1360,6 +1684,9 @@ export function MVSettings() {
                 )
               )}
 
+              {/* ══════════════ AUTOMATION TAB ══════════════ */}
+              {activeTab === "automation" && <AutomationSettingsPanel />}
+
               {/* ══════════════ APPEARANCE TAB ══════════════ */}
               {activeTab === "appearance" && (
                 <div className="settings-section">
@@ -1392,10 +1719,51 @@ export function MVSettings() {
                       </div>
                     </div>
 
-
-
-                    {/* Accent color */}
-
+                    {/* Shared app + Dock color theme */}
+                    <hr className="settings-divider" />
+                    <div className="form-group">
+                      <label className="form-label">Color theme</label>
+                      <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
+                        Choose the same visual language for MakeChurchEasy and the OBS Dock.
+                      </p>
+                      <div className="app-appearance-palette-grid">
+                        {APP_APPEARANCE_PALETTES.map((palette) => {
+                          const selected = appearance.palette === palette.id;
+                          return (
+                            <button
+                              key={palette.id}
+                              type="button"
+                              className={`app-appearance-palette${selected ? " app-appearance-palette--active" : ""}`}
+                              onClick={() => setAppearance({ palette: palette.id })}
+                              aria-pressed={selected}
+                            >
+                              <span className="app-appearance-palette__swatches" aria-hidden="true">
+                                {palette.swatches.map((swatch) => (
+                                  <span key={swatch} style={{ background: swatch }} />
+                                ))}
+                              </span>
+                              <span className="app-appearance-palette__copy">
+                                <span className="app-appearance-palette__title">{palette.label}</span>
+                                <span className="app-appearance-palette__desc">{palette.description}</span>
+                              </span>
+                              {selected && <Check size={15} className="app-appearance-palette__check" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <label className={`app-appearance-custom${appearance.palette === "custom" ? " app-appearance-custom--active" : ""}`}>
+                        <span>
+                          <span className="app-appearance-custom__title">Custom accent</span>
+                          <span className="app-appearance-custom__desc">Use a personal color for buttons and active states.</span>
+                        </span>
+                        <input
+                          type="color"
+                          value={appearance.customAccent}
+                          onChange={(event) => setAppearance({ palette: "custom", customAccent: event.target.value })}
+                          aria-label="Custom accent"
+                        />
+                      </label>
+                    </div>
 
                     <hr className="settings-divider" />
 
@@ -1406,16 +1774,6 @@ export function MVSettings() {
 
 
                     {/* Toggles */}
-                    <div className="switch-row">
-                      <div className="switch-left">
-                        <span className="switch-title">{t("mvSettings.appearance.highContrastMode")}</span>
-                        <span className="switch-subtitle">{t("mvSettings.appearance.highContrastDesc")}</span>
-                      </div>
-                      <label className="switch-toggle-label">
-                        <input type="checkbox" checked={highContrastUI} onChange={() => { setHighContrastUI(!highContrastUI); update({ highContrast: !highContrastUI }); }} />
-                        <span className="switch-slider"></span>
-                      </label>
-                    </div>
 
 
                   </div>
@@ -1426,8 +1784,8 @@ export function MVSettings() {
               {activeTab === "branding" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Church Profile</h3>
-                    <p className="section-desc">Identity values synced from the web dashboard. Edit at makechurcheasy.creatorstudioslabs.stream → Church Profile.</p>
+                    <h3 className="section-title">{t("mvSettings.branding.churchProfile")}</h3>
+                    <p className="section-desc">{t("mvSettings.branding.churchProfileDesc")}</p>
                   </div>
 
                   {/* Sync status bar */}
@@ -1435,21 +1793,36 @@ export function MVSettings() {
                     {syncing && (
                       <>
                         <RefreshCw size={14} className="spin" style={{ animation: "spin 1s linear infinite" }} />
-                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Syncing from web dashboard…</span>
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{t("mvSettings.branding.syncingFromDashboard")}</span>
                       </>
                     )}
                     {!syncing && syncStatus && (
                       <>
-                        <CheckCircle size={14} style={{ color: "var(--accent, #10B981)", flexShrink: 0 }} />
+                        {brandingProfileFound === false ? (
+                          <ExternalLink size={14} style={{ color: "var(--warning-color, #F59E0B)", flexShrink: 0 }} />
+                        ) : (
+                          <CheckCircle size={14} style={{ color: "var(--accent, #10B981)", flexShrink: 0 }} />
+                        )}
                         <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>{syncStatus}</span>
+                        {brandingProfileFound === false && (
+                          <button
+                            className="action-btn"
+                            onClick={handleOpenChurchProfile}
+                            style={{ fontSize: 11, padding: "4px 10px", gap: 4, flexShrink: 0 }}
+                            title={t("mvSettings.branding.fillChurchProfile")}
+                          >
+                            <ExternalLink size={12} />
+                            {t("mvSettings.branding.fillChurchProfile")}
+                          </button>
+                        )}
                         <button
                           className="btn btn-ghost"
                           onClick={runSync}
                           disabled={syncing}
                           style={{ fontSize: 11, padding: "2px 8px", gap: 4, flexShrink: 0 }}
-                          title="Retry">
+                          title={t("mvSettings.branding.retry")}>
                           <RefreshCw size={12} />
-                          Retry
+                          {t("mvSettings.branding.retry")}
                         </button>
                       </>
                     )}
@@ -1457,7 +1830,7 @@ export function MVSettings() {
 
                   <div className="settings-card fields-rows-stack">
                     <div className="form-group">
-                      <label className="form-label">Church Name</label>
+                      <label className="form-label">{t("mvSettings.branding.churchName")}</label>
                       <input className="custom-textbox" type="text" value={settings.churchName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                     </div>
                     {/* <div className="form-group">
@@ -1465,10 +1838,10 @@ export function MVSettings() {
                       <input className="custom-textbox" type="text" value={settings.mainPastorName} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                     </div> */}
                     <div className="form-group">
-                      <label className="form-label">Pastors / Speakers</label>
+                      <label className="form-label">{t("mvSettings.branding.pastorsSpeakers")}</label>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center", fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" as const }}>
-                          <span>Photo</span><span>Name</span><span>Position</span><span />
+                          <span>{t("mvSettings.branding.photo")}</span><span>{t("mvSettings.branding.name")}</span><span>{t("mvSettings.branding.position")}</span><span />
                         </div>
                         {speakerProfiles.filter((p) => p.name.trim()).map((profile, index) => (
                           <div key={`sp-${index}`} style={{ display: "grid", gridTemplateColumns: "44px 1.1fr 1fr auto", gap: 8, alignItems: "center" }}>
@@ -1484,12 +1857,12 @@ export function MVSettings() {
                             <input className="custom-textbox" type="text" value={profile.name} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             <input className="custom-textbox" type="text" value={profile.role} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                             {profile.isMain && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>MAIN</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent, #F59E0B)", background: "rgba(245, 158, 11, 0.15)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{t("mvSettings.branding.main")}</span>
                             )}
                           </div>
                         ))}
                         {speakerProfiles.filter((p) => p.name.trim()).length === 0 && (
-                          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No speakers configured.</p>
+                          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("mvSettings.branding.noSpeakersConfigured")}</p>
                         )}
                       </div>
                     </div>
@@ -1498,29 +1871,21 @@ export function MVSettings() {
                   {/* Brand defaults */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">Brand Defaults</h3>
-                      <p className="section-desc">Defaults for lower-third and speaker overlays (OBS output).</p>
+                      <h3 className="section-title">{t("mvSettings.branding.brandDefaults")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.brandDefaultsDesc")}</p>
                     </div>
 
                     <div className="settings-card fields-rows-stack">
-                      <div className="form-group">
-                        <label className="form-label">Default lower-third duration</label>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <input className="custom-textbox" type="number" min={1} max={300} value={settings.lowerThirdDefaultDurationSec} readOnly tabIndex={-1} style={{ width: 80, opacity: 0.7, cursor: "default" }} />
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>sec</span>
-                        </div>
-                      </div>
-
                       <div className="grid-2-col">
                         <div className="form-group">
-                          <label className="form-label">Primary Color</label>
+                          <label className="form-label">{t("mvSettings.branding.primaryColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
                         <div className="form-group">
-                          <label className="form-label">Secondary Color</label>
+                          <label className="form-label">{t("mvSettings.branding.secondaryColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandSecondaryColor || DEFAULT_SETTINGS.brandColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandSecondaryColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
@@ -1530,14 +1895,14 @@ export function MVSettings() {
 
                       <div className="grid-2-col">
                         <div className="form-group">
-                          <label className="form-label">Accent Color</label>
+                          <label className="form-label">{t("mvSettings.branding.accentColor")}</label>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: settings.brandAccentColor, border: "1px solid var(--border-color)", flexShrink: 0 }} />
                             <input className="custom-textbox" type="text" value={settings.brandAccentColor} readOnly tabIndex={-1} style={{ flex: 1, fontFamily: "monospace", opacity: 0.7, cursor: "default" }} />
                           </div>
                         </div>
                         <div className="form-group">
-                          <label className="form-label">Font Family</label>
+                          <label className="form-label">{t("mvSettings.branding.fontFamily")}</label>
                           <input className="custom-textbox" type="text" value={settings.brandFontFamily} readOnly tabIndex={-1} style={{ opacity: 0.7, cursor: "default" }} />
                         </div>
                       </div>
@@ -1547,8 +1912,8 @@ export function MVSettings() {
                   {/* Brand logo */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">Brand Logo</h3>
-                      <p className="section-desc">Church logo synced from the web dashboard.</p>
+                      <h3 className="section-title">{t("mvSettings.branding.brandLogo")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.brandLogoDesc")}</p>
                     </div>
 
                     <div className="settings-card fields-rows-stack">
@@ -1559,10 +1924,10 @@ export function MVSettings() {
                             alt="Church logo"
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: "contain", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)" }}
                           />
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Logo synced from web dashboard</span>
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t("mvSettings.branding.logoSynced")}</span>
                         </div>
                       ) : (
-                        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No logo set. Upload one from the web dashboard.</p>
+                        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("mvSettings.branding.noLogoSet")}</p>
                       )}
                     </div>
                   </div>
@@ -1570,10 +1935,10 @@ export function MVSettings() {
                   {/* First-launch setup */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">First-Launch Setup</h3>
-                      <p className="section-desc">Reopen the church profile setup flow for a new operator.</p>
+                      <h3 className="section-title">{t("mvSettings.branding.firstLaunchSetup")}</h3>
+                      <p className="section-desc">{t("mvSettings.branding.firstLaunchSetupDesc")}</p>
                     </div>
-                    <button className="action-btn" onClick={handleResetChurchOnboarding} title="Reset"><RefreshCw size={14} /> Reset Onboarding</button>
+                    <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}><RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding")}</button>
                   </div>
                 </div>
               )}
@@ -1585,12 +1950,12 @@ export function MVSettings() {
               {activeTab === "usage" && (
                 <div className="settings-section">
                   <div className="section-header">
-                    <h3 className="section-title">Credits Overview</h3>
-                    <p className="section-desc">Track your AI credits usage and plan details.</p>
+                    <h3 className="section-title">{t("mvSettings.credits.creditsOverview")}</h3>
+                    <p className="section-desc">{t("mvSettings.credits.creditsOverviewDesc")}</p>
                   </div>
 
                   {/* ── Trial Banner ── */}
-                  {trialActive && (
+                  {displayTrialActive && (
                     <div style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       padding: "14px 18px", borderRadius: "3px", marginBottom: "24px",
@@ -1601,15 +1966,15 @@ export function MVSettings() {
                         <Calendar size={18} style={{ color: "#1D4ED8" }} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
-                            Growth Trial — {trialDaysLeft} Day{trialDaysLeft !== 1 ? "s" : ""} Remaining
+                            {t("mvSettings.credits.trial.growthTrialDaysRemaining", { trialDaysLeft })}
                           </div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            Ends {trialEndDate} · All premium features are active · {t("common.upgradePlansStartToday", { amount: "3,500" })}
+                            {t("mvSettings.credits.trial.trialEndsDate", { trialEndDate })} · {t("common.upgradePlansStartToday", { amount: "3,500" })}
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => triggerToast("Visit makechurcheasy.creatorstudioslabs.stream/subscription/plans to upgrade", "accent")} title="Upgrade">
-                        <ExternalLink size={12} /> Upgrade
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => window.open("https://makechurcheazy.com/subscription/plans", "_blank", "noopener,noreferrer")} title={t("mvSettings.credits.upgrade")}>
+                        <ExternalLink size={12} /> {t("mvSettings.credits.upgrade")}
                       </button>
                     </div>
                   )}
@@ -1618,35 +1983,35 @@ export function MVSettings() {
                   <div className="settings-card credits-dashboard" style={{ marginBottom: "24px" }}>
                     <div className="credits-dashboard-grid">
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Current Plan</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.currentPlan")}</span>
                         <div className="credits-stat-value-row">
-                          <span className="credits-stat-value">{planLabel} Plan</span>
+                          <span className="credits-stat-value">{planLabel} {t("mvSettings.credits.plan")}</span>
                           <span className="feature-tag-pill" style={{
                             textTransform: "uppercase",
                             fontSize: "12px",
-                            background: trialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
-                            color: trialActive ? "#1D4ED8" : "var(--success-color)",
-                          }}>{trialActive ? "Active Trial" : "Active"}</span>
+                            background: displayTrialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
+                            color: displayTrialActive ? "#1D4ED8" : "var(--success-color)",
+                          }}>{displayTrialActive ? t("mvSettings.credits.activeTrial") : t("mvSettings.credits.active")}</span>
                         </div>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Credits Remaining</span>
-                        <span className="credits-stat-value credits-accent">{isUnlimited ? "Unlimited" : formatCredits(planCredits)}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.creditsRemaining")}</span>
+                        <span className="credits-stat-value credits-accent">{isUnlimited ? t("mvSettings.credits.unlimited") : formatCredits(creditsRemaining)}</span>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">This Month</span>
-                        <span className="credits-stat-value">{isUnlimited ? "—" : `${creditsUsedThisMonth} Credits Used`}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.thisMonth")}</span>
+                        <span className="credits-stat-value">{isUnlimited ? "—" : t("mvSettings.credits.creditsUsed", { creditsUsedThisMonth })}</span>
                       </div>
                       <div className="credits-stat">
-                        <span className="credits-stat-label">Next Reset</span>
-                        <span className="credits-stat-value">{isUnlimited ? "N/A" : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d.toLocaleDateString("en-US", { month: "long", day: "numeric" }); })()}</span>
+                        <span className="credits-stat-label">{t("mvSettings.credits.nextReset")}</span>
+                        <span className="credits-stat-value">{isUnlimited ? t("mvSettings.credits.notApplicable") : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d.toLocaleDateString(undefined, { month: "long", day: "numeric" }); })()}</span>
                       </div>
                     </div>
 
                     {!isUnlimited && (
                       <div className="credits-progress-section">
                         <div className="credits-progress-header">
-                          <span className="credits-progress-text">{creditsUsedThisMonth} of {formatCredits(planCredits)} Credits Used</span>
+                          <span className="credits-progress-text">{t("mvSettings.credits.creditsUsedOf", { creditsUsedThisMonth, planCredits: formatCredits(planCredits) })}</span>
                           <span className="credits-progress-pct">{usagePct}%</span>
                         </div>
                         <div className="credits-progress-track">
@@ -1658,9 +2023,9 @@ export function MVSettings() {
 
                   {/* ── Recent Transactions ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">Recent Transactions</h4>
+                    <h4 className="section-title">{t("mvSettings.credits.recentTransactions")}</h4>
                     {recentTransactions.length === 0 ? (
-                      <p className="section-desc" style={{ marginTop: "8px" }}>No transactions yet.</p>
+                      <p className="section-desc" style={{ marginTop: "8px" }}>{t("mvSettings.credits.noTransactionsYet")}</p>
                     ) : (
                       <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                         {recentTransactions.map((tx) => (
@@ -1673,7 +2038,7 @@ export function MVSettings() {
                             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                               <span style={{ fontWeight: 600 }}>{tx.description}</span>
                               <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-                                {new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                {new Date(tx.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
                             <span style={{ fontWeight: 700, color: tx.amount < 0 ? "#EF4444" : "#22C55E" }}>
@@ -1687,22 +2052,22 @@ export function MVSettings() {
 
                   {/* ── About Credits ── */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <h4 className="section-title">About Credits</h4>
+                    <h4 className="section-title">{t("mvSettings.credits.aboutCredits")}</h4>
                     <p className="section-desc about-credits-lead">
-                      Credits are only used when MakeChurchEasy runs AI for transcription, translation, or content generation.
+                      {t("mvSettings.credits.creditsPowerAi")}
                     </p>
 
                     <div className="about-credits-stack">
                       <div className="about-credits-block">
-                        <div className="about-credits-block-title">Does not use credits</div>
+                        <div className="about-credits-block-title">{t("mvSettings.credits.doNotConsumeCredits")}</div>
                         <div className="about-credits-grid">
                           {[
-                            "Bible Presentation",
-                            "Worship Presentation",
-                            "Media Management",
-                            "OBS Integration",
-                            "Themes",
-                            "Lower Thirds",
+                            t("mvSettings.credits.biblePresentation"),
+                            t("mvSettings.credits.worshipPresentation"),
+                            t("mvSettings.credits.mediaManagement"),
+                            t("mvSettings.credits.obsIntegration"),
+                            t("mvSettings.credits.themes"),
+                            t("mvSettings.credits.lowerThirds"),
                           ].map((item, i) => (
                             <div key={i} className="about-credit-item">
                               <Check size={13} />
@@ -1711,43 +2076,43 @@ export function MVSettings() {
                           ))}
                         </div>
                         <p className="about-credits-note">
-                          Your normal presentation workflow stays available without reducing your credit balance.
+                          {t("mvSettings.credits.normalWorkflowNote")}
                         </p>
                       </div>
 
                       <div className="about-credits-block">
-                        <div className="about-credits-block-title">Uses credits</div>
+                        <div className="about-credits-block-title">{t("mvSettings.credits.creditConsumption")}</div>
                         <div className="credit-rates-grid">
                           {[
                             {
                               icon: Radio,
-                              title: "Speech-to-Scripture",
-                              cost: "1 credit / minute",
-                              description: "Live sermon transcription and automatic scripture detection while the app is listening.",
+                              title: t("mvSettings.credits.rate.speechToScripture.title"),
+                              cost: t("mvSettings.credits.rate.speechToScripture.cost"),
+                              description: t("mvSettings.credits.rate.speechToScripture.description"),
                             },
                             {
                               icon: Globe,
-                              title: "Transcript Translation",
-                              cost: "1 credit / 150 words",
-                              description: "Translating a saved transcript into another language uses credits based on transcript length.",
+                              title: t("mvSettings.credits.rate.transcriptTranslation.title"),
+                              cost: t("mvSettings.credits.rate.transcriptTranslation.cost"),
+                              description: t("mvSettings.credits.rate.transcriptTranslation.description"),
                             },
                             {
                               icon: FileText,
-                              title: "AI Sermon Summary",
-                              cost: "5 credits",
-                              description: "Generates a concise sermon summary with key takeaways.",
+                              title: t("mvSettings.credits.rate.aiSermonSummary.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonSummary.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonSummary.description"),
                             },
                             {
                               icon: FileText,
-                              title: "AI Sermon Notes",
-                              cost: "10 credits",
-                              description: "Turns a sermon into structured notes for follow-up, study, or sharing.",
+                              title: t("mvSettings.credits.rate.aiSermonNotes.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonNotes.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonNotes.description"),
                             },
                             {
                               icon: Zap,
-                              title: "AI Sermon Points",
-                              cost: "10 credits",
-                              description: "Builds key sermon points with explanations and supporting scriptures.",
+                              title: t("mvSettings.credits.rate.aiSermonPoints.title"),
+                              cost: t("mvSettings.credits.rate.aiSermonPoints.cost"),
+                              description: t("mvSettings.credits.rate.aiSermonPoints.description"),
                             },
                           ].map((item) => {
                             const Icon = item.icon;
@@ -1768,7 +2133,7 @@ export function MVSettings() {
                           })}
                         </div>
                         <p className="about-credits-note">
-                          AI-assisted worship import can also use credits based on document size. Larger files are split into multiple AI batches, and each AI-processed batch adds usage. Every charge appears in Recent Transactions above.
+                          {t("mvSettings.credits.aiImportNote")}
                         </p>
                       </div>
                     </div>
@@ -1786,74 +2151,74 @@ export function MVSettings() {
 
             {/* Right: widgets column */}
             {hasSettingsSidebar && (
-            <div className="widgets-column">
-              {/* Appearance preview widget */}
+              <div className="widgets-column">
+                {/* Appearance preview widget */}
 
 
-              {/* Settings summary widget */}
+                {/* Settings summary widget */}
 
 
-              {/* OBS connection widget */}
-              {activeTab === "obs" && (
-                <div className="widget-card">
-                  <div className="widget-header">
-                    <h4 className="widget-title">Connection Status</h4>
-                  </div>
-                  <div className="widget-body">
-                    <div className="radar-pulse-ambient">
-                      <div className="radar-circle-outer">
-                        <div className="radar-circle-inner" style={{ borderColor: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)", color: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)" }}>
-                          <Radio size={28} />
+                {/* OBS connection widget */}
+                {activeTab === "obs" && (
+                  <div className="widget-card">
+                    <div className="widget-header">
+                      <h4 className="widget-title">Connection Status</h4>
+                    </div>
+                    <div className="widget-body">
+                      <div className="radar-pulse-ambient">
+                        <div className="radar-circle-outer">
+                          <div className="radar-circle-inner" style={{ borderColor: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)", color: obsStatus === "connected" ? "var(--success-color)" : "var(--text-muted)" }}>
+                            <Radio size={28} />
+                          </div>
+                        </div>
+                        {obsStatus === "connected" && <div className="radar-ripple"></div>}
+                      </div>
+                      <div className="details-rows-list" style={{ marginTop: "16px" }}>
+                        <div className="details-row">
+                          <span className="details-label">Ping</span>
+                          <span className="details-value">
+                            {obsStatus === "connected" ? (<><span className="dot-indicator dot-success"></span><span>Connected</span></>) : <span>Disconnected</span>}
+                          </span>
+                        </div>
+                        <div className="details-row">
+                          <span className="details-label">Endpoint</span>
+                          <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
                         </div>
                       </div>
-                      {obsStatus === "connected" && <div className="radar-ripple"></div>}
-                    </div>
-                    <div className="details-rows-list" style={{ marginTop: "16px" }}>
-                      <div className="details-row">
-                        <span className="details-label">Ping</span>
-                        <span className="details-value">
-                          {obsStatus === "connected" ? (<><span className="dot-indicator dot-success"></span><span>Connected</span></>) : <span>Disconnected</span>}
-                        </span>
-                      </div>
-                      <div className="details-row">
-                        <span className="details-label">Endpoint</span>
-                        <span className="details-value mono-display" style={{ fontSize: "12px" }}>{settings.obsUrl || "N/A"}</span>
-                      </div>
-                    </div>
 
-                    {/* Connection actions */}
-                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
-                        <RefreshCw size={14} /><span>Force Reconnect</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
-                        <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
-                      </button>
-                      <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
-                        <Trash2 size={14} /><span>Disconnect</span>
-                      </button>
-                    </div>
-                    {showLogsPanel && (
-                      <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
-                        {obsLogs.map((log) => (
-                          <div key={log.id} className="log-entry">
-                            <span className="log-time">[{log.timestamp}]</span>
-                            <span className="log-source">[{log.source}]</span>
-                            <span>{log.message}</span>
-                          </div>
-                        ))}
+                      {/* Connection actions */}
+                      <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={handleReconnectNow} title="Refresh">
+                          <RefreshCw size={14} /><span>Force Reconnect</span>
+                        </button>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600" }} onClick={() => setShowLogsPanel(!showLogsPanel)} title="Hide">
+                          <FileText size={14} /><span>{showLogsPanel ? "Hide Logs" : "View Logs"}</span>
+                        </button>
+                        <button className="reset-button" style={{ justifyContent: "center", fontWeight: "600", color: "var(--danger-color)" }} onClick={() => { obsService.disconnect(); setObsStatus("disconnected"); setObsPasswordDraft(""); triggerToast("Disconnected.", "accent"); }} title="Disconnect">
+                          <Trash2 size={14} /><span>Disconnect</span>
+                        </button>
                       </div>
-                    )}
+                      {showLogsPanel && (
+                        <div className="expandable-logs-panel" style={{ marginTop: "12px" }}>
+                          {obsLogs.map((log) => (
+                            <div key={log.id} className="log-entry">
+                              <span className="log-time">[{log.timestamp}]</span>
+                              <span className="log-source">[{log.source}]</span>
+                              <span>{log.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* ══════════════ AUDIO TAB ══════════════ */}
+                {/* ══════════════ AUDIO TAB ══════════════ */}
 
 
-              {/* Tips card */}
+                {/* Tips card */}
 
-            </div>
+              </div>
             )}
           </div>
         </div>
@@ -1901,7 +2266,7 @@ export function MVSettings() {
         feature="Mobile Remote"
         requiredPlan="growth"
         currentPlan={effectivePlan}
-        message="Mobile Remote access is available on Growth and Pro plans."
+        message="Mobile Remote access is available on Growth."
       />
     </div >
   );

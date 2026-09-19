@@ -20,7 +20,7 @@ import {
   getSceneBySlot,
 } from "../services/obsRegistry";
 import type { LowerThirdTheme, LTObsSource, LTSize, LTCustomStyle, LTFontSize, LTPosition, LTAnimationIn, LTExitStyle } from "./types";
-import { LT_DEFAULT_CUSTOM_STYLE, LT_SOURCE_PREFIX, LT_SCENE_NAME, OCS_LT_PATTERN, VC_LT_PATTERN, MV_LT_PATTERN, OCS_BIBLE_LT_PATTERN, VC_BIBLE_LT_PATTERN, LT_SIZE_SCALE, LT_SIZE_WIDTH, LT_SIZE_FONT_SCALE, LT_FONT_SIZE_SCALE, LT_EXIT_STYLE_CSS } from "./types";
+import { LT_DEFAULT_CUSTOM_STYLE, LT_SOURCE_PREFIX, LT_SCENE_NAME, OCS_LT_PATTERN, VC_LT_PATTERN, MV_LT_PATTERN, OCS_BIBLE_LT_PATTERN, VC_BIBLE_LT_PATTERN, LT_SIZE_SCALE, LT_SIZE_WIDTH, LT_SIZE_FONT_SCALE, LT_FONT_SIZE_SCALE, LT_EXIT_STYLE_CSS, LT_VISUAL_OUTPUT_SCALE } from "./types";
 import { getLTThemeById } from "./themes";
 import { getSettings } from "../multiview/mvStore";
 import { applyRuntimeBranding } from "./runtimeBranding";
@@ -90,6 +90,7 @@ export function buildOverlayUrl(
     widthPct,
     fontScale,
     fontSizeScale,
+    visualScale: LT_VISUAL_OUTPUT_SCALE,
     position: position || "bottom-left",
     customX: customX ?? 2.5,
     customY: customY ?? 92,

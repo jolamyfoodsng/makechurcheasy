@@ -1,5 +1,9 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
 import '../models/api_models.dart';
+import '../models/file_transfer_models.dart';
 import 'auth_service.dart';
 import 'desktop_service.dart';
 
@@ -11,32 +15,35 @@ class ApiService {
   ApiService({
     required AuthService authService,
     required DesktopService desktopService,
-  })  : _authService = authService,
-        _desktopService = desktopService,
-        _dio = Dio() {
+  }) : _authService = authService,
+       _desktopService = desktopService,
+       _dio = Dio() {
     _dio.options.connectTimeout = const Duration(seconds: 5);
-    _dio.options.receiveTimeout = const Duration(seconds: 10);
+    _dio.options.receiveTimeout = const Duration(minutes: 2);
+    _dio.options.sendTimeout = const Duration(minutes: 30);
 
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        final authHeader = _authService.authorizationHeader;
-        if (authHeader != null) {
-          options.headers['Authorization'] = authHeader;
-        }
-        final pairingToken = _desktopService.pairingToken;
-        if (pairingToken != null) {
-          options.headers['X-Device-Token'] = pairingToken;
-        }
-        handler.next(options);
-      },
-      onError: (error, handler) {
-        // Handle common errors
-        if (error.response?.statusCode == 401) {
-          // Token expired - could trigger re-auth
-        }
-        handler.next(error);
-      },
-    ));
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final authHeader = _authService.authorizationHeader;
+          if (authHeader != null) {
+            options.headers['Authorization'] = authHeader;
+          }
+          final pairingToken = _desktopService.pairingToken;
+          if (pairingToken != null) {
+            options.headers['X-Device-Token'] = pairingToken;
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) {
+          // Handle common errors
+          if (error.response?.statusCode == 401) {
+            // Token expired - could trigger re-auth
+          }
+          handler.next(error);
+        },
+      ),
+    );
   }
 
   String get _baseUrl {
@@ -64,7 +71,9 @@ class ApiService {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/scenes');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APIScene.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APIScene.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> switchScene(String sceneId) async {
@@ -108,7 +117,9 @@ class ApiService {
       queryParameters: {'q': query},
     );
     final data = response.data as List<dynamic>;
-    return data.map((e) => APIBibleVerse.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APIBibleVerse.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> showBibleVerse(String reference) async {
@@ -122,22 +133,28 @@ class ApiService {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/worship/library');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APISong.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APISong.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<APISongSlide>> getSongSlides(String songId) async {
     if (!isConnected) throw Exception('Desktop not connected');
-    final response = await _dio.get('$_baseUrl/api/worship/songs/$songId/slides');
+    final response = await _dio.get(
+      '$_baseUrl/api/worship/songs/$songId/slides',
+    );
     final data = response.data as List<dynamic>;
-    return data.map((e) => APISongSlide.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APISongSlide.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> showSongSlide(String songId, int slideNumber) async {
     if (!isConnected) throw Exception('Desktop not connected');
-    await _dio.post('$_baseUrl/api/worship/show-slide', data: {
-      'songId': songId,
-      'slideNumber': slideNumber,
-    });
+    await _dio.post(
+      '$_baseUrl/api/worship/show-slide',
+      data: {'songId': songId, 'slideNumber': slideNumber},
+    );
   }
 
   // --- Media ---
@@ -146,12 +163,149 @@ class ApiService {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/media');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APIMediaItem.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APIMediaItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> showMedia(String mediaId) async {
     if (!isConnected) throw Exception('Desktop not connected');
     await _dio.post('$_baseUrl/api/media/show', data: {'mediaId': mediaId});
+  }
+
+  // --- LocalSend-inspired file transfer ---------------------------------
+
+  Future<LocalSendUploadBatch> prepareLocalSendUpload(
+    List<PlatformFile> files, {
+    required FileTransferDestination destination,
+  }) async {
+    if (!isConnected) throw Exception('Desktop not connected');
+    if (files.isEmpty) throw Exception('Choose at least one file');
+
+    final transferFiles = <LocalSendTransferFile>[];
+    final metadata = <String, dynamic>{};
+    for (var index = 0; index < files.length; index += 1) {
+      final file = files[index];
+      final id = 'mce-${DateTime.now().microsecondsSinceEpoch}-$index';
+      final mimeType = _guessMimeType(file);
+      transferFiles.add(
+        LocalSendTransferFile(id: id, file: file, mimeType: mimeType),
+      );
+      metadata[id] = {
+        'id': id,
+        'fileName': file.name,
+        'size': file.size,
+        'fileType': mimeType,
+      };
+    }
+
+    final response = await _dio.post(
+      '$_baseUrl/api/localsend/v2/prepare-upload',
+      data: {'destination': destination.wireValue, 'files': metadata},
+    );
+    final payload = Map<String, dynamic>.from(response.data as Map);
+    final rawTokens = payload['files'];
+    final tokens = rawTokens is Map
+        ? rawTokens.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          )
+        : <String, String>{};
+    final sessionId = payload['sessionId']?.toString() ?? '';
+    if (sessionId.isEmpty || tokens.length != transferFiles.length) {
+      throw Exception('The desktop did not prepare the file transfer.');
+    }
+
+    return LocalSendUploadBatch(
+      sessionId: sessionId,
+      files: transferFiles,
+      tokens: tokens,
+    );
+  }
+
+  Future<LocalSendUploadedFile> uploadLocalSendFile(
+    LocalSendUploadBatch batch,
+    LocalSendTransferFile transferFile, {
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    if (!isConnected) throw Exception('Desktop not connected');
+    final token = batch.tokens[transferFile.id];
+    if (token == null) {
+      throw Exception('The desktop transfer token is missing.');
+    }
+
+    final data = transferFile.file.readStream ?? transferFile.file.bytes;
+    if (data == null) {
+      throw Exception(
+        'Could not read ${transferFile.file.name} from the phone.',
+      );
+    }
+
+    final response = await _dio.post(
+      '$_baseUrl/api/localsend/v2/upload',
+      queryParameters: {
+        'sessionId': batch.sessionId,
+        'fileId': transferFile.id,
+        'token': token,
+      },
+      data: data,
+      options: Options(
+        contentType: transferFile.mimeType,
+        headers: {
+          Headers.contentLengthHeader: transferFile.file.size.toString(),
+        },
+        sendTimeout: const Duration(minutes: 30),
+        receiveTimeout: const Duration(minutes: 2),
+      ),
+      onSendProgress: onProgress,
+    );
+    final raw = response.data is String
+        ? jsonDecode(response.data as String)
+        : response.data;
+    return LocalSendUploadedFile.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+      transferId: transferFile.id,
+    );
+  }
+
+  Future<void> cancelLocalSendUpload(String sessionId) async {
+    if (!isConnected || sessionId.isEmpty) return;
+    await _dio.post(
+      '$_baseUrl/api/localsend/v2/cancel',
+      queryParameters: {'sessionId': sessionId},
+    );
+  }
+
+  String _guessMimeType(PlatformFile file) {
+    final extension = (file.extension ?? '').toLowerCase();
+    const mimeTypes = <String, String>{
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'bmp': 'image/bmp',
+      'svg': 'image/svg+xml',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'm4v': 'video/x-m4v',
+      'webm': 'video/webm',
+      'mkv': 'video/x-matroska',
+      'avi': 'video/x-msvideo',
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'm4a': 'audio/mp4',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx':
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'txt': 'text/plain',
+      'csv': 'text/csv',
+      'zip': 'application/zip',
+    };
+    return mimeTypes[extension] ?? 'application/octet-stream';
   }
 
   // --- Ministry ---
@@ -160,24 +314,34 @@ class ApiService {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/ministry/lower-thirds');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APILowerThird.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APILowerThird.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> showLowerThird(String id) async {
     if (!isConnected) throw Exception('Desktop not connected');
-    await _dio.post('$_baseUrl/api/ministry/lower-thirds/show', data: {'id': id});
+    await _dio.post(
+      '$_baseUrl/api/ministry/lower-thirds/show',
+      data: {'id': id},
+    );
   }
 
   Future<void> hideLowerThird(String id) async {
     if (!isConnected) throw Exception('Desktop not connected');
-    await _dio.post('$_baseUrl/api/ministry/lower-thirds/hide', data: {'id': id});
+    await _dio.post(
+      '$_baseUrl/api/ministry/lower-thirds/hide',
+      data: {'id': id},
+    );
   }
 
   Future<List<APITickerItem>> getTickerItems() async {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/ministry/ticker');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APITickerItem.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APITickerItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> showTicker(String id) async {
@@ -196,7 +360,9 @@ class ApiService {
     if (!isConnected) throw Exception('Desktop not connected');
     final response = await _dio.get('$_baseUrl/api/automation/macros');
     final data = response.data as List<dynamic>;
-    return data.map((e) => APIMacro.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => APIMacro.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> executeMacro(String macroId) async {

@@ -26,6 +26,9 @@
 @font-face { font-family: "CMG Sans"; src: url("CMG Sans/Extended Set Styles/CMGSans-ExtraBoldItalic.ttf") format("truetype"); font-weight: 800; font-style: italic; font-display: swap; }
 @font-face { font-family: "CMG Sans"; src: url("CMG Sans/Extended Set Styles/CMGSans-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
 @font-face { font-family: "CMG Sans"; src: url("CMG Sans/Extended Set Styles/CMGSans-BlackItalic.ttf") format("truetype"); font-weight: 900; font-style: italic; font-display: swap; }
+/* Fixed-weight alias for the production default. This keeps Black selected
+ * even when a theme asks for normal or bold text weight. */
+@font-face { font-family: "CMG Sans Black"; src: url("CMG Sans/Extended Set Styles/CMGSans-Black.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
 
 /* ── Bold alias ──────────────────────────────────── */
 @font-face { font-family: "CMG Sans Bold"; src: url("CMG Sans/Starter Set Styles/CMGSans-Bold.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }

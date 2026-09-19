@@ -5,6 +5,8 @@
  */
 
 import { getDefaultBibleTheme } from "../services/desktopConfig";
+import { QUIET_CLOUDS_PATTERN_SRC } from "../library/backgroundAssets";
+import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "./scriptureFont";
 
 // ---------------------------------------------------------------------------
 // Bible Data Types
@@ -233,35 +235,40 @@ export const LOWER_THIRD_SIZE_PRESETS: Record<LowerThirdSize, {
   lineHeight: number; // line-height multiplier
   refSpacing: number; // px — gap between verse and reference
 }> = {
-  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 10, safeArea: 30, lineHeight: 1.25, refSpacing: 10 },
-  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 10, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
-  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 11, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
-  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 12, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
-  big: { maxHeight: 486, padding: 36, fontSize: 42, refFontSize: 12, safeArea: 44, lineHeight: 1.29, refSpacing: 18 },
-  bigger: { maxHeight: 560, padding: 42, fontSize: 48, refFontSize: 13, safeArea: 48, lineHeight: 1.3, refSpacing: 20 },
-  biggest: { maxHeight: 650, padding: 50, fontSize: 56, refFontSize: 14, safeArea: 52, lineHeight: 1.32, refSpacing: 24 },
+  smallest: { maxHeight: 180, padding: 14, fontSize: 24, refFontSize: 18, safeArea: 30, lineHeight: 1.25, refSpacing: 10 },
+  smaller: { maxHeight: 240, padding: 20, fontSize: 28, refFontSize: 20, safeArea: 35, lineHeight: 1.26, refSpacing: 12 },
+  small: { maxHeight: 320, padding: 24, fontSize: 32, refFontSize: 24, safeArea: 38, lineHeight: 1.27, refSpacing: 14 },
+  medium: { maxHeight: 400, padding: 30, fontSize: 36, refFontSize: 26, safeArea: 40, lineHeight: 1.28, refSpacing: 16 },
+  big: { maxHeight: 520, padding: 36, fontSize: 48, refFontSize: 34, safeArea: 44, lineHeight: 1.3, refSpacing: 20 },
+  bigger: { maxHeight: 620, padding: 44, fontSize: 60, refFontSize: 42, safeArea: 48, lineHeight: 1.32, refSpacing: 24 },
+  biggest: { maxHeight: 760, padding: 52, fontSize: 72, refFontSize: 50, safeArea: 52, lineHeight: 1.34, refSpacing: 28 },
 };
 
 export interface BibleThemeSettings {
   // Typography
   fontFamily: string;
   fontSize: number;          // px
-  fontWeight: "normal" | "bold" | "light";
+  /** Reduce text only when it would overflow the selected overlay frame. */
+  autoFontScale?: boolean;
+  fontWeight: "normal" | "bold" | "light" | "extrabold" | "black";
   fontStyle?: "normal" | "italic";
   fontColor: string;         // hex
   lineHeight: number;        // ratio e.g. 1.6
+  letterSpacing?: number;    // px
+  wordSpacing?: number;      // px
   textAlign: "left" | "center" | "right";
   textShadow: string;        // CSS text-shadow value
-  textOutline: boolean;
-  textOutlineColor: string;
-  textOutlineWidth: number;
+  textOutline?: boolean;
+  textOutlineColor?: string;
+  textOutlineWidth?: number;
   textTransform: "none" | "uppercase" | "lowercase" | "capitalize";
 
   // Reference label
   refFontSize: number;
   refFontColor: string;
-  refFontWeight: "normal" | "bold" | "light";
+  refFontWeight: "normal" | "bold" | "light" | "extrabold" | "black";
   refPosition: "top" | "bottom";
+  refAnchor?: "normal" | "top" | "bottom";
   refTextTransform: "none" | "uppercase" | "lowercase" | "capitalize";
   refLetterSpacing: number;       // px
   refOpacity: number;             // 0-1
@@ -275,6 +282,9 @@ export interface BibleThemeSettings {
   referenceBackgroundRadius: number;
 
   // Background
+  /** Dock-selected background mode. Kept with the live settings so OBS and
+   * the Bible overlay agree on which background asset is active. */
+  backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
   backgroundColor: string;
   backgroundColorEnd?: string;   // gradient end color (optional)
   bgGradientAngle?: number;      // gradient angle in degrees (optional, default 135)
@@ -314,6 +324,18 @@ export interface BibleThemeSettings {
   lowerThirdOffsetX: number;
   /** Lower-third vertical caption position — "bottom" anchors text at bottom (default), "top" anchors at top */
   lowerThirdCaptionPosition: "top" | "bottom";
+  /** Screen edge where the lower-third bar is placed. */
+  lowerThirdEdge?: "bottom" | "top" | "left" | "right";
+  /** CSS padding for the lower-third text card. Accepts CSS padding syntax, e.g. "18px 28px". */
+  lowerThirdCardPadding?: string;
+  /** Maximum lower-third card height used by the fitted-size presets. */
+  lowerThirdBarMaxHeight?: number;
+  /** When true, the dock controls vertical and horizontal lower-third text padding together. */
+  lowerThirdPaddingLinked?: boolean;
+  /** Rounded corner radius for the lower-third text card. */
+  lowerThirdCardRadius?: number;
+  /** Optional text inversion for lower-third bars, useful for side/top projection layouts. */
+  lowerThirdTextDirection?: "normal" | "inverted";
 
   // Compare Translation layout
   /** Width percentage of each translation panel in compare mode (30–50, default 40) */
@@ -327,37 +349,42 @@ export interface BibleThemeSettings {
 }
 
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
-  fontFamily: '"CMG Sans", sans-serif',
-  fontSize: 48,
-  fontWeight: "normal",
+  fontFamily: SCRIPTURE_FONT_FAMILY,
+  fontSize: 145,
+  autoFontScale: true,
+  fontWeight: "black",
   fontStyle: "normal",
   fontColor: "#FFFFFF",
   lineHeight: 1.6,
+  letterSpacing: 0,
+  wordSpacing: 0,
   textAlign: "center",
-  textShadow: "0 2px 8px rgba(0,0,0,0.6)",
-  textOutline: false,
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
+  textOutline: true,
   textOutlineColor: "#000000",
-  textOutlineWidth: 2,
+  textOutlineWidth: 4,
   textTransform: "none",
 
-  refFontSize: 28,
-  refFontColor: "#cccccc",
-  refFontWeight: "normal",
+  refFontSize: 42,
+  refFontColor: "#FACC15",
+  refFontWeight: "black",
   refPosition: "bottom",
+  refAnchor: "normal",
   refTextTransform: "none",
   refLetterSpacing: 0,
   refOpacity: 1,
   refTextAlign: "match",
-  refSpacing: 24,
+  refSpacing: 20,
 
   referenceBackgroundEnabled: false,
   referenceBackgroundColor: "#F4D17B",
   referenceBackgroundStyle: "solid",
   referenceBackgroundRadius: 12,
 
+  backgroundType: "pattern",
   backgroundColor: "#000000",
   backgroundImage: "",
-  backgroundPattern: "",
+  backgroundPattern: QUIET_CLOUDS_PATTERN_SRC,
   backgroundVideo: "",
   backgroundOpacity: 1,
   fullscreenShadeEnabled: true,
@@ -381,6 +408,11 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   lowerThirdWidthPreset: "md",
   lowerThirdOffsetX: 0,
   lowerThirdCaptionPosition: "bottom",
+  lowerThirdEdge: "bottom",
+  lowerThirdCardPadding: "18px 28px",
+  lowerThirdPaddingLinked: false,
+  lowerThirdCardRadius: 18,
+  lowerThirdTextDirection: "normal",
 
   compareTranslationWidth: 40,
   compareTranslationGap: 40,
@@ -396,11 +428,21 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
  */
 export function applyThemeConfigOverrides(): void {
   const bible = getDefaultBibleTheme();
-  DEFAULT_THEME_SETTINGS.fontFamily = `"${bible.font}", sans-serif`;
-  DEFAULT_THEME_SETTINGS.fontSize = bible.textSize;
-  DEFAULT_THEME_SETTINGS.fontColor = bible.textColor;
+  DEFAULT_THEME_SETTINGS.fontFamily = withScriptureFontFallback(bible.font);
+  DEFAULT_THEME_SETTINGS.fontSize = bible.textSize || 140;
+  DEFAULT_THEME_SETTINGS.fontColor = bible.textColor || "#FFFFFF";
   DEFAULT_THEME_SETTINGS.backgroundColor = bible.backgroundColor;
   DEFAULT_THEME_SETTINGS.referenceBackgroundColor = bible.accentColor;
+  DEFAULT_THEME_SETTINGS.refFontSize = Math.max(16, Math.round((bible.textSize || 140) * 0.7));
+  DEFAULT_THEME_SETTINGS.refFontColor = bible.textColor || "#FACC15";
+  DEFAULT_THEME_SETTINGS.fontWeight = "black";
+  DEFAULT_THEME_SETTINGS.refFontWeight = "black";
+  DEFAULT_THEME_SETTINGS.textOutline = true;
+  DEFAULT_THEME_SETTINGS.textOutlineWidth = 4;
+  DEFAULT_THEME_SETTINGS.textOutlineColor = "#000000";
+  DEFAULT_THEME_SETTINGS.textShadow = "4px 5px 2px rgba(0, 0, 0, 0.95)";
+  DEFAULT_THEME_SETTINGS.backgroundType = "pattern";
+  DEFAULT_THEME_SETTINGS.backgroundPattern = QUIET_CLOUDS_PATTERN_SRC;
 }
 
 // ---------------------------------------------------------------------------

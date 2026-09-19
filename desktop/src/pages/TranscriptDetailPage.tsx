@@ -17,26 +17,18 @@ import {
   FileCode,
   FileText,
   Globe,
-  HelpCircle,
   Info,
   Languages,
-  RotateCcw,
   Search,
   ShieldCheck,
   Timer,
   X,
   Zap,
-  AlertTriangle,
   AlertCircle
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import TranscriptDetailTutorial, {
-  isDetailTutorialCompleted,
-  markDetailTutorialCompleted,
-  resetDetailTutorial,
-} from './TranscriptDetailTutorial';
 import LanguagePicker from '../components/LanguagePicker';
 import languageData from '../../full_langugae_list.json';
 import { checkPremiumAccess, getPremiumAccessDeniedMessage } from '../services/premiumActionGuard';
@@ -52,7 +44,7 @@ import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from '../lib/upgradeP
 
 /* ── Helpers ── */
 
-const CREDITS_URL = 'https://makechurcheasy.creatorstudioslabs.stream/credits';
+const CREDITS_URL = 'https://makechurcheazy.com/credits';
 
 async function openCreditsPage(): Promise<void> {
   try {
@@ -72,10 +64,8 @@ interface ParsedLine {
 function parseTranscriptLines(raw: string): ParsedLine[] {
   if (!raw) return [];
   return raw.split('\n').filter(Boolean).map((line, i) => {
-    const tabIdx = line.indexOf('\t');
-    if (tabIdx > 0 && /^\d{2}:\d{2}:\d{2}$/.test(line.substring(0, tabIdx))) {
-      return { time: line.substring(0, tabIdx), text: line.substring(tabIdx + 1) };
-    }
+    const timestampMatch = line.match(/^(\d{2}:\d{2}:\d{2})[\t ]+(.*)$/);
+    if (timestampMatch) return { time: timestampMatch[1], text: timestampMatch[2] };
     return { time: formatTimeFallback(i * 5), text: line };
   });
 }
@@ -482,22 +472,22 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
   const [estimatedCredits, setEstimatedCredits] = useState(0);
   const [availableCredits, setAvailableCredits] = useState(0);
   const [verifyingAccess, setVerifyingAccess] = useState(false);
-  const pro = isProUnlocked();
+  const fullAccess = isProUnlocked();
   const wordCount = countWords(transcriptText);
   useEffect(() => {
     calculateTranslationCredits(wordCount).then(setEstimatedCredits);
   }, [wordCount]);
   // Fetch credits from backend — never from localStorage
   useEffect(() => {
-    if (!userId || pro) return;
+    if (!userId || fullAccess) return;
     fetchCreditsFromBackend().then((credits) => {
-      if (credits >= 0) {
+      if (credits !== null && credits >= 0) {
         setAvailableCredits(credits);
         applyCreditSnapshotFromServer(credits);
       }
     });
-  }, [userId, pro]);
-  const canAfford = pro || availableCredits >= estimatedCredits;
+  }, [userId, fullAccess]);
+  const canAfford = fullAccess || availableCredits >= estimatedCredits;
   return (
     <div className={`modal-overlay ${isOpen ? 'open' : ''}`}>
       <div className="modal-panel">
@@ -572,10 +562,10 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
               <span style={{ color: 'var(--text-muted)' }}>Estimated Cost</span>
               <span style={{ fontWeight: 600, color: 'var(--gold)' }}>
                 <Zap size={12} style={{ verticalAlign: -1, marginRight: 3 }} />
-                {pro ? 'Free (Pro)' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
+                {fullAccess ? 'Included' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
               </span>
             </div>
-            {!pro && (
+            {!fullAccess && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Available Credits</span>
                 <span style={{ fontWeight: 600, color: availableCredits >= estimatedCredits ? 'var(--green)' : 'var(--error)' }}>
@@ -626,7 +616,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
             )}
           </button>
 
-          {!pro && (
+          {!fullAccess && (
             <button
               className="btn btn-outline btn-block"
               style={{ marginTop: 8 }}
@@ -1002,7 +992,9 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'scriptures' | 'translations'>('scriptures');
+  const [selectedTranslationId, setSelectedTranslationId] = useState<string | null>(null);
   const [accessDeniedDialog, setAccessDeniedDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const isLicenseUnlocked = useLicenseGuardState();
   const navigate = useNavigate();
 
@@ -1014,11 +1006,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const [translationError, setTranslationError] = useState<string | null>(null);
 
   // Derived plan flags
-  const canTranslate = ['basic', 'growth', 'pro'].includes(userPlan);
-
-  // ── Tutorial state ────────────────────────────────────────────────────
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const canTranslate = ['basic', 'growth'].includes(userPlan);
 
   // Runtime license change: cancel in-progress work if license revoked
   const isTranslatingRef = useRef(isTranslating);
@@ -1054,15 +1042,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     })();
   }, []);
 
-  // ── Auto-start tutorial on first visit ────────────────────────────────
-  useEffect(() => {
-    if (!loading && !isDetailTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
-
   const parsedLines = useMemo(
     () => transcript ? parseTranscriptLines(transcript.transcriptText) : [],
     [transcript],
@@ -1077,6 +1056,22 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     () => transcript ? mapScriptures(transcript.scriptures, parsedLines) : [],
     [transcript, parsedLines],
   );
+
+  const selectedTranslation = useMemo(
+    () => transcript?.translations.find((item) => item.id === selectedTranslationId) ?? null,
+    [transcript, selectedTranslationId],
+  );
+
+  const visibleTranscriptLines = useMemo(
+    () => selectedTranslation
+      ? parseTranscriptLines(selectedTranslation.translatedText)
+      : displayLines,
+    [displayLines, selectedTranslation],
+  );
+
+  useEffect(() => {
+    if (transcriptScrollRef.current) transcriptScrollRef.current.scrollTop = 0;
+  }, [selectedTranslationId]);
 
   const doExport = useCallback(async (type: 'pdf' | 'docx') => {
     if (!transcript || exporting !== 'idle') return;
@@ -1151,12 +1146,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
 
   const handleCopy = useCallback(() => {
     if (copyState === 'done') return;
-    const text = copyTranscriptText(displayLines);
+    const text = copyTranscriptText(visibleTranscriptLines);
     navigator.clipboard.writeText(text).then(() => {
       setCopyState('done');
       setTimeout(() => setCopyState('idle'), 2000);
     });
-  }, [displayLines, copyState]);
+  }, [visibleTranscriptLines, copyState]);
 
   const renderHighlight = (text: string, highlight?: { type: string; text: string }) => {
     if (!highlight) return text;
@@ -1233,7 +1228,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             setCreditReservationId(null);
             if (committed) {
               const newBal = await fetchCreditsFromBackend();
-              if (newBal >= 0) {
+              if (newBal !== null && newBal >= 0) {
                 setUserCredits(newBal);
                 applyCreditSnapshotFromServer(newBal);
               }
@@ -1243,7 +1238,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
               setTranslationStatus('success'); // translation succeeded, treat as success
             }
           } else {
-            // Pro user or zero-cost — no reservation to commit
+            // Full-access user or zero-cost — no reservation to commit
             setTranslationStatus('success');
           }
           setIsTranslating(false);
@@ -1264,31 +1259,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   }
 
   return (
-    <div className="detail-view" data-detail-tutorial="welcome">
+    <div className="detail-view">
       {/* Header Section */}
       <div className="detail-header-section">
-        <button className="back-link" onClick={onBack} data-detail-tutorial="back" title="Go back">
+        <button className="back-link" onClick={onBack} title="Go back">
           <ArrowLeft size={16} /> Back to Transcripts
         </button>
-
-        {/* ── Incomplete tutorial banner ── */}
-        {!tourActive && !isDetailTutorialCompleted() && !bannerDismissed && (
-          <div className="tdt-tutorial-banner">
-            <AlertTriangle size={14} />
-            <span>{t("detailTutorial.banner")}</span>
-            <div className="tdt-tutorial-banner-actions">
-              <button className="tdt-banner-btn tdt-banner-btn--primary" onClick={() => setTourActive(true)}>
-                {t("detailTutorial.banner.continue")}
-              </button>
-              <button className="tdt-banner-btn" onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-                <RotateCcw size={12} /> {t("detailTutorial.banner.restart")}
-              </button>
-              <button className="tdt-banner-btn" onClick={() => setBannerDismissed(true)}>
-                {t("detailTutorial.banner.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="detail-title-row">
           <div className="title-left">
@@ -1296,7 +1272,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
               <h1 className="main-title">{transcript.title}</h1>
               <button className="edit-btn" title="Edit title"><Edit2 size={12} /></button>
             </div>
-            <div className="meta-row" data-detail-tutorial="metadata">
+            <div className="meta-row">
               {transcript.church && <div className="meta-item"><Church size={14} /> {transcript.church}</div>}
               <div className="meta-item"><Calendar size={14} /> {dateLabel}</div>
               <div className="meta-item"><Clock size={14} /> {timeLabel}</div>
@@ -1309,14 +1285,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           </div>
 
           <div className="title-actions">
-            <button
-              className="tdt-tutorial-btn"
-              onClick={() => { resetDetailTutorial(); setTourActive(true); setBannerDismissed(false); }}
-              title={t("detailTutorial.button.tooltip")}
-            >
-              <HelpCircle size={16} /> {t("detailTutorial.button")}
-            </button>
-            <div className="btn-export" style={{ position: 'relative' }} data-detail-tutorial="export">
+            <div className="btn-export" style={{ position: 'relative' }}>
               <button
                 className="btn-export-main"
                 style={{
@@ -1374,7 +1343,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                 return;
               }
               setIsTranslateOpen(true);
-            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} data-detail-tutorial="translate" title="Translate">
+            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} title="Translate">
               <Languages size={16} /> Translate
             </button>
           </div>
@@ -1393,9 +1362,26 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         {/* Left/Center Transcript Panel */}
         <div className="transcript-panel">
           <div className="transcript-toolbar">
-            <div className="search-input-wrapper" data-detail-tutorial="search">
-              <input type="text" className="search-input" placeholder="Search in transcript…" />
-            </div>
+            {selectedTranslation ? (
+              <div className="transcript-language-heading">
+                <button
+                  type="button"
+                  className="transcript-language-back"
+                  onClick={() => setSelectedTranslationId(null)}
+                  title="Back to original transcript"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <div>
+                  <span className="transcript-language-label">Translated transcript</span>
+                  <strong>{selectedTranslation.language}</strong>
+                </div>
+              </div>
+            ) : (
+              <div className="search-input-wrapper">
+                <input type="text" className="search-input" placeholder="Search in transcript…" />
+              </div>
+            )}
             <div className="toolbar-actions">
               <button
                 className="btn-icon-only"
@@ -1404,20 +1390,19 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   color: copyState === 'done' ? '#34d399' : undefined
                 }}
                 onClick={handleCopy}
-                data-detail-tutorial="copy"
                 title="Copy">
                 {copyState === 'done' ? <CheckCircle2 size={16} color="#34d399" /> : <Copy size={16} className="text-muted" />}
               </button>
             </div>
           </div>
 
-          <div className="transcript-scroll" data-detail-tutorial="transcript-content">
-            {displayLines.map((line, i) => (
+          <div className="transcript-scroll" ref={transcriptScrollRef}>
+            {visibleTranscriptLines.map((line, i) => (
               <div key={i} className={`t-line-wrapper ${line.highlight ? 'has-highlight' : ''}`}
                 style={line.highlight ? { borderLeftColor: `var(--hl-${line.highlight.type})` } : {}}>
                 <div className="t-timestamp">{line.time}</div>
                 <div className="t-content">
-                  {renderHighlight(line.text, line.highlight)}
+                  {selectedTranslation ? line.text : renderHighlight(line.text, line.highlight)}
                 </div>
               </div>
             ))}
@@ -1428,7 +1413,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         </div>
 
         {/* Right Sidebar - Scriptures & Translations */}
-        <div className="right-sidebar" data-detail-tutorial="sidebar">
+        <div className="right-sidebar">
           {/* Sidebar Tabs */}
           <div className="sidebar-tabs">
             <button
@@ -1444,7 +1429,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
             <button
               className={`sidebar-tab ${sidebarTab === 'translations' ? 'active' : ''}`}
               onClick={() => setSidebarTab('translations')}
-              data-detail-tutorial="translations-tab"
               title="Translations"
             >
               <Languages size={14} />
@@ -1572,6 +1556,12 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                             <button
                               className="btn-icon-small"
                               title="View translation"
+                              aria-label={`View ${t.language} transcript`}
+                              onClick={() => {
+                                setSelectedTranslationId(t.id);
+                                setSidebarTab('translations');
+                                setCopyState('idle');
+                              }}
                             >
                               <ArrowUpRight size={12} />
                             </button>
@@ -1691,7 +1681,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         }}
         onBeforeStart={async () => {
           const wordCount = countWords(transcript?.transcriptText ?? '');
-          const credits = userPlan === 'pro' ? 0 : Math.ceil(wordCount / 150);
+          const credits = await calculateTranslationCredits(wordCount);
           const access = await checkPremiumAccess('translation', { requiredCredits: credits });
           if (!access.allowed) {
             setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
@@ -1728,15 +1718,6 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         isOpen={accessDeniedDialog.open}
         reason={accessDeniedDialog.reason}
         onClose={() => setAccessDeniedDialog({ open: false, reason: '' })}
-      />
-
-      {/* ── Tutorial Tour ── */}
-      <TranscriptDetailTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markDetailTutorialCompleted(); setTourActive(false); }}
-        hasScriptures={transcript.scriptures.length > 0}
-        hasTranslations={transcript.translations.length > 0}
       />
 
     </div>

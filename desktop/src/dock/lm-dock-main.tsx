@@ -13,7 +13,10 @@ import { resolveInterfaceLocale } from "../i18n/localeCatalog";
 import DockLmTab from "./tabs/DockLmTab";
 import DockAuthGate from "./DockAuthGate";
 import { dockClient } from "../services/dockBridge";
+import { writeNativeDockSetting } from "../services/localDockSettings";
+import "../fonts.css";
 import "./dock.css";
+import "./dock-theme.css";
 import "./dock-auth.css";
 
 dockClient.init();
@@ -25,7 +28,7 @@ dockClient.onState((msg) => {
     if (payload?.code) {
       const code = resolveInterfaceLocale(payload.code);
       void i18n.changeLanguage(code);
-      localStorage.setItem("mce_interface_language", code);
+      writeNativeDockSetting("mce_interface_language", code);
     }
   }
 });

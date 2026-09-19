@@ -564,7 +564,10 @@ class OBSService {
         imageFormat: "png",
       };
       if (imageWidth) params.imageWidth = imageWidth;
-      const resp = await this.obs.call("GetSourceScreenshot" as never, params as never);
+      // Keep screenshots inside the shared OBS request queue. Scene previews
+      // can be requested in bursts from the mobile companion; calling the
+      // websocket directly here lets those captures starve control requests.
+      const resp = await this.call("GetSourceScreenshot", params);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (resp as any).imageData as string;
     } catch {

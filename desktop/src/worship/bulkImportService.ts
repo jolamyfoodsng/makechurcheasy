@@ -1,6 +1,7 @@
 
 
 import { invoke } from "@tauri-apps/api/core";
+import JSZip from "jszip";
 import mammoth from "mammoth";
 import { extractPdfTextWithPdfJs } from "./pdfFallback";
 import { normalizeNfc } from "./unicodeUtils";
@@ -26,27 +27,40 @@ export async function extractTextFromFile(file: File): Promise<string> {
     case "pdf":
       return extractPdfText(file);
     case "txt":
+    case "md":
+    case "markdown":
       return file.text();
+    case "html":
+    case "htm":
+      return extractMarkupText(await file.text());
+    case "odt":
+    case "odp":
+      return extractOpenDocumentText(file);
     case "docx":
       return extractDocxText(file);
+    case "pptx":
+      return extractPptxText(file);
     default:
-      throw new Error(`Unsupported file type: .${ext}. Use PDF, TXT, or DOCX.`);
+      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, ODT, ODP, HTML, Markdown, or TXT.`);
   }
 }
 
 async function extractPdfText(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const data = Array.from(new Uint8Array(buffer));
+  let raw = "";
   try {
-    const raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
-    if (raw.trim()) {
-      return normalizeExtractedLyricsText(reorderTwoColumnText(raw));
-    }
+    raw = await extractPdfTextWithPdfJs(file);
   } catch {
-    // Fall through to in-browser extraction.
+    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+    raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
+    if (!isBilingualHymnTable(raw)) raw = reorderTwoColumnText(raw);
   }
-  const fallback = await extractPdfTextWithPdfJs(file);
-  return normalizeExtractedLyricsText(reorderTwoColumnText(fallback));
+  if (!raw.trim()) throw new Error("This PDF contains no readable text. Scanned pages need OCR first; export a searchable PDF or paste the lyrics.");
+  // Bilingual tables must reach their parser with both columns still aligned.
+  return normalizeExtractedLyricsText(raw);
+}
+
+function isBilingualHymnTable(text: string): boolean {
+  return /Orin\s+\d+[^\n]* {4,}Hymn\s+\d+/i.test(text);
 }
 
 interface ColumnGapCandidate {
@@ -262,10 +276,11 @@ function isAllCapsHeading(line: string): boolean {
 function isProtectedImportLine(line: string): boolean {
   const trimmed = normalizeExtractedLine(line);
   if (!trimmed) return true;
-  if (/^\d{1,4}$/.test(trimmed)) return true;
+  if (/\b\d{1,4}$/.test(trimmed)) return true;
   if (/^[ivxlcdm]{1,8}$/i.test(trimmed)) return true;
   if (SECTION_OR_SONG_LABEL_RE.test(trimmed)) return true;
   if (HYMN_MARKER_RE.test(trimmed)) return true;
+  if (/^(?:#{1,6}\s*)?(?:hymn|song|orin)\s*\d+\b/i.test(trimmed)) return true;
   if (REFERENCE_MARKER_RE.test(trimmed)) return true;
   if (isAllCapsHeading(trimmed)) return true;
   return false;
@@ -306,9 +321,11 @@ function appendJoinedLine(previous: string, next: string): string {
 }
 
 export function normalizeExtractedLyricsText(text: string): string {
+  if (isBilingualHymnTable(text)) return normalizeNfc(text).replace(/\r\n?/g, "\n");
+  const pageBreakToken = "__MCE_PAGE_BREAK__";
   const normalized = normalizeNfc(text)
     .replace(/\r\n?/g, "\n")
-    .replace(/\f/g, "\n\n");
+    .replace(/\f/g, `\n${pageBreakToken}\n`);
 
   const output: string[] = [];
   let pending = "";
@@ -320,6 +337,15 @@ export function normalizeExtractedLyricsText(text: string): string {
   };
 
   for (const rawLine of normalized.split("\n")) {
+    if (rawLine === pageBreakToken) {
+      flushPending();
+      while (output.length > 0 && output[output.length - 1] === "") {
+        output.pop();
+      }
+      output.push("\f");
+      continue;
+    }
+
     const line = normalizeExtractedLine(rawLine);
 
     if (!line) {
@@ -346,6 +372,7 @@ export function normalizeExtractedLyricsText(text: string): string {
 
   return output
     .join("\n")
+    .replace(/\n*\f\n*/g, "\n\f\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -413,8 +440,129 @@ export function assessExtractedTextQuality(text: string): ExtractedTextQuality {
 
 async function extractDocxText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value;
+  try {
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return result.value;
+  } catch (error) {
+    // The browser Mammoth build accepts ArrayBuffer; the Node build used by
+    // tests and desktop tooling accepts Buffer. Support both entrypoints.
+    if (typeof Buffer === "undefined") throw error;
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+    return result.value;
+  }
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function extractMarkupText(markup: string): string {
+  return decodeXmlText(markup
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[^]*?-->/g, "")
+    .replace(/<(?:[\w.-]+:)?(?:br|line-break)\b[^>]*\/?>/gi, "\n")
+    .replace(/<\/(?:[\w.-]+:)?(?:p|h[1-6]|h|div|li|tr)>/gi, "\n\n")
+    .replace(/<[^>]*>/g, ""))
+    .replace(/&nbsp;/g, " ")
+    .replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function extractOpenDocumentText(file: File): Promise<string> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const content = zip.file("content.xml");
+  if (!content) throw new Error("This OpenDocument file is missing its text content.");
+  const xml = await content.async("string");
+  if (/\.odp$/i.test(file.name)) {
+    return Array.from(xml.matchAll(/<draw:page\b[^>]*>([\s\S]*?)<\/draw:page>/g))
+      .map((page) => extractMarkupText(page[1])).join("\f");
+  }
+  return extractMarkupText(xml);
+}
+
+function readXmlAttribute(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`(?:^|\\s)(?:[\\w.-]+:)?${name}\\s*=\\s*([\"'])(.*?)\\1`, "i"));
+  return match?.[2] ? decodeXmlText(match[2]) : "";
+}
+
+function readXmlRelationshipId(tag: string): string {
+  const namespaced = tag.match(/\b[\w.-]+:id\s*=\s*([\"'])(.*?)\1/i);
+  return namespaced?.[2] ? decodeXmlText(namespaced[2]) : readXmlAttribute(tag, "id");
+}
+
+function resolveZipPath(basePath: string, target: string): string {
+  const parts = [
+    ...basePath.split("/").slice(0, -1),
+    ...decodeXmlText(target).replace(/\\/g, "/").split("/"),
+  ];
+  const normalized: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(part);
+  }
+  return normalized.join("/");
+}
+
+async function extractPptxText(file: File): Promise<string> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const presentationPath = "ppt/presentation.xml";
+  const presentationEntry = zip.file(presentationPath);
+  const relationshipEntry = zip.file("ppt/_rels/presentation.xml.rels");
+  if (!presentationEntry || !relationshipEntry) {
+    throw new Error("The PowerPoint file is missing its presentation metadata.");
+  }
+
+  const presentationXml = await presentationEntry.async("string");
+  const relationshipXml = await relationshipEntry.async("string");
+  const relationships = new Map<string, string>();
+
+  for (const match of relationshipXml.matchAll(/<Relationship\b[^>]*>/gi)) {
+    const id = readXmlAttribute(match[0], "Id");
+    const target = readXmlAttribute(match[0], "Target");
+    if (id && target) relationships.set(id, target);
+  }
+
+  const slidePaths = Array.from(
+    presentationXml.matchAll(/<(?:[\w.-]+:)?sldId\b[^>]*>/gi),
+  )
+    .map((match) => relationships.get(readXmlRelationshipId(match[0])) ?? "")
+    .filter(Boolean)
+    .map((target) => resolveZipPath(presentationPath, target));
+
+  if (slidePaths.length === 0) {
+    throw new Error("The PowerPoint file does not contain any slides.");
+  }
+
+  const slideTexts: string[] = [];
+  for (const slidePath of slidePaths) {
+    const slideEntry = zip.file(slidePath);
+    if (!slideEntry) continue;
+    const slideXml = await slideEntry.async("string");
+    const paragraphs = Array.from(
+      slideXml.matchAll(/<(?:[\w.-]+:)?p\b[^>]*>[\s\S]*?<\/(?:[\w.-]+:)?p>/gi),
+    )
+      .map((paragraph) => Array.from(
+        paragraph[0].matchAll(/<(?:[\w.-]+:)?t\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?t>/gi),
+      )
+        .map((text) => decodeXmlText(text[1] ?? ""))
+        .join(""))
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    slideTexts.push(paragraphs.join("\n"));
+  }
+
+  return slideTexts.join("\f");
 }
 
 export function getFileTypeLabel(fileName: string): string {
@@ -423,6 +571,7 @@ export function getFileTypeLabel(fileName: string): string {
     case "pdf": return "PDF";
     case "txt": return "Text";
     case "docx": return "DOCX";
+    case "pptx": return "PPTX";
     default: return ext?.toUpperCase() || "Unknown";
   }
 }

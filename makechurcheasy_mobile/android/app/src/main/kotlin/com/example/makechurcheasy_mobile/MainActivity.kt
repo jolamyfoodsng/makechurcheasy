@@ -1,4 +1,4 @@
-package com.example.makechurcheasy_mobile
+package com.makechurcheasy.app
 
 import io.flutter.embedding.android.FlutterActivity
 

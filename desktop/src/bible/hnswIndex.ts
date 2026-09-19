@@ -11,6 +11,7 @@
 export interface HnswNode {
   id: number;
   vector: Float32Array;
+  norm: number;
   level: number;
   neighbors: Map<number, Set<number>>; // level -> set of neighbor IDs
 }
@@ -41,16 +42,16 @@ const DEFAULT_CONFIG: HnswConfig = {
   maxLevel: 4,
 };
 
-function cosineDistance(a: Float32Array, b: Float32Array): number {
+function vectorNorm(vector: Float32Array): number {
+  let squared = 0;
+  for (let i = 0; i < vector.length; i++) squared += vector[i] * vector[i];
+  return Math.sqrt(squared);
+}
+
+function cosineDistance(a: Float32Array, b: Float32Array, normA: number, normB: number): number {
   let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  const denom = normA * normB;
   return denom === 0 ? 1 : 1 - dot / denom;
 }
 
@@ -85,6 +86,7 @@ export class HnswIndex {
     const node: HnswNode = {
       id,
       vector,
+      norm: vectorNorm(vector),
       level,
       neighbors: new Map(),
     };
@@ -132,13 +134,19 @@ export class HnswIndex {
 
           // Prune neighbors if exceeding max
           if (neighborNode.neighbors.get(l)!.size > maxConn) {
-            const neighborCandidates = this.searchLayer(
-              neighborNode.vector,
-              neighbor.id,
-              maxConn + 1,
-              l,
-            );
-            const pruned = neighborCandidates.slice(0, maxConn);
+            // Pruning selects from this node's existing connections. A graph
+            // search here is both expensive (up to 32 extra traversals per
+            // insertion) and includes the node itself as the closest result,
+            // creating self-edges instead of useful connections.
+            const pruned = [...neighborNode.neighbors.get(l)!]
+              .filter((candidateId) => candidateId !== neighbor.id)
+              .map((candidateId) => ({
+                id: candidateId,
+                distance: cosineDistance(neighborNode.vector, this.nodes.get(candidateId)!.vector,
+                  neighborNode.norm, this.nodes.get(candidateId)!.norm),
+              }))
+              .sort((a, b) => a.distance - b.distance)
+              .slice(0, maxConn);
             neighborNode.neighbors.set(l, new Set(pruned.map((c) => c.id)));
           }
         }
@@ -192,7 +200,11 @@ export class HnswIndex {
     const entryNode = this.nodes.get(entryPoint);
     if (!entryNode) return [];
 
-    const entryDist = cosineDistance(query, entryNode.vector);
+    // Verse vectors do not change after insertion. Compute their magnitude
+    // once, and the query magnitude once per traversal rather than once for
+    // every visited neighbour.
+    const queryNorm = vectorNorm(query);
+    const entryDist = cosineDistance(query, entryNode.vector, queryNorm, entryNode.norm);
     candidates.push({ id: entryPoint, distance: entryDist });
     results.push({ id: entryPoint, distance: entryDist });
 
@@ -223,7 +235,7 @@ export class HnswIndex {
         const neighborNode = this.nodes.get(neighborId);
         if (!neighborNode) continue;
 
-        const dist = cosineDistance(query, neighborNode.vector);
+        const dist = cosineDistance(query, neighborNode.vector, queryNorm, neighborNode.norm);
 
         if (results.length < ef) {
           candidates.push({ id: neighborId, distance: dist });
@@ -306,9 +318,11 @@ export class HnswIndex {
     index.dimension = d.dimension;
 
     for (const nodeData of d.nodes) {
+      const vector = new Float32Array(nodeData.vector);
       const node: HnswNode = {
         id: nodeData.id,
-        vector: new Float32Array(nodeData.vector),
+        vector,
+        norm: vectorNorm(vector),
         level: nodeData.level,
         neighbors: new Map(),
       };

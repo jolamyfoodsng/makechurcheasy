@@ -193,7 +193,6 @@ describe("Partial quotes that resolve via alias substring", () => {
   // These resolve via alias, NOT embeddings. This is correct behavior —
   // the alias fast path is faster and more reliable for these cases.
   const partialAliasMatches = [
-    { text: "greater is he", expected: "1 John 4:4" },
     { text: "faith is the substance", expected: "Hebrews 11:1" },
     { text: "for god so loved", expected: "John 3:16" },
     { text: "trust in the lord with all", expected: "Proverbs 3:5" },
@@ -207,6 +206,10 @@ describe("Partial quotes that resolve via alias substring", () => {
       expect(matchVerseAlias(text)).toBe(expected);
     });
   }
+
+  it("does not treat a fragment with only one distinctive word as a certain verse", () => {
+    expect(matchVerseAlias("greater is he")).toBeNull();
+  });
 });
 
 // ── Long sermon speech with alias substrings embedded ──────────────────────
@@ -1010,6 +1013,11 @@ describe("live quote replacement", () => {
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0].book).toBe("Romans");
 
+    // Explicitly switch passages before the second quote. Quote matching
+    // stays inside the active chapter until the preacher names a new one.
+    const newReference = await engine.processChunk("Psalms 23:1", true);
+    expect(newReference.matches[0].candidate.label).toContain("Psalms 23:1");
+
     // Second quote — also resolves via fastKeywordMatch
     const result2 = await engine.searchQuotesWithText(
       "the lord is my shepherd i shall not want"
@@ -1045,6 +1053,54 @@ describe("live quote replacement", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("does not bind sermon filler or bare numbers as scripture context", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    expect(await engine.searchQuotesWithText("If you are going through lack.")).toHaveLength(0);
+    expect(await engine.searchQuotesWithText("Thank you, Lord Jesus.")).toHaveLength(0);
+
+    const bareNumber = await engine.processChunk("3.", true);
+    expect(bareNumber.matches).toHaveLength(0);
+  });
+
+  it("does not treat a short alias fragment as a complete verse quote", async () => {
+    expect(matchVerseAlias("of Jesus")).toBeNull();
+  });
+
+  it("keeps distinctive sermon quotations fast and deterministic", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const quoteCases = [
+      ["we wrestle not against flesh and blood.", "Ephesians 6:12"],
+      ["mercy prevails over judgment.", "James 2:13"],
+      ["for everything there is a time.", "Ecclesiastes 3:1"],
+    ] as const;
+
+    for (const [text, reference] of quoteCases) {
+      expect(matchVerseAlias(text)).toBe(reference);
+      const result = await new ScriptureDetectionEngine().searchQuotesWithText(text);
+      expect(result[0]?.candidate.label).toContain(reference);
+    }
+  });
+
+  it("lets a strong scripture quote override stale chapter context", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("John 3:2", true);
+    expect(matchVerseAlias("Let him ask God if he lack wisdom.")).toBeNull();
+
+    const result = await engine.searchQuotesWithText(
+      "Let him ask God if he lack wisdom.",
+      engine.getBoundPassage(),
+      { mode: "closest" },
+    );
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].candidate.label).toContain("James 1:5");
+    expect(result[0].candidate.snippet.toLowerCase()).toContain("lack wisdom");
+  });
+
   it("finds Genesis 3:7 from spontaneous lexical quote search", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const { matchVerseAlias } = await import("./scriptureReranker");
@@ -1056,9 +1112,85 @@ describe("live quote replacement", () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].candidate.label).toContain("Genesis 3:7");
   });
+
+  it("returns a closest Bible result for every finalized pause within one second", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+    const pauses = [
+      "That's not sin, cousin.",
+      "That is not sin.",
+      "In Bible studies, in the book of Daniel.",
+    ];
+
+    await engine.preload({ includeEmbeddings: true });
+
+    for (let index = 0; index < pauses.length; index += 1) {
+      if (index > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+
+      const startedAt = performance.now();
+      const result = await engine.searchQuotesWithText(pauses[index], undefined, { mode: "closest" });
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(elapsedMs).toBeLessThan(1_000);
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]?.candidate.label).toMatch(/\d+:\d+/);
+    }
+  }, 10_000);
 });
 
 describe("reference continuations", () => {
+  it("anchors the next quote to the chapter found from the first quote", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const first = await engine.searchQuotesWithText(
+      "He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty.",
+    );
+    expect(first[0].candidate.label).toContain("Psalms 91:1");
+
+    const next = await engine.searchQuotesWithText(
+      "I will say of the LORD, my refuge and my fortress: my God; in him will I trust.",
+    );
+    expect(next[0].candidate.label).toContain("Psalms 91:2");
+  });
+
+  it("keeps spoken verse text inside the active chapter", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const initial = await engine.processChunk("Psalms 91:1", true);
+    expect(initial.matches).toHaveLength(1);
+    expect(initial.matches[0].candidate.label).toContain("Psalms 91:1");
+
+    const continuation = await engine.searchQuotesWithText(
+      "I will say of the LORD, my refuge and my fortress: my God; in him will I trust.",
+    );
+    expect(continuation.length).toBeGreaterThan(0);
+    expect(continuation[0].candidate.label).toContain("Psalms 91:2");
+    expect(continuation.every((match) => (
+      match.candidate.book === "Psalms" && match.candidate.chapter === 91
+    ))).toBe(true);
+  });
+
+  it("follows a confident new quotation into another book and updates navigation", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    await engine.processChunk("Psalms 91:1", true);
+
+    const newQuote = await engine.searchQuotesWithText(
+      "for God so loved the world that he gave his only begotten son",
+    );
+    expect(newQuote[0]?.candidate.label).toBe("John 3:16");
+    expect(newQuote[0]?.candidate.source).not.toBe("fuzzy");
+    expect(newQuote[0]?.candidate.confidence).toBeGreaterThanOrEqual(0.90);
+
+    const continuation = await engine.processChunk("next verse", true);
+    expect(continuation.matches[0]?.candidate.label).toBe("John 3:17");
+  });
+
   it("moves forward one verse from the current queue reference", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
     const engine = new ScriptureDetectionEngine();
@@ -1175,5 +1307,30 @@ describe("reference continuations", () => {
     const verse19 = await engine.processChunk("19.", true);
     expect(verse19.matches).toHaveLength(1);
     expect(verse19.matches[0].candidate.label).toContain("Genesis 4:19");
+  });
+
+  it("keeps a valid chapter context when malformed book-number-chapter speech arrives", async () => {
+    const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");
+    const engine = new ScriptureDetectionEngine();
+
+    const chapter = await engine.processChunk("Ecclesiastes chapter 5.", true);
+    expect(chapter.matches).toHaveLength(0);
+    expect(engine.getBoundPassage()).toMatchObject({
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: null,
+    });
+
+    const verse2 = await engine.processChunk("Verse 2.", true);
+    expect(verse2.matches).toHaveLength(1);
+    expect(verse2.matches[0].candidate.label).toContain("Ecclesiastes 5:2");
+
+    const malformed = await engine.processChunk("James 7, chapter 5.", true);
+    expect(malformed.matches).toHaveLength(0);
+    expect(engine.getBoundPassage()).toMatchObject({
+      book: "Ecclesiastes",
+      chapter: 5,
+      verse: 2,
+    });
   });
 });

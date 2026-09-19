@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscreenThemeQuickSettings";
 import {
+  applyMeasuredFontFitSettings,
   areQuickThemeSettingsEquivalent,
   buildLinkedLowerThirdQuickThemeSettings,
+  mergeQuickThemeBackground,
+  normalizeExplicitOutputFontSettings,
+  normalizeLowerThirdFitSettings,
 } from "./lowerThirdQuickSettings";
 
 function makeSettings(
@@ -57,6 +61,41 @@ function makeSettings(
 }
 
 describe("lowerThirdQuickSettings", () => {
+  it("keeps fit-to-frame lower thirds at a readable 45px minimum", () => {
+    const normalized = normalizeLowerThirdFitSettings(makeSettings({
+      autoFontScale: true,
+      fontSize: 32,
+      refFontSize: 10,
+    }));
+
+    expect(normalized.fontSize).toBe(45);
+    expect(normalized.refFontSize).toBe(16);
+  });
+
+  it("migrates legacy lower thirds into always-on fit mode", () => {
+    const normalized = normalizeLowerThirdFitSettings(makeSettings({
+      autoFontScale: false,
+      fontSize: 32,
+      refFontSize: 10,
+    }));
+
+    expect(normalized.autoFontScale).toBe(true);
+    expect(normalized.fontSize).toBe(45);
+    expect(normalized.refFontSize).toBe(16);
+  });
+
+  it("preserves an explicitly selected Notes font size without an upper cap", () => {
+    const normalized = normalizeExplicitOutputFontSettings(makeSettings({
+      autoFontScale: true,
+      fontSize: 520,
+      refFontSize: 220,
+    }), "lower-third");
+
+    expect(normalized.autoFontScale).toBe(false);
+    expect(normalized.fontSize).toBe(520);
+    expect(normalized.refFontSize).toBe(220);
+  });
+
   it("detects equivalent quick settings snapshots", () => {
     const left = makeSettings();
     const right = makeSettings();
@@ -64,6 +103,26 @@ describe("lowerThirdQuickSettings", () => {
 
     expect(areQuickThemeSettingsEquivalent(left, right)).toBe(true);
     expect(areQuickThemeSettingsEquivalent(left, different)).toBe(false);
+  });
+
+  it("keeps the selected lower-third size when the browser fits a long slide", () => {
+    const fitted = applyMeasuredFontFitSettings(
+      makeSettings({ fontSize: 160, refFontSize: 80 }),
+      { mode: "lower-third", fontSize: 78, refFontSize: 30 },
+    );
+
+    expect(fitted.fontSize).toBe(160);
+    expect(fitted.refFontSize).toBe(80);
+  });
+
+  it("keeps the requested size when the rendered frame already fits", () => {
+    const fitted = applyMeasuredFontFitSettings(
+      makeSettings({ fontSize: 56, refFontSize: 24 }),
+      { mode: "fullscreen", fontSize: 64, refFontSize: 30 },
+    );
+
+    expect(fitted.fontSize).toBe(56);
+    expect(fitted.refFontSize).toBe(24);
   });
 
   it("inherits shared fullscreen styling while keeping lower-third layout settings", () => {
@@ -94,9 +153,9 @@ describe("lowerThirdQuickSettings", () => {
       fullscreenSettings,
     );
 
-    expect(linked.fontSize).toBe(fullscreenSettings.fontSize);
-    expect(linked.refFontSize).toBe(fullscreenSettings.refFontSize);
-    expect(linked.lineHeight).toBe(lowerThirdDefaults.lineHeight);
+    expect(linked.fontSize).toBe(lowerThirdDefaults.fontSize);
+    expect(linked.refFontSize).toBe(lowerThirdDefaults.refFontSize);
+    expect(linked.lineHeight).toBe(fullscreenSettings.lineHeight);
     expect(linked.fontColor).toBe(fullscreenSettings.fontColor);
     expect(linked.backgroundColor).toBe(fullscreenSettings.backgroundColor);
     expect(linked.backgroundType).toBe(fullscreenSettings.backgroundType);
@@ -105,5 +164,33 @@ describe("lowerThirdQuickSettings", () => {
     expect(linked.referenceBackgroundColor).toBe(fullscreenSettings.referenceBackgroundColor);
     expect(linked.referenceBackgroundStyle).toBe(fullscreenSettings.referenceBackgroundStyle);
     expect(linked.referenceBackgroundRadius).toBe(fullscreenSettings.referenceBackgroundRadius);
+  });
+
+  it("carries a custom background across Full/LT without changing LT layout", () => {
+    const lowerThirdDefaults = makeSettings({
+      backgroundType: "theme",
+      backgroundColor: "#112233",
+      lowerThirdPosition: "right",
+      lowerThirdCardPadding: "12px 20px",
+    });
+    const fullscreenSettings = makeSettings({
+      backgroundType: "pattern",
+      backgroundPattern: "/patterns/soft-grid.png",
+      backgroundColor: "",
+      backgroundColorEnd: "",
+      backgroundOpacity: 0.82,
+      fullscreenShadeColor: "#050505",
+      fullscreenShadeOpacity: 0.28,
+    });
+
+    const switched = mergeQuickThemeBackground(lowerThirdDefaults, fullscreenSettings);
+
+    expect(switched.backgroundType).toBe("pattern");
+    expect(switched.backgroundPattern).toBe(fullscreenSettings.backgroundPattern);
+    expect(switched.backgroundOpacity).toBe(fullscreenSettings.backgroundOpacity);
+    expect(switched.fullscreenShadeColor).toBe(fullscreenSettings.fullscreenShadeColor);
+    expect(switched.fullscreenShadeOpacity).toBe(fullscreenSettings.fullscreenShadeOpacity);
+    expect(switched.lowerThirdPosition).toBe(lowerThirdDefaults.lowerThirdPosition);
+    expect(switched.lowerThirdCardPadding).toBe(lowerThirdDefaults.lowerThirdCardPadding);
   });
 });

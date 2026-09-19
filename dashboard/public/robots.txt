@@ -1,4 +1,16 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://makechurcheasy.com/sitemap.xml
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /billing/
+Disallow: /credits/
+Disallow: /dashboard/
+Disallow: /devices/
+Disallow: /login
+Disallow: /pair/
+Disallow: /security/
+Disallow: /settings/
+
+Sitemap: https://makechurcheazy.com/sitemap.xml

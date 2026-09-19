@@ -9,6 +9,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -27,7 +28,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(body.error || `Request failed: ${res.status}`, res.status);
+    throw new ApiError(
+      body.error || `Request failed: ${res.status}`,
+      res.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
   }
 
   return res.json();
@@ -79,6 +84,82 @@ export async function updateUser(
 
 export async function deleteUserAccount(userId: string): Promise<void> {
   await request(`/api/user?userId=${userId}`, { method: "DELETE" });
+}
+
+// ─── Referrals ──────────────────────────────────────────────────────────────
+
+export interface ReferralUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  churchName: string;
+  plan: string;
+}
+
+export interface ReferralListItem {
+  id: string;
+  code: string;
+  status: "signed_up" | "paid";
+  createdAt: string;
+  updatedAt: string;
+  paidAt: string | null;
+  paidPlan: string | null;
+  paidAmount: number | null;
+  paidCurrency: string | null;
+  paidBillingReference: string | null;
+  referredUser: ReferralUserSummary | null;
+  referrerUser?: ReferralUserSummary | null;
+}
+
+export interface ReferralDashboardData {
+  code: string;
+  promptSkippedAt: string | null;
+  referredBy: {
+    code: string;
+    referrerUserId: string;
+    referralId: string;
+    appliedAt: string;
+  } | null;
+  stats: {
+    totalSignups: number;
+    paidSignups: number;
+    pendingSignups: number;
+    conversionRate: number;
+  };
+  referrals: ReferralListItem[];
+}
+
+export async function getReferrals(): Promise<ReferralDashboardData> {
+  return request("/api/referrals");
+}
+
+export async function applyReferralCode(code: string): Promise<{ success: boolean; alreadyApplied: boolean }> {
+  return request("/api/referrals", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function dismissReferralPrompt(): Promise<{ success: boolean; skippedAt: string }> {
+  return request("/api/referrals", {
+    method: "POST",
+    body: JSON.stringify({ action: "dismiss" }),
+  });
+}
+
+export interface AdminReferralOverview {
+  stats: {
+    totalSignups: number;
+    paidSignups: number;
+    pendingSignups: number;
+    referrers: number;
+    conversionRate: number;
+  };
+  referrals: ReferralListItem[];
+}
+
+export async function getAdminReferrals(limit = 500): Promise<AdminReferralOverview> {
+  return request(`/api/admin/referrals?limit=${limit}`);
 }
 
 // ─── Devices ─────────────────────────────────────────────────────────────────
@@ -196,14 +277,35 @@ export interface Subscription {
   plan: string;
   status: string;
   billingCycle: string;
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
+  offerOriginalPrice?: number | null;
+  offerAppliedPrice?: number | null;
   price: number;
   currency: string;
+  discountCode?: string | null;
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  discountMonthsRemaining?: number | null;
+  undiscountedPrice?: number | null;
+  initialDiscountAmount?: number | null;
   startDate: string;
   currentPeriodStart: string;
   currentPeriodEnd: string;
   nextBillingDate: string;
   autoRenew: boolean;
   cancelledAt?: string;
+  cancelAtPeriodEnd?: boolean;
+  pendingPlan?: string;
+  pendingChangeType?: string;
+  pendingChangeEffectiveAt?: string;
+  paymentFailedAt?: string;
+  gracePeriodEndsAt?: string;
+  retryCount?: number;
+  nextRetryAt?: string;
+  paymentProvider?: string;
+  previousPlan?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -281,7 +383,7 @@ export async function deductCredits(
   });
 }
 
-// ─── Billing Transactions (Paystack payments) ────────────────────────────────
+// ─── Billing Transactions ───────────────────────────────────────────────────
 
 export interface BillingTransaction {
   _id?: string;
@@ -289,14 +391,25 @@ export interface BillingTransaction {
   plan: string;
   amount: number;
   currency: string;
-  paymentProvider: "paystack";
-  paystackReference: string;
+  paymentProvider: string;
+  paystackReference?: string;
+  providerReference?: string;
   type: "subscription_purchase" | "subscription_renewal" | "plan_upgrade" | "credit_purchase" | "refund";
   status: "pending" | "success" | "failed" | "refunded";
+  subtotal?: number;
+  discount?: number;
+  discountCode?: string | null;
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
   receiptUrl?: string;
   paidAt: string;
   createdAt: string;
   billingCycle?: "monthly" | "yearly" | "lifetime" | "one_time";
+  purchaseKind?: "subscription" | "one_time";
+  oneTimeOfferId?: string | null;
+  oneTimeOfferName?: string | null;
+  offerOriginalPrice?: number | null;
+  offerAppliedPrice?: number | null;
 }
 
 export interface BillingTransactionsResponse {
@@ -314,6 +427,77 @@ export async function getBillingTransactions(
   if (options.limit) params.set("limit", String(options.limit));
   if (options.skip) params.set("skip", String(options.skip));
   return request(`/api/billing-transactions?${params}`);
+}
+
+// ─── Transaction Detail ───────────────────────────────────────────────────────
+
+export interface TransactionDetail {
+  _id: string;
+  category: "billing" | "ai_usage" | "credit";
+  reference: string;
+  type: string;
+  status: string;
+  title: string;
+  description: string;
+  amount: number;
+  currency?: string;
+  isCredit?: boolean;
+  subtotal?: number;
+  discount?: number;
+  discountCode?: string | null;
+  discountPercent?: number | null;
+  discountDurationMonths?: number | null;
+  tax?: number;
+  total?: number;
+  paymentMethod?: string | null;
+  paymentProvider?: string;
+  providerReference?: string;
+  plan?: string;
+  planName?: string;
+  billingCycle?: string;
+  billingPeriodStart?: string | null;
+  billingPeriodEnd?: string | null;
+  nextBillingDate?: string | null;
+  autoRenew?: boolean;
+  failureCode?: string | null;
+  failureReason?: string | null;
+  creditChange?: number;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  feature?: string | null;
+  usageQuantity?: number | null;
+  usageUnit?: string;
+  duration?: string | null;
+  creditCosts?: { feature: string; creditsPerMinute: number; creditsPerUnit: number }[] | null;
+  receiptUrl?: string | null;
+  paidAt?: string | null;
+  createdAt: string;
+  userId?: string;
+}
+
+export async function getTransactionDetail(
+  transactionId: string,
+): Promise<TransactionDetail> {
+  return request(`/api/billing/transactions/${transactionId}`);
+}
+
+export interface RetryPaymentResponse {
+  authorization_url: string;
+  access_code: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  currencySymbol: string;
+  price: number;
+}
+
+export async function retryPayment(
+  transactionId: string,
+): Promise<RetryPaymentResponse> {
+  return request("/api/payments/retry", {
+    method: "POST",
+    body: JSON.stringify({ transactionId }),
+  });
 }
 
 // ─── Security Sessions ───────────────────────────────────────────────────────
@@ -439,14 +623,26 @@ export async function changePassword(
 
 // ─── Pairing ─────────────────────────────────────────────────────────────────
 
+export function normalizePairingCode(raw: string): string {
+  return raw.normalize("NFKC").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function formatPairingCodeForDisplay(raw: string): string {
+  const normalized = normalizePairingCode(raw);
+  return normalized.length > 4
+    ? `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}`
+    : normalized;
+}
+
 export async function createPairingCode(
   deviceName: string = "MakeChurchEasy",
   ttlSeconds?: number,
 ): Promise<{ code: string; expiresAt: string }> {
-  return request("/api/pairing/create", {
+  const result = await request<{ code: string; expiresAt: string }>("/api/pairing/create", {
     method: "POST",
     body: JSON.stringify({ deviceName, ttlSeconds }),
   });
+  return { ...result, code: normalizePairingCode(result.code) };
 }
 
 export async function authorizePairingCode(
@@ -454,7 +650,7 @@ export async function authorizePairingCode(
 ): Promise<{ success: boolean }> {
   return request("/api/pairing/authorize", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code: normalizePairingCode(code) }),
   });
 }
 
@@ -463,7 +659,7 @@ export async function rejectPairingCode(
 ): Promise<{ success: boolean }> {
   return request("/api/pairing/reject", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code: normalizePairingCode(code) }),
   });
 }
 
@@ -478,7 +674,7 @@ export async function checkVerificationStatus(
 ): Promise<{ verified: boolean }> {
   return request("/api/pairing/check-verification", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code: normalizePairingCode(code) }),
   });
 }
 

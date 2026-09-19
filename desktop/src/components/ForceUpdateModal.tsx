@@ -11,7 +11,7 @@
 import { useState, useCallback } from "react";
 import {
   checkForUpdate,
-  downloadAndInstallUpdate,
+  downloadAndInstallVerifiedUpdate,
   type UpdateCheckResult,
   type DownloadProgress,
 } from "../services/updateService";
@@ -90,7 +90,7 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
     }
     try {
       setStatus("downloading");
-      await downloadAndInstallUpdate(
+      await downloadAndInstallVerifiedUpdate(
         update as Update,
         (p) => setProgress(p),
         (s) => setStatus(s)

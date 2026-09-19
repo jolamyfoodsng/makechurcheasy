@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Credits Management | GraceOS</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fbf8ff;
+        }
+
+        .font-display-lg {
+            font-family: 'Geist', sans-serif;
+        }
+
+        .font-headline-lg {
+            font-family: 'Geist', sans-serif;
+        }
+
+        .font-headline-lg-mobile {
+            font-family: 'Geist', sans-serif;
+        }
+
+        .font-metadata {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+        }
+
+        /* Subtle Chart Mockup Styles */
+        .chart-bar {
+            transition: height 1s ease-in-out;
+        }
+    </style>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#838485",
+                        "on-tertiary-fixed-variant": "#454748",
+                        "inverse-on-surface": "#f1effa",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-secondary-fixed": "#001849",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#1b1b1b",
+                        "surface-container-high": "#e8e7f1",
+                        "on-tertiary-fixed": "#1a1c1d",
+                        "on-secondary-fixed-variant": "#003fa4",
+                        "primary": "#000000",
+                        "inverse-surface": "#2f3038",
+                        "surface-container-highest": "#e3e1ec",
+                        "on-primary-container": "#848484",
+                        "surface-bright": "#fbf8ff",
+                        "error": "#ba1a1a",
+                        "outline": "#7e7576",
+                        "surface-container": "#eeedf7",
+                        "background": "#fbf8ff",
+                        "tertiary-container": "#1a1c1d",
+                        "inverse-primary": "#c6c6c6",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1a1b22",
+                        "tertiary": "#000000",
+                        "surface": "#fbf8ff",
+                        "tertiary-fixed": "#e2e2e3",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#5e5e5e",
+                        "on-error": "#ffffff",
+                        "secondary-fixed-dim": "#b3c5ff",
+                        "on-background": "#1a1b22",
+                        "outline-variant": "#cfc4c5",
+                        "secondary": "#0050cc",
+                        "primary-fixed": "#e2e2e2",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed-variant": "#474747",
+                        "secondary-container": "#0266ff",
+                        "on-secondary-container": "#f9f7ff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#1b1b1b",
+                        "surface-container-low": "#f4f2fd",
+                        "primary-fixed-dim": "#c6c6c6",
+                        "surface-variant": "#e3e1ec",
+                        "secondary-fixed": "#dae1ff",
+                        "on-surface-variant": "#4c4546",
+                        "surface-dim": "#dad9e3"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "section-gap": "80px",
+                        "container-max": "1200px",
+                        "margin-mobile": "16px",
+                        "stack-sm": "8px",
+                        "stack-md": "16px",
+                        "stack-lg": "32px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Geist"],
+                        "pricing-naira": ["Inter"],
+                        "headline-lg-mobile": ["Geist"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "metadata": ["JetBrains Mono"],
+                        "headline-lg": ["Geist"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700" }],
+                        "pricing-naira": ["40px", { "lineHeight": "1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "metadata": ["12px", { "lineHeight": "1", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-surface text-on-surface antialiased min-h-screen">
+    <!-- SideNavBar Integration -->
+
+    <!-- TopAppBar Integration -->
+
+    <!-- Main Content Canvas -->
+    <main class="md:ml-64 p-gutter max-w-container-max mx-auto space-y-stack-lg pb-section-gap">
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="font-display-lg text-display-lg text-primary">Credits</h1>
+                <p class="font-body-md text-body-md text-on-surface-variant">Track and manage your AI usage.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button
+                    class="px-5 py-2.5 bg-surface border border-outline-variant text-primary font-semibold rounded-lg hover:bg-surface-container-low transition-all active:scale-95 text-body-sm font-body-sm">
+                    Compare Plans
+                </button>
+                <button
+                    class="px-5 py-2.5 bg-primary text-on-primary font-semibold rounded-lg hover:opacity-90 transition-all active:scale-95 text-body-sm font-body-sm flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">add</span>
+                    Top Up Credits
+                </button>
+            </div>
+        </div>
+        <!-- Main Balance Card -->
+        <section
+            class="bg-surface-container-lowest border border-outline-variant rounded-xl p-8 relative overflow-hidden group">
+            <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                <div class="space-y-2">
+                    <h2 class="font-metadata text-metadata text-on-primary-container tracking-widest uppercase">AI
+                        CREDITS</h2>
+                    <div class="flex items-baseline gap-2">
+                        <span class="font-display-lg text-display-lg text-primary">1,247</span>
+                        <span class="font-body-md text-body-md text-on-surface-variant">credits remaining</span>
+                    </div>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant italic">of 2,000 included this cycle</p>
+                </div>
+                <div class="flex-1 max-w-xl w-full">
+                    <div class="relative w-full h-3 bg-surface-container-high rounded-full overflow-hidden">
+                        <div class="absolute top-0 left-0 h-full bg-secondary transition-all duration-1000 ease-out"
+                            style="width: 62%;"></div>
+                    </div>
+                    <div class="flex justify-between mt-3">
+                        <p class="font-body-sm text-body-sm font-medium text-on-surface">753 credits used</p>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">Resets Aug 16</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Subtle background decorative element -->
+            <div
+                class="absolute -right-12 -top-12 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity duration-500">
+                <span class="material-symbols-outlined text-[200px]"
+                    style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+            </div>
+        </section>
+        <!-- Bento Sections: Usage & Analytics -->
+        <div class="bento-grid">
+            <!-- Usage by Feature -->
+            <section
+                class="col-span-12 lg:col-span-5 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex flex-col gap-6">
+                <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Usage by feature</h3>
+                <div class="space-y-6">
+                    <!-- Feature Row -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-secondary"
+                                    style="font-variation-settings: 'FILL' 1;">transcribe</span>
+                                <span class="font-body-sm text-body-sm font-medium">Transcription</span>
+                            </div>
+                            <span class="font-metadata text-metadata text-on-surface-variant uppercase">128
+                                credits</span>
+                        </div>
+                        <div class="w-full bg-surface-container-high h-1.5 rounded-full">
+                            <div class="bg-secondary h-full rounded-full" style="width: 45%;"></div>
+                        </div>
+                    </div>
+                    <!-- Feature Row -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-secondary"
+                                    style="font-variation-settings: 'FILL' 1;">translate</span>
+                                <span class="font-body-sm text-body-sm font-medium">Translation</span>
+                            </div>
+                            <span class="font-metadata text-metadata text-on-surface-variant uppercase">64
+                                credits</span>
+                        </div>
+                        <div class="w-full bg-surface-container-high h-1.5 rounded-full">
+                            <div class="bg-secondary h-full rounded-full" style="width: 25%;"></div>
+                        </div>
+                    </div>
+                    <!-- Feature Row -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-secondary"
+                                    style="font-variation-settings: 'FILL' 1;">summarize</span>
+                                <span class="font-body-sm text-body-sm font-medium">AI Extraction</span>
+                            </div>
+                            <span class="font-metadata text-metadata text-on-surface-variant uppercase">33
+                                credits</span>
+                        </div>
+                        <div class="w-full bg-surface-container-high h-1.5 rounded-full">
+                            <div class="bg-secondary h-full rounded-full" style="width: 15%;"></div>
+                        </div>
+                    </div>
+                    <!-- Feature Row -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-secondary"
+                                    style="font-variation-settings: 'FILL' 1;">cloud_upload</span>
+                                <span class="font-body-sm text-body-sm font-medium">AI Import</span>
+                            </div>
+                            <span class="font-metadata text-metadata text-on-surface-variant uppercase">12
+                                credits</span>
+                        </div>
+                        <div class="w-full bg-surface-container-high h-1.5 rounded-full">
+                            <div class="bg-secondary h-full rounded-full" style="width: 8%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Credit Usage Chart -->
+            <section
+                class="col-span-12 lg:col-span-7 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-8">
+                    <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Credit usage</h3>
+                    <div class="relative">
+                        <select
+                            class="appearance-none bg-surface border border-outline-variant rounded-lg px-4 py-1.5 pr-10 text-body-sm font-body-sm focus:outline-none focus:border-primary transition-colors cursor-pointer">
+                            <option>Last 7 days</option>
+                            <option>Last 30 days</option>
+                        </select>
+                        <span
+                            class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant text-[18px]">expand_more</span>
+                    </div>
+                </div>
+                <div class="flex-1 flex items-end justify-between gap-4 h-48 md:h-full pb-2">
+                    <!-- Simple Mock Chart Visualization -->
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 40%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">MON</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 65%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">TUE</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 25%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">WED</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 90%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">THU</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 50%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">FRI</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-outline-variant/30 hover:bg-secondary/40 transition-colors cursor-pointer rounded-t"
+                                style="height: 15%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-on-surface-variant">SAT</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-2">
+                        <div class="w-full bg-surface-container-low h-full flex items-end">
+                            <div class="chart-bar w-full bg-secondary transition-colors cursor-pointer rounded-t"
+                                style="height: 30%"></div>
+                        </div>
+                        <span class="font-metadata text-[10px] text-primary font-bold">SUN</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <!-- Recent Activity Section -->
+        <section class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
+            <div class="flex items-center justify-between p-6 border-b border-outline-variant">
+                <h3 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Recent activity</h3>
+                <a class="font-body-sm text-body-sm text-secondary hover:underline transition-all" href="#">View all
+                    →</a>
+            </div>
+            <div class="divide-y divide-outline-variant/50">
+                <!-- Activity Row 1 -->
+                <div
+                    class="grid grid-cols-1 md:grid-cols-4 items-center gap-4 p-5 hover:bg-surface-container-low transition-colors group">
+                    <div class="flex items-center gap-3 col-span-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center group-hover:bg-white transition-colors">
+                            <span
+                                class="material-symbols-outlined text-on-surface-variant text-[20px]">transcribe</span>
+                        </div>
+                        <div>
+                            <p class="font-body-sm text-body-sm font-semibold">Transcription</p>
+                            <p class="text-[12px] text-on-surface-variant">22m 04s processed</p>
+                        </div>
+                    </div>
+                    <div class="md:text-center text-on-surface-variant font-body-sm text-body-sm">
+                        Jul 17, 2026
+                    </div>
+                    <div class="md:text-right font-metadata text-metadata text-on-surface-variant md:col-span-2">
+                        -23 credits
+                    </div>
+                </div>
+                <!-- Activity Row 2 -->
+                <div
+                    class="grid grid-cols-1 md:grid-cols-4 items-center gap-4 p-5 hover:bg-surface-container-low transition-colors group">
+                    <div class="flex items-center gap-3 col-span-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center group-hover:bg-white transition-colors">
+                            <span class="material-symbols-outlined text-secondary text-[20px]"
+                                style="font-variation-settings: 'FILL' 1;">star</span>
+                        </div>
+                        <div>
+                            <p class="font-body-sm text-body-sm font-semibold">Growth plan credit allocation</p>
+                            <p class="text-[12px] text-on-surface-variant">Monthly allowance</p>
+                        </div>
+                    </div>
+                    <div class="md:text-center text-on-surface-variant font-body-sm text-body-sm">
+                        Jul 24, 2026
+                    </div>
+                    <div class="md:text-right font-metadata text-metadata text-secondary md:col-span-2">
+                        +2,000 credits
+                    </div>
+                </div>
+                <!-- Activity Row 3 -->
+                <div
+                    class="grid grid-cols-1 md:grid-cols-4 items-center gap-4 p-5 hover:bg-surface-container-low transition-colors group">
+                    <div class="flex items-center gap-3 col-span-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center group-hover:bg-white transition-colors">
+                            <span class="material-symbols-outlined text-secondary text-[20px]"
+                                style="font-variation-settings: 'FILL' 1;">admin_panel_settings</span>
+                        </div>
+                        <div>
+                            <p class="font-body-sm text-body-sm font-semibold">Admin credit grant</p>
+                            <p class="text-[12px] text-on-surface-variant">Support adjustment</p>
+                        </div>
+                    </div>
+                    <div class="md:text-center text-on-surface-variant font-body-sm text-body-sm">
+                        Jul 15, 2026
+                    </div>
+                    <div class="md:text-right font-metadata text-metadata text-secondary md:col-span-2">
+                        +1,000 credits
+                    </div>
+                </div>
+                <!-- Activity Row 4 -->
+                <div
+                    class="grid grid-cols-1 md:grid-cols-4 items-center gap-4 p-5 hover:bg-surface-container-low transition-colors group">
+                    <div class="flex items-center gap-3 col-span-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center group-hover:bg-white transition-colors">
+                            <span class="material-symbols-outlined text-secondary text-[20px]"
+                                style="font-variation-settings: 'FILL' 1;">add_shopping_cart</span>
+                        </div>
+                        <div>
+                            <p class="font-body-sm text-body-sm font-semibold">Credit purchase</p>
+                            <p class="text-[12px] text-on-surface-variant">One-time top-up</p>
+                        </div>
+                    </div>
+                    <div class="md:text-center text-on-surface-variant font-body-sm text-body-sm">
+                        Jul 10, 2026
+                    </div>
+                    <div class="md:text-right font-metadata text-metadata text-secondary md:col-span-2">
+                        +5,000 credits
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Bottom CTA Section -->
+        <section
+            class="bg-primary p-12 rounded-xl text-center flex flex-col items-center gap-6 relative overflow-hidden">
+
+            <div class="relative z-10 space-y-2 max-w-lg">
+                <h2 class="font-display-lg text-display-lg text-on-primary">Need more credits?</h2>
+                <p class="font-body-md text-body-md text-on-primary/70">Top up your balance or compare plans for a
+                    larger included allowance to ensure your AI operations never stop.</p>
+            </div>
+            <div class="relative z-10 flex flex-wrap justify-center gap-4">
+                <button
+                    class="px-8 py-3 bg-on-primary text-primary font-bold rounded-lg hover:bg-white transition-all active:scale-95 text-body-sm font-body-sm shadow-xl">
+                    Top Up Credits
+                </button>
+                <button
+                    class="px-8 py-3 border-2 border-on-primary text-on-primary font-bold rounded-lg hover:bg-on-primary/10 transition-all active:scale-95 text-body-sm font-body-sm">
+                    Compare Plans
+                </button>
+            </div>
+        </section>
+    </main>
+    <script>
+        // Micro-interactions and simple reactive bits
+        document.querySelectorAll('.chart-bar').forEach(bar => {
+            bar.addEventListener('mouseenter', () => {
+                bar.classList.add('scale-x-110');
+            });
+            bar.addEventListener('mouseleave', () => {
+                bar.classList.remove('scale-x-110');
+            });
+        });
+
+        // Simple check for page title alignment
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Credits management page loaded successfully.');
+        });
+    </script>
+</body>
+
+</html>

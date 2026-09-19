@@ -28,8 +28,8 @@ interface AnalyticsEvent {
 // ── CORS ──────────────────────────────────────────────────────────────────
 
 const ALLOWED_ORIGINS = [
-  "https://makechurcheasy.creatorstudioslabs.stream",
-  "https://www.makechurcheasy.creatorstudioslabs.stream",
+  "https://makechurcheazy.com",
+  "https://www.makechurcheazy.com",
   "http://localhost:1501",
   "http://localhost:5173",
 ];

@@ -9,10 +9,10 @@
 import type { MediaItem } from "../library/libraryTypes";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { dockClient } from "../services/dockBridge";
-import { compressImage, compressVideo } from "./mediaCompression";
-import { isSupportedMediaFile } from "../services/mediaValidation";
+import { getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import { getUserScopedKey } from "../services/userScopedStorage";
-import { getDefaultImageTargetBytes, getDefaultVideoTargetBytes, isCompressionEnabled } from "../services/desktopConfig";
+import { isInternalDockMediaItem } from "./internalMediaAssets";
+import { compareMediaItemsNewest, getMediaStableKey } from "../library/mediaOrdering";
 
 const LOCAL_LIBRARY_KEY = "ocs-dock-media-library-v1";
 
@@ -63,6 +63,22 @@ export function getVideoDuration(src: string): Promise<number> {
       video.src = "";
     };
     video.src = src;
+  });
+}
+
+export function getAudioDuration(src: string): Promise<number> {
+  return new Promise((resolve) => {
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
+      audio.src = "";
+    };
+    audio.onerror = () => {
+      resolve(0);
+      audio.src = "";
+    };
+    audio.src = src;
   });
 }
 
@@ -171,7 +187,9 @@ export function loadLocalLibrary(): MediaItem[] {
   try {
     const raw = localStorage.getItem(getUserScopedKey(LOCAL_LIBRARY_KEY));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed as MediaItem[] : [];
+    return Array.isArray(parsed)
+      ? (parsed as MediaItem[]).filter((item) => !isInternalDockMediaItem(item))
+      : [];
   } catch {
     return [];
   }
@@ -201,11 +219,14 @@ export function saveLocalLibrary(items: MediaItem[]): void {
 
 export function dedupeMediaItems(items: MediaItem[]): MediaItem[] {
   const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
+  return items
+    .filter((item) => {
+      const key = getMediaStableKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort(compareMediaItemsNewest);
 }
 
 /* ── Sync to main app ────────────────────────────────────────────────────── */
@@ -242,43 +263,27 @@ export interface UploadResult {
 
 export async function uploadFileToDock(
   file: File,
-  onProgress?: (status: string) => void,
+  _onProgress?: (status: string) => void,
 ): Promise<UploadResult> {
   console.log("[UPLOAD] uploadFileToDock: start", { name: file.name, size: file.size, type: file.type });
   if (!isSupportedMediaFile(file)) {
     console.warn("[UPLOAD] uploadFileToDock: unsupported file type", file.type);
-    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image and video files are allowed.` };
+    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image, video, and audio files are allowed.` };
   }
-  const category = file.type.startsWith("video/") ? "video" : "image";
-
-  // Compress before saving (respects admin compression toggle)
-  let processedFile: File = file;
-  if (isCompressionEnabled()) {
-    try {
-      if (category === "image") {
-        if (file.size > getDefaultImageTargetBytes()) {
-          console.log("[UPLOAD] Compressing image…");
-          onProgress?.("Compressing image…");
-          processedFile = await compressImage(file);
-          console.log("[UPLOAD] Image compressed:", processedFile.size);
-        }
-      } else {
-        if (file.size > getDefaultVideoTargetBytes()) {
-          console.log("[UPLOAD] Compressing video…");
-          onProgress?.("Compressing video…");
-          processedFile = await compressVideo(file);
-          console.log("[UPLOAD] Video compressed:", processedFile.size);
-        }
-      }
-    } catch (err) {
-      console.warn("[UPLOAD] Compression failed, using original:", err);
-    }
+  // File.type is empty or incorrect for some native/Tauri picker results.
+  // Resolve the kind from MIME first, then fall back to the file extension so
+  // a video cannot be saved as an image and disappear from the Videos filter.
+  const category = getMediaKind(file);
+  if (!category) {
+    return { item: null as unknown as MediaItem, error: `Unsupported file type. Only image, video, and audio files are allowed.` };
   }
 
-  const safeName = `media_${Date.now()}_${getSafeFileName(processedFile.name)}`;
+  const uploadStartedAt = Date.now();
+  const uploadedAt = new Date(uploadStartedAt).toISOString();
+  const safeName = `media_${uploadStartedAt}_${getSafeFileName(file.name)}`;
   const overlayBaseUrl = getOverlayBaseUrlSync();
   const previewUrl = `${overlayBaseUrl}/uploads/${encodeURIComponent(safeName)}`;
-  const objectUrl = URL.createObjectURL(processedFile);
+  const objectUrl = URL.createObjectURL(file);
 
   let thumbnailUrl = "";
   let durationSec: number | undefined;
@@ -288,9 +293,12 @@ export async function uploadFileToDock(
       console.log("[UPLOAD] Generating video thumbnail…");
       durationSec = await getVideoDuration(objectUrl);
       thumbnailUrl = await generateVideoThumbnail(objectUrl);
-    } else {
+    } else if (category === "image") {
       console.log("[UPLOAD] Generating image thumbnail…");
       thumbnailUrl = await generateImageThumbnail(objectUrl);
+    } else {
+      console.log("[UPLOAD] Reading audio duration…");
+      durationSec = await getAudioDuration(objectUrl);
     }
     console.log("[UPLOAD] Thumbnail done:", { hasThumb: !!thumbnailUrl, durationSec });
   } finally {
@@ -298,7 +306,7 @@ export async function uploadFileToDock(
   }
 
   console.log("[UPLOAD] Saving to disk:", { safeName });
-  const diskPath = await saveToDisk(processedFile, safeName);
+  const diskPath = await saveToDisk(file, safeName);
   console.log("[UPLOAD] Disk save returned:", diskPath);
 
   const item: MediaItem = {
@@ -310,9 +318,11 @@ export async function uploadFileToDock(
     diskFileName: safeName,
     thumbnailUrl: thumbnailUrl || undefined,
     durationSec: durationSec ? Math.round(durationSec) : undefined,
-    fileSize: processedFile.size,
-    mimeType: processedFile.type,
-    createdAt: new Date().toISOString(),
+    fileSize: file.size,
+    mimeType: file.type,
+    createdAt: uploadedAt,
+    uploadedAt,
+    source: "local",
   };
 
   console.log("[UPLOAD] uploadFileToDisk: returning item", { id: item.id, name: item.name, filePath: item.filePath });

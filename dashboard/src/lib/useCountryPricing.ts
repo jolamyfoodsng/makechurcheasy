@@ -1,10 +1,5 @@
 /**
- * useCountryPricing — Fetches pricing from the 3-region model API.
- *
- * Regions:
- * - "nigeria": NGN pricing with introductory rates
- * - "africa": USD Africa pricing
- * - "global": USD Global pricing
+ * useCountryPricing — Fetches admin-managed country pricing.
  *
  * Detection: Cloudflare CF-IPCountry → Vercel x-vercel-ip-country → Global fallback
  * Manual override: localStorage("pricingRegion") → "nigeria" | "africa" | "global"
@@ -26,11 +21,10 @@ export interface CountryPricing {
   plans: {
     basic: PlanPrice;
     growth: PlanPrice;
-    pro: PlanPrice;
   };
   pricingVersion: number;
   region: "nigeria" | "africa" | "global";
-  source: "country" | "override" | "fallback";
+  source: "country" | "regional" | "global" | "override" | "fallback";
   detectedCountry?: string;
 }
 
@@ -40,9 +34,8 @@ const FALLBACK_PRICING: CountryPricing = {
   currency: "USD",
   currencySymbol: "$",
   plans: {
-    basic: { monthly: 5, yearly: 50 },
+    basic: { monthly: 7, yearly: 70 },
     growth: { monthly: 10, yearly: 100 },
-    pro: { monthly: 15, yearly: 150 },
   },
   pricingVersion: 1,
   region: "global",
@@ -103,21 +96,21 @@ export function useCountryPricing() {
   );
 
   const getPlanPrice = useCallback(
-    (planId: "basic" | "growth" | "pro", cycle: "monthly" | "yearly"): number => {
+    (planId: "basic" | "growth", cycle: "monthly" | "yearly"): number => {
       return pricing.plans[planId]?.[cycle] ?? 0;
     },
     [pricing]
   );
 
   const getIntroPrice = useCallback(
-    (planId: "basic" | "growth" | "pro"): number | undefined => {
+    (planId: "basic" | "growth"): number | undefined => {
       return pricing.plans[planId]?.introductoryMonthly;
     },
     [pricing]
   );
 
   const getFormattedPlanPrice = useCallback(
-    (planId: "basic" | "growth" | "pro", cycle: "monthly" | "yearly"): string => {
+    (planId: "basic" | "growth", cycle: "monthly" | "yearly"): string => {
       const amount = getPlanPrice(planId, cycle);
       return formatPrice(amount);
     },

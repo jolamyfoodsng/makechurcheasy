@@ -131,7 +131,6 @@ export default function AdminChurchDetailPage() {
       free: "bg-gray-800 text-slate-400",
       basic: "bg-sky-900/50 text-sky-300 border border-sky-700/50",
       growth: "bg-amber-900/50 text-amber-300 border border-amber-700/50",
-      pro: "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50",
       ambassador: "bg-purple-900/50 text-purple-300 border border-purple-700/50",
       unlimited: "bg-yellow-900/50 text-yellow-300 border border-yellow-700/50",
     };

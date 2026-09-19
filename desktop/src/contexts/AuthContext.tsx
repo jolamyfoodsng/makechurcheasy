@@ -6,11 +6,14 @@ import {
   logout as authLogout,
   refreshAccountBootstrapFromServer,
   syncSessionToOverlay,
+  syncLocalDevPlanOverride,
   type AuthUser,
 } from "@/services/authService";
+import { getLocalDevPlanOverride } from "@/services/localDevPlanOverride";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
 import { resetLicenseGuard } from "@/services/licenseGuard";
+import { refreshAppAppearance } from "@/services/appAppearance";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -44,8 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthenticated(isAuthenticated());
     setIsAdmin(stored?.role === "admin");
     setLoading(false);
+    refreshAppAppearance();
     // Re-sync session to overlay server so the OBS dock can see it
-    if (stored) syncSessionToOverlay(getSession());
+    if (stored) {
+      syncSessionToOverlay(getSession());
+      void syncLocalDevPlanOverride(getLocalDevPlanOverride(stored)).catch((error) => {
+        console.warn("[AuthContext] Could not restore local plan override in API:", error);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -53,9 +62,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   function setUser(u: AuthUser) {
+    console.log("[AuthContext] setUser called, authenticated:", isAuthenticated(), "user:", u.name);
     setUserState(u);
-    setAuthenticated(isAuthenticated());
+    // Login has already persisted the session before calling this setter. Set
+    // the React auth state directly so a slow overlay handoff cannot leave the
+    // user stranded on LoginPage after successful pairing.
+    setAuthenticated(true);
     setIsAdmin(u.role === "admin");
+    refreshAppAppearance();
+    // Keep the local browser/Dock session aligned with the app whenever the
+    // effective plan changes. This is intentionally local-only; it does not
+    // mutate the online account or billing records.
+    const session = getSession();
+    if (session) {
+      void syncSessionToOverlay({ ...session, user: u }).catch((error) => {
+        console.warn("[AuthContext] Could not sync updated user session to Dock:", error);
+      });
+      void syncLocalDevPlanOverride(getLocalDevPlanOverride(u)).catch((error) => {
+        console.warn("[AuthContext] Could not sync local plan override to API:", error);
+      });
+    }
   }
 
   function logout() {
@@ -65,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authLogout();
     resetFavoriteThemeCaches();
     clearAllUserScopedStorage();
+    refreshAppAppearance();
     setUserState(null);
     setAuthenticated(false);
   }
@@ -79,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const STARTUP_GRACE_MS = 15_000;
     const DEVICE_STATE_WARNING_THRESHOLD = 4;
     const VISIBILITY_DEBOUNCE_MS = 5_000;
-    const HEARTBEAT_MS = 5 * 60 * 1000;
+    const HEARTBEAT_MS = 60 * 1000;
     const mountTimestamp = Date.now();
 
     async function refreshAccountState(): Promise<boolean> {

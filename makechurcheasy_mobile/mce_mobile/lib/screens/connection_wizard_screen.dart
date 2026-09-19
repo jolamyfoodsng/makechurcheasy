@@ -25,7 +25,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         backgroundColor: MCEColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: MCEColors.textPrimary),
+          icon: Icon(Icons.arrow_back, color: MCEColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -34,13 +34,10 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: MCESpacing.lg),
+            SizedBox(height: MCESpacing.lg),
 
-            const Text(
-              'Connect to Desktop',
-              style: MCETypography.sectionTitle,
-            ),
-            const SizedBox(height: MCESpacing.sm),
+            Text('Connect to Desktop', style: MCETypography.sectionTitle),
+            SizedBox(height: MCESpacing.sm),
             Text(
               'How would you like to connect to\nyour church computer?',
               style: MCETypography.body.copyWith(
@@ -48,7 +45,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: MCESpacing.xxl * 2),
+            SizedBox(height: MCESpacing.xxl * 2),
 
             // QR Scan
             _ConnectionOption(
@@ -58,7 +55,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
               subtitle: 'Point your camera at the QR code on your desktop app',
               onTap: _openQRScanner,
             ),
-            const SizedBox(height: MCESpacing.lg),
+            SizedBox(height: MCESpacing.lg),
 
             // Auto-detect via UDP
             _ConnectionOption(
@@ -68,31 +65,21 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
               subtitle: 'Search your local network via UDP broadcast beacons',
               onTap: _autoDetect,
             ),
-            const SizedBox(height: MCESpacing.lg),
+            SizedBox(height: MCESpacing.lg),
 
             // Manual
             _ConnectionOption(
               icon: Icons.edit,
               iconColor: MCEColors.accentOrange,
               title: 'Manual Setup',
-              subtitle: 'Enter the IP address and pairing code from your desktop',
+              subtitle:
+                  'Enter the IP address and pairing code from your desktop',
               onTap: _showManualSetup,
             ),
 
-            const Spacer(),
+            Spacer(),
 
-            Center(
-              child: TextButton(
-                onPressed: () {},
-                child: Text(
-                  'Need help? View setup guide',
-                  style: MCETypography.body.copyWith(
-                    color: MCEColors.primaryBlue,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: MCESpacing.xl),
+            SizedBox(height: MCESpacing.xl),
           ],
         ),
       ),
@@ -102,9 +89,9 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
   // ── QR Scanner ──────────────────────────────────────────────────────────
 
   void _openQRScanner() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const _QRScannerScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => _QRScannerScreen()));
   }
 
   // ── Auto-detect via UDP ─────────────────────────────────────────────────
@@ -113,7 +100,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _SearchingDialog(),
+      builder: (_) => _SearchingDialog(),
     );
 
     final desktops = <DesktopInfo>[];
@@ -121,7 +108,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
 
     try {
       await for (final info in desktop.discoverDesktops(
-        duration: const Duration(seconds: 8),
+        duration: Duration(seconds: 8),
       )) {
         desktops.add(info);
       }
@@ -136,7 +123,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
     }
 
     if (desktops.length == 1) {
-      _showManualSetupForDesktop(desktops.first);
+      _connectOrAskForDiscoveredDesktop(desktops.first);
     } else {
       _showDesktopPicker(desktops);
     }
@@ -150,18 +137,18 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Desktops Found', style: MCETypography.bodyBold),
+        title: Text('Desktops Found', style: MCETypography.bodyBold),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.separated(
             shrinkWrap: true,
             itemCount: desktops.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (context, index) => Divider(height: 1),
             itemBuilder: (_, i) {
               final d = desktops[i];
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.computer, color: MCEColors.primaryBlue),
+                leading: Icon(Icons.computer, color: MCEColors.primaryBlue),
                 title: Text(
                   d.name ?? d.computerName ?? d.ip ?? 'Desktop',
                   style: MCETypography.bodyBold,
@@ -174,7 +161,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
                 ),
                 onTap: () {
                   Navigator.of(context).pop();
-                  _showManualSetupForDesktop(d);
+                  _connectOrAskForDiscoveredDesktop(d);
                 },
               );
             },
@@ -195,6 +182,23 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
     );
   }
 
+  void _connectOrAskForDiscoveredDesktop(DesktopInfo desktopInfo) {
+    final ip = desktopInfo.ip;
+    final token = desktopInfo.pairingToken;
+    if (ip != null && ip.isNotEmpty && token != null && token.isNotEmpty) {
+      _connectWithPairingData(
+        DesktopPairingData(
+          ip: ip,
+          wsPort: desktopInfo.wsPort ?? 8765,
+          apiPort: desktopInfo.apiPort ?? 45678,
+          pairingToken: token,
+        ),
+      );
+      return;
+    }
+    _showManualSetupForDesktop(desktopInfo);
+  }
+
   void _showManualSetupForDesktop(DesktopInfo desktopInfo) {
     final codeController = TextEditingController();
 
@@ -205,7 +209,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Enter Pairing Code', style: MCETypography.bodyBold),
+        title: Text('Enter Pairing Code', style: MCETypography.bodyBold),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,14 +220,14 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
                 color: MCEColors.textSecondary,
               ),
             ),
-            const SizedBox(height: MCESpacing.sm),
+            SizedBox(height: MCESpacing.sm),
             Text(
               'Desktop: ${desktopInfo.ip}:${desktopInfo.wsPort ?? 8765}',
               style: MCETypography.caption.copyWith(
                 color: MCEColors.textSecondary,
               ),
             ),
-            const SizedBox(height: MCESpacing.lg),
+            SizedBox(height: MCESpacing.lg),
             Container(
               height: 48,
               padding: const EdgeInsets.symmetric(horizontal: MCESpacing.md),
@@ -269,18 +273,20 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
                 _showError('Please enter a pairing code.');
                 return;
               }
-              _connectWithPairingData(DesktopPairingData(
-                ip: desktopInfo.ip!,
-                wsPort: desktopInfo.wsPort ?? 8765,
-                apiPort: desktopInfo.apiPort ?? 45678,
-                pairingToken: code,
-              ));
+              _connectWithPairingData(
+                DesktopPairingData(
+                  ip: desktopInfo.ip!,
+                  wsPort: desktopInfo.wsPort ?? 8765,
+                  apiPort: desktopInfo.apiPort ?? 45678,
+                  pairingToken: code,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: MCEColors.primaryBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Connect'),
+            child: Text('Connect'),
           ),
         ],
       ),
@@ -299,7 +305,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: MCEColors.surface,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
       ),
       builder: (_) => Padding(
@@ -313,24 +319,25 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Manual Connection', style: MCETypography.sectionTitle),
-            const SizedBox(height: MCESpacing.lg),
+            Text('Manual Connection', style: MCETypography.sectionTitle),
+            SizedBox(height: MCESpacing.lg),
             _buildTextField(
               'IP Address',
               'e.g. 192.168.1.100 or 10.0.2.2',
               ipController,
+              keyboardType: TextInputType.url,
             ),
-            const SizedBox(height: MCESpacing.md),
+            SizedBox(height: MCESpacing.md),
             _buildTextField('WebSocket Port', '8765', wsPortController),
-            const SizedBox(height: MCESpacing.md),
+            SizedBox(height: MCESpacing.md),
             _buildTextField('API Port', '45678', apiPortController),
-            const SizedBox(height: MCESpacing.md),
+            SizedBox(height: MCESpacing.md),
             _buildTextField(
               'Pairing Code',
               '6-character code from desktop',
               codeController,
             ),
-            const SizedBox(height: MCESpacing.xxl),
+            SizedBox(height: MCESpacing.xxl),
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -351,16 +358,18 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
                     return;
                   }
 
-                  _connectWithPairingData(DesktopPairingData(
-                    ip: ip,
-                    wsPort: wsPort,
-                    apiPort: apiPort,
-                    pairingToken: code,
-                  ));
+                  _connectWithPairingData(
+                    DesktopPairingData(
+                      ip: ip,
+                      wsPort: wsPort,
+                      apiPort: apiPort,
+                      pairingToken: code,
+                    ),
+                  );
                 },
               ),
             ),
-            const SizedBox(height: MCESpacing.xxl),
+            SizedBox(height: MCESpacing.xxl),
           ],
         ),
       ),
@@ -377,7 +386,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ConnectingDialog(),
+      builder: (_) => _ConnectingDialog(),
     );
 
     final desktop = context.desktopService;
@@ -391,8 +400,6 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
       return;
     }
 
-    wsService.connect();
-
     // Wait for auth result via WebSocket event stream, with 10s timeout.
     final completer = Completer<WebSocketEventType>();
     late StreamSubscription<WebSocketEvent> sub;
@@ -404,8 +411,14 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
       }
     });
 
+    wsService.connect();
+
+    if (wsService.isAuthenticated && !completer.isCompleted) {
+      completer.complete(WebSocketEventType.authenticated);
+    }
+
     final result = await completer.future.timeout(
-      const Duration(seconds: 10),
+      Duration(seconds: 10),
       onTimeout: () => WebSocketEventType.error,
     );
 
@@ -416,11 +429,15 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
 
     switch (result) {
       case WebSocketEventType.authenticated:
-        _navigateTo(const ConnectionSuccessScreen());
+        _navigateTo(ConnectionSuccessScreen());
         break;
       case WebSocketEventType.authFailed:
+        final reason = wsService.lastAuthFailureReason;
         _showError(
-          'Authentication failed. Please check your pairing code and try again.',
+          reason?.contains('plan') == true ||
+                  reason?.contains('upgrade') == true
+              ? reason!
+              : 'Authentication failed. Please check your pairing code and try again.',
         );
         break;
       case WebSocketEventType.error:
@@ -442,7 +459,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Connection Failed', style: MCETypography.bodyBold),
+        title: Text('Connection Failed', style: MCETypography.bodyBold),
         content: Text(
           message,
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
@@ -454,7 +471,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
               backgroundColor: MCEColors.primaryBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('OK'),
+            child: Text('OK'),
           ),
         ],
       ),
@@ -469,7 +486,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Desktop Not Found', style: MCETypography.bodyBold),
+        title: Text('Desktop Not Found', style: MCETypography.bodyBold),
         content: Text(
           'Could not find your desktop on the local network.\n\n'
           'Make sure your desktop app is running and both devices are on '
@@ -479,7 +496,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            child: Text('OK'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -490,7 +507,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
               backgroundColor: MCEColors.primaryBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Enter Manually'),
+            child: Text('Enter Manually'),
           ),
         ],
       ),
@@ -498,21 +515,22 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
   }
 
   void _navigateTo(Widget screen) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => screen),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => screen));
   }
 
   Widget _buildTextField(
     String label,
     String hint,
-    TextEditingController controller,
-  ) {
+    TextEditingController controller, {
+    TextInputType? keyboardType,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: MCETypography.bodyBold),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         Container(
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: MCESpacing.md),
@@ -523,6 +541,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
           ),
           child: TextField(
             controller: controller,
+            keyboardType: keyboardType,
             style: MCETypography.body,
             decoration: InputDecoration(
               hintText: hint,
@@ -542,7 +561,7 @@ class _ConnectionWizardScreenState extends State<ConnectionWizardScreen> {
 // ── QR Scanner Screen ──────────────────────────────────────────────────────
 
 class _QRScannerScreen extends StatefulWidget {
-  const _QRScannerScreen();
+  _QRScannerScreen();
 
   @override
   State<_QRScannerScreen> createState() => _QRScannerScreenState();
@@ -576,18 +595,38 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
 
     try {
       final raw = barcode.rawValue!;
-      if (!raw.startsWith('{')) {
-        _showError('Could not parse QR code. Please try again or use manual setup.');
-        return;
-      }
-
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final data = DesktopPairingData.fromJson(json);
+      final data = _parsePairingPayload(raw);
 
       _connectWithPairingData(data);
     } catch (e) {
       _showError('Invalid QR code. Please try again.');
     }
+  }
+
+  DesktopPairingData _parsePairingPayload(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('{')) {
+      final json = jsonDecode(trimmed) as Map<String, dynamic>;
+      return DesktopPairingData.fromJson(json);
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || (uri.scheme != 'ws' && uri.scheme != 'wss')) {
+      throw FormatException('Unsupported pairing payload');
+    }
+
+    final token =
+        uri.queryParameters['token'] ?? uri.queryParameters['pairingToken'];
+    if (uri.host.isEmpty || token == null || token.isEmpty) {
+      throw FormatException('Missing host or token');
+    }
+
+    return DesktopPairingData(
+      ip: uri.host,
+      wsPort: uri.hasPort ? uri.port : 8765,
+      apiPort: int.tryParse(uri.queryParameters['apiPort'] ?? '') ?? 45678,
+      pairingToken: token,
+    );
   }
 
   Future<void> _connectWithPairingData(DesktopPairingData data) async {
@@ -596,7 +635,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ConnectingDialog(),
+      builder: (_) => _ConnectingDialog(),
     );
 
     final desktop = context.desktopService;
@@ -610,8 +649,6 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
       return;
     }
 
-    wsService.connect();
-
     final completer = Completer<WebSocketEventType>();
     late StreamSubscription<WebSocketEvent> sub;
 
@@ -622,8 +659,14 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
       }
     });
 
+    wsService.connect();
+
+    if (wsService.isAuthenticated && !completer.isCompleted) {
+      completer.complete(WebSocketEventType.authenticated);
+    }
+
     final result = await completer.future.timeout(
-      const Duration(seconds: 10),
+      Duration(seconds: 10),
       onTimeout: () => WebSocketEventType.error,
     );
 
@@ -635,7 +678,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
     switch (result) {
       case WebSocketEventType.authenticated:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ConnectionSuccessScreen()),
+          MaterialPageRoute(builder: (_) => ConnectionSuccessScreen()),
         );
         break;
       case WebSocketEventType.authFailed:
@@ -661,7 +704,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MCERadius.lg),
         ),
-        title: const Text('Error', style: MCETypography.bodyBold),
+        title: Text('Error', style: MCETypography.bodyBold),
         content: Text(
           message,
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
@@ -673,7 +716,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
               backgroundColor: MCEColors.primaryBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('OK'),
+            child: Text('OK'),
           ),
         ],
       ),
@@ -688,21 +731,15 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Scan QR Code',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: Text('Scan QR Code', style: TextStyle(color: Colors.white)),
         centerTitle: true,
       ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: _scannerController,
-            onDetect: _onDetect,
-          ),
+          MobileScanner(controller: _scannerController, onDetect: _onDetect),
 
           // Overlay scan area
           Center(
@@ -710,10 +747,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
               width: 250,
               height: 250,
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: MCEColors.primaryBlue,
-                  width: 3,
-                ),
+                border: Border.all(color: MCEColors.primaryBlue, width: 3),
                 borderRadius: BorderRadius.circular(MCERadius.lg),
               ),
             ),
@@ -734,7 +768,7 @@ class _QRScannerScreenState extends State<_QRScannerScreen> {
                   color: Colors.black.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(MCERadius.md),
                 ),
-                child: const Text(
+                child: Text(
                   'Point camera at QR code on your desktop',
                   style: TextStyle(color: Colors.white, fontSize: 14),
                 ),
@@ -786,13 +820,13 @@ class _ConnectionOption extends StatelessWidget {
               ),
               child: Icon(icon, color: iconColor, size: 24),
             ),
-            const SizedBox(width: MCESpacing.lg),
+            SizedBox(width: MCESpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: MCETypography.bodyBold),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: MCETypography.caption.copyWith(
@@ -802,11 +836,7 @@ class _ConnectionOption extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right,
-              color: MCEColors.textSecondary,
-              size: 20,
-            ),
+            Icon(Icons.chevron_right, color: MCEColors.textSecondary, size: 20),
           ],
         ),
       ),
@@ -815,7 +845,7 @@ class _ConnectionOption extends StatelessWidget {
 }
 
 class _ConnectingDialog extends StatelessWidget {
-  const _ConnectingDialog();
+  _ConnectingDialog();
 
   @override
   Widget build(BuildContext context) {
@@ -829,7 +859,7 @@ class _ConnectingDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
+            SizedBox(
               width: 48,
               height: 48,
               child: CircularProgressIndicator(
@@ -837,9 +867,9 @@ class _ConnectingDialog extends StatelessWidget {
                 strokeWidth: 3,
               ),
             ),
-            const SizedBox(height: MCESpacing.lg),
-            const Text('Connecting...', style: MCETypography.bodyBold),
-            const SizedBox(height: MCESpacing.sm),
+            SizedBox(height: MCESpacing.lg),
+            Text('Connecting...', style: MCETypography.bodyBold),
+            SizedBox(height: MCESpacing.sm),
             Text(
               'Authenticating via WebSocket...',
               style: MCETypography.caption.copyWith(
@@ -855,7 +885,7 @@ class _ConnectingDialog extends StatelessWidget {
 }
 
 class _SearchingDialog extends StatelessWidget {
-  const _SearchingDialog();
+  _SearchingDialog();
 
   @override
   Widget build(BuildContext context) {
@@ -869,7 +899,7 @@ class _SearchingDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
+            SizedBox(
               width: 48,
               height: 48,
               child: CircularProgressIndicator(
@@ -877,9 +907,9 @@ class _SearchingDialog extends StatelessWidget {
                 strokeWidth: 3,
               ),
             ),
-            const SizedBox(height: MCESpacing.lg),
-            const Text('Searching...', style: MCETypography.bodyBold),
-            const SizedBox(height: MCESpacing.sm),
+            SizedBox(height: MCESpacing.lg),
+            Text('Searching...', style: MCETypography.bodyBold),
+            SizedBox(height: MCESpacing.sm),
             Text(
               'Listening for UDP broadcast beacons on port 9999...',
               style: MCETypography.caption.copyWith(

@@ -64,7 +64,6 @@ const AUDIENCE_OPTIONS = [
   { value: "free_users", label: "Free Users" },
   { value: "basic_users", label: "Basic Users" },
   { value: "growth_users", label: "Growth Users" },
-  { value: "pro_users", label: "Pro Users" },
   { value: "cancelled_users", label: "Cancelled Users" },
   { value: "expired_trials", label: "Expired Trials" },
 ] as const;

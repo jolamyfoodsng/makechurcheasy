@@ -4,6 +4,7 @@ import {
   refreshDesktopConfig,
   type DesktopConfig,
 } from "./desktopConfig";
+import { fetchLatestPublishedRelease } from "./updateService";
 import { coerce, gt, gte, lt } from "semver";
 
 /**
@@ -311,36 +312,57 @@ function computeRemainingHours(lockAt: string | null): number {
 export async function fetchAppSettings(): Promise<AppVersionSettings | null> {
   try {
     const config = await getDesktopConfig();
-    const settings = mapDesktopConfigToAppSettings(config);
+    const settings = await reconcileWithPublishedRelease(mapDesktopConfigToAppSettings(config));
     cacheSettings(settings);
     return settings;
   } catch (err) {
     console.warn("[forcedUpdate] Fetch failed, trying cache:", err);
     const cachedConfig = readDesktopConfigCache();
     if (cachedConfig) {
-      const settings = mapDesktopConfigToAppSettings(cachedConfig);
+      const settings = await reconcileWithPublishedRelease(mapDesktopConfigToAppSettings(cachedConfig));
       cacheSettings(settings);
       return settings;
     }
-    return getCachedSettings();
+    const cachedSettings = getCachedSettings();
+    return cachedSettings ? reconcileWithPublishedRelease(cachedSettings) : null;
   }
 }
 
 export async function refreshAppSettings(): Promise<AppVersionSettings | null> {
   try {
     const config = await refreshDesktopConfig();
-    const settings = mapDesktopConfigToAppSettings(config);
+    const settings = await reconcileWithPublishedRelease(mapDesktopConfigToAppSettings(config));
     cacheSettings(settings);
     return settings;
   } catch (err) {
     console.warn("[forcedUpdate] Refresh failed, trying cache:", err);
     const cachedConfig = readDesktopConfigCache();
     if (cachedConfig) {
-      const settings = mapDesktopConfigToAppSettings(cachedConfig);
+      const settings = await reconcileWithPublishedRelease(mapDesktopConfigToAppSettings(cachedConfig));
       cacheSettings(settings);
       return settings;
     }
-    return getCachedSettings();
+    const cachedSettings = getCachedSettings();
+    return cachedSettings ? reconcileWithPublishedRelease(cachedSettings) : null;
+  }
+}
+
+/**
+ * Keep the admin policy aligned with a release that actually exists. The
+ * admin version field is policy metadata; it must never create a phantom
+ * installer or lock users above the newest published binary.
+ */
+async function reconcileWithPublishedRelease(
+  settings: AppVersionSettings,
+): Promise<AppVersionSettings> {
+  try {
+    const release = await fetchLatestPublishedRelease();
+    return {
+      ...settings,
+      latestVersion: release.version || settings.latestVersion,
+    };
+  } catch {
+    return settings;
   }
 }
 

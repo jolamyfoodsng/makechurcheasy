@@ -31,13 +31,14 @@ import {
   deriveBibleAbbr,
   formatBibleFileSize,
   installBibleFromCatalog,
+  isCatalogBibleInstalled,
 } from "../bibleInstallService";
 import { evictTranslationCache } from "../bibleData";
+import { assertCompleteBibleData } from "../bibleValidation";
 import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEffectivePlan } from "../../services/licenseService";
 import { checkEntitlementSync } from "../../services/entitlementClient";
-import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 /** Auto-download bible abbreviations that cannot be deleted */
 const PROTECTED_ABBRS = new Set(AUTO_DOWNLOAD_BIBLES.map(b => b.abbr));
@@ -85,9 +86,9 @@ export default function BibleLibrary({
 }: BibleLibraryProps) {
   const [tab, setTab] = useState<Tab>("browse");
   const [query, setQuery] = useState("");
-  const [language, setLanguage] = useState("English");
+  const [language, setLanguage] = useState("");
   const [catalogResult, setCatalogResult] = useState<CatalogResponse | null>(
-    () => getCachedCatalogResult({ language: "English", page: 1, limit: 20 }),
+    () => getCachedCatalogResult({ page: 1, limit: 20 }),
   );
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -100,6 +101,8 @@ export default function BibleLibrary({
 
   // All languages from API
   const [allLanguages, setAllLanguages] = useState<string[]>([]);
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
+  const [languageQuery, setLanguageQuery] = useState("");
 
   // Confirm-delete modal
   const [confirmDelete, setConfirmDelete] = useState<{ abbr: string; name: string } | null>(null);
@@ -109,6 +112,7 @@ export default function BibleLibrary({
   const [importStatus, setImportStatus] = useState<{ type: "idle" | "parsing" | "success" | "error"; message?: string }>({ type: "idle" });
   const [showBibleLimitModal, setShowBibleLimitModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
@@ -143,6 +147,20 @@ export default function BibleLibrary({
       fetchAllLanguages().then(setAllLanguages).catch(console.error);
     }
   }, [open, allLanguages.length]);
+
+  const filteredLanguages = useMemo(() => {
+    const needle = languageQuery.trim().toLowerCase();
+    if (!needle) return allLanguages;
+    return allLanguages.filter((lang) => lang.toLowerCase().includes(needle));
+  }, [allLanguages, languageQuery]);
+
+  const languageLabel = language || "All languages";
+
+  const selectLanguage = useCallback((nextLanguage: string) => {
+    setLanguage(nextLanguage);
+    setLanguageQuery("");
+    setLanguageMenuOpen(false);
+  }, []);
 
   // ── Auto-download on first run ──
   useEffect(() => {
@@ -208,7 +226,7 @@ export default function BibleLibrary({
     if (open && tab === "browse" && !catalogResult) {
       doSearch(1);
     }
-  }, [open, tab]);
+  }, [open, tab, catalogResult, doSearch]);
 
   // ── Auto-search when query has 3+ characters ──
   useEffect(() => {
@@ -216,23 +234,35 @@ export default function BibleLibrary({
 
     if (autoSearchTimer.current) clearTimeout(autoSearchTimer.current);
 
-    if (query.trim().length >= 3) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length === 0 || trimmedQuery.length >= 3) {
       autoSearchTimer.current = setTimeout(() => {
         doSearch(1);
-      }, 350);
+      }, trimmedQuery.length === 0 ? 150 : 350);
     }
 
     return () => {
       if (autoSearchTimer.current) clearTimeout(autoSearchTimer.current);
     };
-  }, [query, open, tab]);
+  }, [query, open, tab, doSearch]);
 
   // Re-search when language changes
   useEffect(() => {
     if (open && tab === "browse") {
       doSearch(1);
     }
-  }, [language]);
+  }, [language, open, tab, doSearch]);
+
+  useEffect(() => {
+    if (!languageMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (!languageMenuRef.current?.contains(event.target as Node)) {
+        setLanguageMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [languageMenuOpen]);
 
   // ── Download a Bible ──
   const downloadBible = useCallback(
@@ -243,7 +273,7 @@ export default function BibleLibrary({
       lang: string,
       filesize: number
     ) => {
-      const isInstalled = installed.some((i) => i.id === catalogId);
+      const isInstalled = isCatalogBibleInstalled(installed, catalogId, abbr);
       if (isInstalled) return;
 
       const existing = downloads.get(catalogId);
@@ -300,13 +330,25 @@ export default function BibleLibrary({
           });
         }, 3000);
       } catch (err: any) {
+        const message = err?.message || "Download failed";
+        if (/already installed/i.test(message)) {
+          setDownloads((prev) => {
+            const next = new Map(prev);
+            next.delete(catalogId);
+            return next;
+          });
+          await refreshInstalled();
+          onTranslationsChanged?.();
+          return;
+        }
+
         setDownloads((prev) => {
           const next = new Map(prev);
           next.set(catalogId, {
             ...state,
             progress: 0,
             status: "error",
-            error: err.message || "Download failed",
+            error: message,
           });
           return next;
         });
@@ -314,6 +356,21 @@ export default function BibleLibrary({
     },
     [installed, downloads, refreshInstalled, onTranslationsChanged]
   );
+
+  useEffect(() => {
+    if (downloads.size === 0 || installed.length === 0) return;
+    setDownloads((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [catalogId, state] of next) {
+        if (isCatalogBibleInstalled(installed, catalogId, state.abbr)) {
+          next.delete(catalogId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [downloads.size, installed]);
 
   // ── Import Bible from XML file ──
   const handleImportFile = useCallback(
@@ -327,11 +384,8 @@ export default function BibleLibrary({
         const text = await file.text();
         const data = parseXmlToBibleData(text);
 
-        // Validate: must have at least a few books
+        assertCompleteBibleData(data, file.name);
         const bookCount = Object.keys(data).length;
-        if (bookCount < 1) {
-          throw new Error("No valid books found in the XML file. Ensure it uses the standard Bible XML format.");
-        }
 
         // Try to extract translation name from XML
         const parser = new DOMParser();
@@ -426,12 +480,6 @@ export default function BibleLibrary({
     [handleImportFile]
   );
 
-  // ── Installed IDs set for quick lookup (by catalog UUID, not abbreviation) ──
-  const installedIds = useMemo(
-    () => new Set(installed.map((i) => i.id)),
-    [installed]
-  );
-
   // ── Confirm-delete flow ──
   const handleDeleteRequest = useCallback((abbr: string, name: string) => {
     if (PROTECTED_ABBRS.has(abbr)) return; // should never happen — button is hidden
@@ -509,9 +557,10 @@ export default function BibleLibrary({
           Browse &amp; Download
         </button>
         <button
+          type="button"
           className={`bible-library-tab${tab === "installed" ? " active" : ""}`}
           onClick={() => setTab("installed")}
-          title="Install">
+          title="Installed Bibles">
           <Icon name="download_done" size={20} />
           Installed ({installed.length})
         </button>
@@ -523,6 +572,57 @@ export default function BibleLibrary({
           Import
         </button> */}
       </div>
+
+      {/* ── Free Plan Banner ── */}
+      {effectivePlan === "free" && (
+        <div className={`bible-free-mode-banner${hasReachedBibleLimit ? " bible-free-mode-banner--limit" : ""}`}>
+          <div className="bible-free-mode-banner__left">
+            <div className="bible-free-mode-banner__icon">
+              <Icon name={hasReachedBibleLimit ? "warning" : "library_books"} size={18} />
+            </div>
+            <div className="bible-free-mode-banner__body">
+              <div className="bible-free-mode-banner__header">
+                <span className="bible-free-mode-banner__tag">Free Plan</span>
+                <span className="bible-free-mode-banner__limit-count">
+                  {installed.length} / {bibleVersionLimit} versions
+                </span>
+              </div>
+              <p className="bible-free-mode-banner__text">
+                {hasReachedBibleLimit ? (
+                  <>
+                    You have reached your Free plan limit ({installed.length}/{bibleVersionLimit} versions).
+                    To add new translations, delete versions you don't need in the <strong>Installed</strong> tab, or upgrade to unlock unlimited translations.
+                  </>
+                ) : (
+                  <>
+                    Your Free plan gives you access to up to {bibleVersionLimit} offline Bible versions.
+                    You can delete any installed translation at any time to try others, or upgrade for unlimited versions.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="bible-free-mode-banner__actions">
+            {tab !== "installed" && installed.length > 0 && (
+              <button
+                type="button"
+                className="bible-free-mode-banner__btn bible-free-mode-banner__btn--secondary"
+                onClick={() => setTab("installed")}
+              >
+                Manage Installed ({installed.length})
+              </button>
+            )}
+            <a
+              href="https://makechurcheasy.com/subscription/plans"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bible-free-mode-banner__btn bible-free-mode-banner__btn--primary"
+            >
+              Upgrade Plan
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* ── Auto-download banner ── */}
       {autoDownloadRunning && (
@@ -565,20 +665,62 @@ export default function BibleLibrary({
               )}
             </div>
 
-            {/* Language select - side by side with Bible search */}
-            <select
-              className="bible-library-lang-select"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              aria-label="Filter by language"
-            >
-              <option value="">All Languages</option>
-              {allLanguages.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
+            <div className="bible-library-lang-menu" ref={languageMenuRef}>
+              <button
+                type="button"
+                className="bible-library-lang-trigger"
+                onClick={() => setLanguageMenuOpen((current) => !current)}
+                aria-label="Filter by language"
+                aria-expanded={languageMenuOpen}
+                title="Filter by language"
+              >
+                <Icon name="language" size={16} />
+                <span>{languageLabel}</span>
+                <Icon name={languageMenuOpen ? "expand_less" : "expand_more"} size={16} />
+              </button>
+
+              {languageMenuOpen && (
+                <div className="bible-library-lang-panel">
+                  <div className="bible-library-lang-search">
+                    <Icon name="search" size={14} />
+                    <input
+                      type="text"
+                      value={languageQuery}
+                      onChange={(event) => setLanguageQuery(event.target.value)}
+                      placeholder="Search languages..."
+                      aria-label="Search languages"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="bible-library-lang-list">
+                    <button
+                      type="button"
+                      className={`bible-library-lang-option${language === "" ? " active" : ""}`}
+                      onClick={() => selectLanguage("")}
+                    >
+                      <span>All languages</span>
+                      {language === "" && <Icon name="check" size={16} />}
+                    </button>
+
+                    {filteredLanguages.map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        className={`bible-library-lang-option${language === lang ? " active" : ""}`}
+                        onClick={() => selectLanguage(lang)}
+                      >
+                        <span>{lang}</span>
+                        {language === lang && <Icon name="check" size={16} />}
+                      </button>
+                    ))}
+
+                    {filteredLanguages.length === 0 && (
+                      <div className="bible-library-lang-empty">No languages found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Language pills */}
@@ -616,7 +758,7 @@ export default function BibleLibrary({
               <div className="bible-library-list">
                 {catalogResult.items.map((bible) => {
                   const abbr = deriveBibleAbbr(bible);
-                  const isInst = installedIds.has(bible.id);
+                  const isInst = isCatalogBibleInstalled(installed, bible.id, abbr);
                   const dl = downloads.get(bible.id);
 
                   return (
@@ -715,6 +857,14 @@ export default function BibleLibrary({
       {/* ── Installed Tab ── */}
       {tab === "installed" && (
         <div className="bible-library-body">
+          {effectivePlan === "free" && (
+            <div className="bible-library-installed-note" style={{ marginBottom: 12, borderColor: "rgba(37, 99, 235, 0.3)", background: "rgba(37, 99, 235, 0.08)" }}>
+              <Icon name="info" size={18} />
+              <span>
+                Free Plan ({installed.length}/{bibleVersionLimit} versions): You can delete any custom or non-default translation to make room for new downloads, or upgrade for unlimited versions.
+              </span>
+            </div>
+          )}
           <div className="bible-library-installed-note">
             <Icon name="info" size={18} />
             <span>Installed Bible versions will appear in the Bible selector when using the Dock UI in OBS.</span>
@@ -747,11 +897,13 @@ export default function BibleLibrary({
                     <div className="bible-library-installed-actions">
                       {!isProtected && (
                         <button
+                          type="button"
                           className="bible-library-delete-btn"
                           onClick={() => handleDeleteRequest(b.abbr, b.name)}
-                          title={`Delete ${b.abbr}`}
+                          title={`Delete ${b.name} (${b.abbr})`}
+                          aria-label={`Delete ${b.name} (${b.abbr})`}
                         >
-                          <Icon name="delete_outline" size={20} />
+                          <Icon name="delete" size={18} />
                         </button>
                       )}
                     </div>
@@ -847,16 +999,18 @@ export default function BibleLibrary({
             </p>
             <div className="bible-library-confirm-actions">
               <button
+                type="button"
                 className="bible-library-confirm-cancel"
                 onClick={() => setConfirmDelete(null)}
                 title="Cancel">
                 Cancel
               </button>
               <button
+                type="button"
                 className="bible-library-confirm-delete"
                 onClick={handleDeleteConfirm}
                 title="Delete">
-                <Icon name="delete" size={20} />
+                <Icon name="delete" size={16} />
                 Delete
               </button>
             </div>
@@ -870,13 +1024,24 @@ export default function BibleLibrary({
           <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Bible Version Limit Reached</h3>
             <p>
-              Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions.
-              You currently have {installed.length} installed.
+              Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions ({installed.length} currently installed).
             </p>
-            <p>Upgrade your plan to install more translations. {UPGRADE_PROMO_FALLBACK}</p>
+            <p>
+              To add another translation, delete an existing version from your Installed Bibles tab, or upgrade your plan for unlimited translations.
+            </p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)} title="Close">Close</button>
-              <a href="https://makechurcheasy.creatorstudioslabs.stream/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <button
+                type="button"
+                className="lib-confirm-cancel"
+                onClick={() => {
+                  setShowBibleLimitModal(false);
+                  setTab("installed");
+                }}
+                title="Manage Installed"
+              >
+                Manage Installed
+              </button>
+              <a href="https://makechurcheasy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
             </div>

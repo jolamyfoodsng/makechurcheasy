@@ -1,6 +1,25 @@
 @import "tailwindcss";
 
+@font-face {
+    font-family: "CMG Sans";
+    src: url("/fonts/cmg-sans/CMGSans-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "CMG Sans";
+    src: url("/fonts/cmg-sans/CMGSans-Black.ttf") format("truetype");
+    font-weight: 800 900;
+    font-style: normal;
+    font-display: swap;
+}
+
 @theme {
+    --font-sans: "CMG Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "CMG Sans", ui-sans-serif, system-ui, sans-serif;
+
     /* ── Brand Colors ─────────────────────────────────────────────── */
     --color-brand-blue: #1D4ED8;
     --color-brand-purple: #7C3AED;
@@ -35,6 +54,294 @@
 body {
     background-color: #F8FAFC;
     color: #0F172A;
+    font-family: var(--font-sans);
+}
+
+/* ── MakeChurchEasy visual language ────────────────────────────────────── */
+.mce-dashboard-shell {
+    font-family: var(--font-sans);
+}
+
+.mce-dashboard-shell.mce-admin-mode {
+    --mce-admin-bg: #121313;
+    --mce-admin-surface: #1b1a18;
+    --mce-admin-surface-raised: #24211e;
+    --mce-admin-surface-hover: #302a25;
+    --mce-admin-border: rgba(214, 180, 154, 0.18);
+    --mce-admin-border-strong: rgba(214, 180, 154, 0.32);
+    --mce-admin-text: #f7f0e9;
+    --mce-admin-text-secondary: #c7b7aa;
+    --mce-admin-text-muted: #98877b;
+    --mce-admin-accent: #c77450;
+    --mce-admin-accent-bright: #e29a73;
+    --mce-admin-gold: #d6a355;
+    min-height: 100dvh;
+    color: var(--mce-admin-text);
+    background-color: var(--mce-admin-bg);
+    background-image:
+        radial-gradient(circle at 12% -8%, rgba(199, 116, 80, 0.16), transparent 30%),
+        linear-gradient(140deg, #151514 0%, #211c18 48%, #111516 100%);
+    background-attachment: fixed;
+}
+
+.mce-admin-mode .mce-dashboard-main {
+    background: transparent;
+}
+
+.mce-admin-mode .bg-gray-900,
+.mce-admin-mode .bg-slate-900,
+.mce-admin-mode .bg-white,
+.mce-admin-mode .bg-slate-50 {
+    background-color: var(--mce-admin-surface) !important;
+}
+
+.mce-admin-mode .bg-gray-800,
+.mce-admin-mode .bg-slate-800,
+.mce-admin-mode .bg-slate-100,
+.mce-admin-mode .bg-slate-200 {
+    background-color: var(--mce-admin-surface-raised) !important;
+}
+
+.mce-admin-mode .border-slate-700,
+.mce-admin-mode .border-slate-800,
+.mce-admin-mode .border-slate-600,
+.mce-admin-mode .border-slate-200,
+.mce-admin-mode .border-slate-100,
+.mce-admin-mode .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.mce-admin-mode .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--mce-admin-border) !important;
+}
+
+.mce-admin-mode .text-slate-50,
+.mce-admin-mode .text-slate-100,
+.mce-admin-mode .text-slate-900,
+.mce-admin-mode .text-slate-800,
+.mce-admin-mode .text-slate-700 {
+    color: var(--mce-admin-text) !important;
+}
+
+.mce-admin-mode .text-slate-300,
+.mce-admin-mode .text-slate-400 {
+    color: var(--mce-admin-text-secondary) !important;
+}
+
+.mce-admin-mode .text-slate-500,
+.mce-admin-mode .text-slate-600 {
+    color: var(--mce-admin-text-muted) !important;
+}
+
+.mce-admin-mode .text-indigo-200,
+.mce-admin-mode .text-indigo-300,
+.mce-admin-mode .text-indigo-400 {
+    color: var(--mce-admin-accent-bright) !important;
+}
+
+.mce-admin-mode .bg-indigo-600,
+.mce-admin-mode .bg-indigo-500 {
+    background-color: var(--mce-admin-accent) !important;
+}
+
+/* Admin screens still contain legacy indigo/purple utility classes. Keep the
+   page-specific markup intact while translating those accents into the warm
+   copper/brass palette used by the admin shell. */
+.mce-admin-mode :where(
+    [class*="bg-indigo-"],
+    [class*="bg-purple-"],
+    [class*="bg-violet-"],
+    [class*="bg-blue-"],
+    [class*="bg-sky-"]
+) {
+    background-color: rgba(199, 116, 80, 0.14) !important;
+}
+
+.mce-admin-mode :where(
+    [class*="text-indigo-"],
+    [class*="text-purple-"],
+    [class*="text-violet-"],
+    [class*="text-blue-"],
+    [class*="text-sky-"]
+) {
+    color: var(--mce-admin-accent-bright) !important;
+}
+
+.mce-admin-mode :where(
+    [class*="border-indigo-"],
+    [class*="border-purple-"],
+    [class*="border-violet-"],
+    [class*="border-blue-"],
+    [class*="border-sky-"]
+) {
+    border-color: var(--mce-admin-border-strong) !important;
+}
+
+.mce-admin-mode :where(
+    [class*="from-indigo-"],
+    [class*="from-purple-"],
+    [class*="from-violet-"],
+    [class*="from-blue-"],
+    [class*="from-sky-"]
+) {
+    --tw-gradient-from: var(--mce-admin-accent) !important;
+}
+
+.mce-admin-mode :where(
+    [class*="via-indigo-"],
+    [class*="via-purple-"],
+    [class*="via-violet-"],
+    [class*="via-blue-"],
+    [class*="via-sky-"]
+) {
+    --tw-gradient-via: var(--mce-admin-gold) !important;
+}
+
+.mce-admin-mode :where(
+    [class*="to-indigo-"],
+    [class*="to-purple-"],
+    [class*="to-violet-"],
+    [class*="to-blue-"],
+    [class*="to-sky-"]
+) {
+    --tw-gradient-to: rgba(18, 19, 19, 0.92) !important;
+}
+
+.mce-admin-mode .rounded-2xl {
+    border-radius: 14px;
+}
+
+.mce-admin-mode .rounded-xl {
+    border-radius: 10px;
+}
+
+.mce-admin-mode .shadow-lg,
+.mce-admin-mode .shadow-xl,
+.mce-admin-mode .shadow-2xl {
+    box-shadow: 0 14px 34px rgba(5, 8, 8, 0.22) !important;
+}
+
+.mce-admin-mode :where(input, select, textarea) {
+    border-color: var(--mce-admin-border) !important;
+    background-color: rgba(18, 17, 16, 0.72) !important;
+    color: var(--mce-admin-text) !important;
+}
+
+.mce-admin-mode :where(input, select, textarea):focus {
+    border-color: var(--mce-admin-accent) !important;
+    box-shadow: 0 0 0 3px rgba(199, 116, 80, 0.16) !important;
+}
+
+.mce-admin-page {
+    isolation: isolate;
+}
+
+.mce-admin-page__header {
+    position: relative;
+    padding: 8px 0 14px;
+}
+
+.mce-admin-page__header::after {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 2px;
+    margin-top: 14px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--mce-admin-accent), var(--mce-admin-gold));
+}
+
+.mce-admin-kpi {
+    position: relative;
+    overflow: hidden;
+    border-color: var(--mce-admin-border) !important;
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 52%),
+        var(--mce-admin-surface) !important;
+    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+}
+
+.mce-admin-kpi:hover {
+    border-color: var(--mce-admin-border-strong) !important;
+    background: var(--mce-admin-surface-hover) !important;
+    transform: translateY(-2px);
+}
+
+.mce-admin-kpi::after {
+    content: "";
+    position: absolute;
+    right: -24px;
+    bottom: -42px;
+    width: 112px;
+    height: 112px;
+    border-radius: 50%;
+    border: 1px solid rgba(214, 163, 85, 0.14);
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mce-admin-kpi {
+        transition: none;
+    }
+
+    .mce-admin-kpi:hover {
+        transform: none;
+    }
+}
+
+.mce-admin-sidebar {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 22%),
+        linear-gradient(160deg, #1a1715 0%, #141514 58%, #101211 100%) !important;
+    border-right-color: rgba(214, 180, 154, 0.16) !important;
+}
+
+.mce-admin-sidebar__brand,
+.mce-admin-sidebar__footer {
+    border-color: rgba(214, 180, 154, 0.14) !important;
+}
+
+.mce-admin-sidebar__footer {
+    background: rgba(12, 13, 13, 0.56) !important;
+}
+
+.mce-admin-brand-mark {
+    background: linear-gradient(135deg, #d48a61 0%, #a85338 56%, #713323 100%) !important;
+    box-shadow: 0 8px 18px rgba(168, 83, 56, 0.26) !important;
+}
+
+.mce-admin-nav-group-label {
+    color: #9f8c7f !important;
+    letter-spacing: 0.14em;
+}
+
+.mce-admin-nav-link {
+    color: #a8978b !important;
+    border-color: transparent !important;
+}
+
+.mce-admin-nav-link:hover {
+    color: #f3e3d8 !important;
+    background: rgba(199, 116, 80, 0.08) !important;
+}
+
+.mce-admin-nav-link--active {
+    color: #f0c1a6 !important;
+    background: rgba(199, 116, 80, 0.14) !important;
+    border-color: rgba(199, 116, 80, 0.36) !important;
+    box-shadow: inset 3px 0 0 #c77450, 0 8px 20px rgba(7, 8, 8, 0.16) !important;
+}
+
+.mce-admin-nav-link--active svg {
+    color: #e29a73 !important;
+}
+
+.mce-admin-nav-link--active > span:last-child {
+    background: #d6a355 !important;
+    box-shadow: 0 0 0 3px rgba(214, 163, 85, 0.12);
+}
+
+.mce-dashboard-topbar--admin {
+    background:
+        linear-gradient(90deg, rgba(33, 28, 24, 0.96), rgba(18, 20, 19, 0.88)) !important;
+    border-bottom-color: rgba(214, 180, 154, 0.16) !important;
 }
 
 /* ── Scrollbar ─────────────────────────────────────────────────── */

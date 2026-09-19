@@ -4,21 +4,41 @@
  * Card-based Multi-View manager:
  *   - Each Multi-View is an independent card stacked vertically
  *   - Inline template selection + scene assignment per card
- *   - Per-card Push to OBS-
+ *   - Per-card Preview in OBS
  *   - Card actions menu (⋮): Rename, Duplicate, Delete
  *   - No detail pages, no back buttons, everything on one screen
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { useDockObsReady } from "../useDockObsReady";
 import Icon from "../DockIcon";
-import { requireEntitlement } from "../dockEntitlement";
-import { getUserScopedKey } from "../../services/userScopedStorage";
+import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { checkEntitlementSync } from "../../services/entitlementClient";
+import { loadDockPreferenceList, readDockPreferenceList, saveDockPreferenceList } from "../../services/dockPreferenceStorage";
 import { GALLERY_LAYOUTS, type GalleryLayout, type GallerySlot } from "../../multiview/galleryLayouts";
-import { saveToDisk, getSafeFileName } from "../dockUploadService";
+import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
+import {
+  areAddedLayoutIdsEqual,
+  getAddedLayoutLocalStorageKeys,
+  loadAddedLayoutIdsFromDockData,
+  loadLocalAddedLayoutIds,
+  mergeAddedLayoutIds,
+  MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT,
+  saveAddedLayoutIdsToDockData,
+  saveLocalAddedLayoutIds,
+} from "../../multiview/addedLayoutStorage";
+import type { MediaItem } from "../../library/libraryTypes";
+import {
+  dedupeMediaItems,
+  loadLocalLibrary,
+  registerDockMediaItem,
+  uploadFileToDock,
+} from "../dockUploadService";
+import { isInternalDockMediaItem } from "../internalMediaAssets";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
 // ---------------------------------------------------------------------------
@@ -26,9 +46,17 @@ import { getRecommendedPollingInterval } from "../../services/performanceManager
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "dock-mv-saved";
-const ADDED_LAYOUTS_KEY = "mvg-added-ids";
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
+const DEFAULT_SLOT_FRAMING = { displayMode: "fit" as const, zoom: 1, focalX: 0.5, focalY: 0.5 };
+const BACKGROUND_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
+const BACKGROUND_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]);
+const MV_IMAGE_LIBRARY_UPDATED_EVENT = "dock-mv-image-library-updated";
+// Scene/source inventory is useful while the tab is open, but it does not
+// need to compete with OBS every few seconds on low-end machines.
+const MV_OBS_SCAN_MS = 30_000;
+const MV_THUMBNAIL_REFRESH_MS = 60_000;
+const MV_THUMBNAIL_CONCURRENCY = 2;
 
 const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color: string }> = {
   camera: { labelKey: "multiview.camera", icon: "videocam", color: "#0078d4" },
@@ -41,20 +69,29 @@ const CONTENT_TYPE_INFO: Record<string, { labelKey: string; icon: string; color:
 
 const SCENE_TYPES = new Set(["camera", "scripture", "translation", "lower-third"]);
 
+function areStringListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Data Model
 // ---------------------------------------------------------------------------
 
-type MVBgType = "color" | "image" | "video" | "scene";
+type MVBgType = "color" | "image" | "video" | "pattern" | "scene";
 
 interface MVBackground {
   type: MVBgType;
   color: string;
   filePath: string;
+  patternSrc: string;
   sceneName: string;
 }
 
-const DEFAULT_MV_BG: MVBackground = { type: "color", color: "transparent", filePath: "", sceneName: "" };
+const DEFAULT_MV_BG: MVBackground = { type: "color", color: "transparent", filePath: "", patternSrc: "", sceneName: "" };
 
 interface SavedMultiView {
   id: string;
@@ -270,6 +307,15 @@ function resolveFrame(frameId: string | null | undefined): MultiviewFrame | unde
   return FRAME_LIBRARY.find(f => f.id === frameId);
 }
 
+function resolveEffectiveFrameId(
+  slotFrameId: string | null | undefined,
+  layoutFrameId: string | null | undefined,
+): string | null {
+  if (slotFrameId === "none") return null;
+  if (!slotFrameId || slotFrameId === "inherit") return layoutFrameId || null;
+  return slotFrameId;
+}
+
 // ── Shared frame renderer — used by both preview and OBS compositor ──
 
 function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -333,10 +379,12 @@ async function generateCompositeFramePng(
 ): Promise<Uint8Array | null> {
   // Resolve effective frame per slot
   const slotDefs = layout.slots.map(slot => {
-    const sf = slotFrames[slot.id];
-    const eff = sf === "none" ? null : sf ? sf : frameId;
-    return eff ? { rect: { x: slot.x, y: slot.y, w: slot.width, h: slot.height }, frame: resolveFrame(eff) } : null;
-  }).filter(Boolean) as Array<{ rect: { x: number; y: number; w: number; h: number }; frame: MultiviewFrame }>;
+    const effectiveFrameId = resolveEffectiveFrameId(slotFrames?.[slot.id], frameId);
+    const frame = resolveFrame(effectiveFrameId);
+    return frame
+      ? { rect: { x: slot.x, y: slot.y, w: slot.width, h: slot.height }, frame }
+      : null;
+  }).filter((entry): entry is { rect: { x: number; y: number; w: number; h: number }; frame: MultiviewFrame } => Boolean(entry));
 
   if (slotDefs.length === 0) return null;
 
@@ -389,6 +437,15 @@ async function saveFramePngToDisk(bytes: Uint8Array): Promise<string | null> {
   }
 }
 
+function buildMultiviewPatternBrowserUrl(patternSrc: string): string {
+  const trimmed = patternSrc.trim();
+  const imageSrc = /^(data:|https?:\/\/|file:\/\/|\/)/i.test(trimmed)
+    ? trimmed
+    : `file://${trimmed}`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;width:100vw;height:100vh;overflow:hidden;background:#0F172A"><img src="${imageSrc.replace(/"/g, "&quot;")}" style="display:block;width:100%;height:100%;object-fit:cover" /></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
 function genId(): string {
   return `mv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -406,41 +463,58 @@ function nextObsSceneName(list: SavedMultiView[]): string {
   return `MV: Multiview ${n}`;
 }
 
+function normalizeLoadedMultiView(item: SavedMultiView): SavedMultiView {
+  const assignments = item.assignments ?? {};
+  const slotModes = item.slotModes ?? {};
+  const slotThumbnails = item.slotThumbnails ?? {};
+  const slotFraming = { ...(item.slotFraming ?? {}) };
+  let changed = !item.assignments || !item.slotModes || !item.slotFraming || !item.slotThumbnails;
+
+  for (const slotId of Object.keys(assignments)) {
+    const framing = slotFraming[slotId];
+    if (!framing || framing.displayMode === "fill") {
+      slotFraming[slotId] = DEFAULT_SLOT_FRAMING;
+      changed = true;
+    }
+  }
+
+  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails } : item;
+}
+
 // ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
 
-function loadSaved(): SavedMultiView[] {
-  try {
-    const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
+interface SavedStorageSnapshot {
+  items: SavedMultiView[];
+  /** A valid persisted value was found, including an intentional empty list. */
+  hasStoredValue: boolean;
+  /** The value came from a recovery/migration path and should be written back. */
+  shouldMigrate: boolean;
+  /** Storage was readable and may safely be written to. */
+  canPersist: boolean;
 }
 
-function loadAddedLayoutIds(): Set<string> {
+function loadSavedSnapshot(): SavedStorageSnapshot {
   try {
-    // Migration: try unscoped key first, fall back to user-scoped key
-    let raw = localStorage.getItem(ADDED_LAYOUTS_KEY);
-    if (!raw) {
-      raw = localStorage.getItem(getUserScopedKey(ADDED_LAYOUTS_KEY));
-      if (raw) {
-        localStorage.setItem(ADDED_LAYOUTS_KEY, raw);
-      }
+    const storedItems = readDockPreferenceList<SavedMultiView>(STORAGE_KEY);
+    if (storedItems !== null) {
+      return { items: storedItems.map(normalizeLoadedMultiView), hasStoredValue: true, shouldMigrate: false, canPersist: true };
     }
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+
+    return { items: [], hasStoredValue: false, shouldMigrate: false, canPersist: true };
   } catch {
-    return new Set();
+    // Storage can be temporarily unavailable while the dock/auth document is
+    // being restored. Treat that as an unreadable session, never as an empty
+    // Multiview that should be written back over the user's cards.
+    return { items: [], hasStoredValue: false, shouldMigrate: false, canPersist: false };
   }
 }
 
 function saveSaved(items: SavedMultiView[]) {
-  try {
-    localStorage.setItem(getUserScopedKey(STORAGE_KEY), JSON.stringify(items));
-  } catch { /* ignore */ }
+  // localStorage is written synchronously for instant recovery; the same
+  // snapshot is also mirrored to the dock's durable user-scoped store.
+  void saveDockPreferenceList(STORAGE_KEY, items);
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +524,193 @@ function saveSaved(items: SavedMultiView[]) {
 function getBackgroundMediaLabel(filePath: string): string {
   const parts = filePath.split(/[/\\]/);
   return parts[parts.length - 1] || filePath;
+}
+
+function getMediaItemPreviewSrc(item: MediaItem): string {
+  if (item.thumbnailUrl) return item.thumbnailUrl;
+  if (item.diskFileName) return `/uploads/${encodeURIComponent(item.diskFileName)}`;
+  return item.url;
+}
+
+function getInlineImagePreviewSrc(filePath: string): string {
+  const value = filePath.trim();
+  if (/^(https?:\/\/|data:image\/|\/uploads\/)/i.test(value)) return value;
+  return "";
+}
+
+function formatMediaItemMeta(item: MediaItem): string {
+  const parts: string[] = [];
+  if (item.mimeType) {
+    parts.push(item.mimeType.split("/").pop()?.toUpperCase() || item.type.toUpperCase());
+  } else {
+    parts.push(item.type === "video" ? "VIDEO" : "IMAGE");
+  }
+  if (item.fileSize && Number.isFinite(item.fileSize)) {
+    const mb = item.fileSize / (1024 * 1024);
+    parts.push(mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`);
+  }
+  return parts.join(" · ");
+}
+
+function getUploadBackgroundMediaType(fileName: string): "image" | "video" | null {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  if (BACKGROUND_IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (BACKGROUND_VIDEO_EXTENSIONS.has(ext)) return "video";
+  return null;
+}
+
+function createUploadMediaItem(fileName: string): MediaItem | null {
+  const type = getUploadBackgroundMediaType(fileName);
+  if (!type) return null;
+  return {
+    id: `upload:${fileName}`,
+    name: fileName,
+    type,
+    url: `/uploads/${encodeURIComponent(fileName)}`,
+    diskFileName: fileName,
+    createdAt: "0001-01-01T00:00:00.000Z",
+    source: "local",
+  };
+}
+
+function dedupeBackgroundMediaItems(items: MediaItem[]): MediaItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.type}:${item.filePath || item.diskFileName || item.url || item.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isMediaItemSelectedForBackground(item: MediaItem, filePath: string): boolean {
+  if (!filePath) return false;
+  const selectedName = getBackgroundMediaLabel(filePath);
+  return item.filePath === filePath ||
+    item.url === filePath ||
+    item.diskFileName === selectedName ||
+    item.name === selectedName;
+}
+
+function isSelectableBackgroundMediaItem(item: MediaItem, type: "image" | "video"): boolean {
+  return item.type === type && item.source !== "document-conversion";
+}
+
+function isMultiviewManagedSceneName(sceneName: string): boolean {
+  return /^MV:\s*Multiview\b/i.test(sceneName.trim());
+}
+
+async function loadBackgroundMediaLibrary(): Promise<MediaItem[]> {
+  const sources: MediaItem[][] = [];
+
+  try {
+    const { getAllMedia } = await import("../../library/libraryDb");
+    const indexedItems = await getAllMedia();
+    if (indexedItems.length > 0) sources.push(indexedItems);
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read IndexedDB media library", err);
+  }
+
+  try {
+    const res = await fetch("/uploads/dock-media-library.json");
+    if (res.ok) {
+      const jsonItems = await res.json();
+      if (Array.isArray(jsonItems)) sources.push(jsonItems as MediaItem[]);
+    }
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read dock media library file", err);
+  }
+
+  try {
+    const res = await fetch("/api/uploads");
+    if (res.ok) {
+      const files = await res.json();
+      if (Array.isArray(files)) {
+        sources.push(files
+          .filter((file): file is string => typeof file === "string")
+          .map(createUploadMediaItem)
+          .filter((item): item is MediaItem => Boolean(item)));
+      }
+    }
+  } catch (err) {
+    console.warn("[DockMultiview] Unable to read uploads folder media", err);
+  }
+
+  sources.push(loadLocalLibrary());
+  return dedupeBackgroundMediaItems(
+    dedupeMediaItems(sources.flat()).filter((item) => !isInternalDockMediaItem(item)),
+  );
+}
+
+async function getUploadsDirectory(): Promise<string> {
+  const res = await fetch("/api/uploads-dir");
+  if (!res.ok) throw new Error(`uploads-dir failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.path) throw new Error("Uploads directory was not returned.");
+  return String(data.path);
+}
+
+async function resolveBackgroundMediaFilePath(item: MediaItem): Promise<string> {
+  if (item.filePath) return item.filePath;
+
+  if (item.url?.startsWith("data:")) {
+    const response = await fetch("/api/save-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: item.diskFileName || item.name, dataUrl: item.url }),
+    });
+    if (!response.ok) throw new Error(`save-media failed: ${response.status}`);
+    const data = await response.json();
+    if (!data.path) throw new Error("Saved media path was not returned.");
+    return String(data.path);
+  }
+
+  const fileName = item.diskFileName || decodeURIComponent(item.url?.split("/").pop() || item.name);
+  if (!fileName) throw new Error("Media file name is missing.");
+  const dir = await getUploadsDirectory();
+  const sep = dir.includes("\\") ? "\\" : "/";
+  return `${dir}${sep}${fileName}`;
+}
+
+async function captureMvSourceThumbnail(sourceName: string): Promise<string | null> {
+  if (!sourceName || !dockObsClient.isConnected) return null;
+  try {
+    const resp = await dockObsClient.call("GetSourceScreenshot", {
+      sourceName,
+      imageFormat: "jpeg",
+      imageWidth: 320,
+      imageHeight: 180,
+      imageCompressionQuality: 60,
+    }) as { imageData?: string };
+    const data = resp.imageData;
+    if (!data) return null;
+    return data.startsWith("data:") ? data : `data:image/jpeg;base64,${data}`;
+  } catch (err) {
+    console.warn("[DockMultiview] Thumbnail capture failed", { sourceName, err });
+    return null;
+  }
+}
+
+/**
+ * Capture previews in a small queue instead of starting one OBS screenshot
+ * request per slot at the same time. The Dock is often hosted inside OBS, so
+ * a burst of screenshot requests competes with the live compositor on the
+ * same low-end machine.
+ */
+async function captureMvSourceThumbnails(sourceNames: string[]): Promise<Map<string, string | null>> {
+  const captures = new Map<string, string | null>();
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < sourceNames.length) {
+      const sourceName = sourceNames[nextIndex++];
+      captures.set(sourceName, await captureMvSourceThumbnail(sourceName));
+    }
+  };
+
+  const workerCount = Math.min(MV_THUMBNAIL_CONCURRENCY, sourceNames.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return captures;
 }
 
 function resolveLayout(layoutId: string): GalleryLayout | undefined {
@@ -471,8 +732,170 @@ function cssColorToObsInt(cssColor: string): number {
   return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
 }
 
+function formatMvContentLabel(value: string): string {
+  const clean = value.trim();
+  if (!clean) return clean;
+  if (/^MCE(?: Browser)?\s*-\s*Worship$/i.test(clean) || /^MCE Worship$/i.test(clean)) return "Worship";
+  if (/^MCE(?: Browser)?\s*-\s*Bible$/i.test(clean) || /^MCE Bible$/i.test(clean)) return "Bible";
+  if (/^MCE Presentation$/i.test(clean)) return "Presentation";
+  return clean.replace(/^MCE(?: Browser)?\s*-\s*/i, "").replace(/^MCE\s+/i, "");
+}
+
 function getMvBg(mv: SavedMultiView): MVBackground {
   return mv.background ?? DEFAULT_MV_BG;
+}
+
+function isMultiviewBackgroundEmpty(background: MVBackground): boolean {
+  return (background.type === "color" && (background.color === "transparent" || background.color === "#0F172A"))
+    || (background.type === "scene" && !background.sceneName)
+    || (background.type === "pattern" && !background.patternSrc)
+    || ((background.type === "image" || background.type === "video") && !background.filePath);
+}
+
+function getMultiviewBackgroundInput(background: MVBackground): { inputKind: string; inputSettings: Record<string, unknown> } | null {
+  if (background.type === "scene") return null;
+
+  if (background.type === "image" && background.filePath) {
+    return {
+      inputKind: "image_source",
+      inputSettings: { file: background.filePath, width: CANVAS_W, height: CANVAS_H },
+    };
+  }
+
+  if (background.type === "video" && background.filePath) {
+    return {
+      inputKind: "ffmpeg_source",
+      inputSettings: {
+        local_file: background.filePath,
+        is_local_file: true,
+        looping: true,
+        restart_on_activate: true,
+        close_when_inactive: true,
+      },
+    };
+  }
+
+  if (background.type === "pattern" && background.patternSrc) {
+    return {
+      inputKind: "browser_source",
+      inputSettings: {
+        url: buildMultiviewPatternBrowserUrl(background.patternSrc),
+        width: CANVAS_W,
+        height: CANVAS_H,
+        css: "",
+        bgcolor: "#00000000",
+        shutdown: false,
+        restart_when_active: false,
+      },
+    };
+  }
+
+  return {
+    inputKind: "color_source_v3",
+    inputSettings: {
+      color: cssColorToObsInt(background.color || "#0F172A"),
+      width: CANVAS_W,
+      height: CANVAS_H,
+    },
+  };
+}
+
+/** Apply a background change to an already-created Multi-View scene. */
+export async function updateMultiviewBackgroundSource(
+  sceneName: string,
+  multiviewId: string,
+  background: MVBackground,
+  previousBackground?: MVBackground,
+): Promise<void> {
+  const inputName = `${multiviewId}::BACKGROUND`;
+  const existing = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
+    sceneItems?: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex?: number }>;
+  };
+  const previousSceneName = previousBackground?.type === "scene" ? previousBackground.sceneName.trim() : "";
+  const previousSceneItem = previousSceneName
+    ? (existing.sceneItems ?? []).filter((item) => item.sourceName === previousSceneName)
+      .sort((a, b) => (a.sceneItemIndex ?? Number.MAX_SAFE_INTEGER) - (b.sceneItemIndex ?? Number.MAX_SAFE_INTEGER))[0]
+    : undefined;
+
+  // Remove the old managed background item, or the old nested scene item,
+  // before adding the replacement. This is what makes type changes reliable.
+  for (const item of existing.sceneItems ?? []) {
+    const isManagedBackground = item.sourceName === inputName;
+    const isPreviousNestedBackground = item.sceneItemId === previousSceneItem?.sceneItemId;
+    if (!isManagedBackground && !isPreviousNestedBackground) continue;
+    await dockObsClient.call("RemoveSceneItem", { sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
+  }
+
+  if (isMultiviewBackgroundEmpty(background)) {
+    await dockObsClient.call("RemoveInput", { inputName }).catch(() => { });
+    return;
+  }
+
+  let sceneItemId: number;
+  if (background.type === "scene" && background.sceneName) {
+    // A nested scene does not use the managed input source.
+    await dockObsClient.call("RemoveInput", { inputName }).catch(() => { });
+    const created = await dockObsClient.call("CreateSceneItem", {
+      sceneName,
+      sourceName: background.sceneName,
+      sceneItemEnabled: true,
+    }) as { sceneItemId: number };
+    sceneItemId = created.sceneItemId;
+  } else {
+    const input = getMultiviewBackgroundInput(background);
+    if (!input) return;
+
+    try {
+      const inputList = await dockObsClient.call("GetInputList") as {
+        inputs?: Array<{ inputName: string; inputKind?: string }>;
+      };
+      const existingInput = inputList.inputs?.find((item) => item.inputName === inputName);
+      if (existingInput?.inputKind && existingInput.inputKind !== input.inputKind) {
+        await dockObsClient.call("RemoveInput", { inputName });
+      }
+    } catch {
+      // CreateInput below still handles bridges without input metadata.
+    }
+
+    try {
+      const created = await dockObsClient.call("CreateInput", {
+        sceneName,
+        inputName,
+        inputKind: input.inputKind,
+        inputSettings: input.inputSettings,
+        sceneItemEnabled: true,
+      }) as { sceneItemId: number };
+      sceneItemId = created.sceneItemId;
+    } catch {
+      // The managed input already exists: update its settings and re-add it to
+      // the scene after removing the previous scene item above.
+      await dockObsClient.call("SetInputSettings", { inputName, inputSettings: input.inputSettings });
+      await dockObsClient.call("AddSceneItem", { sceneName, sourceName: inputName });
+      const resolved = await dockObsClient.call("GetSceneItemId", { sceneName, sourceName: inputName }) as { sceneItemId: number };
+      sceneItemId = resolved.sceneItemId;
+    }
+  }
+
+  await dockObsClient.call("SetSceneItemTransform", {
+    sceneName,
+    sceneItemId,
+    sceneItemTransform: {
+      positionX: 0,
+      positionY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      boundsType: "OBS_BOUNDS_STRETCH",
+      boundsWidth: CANVAS_W,
+      boundsHeight: CANVAS_H,
+      boundsAlignment: 0,
+      cropLeft: 0,
+      cropTop: 0,
+      cropRight: 0,
+      cropBottom: 0,
+    },
+  });
+  await dockObsClient.call("SetSceneItemIndex", { sceneName, sceneItemId, sceneItemIndex: 0 }).catch(() => { });
 }
 
 function isSceneType(ct: GallerySlot["contentType"]): boolean {
@@ -489,9 +912,10 @@ function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"]
   );
 }
 
-function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
+const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
   layout: GalleryLayout;
   thumbnails?: Record<string, string>;
+  slotFraming?: SavedMultiView["slotFraming"];
   frameId?: string | null;
   slotFrames?: Record<string, string>;
   frameThickness?: number;
@@ -505,8 +929,7 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
 
   // Resolve frames per slot for SVG overlay
   const slotFramesResolved = layout.slots.map(slot => {
-    const sf = slotFrames?.[slot.id];
-    const effId = sf === "none" ? null : sf ? (sf === "inherit" ? frameId : sf) : frameId;
+    const effId = resolveEffectiveFrameId(slotFrames?.[slot.id], frameId);
     return { slot, frame: resolveFrame(effId) };
   }).filter((s): s is { slot: GallerySlot; frame: MultiviewFrame } => !!s.frame);
 
@@ -516,13 +939,32 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
       {hasThumbs && layout.slots.map((slot) => {
         const thumb = thumbnails?.[slot.id];
         if (!thumb) return null;
+        const framing = slotFraming?.[slot.id] ?? DEFAULT_SLOT_FRAMING;
+        const tx = calculateSlotTransform(
+          320,
+          180,
+          slot,
+          { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
+        );
         return (
-          <img key={slot.id} src={thumb} alt=""
+          <div key={slot.id}
             style={{
               position: "absolute", left: `${slot.x * scaleX}%`, top: `${slot.y * scaleY}%`,
               width: `${slot.width * scaleX}%`, height: `${slot.height * scaleY}%`,
-              objectFit: "cover", display: "block",
-            }} />
+              overflow: "hidden",
+            }}
+          >
+            <img src={thumb} alt=""
+              style={{
+                position: "absolute",
+                left: `${((tx.positionX - slot.x) / slot.width) * 100}%`,
+                top: `${((tx.positionY - slot.y) / slot.height) * 100}%`,
+                width: `${(tx.renderedWidth / slot.width) * 100}%`,
+                height: `${(tx.renderedHeight / slot.height) * 100}%`,
+                objectFit: "fill",
+                display: "block",
+              }} />
+          </div>
         );
       })}
       {/* SVG overlay: unassigned slot outlines + frame layer borders */}
@@ -565,7 +1007,7 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
       </svg>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Content Picker Modal
@@ -574,7 +1016,6 @@ function LayoutMiniPreview({ layout, thumbnails, frameId, slotFrames, frameThick
 function ContentPicker({
   open,
   obsScenes,
-  obsSources,
   loading,
   onSelect,
   onClose,
@@ -582,29 +1023,28 @@ function ContentPicker({
 }: {
   open: boolean;
   obsScenes: string[];
-  obsSources: string[];
   loading: boolean;
-  onSelect: (value: string, mode: "scene" | "source") => void;
+  onSelect: (value: string) => void;
   onClose: () => void;
   excludeScenes?: string[];
 }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"scene" | "source">("scene");
   const [query, setQuery] = useState("");
 
   if (!open) return null;
 
   const exclude = new Set(excludeScenes ?? []);
-  const scenes = obsScenes.filter(s => (!query || s.toLowerCase().includes(query.toLowerCase())) && !exclude.has(s));
-  const sources = obsSources.filter(s => !query || s.toLowerCase().includes(query.toLowerCase()));
-  const items = tab === "scene" ? scenes : sources;
+  const normalizedQuery = query.trim().toLowerCase();
+  const scenes = obsScenes.filter(s => (!normalizedQuery || s.toLowerCase().includes(normalizedQuery)) && !exclude.has(s));
 
   return (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-content-picker" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-content-picker__header">
-          <span className="dock-mv-content-picker__title">{t('multiview.chooseContent')}</span>
-          <span className="dock-mv-content-picker__subtitle">{t('multiview.chooseContentDesc')}</span>
+          <div>
+            <span className="dock-mv-content-picker__title">{t('multiview.chooseContent')}</span>
+            <span className="dock-mv-content-picker__subtitle">{t('multiview.chooseContentDesc')}</span>
+          </div>
           <button type="button" className="dock-mv-content-picker__close" onClick={onClose}>
             <Icon name="close" size={14} />
           </button>
@@ -616,44 +1056,41 @@ function ContentPicker({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('multiview.searchContent')}
+            placeholder={t('multiview.searchScenes', 'Search OBS scenes...')}
             autoFocus
           />
         </div>
-        <div className="dock-mv-content-picker__tabs">
-          <button
-            type="button"
-            className={`dock-mv-content-picker__tab${tab === "scene" ? " dock-mv-content-picker__tab--active" : ""}`}
-            onClick={() => setTab("scene")}
-          >
-            {t('multiview.scenes')}
-          </button>
-          <button
-            type="button"
-            className={`dock-mv-content-picker__tab${tab === "source" ? " dock-mv-content-picker__tab--active" : ""}`}
-            onClick={() => setTab("source")}
-          >
-            {t('multiview.sources')}
-          </button>
+        <div className="dock-mv-content-picker__summary" aria-live="polite">
+          <span>{t('multiview.scenes')} · {scenes.length}</span>
+          <span>{t('multiview.scenePickerHint', 'Use a full OBS scene inside this area.')}</span>
         </div>
         <div className="dock-mv-content-picker__list" aria-busy={loading}>
           {loading ? (
             <div className="dock-mv-content-picker__loading" role="status" aria-live="polite">
-              <Icon name="progress_activity" size={18} />
               <span>{t('common.loading')}</span>
             </div>
-          ) : items.length === 0 ? (
+          ) : scenes.length === 0 ? (
             <div className="dock-mv-content-picker__empty">{t('multiview.noContentFound')}</div>
           ) : (
-            items.map(item => (
+            scenes.map(item => (
               <button
-                key={item}
+                key={`scene:${item}`}
                 type="button"
                 className="dock-mv-content-picker__item"
-                onClick={() => onSelect(item, tab)}
+                onClick={() => onSelect(item)}
               >
-                <span className="dock-mv-content-picker__item-name">{item}</span>
-
+                <span className="dock-mv-content-picker__item-icon" aria-hidden="true">
+                  <Icon name="grid_view" size={14} />
+                </span>
+                <span className="dock-mv-content-picker__item-body">
+                  <span className="dock-mv-content-picker__item-name">{item}</span>
+                  <span className="dock-mv-content-picker__item-meta">
+                    {t('multiview.scene', 'Scene')}
+                  </span>
+                </span>
+                <span className="dock-mv-content-picker__item-action">
+                  <Icon name="arrow_forward" size={13} />
+                </span>
               </button>
             ))
           )}
@@ -670,47 +1107,118 @@ function ContentPicker({
 // ---------------------------------------------------------------------------
 interface SlotRect { x: number; y: number; width: number; height: number }
 interface FramingParams { mode: "fill" | "fit" | "custom"; focalX: number; focalY: number; zoom: number }
+interface SourceSize { width: number; height: number }
 
-function calculateSlotTransform(
+function normalizeSourceSize(width?: number, height?: number): SourceSize {
+  const safeWidth = Number(width);
+  const safeHeight = Number(height);
+  return {
+    width: Number.isFinite(safeWidth) && safeWidth > 0 ? safeWidth : CANVAS_W,
+    height: Number.isFinite(safeHeight) && safeHeight > 0 ? safeHeight : CANVAS_H,
+  };
+}
+
+function normalizeSlotFraming(
+  framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number },
+) {
+  const focalX = Number(framing.focalX);
+  const focalY = Number(framing.focalY);
+  return {
+    displayMode: framing.displayMode,
+    zoom: Math.max(1, Math.min(5, Number(framing.zoom) || 1)),
+    // Do not use `|| 0.5` here: 0 is a valid edge position.
+    focalX: Math.max(0, Math.min(1, Number.isFinite(focalX) ? focalX : 0.5)),
+    focalY: Math.max(0, Math.min(1, Number.isFinite(focalY) ? focalY : 0.5)),
+  };
+}
+
+function normalizeEditorFraming(
+  framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number },
+) {
+  const normalized = normalizeSlotFraming(framing);
+  // "fill" is retained when reading older saved cards, but the editor now
+  // exposes it as the editable Custom mode.
+  return normalized.displayMode === "fill"
+    ? { ...normalized, displayMode: "custom" as const }
+    : normalized;
+}
+
+async function getSceneItemSourceSize(sceneName: string, sceneItemId: number): Promise<SourceSize> {
+  try {
+    const response = await dockObsClient.call("GetSceneItemTransform", {
+      sceneName,
+      sceneItemId,
+    }) as {
+      sceneItemTransform?: {
+        sourceWidth?: number;
+        sourceHeight?: number;
+      };
+    };
+    return normalizeSourceSize(
+      response.sceneItemTransform?.sourceWidth,
+      response.sceneItemTransform?.sourceHeight,
+    );
+  } catch {
+    return normalizeSourceSize();
+  }
+}
+
+export function calculateSlotTransform(
   sourceWidth: number,
   sourceHeight: number,
   slot: SlotRect,
   framing: FramingParams,
 ) {
-  const fitScale = Math.min(slot.width / sourceWidth, slot.height / sourceHeight);
-  const fillScale = Math.max(slot.width / sourceWidth, slot.height / sourceHeight);
+  const sourceSize = normalizeSourceSize(sourceWidth, sourceHeight);
+  const safeFraming = normalizeSlotFraming({
+    displayMode: framing.mode,
+    zoom: framing.zoom,
+    focalX: framing.focalX,
+    focalY: framing.focalY,
+  });
+  const fillScale = Math.max(slot.width / sourceSize.width, slot.height / sourceSize.height);
 
-  if (framing.mode === "fit") {
-    const scale = fitScale;
-    const renderedWidth = sourceWidth * scale;
-    const renderedHeight = sourceHeight * scale;
+  if (safeFraming.displayMode === "fit") {
+    const scaleX = slot.width / sourceSize.width;
+    const scaleY = slot.height / sourceSize.height;
     return {
-      scale,
-      renderedWidth,
-      renderedHeight,
-      positionX: slot.x + (slot.width - renderedWidth) / 2,
-      positionY: slot.y + (slot.height - renderedHeight) / 2,
+      scale: Math.max(scaleX, scaleY),
+      scaleX,
+      scaleY,
+      renderedWidth: slot.width,
+      renderedHeight: slot.height,
+      positionX: slot.x,
+      positionY: slot.y,
+      cropLeft: 0,
+      cropRight: 0,
+      cropTop: 0,
+      cropBottom: 0,
     };
   }
 
-  const scale = fillScale * Math.max(1, framing.zoom);
-  const renderedWidth = sourceWidth * scale;
-  const renderedHeight = sourceHeight * scale;
+  const scale = fillScale * safeFraming.zoom;
+  const renderedWidth = sourceSize.width * scale;
+  const renderedHeight = sourceSize.height * scale;
   const visibleSourceWidth = slot.width / scale;
   const visibleSourceHeight = slot.height / scale;
-  const hCrop = Math.max(0, sourceWidth - visibleSourceWidth);
-  const vCrop = Math.max(0, sourceHeight - visibleSourceHeight);
+  const hCrop = Math.max(0, sourceSize.width - visibleSourceWidth);
+  const vCrop = Math.max(0, sourceSize.height - visibleSourceHeight);
 
   return {
     scale,
+    scaleX: scale,
+    scaleY: scale,
     renderedWidth,
     renderedHeight,
-    positionX: slot.x - hCrop * framing.focalX,
-    positionY: slot.y - vCrop * framing.focalY,
-    cropLeft: hCrop * framing.focalX,
-    cropRight: hCrop - hCrop * framing.focalX,
-    cropTop: vCrop * framing.focalY,
-    cropBottom: vCrop - vCrop * framing.focalY,
+    // Crop distances are measured in source pixels, so convert them back to
+    // canvas pixels before positioning the rendered image. Without this
+    // scale, the preview stops short of the slot edge at focalX/Y = 1.
+    positionX: slot.x - hCrop * safeFraming.focalX * scale,
+    positionY: slot.y - vCrop * safeFraming.focalY * scale,
+    cropLeft: hCrop * safeFraming.focalX,
+    cropRight: hCrop - hCrop * safeFraming.focalX,
+    cropTop: vCrop * safeFraming.focalY,
+    cropBottom: vCrop - vCrop * safeFraming.focalY,
   };
 }
 
@@ -734,16 +1242,20 @@ function FramingEditor({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(initialFraming);
+  const [draft, setDraft] = useState(() => normalizeEditorFraming(initialFraming));
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState<SourceSize>(() => normalizeSourceSize());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [showCustomHint, setShowCustomHint] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; startFocalX: number; startFocalY: number } | null>(null);
   const mountedRef = useRef(true);
   const captureGenRef = useRef(0);
 
-  const isCustom = draft.displayMode === "custom";
+  const isCustom = draft.displayMode !== "fit";
+  const isPortraitPreview = slotHeight > slotWidth;
+  const zoomPixels = Math.round(draft.zoom * 100);
 
   // ── Capture screenshot when modal opens ──
   const captureScreenshot = useCallback(async () => {
@@ -774,19 +1286,48 @@ function FramingEditor({
 
   useEffect(() => {
     if (open) {
-      setDraft(initialFraming);
+      setDraft(normalizeEditorFraming(initialFraming));
       setScreenshot(null);
+      setPreviewSize(normalizeSourceSize());
       setError(null);
+      setShowCustomHint(false);
       mountedRef.current = true;
       captureScreenshot();
     }
     return () => { mountedRef.current = false; };
   }, [open]);
 
+  useEffect(() => {
+    if (!showCustomHint) return;
+    const timeout = window.setTimeout(() => setShowCustomHint(false), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [showCustomHint]);
+
+  const handleDisplayModeChange = useCallback((mode: "fit" | "custom") => {
+    if (mode === "fit") {
+      setDraft(prev => normalizeEditorFraming({ ...prev, displayMode: "fit" }));
+      setShowCustomHint(false);
+      return;
+    }
+
+    setDraft(prev => normalizeEditorFraming({
+      ...prev,
+      displayMode: "custom",
+      // Switching from Fit starts Custom at a centered fill, ready to drag.
+      ...(prev.displayMode === "fit" ? { zoom: 1, focalX: 0.5, focalY: 0.5 } : {}),
+    }));
+    setShowCustomHint(true);
+  }, []);
+
+  const saveFraming = useCallback(() => {
+    onSave(normalizeEditorFraming(draft));
+    onClose();
+  }, [draft, onClose, onSave]);
+
   // ── Preview image transform using the shared calculation ──
   const imageStyle = useMemo((): React.CSSProperties => {
     const tx = calculateSlotTransform(
-      CANVAS_W, CANVAS_H,
+      previewSize.width, previewSize.height,
       { x: 0, y: 0, width: slotWidth, height: slotHeight },
       { mode: draft.displayMode, focalX: draft.focalX, focalY: draft.focalY, zoom: draft.zoom },
     );
@@ -805,7 +1346,7 @@ function FramingEditor({
       maxWidth: "none",
       objectFit: "none",
     };
-  }, [draft, slotWidth, slotHeight]);
+  }, [draft, previewSize.height, previewSize.width, slotWidth, slotHeight]);
 
   // ── Pointer handlers for Custom mode drag ──
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -826,10 +1367,12 @@ function FramingEditor({
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     const sensitivity = 0.003;
-    setDraft(prev => ({
+    setDraft(prev => normalizeSlotFraming({
       ...prev,
-      focalX: Math.max(0, Math.min(1, dragRef.current!.startFocalX + dx * sensitivity)),
-      focalY: Math.max(0, Math.min(1, dragRef.current!.startFocalY + dy * sensitivity)),
+      // Direct manipulation: dragging the picture right/down moves the
+      // picture right/down, instead of reversing the user's gesture.
+      focalX: Math.max(0, Math.min(1, dragRef.current!.startFocalX - dx * sensitivity)),
+      focalY: Math.max(0, Math.min(1, dragRef.current!.startFocalY - dy * sensitivity)),
     }));
   }, [isCustom]);
 
@@ -843,16 +1386,8 @@ function FramingEditor({
     if (!isCustom) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setDraft(prev => ({ ...prev, zoom: Math.max(0.5, Math.min(5, prev.zoom + delta)) }));
+    setDraft(prev => normalizeSlotFraming({ ...prev, zoom: prev.zoom + delta }));
   }, [isCustom]);
-
-  // ── Compute slot aspect ratio label ──
-  const aspectLabel = useMemo(() => {
-    const g = gcd(slotWidth, slotHeight);
-    return `${slotWidth / g}:${slotHeight / g}`;
-  }, [slotWidth, slotHeight]);
-
-  const slotAspectDisplay = `${slotWidth} × ${slotHeight} (${aspectLabel})`;
 
   if (!open) return null;
 
@@ -871,7 +1406,22 @@ function FramingEditor({
             >
               <Icon name="refresh" size={13} />
             </button>
-            <button type="button" className="dock-mv-framing-editor__close" onClick={onClose}>
+            <button
+              type="button"
+              className="dock-mv-framing-editor__save"
+              onClick={saveFraming}
+              title={t('multiview.saveFraming')}
+              aria-label={t('multiview.saveFraming')}
+            >
+              {t('common.save', 'Save')}
+            </button>
+            <button
+              type="button"
+              className="dock-mv-framing-editor__close"
+              onClick={onClose}
+              title={t('common.cancel')}
+              aria-label={t('common.cancel')}
+            >
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -882,6 +1432,7 @@ function FramingEditor({
           <div
             className={[
               "dock-mv-framing-editor__preview",
+              isPortraitPreview ? "dock-mv-framing-editor__preview--portrait" : "",
               isCustom ? "dock-mv-framing-editor__preview--draggable" : "",
               dragging ? "dock-mv-framing-editor__preview--dragging" : "",
               draft.displayMode === "fit" ? "dock-mv-framing-editor__preview--fit" : "",
@@ -919,8 +1470,21 @@ function FramingEditor({
                 src={screenshot}
                 alt={`Preview of ${selectedContentName}`}
                 style={imageStyle}
+                onLoad={(event) => {
+                  setPreviewSize(normalizeSourceSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight));
+                }}
                 draggable={false}
               />
+            )}
+
+            {isCustom && showCustomHint && (
+              <div className="dock-mv-framing-editor__custom-hint" role="status" aria-live="polite">
+                <span className="dock-mv-framing-editor__custom-hint-icon" aria-hidden="true">
+                  <Icon name="swap_horiz" size={18} />
+                </span>
+                <strong>{t('multiview.dragLeftRight', 'Drag left or right')}</strong>
+                <span>{t('multiview.dragToReposition', 'Drag the preview to reposition')}</span>
+              </div>
             )}
 
             {!loading && !error && !screenshot && (
@@ -935,12 +1499,12 @@ function FramingEditor({
 
           {/* Display Mode selector */}
           <div className="dock-mv-framing-editor__modes">
-            {(["fill", "fit", "custom"] as const).map(mode => (
+            {(["fit", "custom"] as const).map(mode => (
               <button
                 key={mode}
                 type="button"
                 className={`dock-mv-framing-editor__mode${draft.displayMode === mode ? " dock-mv-framing-editor__mode--active" : ""}`}
-                onClick={() => setDraft(prev => ({ ...prev, displayMode: mode }))}
+                onClick={() => handleDisplayModeChange(mode)}
               >
                 {t(`multiview.framingMode_${mode}`)}
               </button>
@@ -955,65 +1519,408 @@ function FramingEditor({
                 <div className="dock-mv-framing-editor__control-row">
                   <input
                     type="range"
-                    min="0.5"
-                    max="5"
-                    step="0.05"
-                    value={draft.zoom}
-                    onChange={(e) => setDraft(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
+                    min="100"
+                    max="500"
+                    step="5"
+                    value={zoomPixels}
+                    onChange={(e) => setDraft(prev => normalizeSlotFraming({ ...prev, zoom: parseFloat(e.target.value) / 100 }))}
                     className="dock-mv-framing-editor__slider"
+                    aria-label={t('multiview.zoom')}
                   />
-                  <span className="dock-mv-framing-editor__control-value">{draft.zoom.toFixed(2)}x</span>
+                  <span className="dock-mv-framing-editor__control-value">{zoomPixels}px ({draft.zoom.toFixed(2)}×)</span>
                 </div>
               </label>
 
-              <p className="dock-mv-framing-editor__drag-hint">{t('multiview.dragHint')}</p>
-
-              <button
-                type="button"
-                className="dock-btn dock-btn--sm"
-                onClick={() => setDraft(prev => ({ ...prev, focalX: 0.5, focalY: 0.5, zoom: 1 }))}
-              >
-                {t('multiview.resetCenter')}
-              </button>
             </div>
           )}
-
-          {/* Dimension info */}
-          <div className="dock-mv-framing-editor__info">
-            <span>{t('multiview.source')}: <strong>{selectedContentName}</strong></span>
-            <span className="dock-mv-framing-editor__info-sep">•</span>
-            <span>{t('multiview.slot')}: {slotAspectDisplay}</span>
-          </div>
         </div>
 
-        <div className="dock-mv-framing-editor__actions">
-          <button type="button" className="dock-btn dock-btn--sm" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="dock-btn dock-btn--sm dock-btn--primary"
-            onClick={() => { onSave(draft); onClose(); }}
-          >
-            {t('multiview.saveFraming')}
-          </button>
-        </div>
+
       </div>
     </div>
   );
 }
 
-// ── Greatest common divisor (for aspect ratio display) ──
-function gcd(a: number, b: number): number {
-  a = Math.abs(a);
-  b = Math.abs(b);
-  while (b) { [a, b] = [b, a % b]; }
-  return a;
-}
-
 // ---------------------------------------------------------------------------
 // SlotControl — redesigned card-style slot assignment
 // ---------------------------------------------------------------------------
+
+function SlotContentMenu({
+  onSelect,
+  onRemove,
+}: {
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 168;
+    const menuHeight = 76;
+    const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+    const top = fitsBelow
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - menuHeight - 4);
+    const left = Math.max(
+      8,
+      Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8),
+    );
+    setPosition({ top, left });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    updatePosition();
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const handleViewportChange = () => updatePosition();
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    window.addEventListener("resize", handleViewportChange);
+    document.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointer);
+      window.removeEventListener("resize", handleViewportChange);
+      document.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [open, updatePosition]);
+
+  return (
+    <div className="dock-mv-slot-row__menu-wrap">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="dock-mv-slot-row__menu-btn"
+        onClick={() => setOpen((current) => !current)}
+        title={t("common.more", "More")}
+        aria-label={t("common.more", "More")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Icon name="more_vert" size={14} />
+      </button>
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          className="dock-mv-slot-row__dropdown dock-mv-slot-row__dropdown--portal"
+          role="menu"
+          style={{ top: position.top, left: position.left, right: "auto" }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="dock-mv-slot-row__dropdown-item"
+            onClick={() => {
+              setOpen(false);
+              onSelect();
+            }}
+          >
+            {t("multiview.changeContent")}
+          </button>
+          <div className="dock-mv-slot-row__dropdown-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="dock-mv-slot-row__dropdown-item dock-mv-slot-row__dropdown-item--danger"
+            onClick={() => {
+              setOpen(false);
+              onRemove();
+            }}
+          >
+            {t("multiview.removeContent")}
+          </button>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+function ImageSlotControl({
+  slot,
+  slotIndex,
+  value,
+  onChange,
+  onRemove,
+}: {
+  slot: GallerySlot;
+  slotIndex: number;
+  value: string;
+  onChange: (val: string, m: "scene" | "source") => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [imageItems, setImageItems] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [error, setError] = useState("");
+  const [resolvingMediaId, setResolvingMediaId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const refreshImages = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const items = await loadBackgroundMediaLibrary();
+      setImageItems(items.filter((item) => isSelectableBackgroundMediaItem(item, "image")));
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to load image slot media library", err);
+      setImageItems([]);
+      setError(t("multiview.imageLibraryLoadError", "Could not load saved images."));
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (!open) return;
+    void refreshImages();
+  }, [open, refreshImages]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (open) void refreshImages();
+    };
+    window.addEventListener(MV_IMAGE_LIBRARY_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(MV_IMAGE_LIBRARY_UPDATED_EVENT, handler);
+  }, [open, refreshImages]);
+
+  const selectedItem = imageItems.find((item) => isMediaItemSelectedForBackground(item, value));
+  const selectedName = value ? getBackgroundMediaLabel(value) : "";
+  const previewSrc = selectedItem ? getMediaItemPreviewSrc(selectedItem) : getInlineImagePreviewSrc(value);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleImageItems = normalizedQuery
+    ? imageItems.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+    : imageItems;
+
+  const handleUpload = useCallback(async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!file.type.startsWith("image/") && !BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
+      setError(t("multiview.chooseImageFile", "Choose an image file."));
+      return;
+    }
+
+    setUploading(true);
+    setUploadStatus("");
+    setError("");
+    try {
+      const { item, error: uploadError } = await uploadFileToDock(file, setUploadStatus);
+      if (uploadError) throw new Error(uploadError);
+      await registerDockMediaItem(item);
+      const nextItems = dedupeBackgroundMediaItems(dedupeMediaItems([item, ...imageItems]))
+        .filter((mediaItem) => isSelectableBackgroundMediaItem(mediaItem, "image"));
+      setImageItems(nextItems);
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange(diskPath, "scene");
+      setOpen(false);
+      window.dispatchEvent(new CustomEvent(MV_IMAGE_LIBRARY_UPDATED_EVENT));
+    } catch (err) {
+      console.warn("[DockMultiview] Image slot upload failed", err);
+      setError(err instanceof Error ? err.message : t("multiview.imageUploadFailed", "Could not upload this image."));
+    } finally {
+      setUploading(false);
+      setUploadStatus("");
+    }
+  }, [imageItems, onChange, t]);
+
+  const handlePickerChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void handleUpload(file);
+    event.target.value = "";
+  }, [handleUpload]);
+
+  const handleSelectImage = useCallback(async (item: MediaItem) => {
+    if (uploading || resolvingMediaId !== null) return;
+    setResolvingMediaId(item.id);
+    setError("");
+    try {
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange(diskPath, "scene");
+      setOpen(false);
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to use library image for slot", err);
+      setError(err instanceof Error ? err.message : t("multiview.imageSelectFailed", "Could not use this image."));
+    } finally {
+      setResolvingMediaId(null);
+    }
+  }, [onChange, resolvingMediaId, t, uploading]);
+
+  const slotLabel = slot.label || t("multiview.contentN", { n: slotIndex + 1 });
+  const hasImage = Boolean(value);
+
+  return (
+    <div className="dock-mv-slot-row dock-mv-slot-row--image">
+      <div className="dock-mv-slot-row__main">
+        <SlotTypeIcon contentType={slot.contentType} />
+        <span className="dock-mv-slot-row__name">{slotLabel}</span>
+        <div className="dock-mv-slot-row__spacer" />
+        <div className="dock-mv-slot-image" ref={pickerRef}>
+          <button
+            type="button"
+            className={`dock-mv-slot-image__trigger${hasImage ? " dock-mv-slot-image__trigger--selected" : ""}`}
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            title={hasImage ? selectedName : t("multiview.chooseImage", "Choose image")}
+          >
+            <span className="dock-mv-slot-image__thumb" aria-hidden="true">
+              {previewSrc ? (
+                <img src={previewSrc} alt="" loading="lazy" />
+              ) : (
+                <Icon name="image" size={15} />
+              )}
+            </span>
+            <span className="dock-mv-slot-image__copy">
+              <span className="dock-mv-slot-image__label">{t("multiview.image", "Image")}</span>
+              <span className={`dock-mv-slot-image__value${hasImage ? "" : " dock-mv-slot-image__value--empty"}`}>
+                {hasImage ? selectedName : t("multiview.uploadImage", "Upload image")}
+              </span>
+            </span>
+            <Icon name={open ? "expand_less" : "expand_more"} size={14} />
+          </button>
+
+          {open && (
+            <div className="dock-mv-slot-image__popover">
+              <div className="dock-mv-slot-image__head">
+                <span>{t("multiview.savedImages", "Saved images")} · {imageItems.length}</span>
+                <button type="button" onClick={() => void refreshImages()} disabled={loading || uploading}>
+                  <Icon name="refresh" size={12} />
+                  <span>{loading ? t("common.loading", "Loading") : t("common.refresh", "Refresh")}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="dock-mv-slot-image__upload"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                <Icon name={uploading ? "hourglass_top" : "upload"} size={14} />
+                <span>{uploading ? (uploadStatus || t("multiview.savingImage", "Saving image...")) : t("multiview.uploadImage", "Upload image")}</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="dock-mv-bg__file-hidden"
+                onChange={handlePickerChange}
+              />
+
+              {imageItems.length > 6 && (
+                <div className="dock-mv-slot-image__search">
+                  <Icon name="search" size={13} />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t("multiview.searchSavedImages", "Search saved images...")}
+                  />
+                </div>
+              )}
+
+              {loading ? (
+                <div className="dock-mv-slot-image__status" role="status">
+                  <Icon name="hourglass_top" size={14} />
+                  <span>{t("multiview.loadingSavedImages", "Loading saved images...")}</span>
+                </div>
+              ) : visibleImageItems.length > 0 ? (
+                <div className="dock-mv-slot-image__list">
+                  {visibleImageItems.map((item) => {
+                    const selected = isMediaItemSelectedForBackground(item, value);
+                    const resolving = resolvingMediaId === item.id;
+                    const itemPreviewSrc = getMediaItemPreviewSrc(item);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`dock-mv-slot-image__item${selected ? " dock-mv-slot-image__item--selected" : ""}`}
+                        onClick={() => void handleSelectImage(item)}
+                        disabled={uploading || resolvingMediaId !== null}
+                        title={item.name}
+                      >
+                        <span className="dock-mv-slot-image__item-thumb">
+                          <img src={itemPreviewSrc} alt="" loading="lazy" />
+                        </span>
+                        <span className="dock-mv-slot-image__item-copy">
+                          <span className="dock-mv-slot-image__item-name">{item.name}</span>
+                          <span className="dock-mv-slot-image__item-meta">
+                            {resolving ? t("common.selecting", "Selecting...") : formatMediaItemMeta(item)}
+                          </span>
+                        </span>
+                        <Icon name={selected ? "check" : "arrow_forward"} size={13} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="dock-mv-slot-image__status">
+                  <Icon name="image" size={14} />
+                  <span>
+                    {imageItems.length > 0
+                      ? t("multiview.noSavedImageMatches", "No saved image matches that search.")
+                      : t("multiview.noSavedImages", "No saved images yet.")}
+                  </span>
+                </div>
+              )}
+
+              {hasImage && (
+                <button
+                  type="button"
+                  className="dock-mv-slot-image__clear"
+                  onClick={() => {
+                    onRemove();
+                    setOpen(false);
+                  }}
+                >
+                  {t("multiview.clearImage", "Clear image")}
+                </button>
+              )}
+
+              {error && <div className="dock-mv-slot-image__error">{error}</div>}
+            </div>
+          )}
+        </div>
+        {hasImage && (
+          <SlotContentMenu
+            onSelect={() => setOpen(true)}
+            onRemove={() => {
+              onRemove();
+              setOpen(false);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SlotControl({
   slot,
@@ -1041,28 +1948,18 @@ function SlotControl({
   obsSources: string[];
 }) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  const hasValue = !!value && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
+  const hasValue = Boolean(value);
+  const isLegacySource = mode === "source";
+  const valueExistsInObs = hasValue && (mode === "scene" ? obsScenes.includes(value) : obsSources.includes(value));
+  const displayValue = formatMvContentLabel(value);
 
   if (isSceneType(slot.contentType)) {
     return (
       <div className="dock-mv-slot-row">
         <div className="dock-mv-slot-row__main">
           <SlotTypeIcon contentType={slot.contentType} />
-          <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+          <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
           <div className="dock-mv-slot-row__spacer" />
           {!hasValue && (
             <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
@@ -1071,41 +1968,24 @@ function SlotControl({
           )}
           {hasValue && (
             <>
-              <span className="dock-mv-slot-row__selected-name">{value}</span>
-              <button
-                type="button"
-                className="dock-mv-slot-row__framing-btn"
-                onClick={() => onFramingChange(framing)}
-                title={t('multiview.adjustFraming')}
-                aria-label={t('multiview.adjustFraming')}
+              <span
+                className={`dock-mv-slot-row__selected-name${valueExistsInObs ? "" : " dock-mv-slot-row__selected-name--unknown"}`}
+                title={valueExistsInObs ? value : `${value} (${t('multiview.notSeenInObs', 'not seen in current OBS scan')})`}
               >
-                <Icon name="crop" size={14} />
-              </button>
-              <div className="dock-mv-slot-row__menu-wrap" ref={menuRef}>
+                {displayValue}
+              </span>
+              {!isLegacySource && (
                 <button
                   type="button"
-                  className="dock-mv-slot-row__menu-btn"
-                  onClick={() => setMenuOpen(o => !o)}
-                  title={t('common.more')}
+                  className="dock-mv-slot-row__framing-btn"
+                  onClick={() => onFramingChange(framing)}
+                  title={t('multiview.adjustFraming')}
+                  aria-label={t('multiview.adjustFraming')}
                 >
-                  <Icon name="more_vert" size={14} />
+                  <Icon name="crop" size={14} />
                 </button>
-                {menuOpen && (
-                  <div className="dock-mv-slot-row__dropdown">
-                    <button type="button" className="dock-mv-slot-row__dropdown-item" onClick={() => { setMenuOpen(false); onSelect(); }}>
-                      {t('multiview.changeContent')}
-                    </button>
-                    <div className="dock-mv-slot-row__dropdown-divider" />
-                    <button
-                      type="button"
-                      className="dock-mv-slot-row__dropdown-item dock-mv-slot-row__dropdown-item--danger"
-                      onClick={() => { setMenuOpen(false); onRemove(); }}
-                    >
-                      {t('multiview.removeContent')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              )}
+              <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
             </>
           )}
         </div>
@@ -1113,22 +1993,40 @@ function SlotControl({
     );
   }
 
-  // Browser / image / fallback slots keep inline input
-  if (slot.contentType === "browser" || slot.contentType === "image") {
-    const isUrl = slot.contentType === "browser";
+  if (slot.contentType === "image") {
+    return (
+      <ImageSlotControl
+        slot={slot}
+        slotIndex={slotIndex}
+        value={value}
+        onChange={onChange}
+        onRemove={onRemove}
+      />
+    );
+  }
+
+  // Browser slots keep URL input because they map to OBS browser sources.
+  if (slot.contentType === "browser") {
     return (
       <div className="dock-mv-slot-row">
         <div className="dock-mv-slot-row__main">
           <SlotTypeIcon contentType={slot.contentType} />
-          <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+          <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
           <div className="dock-mv-slot-row__spacer" />
           <input
             className="dock-mv-slot-row__input"
-            type={isUrl ? "url" : "text"}
+            type="url"
             value={value}
             onChange={(e) => onChange(e.target.value, "scene")}
-            placeholder={isUrl ? t('multiview.urlPlaceholder') : t('multiview.imagePathPlaceholder')}
+            placeholder={t('multiview.urlPlaceholder')}
           />
+          {hasValue ? (
+            <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
+          ) : (
+            <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
+              <Icon name="add" size={14} />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1138,7 +2036,7 @@ function SlotControl({
     <div className="dock-mv-slot-row">
       <div className="dock-mv-slot-row__main">
         <SlotTypeIcon contentType={slot.contentType} />
-        <span className="dock-mv-slot-row__name">{t('multiview.contentN', { n: slotIndex + 1 })}</span>
+        <span className="dock-mv-slot-row__name">{slot.label || t('multiview.contentN', { n: slotIndex + 1 })}</span>
         <div className="dock-mv-slot-row__spacer" />
         <input
           className="dock-mv-slot-row__input"
@@ -1147,6 +2045,13 @@ function SlotControl({
           onChange={(e) => onChange(e.target.value, "scene")}
           placeholder={t('multiview.value')}
         />
+        {hasValue ? (
+          <SlotContentMenu onSelect={onSelect} onRemove={onRemove} />
+        ) : (
+          <button type="button" className="dock-mv-slot-row__add-btn" onClick={onSelect} title={t('multiview.addContent')}>
+            <Icon name="add" size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1214,8 +2119,13 @@ const BG_TYPE_OPTIONS: Array<{ type: MVBgType | "none"; labelKey: string; icon: 
   { type: "color", labelKey: "multiview.bgColor", icon: "palette" },
   { type: "image", labelKey: "multiview.bgImage", icon: "image" },
   { type: "video", labelKey: "multiview.bgVideo", icon: "movie" },
+  { type: "pattern", labelKey: "common.pattern", icon: "grid_view" },
   { type: "scene", labelKey: "multiview.bgScene", icon: "grid_view" },
 ];
+
+function getPatternLabel(src: string): string {
+  return BACKGROUND_PATTERNS.find((pattern) => pattern.src === src)?.label || "Pattern";
+}
 
 function BackgroundSection({
   background,
@@ -1231,20 +2141,67 @@ function BackgroundSection({
   const imgInputRef = useRef<HTMLInputElement>(null);
   const vidInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [libraryMedia, setLibraryMedia] = useState<MediaItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [mediaLibraryError, setMediaLibraryError] = useState("");
+  const [resolvingMediaId, setResolvingMediaId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<string | null>(null);
+  const [mediaQuery, setMediaQuery] = useState("");
 
-  const hasBg = background.type !== "color" || (background.color !== "#0F172A" && background.color !== "transparent") || background.filePath || background.sceneName;
+  const hasBg = background.type === "color"
+    ? background.color !== "#0F172A" && background.color !== "transparent"
+    : background.type === "scene"
+      ? Boolean(background.sceneName)
+      : background.type === "pattern"
+        ? Boolean(background.patternSrc)
+        : Boolean(background.filePath);
+
+  const isMediaType = background.type === "image" || background.type === "video";
+  const isPatternType = background.type === "pattern";
+  const mediaType = background.type === "video" ? "video" : "image";
+
+  const refreshMediaLibrary = useCallback(async () => {
+    setLibraryLoading(true);
+    setMediaLibraryError("");
+    try {
+      const items = await loadBackgroundMediaLibrary();
+      setLibraryMedia(items);
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to load background media library", err);
+      setMediaLibraryError("Could not load saved media.");
+      setLibraryMedia([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isMediaType) return;
+    void refreshMediaLibrary();
+  }, [isMediaType, open, refreshMediaLibrary]);
+
+  useEffect(() => {
+    setMediaQuery("");
+  }, [mediaType]);
 
   const handleFileUpload = useCallback(async (file: File, type: "image" | "video") => {
     setUploading(true);
+    setUploadStatus("");
+    setMediaLibraryError("");
     try {
-      const safeName = getSafeFileName(`mv-bg-${Date.now()}-${file.name}`);
-      const diskPath = await saveToDisk(file, safeName);
-      onChange({ ...background, type, filePath: diskPath });
+      const { item, error } = await uploadFileToDock(file, setUploadStatus);
+      if (error) throw new Error(error);
+      await registerDockMediaItem(item);
+      setLibraryMedia((current) => dedupeMediaItems([item, ...current]));
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange({ ...background, type, filePath: diskPath, sceneName: "" });
     } catch (err) {
-      onChange({ ...background, type, filePath: file.name });
+      console.warn("[DockMultiview] Background upload failed", err);
+      setMediaLibraryError(err instanceof Error ? err.message : "Could not save media.");
     } finally {
       setUploading(false);
+      setUploadStatus("");
     }
   }, [background, onChange]);
 
@@ -1268,32 +2225,75 @@ function BackgroundSection({
     void handleFileUpload(file, type);
   }, [handleFileUpload, uploading]);
 
+  const handleSelectLibraryMedia = useCallback(async (item: MediaItem) => {
+    if (uploading || resolvingMediaId) return;
+    setResolvingMediaId(item.id);
+    setMediaLibraryError("");
+    try {
+      if (item.type !== "image" && item.type !== "video") {
+        throw new Error("Only image and video files can be used as a multiview background.");
+      }
+      const diskPath = await resolveBackgroundMediaFilePath(item);
+      onChange({ ...background, type: item.type, filePath: diskPath, sceneName: "" });
+    } catch (err) {
+      console.warn("[DockMultiview] Failed to use library media as background", err);
+      setMediaLibraryError(err instanceof Error ? err.message : "Could not use this media file.");
+    } finally {
+      setResolvingMediaId(null);
+    }
+  }, [background, onChange, resolvingMediaId, uploading]);
+
   const bgLabel = background.type === "color" ? t('multiview.bgColor')
     : background.type === "image" ? t('multiview.bgImage')
       : background.type === "video" ? t('multiview.bgVideo')
-        : background.type === "scene" ? t('multiview.bgScene')
-          : "";
+        : background.type === "pattern" ? t('common.pattern')
+          : background.type === "scene" ? t('multiview.bgScene')
+            : "";
 
   const bgValue = background.type === "color" ? background.color
-    : background.type === "scene" ? background.sceneName
-      : background.filePath ? getBackgroundMediaLabel(background.filePath)
+    : background.type === "pattern" ? getPatternLabel(background.patternSrc)
+      : background.type === "scene" ? background.sceneName
         : "";
 
-  const isMediaType = background.type === "image" || background.type === "video";
-  const mediaType = background.type === "video" ? "video" : "image";
   const selectedMediaName = background.filePath ? getBackgroundMediaLabel(background.filePath) : "";
   const hasSelectedMedia = selectedMediaName.length > 0;
   const mediaTitle = mediaType === "image" ? "Choose background image" : "Choose background video";
   const mediaHint = mediaType === "image"
     ? "Drop an image here or click to browse. PNG, JPG, WEBP, SVG."
     : "Drop a video here or click to browse. MP4, MOV, WEBM, M4V.";
+  const mediaLibraryItems = libraryMedia.filter((item) => isSelectableBackgroundMediaItem(item, mediaType));
+  const normalizedMediaQuery = mediaQuery.trim().toLowerCase();
+  const visibleMediaLibraryItems = normalizedMediaQuery
+    ? mediaLibraryItems.filter((item) => item.name.toLowerCase().includes(normalizedMediaQuery))
+    : mediaLibraryItems;
+  const selectedMediaItem = mediaLibraryItems.find((item) => isMediaItemSelectedForBackground(item, background.filePath));
+  const selectedMediaPreviewSrc = selectedMediaItem ? getMediaItemPreviewSrc(selectedMediaItem) : "";
+  const selectableObsScenes = obsScenes.filter((sceneName) => !isMultiviewManagedSceneName(sceneName));
+  const selectedType = background.type === "color" && (background.color === "transparent" || background.color === "#0F172A")
+    ? "none"
+    : background.type;
+
+  const handleTypeChange = (type: MVBgType | "none") => {
+    if (type === "none") {
+      onChange({ ...DEFAULT_MV_BG });
+      return;
+    }
+    onChange({
+      ...background,
+      type,
+      color: type === "color" ? (background.color === "transparent" ? "#0F172A" : background.color) : background.color,
+      filePath: type === "image" || type === "video" ? background.filePath : "",
+      patternSrc: type === "pattern" ? (background.patternSrc || BACKGROUND_PATTERNS[0]?.src || "") : "",
+      sceneName: type === "scene" ? background.sceneName : "",
+    });
+  };
 
   return (
     <div className="dock-mv-property">
       <span className="dock-mv-property__label">{t('multiview.background')}</span>
       <div className="dock-mv-property__row">
         {hasBg ? (
-          <span className="dock-mv-property__value">{bgLabel}: {bgValue}</span>
+          <span className="dock-mv-property__value">{bgLabel}{bgValue ? `: ${bgValue}` : ""}</span>
         ) : (
           <span className="dock-mv-property__value dock-mv-property__value--empty">{t('multiview.noBackground')}</span>
         )}
@@ -1313,24 +2313,21 @@ function BackgroundSection({
               </button>
             </div>
 
-            <div className="dock-mv-bg-editor__types">
-              {BG_TYPE_OPTIONS.map(opt => (
-                <button
-                  key={opt.type}
-                  type="button"
-                  className={`dock-mv-bg-editor__type-btn${background.type === opt.type ? " dock-mv-bg-editor__type-btn--active" : ""}`}
-                  onClick={() => {
-                    if (opt.type === "none") {
-                      onChange({ type: "color", color: "transparent", filePath: "", sceneName: "" });
-                    } else {
-                      onChange({ ...background, type: opt.type });
-                    }
-                  }}
+            <div className="dock-mv-bg-editor__type-select-wrap">
+              <label htmlFor="dock-mv-background-type" className="dock-mv-bg-editor__type-label">Background type</label>
+              <div className="dock-mv-bg-editor__type-select-control">
+                <Icon name={BG_TYPE_OPTIONS.find((option) => option.type === selectedType)?.icon || "layers"} size={14} />
+                <select
+                  id="dock-mv-background-type"
+                  className="dock-mv-bg-editor__type-select"
+                  value={selectedType}
+                  onChange={(event) => handleTypeChange(event.target.value as MVBgType | "none")}
                 >
-                  <Icon name={opt.icon} size={14} />
-                  <span>{t(opt.labelKey)}</span>
-                </button>
-              ))}
+                  {BG_TYPE_OPTIONS.map((option) => (
+                    <option key={option.type} value={option.type}>{t(option.labelKey)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {background.type === "color" && (
@@ -1353,6 +2350,70 @@ function BackgroundSection({
 
             {isMediaType && (
               <div className="dock-mv-bg-editor__media">
+                <div className="dock-mv-bg-editor__library-head">
+                  <span>
+                    {mediaType === "image" ? "Saved images" : "Saved videos"} · {mediaLibraryItems.length}
+                  </span>
+                  <button type="button" onClick={() => void refreshMediaLibrary()} disabled={libraryLoading}>
+                    <Icon name="refresh" size={12} />
+                    <span>{libraryLoading ? "Loading" : "Refresh"}</span>
+                  </button>
+                </div>
+                {mediaLibraryItems.length > 8 && (
+                  <div className="dock-mv-bg-editor__library-search">
+                    <Icon name="search" size={13} />
+                    <input
+                      type="search"
+                      value={mediaQuery}
+                      onChange={(event) => setMediaQuery(event.target.value)}
+                      placeholder={mediaType === "image" ? "Search saved images..." : "Search saved videos..."}
+                    />
+                  </div>
+                )}
+                {libraryLoading ? (
+                  <div className="dock-mv-bg-editor__library-status" role="status">
+                    <Icon name="hourglass_top" size={14} />
+                    <span>Loading saved media...</span>
+                  </div>
+                ) : visibleMediaLibraryItems.length > 0 ? (
+                  <div className="dock-mv-bg-editor__library-grid">
+                    {visibleMediaLibraryItems.map((item) => {
+                      const selected = isMediaItemSelectedForBackground(item, background.filePath);
+                      const resolving = resolvingMediaId === item.id;
+                      const previewSrc = getMediaItemPreviewSrc(item);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`dock-mv-bg-editor__library-item${selected ? " dock-mv-bg-editor__library-item--selected" : ""}`}
+                          onClick={() => void handleSelectLibraryMedia(item)}
+                          disabled={uploading || resolvingMediaId !== null}
+                          title={item.name}
+                        >
+                          <span className="dock-mv-bg-editor__library-thumb">
+                            {item.type === "image" ? (
+                              <img src={previewSrc} alt="" loading="lazy" />
+                            ) : (
+                              <video src={previewSrc} muted playsInline preload="metadata" />
+                            )}
+                          </span>
+                          <span className="dock-mv-bg-editor__library-copy">
+                            <span className="dock-mv-bg-editor__library-name">{item.name}</span>
+                            <span className="dock-mv-bg-editor__library-meta">{resolving ? "Selecting..." : formatMediaItemMeta(item)}</span>
+                          </span>
+                          <span className="dock-mv-bg-editor__library-check">
+                            <Icon name={selected ? "check" : "arrow_forward"} size={13} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="dock-mv-bg-editor__library-status">
+                    <Icon name={mediaType === "image" ? "image" : "movie"} size={14} />
+                    <span>{mediaLibraryItems.length > 0 ? "No media matches that search." : mediaType === "image" ? "No saved images yet." : "No saved videos yet."}</span>
+                  </div>
+                )}
                 <label
                   className={[
                     "dock-mv-bg-editor__media-card",
@@ -1369,12 +2430,22 @@ function BackgroundSection({
                   onDrop={(event) => void handleMediaDrop(event, mediaType)}
                   aria-busy={uploading}
                 >
-                  <div className="dock-mv-bg-editor__media-icon">
-                    <Icon name={uploading ? "hourglass_top" : mediaType === "image" ? "image" : "movie"} size={18} />
-                  </div>
+                  {hasSelectedMedia && selectedMediaPreviewSrc ? (
+                    <span className="dock-mv-bg-editor__media-selected-thumb">
+                      {mediaType === "image" ? (
+                        <img src={selectedMediaPreviewSrc} alt="" />
+                      ) : (
+                        <video src={selectedMediaPreviewSrc} muted playsInline preload="metadata" />
+                      )}
+                    </span>
+                  ) : (
+                    <div className="dock-mv-bg-editor__media-icon">
+                      <Icon name={uploading ? "hourglass_top" : mediaType === "image" ? "image" : "movie"} size={18} />
+                    </div>
+                  )}
                   <div className="dock-mv-bg-editor__media-copy">
                     <div className="dock-mv-bg-editor__media-title">
-                      {uploading ? "Saving media..." : hasSelectedMedia ? `${t('multiview.bgImageSelected')}: ${selectedMediaName}` : mediaTitle}
+                      {uploading ? (uploadStatus || "Saving original media...") : hasSelectedMedia ? selectedMediaName : mediaTitle}
                     </div>
                     <div className="dock-mv-bg-editor__media-hint">{hasSelectedMedia ? "" : mediaHint}</div>
                   </div>
@@ -1398,19 +2469,70 @@ function BackgroundSection({
                     {t('common.clear')}
                   </button>
                 )}
+                {mediaLibraryError && (
+                  <div className="dock-mv-bg-editor__library-error">{mediaLibraryError}</div>
+                )}
+              </div>
+            )}
+
+            {isPatternType && (
+              <div className="dock-mv-bg-editor__visual-section">
+                <div className="dock-mv-bg-editor__visual-section-head">
+                  <span>Patterns</span>
+                  <span>{BACKGROUND_PATTERNS.length}</span>
+                </div>
+                <div className="dock-mv-bg-editor__visual-grid dock-mv-bg-editor__visual-grid--patterns">
+                  {BACKGROUND_PATTERNS.map((pattern) => {
+                    const selected = background.patternSrc === pattern.src;
+                    return (
+                      <button
+                        key={pattern.label}
+                        type="button"
+                        className={`dock-mv-bg-editor__visual-card${selected ? " dock-mv-bg-editor__visual-card--selected" : ""}`}
+                        onClick={() => onChange({ ...background, type: "pattern", patternSrc: pattern.src, filePath: "", sceneName: "" })}
+                        title={pattern.label}
+                      >
+                        <img src={pattern.src} alt="" loading="lazy" />
+                        <span>{pattern.label}</span>
+                        {selected && <Icon name="check" size={13} />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {background.type === "scene" && (
-              <div className="dock-mv-bg-editor__row">
-                <select
-                  className="dock-mv-bg__select"
-                  value={background.sceneName}
-                  onChange={(e) => onChange({ ...background, sceneName: e.target.value })}
-                >
-                  <option value="">— {t('multiview.selectScene')} —</option>
-                  {obsScenes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              <div className="dock-mv-bg-editor__visual-section">
+                <div className="dock-mv-bg-editor__visual-section-head">
+                  <span>Scenes</span>
+                  <span>{selectableObsScenes.length}</span>
+                </div>
+                {selectableObsScenes.length > 0 ? (
+                  <div className="dock-mv-bg-editor__visual-grid dock-mv-bg-editor__visual-grid--scenes">
+                    {selectableObsScenes.map((sceneName) => {
+                      const selected = background.sceneName === sceneName;
+                      return (
+                        <button
+                          key={sceneName}
+                          type="button"
+                          className={`dock-mv-bg-editor__visual-card dock-mv-bg-editor__visual-card--scene${selected ? " dock-mv-bg-editor__visual-card--selected" : ""}`}
+                          onClick={() => onChange({ ...background, type: "scene", sceneName, filePath: "", patternSrc: "" })}
+                          title={sceneName}
+                        >
+                          <Icon name="grid_view" size={18} />
+                          <span>{sceneName}</span>
+                          {selected && <Icon name="check" size={13} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="dock-mv-bg-editor__library-status">
+                    <Icon name="grid_view" size={14} />
+                    <span>{t('multiview.selectScene')}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1521,7 +2643,7 @@ function FramePicker({
 // MV Card — one independent card per saved Multi-View
 // ---------------------------------------------------------------------------
 
-function MVCard({
+const MVCard = memo(function MVCard({
   mv,
   index,
   isActive,
@@ -1533,10 +2655,10 @@ function MVCard({
   clearingId,
   onPush,
   onClear,
+  onUpdateName,
   onUpdateLayout,
   onUpdateBackground,
   onAssign,
-  onAssignSlotMode,
   onAssignSlotFraming,
   onClearSlot,
   onUpdateFrame,
@@ -1545,6 +2667,8 @@ function MVCard({
   onUpdateFrameOpacity,
   onUpdateFrameColor,
   onUpdateSlotFrame: _onUpdateSlotFrame,
+  onDuplicate,
+  onDelete,
 }: {
   mv: SavedMultiView;
   index: number;
@@ -1560,8 +2684,7 @@ function MVCard({
   onUpdateName: (id: string, name: string) => void;
   onUpdateLayout: (id: string, layoutId: string) => void;
   onUpdateBackground: (id: string, bg: MVBackground) => void;
-  onAssign: (id: string, slotId: string, val: string) => void;
-  onAssignSlotMode: (id: string, slotId: string, mode: "scene" | "source") => void;
+  onAssign: (id: string, slotId: string, val: string, mode: "scene" | "source") => void;
   onAssignSlotFraming: (id: string, slotId: string, framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }) => void;
   onClearSlot: (id: string, slotId: string) => void;
   onUpdateFrame: (id: string, frameId: string | null) => void;
@@ -1576,6 +2699,10 @@ function MVCard({
   const { t } = useTranslation();
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
   const [framingSlot, setFramingSlot] = useState<string | null>(null);
+  const [cardMenuOpen, setCardMenuOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(mv.name);
+  const cardMenuRef = useRef<HTMLDivElement>(null);
   const [showFramePicker, setShowFramePicker] = useState(false);
   const [showFrameSettings, setShowFrameSettings] = useState(false);
   const frameSettingsRef = useRef<HTMLDivElement>(null);
@@ -1584,6 +2711,22 @@ function MVCard({
   const allSlotsFilled = !!layout && assignedCount >= layout.slots.length;
   const isPushing = pushingId === mv.id;
   const isClearing = clearingId === mv.id;
+
+  useEffect(() => {
+    if (!renameOpen) setRenameDraft(mv.name);
+  }, [mv.name, renameOpen]);
+
+  useEffect(() => {
+    if (!cardMenuOpen) return;
+    const handler = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !cardMenuRef.current?.contains(target)) {
+        setCardMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
+  }, [cardMenuOpen]);
 
   // Close frame settings on outside click
   useEffect(() => {
@@ -1597,9 +2740,8 @@ function MVCard({
     return () => document.removeEventListener("mousedown", handler);
   }, [showFrameSettings]);
 
-  const handleContentSelect = (slotId: string, value: string, mode: "scene" | "source") => {
-    onAssignSlotMode(mv.id, slotId, mode);
-    onAssign(mv.id, slotId, value);
+  const handleContentSelect = (slotId: string, value: string) => {
+    onAssign(mv.id, slotId, value, "scene");
     setPickerSlot(null);
   };
 
@@ -1613,11 +2755,98 @@ function MVCard({
       {/* Card Header */}
       <div className="dock-mv-card__header">
         <div className="dock-mv-card__title-group">
-          <span className="dock-mv-card__name">
-            {mv.name}
-            {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
-          </span>
+          {renameOpen ? (
+            <form
+              className="dock-mv-card__rename"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const nextName = renameDraft.trim();
+                if (nextName && nextName !== mv.name) onUpdateName(mv.id, nextName);
+                setRenameOpen(false);
+              }}
+            >
+              <input
+                autoFocus
+                className="dock-mv-card__rename-input"
+                value={renameDraft}
+                onChange={(event) => setRenameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setRenameOpen(false);
+                  }
+                }}
+                aria-label={t("common.rename")}
+              />
+              <button type="submit" className="dock-mv-card__rename-action" title={t("common.save")} aria-label={t("common.save")}>
+                <Icon name="check" size={13} />
+              </button>
+              <button type="button" className="dock-mv-card__rename-action" onClick={() => setRenameOpen(false)} title={t("common.cancel")} aria-label={t("common.cancel")}>
+                <Icon name="close" size={13} />
+              </button>
+            </form>
+          ) : (
+            <span className="dock-mv-card__name">
+              {mv.name}
+              {isActive && <span className="dock-mv-card__badge">{t('multiview.on')}</span>}
+            </span>
+          )}
           <span className="dock-mv-card__id">{shortId(index)}</span>
+        </div>
+        <div className="dock-mv-card__menu-wrap" ref={cardMenuRef}>
+          <button
+            type="button"
+            className="dock-mv-card__menu-btn"
+            onClick={() => setCardMenuOpen((current) => !current)}
+            title={t("common.more", "More")}
+            aria-label={`${t("common.more", "More")} ${mv.name}`}
+            aria-haspopup="menu"
+            aria-expanded={cardMenuOpen}
+          >
+            <Icon name="more_vert" size={15} />
+          </button>
+          {cardMenuOpen && (
+            <div className="dock-mv-card__menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  setRenameDraft(mv.name);
+                  setRenameOpen(true);
+                }}
+              >
+                <Icon name="edit" size={13} />
+                <span>{t("common.rename", t("multiview.rename"))}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  onDuplicate(mv.id);
+                }}
+              >
+                <Icon name="content_copy" size={13} />
+                <span>{t("multiview.copy")}</span>
+              </button>
+              <div className="dock-mv-card__menu-divider" />
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-mv-card__menu-item dock-mv-card__menu-item--danger"
+                onClick={() => {
+                  setCardMenuOpen(false);
+                  onDelete(mv.id);
+                }}
+              >
+                <Icon name="delete_outline" size={13} />
+                <span>{t("common.delete")}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1640,7 +2869,7 @@ function MVCard({
       </div>
 
       {/* Layout Preview — shown below template */}
-      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} frameId={mv.layoutFrameId} slotFrames={mv.slotFrames} frameThickness={mv.frameThickness} frameCornerRadius={mv.frameCornerRadius} frameOpacity={mv.frameOpacity} frameColor={mv.frameColor} />}
+      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} slotFraming={mv.slotFraming} frameId={mv.layoutFrameId} slotFrames={mv.slotFrames} frameThickness={mv.frameThickness} frameCornerRadius={mv.frameCornerRadius} frameOpacity={mv.frameOpacity} frameColor={mv.frameColor} />}
 
       {/* Frames — compact property row */}
       <div className="dock-mv-property">
@@ -1739,7 +2968,7 @@ function MVCard({
         {layout.slots.map((slot, slotIdx) => {
           const val = mv.assignments[slot.id] ?? "";
           const mode = mv.slotModes?.[slot.id] ?? "scene";
-          const framing = mv.slotFraming?.[slot.id] ?? { displayMode: "fill", zoom: 1, focalX: 0.5, focalY: 0.5 };
+          const framing = mv.slotFraming?.[slot.id] ?? DEFAULT_SLOT_FRAMING;
           return (
             <div key={slot.id}>
               <SlotControl
@@ -1749,7 +2978,7 @@ function MVCard({
                 mode={mode}
                 framing={framing}
                 onSelect={() => setPickerSlot(slot.id)}
-                onChange={(v, m) => handleContentSelect(slot.id, v, m)}
+                onChange={(v) => handleContentSelect(slot.id, v)}
                 onFramingChange={(_f) => setFramingSlot(slot.id)}
                 onRemove={() => onClearSlot(mv.id, slot.id)}
                 obsScenes={obsScenes}
@@ -1760,9 +2989,8 @@ function MVCard({
                 <ContentPicker
                   open
                   obsScenes={obsScenes}
-                  obsSources={obsSources}
                   loading={obsContentLoading}
-                  onSelect={(v, m) => handleContentSelect(slot.id, v, m)}
+                  onSelect={(v) => handleContentSelect(slot.id, v)}
                   onClose={() => setPickerSlot(null)}
                   excludeScenes={[mv.obsSceneName]}
                 />
@@ -1787,7 +3015,7 @@ function MVCard({
       </>
       )}
 
-      {/* Push to OBS — per card */}
+      {/* Preview in OBS — per card */}
       <div className="dock-mv-card__actions">
         <button
           type="button"
@@ -1795,9 +3023,9 @@ function MVCard({
           onClick={() => onPush(mv)}
           disabled={isPushing || isClearing || !allSlotsFilled}
           style={{ flex: 1 }}
-          title={t('multiview.pushing')}>
+          title={isPushing ? t('multiview.previewing', 'Previewing…') : t('common.preview', 'Preview')}>
           <Icon name="cast" size={14} />
-          <span>{isPushing ? t('multiview.pushing') : t('multiview.applyToObs')}</span>
+          <span>{isPushing ? t('multiview.previewing', 'Previewing…') : t('common.preview', 'Preview')}</span>
         </button>
         {isActive && (
           <button
@@ -1818,14 +3046,15 @@ function MVCard({
       </div>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
-export default function DockMultiviewTab() {
+function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
   const { t } = useTranslation();
+  const [dockPlan, setDockPlan] = useState<string>(() => getDockPlan());
   const [savedList, setSavedList] = useState<SavedMultiView[]>([]);
   const [obsScenes, setObsScenes] = useState<string[]>([]);
   const [obsSources, setObsSources] = useState<string[]>([]);
@@ -1838,90 +3067,297 @@ export default function DockMultiviewTab() {
   const mountedRef = useRef(true);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const obsScanBusyRef = useRef(false);
+  const obsContentLoadedRef = useRef(false);
+  const obsSceneSignatureRef = useRef("");
+  const thumbnailRefreshSignatureRef = useRef("");
+  const thumbnailRefreshAtRef = useRef(0);
+  const thumbnailRefreshBusyRef = useRef(false);
+  const savedListRef = useRef<SavedMultiView[]>([]);
 
-  async function loadAddedLayoutIdsFromServer(): Promise<Set<string>> {
-    try {
-      const resp = await fetch("/uploads/mv-added-ids.json");
-      if (!resp.ok) return new Set();
-      const data = await resp.json();
-      return Array.isArray(data) ? new Set(data) : new Set();
-    } catch {
-      return new Set();
-    }
-  }
+  useEffect(() => {
+    if (!isActive) return;
+    setDockPlan(getDockPlan());
+    const interval = window.setInterval(() => setDockPlan(getDockPlan()), 30_000);
+    return () => window.clearInterval(interval);
+  }, [isActive]);
 
   // Show layouts that are added via gallery OR in use by saved cards
-  const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadAddedLayoutIds());
+  const [addedLayoutIds, setAddedLayoutIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
 
-  useEffect(() => {
-    // Initial load from server (overrides localStorage)
-    loadAddedLayoutIdsFromServer().then((ids) => {
-      if (ids.size > 0) setAddedLayoutIds(ids);
+  const mergeIntoAddedLayoutIds = useCallback((...sources: Array<Iterable<unknown> | null | undefined>) => {
+    setAddedLayoutIds(prev => {
+      const next = mergeAddedLayoutIds(prev, ...sources);
+      if (areAddedLayoutIdsEqual(prev, next)) return prev;
+      saveLocalAddedLayoutIds(next, { emit: false });
+      return next;
     });
-    // Poll server every 5s
-    const interval = setInterval(() => {
-      loadAddedLayoutIdsFromServer().then((ids) => setAddedLayoutIds(ids));
-    }, 5000);
-    return () => clearInterval(interval);
   }, []);
 
-  const addedLayouts = useMemo(() => {
-    const usedIds = new Set(savedList.map(m => m.layoutId).filter(Boolean));
-    const visibleIds = new Set([...addedLayoutIds, ...usedIds]);
-    return GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
-  }, [addedLayoutIds, savedList]);
-
-  // ── Load saved list (auto-seed two cards if empty) ──
   useEffect(() => {
-    let list = loadSaved();
-    // Migrate old data: cards without obsSceneName get one assigned
-    list = list.map((m, i) => {
-      if (!m.obsSceneName) {
-        return { ...m, obsSceneName: `MV: Multiview ${i + 1}` };
+    if (!isActive) return;
+    let cancelled = false;
+
+    const mergeLocalIds = () => {
+      mergeIntoAddedLayoutIds(loadLocalAddedLayoutIds());
+    };
+
+    const refreshFromDockData = async () => {
+      const remoteIds = await loadAddedLayoutIdsFromDockData();
+      if (cancelled) return;
+
+      const localIds = loadLocalAddedLayoutIds();
+      const mergedIds = mergeAddedLayoutIds(localIds, remoteIds);
+      mergeIntoAddedLayoutIds(mergedIds);
+
+      if (remoteIds.size === 0 && mergedIds.size > 0) {
+        saveAddedLayoutIdsToDockData(mergedIds).catch(() => { });
       }
-      // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
-      if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number") {
-        return { ...m, slotThumbnails: m.slotThumbnails ?? {}, layoutFrameId: m.layoutFrameId ?? null, slotFrames: m.slotFrames ?? {}, frameThickness: m.frameThickness ?? 2, frameCornerRadius: (m as any).frameCornerRadius ?? 0, frameOpacity: (m as any).frameOpacity ?? 100, frameColor: (m as any).frameColor ?? "" };
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && !getAddedLayoutLocalStorageKeys().includes(event.key)) return;
+      mergeLocalIds();
+    };
+
+    const handleAddedLayoutsChanged = (event: Event) => {
+      const ids = (event as CustomEvent<{ ids?: string[] }>).detail?.ids;
+      mergeIntoAddedLayoutIds(ids ?? loadLocalAddedLayoutIds());
+    };
+
+    mergeLocalIds();
+    refreshFromDockData();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      refreshFromDockData();
+    }, 30000);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(MULTIVIEW_ADDED_LAYOUTS_CHANGED_EVENT, handleAddedLayoutsChanged);
+    };
+  }, [isActive, mergeIntoAddedLayoutIds]);
+
+  const usedLayoutIds = useMemo(() => (
+    [...new Set(savedList.map(m => m.layoutId).filter(Boolean))].sort().join("|")
+  ), [savedList]);
+
+  const addedLayouts = useMemo(() => {
+    const visibleIds = new Set([
+      ...addedLayoutIds,
+      ...usedLayoutIds.split("|").filter(Boolean),
+    ]);
+    return GALLERY_LAYOUTS.filter(l => visibleIds.has(l.id));
+  }, [addedLayoutIds, usedLayoutIds]);
+
+  // ── Load saved list without overwriting it during a remount ──
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      let snapshot = loadSavedSnapshot();
+
+      // If the fast local copy is missing, give the durable user-scoped copy a
+      // chance to restore the cards before creating the first three defaults.
+      if (!snapshot.hasStoredValue) {
+        const durableItems = await loadDockPreferenceList<SavedMultiView>(STORAGE_KEY);
+        if (cancelled) return;
+        if (durableItems) {
+          snapshot = {
+            items: durableItems.map(normalizeLoadedMultiView),
+            hasStoredValue: true,
+            shouldMigrate: true,
+            canPersist: true,
+          };
+        }
       }
-      return m;
-    });
-    const now = new Date().toISOString();
-    const cards: SavedMultiView[] = [1, 2, 3].map((n) => {
-      const existing = list[n - 1];
-      if (existing) return existing;
-      return {
-        id: genId(),
-        name: `${t('multiview.title')} ${n}`,
-        obsSceneName: `MV: Multiview ${n}`,
-        layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
-        assignments: {},
-        slotModes: {},
-        slotFraming: {},
-        slotThumbnails: {},
-        layoutFrameId: null,
-        slotFrames: {},
-        frameThickness: 2,
-        frameCornerRadius: 0,
-        frameOpacity: 100,
-        frameColor: "",
-        background: { ...DEFAULT_MV_BG },
-        createdAt: now,
-        updatedAt: now,
-      };
-    });
-    list = cards;
-    saveSaved(list);
-    setSavedList(list);
+
+      let list = snapshot.items;
+      let changed = false;
+      const usedSceneNames = new Set(list.map((m) => m.obsSceneName).filter(Boolean));
+
+      // Migrate old data: cards without obsSceneName get one assigned
+      list = list.map((m, i) => {
+        if (!m.obsSceneName) {
+          let number = i + 1;
+          let obsSceneName = `MV: Multiview ${number}`;
+          while (usedSceneNames.has(obsSceneName)) {
+            number += 1;
+            obsSceneName = `MV: Multiview ${number}`;
+          }
+          usedSceneNames.add(obsSceneName);
+          changed = true;
+          return { ...m, obsSceneName, background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) } };
+        }
+        // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
+        if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string") {
+          changed = true;
+          return {
+            ...m,
+            slotThumbnails: m.slotThumbnails ?? {},
+            layoutFrameId: m.layoutFrameId ?? null,
+            slotFrames: m.slotFrames ?? {},
+            frameThickness: m.frameThickness ?? 2,
+            frameCornerRadius: (m as any).frameCornerRadius ?? 0,
+            frameOpacity: (m as any).frameOpacity ?? 100,
+            frameColor: (m as any).frameColor ?? "",
+            background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
+          };
+        }
+        return m;
+      });
+
+      const now = new Date().toISOString();
+      const cards: SavedMultiView[] = [...list];
+      // Seed only a brand-new store. If the user deliberately has an empty
+      // stored list, keep it empty. Never truncate saved cards to the first 3.
+      const shouldSeedDefaults = !snapshot.hasStoredValue || cards.length > 0;
+      while (shouldSeedDefaults && cards.length < 3) {
+        const n = cards.length + 1;
+        const obsSceneName = nextObsSceneName(cards);
+        cards.push({
+          id: genId(),
+          name: `${t('multiview.title')} ${n}`,
+          obsSceneName,
+          layoutId: GALLERY_LAYOUTS[0]?.id ?? "",
+          assignments: {},
+          slotModes: {},
+          slotFraming: {},
+          slotThumbnails: {},
+          layoutFrameId: null,
+          slotFrames: {},
+          frameThickness: 2,
+          frameCornerRadius: 0,
+          frameOpacity: 100,
+          frameColor: "",
+          background: { ...DEFAULT_MV_BG },
+          createdAt: now,
+          updatedAt: now,
+        });
+        changed = true;
+      }
+
+      if (cancelled) return;
+
+      // A failed/temporary storage read must not be written back as defaults.
+      // Persist only migrations, durable recovery, or intentional seeding.
+      if (snapshot.canPersist && (changed || snapshot.shouldMigrate)) {
+        saveSaved(cards);
+      }
+      savedListRef.current = cards;
+      setSavedList(cards);
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const obsReady = useDockObsReady();
 
+  useEffect(() => {
+    savedListRef.current = savedList;
+  }, [savedList]);
+
+  useEffect(() => {
+    obsContentLoadedRef.current = obsContentLoaded;
+  }, [obsContentLoaded]);
+
+  const commitSavedList = useCallback((next: SavedMultiView[]) => {
+    savedListRef.current = next;
+    setSavedList(next);
+    saveSaved(next);
+  }, []);
+
+  const refreshAssignedThumbnails = useCallback(async (
+    availableSceneNames: string[],
+    options?: { force?: boolean },
+  ) => {
+    if (!dockObsClient.isConnected) return;
+    if (thumbnailRefreshBusyRef.current) return;
+    const available = new Set(availableSceneNames);
+    const snapshot = savedListRef.current;
+    const targetKeys = new Set<string>();
+    const captureSources = new Set<string>();
+
+    for (const mv of snapshot) {
+      for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
+        if (!sourceName) continue;
+        const mode = mv.slotModes?.[slotId] ?? "scene";
+        if (mode !== "scene") continue;
+        targetKeys.add(`${mv.id}:${slotId}:${sourceName}`);
+        if (available.has(sourceName)) {
+          captureSources.add(sourceName);
+        }
+      }
+    }
+
+    if (targetKeys.size === 0) return;
+
+    const captureSourceNames = [...captureSources].sort();
+    const signature = `${[...targetKeys].sort().join("|")}::${captureSourceNames.join("|")}`;
+    const now = Date.now();
+    if (!options?.force && signature === thumbnailRefreshSignatureRef.current && now - thumbnailRefreshAtRef.current < MV_THUMBNAIL_REFRESH_MS) {
+      return;
+    }
+    thumbnailRefreshSignatureRef.current = signature;
+    thumbnailRefreshAtRef.current = now;
+    thumbnailRefreshBusyRef.current = true;
+
+    try {
+      const captures = await captureMvSourceThumbnails(captureSourceNames);
+
+      if (!mountedRef.current) return;
+
+      setSavedList((current) => {
+        let changed = false;
+        const next = current.map((mv) => {
+          const currentThumbs = mv.slotThumbnails ?? {};
+          let nextThumbs = currentThumbs;
+
+          for (const [slotId, sourceName] of Object.entries(mv.assignments ?? {})) {
+            const key = `${mv.id}:${slotId}:${sourceName}`;
+            if (!targetKeys.has(key)) continue;
+            const mode = mv.slotModes?.[slotId] ?? "scene";
+            if (mode !== "scene") continue;
+
+            const nextUrl = available.has(sourceName) ? captures.get(sourceName) ?? null : null;
+            if (nextUrl) {
+              if (nextThumbs[slotId] !== nextUrl) {
+                if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
+                nextThumbs[slotId] = nextUrl;
+                changed = true;
+              }
+            } else if (nextThumbs[slotId]) {
+              if (nextThumbs === currentThumbs) nextThumbs = { ...currentThumbs };
+              delete nextThumbs[slotId];
+              changed = true;
+            }
+          }
+
+          return nextThumbs === currentThumbs ? mv : { ...mv, slotThumbnails: nextThumbs };
+        });
+
+        if (changed) {
+          savedListRef.current = next;
+          saveSaved(next);
+        }
+        return changed ? next : current;
+      });
+    } finally {
+      thumbnailRefreshBusyRef.current = false;
+    }
+  }, []);
+
   // ── Single GetSceneList + GetInputList call ──
-  const refreshObsScenes = useCallback(async () => {
-    if (!mountedRef.current) { console.log("[MV] refreshObsScenes bailed — not mounted"); return; }
-    if (obsScanBusyRef.current) { console.log("[MV] refreshObsScenes bailed — scan busy"); return; }
+  const refreshObsScenes = useCallback(async (options?: { forceThumbnails?: boolean }) => {
+    if (!mountedRef.current) return;
+    if (obsScanBusyRef.current) return;
     obsScanBusyRef.current = true;
-    setObsContentLoading(true);
+    if (!obsContentLoadedRef.current) setObsContentLoading(true);
     try {
       const result = await Promise.race([
         Promise.all([
@@ -1936,10 +3372,25 @@ export default function DockMultiviewTab() {
       const scenes = sceneResp.scenes ?? [];
       const inputs = inputResp.inputs ?? [];
       if (!mountedRef.current) return;
-      console.log("[MV] refreshObsScenes OK", { sceneCount: scenes.length, scenes: scenes.map(s => s.sceneName), inputCount: inputs.length });
-      setObsScenes(scenes.map(s => s.sceneName));
-      setObsSources(inputs.map(i => i.inputName));
+      const sceneNames = scenes.map(s => s.sceneName);
+      const sourceNames = inputs.map(i => i.inputName);
+      const sceneSignature = sceneNames.join("\n");
+      const scenesChanged = sceneSignature !== obsSceneSignatureRef.current;
+      obsSceneSignatureRef.current = sceneSignature;
+      setObsScenes(current => areStringListsEqual(current, sceneNames) ? current : sceneNames);
+      setObsSources(current => areStringListsEqual(current, sourceNames) ? current : sourceNames);
       setObsContentLoaded(true);
+
+      // Let the card list paint before the heavier OBS screenshot work starts.
+      // The screenshots are useful previews, but they are not required to open
+      // the tab and can otherwise compete with the first visible render.
+      if (Boolean(options?.forceThumbnails) || scenesChanged) {
+        window.setTimeout(() => {
+          if (mountedRef.current) {
+            void refreshAssignedThumbnails(sceneNames, { force: Boolean(options?.forceThumbnails) || scenesChanged });
+          }
+        }, 0);
+      }
     } catch (err) {
       console.warn("[MV] refreshObsScenes FAILED", err);
       if (mountedRef.current) setObsContentLoaded(true);
@@ -1947,16 +3398,36 @@ export default function DockMultiviewTab() {
       obsScanBusyRef.current = false;
       if (mountedRef.current) setObsContentLoading(false);
     }
-  }, []);
+  }, [refreshAssignedThumbnails]);
 
   useEffect(() => {
-    if (!obsReady) { console.log("[MV] effect bailed — obsReady is false"); return; }
-    console.log("[MV] effect running — calling refreshObsScenes");
-    mountedRef.current = true;
-    refreshObsScenes();
-    const interval = setInterval(() => { refreshObsScenes(); }, getRecommendedPollingInterval(5000));
-    return () => { console.log("[MV] effect cleanup"); mountedRef.current = false; clearInterval(interval); };
-  }, [obsReady, refreshObsScenes]);
+    if (!isActive || !obsReady) return;
+    let cancelled = false;
+    let interval: number | null = null;
+    let startTimer: number | null = null;
+
+    // Defer OBS enumeration until after the active tab has committed. This
+    // keeps the navigation response independent from WebSocket round trips.
+    const frame = window.requestAnimationFrame(() => {
+      startTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        mountedRef.current = true;
+        void refreshObsScenes({ forceThumbnails: true });
+        interval = window.setInterval(() => {
+          if (document.visibilityState === "hidden") return;
+          void refreshObsScenes();
+        }, getRecommendedPollingInterval(MV_OBS_SCAN_MS));
+      }, 0);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      if (startTimer !== null) window.clearTimeout(startTimer);
+      if (interval !== null) window.clearInterval(interval);
+      mountedRef.current = false;
+    };
+  }, [isActive, obsReady, refreshObsScenes]);
 
   // ── Show feedback briefly ──
   const showFeedback = useCallback((type: "success" | "error", text: string) => {
@@ -1970,70 +3441,75 @@ export default function DockMultiviewTab() {
   // ════════════════════════════════════════════════════════════════════════
 
   const handleUpdateName = useCallback((id: string, name: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, name, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateLayout = useCallback((id: string, layoutId: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, layoutId, assignments: {}, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const selectedLayout = resolveLayout(layoutId);
+    const next = savedListRef.current.map(m => m.id === id ? {
+      ...m,
+      layoutId,
+      assignments: {},
+      slotModes: {},
+      slotFraming: {},
+      slotThumbnails: {},
+      layoutFrameId: selectedLayout?.defaultFrameId ?? null,
+      slotFrames: { ...(selectedLayout?.defaultSlotFrames ?? {}) },
+      updatedAt: new Date().toISOString(),
+    } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
-  const handleAssign = useCallback((id: string, slotId: string, val: string) => {
+  const handleAssign = useCallback((id: string, slotId: string, val: string, mode: "scene" | "source") => {
     const now = new Date().toISOString();
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
-      return { ...m, assignments: { ...m.assignments, [slotId]: val }, updatedAt: now };
+      const slotThumbnails = { ...(m.slotThumbnails ?? {}) };
+      delete slotThumbnails[slotId];
+      return {
+        ...m,
+        assignments: { ...m.assignments, [slotId]: val },
+        slotModes: { ...m.slotModes, [slotId]: mode },
+        slotFraming: m.slotFraming?.[slotId] ? m.slotFraming : { ...m.slotFraming, [slotId]: DEFAULT_SLOT_FRAMING },
+        slotThumbnails,
+        updatedAt: now,
+      };
     });
-    setSavedList(next);
-    saveSaved(next);
-    // Capture screenshot of assigned scene for thumbnail preview
-    if (dockObsClient.isConnected && val) {
-      dockObsClient.call("GetSourceScreenshot", {
-        sourceName: val,
-        imageFormat: "jpeg",
-        imageWidth: 320,
-        imageHeight: 180,
-        imageCompressionQuality: 60,
-      }).then((resp: unknown) => {
-        const data = (resp as { imageData?: string })?.imageData;
-        if (data) {
-          const url = data.startsWith("data:") ? data : `data:image/jpeg;base64,${data}`;
-          setSavedList(prev => {
-            const updated = prev.map(m => {
-              if (m.id !== id) return m;
-              return { ...m, slotThumbnails: { ...m.slotThumbnails, [slotId]: url } };
-            });
-            saveSaved(updated);
-            return updated;
+    commitSavedList(next);
+    if (dockObsClient.isConnected && val && mode === "scene" && !thumbnailRefreshBusyRef.current) {
+      thumbnailRefreshBusyRef.current = true;
+      captureMvSourceThumbnails([val]).then((captures) => {
+        const url = captures.get(val);
+        if (!url) return;
+        setSavedList(prev => {
+          let changed = false;
+          const updated = prev.map(m => {
+            if (m.id !== id || m.assignments?.[slotId] !== val) return m;
+            changed = true;
+            return { ...m, slotThumbnails: { ...(m.slotThumbnails ?? {}), [slotId]: url } };
           });
-        }
-      }).catch(() => { });
+          if (!changed) return prev;
+          savedListRef.current = updated;
+          saveSaved(updated);
+          return updated;
+        });
+      }).catch(() => { }).finally(() => {
+        thumbnailRefreshBusyRef.current = false;
+      });
     }
-  }, [savedList]);
-
-  const handleAssignSlotMode = useCallback((id: string, slotId: string, mode: "scene" | "source") => {
-    const next = savedList.map(m => {
-      if (m.id !== id) return m;
-      return { ...m, slotModes: { ...m.slotModes, [slotId]: mode }, updatedAt: new Date().toISOString() };
-    });
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+  }, [commitSavedList]);
 
   const handleAssignSlotFraming = useCallback((id: string, slotId: string, framing: { displayMode: "fill" | "fit" | "custom"; zoom: number; focalX: number; focalY: number }) => {
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
       return { ...m, slotFraming: { ...m.slotFraming, [slotId]: framing }, updatedAt: new Date().toISOString() };
     });
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleRemoveSlot = useCallback((id: string, slotId: string) => {
-    const next = savedList.map(m => {
+    const next = savedListRef.current.map(m => {
       if (m.id !== id) return m;
       const assigns = { ...m.assignments };
       delete assigns[slotId];
@@ -2041,73 +3517,115 @@ export default function DockMultiviewTab() {
       delete modes[slotId];
       const framing = { ...m.slotFraming };
       delete framing[slotId];
-      return { ...m, assignments: assigns, slotModes: modes, slotFraming: framing, updatedAt: new Date().toISOString() };
+      const slotThumbnails = { ...(m.slotThumbnails ?? {}) };
+      delete slotThumbnails[slotId];
+      return { ...m, assignments: assigns, slotModes: modes, slotFraming: framing, slotThumbnails, updatedAt: new Date().toISOString() };
     });
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateBackground = useCallback((id: string, bg: MVBackground) => {
-    const next = savedList.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const current = savedListRef.current;
+    const previous = current.find(m => m.id === id);
+    if (!previous) return;
+
+    const next = current.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+
+    // Persisting the card is not enough when its managed OBS scene already
+    // exists. Apply the latest background directly to that scene so changing
+    // a background does not require rebuilding the whole layout.
+    void (async () => {
+      try {
+        const sceneWasAlreadyKnown = obsScenes.includes(previous.obsSceneName);
+        if (!sceneWasAlreadyKnown && !dockObsClient.isConnected) return;
+
+        await ensureObsConnected();
+        if (!dockObsClient.isConnected) return;
+
+        let sceneExists = sceneWasAlreadyKnown;
+        if (!sceneExists) {
+          const response = await dockObsClient.call("GetSceneList") as {
+            scenes?: Array<{ sceneName: string }>;
+          };
+          sceneExists = Boolean(response.scenes?.some((scene) => scene.sceneName === previous.obsSceneName));
+        }
+        if (!sceneExists) return;
+
+        await updateMultiviewBackgroundSource(
+          previous.obsSceneName,
+          previous.id,
+          bg,
+          getMvBg(previous),
+        );
+      } catch (err) {
+        console.warn("[DockMultiview] Live background update failed", err);
+        if (mountedRef.current) {
+          showFeedback("error", err instanceof Error ? err.message : "Background update failed");
+        }
+      }
+    })();
+  }, [commitSavedList, ensureObsConnected, obsScenes, showFeedback]);
 
   const handleUpdateFrame = useCallback((id: string, frameId: string | null) => {
-    const next = savedList.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameThickness = useCallback((id: string, thickness: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameThickness: thickness, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameThickness: thickness, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameCornerRadius = useCallback((id: string, radius: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameCornerRadius: radius, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameCornerRadius: radius, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameOpacity = useCallback((id: string, opacity: number) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameOpacity: opacity, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameOpacity: opacity, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrameColor = useCallback((id: string, color: string) => {
-    const next = savedList.map(m => m.id === id ? { ...m, frameColor: color, updatedAt: new Date().toISOString() } : m);
-    setSavedList(next);
-    saveSaved(next);
-  }, [savedList]);
+    const next = savedListRef.current.map(m => m.id === id ? { ...m, frameColor: color, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
+
+  const handleUpdateSlotFrame = useCallback((id: string, slotId: string, frameMode: string) => {
+    const next = savedListRef.current.map(m => m.id === id ? {
+      ...m,
+      slotFrames: { ...(m.slotFrames ?? {}), [slotId]: frameMode },
+      updatedAt: new Date().toISOString(),
+    } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleDuplicate = useCallback((id: string) => {
-    const src = savedList.find(m => m.id === id);
+    const current = savedListRef.current;
+    const src = current.find(m => m.id === id);
     if (!src) return;
     const now = new Date().toISOString();
     const dupe: SavedMultiView = {
       ...src,
       id: genId(),
       name: `${src.name} (${t('multiview.copy')})`,
-      obsSceneName: nextObsSceneName(savedList),
+      obsSceneName: nextObsSceneName(current),
       assignments: { ...src.assignments },
       background: { ...(src.background ?? DEFAULT_MV_BG) },
       createdAt: now,
       updatedAt: now,
     };
-    const next = [dupe, ...savedList];
-    setSavedList(next);
-    saveSaved(next);
+    const next = [dupe, ...current];
+    commitSavedList(next);
     showFeedback("success", `"${dupe.name}" created`);
-  }, [savedList, showFeedback, t]);
+  }, [commitSavedList, showFeedback, t]);
 
   const handleDeleteConfirmed = useCallback((id: string, deleteObsScene: boolean) => {
-    const mv = savedList.find(m => m.id === id);
-    const next = savedList.filter(m => m.id !== id);
-    setSavedList(next);
-    saveSaved(next);
+    const current = savedListRef.current;
+    const mv = current.find(m => m.id === id);
+    const next = current.filter(m => m.id !== id);
+    commitSavedList(next);
     setDeleteTargetId(null);
 
     if (deleteObsScene && mv && dockObsClient.isConnected) {
@@ -2115,7 +3633,11 @@ export default function DockMultiviewTab() {
     }
 
     showFeedback("success", t('common.delete'));
-  }, [savedList, showFeedback, t]);
+  }, [commitSavedList, showFeedback, t]);
+
+  const handleDelete = useCallback((id: string) => {
+    setDeleteTargetId(id);
+  }, []);
 
   // ════════════════════════════════════════════════════════════════════════
   // OBS Operations
@@ -2141,6 +3663,12 @@ export default function DockMultiviewTab() {
     const hasAny = Object.values(mv.assignments).some(v => v);
     if (!hasAny) { showFeedback("error", t('multiview.assignBeforePush')); return; }
 
+    const legacySourceSlot = layout.slots.find(slot => mv.assignments[slot.id] && mv.slotModes?.[slot.id] === "source");
+    if (legacySourceSlot) {
+      showFeedback("error", t('multiview.sourcesNoLongerSupported', 'Replace source assignments with OBS scenes before pushing.'));
+      return;
+    }
+
     setPushingId(mv.id);
     try {
       const sceneName = mv.obsSceneName;
@@ -2159,6 +3687,23 @@ export default function DockMultiviewTab() {
 
       // Helper: create or update a managed input and return its sceneItemId
       const createManagedItem = async (inputName: string, inputKind: string, inputSettings: Record<string, unknown>): Promise<number> => {
+        // A managed source can change type when the user switches a card from
+        // color/image/video to a pattern (or back). OBS does not allow
+        // SetInputSettings to change the input kind, so remove only this
+        // uniquely-named MCE input before recreating it with the new kind.
+        try {
+          const inputList = await dockObsClient.call("GetInputList") as {
+            inputs?: Array<{ inputName: string; inputKind?: string }>;
+          };
+          const existingInput = inputList.inputs?.find((input) => input.inputName === inputName);
+          if (existingInput?.inputKind && existingInput.inputKind !== inputKind) {
+            await dockObsClient.call("RemoveInput", { inputName });
+          }
+        } catch {
+          // CreateInput's existing-source fallback below still handles older
+          // OBS bridges that do not expose input metadata.
+        }
+
         try {
           const resp = await dockObsClient.call("CreateInput", {
             sceneName, inputName, inputKind, inputSettings, sceneItemEnabled: true,
@@ -2177,12 +3722,15 @@ export default function DockMultiviewTab() {
       };
 
       // ── Phase 1: Create / find all managed scene items ──────────────────
-      const entries: Array<{ slotId: string; sceneItemId: number; zIndex: number }> = [];
+      const entries: Array<{ slotId: string; sceneItemId: number; zIndex: number; sourceSize?: SourceSize }> = [];
 
       // Background (always zIndex 0) — skip when transparent/effectively none
       const bg = getMvBg(mv);
       const bgSourceName = `${prefix}BACKGROUND`;
-      const isBgEmpty = bg.type === "color" && (bg.color === "transparent" || bg.color === "#0F172A") && !bg.filePath && !bg.sceneName;
+      const isBgEmpty = (bg.type === "color" && (bg.color === "transparent" || bg.color === "#0F172A"))
+        || (bg.type === "scene" && !bg.sceneName)
+        || (bg.type === "pattern" && !bg.patternSrc)
+        || ((bg.type === "image" || bg.type === "video") && !bg.filePath);
       try {
         let bgItemId = -1;
         if (isBgEmpty) {
@@ -2201,7 +3749,21 @@ export default function DockMultiviewTab() {
             inputSettings = { file: bg.filePath, width: CANVAS_W, height: CANVAS_H };
           } else if (bg.type === "video" && bg.filePath) {
             inputKind = "ffmpeg_source";
-            inputSettings = { local_file: bg.filePath, is_local_file: true, looping: true, restart_on_activate: true, close_when_inactive: false };
+            inputSettings = { local_file: bg.filePath, is_local_file: true, looping: true, restart_on_activate: true, close_when_inactive: true };
+          } else if (bg.type === "pattern" && bg.patternSrc) {
+            // SVG is not consistently rendered by OBS's native image source.
+            // Keep the pattern in memory and let Browser Source render it so
+            // the selected pattern is visible without creating user media.
+            inputKind = "browser_source";
+            inputSettings = {
+              url: buildMultiviewPatternBrowserUrl(bg.patternSrc),
+              width: CANVAS_W,
+              height: CANVAS_H,
+              css: "",
+              bgcolor: "#00000000",
+              shutdown: false,
+              restart_when_active: false,
+            };
           }
           bgItemId = await createManagedItem(bgSourceName, inputKind, inputSettings);
         }
@@ -2212,15 +3774,17 @@ export default function DockMultiviewTab() {
       for (const slot of layout.slots) {
         const assigned = mv.assignments[slot.id];
         if (!assigned) continue;
+        const assignedMode = mv.slotModes?.[slot.id] ?? "scene";
         try {
           const created = await dockObsClient.call("CreateSceneItem", {
             sceneName, sourceName: assigned, sceneItemEnabled: true,
           }) as { sceneItemId: number };
           if (created.sceneItemId >= 0) {
-            entries.push({ slotId: slot.id, sceneItemId: created.sceneItemId, zIndex: slot.zIndex ?? 1 });
+            const sourceSize = await getSceneItemSourceSize(sceneName, created.sceneItemId);
+            entries.push({ slotId: slot.id, sceneItemId: created.sceneItemId, zIndex: slot.zIndex ?? 1, sourceSize });
           }
         } catch (err) {
-          console.warn("[DockMultiview] slot push failed for", slot.id, assigned, err);
+          console.warn("[DockMultiview] slot push failed for", { slotId: slot.id, assigned, mode: assignedMode, err });
         }
       }
 
@@ -2274,9 +3838,10 @@ export default function DockMultiviewTab() {
         } else {
           const slot = layout.slots.find(s => s.id === entry.slotId);
           if (!slot) continue;
-          const framing = mv.slotFraming?.[entry.slotId] ?? { displayMode: "fill", zoom: 1, focalX: 0.5, focalY: 0.5 };
+          const framing = mv.slotFraming?.[entry.slotId] ?? DEFAULT_SLOT_FRAMING;
+          const sourceSize = entry.sourceSize ?? normalizeSourceSize();
           const tx = calculateSlotTransform(
-            CANVAS_W, CANVAS_H,
+            sourceSize.width, sourceSize.height,
             { x: slot.x, y: slot.y, width: slot.width, height: slot.height },
             { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
           );
@@ -2287,8 +3852,8 @@ export default function DockMultiviewTab() {
             sceneItemTransform: {
               positionX: hasCrop ? slot.x : tx.positionX,
               positionY: hasCrop ? slot.y : tx.positionY,
-              scaleX: tx.scale,
-              scaleY: tx.scale,
+              scaleX: tx.scaleX ?? tx.scale,
+              scaleY: tx.scaleY ?? tx.scale,
               rotation: 0,
               boundsType: "OBS_BOUNDS_NONE",
               cropLeft: Math.round(tx.cropLeft ?? 0),
@@ -2331,10 +3896,10 @@ export default function DockMultiviewTab() {
 
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
-      showFeedback("success", `"${sceneName}" pushed to OBS`);
-      refreshObsScenes();
+      showFeedback("success", `"${sceneName}" previewed in OBS`);
+      refreshObsScenes({ forceThumbnails: true });
     } catch (err) {
-      showFeedback("error", err instanceof Error ? err.message : t('multiview.pushFailed'));
+      showFeedback("error", err instanceof Error ? err.message : t('multiview.previewFailed', 'Preview failed'));
     } finally {
       if (mountedRef.current) setPushingId(null);
     }
@@ -2367,7 +3932,7 @@ export default function DockMultiviewTab() {
       } catch { }
 
       showFeedback("success", `"${sceneName}" cleared`);
-      refreshObsScenes();
+      refreshObsScenes({ forceThumbnails: true });
     } catch { /* ignore */ }
     finally { if (mountedRef.current) setClearingId(null); }
   }, [refreshObsScenes, showFeedback]);
@@ -2377,6 +3942,31 @@ export default function DockMultiviewTab() {
   // ════════════════════════════════════════════════════════════════════════
 
   const deleteTarget = deleteTargetId ? savedList.find(m => m.id === deleteTargetId) : null;
+  const multiviewEntitlement = checkEntitlementSync("multiview", dockPlan);
+
+  if (!multiviewEntitlement.allowed) {
+    return (
+      <div className="dock-mv-tab" role="status">
+        <div style={{ padding: "32px 20px", textAlign: "center" }}>
+          <Icon name="lock" size={36} />
+          <div style={{ fontSize: 14, fontWeight: 700, margin: "14px 0 8px" }}>
+            {t("upgrade.multiviewRequired", "Multi-View requires Basic plan or higher")}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--dock-text-dim)", lineHeight: 1.5, marginBottom: 18 }}>
+            {t("upgrade.multiviewDescription", "Build broadcast layouts with multiple camera, scripture, and media views.")}
+          </div>
+          <button
+            type="button"
+            className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"
+            onClick={() => showUpgradeModal(t("upgrade.multiviewRequiredMessage", "Upgrade to Basic or higher to enable Multi-View."))}
+          >
+            <Icon name="upgrade" size={14} />
+            <span>{t("upgrade.upgradePlan", "Upgrade Plan")}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dock-mv-tab">
@@ -2411,7 +4001,6 @@ export default function DockMultiviewTab() {
             onUpdateLayout={handleUpdateLayout}
             onUpdateBackground={handleUpdateBackground}
             onAssign={handleAssign}
-            onAssignSlotMode={handleAssignSlotMode}
             onAssignSlotFraming={handleAssignSlotFraming}
             onClearSlot={handleRemoveSlot}
             onUpdateFrame={handleUpdateFrame}
@@ -2419,16 +4008,9 @@ export default function DockMultiviewTab() {
             onUpdateFrameCornerRadius={handleUpdateFrameCornerRadius}
             onUpdateFrameOpacity={handleUpdateFrameOpacity}
             onUpdateFrameColor={handleUpdateFrameColor}
-            onUpdateSlotFrame={(id: string, slotId: string, frameMode: string) => {
-              const next = savedList.map(m => {
-                if (m.id !== id) return m;
-                return { ...m, slotFrames: { ...m.slotFrames, [slotId]: frameMode }, updatedAt: new Date().toISOString() };
-              });
-              setSavedList(next);
-              saveSaved(next);
-            }}
+            onUpdateSlotFrame={handleUpdateSlotFrame}
             onDuplicate={handleDuplicate}
-            onDelete={(id) => setDeleteTargetId(id)}
+            onDelete={handleDelete}
           />
         ))}
       </div>
@@ -2444,3 +4026,5 @@ export default function DockMultiviewTab() {
     </div>
   );
 }
+
+export default memo(DockMultiviewTab);

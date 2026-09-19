@@ -3,42 +3,55 @@
 
 <head>
   <meta charset="UTF-8">
-<<<<<<< HEAD
-  <meta name="viewport" content="width=1920, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>MCE Worship Overlay</title>
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet">
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet">
   <script>
-    (function() {
-      document.addEventListener("keydown", function(e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
-      document.addEventListener("wheel", function(e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
-      document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
-      document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
-      document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
+    (function () {
+      document.addEventListener("keydown", function (e) { var c = e.ctrlKey || e.metaKey; if (!c) return; var k = e.key; if (k === "=" || k === "-" || k === "0" || k === "Plus" || k === "Minus" || k === "NumpadAdd" || k === "NumpadSubtract" || k === "Numpad0") { e.preventDefault(); e.stopPropagation(); } }, true);
+      document.addEventListener("wheel", function (e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false, capture: true });
+      document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gesturechange", function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("gestureend", function (e) { e.preventDefault(); }, { passive: false });
     })();
   </script>
-  <style>html,body,#overlay-root,#overlay-bg-buffer{touch-action:pan-y;-ms-content-zooming:none;}</style>
+  <style>
+    html,
+    body,
+    #overlay-root,
+    #overlay-bg-buffer {
+      touch-action: pan-y;
+      -ms-content-zooming: none;
+    }
+  </style>
   <script>
-    (function() {
+    (function () {
       var W = 1920, H = 1080;
-      var stage = document.getElementById('overlay-stage');
-      if (!stage) return;
-      stage.style.width = W + 'px';
-      stage.style.height = H + 'px';
-      stage.style.transformOrigin = '0 0';
-      stage.style.position = 'absolute';
-      stage.style.top = '0';
-      stage.style.left = '0';
+      var stage = null;
       function fit() {
-        var s = Math.min(window.innerWidth / W, window.innerHeight / H);
-        stage.style.transform = 'scale(' + s + ')';
+        stage = stage || document.getElementById('overlay-stage');
+        if (!stage) return;
+        stage.style.width = W + 'px';
+        stage.style.height = H + 'px';
+        stage.style.transformOrigin = '0 0';
+        stage.style.position = 'absolute';
+        stage.style.top = '0';
+        stage.style.left = '0';
+        var viewportWidth = window.innerWidth || document.documentElement.clientWidth || W;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || H;
+        var s = Math.min(viewportWidth / W, viewportHeight / H);
+        stage.style.transform = 'scale(' + Math.max(0.01, s) + ')';
       }
-      fit();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fit, { once: true });
+      } else {
+        fit();
+      }
       window.addEventListener('resize', fit);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
     })();
   </script>
-=======
-  <meta name="viewport" content="width=1920, initial-scale=1">
-  <title>MCE Worship Overlay</title>
->>>>>>> origin/main
   <style>
     /* ── Shared: Font-face ── */
     @font-face {
@@ -70,23 +83,24 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'CMG Sans', 'Noto Sans', 'Charis SIL', Arial, sans-serif;
+      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
-      --font-weight: 400;
+      --font-weight: 900;
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
+      --word-spacing: 0px;
       --text-align: center;
-      --text-shadow: none;
-      --outline-width: 0px;
-      --outline-color: transparent;
+      --text-shadow: 4px 5px 2px rgba(0, 0, 0, 0.95);
+      --outline-width: 4px;
+      --outline-color: #000000;
       --ref-font-size: 24px;
       --ref-font-family: var(--font-family);
       --ref-font-weight: 400;
@@ -98,6 +112,7 @@
       --ref-spacing: 24px;
       --ref-text-align: center;
       --ref-width: 100%;
+      --fullscreen-text-max-width: 100%;
       --ref-bg-color: transparent;
       --ref-bg-padding: 0;
       --ref-bg-radius: 0;
@@ -107,9 +122,11 @@
       --bg-opacity: 1;
       --bg-shade-gradient: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.42));
       --bg-shade-display: block;
+      --lt-bg-shade-opacity: 0;
       --padding: 60px;
       --safe-area: 40px;
       --anim-duration: 152ms;
+      --text-transition-duration: 160ms;
       --bg-enter-duration: 64ms;
       --text-enter-duration: 82ms;
       --text-enter-delay: 12ms;
@@ -130,6 +147,11 @@
 
     html {
       background: transparent !important;
+    }
+
+    body,
+    body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]) {
+      font-family: var(--mce-output-font-family, var(--font-family)) !important;
     }
 
     /* ── Shared: Background layers ── */
@@ -206,9 +228,16 @@
       align-items: var(--text-align, center);
       justify-content: center;
       width: 100%;
+      max-width: var(--fullscreen-text-max-width, 100%);
     }
 
     #verse-text {
+      order: 1;
+      /* Keep measurement and wrapping inside the fullscreen frame. Without an
+         explicit width, the centered flex item can size itself to the lyric's
+         max-content width and make every large preset collapse to the same
+         minimum even when the wrapped text would fit vertically. */
+      width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -216,10 +245,82 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    #verse-text .verse-text__line,
+    #lt-verse-text .verse-text__line,
+    .compare-column__verse .verse-text__line,
+    .lt-compare-col .verse-text__line {
+      display: block;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    #verse-text .verse-text__number,
+    #lt-verse-text .verse-text__number,
+    .compare-column__verse .verse-text__number,
+    .lt-compare-col .verse-text__number {
+      position: absolute;
+      left: 0;
+      top: 0;
+      min-width: 1.2em;
+      width: auto;
+      font-size: 0.5em;
+      line-height: 1.15;
+      font-weight: 700;
+      text-align: right;
+      opacity: 0.82;
+      -webkit-text-stroke: 0 transparent;
+      white-space: nowrap;
+    }
+
+    #verse-text .verse-text__body,
+    #lt-verse-text .verse-text__body,
+    .compare-column__verse .verse-text__body,
+    .lt-compare-col .verse-text__body {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    #verse-text .verse-text__line + .verse-text__line,
+    #lt-verse-text .verse-text__line + .verse-text__line,
+    .compare-column__verse .verse-text__line + .verse-text__line,
+    .lt-compare-col .verse-text__line + .verse-text__line {
+      margin-top: 0.18em;
+    }
+
+    #translation-text {
+      display: none;
+      width: 100%;
+      margin-top: clamp(16px, 2vh, 34px);
+      font-size: var(--ref-font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: 1.35;
+      letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
+      white-space: pre-line;
+      opacity: 0.82;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -240,6 +341,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #reference.top {
@@ -248,6 +352,10 @@
     }
 
     #reference:empty {
+      display: none;
+    }
+
+    #translation-text:empty {
       display: none;
     }
 
@@ -341,10 +449,13 @@
       font-style: var(--font-style, normal);
       line-height: var(--compare-line-height, 1.4);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
       text-align: var(--compare-text-align, var(--text-align));
       text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       text-transform: var(--text-transform);
+      white-space: pre-line;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -365,6 +476,9 @@
       opacity: var(--ref-opacity);
       text-transform: var(--compare-reference-transform, var(--ref-text-transform));
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     .compare-column__reference.is-above {
@@ -393,36 +507,42 @@
       gap: 16px;
       width: 100%;
     }
+
     .lt-compare-row .lt-compare-col {
       flex: 1 1 0;
       min-width: 0;
     }
+
     .lt-compare-row .lt-compare-divider {
       width: 1px;
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.2);
       flex-shrink: 0;
       align-self: stretch;
     }
+
     .lt-compare-stack {
       display: flex;
       flex-direction: column;
       gap: 8px;
       width: 100%;
     }
+
     .lt-compare-stack .lt-compare-divider {
       height: 1px;
-      background: rgba(255,255,255,0.15);
+      background: rgba(255, 255, 255, 0.15);
       width: 100%;
     }
+
     .lt-compare-ref {
       display: block;
       font-size: 0.65em;
-      color: rgba(255,255,255,0.55);
+      color: rgba(255, 255, 255, 0.55);
       margin-bottom: 2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     .lt-compare-col {
       display: block;
     }
@@ -440,7 +560,7 @@
       bottom: 0;
       transform: translateX(-50%);
       z-index: 3;
-      width: calc(100vw - var(--lt-h-margin, 120px));
+      width: calc(100% - var(--lt-h-margin, 120px));
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
       padding: var(--lt-card-padding, 28px 48px);
@@ -451,6 +571,54 @@
       align-items: var(--text-align, center);
       justify-content: center;
       transition: opacity var(--anim-duration, 152ms) ease;
+    }
+
+    #lt-bar.lt-edge-bottom {
+      top: auto;
+      right: auto;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-top {
+      top: 0;
+      right: auto;
+      bottom: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - var(--lt-h-margin, 120px));
+      height: auto;
+      max-width: var(--lt-max-width, 1680px);
+      max-height: var(--lt-max-height, 600px);
+    }
+
+    #lt-bar.lt-edge-left,
+    #lt-bar.lt-edge-right {
+      top: 50%;
+      bottom: auto;
+      width: var(--lt-side-width, 168px);
+      height: calc(100vh - var(--lt-v-margin, 0px));
+      max-width: none;
+      max-height: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #lt-bar.lt-edge-left {
+      right: auto;
+      left: 0;
+      transform: translateY(-50%);
+    }
+
+    #lt-bar.lt-edge-right {
+      right: 0;
+      left: auto;
+      transform: translateY(-50%);
     }
 
     /* ══════════════════════════════════════════════════════
@@ -482,6 +650,70 @@
       pointer-events: auto;
     }
 
+    /* Slide changes animate the text only, keeping the selected background
+       mounted and avoiding a costly full-canvas repaint. */
+    @keyframes mce-preview-text-exit {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    @keyframes mce-preview-text-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes mce-preview-text-slide-up-in {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes mce-preview-text-slide-left-in {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes mce-preview-text-scale-in {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .mce-preview-text-exit {
+      animation: mce-preview-text-exit var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.4, 0, 1, 1) both;
+      will-change: opacity;
+    }
+
+    .mce-preview-text-enter--fade,
+    .mce-preview-text-enter--reveal-bg-then-text {
+      animation: mce-preview-text-fade-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity;
+    }
+
+    .mce-preview-text-enter--slide-up {
+      animation: mce-preview-text-slide-up-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--slide-left {
+      animation: mce-preview-text-slide-left-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    .mce-preview-text-enter--scale-in {
+      animation: mce-preview-text-scale-in var(--text-transition-duration, var(--anim-duration, 152ms)) cubic-bezier(0.16, 1, 0.3, 1) both;
+      will-change: opacity, transform;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mce-preview-text-exit,
+      .mce-preview-text-enter--fade,
+      .mce-preview-text-enter--reveal-bg-then-text,
+      .mce-preview-text-enter--slide-up,
+      .mce-preview-text-enter--slide-left,
+      .mce-preview-text-enter--scale-in {
+        animation: none;
+      }
+    }
+
     #lt-bar.hidden,
     #lt-bar.blank {
       opacity: 0 !important;
@@ -499,12 +731,32 @@
       z-index: 0;
     }
 
-    #lt-bar > * {
+    #lt-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, var(--lt-bg-shade-opacity, 0));
+      pointer-events: none;
+      transition: background-color var(--anim-duration, 152ms) ease;
+      z-index: 2;
+    }
+
+    #lt-bar>* {
       position: relative;
       z-index: 1;
     }
 
+    #lt-bar>#lt-verse-text,
+    #lt-bar>#ref-text,
+    #lt-bar>#lt-translation-text {
+      z-index: 3;
+    }
+
     #lt-verse-text {
+      order: 1;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--font-size);
       font-family: var(--font-family);
       color: var(--font-color, #ffffff);
@@ -512,9 +764,82 @@
       font-style: var(--font-style, normal);
       line-height: var(--line-height);
       letter-spacing: var(--letter-spacing, 0px);
+      word-spacing: var(--word-spacing, 0px);
+      text-align: var(--text-align);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      text-transform: var(--text-transform);
+      white-space: pre-line;
+      transform-origin: center;
+    }
+
+    /* Horizontal lower-thirds use the full fixed overlay stage. Do not let a
+       legacy width preset cap the verse inside that full-width card. */
+    #lt-bar.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-edge-top #lt-verse-text {
+      width: 100%;
+      max-width: none;
+    }
+
+    #lt-translation-text {
+      display: none;
+      width: 100%;
+      margin-top: clamp(8px, 1vh, 18px);
+      font-size: var(--ref-font-size);
+      font-family: var(--font-family);
+      color: var(--font-color, #ffffff);
+      font-weight: var(--font-weight, 400);
+      font-style: var(--font-style, normal);
+      line-height: 1.3;
+      letter-spacing: var(--letter-spacing, 0px);
       text-align: var(--text-align);
       text-shadow: var(--text-shadow);
       text-transform: var(--text-transform);
+      white-space: pre-line;
+      opacity: 0.82;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text,
+    #lt-bar.lt-edge-right #lt-verse-text {
+      width: max-content;
+      max-width: calc(100vh - 120px);
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1;
+    }
+
+    #lt-bar.lt-edge-left #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-right #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-text-inverted.lt-edge-bottom #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #lt-verse-text,
+    #lt-bar.lt-text-inverted.lt-edge-bottom #ref-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #ref-text,
+    #lt-bar.lt-text-inverted.lt-edge-bottom #lt-translation-text,
+    #lt-bar.lt-text-inverted.lt-edge-top #lt-translation-text {
+      transform: rotate(180deg);
+      transform-origin: center;
+    }
+
+    #lt-bar.lt-edge-left.lt-text-inverted #lt-verse-text {
+      transform: rotate(-90deg);
+    }
+
+    #lt-bar.lt-edge-right.lt-text-inverted #lt-verse-text {
+      transform: rotate(90deg);
+    }
+
+    #lt-bar.lt-edge-left #ref-text,
+    #lt-bar.lt-edge-right #ref-text,
+    #lt-bar.lt-edge-left #lt-translation-text,
+    #lt-bar.lt-edge-right #lt-translation-text {
+      display: none !important;
     }
 
     #lt-bar #ref-text {
@@ -526,11 +851,18 @@
       opacity: var(--ref-opacity);
       text-transform: var(--ref-text-transform);
       letter-spacing: var(--ref-letter-spacing);
+      text-shadow: var(--text-shadow);
+      paint-order: stroke fill;
+      -webkit-text-stroke: var(--outline-width) var(--outline-color);
     }
 
     #lt-bar #ref-text.top {
       margin-top: 0;
       margin-bottom: 12px;
+    }
+
+    #lt-translation-text:empty {
+      display: none;
     }
 
     #bar-background-video {
@@ -554,7 +886,6 @@
       border-radius: inherit;
       z-index: 0;
     }
-
   </style>
 </head>
 
@@ -575,6 +906,7 @@
         <div id="verse-container">
           <div id="verse-text"></div>
           <div id="reference"></div>
+          <div id="translation-text"></div>
         </div>
       </div>
       <div id="compare-layout">
@@ -603,6 +935,7 @@
         <div id="lt-bar-bg"></div>
         <div id="lt-verse-text"></div>
         <div id="ref-text"></div>
+        <div id="lt-translation-text"></div>
       </div>
     </div>
 
@@ -615,18 +948,6 @@
       let currentBibleState = null;
       let currentBibleRevision = 0;
       let hasReceivedLiveOverlayUpdate = false;
-
-      const FONT_SIZE_MIN = 12;
-      const REF_FONT_SIZE_MIN = 10;
-      const COMPARE_TEXT_MIN = 16;
-      const COMPARE_REF_MIN = 12;
-      const COMPARE_META_MIN = 10;
-      const COMPARE_PADDING_MIN = 16;
-      const COMPARE_LAYOUT_PADDING_MIN = 20;
-      const CONTENT_PADDING_MIN = 16;
-      const CONTENT_LINE_HEIGHT_MIN = 1.1;
-      const BAR_PADDING_MIN = 12;
-      const BAR_LINE_HEIGHT_MIN = 1.2;
 
       const SIZE_PRESETS = {
         'smallest': { fontSize: 24, refFontSize: 10, lineHeight: 1.25 },
@@ -646,10 +967,93 @@
         'full': { maxWidth: 1920, hMargin: 0 },
       };
 
+      // Large type gets a modestly narrower text column so the renderer can
+      // keep readable line lengths without making the frame feel cramped.
+      // The steps stay close to the 1920px canvas width: the fit loop still
+      // makes the final decision from the actual rendered bounds.
+      function resolveFullscreenTextMaxWidth(fontSize) {
+        const size = Math.max(0, Number(fontSize) || 0);
+        if (size >= 144) return 1720;
+        if (size >= 112) return 1740;
+        if (size >= 80) return 1760;
+        if (size >= 48) return 1780;
+        return WIDTH_PRESETS.xxl.maxWidth;
+      }
+
       function escapeHtml(s) { const d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
       function safeSupText(h) {
         if (typeof h !== 'string') return '';
         return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function renderVerseLines(text, lineCount) {
+        if (typeof text !== 'string') return '';
+        const hideVerseNumbers = Number(lineCount) === 1;
+        return text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const match = line.match(/^(?:\[(\d+)\]|(\d+)[.)])\s+([\s\S]+)$/);
+            if (!match || hideVerseNumbers) return `<span class="verse-text__line"><span class="verse-text__body">${safeSupText(match ? match[3] : line)}</span></span>`;
+            const number = match[1] || match[2];
+            return `<span class="verse-text__line"><span class="verse-text__number" aria-hidden="true">${safeSupText(number)}</span><span class="verse-text__body">${safeSupText(match[3])}</span></span>`;
+          })
+          .join('');
+      }
+
+      function positionVerseNumbers(rootNode) {
+        if (!rootNode) return;
+        const stage = document.getElementById('overlay-stage');
+        const stageRect = stage?.getBoundingClientRect();
+        const stageWidth = stage?.offsetWidth || 1920;
+        const stageHeight = stage?.offsetHeight || 1080;
+        const scaleX = stageRect?.width > 0 ? stageRect.width / stageWidth : 1;
+        const scaleY = stageRect?.height > 0 ? stageRect.height / stageHeight : 1;
+        const rootFontSize = Number.parseFloat(getComputedStyle(rootNode).fontSize) || 48;
+        const gap = Math.max(3, rootFontSize * 0.12);
+
+        rootNode.querySelectorAll('.verse-text__line').forEach((line) => {
+          const marker = line.querySelector('.verse-text__number');
+          const body = line.querySelector('.verse-text__body');
+          if (!marker || !body) return;
+
+          line.style.paddingLeft = '0px';
+          marker.style.left = '0px';
+          marker.style.top = '0px';
+
+          const range = document.createRange();
+          range.selectNodeContents(body);
+          const firstTextRect = Array.from(range.getClientRects())
+            .find((rect) => rect.width > 0 && rect.height > 0);
+          if (!firstTextRect) return;
+
+          const lineRect = line.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
+          const markerHeight = marker.offsetHeight || markerRect.height / scaleY;
+          const firstTextLeft = (firstTextRect.left - lineRect.left) / scaleX;
+          const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
+          const firstTextHeight = firstTextRect.height / scaleY;
+
+          // Ensure the marker never extends to the left of the container boundary.
+          // If text is left-aligned or close to the left edge, indent the line so
+          // the number marker sits cleanly inside the box right beside the text.
+          const neededLeftSpace = markerWidth + gap;
+          if (firstTextLeft < neededLeftSpace) {
+            const shift = Math.ceil(neededLeftSpace - firstTextLeft);
+            line.style.paddingLeft = `${shift}px`;
+            marker.style.left = '0px';
+          } else {
+            marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
+          }
+          marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
+        });
+      }
+
+      function positionAllVerseNumbers() {
+        [verseText, ltVerseText, compareTextLeft, compareTextRight]
+          .forEach(positionVerseNumbers);
       }
 
       const PATTERN_CSS = {
@@ -685,6 +1089,7 @@
       const verseContainer = document.getElementById('verse-container');
       const verseText = document.getElementById('verse-text');
       const reference = document.getElementById('reference');
+      const translationText = document.getElementById('translation-text');
       const compareLayout = document.getElementById('compare-layout');
       const compareTextLeft = document.getElementById('compare-text-left');
       const compareTextRight = document.getElementById('compare-text-right');
@@ -697,15 +1102,18 @@
       const barBackgroundVideoEl = document.getElementById('bar-background-video');
       const ltRefText = document.getElementById('ref-text');
       const ltVerseText = document.getElementById('lt-verse-text');
+      const ltTranslationText = document.getElementById('lt-translation-text');
       const logo = document.getElementById('logo');
       const overlayStage = document.getElementById('overlay-stage');
       const fullscreenLayer = document.getElementById('fullscreen-layer');
       const lowerThirdLayer = document.getElementById('lower-third-layer');
 
       const _tabParam = 'worship';
-      const _storageKey = 'worship-overlay-data';
-      const _ackStorageKey = 'worship-overlay-render-ack';
-      const _channelName = 'obs-church-studio-worship-overlay';
+      const _routeSource = new URLSearchParams(window.location.search).get('mceSource') || '';
+      const _routeSuffix = _routeSource ? `:${_routeSource}` : '';
+      const _storageKey = 'worship-overlay-data' + _routeSuffix;
+      const _ackStorageKey = 'worship-overlay-render-ack' + _routeSuffix;
+      const _channelName = 'obs-church-studio-worship-overlay' + _routeSuffix;
 
       function readInitialMode() {
         try {
@@ -734,7 +1142,14 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
-      let lastAppliedThemeKey = '';
+      let overlayRelaySocket = null;
+      let latestRenderAck = null;
+      let lastRenderAckPacket = null;
+      let lastTargetSource = _routeSource;
+      const lastAppliedThemeKeyByMode = {
+        fullscreen: '',
+        'lower-third': '',
+      };
       let fitRafId = 0;
       let lastBgFingerprint = '';
       let lastBgType = 'none';
@@ -749,6 +1164,14 @@
       let baseCompareLayoutPadding = { top: 60, right: 60, bottom: 60, left: 60 };
       let baseBarPadding = 28;
       let barMaxHeight = 600;
+      let autoFontScaleEnabled = true;
+      // Fit from the requested theme size on every render. The measured size
+      // is a temporary layout result for the current lyric, never a new user
+      // preference for the next lyric.
+      const AUTO_FIT_MIN_FONT_SIZE = 28;
+      const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
+      const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+
       function toCssFontWeight(w, fb) {
         const n = Number(w); if (!n || isNaN(n)) return fb || '400';
         if (n <= 100) return '100'; if (n <= 200) return '200'; if (n <= 300) return '300';
@@ -764,18 +1187,89 @@
       }
       function mapCompareFontWeight(w) {
         if (!w) return '';
-        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800' };
+        var m = { 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700', 'extrabold': '800', 'black': '900' };
         return m[w.toLowerCase()] || '';
       }
 
       function mapTextTransform(t) {
-        if (!t || t === 'none') return 'none';
+        const normalized = normalizeTextTransform(t);
+        return normalized || 'none';
+      }
+
+      function normalizeTextTransform(t) {
+        if (!t || t === 'none') return '';
         var m = { 'uppercase': 'uppercase', 'upper': 'uppercase', 'lowercase': 'lowercase', 'lower': 'lowercase', 'capitalize': 'capitalize', 'title': 'capitalize' };
-        return m[t.toLowerCase()] || 'none';
+        return m[String(t).toLowerCase()] || '';
+      }
+
+      function capitalizeDisplayText(text) {
+        return String(text).replace(/\b([A-Za-z])([A-Za-z'’-]*)/g, function (_, first, rest) {
+          return first.toLocaleUpperCase() + rest.toLocaleLowerCase();
+        });
+      }
+
+      function applyDisplayTextTransform(text, transform) {
+        const value = typeof text === 'string' ? text : '';
+        switch (normalizeTextTransform(transform)) {
+          case 'uppercase': return value.toLocaleUpperCase();
+          case 'lowercase': return value.toLocaleLowerCase();
+          case 'capitalize': return capitalizeDisplayText(value);
+          default: return value;
+        }
+      }
+
+      function normalizeSlideDisplayText(text) {
+        return typeof text === 'string'
+          ? text.replace(/<br\s*\/?>/gi, '\n').replace(/\r\n?/g, '\n').trim()
+          : '';
+      }
+
+      function getSlideTranslationText(slide) {
+        return normalizeSlideDisplayText(slide?.translationText);
+      }
+
+      function getSlideDisplayText(slide) {
+        const original = normalizeSlideDisplayText(slide?.text);
+        const translation = getSlideTranslationText(slide);
+        if (!translation || slide?.translationOrder !== 'translation-first') {
+          return { primary: original, secondary: translation };
+        }
+        return { primary: translation, secondary: original };
+      }
+
+      function renderTranslationBlock(node, value, transform) {
+        if (!node) return;
+        const translated = typeof value === 'string' ? value.trim() : '';
+        if (!translated) {
+          node.innerHTML = '';
+          node.style.display = 'none';
+          return;
+        }
+        node.innerHTML = safeSupText(applyDisplayTextTransform(translated, transform));
+        node.style.display = 'block';
+      }
+
+      function clearTranslationBlocks() {
+        renderTranslationBlock(translationText, '', null);
+        renderTranslationBlock(ltTranslationText, '', null);
+      }
+
+      function scriptureFontFamily(fontFamily) {
+        var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
+        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        var lower = value.toLowerCase();
+        if (lower.indexOf('cmg sans') !== -1) {
+          if (lower.indexOf('cmg sans black') === -1) {
+            value = '"CMG Sans Black",' + value;
+          }
+        }
+        if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
+        if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
+        return value;
       }
 
       function ensureCmgSansFont() {
-        body.style.fontFamily = '"CMG Sans","Noto Sans","Charis SIL",Arial,sans-serif';
+        body.style.fontFamily = scriptureFontFamily();
       }
 
       function parseColorToRgb(c) {
@@ -846,11 +1340,14 @@
           return direct.textContent;
         }
         const styles = document.querySelectorAll('style');
+        let matched = '';
         for (const styleEl of styles) {
           const cssText = typeof styleEl.textContent === 'string' ? styleEl.textContent : '';
-          if (cssText && cssText.includes('--overlay-data')) return cssText;
+          if (cssText && (cssText.includes('--overlay-data') || cssText.includes('--bg-pattern-data') || cssText.includes('--bg-image'))) {
+            matched += '\n' + cssText;
+          }
         }
-        return '';
+        return matched;
       }
 
       function extractCssCustomPropertyValue(cssText, name) {
@@ -906,6 +1403,16 @@
         if (value.startsWith('data:')) return `url("${value.replace(/"/g, '\\"')}")`;
         if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-pattern-data');
         return PATTERN_CSS[value] || '';
+      }
+
+      function resolveBackgroundImageCss(image) {
+        let value = String(image || '').trim();
+        if (!value || value === '__BG_SOURCE__') return '';
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-image') || '';
+        if (value === '__FROM_LOCALSTORAGE__') value = localStorage.getItem('bible-overlay-bg-image') || '';
+        if (!value || value === 'none') return '';
+        if (/^url\(/i.test(value)) return value;
+        return `url("${value.replace(/"/g, '\\"')}")`;
       }
 
       function clearVideoElement(videoEl) {
@@ -1022,10 +1529,114 @@
         return Number(getComputedStyle(root).getPropertyValue('--safe-area').trim().replace('px', '')) || 40;
       }
 
-      function isOverflowing(node, w, h) {
+      // The overlay is rendered on a fixed 1920x1080 stage that may be CSS-
+      // scaled inside a browser preview. Normalize visual rectangles back to
+      // the stage's layout coordinates so a small preview viewport cannot make
+      // valid text look like it is outside the frame. `offsetParent` is not
+      // reliable here because the stage itself is transformed in the preview.
+      function getLayoutRect(node) {
+        if (!node) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        const visualRect = node.getBoundingClientRect();
+        const stageRect = overlayStage?.getBoundingClientRect?.();
+        const stageWidth = Math.max(Number(overlayStage?.offsetWidth) || 0, 1920);
+        const stageHeight = Math.max(Number(overlayStage?.offsetHeight) || 0, 1080);
+        const scaleX = stageRect?.width > 0 ? stageRect.width / stageWidth : 1;
+        const scaleY = stageRect?.height > 0 ? stageRect.height / stageHeight : 1;
+        const left = stageRect && scaleX > 0
+          ? (visualRect.left - stageRect.left) / scaleX
+          : Number(node.offsetLeft) || 0;
+        const top = stageRect && scaleY > 0
+          ? (visualRect.top - stageRect.top) / scaleY
+          : Number(node.offsetTop) || 0;
+        // offsetWidth/offsetHeight are the untransformed layout dimensions;
+        // the stage scale is already removed from the position above.
+        const width = Math.max(Number(node.offsetWidth) || 0, Number(node.clientWidth) || 0);
+        const height = Math.max(Number(node.offsetHeight) || 0, Number(node.clientHeight) || 0);
+        return { left, top, right: left + width, bottom: top + height, width, height };
+      }
+
+      function getFrameContentRect(frame) {
+        if (!frame) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        const rect = getLayoutRect(frame);
+        const style = getComputedStyle(frame);
+        const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+        const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+        const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+        const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+        const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+        const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
+        const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+        const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+        const left = rect.left + borderLeft + paddingLeft;
+        const top = rect.top + borderTop + paddingTop;
+        const right = Math.max(left, rect.right - borderRight - paddingRight);
+        const bottom = Math.max(top, rect.bottom - borderBottom - paddingBottom);
+        return { left, top, right, bottom, width: right - left, height: bottom - top };
+      }
+
+      function getLayoutContentSize(node, rect) {
+        const layoutWidth = node?.offsetWidth || node?.clientWidth || rect.width || 1;
+        const layoutHeight = node?.offsetHeight || node?.clientHeight || rect.height || 1;
+        return {
+          width: Math.max(rect.width, node.scrollWidth || layoutWidth),
+          height: Math.max(rect.height, node.scrollHeight || layoutHeight),
+        };
+      }
+
+      function getRenderedBounds(node) {
+        if (!node || getComputedStyle(node).display === 'none') return null;
+        const rect = getLayoutRect(node);
+        const content = getLayoutContentSize(node, rect);
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.left + content.width,
+          bottom: rect.top + content.height,
+        };
+      }
+
+      function isContentOutsideFrame(nodes, frame) {
+        const frameRect = getFrameContentRect(frame);
+        const bounds = nodes
+          .map(getRenderedBounds)
+          .filter(Boolean)
+          .reduce((combined, current) => ({
+            left: Math.min(combined.left, current.left),
+            top: Math.min(combined.top, current.top),
+            right: Math.max(combined.right, current.right),
+            bottom: Math.max(combined.bottom, current.bottom),
+          }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+        if (!Number.isFinite(bounds.left)) return false;
+        return bounds.left < frameRect.left - 1 ||
+          bounds.top < frameRect.top - 1 ||
+          bounds.right > frameRect.right + 1 ||
+          bounds.bottom > frameRect.bottom + 1;
+      }
+
+      function isOverflowing(node, width, height) {
         if (!node) return false;
-        return Math.max(node.scrollWidth, node.getBoundingClientRect().width) > w + 1 ||
-          Math.max(node.scrollHeight, node.getBoundingClientRect().height) > h + 1;
+        const rect = getLayoutRect(node);
+        const content = getLayoutContentSize(node, rect);
+        return content.width > width + 1 || content.height > height + 1;
+      }
+
+      function isFitVisible(node) {
+        if (!node || !String(node.textContent || '').trim()) return false;
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return false;
+        }
+        const rects = node.getClientRects();
+        if (!rects || rects.length === 0) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+
+      function getViewportSize() {
+        return {
+          width: Math.max(1, Math.round(document.body?.clientWidth || overlayStage?.clientWidth || window.innerWidth || 1920)),
+          height: Math.max(1, Math.round(document.body?.clientHeight || overlayStage?.clientHeight || window.innerHeight || 1080)),
+        };
       }
 
       /* ── Seamless video loop ── */
@@ -1074,92 +1685,251 @@
         lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
         activeMode = mode;
         body.dataset.mode = mode;
+        // A data URI may remain represented by the same __FROM_CSS__ token
+        // while its injected CSS changes. Reapply the mode theme on every
+        // transition so a reused OBS browser document cannot show a blank
+        // background until a manual cache refresh.
+        lastAppliedThemeKeyByMode[mode] = '';
         console.log('[Mode] ' + mode);
       }
 
-      /* ═══ FULLSCREEN: Auto-scaling ═══ */
-      function isSingleLayoutOverflowing(tw, th) {
-        return isOverflowing(verseContainer, tw, th) ||
-          isOverflowing(verseText, verseText.clientWidth || tw, th) ||
-          (reference.style.display !== 'none' && isOverflowing(reference, reference.clientWidth || tw, th));
-      }
-
+      /* ═══ FULLSCREEN: Fixed-size rendering ═══ */
       function autoScaleContent() {
         if (!verseContainer) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) {
-          verseText.style.fontSize = Math.round(baseFontSize) + 'px';
-          reference.style.fontSize = Math.round(baseRefFontSize) + 'px';
-          verseText.style.lineHeight = String(Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          verseText.style.fontSize = '';
+          reference.style.fontSize = '';
+          translationText.style.fontSize = '';
+          verseText.style.lineHeight = '';
+          translationText.style.lineHeight = '';
+          verseContainer.style.padding = '';
+          reference.style.marginTop = '';
+          reference.style.marginBottom = '';
           return;
         }
-        let vs = Math.max(FONT_SIZE_MIN, Math.round(baseFontSize));
-        let rs = Math.max(REF_FONT_SIZE_MIN, Math.round(baseRefFontSize));
-        let pd = Math.max(CONTENT_PADDING_MIN, Math.round(basePadding));
-        let lh = Math.max(CONTENT_LINE_HEIGHT_MIN, Number(getComputedStyle(root).getPropertyValue('--line-height')) || 1.6);
-        let sp = reference.classList.contains('top') ? 24 : 24;
-        const ratio = baseFontSize > 0 ? Math.max(0.6, baseRefFontSize / baseFontSize) : 0.6;
-        const sa = resolveSafeArea();
-        const vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
-        const tw = Math.max(420, vw - sa * 2), th = Math.max(260, vh - sa * 2);
+
+        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        const translationRatio = baseFontSize > 0 ? Math.max(0.42, Math.min(0.78, (baseRefFontSize * 1.15) / baseFontSize)) : 0.62;
+        let textSize = Math.max(AUTO_FIT_MIN_FONT_SIZE, Math.round(baseFontSize));
+        let referenceSize = Math.max(10, Math.round(baseRefFontSize));
+        let translationSize = Math.max(10, Math.round(textSize * translationRatio));
+        const frameRect = getFrameContentRect(overlay);
+        const targetWidth = Math.max(320, frameRect.width);
+        const targetHeight = Math.max(220, frameRect.height);
         const apply = () => {
-          verseText.style.fontSize = vs + 'px'; reference.style.fontSize = rs + 'px';
-          verseText.style.lineHeight = String(lh); verseContainer.style.padding = pd + 'px';
-          reference.style.marginTop = reference.classList.contains('top') ? '0px' : sp + 'px';
-          reference.style.marginBottom = reference.classList.contains('top') ? sp + 'px' : '0px';
+          verseText.style.fontSize = `${textSize}px`;
+          verseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.6';
+          reference.style.fontSize = `${referenceSize}px`;
+          translationText.style.fontSize = `${translationSize}px`;
+          translationText.style.lineHeight = '1.35';
         };
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
+          referenceSize = Math.max(10, Math.round(textSize * ratio));
+          translationSize = Math.max(10, Math.round(textSize * translationRatio));
+          apply();
+        };
+        const overflowing = () => {
+          const fitNodes = [verseText, reference, translationText].filter((node) => isFitVisible(node));
+          if (!fitNodes.length) return false;
+          if (isContentOutsideFrame(fitNodes, overlay)) return true;
+          if (fitNodes.some((node) => isOverflowing(node, targetWidth, targetHeight))) return true;
+          return isOverflowing(verseContainer, targetWidth, targetHeight);
+        };
+
+        [verseText, reference, translationText].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
         apply();
-        let g = 0;
-        while (isSingleLayoutOverflowing(tw, th) && (vs > FONT_SIZE_MIN || rs > REF_FONT_SIZE_MIN || pd > CONTENT_PADDING_MIN || lh > CONTENT_LINE_HEIGHT_MIN || sp > 8) && g < 220) {
-          if (vs > FONT_SIZE_MIN) vs -= 1;
-          rs = Math.max(REF_FONT_SIZE_MIN, Math.round(vs * ratio));
-          if (isSingleLayoutOverflowing(tw, th) && pd > CONTENT_PADDING_MIN) pd = Math.max(CONTENT_PADDING_MIN, pd - 2);
-          if (isSingleLayoutOverflowing(tw, th) && lh > CONTENT_LINE_HEIGHT_MIN) lh = Math.max(CONTENT_LINE_HEIGHT_MIN, +(lh - 0.02).toFixed(2));
-          if (isSingleLayoutOverflowing(tw, th) && sp > 8) sp = Math.max(8, sp - 2);
-          apply(); g++;
+        if (overflowing() && textSize > AUTO_FIT_MIN_FONT_SIZE) {
+          let low = AUTO_FIT_MIN_FONT_SIZE;
+          let high = textSize - 1;
+          let best = AUTO_FIT_MIN_FONT_SIZE;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
         }
       }
 
       function autoScaleCompareContent() {
         if (!compareLayout || !compareTextLeft || !compareTextRight) return;
-        const isWin = navigator.platform?.includes('Win') || navigator.userAgent?.includes('Windows');
-        if (!isWin) return;
+        if (!compareLayout.classList.contains('is-visible')) return;
+        if (overlay.classList.contains('hidden') || overlay.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          [compareTextLeft, compareTextRight].forEach((node) => { node.style.fontSize = ''; node.style.lineHeight = ''; });
+          [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => { if (node) node.style.fontSize = ''; });
+          compareLayout.style.padding = '';
+          compareLayout.querySelectorAll('.compare-column').forEach((column) => { column.style.padding = ''; });
+          return;
+        }
+
         const tn = [compareTextLeft, compareTextRight], rn = [compareReferenceLeft, compareReferenceRight], trn = [compareTranslationLeft, compareTranslationRight];
-        const wr = Array.from(compareLayout.querySelectorAll('.compare-column__text-wrap'));
-        const bT = Math.max(22, Math.round(baseCompareFontSize)), bR = Math.max(14, Math.round(baseCompareRefFontSize));
-        const bM = Math.max(12, Math.round(bR * 0.62));
-        let ts = bT, rs2 = bR, ms = bM;
-        let cp = Math.max(COMPARE_PADDING_MIN, Math.round(baseComparePanelInnerPadding));
-        let lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.top));
-        let lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.right));
-        let lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.bottom));
-        let lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, Math.round(baseCompareLayoutPadding.left));
-        let lh = Math.max(1.08, Number(getComputedStyle(root).getPropertyValue('--compare-line-height')) || 1.4);
-        const sa = resolveSafeArea(), vw = document.body?.clientWidth || 1920, vh = document.body?.clientHeight || 1080;
-        const tw = Math.max(600, vw - sa * 2), th = Math.max(320, vh - sa * 2);
         const cols = Array.from(compareLayout.querySelectorAll('.compare-column'));
-        const hasLayoutPaddingRoom = () => lpTop > COMPARE_LAYOUT_PADDING_MIN || lpRight > COMPARE_LAYOUT_PADDING_MIN || lpBottom > COMPARE_LAYOUT_PADDING_MIN || lpLeft > COMPARE_LAYOUT_PADDING_MIN;
-        const shrinkLayoutPadding = () => {
-          lpTop = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpTop - 2);
-          lpRight = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpRight - 2);
-          lpBottom = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpBottom - 2);
-          lpLeft = Math.max(COMPARE_LAYOUT_PADDING_MIN, lpLeft - 2);
-        };
+        const referenceRatio = baseCompareFontSize > 0 ? Math.max(0.35, baseCompareRefFontSize / baseCompareFontSize) : 0.5;
+        const translationRatio = baseCompareFontSize > 0 ? Math.max(0.25, (baseCompareRefFontSize * 0.62) / baseCompareFontSize) : 0.3;
+        let textSize = Math.max(AUTO_FIT_MIN_FONT_SIZE, Math.round(baseCompareFontSize));
+        let referenceSize = Math.max(10, Math.round(baseCompareRefFontSize));
+        let translationSize = Math.max(10, Math.round(baseCompareFontSize * translationRatio));
+        const safeArea = resolveSafeArea();
+        const viewportWidth = Math.max(1, document.body?.clientWidth || window.innerWidth || 1920);
+        const viewportHeight = Math.max(1, document.body?.clientHeight || window.innerHeight || 1080);
+        const targetWidth = Math.max(420, viewportWidth - safeArea * 2);
+        const targetHeight = Math.max(260, viewportHeight - safeArea * 2);
         const apply = () => {
-          compareLayout.style.padding = `${lpTop}px ${lpRight}px ${lpBottom}px ${lpLeft}px`;
-          cols.forEach(c => c.style.padding = cp + 'px');
-          tn.forEach(n => { n.style.fontSize = ts + 'px'; n.style.lineHeight = String(lh) });
-          rn.forEach(n => n.style.fontSize = rs2 + 'px');
-          trn.forEach(n => n.style.fontSize = ms + 'px');
+          compareLayout.style.padding = `${Math.round(baseCompareLayoutPadding.top)}px ${Math.round(baseCompareLayoutPadding.right)}px ${Math.round(baseCompareLayoutPadding.bottom)}px ${Math.round(baseCompareLayoutPadding.left)}px`;
+          cols.forEach((column) => { column.style.padding = `${Math.round(baseComparePanelInnerPadding)}px`; });
+          tn.forEach((node) => { node.style.fontSize = `${textSize}px`; node.style.lineHeight = getComputedStyle(root).getPropertyValue('--compare-line-height').trim() || '1.4'; });
+          rn.forEach((node) => { if (node) node.style.fontSize = `${referenceSize}px`; });
+          trn.forEach((node) => { if (node) node.style.fontSize = `${translationSize}px`; });
         };
-        const ov = () => { if (isOverflowing(compareLayout, tw, th)) return true; return cols.some((c, i) => { const w = wr[i]; return isOverflowing(c, c.clientWidth || tw, c.clientHeight || th) || (w && isOverflowing(w, w.clientWidth || tw, w.clientHeight || th)) || isOverflowing(tn[i], tn[i].clientWidth || tw, th); }); };
-        apply(); let g = 0;
-        while (ov() && (ts > COMPARE_TEXT_MIN || rs2 > COMPARE_REF_MIN || ms > COMPARE_META_MIN || cp > COMPARE_PADDING_MIN || hasLayoutPaddingRoom() || lh > 1.08) && g < 240) {
-          if (ts > COMPARE_TEXT_MIN) ts--; if (rs2 > COMPARE_REF_MIN) rs2 = Math.max(COMPARE_REF_MIN, rs2 - 1); if (ms > COMPARE_META_MIN) ms = Math.max(COMPARE_META_MIN, ms - 1);
-          if (ov() && cp > COMPARE_PADDING_MIN) cp = Math.max(COMPARE_PADDING_MIN, cp - 1);
-          if (ov() && hasLayoutPaddingRoom()) shrinkLayoutPadding();
-          if (ov() && lh > 1.08) lh = Math.max(1.08, +((lh - 0.02).toFixed(2)));
-          apply(); g++;
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
+          referenceSize = Math.max(10, Math.round(textSize * referenceRatio));
+          translationSize = Math.max(10, Math.round(textSize * translationRatio));
+          apply();
+        };
+        const overflowing = () => {
+          if (isContentOutsideFrame(cols, overlay)) return true;
+          return cols.some((column) => {
+            const columnRect = getLayoutRect(column);
+            return isOverflowing(column, columnRect.width || targetWidth, targetHeight);
+          });
+        };
+
+        [...tn, ...rn, ...trn].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        apply();
+        if (overflowing() && textSize > AUTO_FIT_MIN_FONT_SIZE) {
+          let low = AUTO_FIT_MIN_FONT_SIZE;
+          let high = textSize - 1;
+          let best = AUTO_FIT_MIN_FONT_SIZE;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
+        }
+      }
+
+      function autoScaleLowerThirdContent() {
+        if (!ltBar || !ltVerseText || !ltRefText) return;
+        if (ltBar.classList.contains('hidden') || ltBar.classList.contains('blank')) return;
+        if (!autoFontScaleEnabled) {
+          ltVerseText.style.fontSize = '';
+          ltVerseText.style.lineHeight = '';
+          ltRefText.style.fontSize = '';
+          ltTranslationText.style.fontSize = '';
+          ltTranslationText.style.lineHeight = '';
+          ltBar.style.padding = '';
+          return;
+        }
+
+        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
+        const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
+        const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
+        const minFitSize = 18;
+        let textSize = Math.max(minFitSize, Math.round(baseFontSize));
+        let referenceSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize));
+        let translationSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(textSize * translationRatio));
+        const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+        const targetWidth = Math.max(280, viewportWidth);
+        const targetHeight = Math.max(100, Math.min(barMaxHeight, viewportHeight));
+        const apply = () => {
+          ltVerseText.style.fontSize = `${textSize}px`;
+          ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
+          ltRefText.style.fontSize = `${referenceSize}px`;
+          ltTranslationText.style.fontSize = `${translationSize}px`;
+          ltTranslationText.style.lineHeight = '1.3';
+        };
+        const applyTextSize = (nextSize) => {
+          textSize = nextSize;
+          referenceSize = Math.max(
+            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+            Math.round(textSize * ratio),
+          );
+          translationSize = Math.max(
+            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+            Math.round(textSize * translationRatio),
+          );
+          apply();
+        };
+        const overflowing = () => {
+          const fitNodes = [ltVerseText, ltRefText, ltTranslationText].filter((node) => isFitVisible(node));
+          if (!fitNodes.length) return false;
+          // The bar clips its contents by design, so scrollHeight is not a
+          // reliable fit signal. Measure the visible text against the bar's
+          // actual content frame instead.
+          if (isContentOutsideFrame(fitNodes, ltBar)) return true;
+          const frame = getFrameContentRect(ltBar);
+          const frameWidth = Math.max(1, frame.width || targetWidth);
+          const frameHeight = Math.max(1, frame.height || targetHeight);
+          return fitNodes.some((node) => isOverflowing(node, frameWidth, frameHeight));
+        };
+
+        [ltVerseText, ltRefText, ltTranslationText].forEach((node) => {
+          if (!node) return;
+          node.style.fontSize = '';
+          node.style.lineHeight = '';
+        });
+        apply();
+        if (overflowing() && textSize > minFitSize) {
+          let low = minFitSize;
+          let high = textSize - 1;
+          let best = minFitSize;
+          applyTextSize(low);
+          if (!overflowing()) {
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              applyTextSize(mid);
+              if (overflowing()) high = mid - 1;
+              else { best = mid; low = mid + 1; }
+            }
+          }
+          applyTextSize(best);
+        }
+      }
+
+      function requestAutoScaleActiveContent() {
+        requestAnimationFrame(() => {
+          if (activeMode === 'lower-third') autoScaleLowerThirdContent();
+          else if (compareLayout.classList.contains('is-visible')) autoScaleCompareContent();
+          else autoScaleContent();
+          positionAllVerseNumbers();
+        });
+      }
+
+      function requestAutoScaleAfterRender() {
+        requestAutoScaleActiveContent();
+        const publishFinalFitAck = () => {
+          requestAutoScaleActiveContent();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (lastRenderAckPacket) writeRenderAck(lastRenderAckPacket, true);
+            });
+          });
+        };
+        if (document.fonts?.ready) {
+          document.fonts.ready.then(publishFinalFitAck).catch(publishFinalFitAck);
+        } else {
+          publishFinalFitAck();
         }
       }
 
@@ -1167,6 +1937,8 @@
         verseText.style.fontSize = '';
         verseText.style.lineHeight = '';
         reference.style.fontSize = '';
+        translationText.style.fontSize = '';
+        translationText.style.lineHeight = '';
         reference.style.marginTop = '';
         reference.style.marginBottom = '';
         verseContainer.style.padding = '';
@@ -1199,15 +1971,52 @@
         if (_animateOutResolve) { _animateOutResolve(); _animateOutResolve = null; }
         try { const bc = new BroadcastChannel(_channelName); bc.postMessage({ type: 'lower-third-animation-complete' }); bc.close(); } catch { }
       }
-      function writeRenderAck(packet) {
+      function getEffectiveFontMeasurement() {
+        const readSize = (node) => {
+          if (!node) return undefined;
+          const value = Number.parseFloat(getComputedStyle(node).fontSize || node.style.fontSize || '');
+          return Number.isFinite(value) && value > 0 ? Math.round(value) : undefined;
+        };
+        if (activeMode === 'lower-third') {
+          return {
+            effectiveFontSize: readSize(ltVerseText),
+            effectiveRefFontSize: readSize(ltRefText),
+            effectiveTranslationFontSize: readSize(ltTranslationText),
+          };
+        }
+        if (compareLayout?.classList.contains('is-visible')) {
+          return {
+            effectiveFontSize: readSize(compareTextLeft),
+            effectiveRefFontSize: readSize(compareReferenceLeft),
+            effectiveTranslationFontSize: readSize(compareTranslationLeft),
+          };
+        }
+        return {
+          effectiveFontSize: readSize(verseText),
+          effectiveRefFontSize: readSize(reference),
+          effectiveTranslationFontSize: readSize(translationText),
+        };
+      }
+      function writeRenderAck(packet, fontFitReady = false) {
         try {
           const timestamp = Number(packet && packet.timestamp) || 0;
           if (!timestamp) return;
-          localStorage.setItem(_ackStorageKey, JSON.stringify({
+          lastRenderAckPacket = packet;
+          const ack = {
+            channel: _tabParam,
+            type: 'overlay-render-ack',
+            targetSource: lastTargetSource || '',
             timestamp,
             mode: packet.mode || activeMode,
             transitionId: packet.transitionId,
-          }));
+            fontFitReady,
+            ...getEffectiveFontMeasurement(),
+          };
+          latestRenderAck = ack;
+          localStorage.setItem(_ackStorageKey, JSON.stringify(ack));
+          if (overlayRelaySocket && overlayRelaySocket.readyState === WebSocket.OPEN) {
+            overlayRelaySocket.send(JSON.stringify(ack));
+          }
         } catch { }
       }
 
@@ -1215,19 +2024,24 @@
       function applyThemeBase(s) {
         ensureCmgSansFont();
         const bs = Number(s.fontSize || 48); baseFontSize = bs; baseRefFontSize = Number(s.refFontSize) || Math.max(14, Math.round(bs * 0.5));
+        autoFontScaleEnabled = true;
         root.style.setProperty('--font-size', baseFontSize + 'px');
-        root.style.setProperty('--font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
-        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight || 'black'));
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
+        root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
-        root.style.setProperty('--text-shadow', s.textShadow || 'none');
-        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
-        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--text-shadow', s.textShadow || '4px 5px 2px rgba(0, 0, 0, 0.95)');
+        const outlineEnabled = s.textOutline !== false;
+        const outlineWidth = outlineEnabled ? (s.textOutlineWidth != null ? Number(s.textOutlineWidth) : 4) : 0;
+        const outlineColor = outlineEnabled ? (s.textOutlineColor || '#000000') : 'transparent';
+        root.style.setProperty('--outline-width', outlineWidth + 'px');
+        root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.style.setProperty('--ref-font-family', s.fontFamily || '"CMG Sans", "Noto Sans", "Charis SIL", Arial, sans-serif');
+        root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
         root.style.setProperty('--ref-font-style', 'normal');
         root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
@@ -1246,8 +2060,14 @@
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
-        const ead = Math.max(95, Math.min(170, Math.round((s.animationDuration || 400) * 0.38)));
+        const configuredAnimationDuration = Number(s.animationDuration);
+        const ead = Math.max(100, Math.min(1500, Math.round(
+          Number.isFinite(configuredAnimationDuration) && configuredAnimationDuration > 0
+            ? configuredAnimationDuration
+            : 400,
+        )));
         root.style.setProperty('--anim-duration', ead + 'ms');
+        root.style.setProperty('--text-transition-duration', ead + 'ms');
         root.style.setProperty('--bg-enter-duration', Math.max(70, Math.round(ead * 0.42)) + 'ms');
         root.style.setProperty('--text-enter-duration', Math.max(82, Math.round(ead * 0.54)) + 'ms');
         root.style.setProperty('--text-enter-delay', Math.max(12, Math.round(ead * 0.08)) + 'ms');
@@ -1261,13 +2081,18 @@
         applyThemeBase(s);
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
+        root.style.setProperty('--fullscreen-text-max-width', resolveFullscreenTextMaxWidth(baseFontSize) + 'px');
         // Compare-specific font size — use the explicit setting if provided, otherwise derive from primary
-        const hasCompareSize = s.compareVerseFontSizeLeft != null && Number(s.compareVerseFontSizeLeft) > 0;
-        baseCompareFontSize = hasCompareSize ? Number(s.compareVerseFontSizeLeft) : Math.max(24, Math.round(baseFontSize * 0.76));
+        const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
+        baseCompareFontSize = (rawCompareSize > 40)
+          ? rawCompareSize
+          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         // Compare-specific reference font size
-        const hasCompareRefSize = s.compareReferenceFontSizeLeft != null && Number(s.compareReferenceFontSizeLeft) > 0;
-        baseCompareRefFontSize = hasCompareRefSize ? Number(s.compareReferenceFontSizeLeft) : Math.max(16, Math.round(baseRefFontSize * 0.95));
+        const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
+        baseCompareRefFontSize = (rawCompareRefSize > 25)
+          ? rawCompareRefSize
+          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
         // Compare-specific line height
@@ -1343,7 +2168,12 @@
         applyThemeBase(s);
         baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        if (!s.fontSize) {
+          baseFontSize = preset.fontSize;
+          baseRefFontSize = preset.refFontSize;
+          root.style.setProperty('--font-size', baseFontSize + 'px');
+          root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
         if (targetMode === 'lower-third') {
@@ -1361,15 +2191,50 @@
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
         root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
-        root.style.setProperty('--lt-card-radius', (s.lowerThirdCardRadius || 18) + 'px');
+        const cardRadius = Math.max(0, Math.min(64, Number(s.lowerThirdCardRadius ?? 18)));
+        root.style.setProperty('--lt-card-radius', cardRadius + 'px');
+        const edge = s.lowerThirdEdge === 'top' || s.lowerThirdEdge === 'left' || s.lowerThirdEdge === 'right' ? s.lowerThirdEdge : 'bottom';
+        const sideWidth = Math.max(96, Math.min(360, Number(s.lowerThirdSideWidth) || Math.round((Number(s.fontSize) || preset.fontSize) + (baseBarPadding * 2) + 36)));
+        root.style.setProperty('--lt-side-width', sideWidth + 'px');
+        root.style.setProperty('--lt-v-margin', (s.lowerThirdVMargin || 0) + 'px');
+        ltBar.classList.remove('lt-edge-top', 'lt-edge-bottom', 'lt-edge-left', 'lt-edge-right');
+        ltBar.classList.add('lt-edge-' + edge);
+        ltBar.classList.toggle('lt-text-inverted', s.lowerThirdTextDirection === 'inverted' || s.lowerThirdTextInverted === true || s.textInverted === true);
         const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
+        root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
         const barBgV = String(s.backgroundVideo || '').trim();
-        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
+        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.style.opacity = String(s.backgroundOpacity ?? 1); barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); barBackgroundVideoEl.style.opacity = '1'; if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        if (!barBgV && targetMode === 'lower-third') {
+          const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+          const bgPattern = String(s.backgroundPattern || '').trim();
+          if (bgImageCss) {
+            ltBarBg.style.background = bgImageCss;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else if (bgPattern) {
+            const pc = resolvePatternCss(bgPattern);
+            ltBarBg.style.background = pc || 'transparent';
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          } else {
+            const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent';
+            ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
+            ltBarBg.style.backgroundSize = 'cover';
+            ltBarBg.style.backgroundPosition = 'center';
+            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+            ltBarBg.style.display = 'block';
+          }
+        } else {
+          ltBarBg.style.display = 'none';
+        }
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 
@@ -1387,26 +2252,108 @@
         } catch {
           themeKey = targetMode + '|unserializable';
         }
-        if (!force && themeKey === lastAppliedThemeKey) return;
+        const themeChanged = themeKey !== lastAppliedThemeKeyByMode[targetMode];
+        if (!force && !themeChanged) return;
         applyTheme(safeTheme, targetMode);
-        lastAppliedThemeKey = themeKey;
+        lastAppliedThemeKeyByMode[targetMode] = themeKey;
       }
 
       /* ═══ SINGLE RENDERER ═══ */
       var lastProcessedPacketKey = '';
+      let pendingOverlayPacket = null;
+      let overlayTransitionInFlight = false;
 
       function hasRenderableSlide(data) {
         return Boolean(data && data.slide && data.blanked !== true);
       }
 
       function getOverlayPacketKey(data) {
+        const slide = data && data.slide && typeof data.slide === 'object' ? data.slide : {};
+        // The same packet can arrive through local storage/BroadcastChannel and
+        // the relay. The relay adds its own revision, so timestamp is the
+        // transport-independent identity that prevents a verse being rendered
+        // and animated twice.
         return [
           data.type || '',
-          data.revision ?? data.timestamp ?? 0,
+          data.timestamp ?? data.revision ?? 0,
           data.mode ?? '',
+          typeof slide.text === 'string' ? slide.text.substring(0, 80) : '',
+          typeof slide.translationText === 'string' ? slide.translationText.substring(0, 80) : '',
+          slide.translationOrder || '',
           typeof data.verseText === 'string' ? data.verseText.substring(0, 40) : '',
           typeof data.referenceText === 'string' ? data.referenceText : (typeof data.referenceLabel === 'string' ? data.referenceLabel : ''),
         ].join('|');
+      }
+
+      function getOverlaySlideKey(data) {
+        if (!hasRenderableSlide(data)) return '';
+        try {
+          return JSON.stringify({ mode: data.mode || '', slide: data.slide });
+        } catch {
+          return [
+            data.mode || '',
+            data.slide && data.slide.id || '',
+            data.verseText || '',
+            data.referenceText || data.referenceLabel || '',
+          ].join('|');
+        }
+      }
+
+      function getOverlayAnimationName(data) {
+        const animation = data && data.theme && data.theme.animation
+          || currentOverlayData && currentOverlayData.theme && currentOverlayData.theme.animation
+          || currentBibleState && currentBibleState.theme && currentBibleState.theme.animation;
+        const configuredAnimation = String(animation || '').trim();
+        if (configuredAnimation === 'none') return 'none';
+        // Worship lyrics stay vertically settled while the verse changes.
+        // Directional/scale transitions made the centered block visibly jump
+        // when the new lyric had a different number of lines. Keep the user's
+        // transition duration, but use an opacity-only transition for those
+        // motion styles.
+        const allowed = ['fade', 'reveal-bg-then-text'];
+        return allowed.includes(configuredAnimation) ? configuredAnimation : 'fade';
+      }
+
+      function prefersReducedMotion() {
+        try {
+          return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch {
+          return false;
+        }
+      }
+
+      function isOverlayAnimationEnabled(data) {
+        return getOverlayAnimationName(data) !== 'none' && !prefersReducedMotion();
+      }
+
+      function getVerseAnimationTargets(mode) {
+        const targetMode = mode === 'lower-third' || mode === 'fullscreen' ? mode : activeMode;
+        const targets = targetMode === 'lower-third'
+          ? [ltVerseText, ltRefText, ltTranslationText]
+          : compareLayout && compareLayout.classList.contains('is-visible')
+            ? [compareLayout]
+            : [verseContainer];
+        return targets.filter(Boolean);
+      }
+
+      function clearVerseAnimationClasses(targets) {
+        const classes = [
+          'mce-preview-text-exit',
+          'mce-preview-text-enter--fade',
+          'mce-preview-text-enter--slide-up',
+          'mce-preview-text-enter--slide-left',
+          'mce-preview-text-enter--scale-in',
+          'mce-preview-text-enter--reveal-bg-then-text',
+        ];
+        targets.forEach((target) => target.classList.remove(...classes));
+      }
+
+      function playVerseEnterAnimation(mode, animation) {
+        const targets = getVerseAnimationTargets(mode);
+        if (!targets.length || animation === 'none' || prefersReducedMotion()) return;
+        clearVerseAnimationClasses(targets);
+        void targets[0].offsetWidth;
+        targets.forEach((target) => target.classList.add(`mce-preview-text-enter--${animation}`));
       }
 
       function renderBothBibleLayers(state) {
@@ -1416,10 +2363,56 @@
         console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision });
       }
 
+      function commitOverlayPacket(packet, animateIn) {
+        const revision = Number(packet.revision ?? packet.timestamp ?? 0);
+        const mode = packet.mode === 'fullscreen' || packet.mode === 'lower-third'
+          ? packet.mode
+          : activeMode;
+        clearVerseAnimationClasses([
+          ...getVerseAnimationTargets('fullscreen'),
+          ...getVerseAnimationTargets('lower-third'),
+        ]);
+        currentBibleRevision = revision;
+        currentBibleState = packet;
+        currentOverlayData = packet;
+        hasReceivedLiveOverlayUpdate = true;
+
+        if (mode === 'fullscreen' || mode === 'lower-third') {
+          setActiveLayer(mode);
+        }
+
+        renderBothBibleLayers(currentBibleState);
+        if (animateIn) playVerseEnterAnimation(mode, getOverlayAnimationName(packet));
+        writeRenderAck(packet);
+      }
+
+      function runOverlayTransitionQueue() {
+        if (overlayTransitionInFlight) return;
+        overlayTransitionInFlight = true;
+        try {
+          while (pendingOverlayPacket) {
+            // Render immediately. Waiting for an exit or entry timer made a
+            // lyric trigger feel slow and caused rapid clicks to queue behind
+            // an older verse. The short CSS fade remains purely visual.
+            const packet = pendingOverlayPacket;
+            pendingOverlayPacket = null;
+            const animateIn = hasRenderableSlide(packet) && isOverlayAnimationEnabled(packet);
+            commitOverlayPacket(packet, animateIn);
+          }
+        } finally {
+          overlayTransitionInFlight = false;
+          if (pendingOverlayPacket) void runOverlayTransitionQueue();
+        }
+      }
+
       function processOverlayUpdate(packet) {
         if (!packet) return;
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
         if (packet.theme && (!packet.slide && !packet.blanked)) {
+          const themedPacket = { ...(currentOverlayData || currentBibleState || {}), ...packet };
+          currentBibleState = themedPacket;
+          currentOverlayData = themedPacket;
+          hasReceivedLiveOverlayUpdate = true;
           applyThemeIfChanged(packet.theme, true, packet.mode || activeMode);
           if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
             setActiveLayer(packet.mode);
@@ -1428,6 +2421,7 @@
           overlay.classList.remove('hidden');
           ltBar.classList.remove('hidden');
           writeRenderAck(packet);
+          requestAutoScaleAfterRender();
           return;
         }
         if (!packet.slide && !packet.blanked) return;
@@ -1441,37 +2435,32 @@
           packet.timestamp ??
           0
         );
-        if (revision && revision < currentBibleRevision) return;
-        currentBibleRevision = revision;
-        currentBibleState = packet;
-        currentOverlayData = packet;
-        hasReceivedLiveOverlayUpdate = true;
-
-        if (packet.mode === 'fullscreen' || packet.mode === 'lower-third') {
-          setActiveLayer(packet.mode);
-        }
-
-        renderBothBibleLayers(currentBibleState);
-        writeRenderAck(packet);
+        const pendingRevision = pendingOverlayPacket
+          ? Number(pendingOverlayPacket.revision ?? pendingOverlayPacket.timestamp ?? 0)
+          : 0;
+        if (revision && revision < Math.max(currentBibleRevision, pendingRevision)) return;
+        pendingOverlayPacket = packet;
+        void runOverlayTransitionQueue();
       }
 
       function processSlideFullscreen(data) {
-        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        if (!data.slide) { clearTranslationBlocks(); bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId, isSame = sl.id === currentSlideId && !isNew; currentSlideId = sl.id;
-        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        if (data.blanked) { clearTranslationBlocks(); overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [], isCL = sl.layout === 'compare' && cc.length === 2;
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
         if (isCL) {
           compareLayout.style.display = '';
           compareLayout.classList.add('is-visible');
           verseContainer.classList.add('is-hidden');
+          renderTranslationBlock(translationText, '', null);
           const [l, r] = cc;
           compareReferenceLeft.textContent = formatCompareReference(l.reference, l.translation);
           compareReferenceRight.textContent = formatCompareReference(r.reference, r.translation);
           compareTranslationLeft.textContent = '';
           compareTranslationRight.textContent = '';
-          compareTextLeft.innerHTML = safeSupText(l.text);
-          compareTextRight.innerHTML = safeSupText(r.text);
+          compareTextLeft.innerHTML = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(l.text), data.theme && data.theme.textTransform), sl.lineCount);
+          compareTextRight.innerHTML = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(r.text), data.theme && data.theme.textTransform), sl.lineCount);
           const clMode = sl.compareLayout || 'line-by-line';
           currentCompareLayout = clMode;
           if (clMode === 'line-by-line') {
@@ -1483,22 +2472,26 @@
           compareLayout.classList.remove('is-visible');
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
-          verseText.innerHTML = safeSupText(sl.text);
+          const textTransform = data.theme && data.theme.textTransform;
+          const displayText = getSlideDisplayText(sl);
+          verseText.innerHTML = renderVerseLines(applyDisplayTextTransform(displayText.primary, textTransform), sl.lineCount);
           const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
+          renderTranslationBlock(translationText, displayText.secondary, textTransform);
         }
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-worship-overlay fullscreen theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-worship-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
       function processSlideLowerThird(data) {
-        if (data.action === 'animate-out') { overlay.classList.remove('hidden'); ltBar.classList.remove('hidden'); overlay.classList.add('blank'); ltBar.classList.add('blank'); _animateOutTimer = setTimeout(() => { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); signalAnimateOutComplete(); }, 400); return new Promise((r) => { _animateOutResolve = r; }); }
-        if (!data.slide) { bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
+        if (data.action === 'animate-out') { clearTranslationBlocks(); overlay.classList.remove('hidden'); ltBar.classList.remove('hidden'); overlay.classList.add('blank'); ltBar.classList.add('blank'); _animateOutTimer = setTimeout(() => { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); signalAnimateOutComplete(); }, 400); return new Promise((r) => { _animateOutResolve = r; }); }
+        if (!data.slide) { clearTranslationBlocks(); bgClearToken++; overlay.classList.add('blank'); ltBar.classList.add('blank'); const tk = bgClearToken; setTimeout(() => { if (tk === bgClearToken) { overlay.classList.add('hidden'); ltBar.classList.add('hidden'); currentSlideId = null; hasShownOnce = false; } }, 280); return; }
         bgClearToken++; const sl = data.slide, isNew = sl.id !== currentSlideId; currentSlideId = sl.id;
-        if (data.blanked) { overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
+        if (data.blanked) { clearTranslationBlocks(); overlay.classList.add('blank'); ltBar.classList.add('blank'); return; } else { overlay.classList.remove('blank'); ltBar.classList.remove('blank'); }
         overlay.classList.remove('hidden'); ltBar.classList.remove('hidden');
 
         const cc = Array.isArray(sl.columns) ? sl.columns.slice(0, 2) : [];
@@ -1506,8 +2499,9 @@
         if (isCompare) {
           const [l, r] = cc;
           const layoutMode = sl.compareLayout || 'line-by-line';
-          const lText = safeSupText(l.text || '');
-          const rText = safeSupText(r.text || '');
+          const textTransform = data.theme && data.theme.textTransform;
+          const lText = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(l.text), textTransform), sl.lineCount);
+          const rText = renderVerseLines(applyDisplayTextTransform(normalizeSlideDisplayText(r.text), textTransform), sl.lineCount);
           const lRef = l.reference ? `<span class="lt-compare-ref">${escapeHtml(l.reference)} (${escapeHtml(l.translation || '')})</span>` : '';
           const rRef = r.reference ? `<span class="lt-compare-ref">${escapeHtml(r.reference)} (${escapeHtml(r.translation || '')})</span>` : '';
           if (layoutMode === 'side-by-side') {
@@ -1516,11 +2510,17 @@
             ltVerseText.innerHTML = `<div class="lt-compare-stack">${lRef}${lText ? `<span class="lt-compare-col">${lText}</span>` : ''}<span class="lt-compare-divider"></span>${rRef}${rText ? `<span class="lt-compare-col">${rText}</span>` : ''}</div>`;
           }
           ltRefText.textContent = '';
+          renderTranslationBlock(ltTranslationText, '', null);
         } else {
-          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          const textTransform = data.theme && data.theme.textTransform;
+          const displayText = getSlideDisplayText(sl);
+          ltVerseText.innerHTML = renderVerseLines(applyDisplayTextTransform(displayText.primary, textTransform), sl.lineCount); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          renderTranslationBlock(ltTranslationText, displayText.secondary, textTransform);
         }
 
-        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }
+        try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-worship-overlay lower-third theme error', error); }
+        autoScaleLowerThirdContent();
+        requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
 
@@ -1539,19 +2539,41 @@
         return false;
       }
       function readModeFromCssVar() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = getComputedStyle(root).getPropertyValue('--display-mode').trim().replace(/^['"]|['"]$/g, ''); if (raw === 'lower-third' || raw === 'fullscreen') { setActiveLayer(raw); } } catch { } }
-      function readFromUrlHash() { if (hasReceivedLiveOverlayUpdate) return; try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
-      function readFromUrlSearch() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
+      // URL packets are explicit updates. Let a newer hash/search packet
+      // replace a cached packet that was read earlier; processOverlayUpdate
+      // still rejects older revisions, so a stale URL can never roll the
+      // overlay backwards.
+      function readFromUrlHash() { try { const h = window.location.hash; if (h && h.startsWith('#data=')) { processOverlayUpdate(JSON.parse(decodeURIComponent(h.slice(6)))); return true; } } catch { } return false; }
+      function readFromUrlSearch() { try { const raw = new URLSearchParams(window.location.search).get('overlayData'); if (raw) { processOverlayUpdate(JSON.parse(decodeURIComponent(raw))); return true; } } catch { } return false; }
       function readFromLocalStorage() { if (hasReceivedLiveOverlayUpdate) return; try { const raw = localStorage.getItem(_storageKey); if (raw) { processOverlayUpdate(JSON.parse(raw)); return true; } } catch { } return false; }
       function applyObsBrowserEventCss(cssText) {
-        if (typeof cssText !== 'string') return;
+        if (typeof cssText !== 'string') return false;
         let styleEl = document.getElementById('obs-cssoverride');
         if (!styleEl) {
           styleEl = document.createElement('style');
           styleEl.id = 'obs-cssoverride';
           document.head.appendChild(styleEl);
         }
+        const backgroundPropertyNames = [
+          '--bg-image',
+          '--bg-pattern-data',
+          '--box-bg-image',
+          '--logo-data-uri',
+        ];
+        const previousCssText = styleEl.textContent || '';
+        const backgroundChanged = backgroundPropertyNames.some((name) => (
+          extractCssCustomPropertyValue(previousCssText, name)
+          !== extractCssCustomPropertyValue(cssText, name)
+        ));
         styleEl.textContent = cssText;
+        if (backgroundChanged) {
+          // The packet uses __FROM_CSS__ for large assets, so the serialized
+          // theme can stay identical while the actual image/pattern changes.
+          lastAppliedThemeKeyByMode.fullscreen = '';
+          lastAppliedThemeKeyByMode['lower-third'] = '';
+        }
         lastCssOverlayData = '';
+        return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
         try {
@@ -1559,8 +2581,14 @@
           const data = detail && typeof detail.event_data === 'object' ? detail.event_data : detail;
           if (!data || typeof data !== 'object') return false;
           if (data.tab && data.tab !== _tabParam) return false;
+          const targetSource = typeof data.targetSource === 'string' ? data.targetSource : '';
+          if (_routeSource && targetSource !== _routeSource) return false;
+          if (targetSource) lastTargetSource = targetSource;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
+          // Background images and SVG patterns may be represented by the
+          // __FROM_CSS__ marker. Install their CSS variables before applying
+          // the theme so the packet renders the newly saved background.
           applyObsBrowserEventCss(data.css || data.overlayCss || '');
           processOverlayUpdate(packet);
           return true;
@@ -1570,7 +2598,13 @@
       function readFromOverlayRelayPacket(packet) {
         try {
           if (!packet || typeof packet !== 'object') return false;
+          const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
+          if (_routeSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
+          if (targetSource) lastTargetSource = targetSource;
+          const data = packet.data || packet.packet || packet.overlayData;
+          const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
+          if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
@@ -1578,7 +2612,6 @@
             setActiveLayer(packet.mode);
             return true;
           }
-          const data = packet.data || packet.packet || packet.overlayData;
           if (!data || typeof data !== 'object') return false;
           processOverlayUpdate(data);
           return true;
@@ -1618,11 +2651,20 @@
           if (Date.now() < disabledUntil) return;
           try {
             var ws = new WebSocket('ws://127.0.0.1:17891');
-            ws.onopen = function () { attempts = 0; };
+            overlayRelaySocket = ws;
+            ws.onopen = function () {
+              attempts = 0;
+              if (latestRenderAck) {
+                try { ws.send(JSON.stringify(latestRenderAck)); } catch { }
+              }
+            };
             ws.onmessage = function (event) {
               try { readFromOverlayRelayPacket(JSON.parse(event.data)); } catch { }
             };
-            ws.onclose = schedule;
+            ws.onclose = function () {
+              if (overlayRelaySocket === ws) overlayRelaySocket = null;
+              schedule();
+            };
             ws.onerror = function () {
               try { ws.close(); } catch { }
             };
@@ -1680,7 +2722,16 @@
         _cssObserver.observe(_cssObserverTarget, { childList: true, subtree: true, characterData: true });
       }
 
-      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (activeMode === 'fullscreen') requestAnimationFrame(autoScaleContent); }); ro.observe(document.body); ro.observe(verseContainer); ro.observe(compareLayout); }
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => requestAutoScaleActiveContent());
+        ro.observe(document.body);
+        ro.observe(verseContainer);
+        ro.observe(compareLayout);
+        ro.observe(ltBar);
+        [verseText, reference, translationText, compareTextLeft, compareTextRight, compareReferenceLeft, compareReferenceRight, ltVerseText, ltRefText, ltTranslationText]
+          .filter(Boolean)
+          .forEach((node) => ro.observe(node));
+      }
 
       /* ═══ INITIAL ═══
          Both layers start hidden (opacity 0). Reveal the correct one.
@@ -1722,7 +2773,7 @@
           try {
             hasReceivedLiveOverlayUpdate = true;
             processOverlayUpdate(JSON.parse(e.newValue));
-          } catch (_) {}
+          } catch (_) { }
         }
       });
 

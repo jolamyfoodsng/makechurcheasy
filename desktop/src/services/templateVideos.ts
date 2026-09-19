@@ -18,6 +18,37 @@ export type TemplateVideoAsset = {
   modified?: string;
 };
 
+export type TemplatePictureAsset = {
+  id: string;
+  fileName: string;
+  imageUrl: string;
+  cloudflareKey: string;
+  size?: number;
+  modified?: string;
+};
+
+type TemplateAssetWithDate = {
+  fileName: string;
+  modified?: string;
+};
+
+function getTemplateAssetModifiedAt(asset: TemplateAssetWithDate): number {
+  const timestamp = Date.parse(asset.modified || "");
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+/** Keep every template catalog newest-first, regardless of API response order. */
+export function compareTemplateAssetsNewest(
+  left: TemplateAssetWithDate,
+  right: TemplateAssetWithDate,
+): number {
+  const modifiedComparison = getTemplateAssetModifiedAt(right) - getTemplateAssetModifiedAt(left);
+  return modifiedComparison || left.fileName.localeCompare(right.fileName, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 type SaveBackgroundVideoResult = {
   filePath: string;
   relativeUrl: string;
@@ -26,7 +57,7 @@ type SaveBackgroundVideoResult = {
 type DownloadProgressHandler = (fraction: number | null) => void;
 
 function uid(): string {
-  return crypto.randomUUID?.() ?? `template-video-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return crypto.randomUUID?.() ?? `template-asset-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function versionHeaders(): Record<string, string> {
@@ -85,6 +116,42 @@ async function invokeSaveBackgroundVideo(
     fileName,
     fileData: Array.from(fileData),
   });
+}
+
+async function invokeSaveUploadFile(
+  fileName: string,
+  fileData: Uint8Array,
+): Promise<SaveBackgroundVideoResult> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const filePath = await invoke<string>("save_upload_file", {
+    fileName,
+    fileData: Array.from(fileData),
+  });
+  return {
+    filePath,
+    relativeUrl: `/uploads/${encodeURIComponent(fileName)}`,
+  };
+}
+
+function safeTemplatePictureFileName(fileName: string): string {
+  const dotIndex = fileName.lastIndexOf(".");
+  const base = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  const extension = dotIndex > 0 ? fileName.slice(dotIndex + 1).toLowerCase() : "jpg";
+  const safeBase = base
+    .replace(/[^a-zA-Z0-9-_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "") || "template-picture";
+  return `template_${safeBase}.${extension}`;
+}
+
+function pictureMimeType(fileName: string): string {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "png": return "image/png";
+    case "webp": return "image/webp";
+    case "gif": return "image/gif";
+    default: return "image/jpeg";
+  }
 }
 
 function bytesToDataUrl(bytes: Uint8Array, mimeType: string): Promise<string> {
@@ -247,13 +314,47 @@ export async function fetchTemplateVideos(): Promise<TemplateVideoAsset[]> {
         throw new Error("Template videos response was not an array.");
       }
 
-      return data;
+      return data.slice().sort(compareTemplateAssetsNewest);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
 
   throw lastError ?? new Error("Template videos request failed.");
+}
+
+export async function fetchTemplatePictures(): Promise<TemplatePictureAsset[]> {
+  const requestUrls = [`${TEMPLATE_VIDEO_API_BASE}/template-pictures?_=${Date.now()}`];
+
+  const overlayBaseUrl = await getOverlayBaseUrl();
+  const localFallbackUrl = `${overlayBaseUrl}/api/template-pictures?_=${Date.now()}`;
+  if (!requestUrls.includes(localFallbackUrl)) {
+    requestUrls.push(localFallbackUrl);
+  }
+
+  let lastError: Error | null = null;
+
+  for (const requestUrl of requestUrls) {
+    try {
+      const response = await universalFetch(requestUrl);
+      if (!response.ok) {
+        lastError = new Error(await readErrorMessage(response));
+        continue;
+      }
+
+      const raw = await response.json();
+      const data = unwrapEnvelope<TemplatePictureAsset[]>(raw);
+      if (!Array.isArray(data)) {
+        throw new Error("Template pictures response was not an array.");
+      }
+
+      return data.slice().sort(compareTemplateAssetsNewest);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error("Template pictures request failed.");
 }
 
 async function saveTemplateVideoBytes(
@@ -285,6 +386,51 @@ async function saveTemplateVideoBytes(
     return {
       filePath: payload.path,
       relativeUrl: `/uploads/${encodeURIComponent(asset.fileName)}`,
+    };
+  }
+}
+
+async function findExistingTemplatePicture(asset: TemplatePictureAsset): Promise<MediaItem | undefined> {
+  const items = await getAllMedia();
+  return items.find((item) => (
+    item.type === "image" &&
+    (item.sourceAssetId === asset.id ||
+      item.cloudflareKey === asset.cloudflareKey ||
+      (item.source === "template-cloudflare" && item.name === asset.fileName))
+  ));
+}
+
+async function saveTemplatePictureBytes(
+  asset: TemplatePictureAsset,
+  bytes: Uint8Array,
+): Promise<SaveBackgroundVideoResult> {
+  const storedFileName = safeTemplatePictureFileName(asset.fileName);
+
+  try {
+    return await invokeSaveUploadFile(storedFileName, bytes);
+  } catch {
+    const dataUrl = await bytesToDataUrl(bytes, pictureMimeType(asset.fileName));
+    const response = await fetch("/api/save-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: storedFileName,
+        dataUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    const payload = await response.json() as { path?: string };
+    if (!payload.path) {
+      throw new Error("Template picture save path was not returned.");
+    }
+
+    return {
+      filePath: payload.path,
+      relativeUrl: `/uploads/${encodeURIComponent(storedFileName)}`,
     };
   }
 }
@@ -351,6 +497,61 @@ export async function downloadTemplateVideoToLibrary(
       if (nextAsset) {
         return downloadOnce(nextAsset);
       }
+    }
+    throw error;
+  }
+}
+
+export async function downloadTemplatePictureToLibrary(
+  asset: TemplatePictureAsset,
+  onProgress?: DownloadProgressHandler,
+): Promise<MediaItem> {
+  const existing = await findExistingTemplatePicture(asset);
+  if (existing?.filePath) {
+    onProgress?.(1);
+    return existing;
+  }
+
+  const downloadOnce = async (resolvedAsset: TemplatePictureAsset) => {
+    const progressCallback = onProgress ? (fraction: number | null) => {
+      if (fraction !== null && (fraction < 0 || fraction > 1)) return;
+      onProgress(fraction);
+    } : undefined;
+
+    const bytes = await readResponseBytes(resolvedAsset.imageUrl, progressCallback);
+    const saved = await saveTemplatePictureBytes(resolvedAsset, bytes);
+    const overlayBaseUrl = await getOverlayBaseUrl();
+    const overlayUrl = `${overlayBaseUrl}${saved.relativeUrl}`;
+
+    const item: MediaItem = {
+      id: existing?.id || uid(),
+      name: resolvedAsset.fileName,
+      type: "image",
+      url: overlayUrl,
+      filePath: saved.filePath,
+      thumbnailUrl: overlayUrl,
+      fileSize: bytes.byteLength || resolvedAsset.size || existing?.fileSize,
+      mimeType: pictureMimeType(resolvedAsset.fileName),
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      downloadedAt: new Date().toISOString(),
+      source: "template-cloudflare",
+      remoteUrl: resolvedAsset.imageUrl,
+      sourceAssetId: resolvedAsset.id,
+      cloudflareKey: resolvedAsset.cloudflareKey,
+    };
+
+    await saveMedia(item);
+    return item;
+  };
+
+  try {
+    return await downloadOnce(asset);
+  } catch (error) {
+    const status = (error as Error & { status?: number }).status;
+    if (status === 401 || status === 403) {
+      const refreshed = await fetchTemplatePictures();
+      const nextAsset = refreshed.find((entry) => entry.cloudflareKey === asset.cloudflareKey);
+      if (nextAsset) return downloadOnce(nextAsset);
     }
     throw error;
   }

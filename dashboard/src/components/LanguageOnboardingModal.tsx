@@ -4,10 +4,7 @@ import { useState, useEffect } from "react";
 import { Globe, Check } from "lucide-react";
 import { LOCALES, type Locale } from "@/i18n/routing";
 import { updateUser } from "@/lib/api";
-import { getUserId } from "@/lib/userId";
 import { useAuth } from "@/contexts/AuthContext";
-
-const LANGUAGE_ONBOARDING_KEY = "mce_language_onboarding_shown";
 
 function setCookie(name: string, value: string, days = 365) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -19,40 +16,41 @@ export function LanguageOnboardingModal() {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!mongoUser) return;
     // Already picked a language before
     if (mongoUser.language) return;
-    // Already dismissed this modal
-    if (localStorage.getItem(LANGUAGE_ONBOARDING_KEY) === "true") return;
     const timer = setTimeout(() => setOpen(true), 800);
     return () => clearTimeout(timer);
   }, [mongoUser]);
 
   async function handleSelect(locale: Locale) {
     setSelected(locale.code);
+    setError("");
     setSaving(true);
 
-    setCookie("NEXT_LOCALE", locale.code);
-
-    const userId = getUserId();
-    if (userId) {
-      try {
-        await updateUser(userId, { language: locale.code });
-        await refreshMongoUser();
-      } catch {
-        // Profile save failed, cookie is still set for this session
-      }
+    if (!mongoUser?._id) {
+      setError("We could not identify your account. Please try again.");
+      setSaving(false);
+      return;
     }
 
-    localStorage.setItem(LANGUAGE_ONBOARDING_KEY, "true");
-    setOpen(false);
-    window.location.reload();
+    try {
+      await updateUser(mongoUser._id, { language: locale.code });
+      setCookie("NEXT_LOCALE", locale.code);
+      await refreshMongoUser();
+      setOpen(false);
+      window.location.reload();
+    } catch {
+      setError("Could not save your language. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleSkip() {
-    localStorage.setItem(LANGUAGE_ONBOARDING_KEY, "true");
     setOpen(false);
   }
 
@@ -61,7 +59,7 @@ export function LanguageOnboardingModal() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200"
-      onClick={handleSkip}
+      onClick={() => !saving && handleSkip()}
     >
       <div
         className="w-full max-w-[480px] bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300"
@@ -106,6 +104,12 @@ export function LanguageOnboardingModal() {
               </button>
             ))}
           </div>
+
+          {error && (
+            <p role="alert" className="mb-3 text-sm text-red-600">
+              {error}
+            </p>
+          )}
 
           <button
             onClick={handleSkip}

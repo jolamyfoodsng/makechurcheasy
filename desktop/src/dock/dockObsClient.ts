@@ -16,13 +16,14 @@
  *   4. "Send to Preview" → Auto-enable Studio Mode if off, then push
  *      overlay to Preview scene. Hide overlay in Program to prevent
  *      the global URL update from leaking across.
- *   5. "Go Live"         → push overlay to the current Program scene.
+ *   5. "Send to OBS"     → send overlay to the configured OBS destination.
  *      Hide overlay in Preview to prevent cross-contamination.
  *   6. "Clear"           → blank / hide the overlay source.
  *
  * Connection params are resolved in this order:
  *   1. URL query params: ?obsUrl=ws://...&obsPassword=...
- *   2. localStorage key "mv-settings" (works if same origin)
+ *   2. Native Dock settings key "ocs-dock-obs-params" (with "mv-settings"
+ *      retained as a migrated legacy value)
  *   3. Default: ws://localhost:4455 with no password
  */
 
@@ -35,7 +36,8 @@ import * as obsQueue from "../services/obsRequestQueue";
 import * as browserQueue from "../services/browserUpdateQueue";
 import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
-import { getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getOverlayBaseUrlSync, resolveOverlayAssetUrl } from "../services/overlayUrl";
+import { OVERLAY_HTML_VERSION, buildVersionedOverlayUrl } from "../services/overlayVersion";
 import { getMinistryData, buildSpeakerRoleMap } from "../services/ministryStore";
 import { PRESENTATION_SCENE_NAME, PROGRAM_SCENE_SOURCE_NAME, SOURCE_NAMES, BG_SOURCE_NAMES, FULLSCREEN_SOURCE_NAMES, FULLSCREEN_BG_SOURCE_NAMES } from "../services/PresentationSceneManager";
 import type { DockLiveThemeOverrides } from "./dockConsoleTheme";
@@ -45,8 +47,28 @@ import {
 } from "../services/dockSceneNames";
 import type { LiveToolOverlayPayload, LiveToolTemplate } from "../live-tools/types";
 import { loadProjectionSettings } from "./dockProjectionSettings";
-import { getUserScopedKey } from "../services/userScopedStorage";
-import { overlayBridge } from "./dockOverlayBridge";
+import {
+  isNativeDockSettingsHydrated,
+  readNativeDockSetting,
+  writeNativeDockSetting,
+} from "../services/localDockSettings";
+import { overlayBridge, type BridgePacket } from "./dockOverlayBridge";
+import { buildDockFontFamilyCss } from "./dockFontFamily";
+import {
+  applyDockOutputFontScale,
+  loadDockOutputFontFamily,
+  loadDockOutputFontScale,
+} from "./dockOutputTypography";
+import type { DockOverlayFontFitMeasurement } from "./lowerThirdQuickSettings";
+import type { DockTranslationOrder } from "./dockTranslation";
+import { buildVlcPlaylistItems } from "./vlcPlaylist";
+import type { EditableTemplate } from "../templates/editableTemplateCatalog";
+import { createMceTemplateBlob } from "../templates/mceTemplatePackage";
+import type { DockTimeOverlayData } from "./timeOverlay";
+import {
+  assertDockObsMutationAllowed,
+  isFreeDockPlan,
+} from "./dockMutationPolicy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +85,69 @@ export interface DockLTThemeRef {
   css: string;
 }
 
+export type DockSceneRouteModule = "bible" | "worship" | "notes" | "ticker" | "lower-third" | "countdown" | "time";
+
+/** Shared MCE Presentation content families that can be focused by a dock card. */
+export type DockPresentationModule = "bible" | "worship" | "notes" | "media";
+
+export interface DockBiblePushData {
+  book: string;
+  chapter: number;
+  verse: number;
+  lineCount?: number;
+  verseEnd?: number;
+  verseRange?: string;
+  rawReferenceLabel?: string;
+  referenceLabel?: string;
+  displayReferenceLabel?: string;
+  referenceBaseLabel?: string;
+  translation: string;
+  theme?: string;
+  verseText?: string;
+  overlayMode?: "fullscreen" | "lower-third";
+  ltTheme?: DockLTThemeRef;
+  bibleThemeSettings?: Record<string, unknown> | null;
+  liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+  backgroundOnly?: boolean;
+  compareEnabled?: boolean;
+  compareMode?: "translations" | "passages";
+  compareLayout?: "line-by-line" | "side-by-side";
+  translationA?: string;
+  translationB?: string;
+  compare?: {
+    enabled?: boolean;
+    mode?: "translations" | "passages";
+    layout?: "line-by-line" | "side-by-side";
+    columns?: Array<{
+      book: string;
+      chapter: number;
+      verse: number;
+      verseEnd?: number;
+      verseRange?: string;
+      referenceLabel: string;
+      translation: string;
+      verseText: string;
+    }>;
+  } | null;
+  /** Override target scene instead of using getTargetScene() */
+  targetScene?: string;
+}
+
+export interface DockTabContentPushData {
+  sectionText: string;
+  translationText?: string;
+  translationOrder?: DockTranslationOrder;
+  sectionLabel: string;
+  songTitle: string;
+  artist?: string;
+  overlayMode?: "fullscreen" | "lower-third";
+  ltTheme?: DockLTThemeRef;
+  values?: Record<string, string>;
+  bibleThemeSettings?: Record<string, unknown> | null;
+  liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+  backgroundOnly?: boolean;
+}
+
 export interface DockAudioInputSource {
   inputName: string;
   inputKind: string;
@@ -73,6 +158,20 @@ export interface DockMediaSendOptions {
   imageAudioInputName?: string | null;
   looping?: boolean;
   fitMode?: "cover" | "contain" | "stretch";
+  transition?: "cut" | "fade";
+  document?: DockDocumentMediaOptions;
+}
+
+export interface DockDocumentMediaOptions {
+  pageNumber: number;
+  pageCount: number;
+  showBackground: boolean;
+  showPageLabel: boolean;
+  alignment: "left" | "center" | "right";
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+  legacyCanvas?: boolean;
 }
 
 interface DockPreviewSceneState {
@@ -111,6 +210,7 @@ const DOCK_MEDIA_IMAGE_SOURCE = "MCE Media Image";
 const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "MCE Media Image Audio";
 const DOCK_MEDIA_PATTERN_SOURCE = "MCE Media Pattern";
 const DOCK_MEDIA_TEXT_SOURCE = "MCE Media Text";
+const DOCK_MEDIA_TEMPLATE_SOURCE = "MCE Media Template";
 const DOCK_LIVE_TOOL_SOURCE = "MCE Live Tools";
 const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "MCE Live Tools Media Video";
 const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "MCE Live Tools Media Image";
@@ -123,37 +223,134 @@ const DOCK_PRESENTATION_SCENE = "MCE Presentation";
 const DOCK_BIBLE_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_WORSHIP_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_MEDIA_SCENE = DOCK_PRESENTATION_SCENE;
+const MCE_PRESENTATION_FOCUS_SOURCES: Record<DockPresentationModule, string> = {
+  bible: FULLSCREEN_SOURCE_NAMES.BIBLE,
+  worship: DOCK_WORSHIP_SOURCE,
+  notes: DOCK_NOTES_SOURCE,
+  media: DOCK_MEDIA_VIDEO_SOURCE,
+};
+const MCE_PRESENTATION_ACTIVE_MODULE_KEY = "ocs-dock-presentation-active-module-v1";
 const FULLSCREEN_CLEAR_WAIT_MS = 240;
 const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
+const PROGRAM_BACKGROUND_MANAGED_SCENES_KEY = "ocs-dock-program-background-scenes-v1";
+const PROGRAM_BACKGROUND_LAST_SCENE_KEY = "ocs-dock-program-background-last-scene-v1";
 const DOCK_OBS_RECONNECT_DELAY_MS = 300;
 const DOCK_OBS_RECONNECT_MAX_DELAY_MS = 8000;
 const DOCK_OBS_PARAMS_KEY = "ocs-dock-obs-params";
-const OVERLAY_HTML_VERSION = "2026-07-18-1-static-frame";
+const PROGRAM_BACKGROUND_WATCH_INTERVAL_MS = 1500;
+const SCENE_ROUTE_SOURCE_RECONCILE_MS = 30_000;
 const DOCK_TICKER_CLEARANCE_FALLBACK_PX = 80;
 const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
 
+/**
+ * Sources that MakeChurchEasy may place inside MCE Presentation. We use the
+ * known MCE naming families instead of touching every source whose name merely
+ * happens to contain "MCE". User-owned OBS sources are never included here.
+ */
+const MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES = [
+  "MCE Browser -",
+  "MCE BG -",
+  "MCE Bible",
+  "MCE Worship",
+  "MCE Notes",
+  "MCE Media",
+  "MCE Lower Third",
+  "MCE Ticker",
+  "MCE Countdown",
+  "MCE Time",
+  "MCE Pre-Service",
+  "MCE_PreService",
+  "MCE Live",
+  "MCE Animated Lower Thirds",
+  "MCE Lower Thirds",
+  "MCE LT:",
+  "MCE MV:",
+  "MCE Fullscreen",
+  "MCE -",
+] as const;
+
+function isMcePresentationManagedSource(sourceName: string): boolean {
+  const normalized = sourceName.trim();
+  if (!normalized || normalized === PRESENTATION_SCENE_NAME || normalized === PROGRAM_SCENE_SOURCE_NAME) {
+    return false;
+  }
+  return MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function getMcePresentationSourceFamily(sourceName: string): string | null {
+  const normalized = sourceName.trim().toLocaleLowerCase();
+  if (normalized.includes("bible")) return "bible";
+  if (normalized.includes("worship")) return "worship";
+  if (normalized.includes("notes")) return "notes";
+  if (normalized.includes("media")) return "media";
+  if (normalized.includes("lower third") || normalized.includes("lower-third") || normalized.startsWith("mce lt:")) return "lower-third";
+  if (normalized.includes("ticker")) return "ticker";
+  if (normalized.includes("countdown") || normalized.includes("pre-service") || normalized.includes("preservice")) return "countdown";
+  if (normalized.includes("time")) return "time";
+  if (normalized.includes("live")) return "live-tools";
+  return null;
+}
+
+/**
+ * Build the MCE-owned sources that should remain visible for an active push.
+ * The program-scene reference is structural, so it is intentionally preserved
+ * but is not treated as a content source.
+ */
+export function getMcePresentationVisibilityKeepSet(
+  primarySourceName: string,
+  items: ReadonlyArray<{ sourceName: string; sceneItemIndex?: number }>,
+  lowerThirdSourceVisibility: "keep-first" | "active-only" = "active-only",
+): Set<string> {
+  const primary = primarySourceName.trim();
+  const keepSet = new Set<string>([primary, PROGRAM_SCENE_SOURCE_NAME]);
+  const primaryFamily = getMcePresentationSourceFamily(primary);
+
+  if (primaryFamily) {
+    for (const item of items) {
+      if (getMcePresentationSourceFamily(item.sourceName) === primaryFamily) {
+        keepSet.add(item.sourceName);
+      }
+    }
+  }
+
+  if (lowerThirdSourceVisibility === "keep-first") {
+    const firstMceSource = [...items]
+      .filter((item) => isMcePresentationManagedSource(item.sourceName))
+      .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
+    if (firstMceSource) keepSet.add(firstMceSource.sourceName);
+  }
+
+  return keepSet;
+}
+
 type DockOverlayMode = "fullscreen" | "lower-third";
 
 type PrimeBibleOverlayData = {
-  book: string;
-  chapter: number;
-  verse: number;
+  book?: string;
+  chapter?: number;
+  verse?: number;
+  lineCount?: number;
   verseEnd?: number;
   verseRange?: string;
+  rawReferenceLabel?: string;
   referenceLabel?: string;
-  translation: string;
+  displayReferenceLabel?: string;
+  referenceBaseLabel?: string;
+  translation?: string;
   verseText?: string;
   overlayMode?: DockOverlayMode;
   bibleThemeSettings?: Record<string, unknown> | null;
   liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
   backgroundOnly?: boolean;
   compareEnabled?: boolean;
+  compareMode?: "translations" | "passages";
   compareLayout?: "line-by-line" | "side-by-side";
   translationA?: string;
   translationB?: string;
   compare?: {
     enabled?: boolean;
+    mode?: "translations" | "passages";
     layout?: "line-by-line" | "side-by-side";
     columns?: Array<{
       book: string;
@@ -169,15 +366,25 @@ type PrimeBibleOverlayData = {
 };
 
 type PrimeWorshipOverlayData = {
-  sectionText: string;
-  sectionLabel: string;
-  songTitle: string;
+  sectionText?: string;
+  translationText?: string;
+  translationOrder?: DockTranslationOrder;
+  sectionLabel?: string;
+  songTitle?: string;
   artist?: string;
   overlayMode?: DockOverlayMode;
   bibleThemeSettings?: Record<string, unknown> | null;
   liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
   backgroundOnly?: boolean;
 };
+
+type CssOverlayPacketTab = "bible" | "worship" | "announcements" | "sermon" | "notes" | "lower-third" | "time";
+
+export interface DockOverlayFitOptions {
+  /** Wait for the browser source to finish measuring the rendered text. */
+  waitForFit?: boolean;
+  timeoutMs?: number;
+}
 
 function readPersistedDockOverlayMode(
   tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
@@ -186,9 +393,9 @@ function readPersistedDockOverlayMode(
     ? "ocs-dock-bible-preferences"
     : "ocs-dock-worship-preferences";
   try {
-    const raw = localStorage.getItem(getUserScopedKey(preferencesKey));
+    const raw = readNativeDockSetting<unknown>(preferencesKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { overlayMode?: unknown };
+    const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as { overlayMode?: unknown };
     return parsed.overlayMode === "fullscreen" || parsed.overlayMode === "lower-third"
       ? parsed.overlayMode
       : null;
@@ -208,6 +415,7 @@ interface DockResourceNames {
   mediaImageAudioSource: string;
   mediaPatternSource: string;
   mediaTextSource: string;
+  mediaTemplateSource: string;
   fsBgSource: string;
   fsTargetBgPrefix: string;
   bibleScene: string;
@@ -226,6 +434,7 @@ const DOCK_RESOURCES: DockResourceNames = {
   mediaImageAudioSource: DOCK_MEDIA_IMAGE_AUDIO_SOURCE,
   mediaPatternSource: DOCK_MEDIA_PATTERN_SOURCE,
   mediaTextSource: DOCK_MEDIA_TEXT_SOURCE,
+  mediaTemplateSource: DOCK_MEDIA_TEMPLATE_SOURCE,
   fsBgSource: DOCK_FS_BG_SOURCE,
   fsTargetBgPrefix: DOCK_FS_TARGET_BG_PREFIX,
   bibleScene: DOCK_BIBLE_SCENE,
@@ -366,7 +575,8 @@ function matchesThemeHints(theme: ThemeLike, hints: string[]): boolean {
 // Client
 // ---------------------------------------------------------------------------
 
-class DockObsClient {
+export class DockObsClient {
+  private static readonly NO_CLONE_UNDERLAY_CACHE_KEY = "__no-clone__";
   private obs = new OBSWebSocket();
   private _status: DockObsStatus = "disconnected";
   private _error = "";
@@ -376,6 +586,14 @@ class DockObsClient {
   private _reconnectAttempts = 0;
   private _url = getDefaultOBSUrl();
   private _password: string | undefined;
+  private _persistConnectionParams = true;
+  private _hasTransientExplicitConnection = false;
+  /**
+   * OBS can keep a stale browser document even after its source is restarted.
+   * A token scoped to this Dock process makes the first source load fetch the
+   * current overlay HTML without changing the stable URL used for live packets.
+   */
+  private readonly _overlayDocumentSessionToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   /** Track last overlay mode per source so we can force-reload when switching HTML files */
   private _lastOverlayMode: Record<string, string> = {};
   /** Last overlay mode for the unified Bible source ("fullscreen" | "lower-third") */
@@ -401,10 +619,15 @@ class DockObsClient {
   private _lastCssOverlayPacketBySource: Record<string, Record<string, unknown>> = {};
   private _lastCssOverlayBaseUrlBySource: Record<string, string> = {};
   private _lastCssOverlayThemeCssBySource: Record<string, string> = {};
+  private _lastCssOverlayTabBySource: Record<string, CssOverlayPacketTab> = {};
   /** Track the last browser source URL per input so identical verse pushes can skip reloads. */
   private _lastBrowserSourceUrlBySource: Record<string, string> = {};
   /** Avoid repeating expensive source order/fit checks on every fast overlay packet. */
   private _lastFastOverlayPrepAtBySource: Record<string, number> = {};
+  /** Reuse the served URL for a local Bible asset across verse pushes. */
+  private _preparedBrowserThemeAssetUrls: Record<string, string> = {};
+  /** The program scene has already been wired behind the Bible overlay. */
+  private _lastBibleProgramScenePrepared = "";
   /** Serialize Bible overlay mutations so rapid verse clicks do not overlap OBS scene rebuilds. */
   private _bibleMutationTail: Promise<void> = Promise.resolve();
   private _lastBiblePushSignature = "";
@@ -421,6 +644,11 @@ class DockObsClient {
   private _announcementMutationTail: Promise<void> = Promise.resolve();
   /** Serialize presentation-scene structural mutations to avoid duplicate scene-source inserts. */
   private _presentationMutationTail: Promise<void> = Promise.resolve();
+  /** Short cache for the Program scene already placed under MCE Presentation. */
+  private _presentationProgramUnderlayCache: { programScene: string; expiresAt: number } | null = null;
+  /** Manual deletion of MCE Presentation can leave obs-websocket unsettled briefly. */
+  private _presentationSceneDeletedAt = 0;
+  private _presentationSceneRepairPromise: Promise<void> | null = null;
   private _lastAnnouncementPushSignature = "";
   private _announcementInitialized = false;
   private _notesMutationTail: Promise<void> = Promise.resolve();
@@ -462,12 +690,26 @@ class DockObsClient {
   private _lastFullscreenSceneItemSignature: Record<string, string> = {};
   /** Fast-path signature for repeated fullscreen Bible pushes where only verse data changes */
   private _lastBibleFullscreenSetupSignature = "";
+  /** A Dock refresh found and adopted the still-live Bible browser source. */
+  private _restoredLiveBibleSource = false;
   /** Track active fullscreen native BG config so verse changes do not reapply it */
   private _activeFullscreenBgSignature: Record<string, string> = {};
+  /** One-time cleanup for legacy fullscreen BG inputs now rendered by the browser overlay. */
+  private _legacyFullscreenBgCleanupDone: Record<string, boolean> = {};
   /** Track which MCE overlay source is live per scene so module switches do one cleanup pass */
   private _activeMceOverlayStateByScene: Record<string, string> = {};
+  /** MCE-owned presentation sources hidden by the active-only preference. */
+  private _mcePresentationSourcesDisabledByVisibility = new Set<string>();
   /** Remember the LT base Y so ticker clearance can be added/removed safely. */
   private _ltBasePosYBySceneItem: Map<string, number> = new Map();
+  /** Reconcile the current OBS Program scene whenever Program background is on. */
+  private _programBackgroundWatchTimer: ReturnType<typeof setInterval> | null = null;
+  private _programBackgroundReconcilePromise: Promise<void> | null = null;
+  private _programBackgroundPendingScene: string | null = null;
+  private _programBackgroundPendingForce = false;
+  /** Only these scene sources were created by MCE as Program underlays. */
+  private _programBackgroundManagedScenes: Set<string> | null = null;
+  private _programBackgroundManagedScenesHydrated = false;
 
   get status() { return this._status; }
   get isConnected() { return this._status === "connected"; }
@@ -484,6 +726,7 @@ class DockObsClient {
   }
 
   private resetObsStateCaches(): void {
+    this.stopProgramBackgroundWatcher();
     this._sceneItemListCache = null;
     this._programSceneCache = null;
     this._canvasCache = null;
@@ -507,13 +750,18 @@ class DockObsClient {
     this._lastCssOverlayPacketBySource = {};
     this._lastCssOverlayBaseUrlBySource = {};
     this._lastCssOverlayThemeCssBySource = {};
+    this._lastFastOverlayPrepAtBySource = {};
+    this._lastBibleProgramScenePrepared = "";
     this._lastBiblePushSignature = "";
     this._lastWorshipPushSignature = "";
     this._lastAnnouncementPushSignature = "";
     this._lastNotesPushSignature = "";
     this._lastBibleFullscreenSetupSignature = "";
+    this._restoredLiveBibleSource = false;
     this._activeFullscreenBgSignature = {};
+    this._legacyFullscreenBgCleanupDone = {};
     this._activeMceOverlayStateByScene = {};
+    this._presentationProgramUnderlayCache = null;
     this._activeLtBgSignature = {};
     this._activeLtBgInputKind = {};
     this._bgActiveSlot = {};
@@ -522,6 +770,162 @@ class DockObsClient {
     this._worshipInitialized = false;
     this._announcementInitialized = false;
     this._notesInitialized = false;
+  }
+
+  private getProgramBackgroundManagedScenes(): Set<string> {
+    if (!this._programBackgroundManagedScenes) {
+      this._programBackgroundManagedScenes = new Set<string>();
+    }
+
+    // The Dock can be constructed before the native settings hydration has
+    // finished. Keep any in-memory writes made during that window, then merge
+    // the durable database value once it becomes available.
+    if (!this._programBackgroundManagedScenesHydrated && isNativeDockSettingsHydrated()) {
+      const stored = readNativeDockSetting<unknown>(PROGRAM_BACKGROUND_MANAGED_SCENES_KEY);
+      const names = Array.isArray(stored)
+        ? stored.filter((value): value is string => typeof value === "string")
+        : [];
+      for (const name of names) {
+        const trimmed = name.trim();
+        if (trimmed && trimmed !== DOCK_PRESENTATION_SCENE) {
+          this._programBackgroundManagedScenes.add(trimmed);
+        }
+      }
+      this._programBackgroundManagedScenesHydrated = true;
+    }
+
+    return this._programBackgroundManagedScenes;
+  }
+
+  private persistProgramBackgroundManagedScenes(): void {
+    const names = [...this.getProgramBackgroundManagedScenes()]
+      .filter((name) => name && name !== DOCK_PRESENTATION_SCENE)
+      .sort();
+    writeNativeDockSetting(PROGRAM_BACKGROUND_MANAGED_SCENES_KEY, names);
+  }
+
+  private rememberProgramBackgroundManagedScene(sceneName: string): void {
+    const trimmed = sceneName.trim();
+    if (!trimmed || trimmed === DOCK_PRESENTATION_SCENE) return;
+    const scenes = this.getProgramBackgroundManagedScenes();
+    if (scenes.has(trimmed)) return;
+    scenes.add(trimmed);
+    this.persistProgramBackgroundManagedScenes();
+  }
+
+  private forgetProgramBackgroundManagedScene(sceneName: string): void {
+    const scenes = this.getProgramBackgroundManagedScenes();
+    if (!scenes.delete(sceneName.trim())) return;
+    this.persistProgramBackgroundManagedScenes();
+  }
+
+  private rememberLastProgramBackgroundScene(sceneName: string): void {
+    const trimmed = sceneName.trim();
+    if (
+      !trimmed ||
+      trimmed === DOCK_PRESENTATION_SCENE ||
+      DockObsClient.isManagedMultiviewSceneName(trimmed)
+    ) return;
+    writeNativeDockSetting(PROGRAM_BACKGROUND_LAST_SCENE_KEY, trimmed);
+  }
+
+  private readLastProgramBackgroundScene(): string {
+    return String(readNativeDockSetting<unknown>(PROGRAM_BACKGROUND_LAST_SCENE_KEY) || "").trim();
+  }
+
+  private startProgramBackgroundWatcher(): void {
+    if (!this.isConnected || this._programBackgroundWatchTimer || isFreeDockPlan()) return;
+
+    // Reconcile once immediately, then use the interval as a safety net for
+    // OBS builds or remote sessions that fail to emit a scene-change event.
+    this.scheduleProgramBackgroundReconcile(undefined, true);
+    this._programBackgroundWatchTimer = setInterval(() => {
+      if (!this.isConnected) return;
+      if (loadProjectionSettings().sceneMode !== "auto-duplicate") return;
+      this.scheduleProgramBackgroundReconcile();
+    }, PROGRAM_BACKGROUND_WATCH_INTERVAL_MS);
+  }
+
+  private stopProgramBackgroundWatcher(): void {
+    if (this._programBackgroundWatchTimer) {
+      clearInterval(this._programBackgroundWatchTimer);
+      this._programBackgroundWatchTimer = null;
+    }
+    this._programBackgroundPendingScene = null;
+    this._programBackgroundPendingForce = false;
+  }
+
+  private scheduleProgramBackgroundReconcile(sceneName?: string, force = false): void {
+    if (!this.isConnected || isFreeDockPlan()) {
+      if (isFreeDockPlan()) this.stopProgramBackgroundWatcher();
+      return;
+    }
+    if (loadProjectionSettings().sceneMode !== "auto-duplicate") return;
+
+    this._programBackgroundPendingScene = sceneName?.trim() || "";
+    this._programBackgroundPendingForce ||= force;
+    if (this._programBackgroundReconcilePromise) return;
+
+    const run = (async () => {
+      while (this.isConnected && this._programBackgroundPendingScene !== null) {
+        const requestedScene = this._programBackgroundPendingScene || undefined;
+        const requestedForce = this._programBackgroundPendingForce;
+        this._programBackgroundPendingScene = null;
+        this._programBackgroundPendingForce = false;
+        await this.reconcileProgramBackground(requestedScene, requestedForce).catch((error) => {
+          console.warn("[DockOBS] Program background watcher failed:", error);
+        });
+      }
+    })();
+
+    this._programBackgroundReconcilePromise = run.finally(() => {
+      this._programBackgroundReconcilePromise = null;
+      if (this.isConnected && this._programBackgroundPendingScene !== null) {
+        this.scheduleProgramBackgroundReconcile(undefined, this._programBackgroundPendingForce);
+      }
+    });
+  }
+
+  private async reconcileProgramBackground(
+    requestedScene?: string,
+    force = false,
+  ): Promise<void> {
+    if (!this.isConnected || loadProjectionSettings().sceneMode !== "auto-duplicate") return;
+
+    const liveProgramScene = (requestedScene || await this.getCurrentProgramSceneName(true).catch(() => "")).trim();
+    if (!liveProgramScene) return;
+
+    if (liveProgramScene !== DOCK_PRESENTATION_SCENE) {
+      this.rememberLastProgramBackgroundScene(liveProgramScene);
+    }
+
+    // If MCE Presentation is already Program in non-Studio Mode, retain the
+    // last real Program scene as the background instead of nesting the
+    // presentation scene inside itself. This survives Dock reloads because
+    // the scene name is stored in the native Dock settings database.
+    let sourceScene = liveProgramScene;
+    const usingRememberedScene = liveProgramScene === DOCK_PRESENTATION_SCENE;
+    if (usingRememberedScene) {
+      sourceScene = this.readLastProgramBackgroundScene();
+      if (!sourceScene || sourceScene === DOCK_PRESENTATION_SCENE) return;
+      if (DockObsClient.isManagedMultiviewSceneName(sourceScene)) return;
+      if (!await this.hasObsScene(sourceScene).catch(() => false)) return;
+    }
+
+    if (
+      sourceScene === DOCK_PRESENTATION_SCENE ||
+      DockObsClient.isManagedMultiviewSceneName(sourceScene)
+    ) return;
+
+    const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+    await this.ensureProgramSceneAsSourceInPresentation(force, {
+      // The helper normally protects non-Studio Mode from scene mutations.
+      // Program-background-on is the explicit exception requested by the
+      // operator, so it must also reconcile the live scene without Studio
+      // Mode enabled.
+      allowWithoutStudioMode: !studioMode,
+      programSceneName: sourceScene,
+    });
   }
 
   // ── Branding ──
@@ -599,29 +1003,26 @@ class DockObsClient {
 
     // 2. Persisted dock connection params (from previous successful connect)
     try {
-      const raw = localStorage.getItem(DOCK_OBS_PARAMS_KEY);
+      const raw = readNativeDockSetting<unknown>(DOCK_OBS_PARAMS_KEY);
       if (raw) {
-        const p = JSON.parse(raw);
+        const p = (typeof raw === "string" ? JSON.parse(raw) : raw) as { url?: unknown; password?: unknown };
         if (p.url) {
-          this._url = normalizeOBSWebSocketUrl(p.url);
-          this._password = p.password || undefined;
+          this._url = normalizeOBSWebSocketUrl(String(p.url));
+          this._password = typeof p.password === "string" && p.password ? p.password : undefined;
           return;
         }
       }
     } catch { /* ignore */ }
 
-    // 3. localStorage mv-settings (legacy multiview store — try scoped key first)
+    // 3. Native mv-settings (legacy multiview store)
     try {
-      const scopedKey = getUserScopedKey("mv-settings");
-      for (const key of [scopedKey, "mv-settings"]) {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          const s = JSON.parse(stored);
-          if (s.obsUrl) {
-            this._url = normalizeOBSWebSocketUrl(s.obsUrl);
-            this._password = s.obsPassword || undefined;
-            return;
-          }
+      const stored = readNativeDockSetting<unknown>("mv-settings");
+      if (stored) {
+        const s = (typeof stored === "string" ? JSON.parse(stored) : stored) as { obsUrl?: unknown; obsPassword?: unknown };
+        if (s.obsUrl) {
+          this._url = normalizeOBSWebSocketUrl(String(s.obsUrl));
+          this._password = typeof s.obsPassword === "string" && s.obsPassword ? s.obsPassword : undefined;
+          return;
         }
       }
     } catch { /* ignore */ }
@@ -633,21 +1034,39 @@ class DockObsClient {
 
   /** Persist current connection params so dock auto-reconnects on next reload */
   private persistParams() {
-    try {
-      localStorage.setItem(DOCK_OBS_PARAMS_KEY, JSON.stringify({
-        url: this._url,
-        password: this._password || "",
-      }));
-    } catch { /* ignore */ }
+    writeNativeDockSetting(DOCK_OBS_PARAMS_KEY, {
+      url: this._url,
+      password: this._password || "",
+    });
   }
 
   // ── Connection ──
 
-  async connect(url?: string, password?: string, forceReconnect = false) {
+  async connect(
+    url?: string,
+    password?: string,
+    forceReconnect = false,
+    options?: { persist?: boolean },
+  ) {
+    const hasExplicitUrl = Boolean(url);
+    if (!hasExplicitUrl && !forceReconnect) {
+      if (this.isConnected) return;
+      if (this._connectPromise) return this._connectPromise;
+    }
+
     const previousUrl = this._url;
     const previousPassword = this._password;
-    this.resolveParams(url, password);
-    const explicitParamsChanged = Boolean(url) &&
+
+    if (hasExplicitUrl) {
+      this._persistConnectionParams = options?.persist !== false;
+      this._hasTransientExplicitConnection = options?.persist === false;
+      this.resolveParams(url, password);
+    } else if (!this._hasTransientExplicitConnection) {
+      this._persistConnectionParams = true;
+      this.resolveParams();
+    }
+
+    const explicitParamsChanged = hasExplicitUrl &&
       (this._url !== previousUrl || this._password !== previousPassword);
 
     if (this.reconnectTimer) {
@@ -686,7 +1105,7 @@ class DockObsClient {
           this.setStatus("error", "Connection error");
           this.scheduleReconnect();
         });
-        this.obs.on("StudioModeStateChange" as never, (data: { studioModeEnabled?: boolean } | unknown) => {
+        const handleStudioModeStateChange = (data: { studioModeEnabled?: boolean } | unknown) => {
           if (this._obsGeneration !== gen) return;
           const enabled = Boolean((data as { studioModeEnabled?: boolean } | undefined)?.studioModeEnabled);
           this._studioModeCache = { value: enabled, expiresAt: Date.now() + 30_000 };
@@ -695,13 +1114,32 @@ class DockObsClient {
               console.warn("[DockOBS] Error handling studio mode disabled:", err),
             );
           }
-        });
+          this.scheduleProgramBackgroundReconcile(undefined, true);
+        };
+        // OBS WebSocket 5 uses the plural event name. Keep the legacy alias
+        // as well because older OBS builds emitted the singular spelling.
+        this.obs.on("StudioModeStateChanged" as never, handleStudioModeStateChange);
+        this.obs.on("StudioModeStateChange" as never, handleStudioModeStateChange);
         this.obs.on("CurrentProgramSceneChanged" as never, (data: { sceneName?: string } | unknown) => {
           if (this._obsGeneration !== gen) return;
           const sceneName = String((data as { sceneName?: string } | undefined)?.sceneName || "").trim();
           if (!sceneName) return;
           this._programSceneCache = { name: sceneName, expiresAt: Date.now() + 30_000 };
+          this.rememberLastProgramBackgroundScene(sceneName);
+          this.scheduleProgramBackgroundReconcile(sceneName, true);
           this._lastBibleFullscreenSetupSignature = "";
+          if (sceneName !== DOCK_PRESENTATION_SCENE) {
+            this._lastBibleProgramScenePrepared = "";
+            this._lastFastOverlayPrepAtBySource = {};
+            this._presentationProgramUnderlayCache = null;
+          }
+        });
+        this.obs.on("CurrentPreviewSceneChanged" as never, (data: { sceneName?: string } | unknown) => {
+          if (this._obsGeneration !== gen) return;
+          const sceneName = String((data as { sceneName?: string } | undefined)?.sceneName || "").trim();
+          if (sceneName && sceneName !== DOCK_PRESENTATION_SCENE) {
+            this._lastFastOverlayPrepAtBySource = {};
+          }
         });
         this.obs.on("SceneCreated" as never, (data: { sceneName?: string } | unknown) => {
           if (this._obsGeneration !== gen) return;
@@ -718,6 +1156,7 @@ class DockObsClient {
           if (this._sceneItemListCache?.sceneName === sceneName) this._sceneItemListCache = null;
           if (this._programSceneCache?.name === sceneName) this._programSceneCache = null;
           if (sceneName === DOCK_PRESENTATION_SCENE) {
+            this._presentationSceneDeletedAt = Date.now();
             this.resetPresentationSceneState();
           }
         });
@@ -734,6 +1173,7 @@ class DockObsClient {
           this._sceneItemListCache = null;
           if (this._programSceneCache?.name === oldSceneName) this._programSceneCache = null;
           if (oldSceneName === DOCK_PRESENTATION_SCENE) {
+            this._presentationSceneDeletedAt = Date.now();
             this.resetPresentationSceneState();
           }
         });
@@ -756,8 +1196,18 @@ class DockObsClient {
         this.setStatus("connected");
         connTracker.register("dock-cef", this._url);
 
-        // Persist connection params so auto-reconnect works across dock reloads
-        this.persistParams();
+        // Persist normal dock connection params so auto-reconnect works across
+        // dock reloads. Remote presentation uses a transient target and must
+        // not overwrite the user's normal OBS settings.
+        if (this._persistConnectionParams) {
+          this.persistParams();
+        }
+
+        this.startProgramBackgroundWatcher();
+
+        if (isFreeDockPlan()) {
+          void this.clearMCESourcesForFreePlan();
+        }
 
         const startupPromise = (async () => {
           // A dock reload must not reorder, rebuild, or otherwise mutate the
@@ -796,6 +1246,8 @@ class DockObsClient {
     // this deliberate disconnect cannot schedule an automatic reconnect.
     this._obsGeneration += 1;
     this._connectPromise = null;
+    this._persistConnectionParams = true;
+    this._hasTransientExplicitConnection = false;
     this.resetObsStateCaches();
     await this.deleteClone().catch(() => { });
     try { await this.obs.disconnect(); } catch { /* ignore */ }
@@ -804,6 +1256,7 @@ class DockObsClient {
   }
 
   async prewarmPrimaryDockSources(): Promise<void> {
+    if (isFreeDockPlan()) return;
     if (this._startupPrewarmPromise) return this._startupPrewarmPromise;
 
     const warmupPromise = (async () => {
@@ -828,14 +1281,14 @@ class DockObsClient {
         mode: bibleMode,
       } as const;
 
-      await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+      await this.ensurePresentationSceneReady().catch(() => { });
       await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
 
       const bibleSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-      const bibleBaseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+      const bibleBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", bibleSourceName, bibleMode);
       const bibleCss = this.buildCssOverlayDataCss({ ...bibleBlankPacket }, "");
 
-      await this._ensureFullscreenScene("bible").catch(() => { });
+      await this._ensureFullscreenScene("bible", bibleMode).catch(() => { });
       await this.ensureOverlaySource(DOCK_PRESENTATION_SCENE, bibleSourceName, undefined, undefined, true).catch(() => { });
       await this.setBrowserSourceUrl(bibleSourceName, bibleBaseUrl, false, bibleCss).catch(() => { });
       this._lastCssOverlayPacketBySource[bibleSourceName] = { ...bibleBlankPacket };
@@ -854,7 +1307,7 @@ class DockObsClient {
         timestamp: startupBlankTimestamp,
         mode: worshipMode,
       } as const;
-      const worshipBaseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
+      const worshipBaseUrl = this.buildCssOverlayHtmlUrlForTab("worship", worshipSourceName);
       const worshipCss = this.buildCssOverlayDataCss({ ...worshipBlankPacket }, "");
 
       await this.ensureDedicatedScene(resources.worshipScene).catch(() => { });
@@ -891,7 +1344,7 @@ class DockObsClient {
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       if (this._status !== "connected") {
-        await this.connect(this._url, this._password, true);
+        await this.connect(this._url, this._password, true, { persist: this._persistConnectionParams });
       }
     }, delay);
   }
@@ -910,7 +1363,17 @@ class DockObsClient {
 
   // ── OBS API helpers ──
 
-  async call(requestType: string, requestData?: Record<string, unknown>): Promise<unknown> {
+  async call(
+    requestType: string,
+    requestData?: Record<string, unknown>,
+    options: { priority?: "high" | "normal" | "low"; bypassFreeMutationGate?: boolean } = {},
+  ): Promise<unknown> {
+    // Check before auto-reconnecting. A Free-plan Dock must not even open an
+    // OBS mutation path that could later create or update a scene/source.
+    if (!options.bypassFreeMutationGate) {
+      assertDockObsMutationAllowed(requestType);
+    }
+
     // Auto-reconnect if not connected
     if (!this.isConnected) {
       await this.connect();
@@ -923,13 +1386,39 @@ class DockObsClient {
     if (!this.isConnected) throw new Error("Not connected to OBS");
     const t0 = Date.now();
     try {
-      const result = await obsQueue.enqueue(
+      const request = () => obsQueue.enqueue(
         requestType,
-        () => this.obs.call(requestType as never, requestData as never),
-        { dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined }
+        () => {
+          // Re-check immediately before the WebSocket write in case the
+          // account was downgraded while this request was reconnecting or
+          // waiting in the OBS queue.
+          if (!options.bypassFreeMutationGate) {
+            assertDockObsMutationAllowed(requestType);
+          }
+          return this.obs.call(requestType as never, requestData as never);
+        },
+        {
+          dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined,
+          priority: options.priority,
+        },
       );
-      this.noteObsSceneMutation(requestType, requestData);
-      return result;
+
+      try {
+        const result = await request();
+        this.noteObsSceneMutation(requestType, requestData);
+        return result;
+      } catch (err) {
+        if (!this.shouldRepairPresentationSceneReference(requestType, requestData, err)) {
+          throw err;
+        }
+
+        // OBS removes the scene source before reporting the manual deletion to
+        // the dock. Recreate the managed scene, then repeat the original add.
+        await this.repairPresentationSceneReference();
+        const result = await request();
+        this.noteObsSceneMutation(requestType, requestData);
+        return result;
+      }
     } finally {
       this._trackCallLatency(Date.now() - t0, requestType);
     }
@@ -944,6 +1433,10 @@ class DockObsClient {
     requests: Array<{ requestType: string; requestData?: Record<string, unknown> }>,
     executionType: 0 | 1 | 2 = 2, // default: Parallel
   ): Promise<Array<{ requestData?: unknown; requestStatus?: { code: number; comment?: string } }>> {
+    for (const request of requests) {
+      assertDockObsMutationAllowed(request.requestType);
+    }
+
     if (!this.isConnected) {
       await this.connect();
       const deadline = Date.now() + 3000;
@@ -959,6 +1452,9 @@ class DockObsClient {
         requestType: r.requestType as never,
         requestData: r.requestData as never,
       }));
+      for (const request of requests) {
+        assertDockObsMutationAllowed(request.requestType);
+      }
       const results = await this.obs.callBatch(batch, { executionType });
       for (const request of requests) {
         this.noteObsSceneMutation(request.requestType, request.requestData);
@@ -1127,9 +1623,24 @@ class DockObsClient {
     if (this._sceneItemListCache && this._sceneItemListCache.sceneName === sceneName && this._sceneItemListCache.expiresAt > now) {
       return this._sceneItemListCache.items;
     }
-    const resp = await this.call("GetSceneItemList", { sceneName }) as {
-      sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
-    };
+    let resp: { sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }> };
+    try {
+      resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
+      };
+    } catch (err) {
+      if (sceneName !== DOCK_PRESENTATION_SCENE || !this.isMissingObsSceneError(err)) {
+        throw err;
+      }
+
+      this._knownScenes.delete(sceneName);
+      this.invalidateSceneItemListCache(sceneName);
+      this.resetPresentationSceneState();
+      await this.ensurePresentationSceneReady();
+      resp = await this.call("GetSceneItemList", { sceneName }) as {
+        sceneItems: Array<{ sourceName: string; sceneItemId: number; sceneItemIndex: number; sceneItemEnabled: boolean }>;
+      };
+    }
     const items = resp.sceneItems ?? [];
     if (items.length > 20) {
       console.warn(`[DockOBS] Scene "${sceneName}" has ${items.length} items — this may cause slow rendering on older hardware.`);
@@ -1269,6 +1780,7 @@ class DockObsClient {
       book: string;
       chapter: number;
       verse: number;
+      lineCount?: number;
       verseEnd?: number;
       verseRange?: string;
       referenceLabel?: string;
@@ -1278,11 +1790,13 @@ class DockObsClient {
       overlayMode?: "fullscreen" | "lower-third";
       backgroundOnly?: boolean;
       compareEnabled?: boolean;
+      compareMode?: "translations" | "passages";
       compareLayout?: "line-by-line" | "side-by-side";
       translationA?: string;
       translationB?: string;
       compare?: {
         enabled?: boolean;
+        mode?: "translations" | "passages";
         layout?: "line-by-line" | "side-by-side";
         columns?: Array<{
           book: string;
@@ -1305,6 +1819,7 @@ class DockObsClient {
       book: data.book,
       chapter: data.chapter,
       verse: data.verse,
+      lineCount: data.lineCount ?? null,
       verseEnd: data.verseEnd ?? null,
       verseRange: data.verseRange ?? "",
       referenceLabel: data.referenceLabel ?? "",
@@ -1314,6 +1829,7 @@ class DockObsClient {
       overlayMode: data.overlayMode ?? "fullscreen",
       backgroundOnly: Boolean(data.backgroundOnly),
       compareEnabled: Boolean(data.compareEnabled),
+      compareMode: data.compareMode ?? data.compare?.mode ?? "translations",
       compareLayout: data.compareLayout ?? "",
       translationA: data.translationA ?? "",
       translationB: data.translationB ?? "",
@@ -1326,39 +1842,14 @@ class DockObsClient {
   private buildBibleFullscreenSetupSignature(
     sceneName: string,
     currentProgramSceneBeforeTarget: string,
-    themeSettings: Record<string, unknown> | null,
+    _themeSettings: Record<string, unknown> | null,
   ): string {
     const def = this._fullscreenSceneDefs["bible"];
-    const canvas = this._canvasCache?.size ?? getDefaultCanvasSize();
-    const nativeBg = this._resolveNativeBackgroundSource(themeSettings, canvas);
     return JSON.stringify({
       sceneName,
       currentProgramSceneBeforeTarget,
       browserSourceName: def.browserSourceName,
       overlayFile: def.overlayFile,
-      nativeBg: nativeBg
-        ? { inputKind: nativeBg.inputKind, inputSettings: nativeBg.inputSettings }
-        : null,
-      // Keep this signature stable across verse changes. Only structural or
-      // theme changes should force the browser source to be reconfigured.
-      themeSettings: themeSettings
-        ? {
-          backgroundType: themeSettings.backgroundType ?? null,
-          backgroundColor: themeSettings.backgroundColor ?? null,
-          backgroundColorEnd: themeSettings.backgroundColorEnd ?? null,
-          backgroundImage: themeSettings.backgroundImage ?? null,
-          backgroundImageFilePath: themeSettings.backgroundImageFilePath ?? null,
-          backgroundVideo: themeSettings.backgroundVideo ?? null,
-          backgroundVideoFilePath: themeSettings.backgroundVideoFilePath ?? null,
-          backgroundPattern: themeSettings.backgroundPattern ?? null,
-          backgroundOpacity: themeSettings.backgroundOpacity ?? null,
-          bgGradientAngle: themeSettings.bgGradientAngle ?? null,
-          fullscreenShadeOpacity: themeSettings.fullscreenShadeOpacity ?? null,
-          compareEnabled: themeSettings.compareEnabled ?? null,
-          compareLayout: themeSettings.compareLayout ?? null,
-          compareTranslationWidth: themeSettings.compareTranslationWidth ?? null,
-        }
-        : null,
     });
   }
 
@@ -1367,6 +1858,7 @@ class DockObsClient {
     currentProgramSceneBeforeTarget: string,
     data: {
       sectionText: string;
+      translationText?: string;
       sectionLabel: string;
       songTitle: string;
       artist?: string;
@@ -1382,6 +1874,7 @@ class DockObsClient {
       sceneName,
       currentProgramSceneBeforeTarget,
       sectionText: data.sectionText,
+      translationText: data.translationText ?? "",
       sectionLabel: data.sectionLabel,
       songTitle: data.songTitle,
       artist: data.artist ?? "",
@@ -1426,7 +1919,8 @@ class DockObsClient {
       this.invalidateSceneItemListCache(sceneName);
       const items = await this.getSceneItemListCached(sceneName);
       const item = items.find((i) => i.sourceName === sourceName);
-      const tickerItem = items.find((i) => i.sourceName === DOCK_TICKER_SOURCE);
+      const tickerItem = items.find((i) => i.sourceName === DOCK_TICKER_SOURCE)
+        ?? items.find((i) => i.sourceName.startsWith("MCE Ticker - "));
       const topIndex = Math.max(0, items.length - 1);
 
       if (!tickerItem) {
@@ -1544,9 +2038,13 @@ class DockObsClient {
   ): Promise<void> {
     const key = `${tabId}:${sourceName}`;
     const now = Date.now();
-    if (this._lastFastOverlayPrepAtBySource[key] && now - this._lastFastOverlayPrepAtBySource[key] < 10_000) {
+    if (this._lastFastOverlayPrepAtBySource[key]) {
       return;
     }
+
+    // The browser document is already live. Re-promoting or refitting the OBS
+    // scene for every verse can briefly redraw the scene and expose the
+    // underlying frame. Prepare the route once, then update only the packet.
     this._lastFastOverlayPrepAtBySource[key] = now;
 
     const target = await this.getPresentationTargetScene(tabId, { activate: false }).catch(() => null);
@@ -1554,7 +2052,6 @@ class DockObsClient {
       await fitSource(target.sceneName).catch(() => { });
       await this.ensureTickerAboveSource(target.sceneName, sourceName).catch(() => { });
     }
-    await this.promotePresentationScene(tabId).catch(() => { });
     await fitSource(PRESENTATION_SCENE_NAME).catch(() => { });
     await this.ensureTickerAboveSource(PRESENTATION_SCENE_NAME, sourceName).catch(() => { });
   }
@@ -1668,145 +2165,153 @@ class DockObsClient {
     }
   }
 
-  private getKnownMceOverlaySourceNames(resources: DockResourceNames = DOCK_RESOURCES): Set<string> {
-    const names = new Set<string>([
-      ...Object.values(SOURCE_NAMES),
-      ...Object.values(BG_SOURCE_NAMES),
-      ...Object.values(FULLSCREEN_SOURCE_NAMES),
-      ...Object.values(FULLSCREEN_BG_SOURCE_NAMES),
-      resources.ltSource,
-      resources.animatedLtSource,
-      resources.worshipSource,
-      resources.tickerSource,
-      resources.mediaVideoSource,
-      resources.mediaImageSource,
-      resources.mediaImageAudioSource,
-      resources.mediaPatternSource,
-      resources.mediaTextSource,
-      resources.fsBgSource,
-      DOCK_LIVE_TOOL_SOURCE,
-      DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE,
-      DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE,
-      "MCE Media - Video",
-      "MCE Media - Image",
-      "MCE Media - Pattern",
-      "MCE Media - Image Audio",
-      "MCE Media - Text",
-    ]);
-
-    for (const def of Object.values(this._fullscreenSceneDefs)) {
-      names.add(def.browserSourceName);
-      names.add(def.bgSourceName);
-      names.add(`${def.bgSourceName} 2`);
-    }
-
-    return names;
-  }
-
-  private isManagedMceOverlaySourceName(
-    sourceName: string,
-    resources: DockResourceNames = DOCK_RESOURCES,
-  ): boolean {
-    const name = sourceName.trim();
-    if (!name) return false;
-    if (name === PRESENTATION_SCENE_NAME || name === PROGRAM_SCENE_SOURCE_NAME) return false;
-    if (this.getKnownMceOverlaySourceNames(resources).has(name)) return true;
-    return (
-      name.startsWith(`${resources.fsTargetBgPrefix} - `) ||
-      name.startsWith("MCE Browser - ") ||
-      name.startsWith("MCE BG - ") ||
-      name.startsWith("MCE Fullscreen ") ||
-      name.startsWith("MCE Lower Third") ||
-      name.startsWith("MCE Animated Lower Thirds") ||
-      name.startsWith("MCE Worship") ||
-      name.startsWith("MCE Notes") ||
-      name.startsWith("MCE Bible") ||
-      name.startsWith("MCE Media ") ||
-      name.startsWith("MCE Media - ") ||
-      name.startsWith("MCE Live Tools") ||
-      name.startsWith("MCE Ticker")
-    );
-  }
-
   private async ensureActiveMceOverlaySource(
     sceneName: string,
     primarySourceName: string,
     keepSources: string[] = [],
-    resources: DockResourceNames = DOCK_RESOURCES,
+    _resources: DockResourceNames = DOCK_RESOURCES,
   ): Promise<void> {
     const primary = primarySourceName.trim();
-    if (!sceneName || !primary) return;
-    const hideOtherMceSources = this.readHideOtherMceSourcesOnSend();
-
-    const keepSet = new Set<string>([
-      ...keepSources.filter(Boolean),
-      primary,
-      resources.tickerSource,
-      DOCK_TICKER_SOURCE,
-      PRESENTATION_SCENE_NAME,
-      PROGRAM_SCENE_SOURCE_NAME,
-    ]);
+    const targetScene = sceneName.trim();
+    if (!targetScene || !primary) return;
+    const projectionSettings = loadProjectionSettings();
+    const isLowerThirdSource = primary === DOCK_LT_SOURCE
+      || primary === SOURCE_NAMES.LOWER_THIRD
+      || primary.startsWith("MCE Lower Third")
+      || primary.startsWith("MCE Animated Lower Third")
+      || primary.startsWith("MCE LT:");
+    // Lower thirds always isolate MCE Presentation. Their separate setting
+    // only controls whether the first MCE content layer is added to the keep
+    // set; regular Bible/Worship/Notes/Media visibility can be opt-out.
+    const shouldIsolateSources = isLowerThirdSource
+      ? true
+      : projectionSettings.presentationSourceVisibility === "active-only";
     const stateSignature = JSON.stringify({
       primary,
-      keep: Array.from(keepSet).sort(),
-      hideOtherMceSources,
+      targetScene,
+      keep: keepSources.filter(Boolean).sort(),
+      shouldIsolateSources,
+      presentationSourceVisibility: projectionSettings.presentationSourceVisibility,
+      lowerThirdSourceVisibility: projectionSettings.lowerThirdSourceVisibility,
     });
 
-    // Always ensure ticker is positioned correctly, even if overlay state
-    // hasn't changed (e.g., another tab reordered scene items).
-    await this.ensureTickerAboveSource(sceneName, primary).catch(() => { });
+    // Do not touch the scene-item order when only the verse/slide payload is
+    // changing. Re-running SetSceneItemIndex for every Bible arrow press can
+    // make OBS move the neighbouring source above the active source. A new
+    // active source still falls through and gets ordered below the ticker.
+    if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
 
-    if (this._activeMceOverlayStateByScene[sceneName] === stateSignature) return;
+    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
 
-    let changedVisibility = false;
+    const targetItems = await this.getSceneItemListCached(targetScene);
+    const presentationItems = targetScene === PRESENTATION_SCENE_NAME
+      ? targetItems
+      : await this.getSceneItemListCached(PRESENTATION_SCENE_NAME);
     const requests: Array<{ requestType: string; requestData: Record<string, unknown> }> = [];
-    const items = await this.getSceneItemListCached(sceneName);
+    const requestedRequestKeys = new Set<string>();
+    const addVisibilityRequest = (
+      requestScene: string,
+      sceneItemId: number,
+      sceneItemEnabled: boolean,
+    ) => {
+      const requestKey = `${requestScene}:${sceneItemId}:${sceneItemEnabled}`;
+      if (requestedRequestKeys.has(requestKey)) return;
+      requestedRequestKeys.add(requestKey);
+      requests.push({
+        requestType: "SetSceneItemEnabled",
+        requestData: {
+          sceneName: requestScene,
+          sceneItemId,
+          sceneItemEnabled,
+        },
+      });
+    };
 
-    for (const item of items) {
+    // The selected active source must be enabled wherever the current push
+    // uses it, including a routed target scene outside MCE Presentation.
+    for (const item of targetItems) {
+      if (item.sourceName === primary && item.sceneItemEnabled === false) {
+        addVisibilityRequest(targetScene, item.sceneItemId, true);
+      }
+    }
+
+    // Visibility is deliberately reconciled in MCE Presentation only. A
+    // routed user scene may contain an MCE source for that route, but it must
+    // not become the place where this global presentation preference hides
+    // unrelated content.
+    const keepSet = getMcePresentationVisibilityKeepSet(
+      primary,
+      presentationItems,
+      isLowerThirdSource ? projectionSettings.lowerThirdSourceVisibility : "active-only",
+    );
+    for (const item of presentationItems) {
+      if (!isMcePresentationManagedSource(item.sourceName)) continue;
+
       const shouldKeep = keepSet.has(item.sourceName);
-      if (shouldKeep && item.sourceName === primary && item.sceneItemEnabled === false) {
-        requests.push({
-          requestType: "SetSceneItemEnabled",
-          requestData: {
-            sceneName,
-            sceneItemId: item.sceneItemId,
-            sceneItemEnabled: true,
-          },
-        });
-        changedVisibility = true;
+      if (shouldIsolateSources && !shouldKeep && item.sceneItemEnabled !== false) {
+        addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, false);
+        this._mcePresentationSourcesDisabledByVisibility.add(item.sourceName);
         continue;
       }
 
-      if (
-        hideOtherMceSources &&
-        !shouldKeep &&
-        this.isManagedMceOverlaySourceName(item.sourceName, resources) &&
-        item.sceneItemEnabled !== false
-      ) {
-        requests.push({
-          requestType: "SetSceneItemEnabled",
-          requestData: {
-            sceneName,
-            sceneItemId: item.sceneItemId,
-            sceneItemEnabled: false,
-          },
-        });
-        changedVisibility = true;
+      // When the operator changes back to "keep visible", restore only the
+      // sources that this preference itself hid; do not override a manual OBS
+      // disable. The active source is always re-enabled for the new push.
+      const shouldRestore = item.sourceName === primary
+        || this._mcePresentationSourcesDisabledByVisibility.has(item.sourceName);
+      if ((!shouldIsolateSources || shouldKeep) && item.sceneItemEnabled === false && shouldRestore) {
+        addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, true);
+        this._mcePresentationSourcesDisabledByVisibility.delete(item.sourceName);
       }
     }
 
     if (requests.length > 0) {
       await this.callBatch(requests, 2).catch(() => { });
     }
-    if (changedVisibility) this.invalidateSceneItemListCache(sceneName);
+    if (requests.length > 0) {
+      this.invalidateSceneItemListCache(targetScene);
+      if (targetScene !== PRESENTATION_SCENE_NAME) {
+        this.invalidateSceneItemListCache(PRESENTATION_SCENE_NAME);
+      }
+    }
 
     // Visibility and scene-source mutations from neighboring dock actions can
     // leave the active source lower in the stack than expected. Re-apply the
     // source ordering after the batch so the live dock source stays at the top
     // of the dock-managed stack, just beneath the ticker when it exists.
-    await this.ensureTickerAboveSource(sceneName, primary).catch(() => { });
+    await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
 
-    this._activeMceOverlayStateByScene[sceneName] = stateSignature;
+    this._activeMceOverlayStateByScene[targetScene] = stateSignature;
+  }
+
+  /** Apply the operator's MCE-only visibility preference to MCE Presentation. */
+  async applyMcePresentationSourceVisibility(primarySourceName: string): Promise<void> {
+    const primary = primarySourceName.trim();
+    if (!isMcePresentationManagedSource(primary)) return;
+    await this.ensureActiveMceOverlaySource(
+      PRESENTATION_SCENE_NAME,
+      primary,
+      [primary],
+      DOCK_RESOURCES,
+    );
+  }
+
+  /**
+   * Focus the shared MCE Presentation family directly from a dock action.
+   *
+   * This is intentionally called by the card/live handlers instead of a
+   * React effect. The OBS request is still asynchronous at the transport
+   * boundary, but the visibility decision starts in the same click event.
+   */
+  async focusMcePresentationModule(module: DockPresentationModule): Promise<void> {
+    if (!this.isConnected) return;
+    await this.runSerializedPresentationMutation(() => (
+      this.applyMcePresentationSourceVisibility(MCE_PRESENTATION_FOCUS_SOURCES[module])
+    ));
+    // The Dock page can refresh while OBS keeps the live MCE Presentation
+    // source. Remember its selected module locally so the next Bible click
+    // updates that source in place instead of briefly disabling it first.
+    writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module);
   }
 
   private invalidateActiveMceOverlayState(sceneName?: string): void {
@@ -1899,10 +2404,10 @@ class DockObsClient {
   }
 
   /**
-   * Fade out every visible scene item in `sceneName` to opacity 0, then disable them.
-   * Used by multiview clear to animate the entire scene out before removal.
+   * Disable every visible scene item in `sceneName` immediately.
+   * Multiview clear should be instant and low-CPU, not a filter animation.
    */
-  async fadeOutAllSceneItems(sceneName: string, durationMs = 300): Promise<void> {
+  async fadeOutAllSceneItems(sceneName: string, _durationMs = 0): Promise<void> {
     let items: Array<{ sceneItemId: number; sourceName: string; sceneItemEnabled: boolean }> = [];
     try {
       const resp = await this.call("GetSceneItemList", { sceneName }) as {
@@ -1913,43 +2418,6 @@ class DockObsClient {
 
     if (items.length === 0) return;
 
-    const steps = 12;
-    const stepDelay = durationMs / steps;
-    const filterName = "__dock_fade_out";
-
-    for (const item of items) {
-      try {
-        await this.call("CreateSourceFilter", {
-          sourceName: item.sourceName,
-          filterName,
-          filterKind: "color_filter_v2",
-          filterSettings: { opacity: 1.0 },
-        });
-      } catch {
-        try {
-          await this.call("SetSourceFilterSettings", {
-            sourceName: item.sourceName,
-            filterName,
-            filterSettings: { opacity: 1.0 },
-          });
-        } catch { /* ignore */ }
-      }
-    }
-
-    for (let step = 1; step <= steps; step++) {
-      const opacity = Math.max(0, 1 - step / steps);
-      await Promise.all(items.map(async (item) => {
-        try {
-          await this.call("SetSourceFilterSettings", {
-            sourceName: item.sourceName,
-            filterName,
-            filterSettings: { opacity },
-          });
-        } catch { /* ignore */ }
-      }));
-      if (step < steps) await this.sleep(stepDelay);
-    }
-
     await Promise.all(items.map(async (item) => {
       try {
         await this.call("SetSceneItemEnabled", {
@@ -1957,9 +2425,6 @@ class DockObsClient {
           sceneItemId: item.sceneItemId,
           sceneItemEnabled: false,
         });
-      } catch { /* ignore */ }
-      try {
-        await this.call("RemoveSourceFilter", { sourceName: item.sourceName, filterName });
       } catch { /* ignore */ }
     }));
   }
@@ -1988,9 +2453,14 @@ class DockObsClient {
   // ── Scene helpers ──
 
   private rememberUserScene(sceneName: string, tabId?: DockPreviewTab): void {
-    if (!sceneName) return;
+    if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
     const key = tabId || "__global__";
-    this._programSceneBeforePush.set(key, sceneName);
+    // A second send can run after MCE Presentation is already Program. Keep
+    // the first real scene so clearing the overlay still returns to the scene
+    // that was live before the whole presentation session started.
+    if (!this._programSceneBeforePush.has(key)) {
+      this._programSceneBeforePush.set(key, sceneName);
+    }
   }
 
   /** Get the Program scene that was active before content was pushed for a tab */
@@ -2014,7 +2484,7 @@ class DockObsClient {
       return false;
     }
 
-    // In "Don't Clone" mode, clean up the embedded MCE Presentation from Program
+    // Overlay-only mode also cleans up any legacy direct Program insertion.
     if (this.readSceneMode() === "no-clone") {
       const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (currentScene) {
@@ -2022,7 +2492,7 @@ class DockObsClient {
       }
     }
 
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     if (currentProgramScene === remembered) {
       this.clearRememberedSceneBeforePush(tabId);
       return false; // already on the right scene
@@ -2052,26 +2522,21 @@ class DockObsClient {
     const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
     if (!studioMode) return false;
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+    await this.ensurePresentationSceneReady().catch(() => { });
 
     const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
-      await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+      if (this.readSceneMode() === "no-clone") {
+        await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+      } else {
+        await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+      }
     }
 
     const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
     // If the preview is already MCE Presentation, nothing to do
     if (currentPreviewScene === DOCK_PRESENTATION_SCENE) return true;
-
-    // Check if we've previously set the preview — if so, the user must have
-    // manually changed it. Respect that and don't override.
-    const existingState = tabId
-      ? this.getStoredPreviewSceneStateForTab(tabId)
-      : this.getStoredPreviewSceneState();
-    if (existingState && existingState.previewSceneName === DOCK_PRESENTATION_SCENE) {
-      return false;
-    }
 
     const originalPreviewScene = currentPreviewScene || currentProgramScene;
     if (originalPreviewScene && originalPreviewScene !== DOCK_PRESENTATION_SCENE) {
@@ -2090,29 +2555,73 @@ class DockObsClient {
   }
 
   /**
-   * Make MCE Presentation visible without replacing the user's Program scene.
+   * Make MCE Presentation visible after an explicit dock send.
    *
    * Studio Mode: put MCE Presentation in Preview only.
-   * Non-Studio Mode: embed MCE Presentation as a scene source inside the
-   * current Program scene so the live scene name does not change.
+   * Non-Studio Mode: switch Program to MCE Presentation after the scene is
+   * populated. Program-background-on places the previous Program scene below
+   * the overlays; no-clone keeps MCE Presentation overlay-only.
    */
   private async promotePresentationScene(tabId?: DockPreviewTab): Promise<void> {
     if (await this.ensurePresentationPreviewActive(tabId).catch(() => false)) {
       return;
     }
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
     }
 
     if (currentProgramScene === DOCK_PRESENTATION_SCENE) return;
 
-    if (currentProgramScene) {
-      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+    if (this.readSceneMode() === "no-clone") {
+      await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+      if (currentProgramScene) {
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
+      }
+    } else if (currentProgramScene) {
+      await this.ensureProgramSceneAsSourceInPresentation(true, {
+        allowWithoutStudioMode: true,
+        programSceneName: currentProgramScene,
+      }).catch(() => { });
     }
+
+    await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
+    this._programSceneCache = null;
+    await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
+  }
+
+  /**
+   * Prepare the shared presentation output for a service-planner cue.
+   *
+   * OBS Studio Mode keeps the cue in Preview until the operator explicitly
+   * takes it live. When Studio Mode is disabled, OBS has no separate Preview
+   * surface, so the presentation is shown in Program immediately.
+   */
+  async preparePlannerOutput(
+    tabId: DockPreviewTab = "bible",
+    goLive = false,
+  ): Promise<{ studioMode: boolean; outputMode: "preview" | "program" }> {
+    const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+
+    if (!studioMode) {
+      await this.promotePresentationScene(tabId);
+      return { studioMode: false, outputMode: "program" };
+    }
+
+    const previewReady = await this.ensurePresentationPreviewActive(tabId);
+    if (!previewReady) {
+      throw new Error("OBS Preview is not available. Enable Studio Mode and try again.");
+    }
+
+    if (goLive) {
+      await this.call("TransitionToProgram");
+      await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
+    }
+
+    return { studioMode: true, outputMode: goLive ? "program" : "preview" };
   }
 
   /**
@@ -2121,31 +2630,53 @@ class DockObsClient {
    * This makes the live broadcast content visible behind overlays in Studio Mode,
    * where MCE Presentation is only placed in Preview.
    *
-   * Non-Studio Mode embeds MCE Presentation into the user's Program scene instead,
-   * so do not also nest Program inside MCE Presentation.
+   * Non-Studio Mode can call this with an explicit pre-switch Program scene
+   * when Program-background-on needs that scene under MCE Presentation.
    * Skips if the program scene IS MCE Presentation (circular reference).
    */
-  private async ensureProgramSceneAsSourceInPresentation(force = false): Promise<void> {
+  private async ensureProgramSceneAsSourceInPresentation(
+    _force = false,
+    options: { allowWithoutStudioMode?: boolean; programSceneName?: string } = {},
+  ): Promise<void> {
     return this.runSerializedPresentationMutation(async () => {
       try {
-        const studioMode = await this.isStudioModeEnabled().catch(() => false);
+        const studioMode = options.allowWithoutStudioMode
+          ? true
+          : await this.isStudioModeEnabled().catch(() => false);
         if (!studioMode) return;
 
-        // In "Don't Clone" mode, MCE Presentation is already inside the Program scene
-        // (reversed direction). Adding Program inside MCE Presentation would create a
-        // circular reference (Program → Presentation → Program), so skip.
-        if (!force && this.readSceneMode() === "no-clone") return;
+        if (this.readSceneMode() === "no-clone") {
+          await this.ensureNoProgramSceneUnderlayInPresentation(_force);
+          return;
+        }
 
-        const programScene = await this.getCurrentProgramSceneName().catch(() => "");
-        if (!programScene || programScene === DOCK_PRESENTATION_SCENE) return;
+        const programScene = (options.programSceneName || await this.getCurrentProgramSceneName(true).catch(() => "")).trim();
+        if (!programScene) {
+          this._presentationProgramUnderlayCache = null;
+          return;
+        }
 
-        const sceneMode = this.readSceneMode();
+        if (programScene === DOCK_PRESENTATION_SCENE) {
+          // MCE Presentation can become Program after a studio transition. In
+          // that state the existing nested scene is still the intended live
+          // background, so do not run the stale-underlay cleanup here.
+          return;
+        }
+
+        if (DockObsClient.isManagedMultiviewSceneName(programScene)) {
+          // Multiview scenes are themselves composed outputs. Do not replace
+          // the presentation's last background scene with a Multiview scene,
+          // and do not empty the presentation while a Multiview scene is live.
+          return;
+        }
+
+        const cached = this._presentationProgramUnderlayCache;
+        if (!_force && cached?.programScene === programScene && cached.expiresAt > Date.now()) {
+          return;
+        }
+
         const programContainsPresentation = await this.sceneContainsSource(programScene, DOCK_PRESENTATION_SCENE);
         if (programContainsPresentation) {
-          if (sceneMode === "no-clone") {
-            return;
-          }
-
           console.warn(
             `[DockOBS] Removing stale "${DOCK_PRESENTATION_SCENE}" source from "${programScene}" before rebuilding presentation.`,
           );
@@ -2154,7 +2685,8 @@ class DockObsClient {
         }
 
         const presentationScene = DOCK_PRESENTATION_SCENE;
-        await this.ensureDedicatedScene(presentationScene);
+        await this.ensurePresentationSceneReady();
+        await this.removeProgramSceneUnderlaysFromPresentation(programScene);
 
         const existing = await this.collapseDuplicateSceneItems(presentationScene, programScene);
 
@@ -2167,12 +2699,14 @@ class DockObsClient {
               sceneItemIndex: 0,
             }).catch(() => { });
           }
-          // Ensure enabled
-          await this.call("SetSceneItemEnabled", {
-            sceneName: presentationScene,
-            sceneItemId: existing.sceneItemId,
-            sceneItemEnabled: true,
-          }).catch(() => { });
+          if (existing.sceneItemEnabled === false) {
+            await this.call("SetSceneItemEnabled", {
+              sceneName: presentationScene,
+              sceneItemId: existing.sceneItemId,
+              sceneItemEnabled: true,
+            }).catch(() => { });
+          }
+          this._presentationProgramUnderlayCache = { programScene, expiresAt: Date.now() + 3000 };
           return;
         }
 
@@ -2182,6 +2716,7 @@ class DockObsClient {
           sourceName: programScene,
           sceneItemEnabled: true,
         }) as { sceneItemId: number };
+        this.rememberProgramBackgroundManagedScene(programScene);
         this.invalidateSceneItemListCache(presentationScene);
 
         await this.sleep(120);
@@ -2197,6 +2732,7 @@ class DockObsClient {
           sceneItemId,
           sceneItemIndex: 0,
         }).catch(() => { });
+        this._presentationProgramUnderlayCache = { programScene, expiresAt: Date.now() + 3000 };
 
       } catch (err) {
         console.warn("[DockOBS] Failed to add program scene as source in presentation:", err);
@@ -2204,59 +2740,66 @@ class DockObsClient {
     });
   }
 
-  /**
-   * Ensure MCE Presentation exists as a Scene Source inside the given scene,
-   * positioned at the top of the z-order (above all other content).
-   * Used in "Don't Clone" mode: MCE Presentation is embedded inside the user's
-   * Program scene so overlays appear directly within it without needing a clone.
-   */
-  private async ensureMCEPresentationInScene(sceneName: string): Promise<void> {
-    return this.runSerializedPresentationMutation(async () => {
-      try {
-        if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+  private async removeProgramSceneUnderlaysFromPresentation(keepSceneName?: string): Promise<void> {
+    try {
+      await this.ensurePresentationSceneReady();
+      const managedScenes = this.getProgramBackgroundManagedScenes();
+      if (managedScenes.size === 0) return;
 
-        await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
-
-        const existing = await this.collapseDuplicateSceneItems(sceneName, DOCK_PRESENTATION_SCENE);
-
-        if (existing) {
-          // Already present — ensure it's on top and enabled
-          this.invalidateSceneItemListCache(sceneName);
-          const refreshedItems = await this.getSceneItemListCached(sceneName);
-          const maxIndex = Math.max(0, refreshedItems.length - 1);
-          if (existing.sceneItemIndex !== maxIndex) {
-            await this.call("SetSceneItemIndex", {
-              sceneName,
-              sceneItemId: existing.sceneItemId,
-              sceneItemIndex: maxIndex,
-            }).catch(() => { });
-          }
-          await this.call("SetSceneItemEnabled", {
-            sceneName,
-            sceneItemId: existing.sceneItemId,
-            sceneItemEnabled: true,
-          }).catch(() => { });
-          return;
+      this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      const items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
+      let removed = false;
+      for (const item of items) {
+        // Do not infer ownership from the fact that a source happens to be a
+        // scene. User-created nested scenes are valid sources and must remain
+        // untouched. Ownership comes only from the native MCE tracking list.
+        if (!managedScenes.has(item.sourceName)) continue;
+        if (keepSceneName && item.sourceName === keepSceneName) continue;
+        try {
+          await this.call("RemoveSceneItem", {
+            sceneName: DOCK_PRESENTATION_SCENE,
+            sceneItemId: item.sceneItemId,
+          });
+          this.forgetProgramBackgroundManagedScene(item.sourceName);
+          removed = true;
+        } catch {
+          // Keep the native ownership record so a later watcher pass can
+          // retry the cleanup after OBS finishes its scene mutation.
         }
-
-        // Add MCE Presentation as a source to the scene
-        const created = await this.call("CreateSceneItem", {
-          sceneName,
-          sourceName: DOCK_PRESENTATION_SCENE,
-          sceneItemEnabled: true,
-        }) as { sceneItemId: number };
-
-        await this.sleep(120);
-        const stableItem = await this.collapseDuplicateSceneItems(sceneName, DOCK_PRESENTATION_SCENE);
-        const sceneItemId = stableItem?.sceneItemId ?? created.sceneItemId;
-
-        // Fit to canvas
-        await this.fitSceneItemToCanvas(sceneName, sceneItemId);
-
-      } catch (err) {
-        console.warn("[DockOBS] Failed to add MCE Presentation as scene source:", err);
       }
-    });
+      if (removed) {
+        this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      }
+      if (removed || !keepSceneName) {
+        this._presentationProgramUnderlayCache = null;
+      }
+    } catch (err) {
+      console.warn("[DockOBS] Failed to remove Program scene underlay from MCE Presentation:", err);
+    }
+  }
+
+  private async ensureNoProgramSceneUnderlayInPresentation(force = false): Promise<void> {
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
+    if (DockObsClient.isManagedMultiviewSceneName(currentProgramScene)) {
+      // A Multiview scene can be the live OBS output while MCE Presentation
+      // remains the presentation layer. Preserve its last added underlay.
+      return;
+    }
+
+    const cached = this._presentationProgramUnderlayCache;
+    if (
+      !force &&
+      cached?.programScene === DockObsClient.NO_CLONE_UNDERLAY_CACHE_KEY &&
+      cached.expiresAt > Date.now()
+    ) {
+      return;
+    }
+
+    await this.removeProgramSceneUnderlaysFromPresentation();
+    this._presentationProgramUnderlayCache = {
+      programScene: DockObsClient.NO_CLONE_UNDERLAY_CACHE_KEY,
+      expiresAt: Date.now() + 3000,
+    };
   }
 
   private async sceneContainsSource(sceneName: string, sourceName: string): Promise<boolean> {
@@ -2284,6 +2827,14 @@ class DockObsClient {
 
     const duplicates = matches.slice(1);
     if (duplicates.length > 0) {
+      // A user may have intentionally added the same scene more than once.
+      // Only collapse duplicates when the source is an MCE-owned source or a
+      // Program underlay that this Dock created and persisted.
+      const canRemoveDuplicates =
+        isMcePresentationManagedSource(sourceName) ||
+        this.getProgramBackgroundManagedScenes().has(sourceName);
+      if (!canRemoveDuplicates) return matches[0] ?? null;
+
       for (const item of duplicates) {
         await this.call("RemoveSceneItem", {
           sceneName,
@@ -2303,12 +2854,13 @@ class DockObsClient {
 
   /**
    * Remove MCE Presentation as a Scene Source from the given scene.
-   * Used in "Don't Clone" mode cleanup — removes the embedded presentation
-   * when overlays are cleared or projection ends.
+   * Used by routing cleanup when an older mode embedded the managed
+   * presentation scene inside the user's Program scene.
    */
   private async removeMCEPresentationFromScene(sceneName: string): Promise<void> {
     try {
       if (!sceneName || sceneName === DOCK_PRESENTATION_SCENE) return;
+      if (DockObsClient.isManagedMultiviewSceneName(sceneName)) return;
 
       const resp = await this.call("GetSceneItemList", { sceneName }) as {
         sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -2360,21 +2912,31 @@ class DockObsClient {
   }
 
   async applyProjectionSettings(options: { allowSceneMutation?: boolean } = {}): Promise<void> {
-    if (!options.allowSceneMutation) return;
+    if (!options.allowSceneMutation || isFreeDockPlan()) return;
 
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE).catch(() => { });
+    await this.ensurePresentationSceneReady().catch(() => { });
+
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
 
     if (this.readSceneMode() === "no-clone") {
-      const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-        await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
       }
+      await this.ensureNoProgramSceneUnderlayInPresentation(true).catch(() => { });
     } else {
-      await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+      const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+      await this.ensureProgramSceneAsSourceInPresentation(true, {
+        allowWithoutStudioMode: !studioMode,
+        programSceneName: currentProgramScene || undefined,
+      }).catch(() => { });
     }
 
+    // Keep watching after the setting is changed so a later OBS Program scene
+    // switch is reconciled even when no MCE card is clicked.
+    this.startProgramBackgroundWatcher();
+    this.scheduleProgramBackgroundReconcile(undefined, true);
+
     const scenes = new Set<string>([DOCK_PRESENTATION_SCENE]);
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
     if (currentProgramScene) scenes.add(currentProgramScene);
     const currentPreviewScene = await this.getCurrentPreviewSceneName().catch(() => "");
     if (currentPreviewScene) scenes.add(currentPreviewScene);
@@ -2470,9 +3032,9 @@ class DockObsClient {
     } catch { /* ignore */ }
   }
 
-  private async getCurrentProgramSceneName(): Promise<string> {
+  private async getCurrentProgramSceneName(forceRefresh = false): Promise<string> {
     const now = Date.now();
-    if (this._programSceneCache && this._programSceneCache.expiresAt > now) {
+    if (!forceRefresh && this._programSceneCache && this._programSceneCache.expiresAt > now) {
       return this._programSceneCache.name;
     }
     const resp = await this.call("GetCurrentProgramScene") as { currentProgramSceneName?: string; sceneName?: string };
@@ -2499,139 +3061,6 @@ class DockObsClient {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Check if the OBS Move Transition plugin is installed.
-   * The plugin provides animated source movements via filters.
-   * Download: https://obsproject.com/forum/resources/move.913/
-   */
-  async isMovePluginInstalled(): Promise<boolean> {
-    try {
-      // GetVendorInfo doesn't work for Move Transition — it doesn't register
-      // as a vendor. Instead, check if its filter kind is available.
-      const resp = await this.call("GetSourceFilterKindList") as { sourceFilterKinds?: string[] };
-      return Array.isArray(resp.sourceFilterKinds) && resp.sourceFilterKinds.includes("move_source_filter");
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Returns platform-specific download info for the Move plugin.
-   */
-  getMovePluginDownloadInfo(): { url: string; filename: string; instructions: string } {
-    return {
-      url: "https://github.com/exeldro/obs-move-transition/releases/latest",
-      filename: "move-transition",
-      instructions: "Download the installer for your OS from the GitHub releases page, then restart MakeChurchEasy.",
-    };
-  }
-
-  /**
-   * Add a Move Source filter to a scene item for animation.
-   * Returns the filter name on success, null on failure.
-   */
-  async addMoveFilter(
-    sceneName: string,
-    sceneItemId: number,
-    filterName: string,
-  ): Promise<string | null> {
-    try {
-      const resp = await this.call("GetSceneItemList", { sceneName }) as {
-        sceneItems?: Array<{ sceneItemId: number; sourceName: string }>;
-      };
-      const item = resp.sceneItems?.find((i) => i.sceneItemId === sceneItemId);
-      if (!item) return null;
-
-      await this.call("CreateSourceFilter", {
-        sourceName: item.sourceName,
-        filterName,
-        filterKind: "move_source_filter",
-        filterSettings: {},
-      });
-      return item.sourceName;
-    } catch (err) {
-      console.warn(`[DockOBS] Failed to add Move filter "${filterName}":`, err);
-      return null;
-    }
-  }
-
-  /**
-   * Configure a Move Source filter with start/end positions.
-   * The filter animates from current (start) to target (end).
-   */
-  async configureMoveFilter(
-    sourceName: string,
-    filterName: string,
-    _startPos: { x: number; y: number },
-    endPos: { x: number; y: number },
-    _startBounds: { width: number; height: number },
-    endBounds: { width: number; height: number },
-    durationMs: number = 300,
-    easing: number = 1, // 1 = quadratic ease-out
-  ): Promise<void> {
-    await this.call("SetSourceFilterSettings", {
-      sourceName,
-      filterName,
-      filterSettings: {
-        source: "",
-        pos: {
-          x: endPos.x,
-          y: endPos.y,
-          x_sign: 1, // absolute
-          y_sign: 1, // absolute
-        },
-        bounds: {
-          x: endBounds.width,
-          y: endBounds.height,
-          x_sign: 1,
-          y_sign: 1,
-        },
-        rot: 0,
-        rot_sign: 1,
-        crop: { left: 0, top: 0, right: 0, bottom: 0 },
-        custom_duration: durationMs,
-        duration: durationMs,
-        easing_match: easing,
-        easing_function_match: easing,
-        start_trigger: 0, // Don't auto-trigger yet
-      },
-    }).catch(() => {
-      // Move filter settings format may vary by version; ignore config errors
-    });
-  }
-
-  /**
-   * Trigger a Move filter animation and wait for it to complete.
-   */
-  async triggerMoveFilter(
-    sourceName: string,
-    filterName: string,
-    durationMs: number = 300,
-  ): Promise<void> {
-    await this.call("SetSourceFilterSettings", {
-      sourceName,
-      filterName,
-      filterSettings: {
-        start_trigger: 5, // ENABLE = trigger
-      },
-    }).catch(() => { });
-
-    await this.sleep(durationMs + 50);
-  }
-
-  /**
-   * Remove a Move filter from a source.
-   */
-  async removeMoveFilter(
-    sourceName: string,
-    filterName: string,
-  ): Promise<void> {
-    await this.call("RemoveSourceFilter", {
-      sourceName,
-      filterName,
-    }).catch(() => { });
   }
 
   /**
@@ -2687,9 +3116,9 @@ class DockObsClient {
     const trimmed = expectedSceneName.trim();
     if (!trimmed) return false;
 
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
       const current = mode === "program"
-        ? await this.getCurrentProgramSceneName().catch(() => "")
+        ? await this.getCurrentProgramSceneName(true).catch(() => "")
         : await this.getCurrentPreviewSceneName().catch(() => "");
       if (current === trimmed) return true;
       await this.sleep(delayMs);
@@ -2776,7 +3205,7 @@ class DockObsClient {
     if (!trimmedSceneName) return false;
 
     if (trimmedSceneName === DOCK_PRESENTATION_SCENE) {
-      await this.ensureDedicatedScene(trimmedSceneName).catch((err) => {
+      await this.ensurePresentationSceneReady().catch((err) => {
         console.warn(`[DockOBS] Failed to ensure preview scene "${trimmedSceneName}":`, err);
       });
     }
@@ -2808,7 +3237,7 @@ class DockObsClient {
           trimmedSceneName === DOCK_PRESENTATION_SCENE &&
           /No source was found|not found|does not exist/i.test(message)
         ) {
-          await this.ensureDedicatedScene(trimmedSceneName).catch(() => { });
+          await this.ensurePresentationSceneReady().catch(() => { });
           await new Promise((resolve) => setTimeout(resolve, 120));
           continue;
         }
@@ -2854,7 +3283,7 @@ class DockObsClient {
    * Returns { sceneName, studioMode }.
    */
   private async getTargetScene(tabId?: DockPreviewTab, options?: { skipClone?: boolean }): Promise<{ sceneName: string; studioMode: boolean }> {
-    const studioMode = await this.isStudioModeEnabled();
+    const studioMode = await this.isStudioModeEnabled(true);
 
     // Bible fullscreen adds its scene directly to the user's scene — no clone needed.
     if (options?.skipClone) {
@@ -2866,21 +3295,12 @@ class DockObsClient {
     if (studioMode) {
       const sceneMode = this.readSceneMode();
 
-      // "no-clone" mode: embed MCE Presentation as a Scene Source inside the
-      // user's Program scene, then return MCE Presentation as the target so
-      // overlays go into it — no separate clone scene is created.
       if (sceneMode === "no-clone") {
         const sceneName = await this.getCurrentProgramSceneName().catch(() => "");
-        if (!sceneName) return { sceneName: "", studioMode: true };
         this.rememberUserScene(sceneName, tabId);
-
-        // Add MCE Presentation on top of the user's scene
-        await this.ensureMCEPresentationInScene(sceneName);
-
-        // Set Program as Preview so the user sees the result before going live
-        await this.setCurrentPreviewScene(sceneName);
-
-        // Return MCE Presentation as target — overlays will be placed there
+        await this.ensureNoProgramSceneUnderlayInPresentation();
+        await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
+        await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
         return { sceneName: DOCK_PRESENTATION_SCENE, studioMode: true };
       }
 
@@ -2897,16 +3317,21 @@ class DockObsClient {
     tabId?: DockPreviewTab,
     options?: { activate?: boolean },
   ): Promise<{ sceneName: string; studioMode: boolean }> {
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
-    const studioMode = await this.isStudioModeEnabled().catch(() => false);
-    const currentProgramScene = await this.getCurrentProgramSceneName().catch(() => "");
+    const studioMode = await this.isStudioModeEnabled(true).catch(() => false);
+    const currentProgramScene = await this.getCurrentProgramSceneName(true).catch(() => "");
     const activate = options?.activate !== false;
+    const sceneMode = this.readSceneMode();
 
     if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
       this.rememberUserScene(currentProgramScene, tabId);
       if (studioMode) {
-        await this.ensureProgramSceneAsSourceInPresentation(true);
+        if (sceneMode === "no-clone") {
+          await this.ensureNoProgramSceneUnderlayInPresentation();
+        } else {
+          await this.ensureProgramSceneAsSourceInPresentation(true);
+        }
       }
     }
 
@@ -2927,7 +3352,18 @@ class DockObsClient {
       await this.setCurrentPreviewScene(DOCK_PRESENTATION_SCENE);
       await this.waitForSceneMatch("preview", DOCK_PRESENTATION_SCENE).catch(() => { });
     } else if (currentProgramScene && currentProgramScene !== DOCK_PRESENTATION_SCENE) {
-      await this.ensureMCEPresentationInScene(currentProgramScene).catch(() => { });
+      if (sceneMode === "no-clone") {
+        await this.ensureNoProgramSceneUnderlayInPresentation().catch(() => { });
+        await this.removeMCEPresentationFromScene(currentProgramScene).catch(() => { });
+      } else {
+        await this.ensureProgramSceneAsSourceInPresentation(true, {
+          allowWithoutStudioMode: true,
+          programSceneName: currentProgramScene,
+        }).catch(() => { });
+      }
+      await this.call("SetCurrentProgramScene", { sceneName: DOCK_PRESENTATION_SCENE });
+      this._programSceneCache = null;
+      await this.waitForSceneMatch("program", DOCK_PRESENTATION_SCENE).catch(() => { });
     }
 
     return { sceneName: DOCK_PRESENTATION_SCENE, studioMode };
@@ -2935,13 +3371,12 @@ class DockObsClient {
   /**
    * Read the user's chosen scene creation mode from projection settings.
    *
-   * - "auto-duplicate" (default): snapshot — each source is individually copied with its
-   *   transform so the clone is an independent copy of the program scene.
-   * - "reference": live — the program scene is embedded as a single Scene Source that
-   *   automatically mirrors any changes to the original.
-   * - "no-clone": the dock works directly on the user's program scene without cloning.
+   * - "auto-duplicate": put the current Program scene underneath
+   *   MCE Presentation as a scene source.
+   * - "no-clone" (default): keep MCE Presentation overlay-only and remove Program
+   *   scene underlays from it.
    */
-  private readSceneMode(): "auto-duplicate" | "reference" | "no-clone" {
+  private readSceneMode(): "auto-duplicate" | "no-clone" {
     return loadProjectionSettings().sceneMode;
   }
 
@@ -2949,13 +3384,9 @@ class DockObsClient {
     return loadProjectionSettings().restoreOriginalScene;
   }
 
-  private readHideOtherMceSourcesOnSend(): boolean {
-    return loadProjectionSettings().hideOtherMceSourcesOnSend;
-  }
-
   async deleteClone(sceneNameOrTab?: string, tabId?: DockPreviewTab): Promise<void> {
-    // In "Don't Clone" mode, there is no clone scene to delete.
-    // Instead, remove the embedded MCE Presentation from the user's Program scene.
+    // Overlay-only mode has no Program underlay to delete; also clean up any
+    // legacy direct Program insertion from the previous routing behavior.
     if (this.readSceneMode() === "no-clone") {
       const programScene = await this.getCurrentProgramSceneName().catch(() => "");
       if (programScene) {
@@ -3132,7 +3563,9 @@ class DockObsClient {
     enable = true,
   ): Promise<number> {
     // Ensure the target scene exists before querying it
-    if (!await this.hasObsScene(sceneName).catch(() => false)) {
+    if (sceneName === DOCK_PRESENTATION_SCENE) {
+      await this.ensurePresentationSceneReady();
+    } else if (!await this.hasObsScene(sceneName).catch(() => false)) {
       try {
         await this.call("CreateScene", { sceneName });
         this._knownScenes.add(sceneName);
@@ -3157,7 +3590,9 @@ class DockObsClient {
       if (sceneName === DOCK_PRESENTATION_SCENE) {
         this.resetPresentationSceneState();
       }
-      await this.ensureDedicatedScene(sceneName);
+      await (sceneName === DOCK_PRESENTATION_SCENE
+        ? this.ensurePresentationSceneReady()
+        : this.ensureDedicatedScene(sceneName));
       this.invalidateSceneItemListCache(sceneName);
       items = await this.getSceneItemListCached(sceneName);
     }
@@ -3184,6 +3619,15 @@ class DockObsClient {
           });
         } catch { /* ignore */ }
       }
+      if (!enable && existing.sceneItemEnabled !== false) {
+        try {
+          await this.call("SetSceneItemEnabled", {
+            sceneName,
+            sceneItemId: existing.sceneItemId,
+            sceneItemEnabled: false,
+          });
+        } catch { /* ignore */ }
+      }
     } else {
       // 2. Check if the input already exists globally (from another scene)
       let inputExists = false;
@@ -3204,7 +3648,7 @@ class DockObsClient {
             const created = await this.call("CreateSceneItem", {
               sceneName,
               sourceName,
-              sceneItemEnabled: true,
+              sceneItemEnabled: enable,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
             createdSceneItem = true;
@@ -3227,7 +3671,7 @@ class DockObsClient {
                 shutdown: false,
                 restart_when_active: false,
               },
-              sceneItemEnabled: true,
+              sceneItemEnabled: enable,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
             createdSceneItem = true;
@@ -3267,7 +3711,7 @@ class DockObsClient {
               const created = await this.call("CreateSceneItem", {
                 sceneName,
                 sourceName,
-                sceneItemEnabled: true,
+                sceneItemEnabled: enable,
               }) as { sceneItemId: number };
               sceneItemId = created.sceneItemId;
               createdSceneItem = true;
@@ -3388,6 +3832,76 @@ class DockObsClient {
     }
 
     return trimmedSceneName;
+  }
+
+  private isMissingObsSceneError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /No source was found|No scene was found|scene.*not found|source.*not found|not found|does not exist|was not found/i.test(message);
+  }
+
+  private shouldRepairPresentationSceneReference(
+    requestType: string,
+    requestData: Record<string, unknown> | undefined,
+    error: unknown,
+  ): boolean {
+    return requestType === "CreateSceneItem" &&
+      requestData?.sourceName === DOCK_PRESENTATION_SCENE &&
+      typeof requestData.sceneName === "string" &&
+      requestData.sceneName !== DOCK_PRESENTATION_SCENE &&
+      this.isMissingObsSceneError(error);
+  }
+
+  private async repairPresentationSceneReference(): Promise<void> {
+    this._knownScenes.delete(DOCK_PRESENTATION_SCENE);
+    this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+
+    const sceneStillExists = await this.hasObsScene(DOCK_PRESENTATION_SCENE).catch(() => false);
+    if (!sceneStillExists) {
+      this._presentationSceneDeletedAt ||= Date.now();
+      this.resetPresentationSceneState();
+    }
+
+    await this.ensurePresentationSceneReady();
+  }
+
+  private async waitForPresentationSceneDeletionToSettle(): Promise<void> {
+    if (!this._presentationSceneDeletedAt) return;
+    const elapsed = Date.now() - this._presentationSceneDeletedAt;
+    const remaining = 1200 - elapsed;
+    if (remaining > 0) {
+      await this.sleep(remaining);
+    }
+  }
+
+  private async ensurePresentationSceneReady(): Promise<string> {
+    if (!this._presentationSceneDeletedAt && await this.hasObsScene(DOCK_PRESENTATION_SCENE).catch(() => false)) {
+      return DOCK_PRESENTATION_SCENE;
+    }
+
+    if (this._presentationSceneRepairPromise) {
+      await this._presentationSceneRepairPromise;
+      return DOCK_PRESENTATION_SCENE;
+    }
+
+    const repairPromise = (async () => {
+      await this.waitForPresentationSceneDeletionToSettle();
+      this._knownScenes.delete(DOCK_PRESENTATION_SCENE);
+      this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
+      await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+      this._knownScenes.add(DOCK_PRESENTATION_SCENE);
+      this._presentationSceneDeletedAt = 0;
+      await this.sleep(160);
+    })();
+
+    const trackedRepairPromise = repairPromise.finally(() => {
+      if (this._presentationSceneRepairPromise === trackedRepairPromise) {
+        this._presentationSceneRepairPromise = null;
+      }
+    });
+    this._presentationSceneRepairPromise = trackedRepairPromise;
+
+    await trackedRepairPromise;
+    return DOCK_PRESENTATION_SCENE;
   }
 
   private getTargetFullscreenBgSourceName(
@@ -3582,6 +4096,10 @@ class DockObsClient {
     return false;
   }
 
+  private static isManagedMultiviewSceneName(name: string): boolean {
+    return /^MV:\s*Multiview\b/i.test(name.trim());
+  }
+
   /**
    * Delete every scene and source that MakeChurchEasy created in OBS.
    *
@@ -3619,7 +4137,6 @@ class DockObsClient {
     }
 
     // Clean up MCE-prefixed sources from remaining user scenes
-    const MCE_SOURCE_PREFIXES = ["MCE ", "MCE_", "OCS "];
     let cleanedSources = 0;
 
     for (const scene of userScenes) {
@@ -3630,8 +4147,7 @@ class DockObsClient {
         const items = resp.sceneItems ?? [];
         for (const item of items) {
           const src = (item.sourceName ?? "").trim();
-          const isMCE = MCE_SOURCE_PREFIXES.some((p) => src.startsWith(p));
-          if (!isMCE) continue;
+          if (!DockObsClient.isMCESource(src)) continue;
           try {
             await this.call("RemoveSceneItem", {
               sceneName: scene,
@@ -3644,6 +4160,102 @@ class DockObsClient {
     }
 
     return { deletedScenes, cleanedSources };
+  }
+
+  /**
+   * Determine whether an OBS source or input was created by MakeChurchEasy.
+   * Matches MCE, MCA, and OCS naming conventions. Leaves user sources intact.
+   */
+  public static isMCESource(name: string): boolean {
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.startsWith("mce ") ||
+      lower.startsWith("mce_") ||
+      lower.startsWith("mca ") ||
+      lower.startsWith("mca_") ||
+      lower.startsWith("ocs ") ||
+      lower.startsWith("ocs_") ||
+      trimmed === "⚡ Quick Merge" ||
+      lower.startsWith("mv: ") ||
+      lower === "mce presentation" ||
+      lower === "mce lower thirds" ||
+      lower === "mce ticker" ||
+      lower === "mce stage display"
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private _isCleaningMceSources = false;
+
+  /**
+   * Remove all MCE/MCA-created sources from OBS for free plan users (after free trial).
+   * Leaves user scenes, MCE scenes, and all non-MCE sources completely intact.
+   */
+  async clearMCESourcesForFreePlan(): Promise<{ cleanedSources: number }> {
+    if (!this.isConnected || this._isCleaningMceSources) {
+      return { cleanedSources: 0 };
+    }
+    this._isCleaningMceSources = true;
+    let cleanedSources = 0;
+
+    try {
+      // 1. Remove all MCE-created inputs globally (removes them from all scenes and audio mixer)
+      const inputListResp = await this.call("GetInputList", undefined, { bypassFreeMutationGate: true }).catch(() => null) as {
+        inputs?: Array<{ inputName: string; inputKind: string }>;
+      } | null;
+
+      const inputs = inputListResp?.inputs ?? [];
+      for (const input of inputs) {
+        if (DockObsClient.isMCESource(input.inputName)) {
+          try {
+            await this.call("RemoveInput", { inputName: input.inputName }, { bypassFreeMutationGate: true });
+            cleanedSources++;
+          } catch (err) {
+            console.warn(`[DockOBS] Failed to remove MCE input "${input.inputName}":`, err);
+          }
+        }
+      }
+
+      // 2. Iterate through all scenes (including MCE Presentation, user scenes, etc.)
+      // and remove any scene items whose sourceName matches MCE source prefixes.
+      // NOTE: Scenes themselves are kept intact, only MCE sources within them are removed.
+      const sceneNames = await this.getObsSceneNames().catch(() => []);
+      for (const scene of sceneNames) {
+        try {
+          const resp = await this.call("GetSceneItemList", { sceneName: scene }, { bypassFreeMutationGate: true }).catch(() => null) as {
+            sceneItems?: Array<{ sceneItemId: number; sourceName?: string }>;
+          } | null;
+          const items = resp?.sceneItems ?? [];
+          for (const item of items) {
+            const src = (item.sourceName ?? "").trim();
+            if (DockObsClient.isMCESource(src)) {
+              try {
+                await this.call(
+                  "RemoveSceneItem",
+                  { sceneName: scene, sceneItemId: item.sceneItemId },
+                  { bypassFreeMutationGate: true }
+                );
+                cleanedSources++;
+              } catch { /* ignore individual item failure */ }
+            }
+          }
+        } catch { /* ignore scene-level failures */ }
+      }
+    } catch (err) {
+      console.warn("[DockOBS] Failed clearing MCE sources for free plan:", err);
+    } finally {
+      this._isCleaningMceSources = false;
+    }
+
+    if (cleanedSources > 0) {
+      console.log(`[DockOBS] Free plan cleanup: removed ${cleanedSources} MCE source(s) from OBS.`);
+    }
+
+    return { cleanedSources };
   }
 
   /**
@@ -3706,10 +4318,13 @@ class DockObsClient {
     liveOverrides: DockLiveThemeOverrides | Record<string, unknown> | null | undefined,
   ): Record<string, unknown> | null {
     if (!themeSettings && !liveOverrides) return null;
-    return {
+    const merged = {
       ...(themeSettings ?? {}),
       ...(liveOverrides ?? {}),
     };
+    const outputFontFamily = loadDockOutputFontFamily();
+    if (outputFontFamily) merged.fontFamily = outputFontFamily;
+    return applyDockOutputFontScale(merged, loadDockOutputFontScale());
   }
 
   private hasVisualBackground(themeSettings: Record<string, unknown> | null | undefined): boolean {
@@ -3983,7 +4598,14 @@ class DockObsClient {
   private async setBrowserSourceUrl(inputName: string, url: string, forceReload = false, css?: string): Promise<void> {
     await browserQueue.enqueue(inputName, async () => {
       const prevUrl = this._lastBrowserSourceUrlBySource[inputName];
-      const urlChanged = prevUrl !== url;
+      let urlChanged = !this.browserSourceUrlMatchesLoadedDocument(prevUrl, url);
+      if (urlChanged && !prevUrl && !forceReload) {
+        const currentUrl = await this.readBrowserSourceUrl(inputName);
+        if (this.browserSourceUrlMatchesLoadedDocument(currentUrl, url)) {
+          this._lastBrowserSourceUrlBySource[inputName] = url;
+          urlChanged = false;
+        }
+      }
 
       if (forceReload || urlChanged) {
         // Blank → wait → set new URL → forces OBS CEF to fully reload
@@ -4001,6 +4623,9 @@ class DockObsClient {
             inputSettings,
           });
           this._lastBrowserSourceUrlBySource[inputName] = url;
+          if (forceReload) {
+            void this.refreshBrowserSourceCache(inputName);
+          }
         } catch { /* ignore */ }
         return;
       }
@@ -4015,6 +4640,97 @@ class DockObsClient {
     }, { label: inputName, force: forceReload });
   }
 
+  private normalizeBrowserSourceDocumentUrl(url: string | undefined): string {
+    const trimmed = String(url || "").trim();
+    if (!trimmed || trimmed === "about:blank") return "";
+    const hashIndex = trimmed.indexOf("#");
+    const documentUrl = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+    try {
+      const parsed = new URL(documentUrl);
+      // The initial Bible bootstrap mode is a startup hint only. The running
+      // page changes mode through the overlay packet, so a later stable URL
+      // without this hint must still be treated as the same document.
+      parsed.searchParams.delete("mode");
+      // This token is intentionally different for each Dock process so OBS
+      // fetches a current HTML document at startup. It is not a document
+      // identity and must not make normal packet updates look like URL swaps.
+      parsed.searchParams.delete("mceReload");
+      return parsed.toString();
+    } catch {
+      return documentUrl;
+    }
+  }
+
+  private browserSourceUrlMatchesLoadedDocument(currentUrl: string | undefined, nextUrl: string): boolean {
+    if (!currentUrl || !nextUrl) return false;
+    if (currentUrl === nextUrl) return true;
+    if (nextUrl.includes("#")) return false;
+    return this.normalizeBrowserSourceDocumentUrl(currentUrl)
+      === this.normalizeBrowserSourceDocumentUrl(nextUrl);
+  }
+
+  private async readBrowserSourceUrl(inputName: string): Promise<string> {
+    try {
+      const resp = await this.call("GetInputSettings", { inputName }) as {
+        inputSettings?: { url?: unknown };
+      };
+      return typeof resp.inputSettings?.url === "string" ? resp.inputSettings.url : "";
+    } catch {
+      return "";
+    }
+  }
+
+  private async hasBrowserSourceUrlChanged(inputName: string, baseUrl: string): Promise<boolean> {
+    const cachedUrl = this._lastBrowserSourceUrlBySource[inputName];
+    if (this.browserSourceUrlMatchesLoadedDocument(cachedUrl, baseUrl)) return false;
+
+    const currentUrl = await this.readBrowserSourceUrl(inputName);
+    if (this.browserSourceUrlMatchesLoadedDocument(currentUrl, baseUrl)) {
+      this._lastBrowserSourceUrlBySource[inputName] = baseUrl;
+      return false;
+    }
+
+    return true;
+  }
+
+  private async hasExistingOverlaySceneItem(sourceName: string): Promise<boolean> {
+    for (const sceneName of await this.getLikelyOverlayScenes()) {
+      const items = await this.getSceneItemListCached(sceneName).catch(() => []);
+      if (items.some((item) => item.sourceName === sourceName)) return true;
+    }
+    return false;
+  }
+
+  private async canReuseStableCssOverlaySource(sourceName: string, baseUrl: string): Promise<boolean> {
+    const urlChanged = await this.hasBrowserSourceUrlChanged(sourceName, baseUrl).catch(() => true);
+    if (urlChanged) return false;
+    return this.hasExistingOverlaySceneItem(sourceName);
+  }
+
+  private async keepLoadedCssOverlaySourceStable(
+    sourceName: string,
+    tabType: "worship" | "notes",
+    packet: Record<string, unknown>,
+    baseUrl: string,
+    themeCss = "",
+  ): Promise<boolean> {
+    const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, baseUrl).catch(() => false);
+    if (!canReuseLoadedSource) return false;
+
+    if (tabType === "worship") {
+      this._worshipInitialized = true;
+    } else {
+      this._notesInitialized = true;
+    }
+
+    const mode = packet.mode;
+    if (mode === "fullscreen" || mode === "lower-third") {
+      this._lastOverlayMode[sourceName] = mode;
+    }
+    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss, tabType);
+    return true;
+  }
+
   private buildCssOverlayDataCss(
     packet: Record<string, unknown>,
     themeCss = "",
@@ -4024,43 +4740,89 @@ class DockObsClient {
       ? ` --display-mode: "${String(packet.mode)}";`
       : "";
     const overlayCss = `:root { --overlay-data: "${encodedPacket}";${displayMode} }`;
-    return themeCss ? `${overlayCss}\n${themeCss}` : overlayCss;
+    const fontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
+    return [overlayCss, themeCss, fontCss].filter(Boolean).join("\n");
   }
 
   private async emitBrowserOverlayPacket(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+    tabType: CssOverlayPacketTab,
     packet: Record<string, unknown>,
     overlayCss: string,
+    targetSource?: string,
   ): Promise<boolean> {
     try {
-      await this.call("CallVendorRequest", {
-        vendorName: "obs-browser",
-        requestType: "emit_event",
-        requestData: {
-          event_name: "mce-overlay-packet",
-          event_data: {
-            tab: tabType,
-            packet,
-            css: overlayCss,
-            version: OVERLAY_HTML_VERSION,
+      await this.call(
+        "CallVendorRequest",
+        {
+          vendorName: "obs-browser",
+          requestType: "emit_event",
+          requestData: {
+            event_name: "mce-overlay-packet",
+            event_data: {
+              // obs-browser dispatches requestData.event_data as the custom
+              // event detail. Keep the payload one level deeper so OBS does
+              // not consume targetSource as a vendor-level routing field before
+              // the overlay can validate it.
+              event_name: "mce-overlay-packet",
+              event_data: {
+                tab: tabType,
+                packet,
+                css: overlayCss,
+                version: OVERLAY_HTML_VERSION,
+                ...(targetSource ? { targetSource } : {}),
+              },
+            },
           },
         },
-      });
+        { priority: "high" },
+      );
       return true;
     } catch {
       return false;
     }
   }
 
+  private async emitCssOverlayPacketWithFallback(
+    inputName: string,
+    tabType: CssOverlayPacketTab,
+    packet: Record<string, unknown>,
+    baseUrl: string,
+    overlayCss: string,
+  ): Promise<void> {
+    // Browser-source CSS changes destroy and recreate OBS's CEF document.
+    // Deliver the complete packet (including theme CSS) through obs-browser's
+    // in-place custom event instead. The CSS write is a recovery path only
+    // when this OBS build cannot emit the event at all.
+    // Scope the packet to this input. obs-browser broadcasts vendor events to
+    // every browser source, so an older dock window must not overwrite this
+    // source while an operator advances a verse or lyric.
+    const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss, inputName);
+    if (!emitted) {
+      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
+      return;
+    }
+
+    // Do not wait for a paint acknowledgement here. OBS acknowledges the
+    // vendor request before CEF paints, so waiting on that acknowledgement
+    // only holds up the verse-selection path. More importantly, an ordinary
+    // verse change must never reload the browser source as a recovery attempt:
+    // that is the black flash operators see between verses. CSS recovery is
+    // reserved for an explicit vendor failure above.
+  }
+
   private async deliverCssOverlayPacket(
     inputName: string,
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+    tabType: CssOverlayPacketTab,
     packet: Record<string, unknown>,
     baseUrl: string,
     themeCss = "",
   ): Promise<void> {
     const overlayCss = this.buildCssOverlayDataCss(packet, themeCss);
-    const urlChanged = this._lastBrowserSourceUrlBySource[inputName] !== baseUrl;
+    const sourceWasNotTracked = !Object.prototype.hasOwnProperty.call(
+      this._lastBrowserSourceUrlBySource,
+      inputName,
+    );
+    const urlChanged = await this.hasBrowserSourceUrlChanged(inputName, baseUrl);
     const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
     const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
     const previousPacket = this._lastCssOverlayPacketBySource[inputName];
@@ -4075,40 +4837,45 @@ class DockObsClient {
       }
     }
 
-    // URL changes still require a browser reload. Mode-only changes must NOT
-    // force-reload — the same mce-bible-overlay document morphs Full ↔ LT.
-    if (urlChanged) {
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+    // URL changes still require a browser reload. On the first packet after
+    // connecting to OBS, put the complete packet into CSS as well: a newly
+    // loaded CEF document may not have attached its obs-browser event listener
+    // yet, so an event-only packet can be lost and leave the source blank.
+    // This is a one-time/bootstrap path; normal verse changes stay in-place.
+    if (urlChanged || sourceWasNotTracked) {
+      const bootstrapMode = packet.mode === "fullscreen" || packet.mode === "lower-third"
+        ? packet.mode
+        : undefined;
+      const stableBootstrapUrl = tabType === "bible" && bootstrapMode
+        ? this.buildCssOverlayHtmlUrlForTab("bible", inputName, bootstrapMode)
+        : baseUrl;
+      const bootstrapUrl = this.addOverlayDocumentSessionToken(stableBootstrapUrl);
+      // A newly loaded Bible page must know its mode before its first paint.
+      // The URL hint prevents a lower-third source from briefly showing the
+      // fullscreen layer while the CSS packet is arriving. It is ignored by
+      // URL comparison after bootstrap, so later verse updates stay in place.
+      await this.setBrowserSourceUrl(inputName, bootstrapUrl, sourceWasNotTracked, overlayCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
     if (modeChanged) {
-      // Live event first so the running page can morph; CSS write keeps OBS state durable.
-      await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      // The running page morphs in place; never recreate it for a mode switch.
+      await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
     if (!themePayloadChanged) {
-      void browserQueue.enqueue(
-        `event:${inputName}`,
-        () => this.emitBrowserOverlayPacket(tabType, packet, overlayCss).then(() => { }),
-        { label: `${inputName} event` },
-      );
-      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+      await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
     }
 
-    const emitted = await this.emitBrowserOverlayPacket(tabType, packet, overlayCss);
-    // Theme changes must also update the browser source CSS in OBS itself.
-    // The live browser event path is fine for high-frequency text/slide updates,
-    // but theme-only updates can otherwise leave OBS rendering stale visuals.
-    if (!emitted || themePayloadChanged) {
-      await this.setBrowserSourceUrl(inputName, baseUrl, false, overlayCss);
-    }
-    this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss);
+    // Theme changes use the same in-place event path, so changing a background
+    // or font cannot blank the browser source between slides.
+    await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
+    this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
   }
 
   private rememberCssOverlayTransport(
@@ -4116,10 +4883,145 @@ class DockObsClient {
     packet: Record<string, unknown>,
     baseUrl: string,
     themeCss = "",
+    tabType?: CssOverlayPacketTab,
   ): void {
     this._lastCssOverlayPacketBySource[inputName] = packet;
     this._lastCssOverlayBaseUrlBySource[inputName] = baseUrl;
     this._lastCssOverlayThemeCssBySource[inputName] = themeCss || "";
+    if (tabType) this._lastCssOverlayTabBySource[inputName] = tabType;
+  }
+
+  private isRefreshableTextBrowserSource(sourceName: string): boolean {
+    const normalized = sourceName.trim();
+    return normalized === this._fullscreenSceneDefs.bible.browserSourceName
+      || normalized === this._fullscreenSceneDefs.worship.browserSourceName
+      || normalized === this._fullscreenSceneDefs.notes.browserSourceName
+      || normalized.startsWith("MCE Bible - ")
+      || normalized.startsWith("MCE Worship - ")
+      || normalized.startsWith("MCE Notes - ");
+  }
+
+  private buildOutputFontRefreshCss(): string {
+    const outputFontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
+    if (outputFontCss) return outputFontCss;
+
+    return [
+      ":root { --mce-output-font-family: var(--font-family); }",
+      "body, body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^=\"fa-\"]):not([class*=\" fa-\"]) { font-family: var(--font-family) !important; }",
+    ].join("\n");
+  }
+
+  /**
+   * Apply a CSS refresh to an existing browser source and ask obs-browser to
+   * restart its CEF document. Clear the one-shot flag afterwards so future
+   * source-setting changes do not unexpectedly restart the page.
+   */
+  private async setBrowserSourceCssAndRestart(
+    inputName: string,
+    css: string,
+    url?: string,
+  ): Promise<void> {
+    const inputSettings: Record<string, unknown> = {
+      css,
+      restart_cef: true,
+    };
+    if (url) inputSettings.url = url;
+
+    await this.call("SetInputSettings", { inputName, inputSettings });
+    await this.sleep(50);
+    await this.call("SetInputSettings", {
+      inputName,
+      inputSettings: { restart_cef: false },
+    }).catch(() => { });
+  }
+
+  /**
+   * Reapply the configured OBS font family to browser sources that are already
+   * live. The active OBS document needs the same packet refresh as a theme
+   * change.
+   */
+  async refreshOutputTypography(): Promise<void> {
+    // A font change can happen while the Dock is still reconnecting to OBS.
+    // The browser preview updates immediately, but returning here would leave
+    // the live source on its previous family with no later retry. Reuse the
+    // normal connection path and wait briefly for the socket to become ready.
+    if (!this.isConnected) {
+      await this.connect().catch(() => { });
+      const deadline = Date.now() + 3000;
+      while (!this.isConnected && Date.now() < deadline) {
+        await this.sleep(50);
+      }
+    }
+    if (!this.isConnected) return;
+
+    const entries = Object.entries(this._lastCssOverlayPacketBySource);
+    await Promise.allSettled(entries.map(async ([sourceName, packet]) => {
+      const baseUrl = this._lastCssOverlayBaseUrlBySource[sourceName];
+      const tabType = this._lastCssOverlayTabBySource[sourceName];
+      if (!baseUrl || !tabType) return;
+
+      const refreshedPacket: Record<string, unknown> = { ...packet, timestamp: Date.now() };
+      const themeCss = this._lastCssOverlayThemeCssBySource[sourceName] || "";
+      const overlayCss = this.buildCssOverlayDataCss(refreshedPacket, themeCss);
+      const emitted = await this.emitBrowserOverlayPacket(tabType, refreshedPacket, overlayCss, sourceName);
+      const mode = refreshedPacket.mode === "fullscreen" || refreshedPacket.mode === "lower-third"
+        ? refreshedPacket.mode
+        : "";
+      const rendered = emitted && mode
+        ? await this.waitForOverlayRenderAck(
+          tabType,
+          refreshedPacket.timestamp as number,
+          mode,
+          350,
+          undefined,
+          sourceName,
+        )
+        : false;
+
+      // OBS can acknowledge obs-browser's vendor request before the CEF page
+      // has actually consumed it. If no render acknowledgement arrives, put
+      // the complete packet into the source CSS and explicitly restart CEF so
+      // the live OBS source cannot remain on its old font.
+      if (!rendered) {
+        await this.setBrowserSourceCssAndRestart(sourceName, overlayCss, baseUrl);
+      }
+      this.rememberCssOverlayTransport(sourceName, refreshedPacket, baseUrl, themeCss, tabType);
+    }));
+
+    // A source that was already live before this Dock session has no cached
+    // packet yet. Update those known MCE Bible/Notes/Worship browser inputs by
+    // appending the same override to their current OBS CSS.
+    let inputNames: string[] = [];
+    try {
+      const response = await this.call("GetInputList") as {
+        inputs?: Array<{ inputName?: string; inputKind?: string }>;
+      };
+      inputNames = (response.inputs ?? [])
+        .filter((input) => input.inputKind === "browser_source")
+        .map((input) => String(input.inputName || "").trim())
+        .filter((inputName) => inputName && this.isRefreshableTextBrowserSource(inputName));
+    } catch {
+      return;
+    }
+
+    const refreshCss = this.buildOutputFontRefreshCss();
+    const trackedSources = new Set(entries.map(([sourceName]) => sourceName));
+    await Promise.allSettled(inputNames
+      .filter((inputName) => !trackedSources.has(inputName))
+      .map(async (inputName) => {
+        const response = await this.call("GetInputSettings", { inputName }) as {
+          inputSettings?: { css?: unknown; url?: unknown };
+        };
+        const currentCss = typeof response.inputSettings?.css === "string"
+          ? response.inputSettings.css
+          : "";
+        const currentUrl = typeof response.inputSettings?.url === "string"
+          ? response.inputSettings.url
+          : "";
+        const nextCss = [currentCss, refreshCss].filter(Boolean).join("\n");
+        if (nextCss === currentCss) return;
+        await this.setBrowserSourceCssAndRestart(inputName, nextCss, currentUrl);
+      }));
   }
 
   private extractOverlayPacketFromCss(css: string | undefined): Record<string, unknown> | null {
@@ -4219,6 +5121,45 @@ class DockObsClient {
         });
       }
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Hide content sources left by the pre-unified Bible output. The current
+   * Bible browser source renders both single and compare layouts, so an old
+   * MCE Bible scene/browser item must not remain visible underneath it.
+   * Background items are intentionally left alone; they do not contain a
+   * second verse and may still be used by an older presentation setup.
+   */
+  private async hideLegacyBibleContentSources(
+    sceneName: string,
+    activeSourceName: string,
+  ): Promise<void> {
+    const target = sceneName.trim();
+    const active = activeSourceName.trim();
+    if (!target || !active) return;
+
+    try {
+      this.invalidateSceneItemListCache(target);
+      const items = await this.getSceneItemListCached(target);
+      const legacyItems = items.filter((item) => {
+        if (item.sourceName === active || item.sceneItemEnabled === false) return false;
+        if (!isMcePresentationManagedSource(item.sourceName)) return false;
+        if (getMcePresentationSourceFamily(item.sourceName) !== "bible") return false;
+        const normalized = item.sourceName.trim().toLocaleLowerCase();
+        return !normalized.includes("background") && !normalized.includes(" bg") && !normalized.endsWith("bg");
+      });
+
+      if (legacyItems.length === 0) return;
+      await Promise.all(legacyItems.map((item) => this.call("SetSceneItemEnabled", {
+        sceneName: target,
+        sceneItemId: item.sceneItemId,
+        sceneItemEnabled: false,
+      }).catch(() => { })));
+      this.invalidateSceneItemListCache(target);
+    } catch {
+      // Legacy cleanup must never prevent the current Bible output from being
+      // pushed when an old scene no longer exists.
+    }
   }
 
   /**
@@ -4492,23 +5433,139 @@ class DockObsClient {
     return getOverlayBaseUrlSync();
   }
 
+  private isRemotePresentationSession(): boolean {
+    return this._hasTransientExplicitConnection && !this._persistConnectionParams;
+  }
+
+  private async toRemoteServedMediaUrl(filePath: string, fileName: string): Promise<string> {
+    const trimmed = String(filePath || "").trim();
+    if (!trimmed) return "";
+
+    if (/^(https?:|data:|blob:)/i.test(trimmed)) {
+      return resolveOverlayAssetUrl(trimmed);
+    }
+
+    if (trimmed.startsWith("/uploads/") || trimmed.startsWith("uploads/")) {
+      return resolveOverlayAssetUrl(trimmed);
+    }
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      let targetHost = "";
+      try {
+        targetHost = new URL(this._url).hostname;
+      } catch {
+        targetHost = "";
+      }
+      return await invoke<string>("prepare_remote_media_url", {
+        filePath: trimmed,
+        fileName,
+        targetHost: targetHost || undefined,
+      });
+    } catch {
+      // Non-Tauri dock contexts cannot copy files. Fall back to the managed
+      // uploads URL convention; this works for media already saved in uploads.
+    }
+
+    const withoutFileProtocol = trimmed.replace(/^file:\/\//i, "");
+    const safeFileName = withoutFileProtocol.split(/[\\/]/).pop()?.trim() || "";
+    if (!safeFileName) return trimmed;
+
+    return `${this.getOverlayBaseUrl()}/uploads/${encodeURIComponent(safeFileName)}`;
+  }
+
+  /**
+   * Make Bible background assets addressable from the OBS browser source.
+   *
+   * The Dock can persist either a managed `/uploads/...` URL, a local file
+   * path, or (in older themes) only the file path. OBS cannot read the latter
+   * directly, so prepare it through the overlay server before building the
+   * packet. Keeping this at the packet boundary also fixes older imported
+   * themes without changing how the picker stores its settings.
+   */
+  private async prepareBrowserThemeAssets(
+    themeSettings: Record<string, unknown> | null | undefined,
+  ): Promise<Record<string, unknown> | null> {
+    if (!themeSettings) return null;
+
+    const prepared = { ...themeSettings };
+    const assets = [
+      { urlKey: "backgroundImage", pathKey: "backgroundImageFilePath" },
+      { urlKey: "backgroundVideo", pathKey: "backgroundVideoFilePath" },
+    ] as const;
+
+    for (const { urlKey, pathKey } of assets) {
+      const value = String(prepared[urlKey] || "").trim();
+      const filePath = String(prepared[pathKey] || "").trim();
+      const candidate = value || filePath;
+      if (!candidate || candidate === "__FROM_CSS__" || candidate === "__FROM_LOCALSTORAGE__") {
+        continue;
+      }
+
+      if (/^(?:data:|blob:)/i.test(candidate)) continue;
+
+      if (/^(?:https?:\/\/|\/?uploads\/)/i.test(candidate)) {
+        prepared[urlKey] = candidate.startsWith("uploads/") ? `/${candidate}` : candidate;
+        continue;
+      }
+
+      const isLocalFileReference = Boolean(filePath) || /^file:\/\//i.test(candidate)
+        || /^[A-Za-z]:[\\/]/.test(candidate)
+        || /^\/(?:Users|home|private|tmp|var)\//i.test(candidate);
+      if (!isLocalFileReference) continue;
+
+      const safeFileName = candidate
+        .replace(/^file:\/\//i, "")
+        .split(/[\\/]/)
+        .pop()
+        ?.trim() || "background-asset";
+      const cacheKey = `${this._url}|${candidate}`;
+      const cachedUrl = this._preparedBrowserThemeAssetUrls[cacheKey];
+      if (cachedUrl) {
+        prepared[urlKey] = cachedUrl;
+        continue;
+      }
+      const servedUrl = await this.toRemoteServedMediaUrl(candidate, safeFileName).catch(() => "");
+      if (servedUrl) {
+        this._preparedBrowserThemeAssetUrls[cacheKey] = servedUrl;
+        prepared[urlKey] = servedUrl;
+      }
+    }
+
+    return prepared;
+  }
+
   private buildOverlayHtmlUrl(
     fileName: string,
     query?: Record<string, string | number | boolean | null | undefined>,
   ): string {
-    const params = new URLSearchParams();
-    params.set("v", OVERLAY_HTML_VERSION);
-    for (const [key, value] of Object.entries(query ?? {})) {
-      if (value === undefined || value === null || value === "") continue;
-      params.set(key, String(value));
-    }
-    return `${this.getOverlayBaseUrl()}/${fileName}?${params.toString()}`;
+    return buildVersionedOverlayUrl(this.getOverlayBaseUrl(), fileName, query);
   }
 
-  private buildCssOverlayHtmlUrlForTab(tab: "bible" | "worship" | "announcements" | "notes"): string {
-    if (tab === "worship") return this.buildOverlayHtmlUrl("mce-worship-overlay.html");
-    if (tab === "notes") return this.buildOverlayHtmlUrl("mce-note.html");
-    return this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab });
+  private buildCssOverlayHtmlUrlForTab(
+    tab: "bible" | "worship" | "announcements" | "notes",
+    sourceName?: string,
+    mode?: "fullscreen" | "lower-third",
+  ): string {
+    const route = sourceName ? { mceSource: sourceName } : {};
+    if (tab === "worship") return this.buildOverlayHtmlUrl("mce-worship-overlay.html", route);
+    if (tab === "notes") return this.buildOverlayHtmlUrl("mce-note.html", route);
+    return this.buildOverlayHtmlUrl("mce-bible-overlay.html", {
+      tab,
+      ...route,
+      ...(mode ? { mode } : {}),
+    });
+  }
+
+  private addOverlayDocumentSessionToken(url: string): string {
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.set("mceReload", this._overlayDocumentSessionToken);
+      return parsed.toString();
+    } catch {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}mceReload=${encodeURIComponent(this._overlayDocumentSessionToken)}`;
+    }
   }
 
   private extractCssCustomPropertyValue(cssText: string | undefined, name: string): string {
@@ -4606,27 +5663,44 @@ class DockObsClient {
     blanked: boolean;
     timestamp: number;
     mode?: string;
-  }, tabType: "bible" | "worship" | "announcements" | "sermon" | "notes" = "bible", css?: string): void {
-    const storageKey = tabType === "notes"
+  }, tabType: "bible" | "worship" | "announcements" | "sermon" | "notes" = "bible", css?: string, targetSource?: string): void {
+    const baseStorageKey = tabType === "notes"
       ? "notes-overlay-data"
       : tabType === "worship" || tabType === "announcements"
         ? "worship-overlay-data"
         : "bible-overlay-data";
-    const channelName = tabType === "notes"
+    const baseChannelName = tabType === "notes"
       ? "obs-church-studio-notes-overlay"
       : tabType === "worship" || tabType === "announcements"
         ? "obs-church-studio-worship-overlay"
         : "obs-church-studio-bible-overlay";
+    const routedSource = targetSource?.trim() || "";
+    const storageKeys = routedSource
+      ? [baseStorageKey, `${baseStorageKey}:${routedSource}`]
+      : [baseStorageKey];
+    const channelNames = routedSource
+      ? [baseChannelName, `${baseChannelName}:${routedSource}`]
+      : [baseChannelName];
     const standalonePacket = this.buildStandaloneOverlayPacket(packet, css);
+    let serializedPacket = "";
     try {
-      localStorage.setItem(storageKey, JSON.stringify(standalonePacket));
-    } catch { /* ignore */ }
+      serializedPacket = JSON.stringify(standalonePacket);
+    } catch {
+      return;
+    }
+    for (const storageKey of storageKeys) {
+      try {
+        localStorage.setItem(storageKey, serializedPacket);
+      } catch { /* ignore */ }
+    }
 
-    try {
-      const bc = new BroadcastChannel(channelName);
-      bc.postMessage(standalonePacket);
-      bc.close();
-    } catch { /* ignore */ }
+    for (const channelName of channelNames) {
+      try {
+        const bc = new BroadcastChannel(channelName);
+        bc.postMessage(standalonePacket);
+        bc.close();
+      } catch { /* ignore */ }
+    }
 
     const bridgeChannel = tabType === "notes"
       ? "notes"
@@ -4637,13 +5711,16 @@ class DockObsClient {
       channel: bridgeChannel,
       type: "overlay-update",
       revision: Date.now(),
-      data: { ...packet, revision: Date.now() },
+      ...(routedSource ? { targetSource: routedSource } : {}),
+      data: { ...standalonePacket, revision: Date.now() },
+      css,
     });
   }
 
   private publishBlankFullscreenOverlayPacket(
     tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
     mode: "fullscreen" | "lower-third" = "lower-third",
+    targetSource?: string,
   ): void {
     this.publishFullscreenOverlayPacket({
       slide: null,
@@ -4652,25 +5729,85 @@ class DockObsClient {
       blanked: true,
       timestamp: Date.now(),
       mode,
-    }, tabType, "");
+    }, tabType, "", targetSource);
   }
 
   private getOverlayRenderAckStorageKey(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes" = "bible",
+    tabType: CssOverlayPacketTab = "bible",
   ): string {
     if (tabType === "notes") return "notes-overlay-render-ack";
+    if (tabType === "lower-third") return "lower-third-overlay-render-ack";
     return tabType === "worship" || tabType === "announcements"
       ? "worship-overlay-render-ack"
       : "bible-overlay-render-ack";
   }
 
-  private async waitForOverlayRenderAck(
-    tabType: "bible" | "worship" | "announcements" | "sermon" | "notes",
+  private async waitForOverlayRenderAckPacket(
+    tabType: CssOverlayPacketTab,
     timestamp: number,
     mode: string,
     timeoutMs = 250,
     transitionId?: number,
-  ): Promise<boolean> {
+    targetSource?: string,
+    requireFontFitReady = false,
+  ): Promise<BridgePacket | null> {
+    const bridgeChannel = tabType === "notes"
+      ? "notes"
+      : tabType === "worship" || tabType === "announcements"
+        ? "worship"
+        : "bible";
+
+    if (targetSource) {
+      overlayBridge.connect();
+      let acknowledged = overlayBridge.getLatestRenderAck(bridgeChannel, targetSource);
+      if (
+        acknowledged &&
+        Number(acknowledged.timestamp) >= timestamp &&
+        acknowledged.mode === mode &&
+        (transitionId === undefined || acknowledged.transitionId === transitionId) &&
+        (!requireFontFitReady || acknowledged.fontFitReady === true)
+      ) {
+        return acknowledged;
+      }
+
+      let resolved = false;
+      const unsubscribe = overlayBridge.subscribe((packet) => {
+        if (
+          packet.type === "overlay-render-ack" &&
+          packet.channel === bridgeChannel &&
+          packet.targetSource === targetSource &&
+          Number(packet.timestamp) >= timestamp &&
+          packet.mode === mode &&
+          (transitionId === undefined || packet.transitionId === transitionId) &&
+          (!requireFontFitReady || packet.fontFitReady === true)
+        ) {
+          resolved = true;
+        }
+      });
+
+      try {
+        const deadline = Date.now() + timeoutMs;
+        while (!resolved && Date.now() <= deadline) {
+          acknowledged = overlayBridge.getLatestRenderAck(bridgeChannel, targetSource);
+          if (
+            acknowledged &&
+            Number(acknowledged.timestamp) >= timestamp &&
+            acknowledged.mode === mode &&
+            (transitionId === undefined || acknowledged.transitionId === transitionId) &&
+            (!requireFontFitReady || acknowledged.fontFitReady === true)
+          ) {
+            return acknowledged;
+          }
+          await this.sleep(16);
+        }
+        return resolved
+          ? overlayBridge.getLatestRenderAck(bridgeChannel, targetSource)
+          : null;
+      } finally {
+        unsubscribe();
+      }
+    }
+
     const storageKey = this.getOverlayRenderAckStorageKey(tabType);
     const deadline = Date.now() + timeoutMs;
 
@@ -4678,14 +5815,15 @@ class DockObsClient {
       try {
         const raw = localStorage.getItem(storageKey);
         if (raw) {
-          const parsed = JSON.parse(raw) as { timestamp?: number; mode?: string; transitionId?: number } | null;
+          const parsed = JSON.parse(raw) as BridgePacket | null;
           if (
             parsed &&
             Number(parsed.timestamp) >= timestamp &&
             parsed.mode === mode &&
-            (transitionId === undefined || parsed.transitionId === transitionId)
+            (transitionId === undefined || parsed.transitionId === transitionId) &&
+            (!requireFontFitReady || parsed.fontFitReady === true)
           ) {
-            return true;
+            return parsed;
           }
         }
       } catch { /* ignore */ }
@@ -4693,7 +5831,57 @@ class DockObsClient {
       await this.sleep(16);
     }
 
-    return false;
+    return null;
+  }
+
+  private async waitForOverlayRenderAck(
+    tabType: CssOverlayPacketTab,
+    timestamp: number,
+    mode: string,
+    timeoutMs = 250,
+    transitionId?: number,
+    targetSource?: string,
+  ): Promise<boolean> {
+    return Boolean(await this.waitForOverlayRenderAckPacket(
+      tabType,
+      timestamp,
+      mode,
+      timeoutMs,
+      transitionId,
+      targetSource,
+    ));
+  }
+
+  private async waitForOverlayRenderMeasurement(
+    tabType: CssOverlayPacketTab,
+    timestamp: number,
+    mode: "fullscreen" | "lower-third",
+    timeoutMs = 500,
+    targetSource?: string,
+  ): Promise<DockOverlayFontFitMeasurement | null> {
+    const ack = await this.waitForOverlayRenderAckPacket(
+      tabType,
+      timestamp,
+      mode,
+      timeoutMs,
+      undefined,
+      targetSource,
+      true,
+    );
+    if (!ack) return null;
+
+    const measurement: DockOverlayFontFitMeasurement = { mode };
+    const fontSize = Number(ack.effectiveFontSize);
+    const refFontSize = Number(ack.effectiveRefFontSize);
+    const translationFontSize = Number(ack.effectiveTranslationFontSize);
+    if (Number.isFinite(fontSize) && fontSize > 0) measurement.fontSize = fontSize;
+    if (Number.isFinite(refFontSize) && refFontSize > 0) measurement.refFontSize = refFontSize;
+    if (Number.isFinite(translationFontSize) && translationFontSize > 0) {
+      measurement.translationFontSize = translationFontSize;
+    }
+    return measurement.fontSize || measurement.refFontSize || measurement.translationFontSize
+      ? measurement
+      : null;
   }
 
   /**
@@ -4715,7 +5903,9 @@ class DockObsClient {
     const payload = {
       themeId: t.id,
       html: t.html,
-      css: stripCompatModeCSS(t.css),
+      css: [stripCompatModeCSS(t.css), buildDockFontFamilyCss(loadDockOutputFontFamily())]
+        .filter(Boolean)
+        .join("\n"),
       values,
       live: true,
       blanked,
@@ -4749,6 +5939,13 @@ class DockObsClient {
   private buildOverlayUrlFromPayload(baseUrl: string, payload: Record<string, unknown>): string {
     const encoded = encodeURIComponent(JSON.stringify(payload));
     return `${baseUrl}#data=${encoded}`;
+  }
+
+  /** Keep routed browser sources independent from the shared MCE output. */
+  private buildSceneRouteOverlayUrl(url: string, sourceName: string): string {
+    const [documentUrl, hash = ""] = url.split("#", 2);
+    const separator = documentUrl.includes("?") ? "&" : "?";
+    return `${documentUrl}${separator}mceSource=${encodeURIComponent(sourceName)}${hash ? `#${hash}` : ""}`;
   }
 
   private escapeHtml(value: string): string {
@@ -4838,6 +6035,7 @@ class DockObsClient {
     const bg = payload.background;
     const bgEnabled = Boolean(bg?.enabled);
     const bgMode = bg?.mode || "text-only";
+    const dockFontCss = buildDockFontFamilyCss(loadDockOutputFontFamily());
 
     const alignValue = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
     let justifyValue = verticalPos === "top" ? "flex-start" : verticalPos === "center" ? "center" : "flex-end";
@@ -5021,6 +6219,7 @@ class DockObsClient {
     }
     ${bgStyle}
     ${animKeyframes}
+    ${dockFontCss}
     .animate-in .copy {
       animation: overlayIn ${animDuration}s ease-out both;
     }
@@ -5063,8 +6262,11 @@ class DockObsClient {
     text: string,
     reference: string,
     verseRange = "",
+    translationText = "",
+    translationOrder: DockTranslationOrder = "original-first",
+    lineCount?: number,
   ): Record<string, unknown> {
-    return {
+    const slide: Record<string, unknown> = {
       id: "dock-bible-slide",
       text,
       reference,
@@ -5072,31 +6274,70 @@ class DockObsClient {
       index: 0,
       total: 1,
     };
+    if (Number.isFinite(lineCount) && Number(lineCount) > 0) {
+      slide.lineCount = Math.round(Number(lineCount));
+    }
+    const cleanTranslation = translationText.trim();
+    if (cleanTranslation) {
+      slide.translationText = cleanTranslation;
+      slide.translationOrder = translationOrder;
+    }
+    return slide;
+  }
+
+  private formatBibleReferenceDisplayText(
+    reference: string,
+    translation: string,
+    displayReferenceLabel?: string,
+  ): string {
+    if (typeof displayReferenceLabel === "string") {
+      return displayReferenceLabel;
+    }
+    const ref = String(reference || "").trim();
+    const version = String(translation || "").trim().toUpperCase();
+    if (ref && version) {
+      const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`\\(${escapedVersion}\\)$`).test(ref)) return ref;
+      return `${ref} (${version})`;
+    }
+    return ref || version;
   }
 
   async primeBibleOverlay(data: PrimeBibleOverlayData): Promise<void> {
+    return this.runSerializedBibleMutation(() => this.primeBibleOverlayInternal(data));
+  }
+
+  private async primeBibleOverlayInternal(data: PrimeBibleOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
-    const verseRange = data.verseRange ?? String(data.verse);
-    const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
+    const verseRange = data.verseRange ?? (data.verse != null ? String(data.verse) : "");
+    const ref = data.referenceLabel ?? (data.book ? `${data.book} ${data.chapter ?? ""}:${verseRange}` : "");
     const backgroundOnly = Boolean(data.backgroundOnly);
     const primaryText = backgroundOnly ? "" : (data.verseText || ref);
-    const referenceText = backgroundOnly ? "" : `${ref} (${data.translation})`;
+    const referenceText = backgroundOnly
+      ? ""
+      : this.formatBibleReferenceDisplayText(ref, data.translation || "", data.displayReferenceLabel);
     const displayVerseRange = backgroundOnly ? "" : verseRange;
     const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+    const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
     const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
     const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
-      ? data.compare.columns.filter(Boolean).slice(0, 2)
+      ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
       : [];
-    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
-      data.bibleThemeSettings,
-      data.liveOverrides,
+    const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
+      this.mergeThemeSettingsWithLiveOverrides(
+        data.bibleThemeSettings,
+        data.liveOverrides,
+      ),
     );
     const themeForOverlay = mode === "lower-third" && effectiveThemeSettings
       ? this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings).overlayTheme
       : effectiveThemeSettings;
     const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
     const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
-    const slide = compareColumns.length === 2
+    const hasCompareSlide = compareMode === "passages"
+      ? compareColumns.length >= 2
+      : compareColumns.length === 2;
+    const slide = hasCompareSlide
       ? {
         id: "dock-bible-compare-slide",
         layout: "compare",
@@ -5107,6 +6348,7 @@ class DockObsClient {
         verseRange: displayVerseRange,
         index: 0,
         total: 1,
+        lineCount: data.lineCount,
         translationA: data.translationA ?? compareColumns[0].translation,
         translationB: data.translationB ?? compareColumns[1].translation,
         columns: compareColumns.map((column) => ({
@@ -5120,7 +6362,7 @@ class DockObsClient {
           verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
         })),
       }
-      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
     const packet: Record<string, unknown> = {
       slide,
       theme: cleanSettings ?? null,
@@ -5130,7 +6372,7 @@ class DockObsClient {
       mode,
     };
     const sourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-    const baseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab("bible", sourceName);
 
     this.publishFullscreenOverlayPacket({
       slide,
@@ -5139,14 +6381,124 @@ class DockObsClient {
       blanked: false,
       timestamp: Number(packet.timestamp) || Date.now(),
       mode,
-    }, "bible", themeCss);
+    }, "bible", themeCss, sourceName);
     await this.deliverCssOverlayPacket(sourceName, "bible", packet, baseUrl, themeCss).catch(() => { });
   }
 
+  /**
+   * A Dock refresh loses only this client's caches; OBS keeps the existing
+   * Bible browser document and its active scene item. Re-adopt that document
+   * and send the next packet straight to it instead of rebuilding the scene.
+   */
+  private async tryPushRestoredLiveBiblePacket(data: DockBiblePushData): Promise<boolean> {
+    if (
+      data.targetScene
+      || readNativeDockSetting<unknown>(MCE_PRESENTATION_ACTIVE_MODULE_KEY) !== "bible"
+    ) {
+      return false;
+    }
+
+    const mode = data.overlayMode ?? "fullscreen";
+    const sourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab("bible", sourceName);
+    const canReuseLiveSource = this._restoredLiveBibleSource
+      || await this.canReuseStableCssOverlaySource(sourceName, baseUrl).catch(() => false);
+    if (!canReuseLiveSource) return false;
+
+    const verseRange = data.verseRange ?? String(data.verse);
+    const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
+    const backgroundOnly = Boolean(data.backgroundOnly);
+    const primaryText = backgroundOnly ? "" : (data.verseText || ref);
+    const referenceText = backgroundOnly
+      ? ""
+      : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
+    const displayVerseRange = backgroundOnly ? "" : verseRange;
+    const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+    const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
+    const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
+    const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
+      ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
+      : [];
+    const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
+      this.mergeThemeSettingsWithLiveOverrides(
+        data.bibleThemeSettings,
+        data.liveOverrides,
+      ),
+    );
+    const themeForOverlay = mode === "lower-third" && effectiveThemeSettings
+      ? this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings).overlayTheme
+      : effectiveThemeSettings;
+    const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
+    const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
+    const hasCompareSlide = compareMode === "passages"
+      ? compareColumns.length >= 2
+      : compareColumns.length === 2;
+    const slide = hasCompareSlide
+      ? {
+        id: "dock-bible-compare-slide",
+        layout: "compare",
+        compareEnabled: true,
+        compareMode,
+        compareLayout,
+        reference: referenceText,
+        text: primaryText,
+        verseRange: displayVerseRange,
+        index: 0,
+        total: 1,
+        lineCount: data.lineCount,
+        translationA: data.translationA ?? compareColumns[0].translation,
+        translationB: data.translationB ?? compareColumns[1].translation,
+        columns: compareColumns.map((column) => ({
+          book: column.book,
+          chapter: column.chapter,
+          verse: column.verse,
+          verseEnd: column.verseEnd ?? column.verse,
+          reference: backgroundOnly ? "" : column.referenceLabel,
+          translation: column.translation,
+          text: backgroundOnly ? "" : column.verseText,
+          verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
+        })),
+      }
+      : this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
+    const packet: Record<string, unknown> = {
+      slide,
+      theme: cleanSettings ?? null,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+      mode,
+    };
+
+    try {
+      this.publishFullscreenOverlayPacket({
+        slide,
+        theme: cleanSettings ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Number(packet.timestamp) || Date.now(),
+        mode,
+      }, "bible", themeCss, sourceName);
+      await this.deliverCssOverlayPacket(sourceName, "bible", packet, baseUrl, themeCss);
+    } catch {
+      this._restoredLiveBibleSource = false;
+      return false;
+    }
+
+    this._restoredLiveBibleSource = true;
+    this._lastBibleMode = mode;
+    this._bibleLtInitialized = true;
+    return true;
+  }
+
   async primeWorshipOverlay(data: PrimeWorshipOverlayData): Promise<void> {
+    return this.runSerializedWorshipMutation(() => this.primeWorshipOverlayInternal(data));
+  }
+
+  private async primeWorshipOverlayInternal(data: PrimeWorshipOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const backgroundOnly = Boolean(data.backgroundOnly);
-    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const sectionText = backgroundOnly ? "" : (data.sectionText ?? "");
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
       data.liveOverrides,
@@ -5156,7 +6508,7 @@ class DockObsClient {
       : effectiveThemeSettings;
     const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
     const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
-    const slide = this.buildBibleSlide(sectionText, "");
+    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
     const packet: Record<string, unknown> = {
       slide,
       theme: cleanSettings ?? null,
@@ -5166,7 +6518,11 @@ class DockObsClient {
       mode,
     };
     const sourceName = getDockResources().worshipSource;
-    const baseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab("worship", sourceName);
+
+    if (await this.keepLoadedCssOverlaySourceStable(sourceName, "worship", packet, baseUrl, themeCss)) {
+      return;
+    }
 
     this.publishFullscreenOverlayPacket({
       slide,
@@ -5175,145 +6531,450 @@ class DockObsClient {
       blanked: false,
       timestamp: Number(packet.timestamp) || Date.now(),
       mode,
-    }, "worship", themeCss);
+    }, "worship", themeCss, sourceName);
     await this.deliverCssOverlayPacket(sourceName, "worship", packet, baseUrl, themeCss).catch(() => { });
   }
 
   // ── Clear all overlays ──
 
   /**
-   * Hide ALL overlay sources in the current scene except the ones
-   * that are about to be shown. This ensures that switching from e.g.
-   * a fullscreen Bible overlay to a lower-third speaker overlay doesn't
-   * leave the previous overlay visible.
-   *
-   * In the new single-scene architecture, all sources live inside
-   * "MCE Presentation", so we hide individual sources rather than
-   * hiding separate scene sources.
-   *
-   * @param keepSources  Source/scene names that should NOT be hidden
-   *                     (because they're about to be updated).
-   *                     Pass `null` or `[]` to hide ALL.
-   * @param sceneName    The target scene name — hides sources there.
+   * Keep the legacy clear hook available for callers while leaving other
+   * MCE sources untouched. Visibility is controlled explicitly by the
+   * operator rather than by a hidden send-time preference.
    */
   async clearAllOverlays(
     keepSources: string | string[] | null = null,
     sceneName?: string,
     resources: DockResourceNames = DOCK_RESOURCES,
   ): Promise<void> {
-    if (!this.readHideOtherMceSourcesOnSend()) {
-      this.invalidateActiveMceOverlayState(sceneName);
-      if (resources.mediaScene && resources.mediaScene !== sceneName) {
-        this.invalidateActiveMceOverlayState(resources.mediaScene);
-      }
-      return;
+    void keepSources;
+    this.invalidateActiveMceOverlayState(sceneName);
+    if (resources.mediaScene && resources.mediaScene !== sceneName) {
+      this.invalidateActiveMceOverlayState(resources.mediaScene);
     }
-
-    const keepSet = new Set(
-      keepSources == null ? [] : Array.isArray(keepSources) ? keepSources : [keepSources],
-    );
-    keepSet.add(resources.tickerSource);
-    keepSet.add(DOCK_TICKER_SOURCE);
-
-    const ALL_OVERLAY_SOURCES = [
-      resources.ltSource,
-      resources.animatedLtSource,
-      resources.worshipSource,
-      resources.tickerSource,
-      resources.fsBgSource,
-      // Media sources within MCE Presentation
-      resources.mediaVideoSource,
-      resources.mediaImageSource,
-      resources.mediaImageAudioSource,
-      resources.mediaPatternSource,
-      resources.mediaTextSource,
-    ];
-
-    const toHide = ALL_OVERLAY_SOURCES.filter((s) => !keepSet.has(s));
-
-    // Collect scene names to clear: the provided scene + fallback to target scene
-    const scenes = new Set<string>();
-    if (sceneName) scenes.add(sceneName);
-    // Shared dock media and presentation overlays live inside MCE Presentation,
-    // so clearing only the user target scene leaves those sources visible.
-    if (resources.mediaScene) scenes.add(resources.mediaScene);
-
-    try {
-      if (!sceneName) {
-        const target = await this.getCurrentProgramSceneName().catch(() => "");
-        if (target) scenes.add(target);
-      }
-    } catch { /* ignore */ }
-
-    for (const scene of scenes) {
-      const hidePromises = toHide.map((src) => this.hideOverlaySource(scene, src));
-      if (!keepSet.has(resources.fsBgSource)) {
-        hidePromises.push(this.hideOverlaySource(scene, this.getTargetFullscreenBgSourceName(scene, resources)));
-      }
-      await Promise.all(hidePromises);
-      this.invalidateActiveMceOverlayState(scene);
-    }
-
   }
 
   // ── High-level actions ──
 
   /**
+   * Returns a browser-source name that belongs to one selected OBS scene.
+   * These sources deliberately do not reuse MCE Presentation's inputs: OBS
+   * inputs are global, so sharing one would make the two outputs mirror each
+   * other even when the operator asked for independent content.
+   */
+  getSceneRouteSourceName(module: DockSceneRouteModule, sceneName: string, variant = "content"): string {
+    const labelByModule: Record<DockSceneRouteModule, string> = {
+      bible: "Bible",
+      worship: "Worship",
+      notes: "Notes",
+      ticker: "Ticker",
+      "lower-third": "Lower Third",
+      countdown: "Countdown",
+      time: "Time",
+    };
+    const safeScene = sceneName
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9 _.-]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 56) || "Scene";
+    const suffix = variant === "content" ? "" : ` ${variant}`;
+    return `MCE ${labelByModule[module]}${suffix} - ${safeScene}`;
+  }
+
+  private async pushSceneRouteBrowserSource(options: {
+    module: DockSceneRouteModule;
+    sceneName: string;
+    url: string;
+    css?: string;
+    overlayPacket?: Record<string, unknown>;
+    overlayTab?: CssOverlayPacketTab;
+    sourceName?: string;
+    width?: number;
+    height?: number;
+  }): Promise<string> {
+    const sceneName = options.sceneName.trim();
+    if (!sceneName) throw new Error("Select an OBS scene before sending.");
+    const sourceName = options.sourceName ?? this.getSceneRouteSourceName(options.module, sceneName);
+    const stableSourceUrl = this.buildSceneRouteOverlayUrl(options.url, sourceName);
+    const sourceWasNotTracked = !Object.prototype.hasOwnProperty.call(
+      this._lastBrowserSourceUrlBySource,
+      sourceName,
+    );
+    const routePrepKey = `scene-route:${sceneName}:${sourceName}`;
+    const routeWasRecentlyPrepared = (
+      Date.now() - (this._lastFastOverlayPrepAtBySource[routePrepKey] || 0)
+    ) < SCENE_ROUTE_SOURCE_RECONCILE_MS;
+    const hasStableLoadedDocument = this.browserSourceUrlMatchesLoadedDocument(
+      this._lastBrowserSourceUrlBySource[sourceName],
+      stableSourceUrl,
+    );
+    const needsRouteReconciliation = !routeWasRecentlyPrepared || !hasStableLoadedDocument;
+    if (needsRouteReconciliation) {
+      await this.ensureOverlaySource(sceneName, sourceName, options.width, options.height, true);
+    }
+
+    // A routed overlay is a long-lived browser document. Rewriting its source
+    // settings for every verse makes OBS restart CEF repeatedly, which turns
+    // a normal slide change into a growing multi-minute queue. Only bootstrap
+    // or repair the document when the URL itself actually changed; every
+    // routine update below is an in-place obs-browser packet.
+    const documentNeedsLoad = needsRouteReconciliation
+      ? await this.hasBrowserSourceUrlChanged(sourceName, stableSourceUrl)
+      : false;
+    const sourceUrl = documentNeedsLoad && sourceWasNotTracked && options.overlayPacket
+      ? this.addOverlayDocumentSessionToken(stableSourceUrl)
+      : stableSourceUrl;
+    // OBS CEF can retain a document with a changed URL hash but never apply
+    // the encoded packet, leaving a blank routed source. Keep one small,
+    // stable document and target the live packet to this source instead.
+    if (documentNeedsLoad) {
+      await this.setBrowserSourceUrl(
+        sourceName,
+        sourceUrl,
+        false,
+        options.css,
+      );
+    }
+    if (options.overlayPacket && options.overlayTab) {
+      // A source created or reloaded by SetInputSettings needs time to attach
+      // the event listener before OBS dispatches the first packet. Established
+      // route sources do not reload, so they must not pay this delay per verse.
+      if (documentNeedsLoad) await this.sleep(220);
+      const emitted = await this.emitBrowserOverlayPacket(
+        options.overlayTab,
+        options.overlayPacket,
+        options.css ?? "",
+        sourceName,
+      );
+      if (!emitted) {
+          // Compatibility fallback for OBS builds without obs-browser events.
+          await this.setBrowserSourceUrl(
+            sourceName,
+            this.buildOverlayUrlFromPayload(stableSourceUrl, options.overlayPacket),
+            false,
+            options.css,
+        );
+      }
+    }
+    // Source creation can affect stacking; a text-only update cannot. Avoid
+    // re-reading and reordering the scene for every Bible verse.
+    if (needsRouteReconciliation) {
+      await this.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
+      this._lastFastOverlayPrepAtBySource[routePrepKey] = Date.now();
+    }
+    return sourceName;
+  }
+
+  async clearSceneRouteSource(module: DockSceneRouteModule, sceneName: string, variant = "content"): Promise<void> {
+    const target = sceneName.trim();
+    if (!target) return;
+    const sourceName = this.getSceneRouteSourceName(module, target, variant);
+    await this.hideOverlaySource(target, sourceName).catch(() => { });
+  }
+
+  async pushBibleToScene(
+    data: DockBiblePushData,
+    sceneName: string,
+    sourceModule: "bible" | "lower-third" = "bible",
+  ): Promise<void> {
+    return this.runSerializedBibleMutation(() => this.pushBibleToSceneInternal(data, sceneName, sourceModule));
+  }
+
+  /**
+   * Push routed Bible targets as one latest-only mutation. Calling
+   * pushBibleToScene once per target in parallel would make the shared
+   * latest-update queue discard every target except the last one.
+   */
+  async pushBibleToScenes(
+    targets: Array<{
+      data: DockBiblePushData;
+      sceneName: string;
+      sourceModule?: "bible" | "lower-third";
+    }>,
+  ): Promise<void> {
+    if (targets.length === 0) return;
+    return this.runSerializedBibleMutation(async () => {
+      for (const target of targets) {
+        await this.pushBibleToSceneInternal(target.data, target.sceneName, target.sourceModule ?? "bible");
+      }
+    });
+  }
+
+  private async pushBibleToSceneInternal(
+    data: DockBiblePushData,
+    sceneName: string,
+    sourceModule: "bible" | "lower-third" = "bible",
+  ): Promise<void> {
+      const mode = data.overlayMode ?? "fullscreen";
+      const verseRange = data.verseRange ?? String(data.verse);
+      const reference = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
+      const backgroundOnly = Boolean(data.backgroundOnly);
+      const text = backgroundOnly ? "" : (data.verseText || reference);
+      const referenceText = backgroundOnly
+        ? ""
+        : this.formatBibleReferenceDisplayText(reference, data.translation, data.displayReferenceLabel);
+      const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+      const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
+      const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
+      const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
+        ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
+        : [];
+
+      const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
+        this.mergeThemeSettingsWithLiveOverrides(
+          data.bibleThemeSettings,
+          data.liveOverrides,
+        ),
+      );
+      const themeForOverlay = mode === "lower-third" && effectiveThemeSettings
+        ? this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings).overlayTheme
+        : effectiveThemeSettings;
+      const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
+      const hasCompareSlide = compareMode === "passages"
+        ? compareColumns.length >= 2
+        : compareColumns.length === 2;
+      const slide = hasCompareSlide
+        ? {
+          id: "dock-bible-route-compare-slide",
+          layout: "compare",
+          compareEnabled: true,
+          compareMode,
+          compareLayout,
+          reference: referenceText,
+          text,
+          verseRange: backgroundOnly ? "" : verseRange,
+          index: 0,
+          total: 1,
+          lineCount: data.lineCount,
+          translationA: data.translationA ?? compareColumns[0].translation,
+          translationB: data.translationB ?? compareColumns[1].translation,
+          columns: compareColumns.map((column) => ({
+            book: column.book,
+            chapter: column.chapter,
+            verse: column.verse,
+            verseEnd: column.verseEnd ?? column.verse,
+            reference: backgroundOnly ? "" : column.referenceLabel,
+            translation: column.translation,
+            text: backgroundOnly ? "" : column.verseText,
+            verseRange: backgroundOnly ? "" : (column.verseRange ?? ""),
+          })),
+        }
+        : this.buildBibleSlide(text, referenceText, backgroundOnly ? "" : verseRange, "", "original-first", data.lineCount);
+      const packet: Record<string, unknown> = {
+        slide,
+        theme: cleanSettings ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Date.now(),
+        mode,
+      };
+      const baseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+      const sourceName = this.getSceneRouteSourceName(sourceModule, sceneName);
+      if (compareEnabled) {
+        await this.hideLegacyBibleContentSources(sceneName, sourceName);
+      }
+      await this.pushSceneRouteBrowserSource({
+        module: sourceModule,
+        sceneName,
+        sourceName,
+        url: baseUrl,
+        overlayPacket: packet,
+        overlayTab: "bible",
+        css: this.buildCssOverlayDataCss(packet, css),
+      });
+      this.rememberCssOverlayTransport(sourceName, packet, baseUrl, css, "bible");
+  }
+
+  private async pushTabContentToScene(
+    data: DockTabContentPushData,
+    tab: "worship" | "notes",
+    sceneName: string,
+  ): Promise<void> {
+    const mode = data.overlayMode ?? "lower-third";
+    const sourceName = this.getSceneRouteSourceName(tab, sceneName);
+    if (mode === "lower-third" && data.ltTheme) {
+      await this.pushSceneRouteBrowserSource({
+        module: tab,
+        sceneName,
+        sourceName,
+        url: this.buildLowerThirdUrl(data.values ?? {}, false, false, data.ltTheme),
+      });
+      return;
+    }
+
+    const backgroundOnly = Boolean(data.backgroundOnly);
+    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
+      data.bibleThemeSettings,
+      data.liveOverrides,
+    );
+    const themeForOverlay = mode === "lower-third" && effectiveThemeSettings
+      ? this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings).overlayTheme
+      : effectiveThemeSettings;
+    const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
+    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
+    const sectionLabel = backgroundOnly || tab === "worship" ? "" : cleanWorshipObsLabel(data.sectionLabel);
+    const packet: Record<string, unknown> = {
+      slide: sectionText ? {
+        id: `dock-${tab}-route-slide`,
+        reference: "",
+        text: sectionText,
+        translationText,
+        translationOrder: data.translationOrder ?? "original-first",
+        verseRange: sectionLabel,
+        index: 0,
+        total: 1,
+      } : null,
+      theme: cleanSettings ?? null,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+      mode,
+    };
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab(tab);
+    const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
+    await this.pushSceneRouteBrowserSource({
+      module: tab,
+      sceneName,
+      sourceName,
+      url: baseUrl,
+      overlayPacket: packet,
+      overlayTab: tab,
+      css: this.buildCssOverlayDataCss(packet, themeCss),
+    });
+    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss, tab);
+  }
+
+  async pushWorshipToScene(data: DockTabContentPushData, sceneName: string): Promise<void> {
+    return this.runSerializedWorshipMutation(() => this.pushTabContentToScene(data, "worship", sceneName));
+  }
+
+  async pushNotesToScene(data: DockTabContentPushData, sceneName: string): Promise<void> {
+    return this.runSerializedNotesMutation(() => this.pushTabContentToScene(data, "notes", sceneName));
+  }
+
+  async pushLowerThirdOverlayUrlToScene(
+    url: string,
+    sceneName: string,
+    options?: { sourceWidth?: number; sourceHeight?: number },
+  ): Promise<void> {
+    const parsed = this.parseOverlayPayloadUrl(url);
+    if (parsed) {
+      const sourceName = this.getSceneRouteSourceName("lower-third", sceneName);
+      await this.pushSceneRouteBrowserSource({
+        module: "lower-third",
+        sceneName,
+        sourceName,
+        // OBS can keep a browser document alive while ignoring a new URL
+        // hash. Sending the full payload to the named source makes every
+        // explicit Send apply its size, values, and theme reliably.
+        url: parsed.baseUrl,
+        overlayPacket: parsed.payload,
+        overlayTab: "lower-third",
+        css: this.buildCssOverlayDataCss(parsed.payload, ""),
+        width: options?.sourceWidth,
+        height: options?.sourceHeight,
+      });
+      this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, "", "lower-third");
+      return;
+    }
+
+    await this.pushSceneRouteBrowserSource({
+      module: "lower-third",
+      sceneName,
+      url,
+      width: options?.sourceWidth,
+      height: options?.sourceHeight,
+    });
+  }
+
+  /**
+   * Send a live Timer or Clock document to one OBS scene. Once the browser
+   * source is prepared, control changes are delivered as a small in-place
+   * packet instead of restarting the OBS browser page.
+   */
+  async pushTimeOverlayToScene(
+    data: DockTimeOverlayData,
+    sceneName: string,
+    options?: { sourceName?: string },
+  ): Promise<string> {
+    const targetScene = sceneName.trim();
+    const sourceName = options?.sourceName ?? this.getSceneRouteSourceName("time", targetScene);
+    const canvas = await this.getCanvasSize();
+    const packet: DockTimeOverlayData = {
+      ...data,
+      timestamp: Date.now(),
+    };
+    const source = await this.pushSceneRouteBrowserSource({
+      module: "time",
+      sceneName: targetScene,
+      sourceName,
+      url: this.buildOverlayHtmlUrl("time-overlay.html"),
+      overlayPacket: { ...packet },
+      overlayTab: "time",
+      width: canvas.width,
+      height: canvas.height,
+    });
+
+    if (targetScene === PRESENTATION_SCENE_NAME) {
+      await this.applyMcePresentationSourceVisibility(source).catch(() => { });
+    }
+
+    return source;
+  }
+
+  async clearTimeOverlayFromScene(
+    sceneName: string,
+    options?: { sourceName?: string },
+  ): Promise<void> {
+    const targetScene = sceneName.trim();
+    if (!targetScene) return;
+    const sourceName = options?.sourceName ?? this.getSceneRouteSourceName("time", targetScene);
+    await this.hideOverlaySource(targetScene, sourceName).catch(() => { });
+  }
+
+  /**
    * Push a Bible verse to OBS as an overlay.
    *
-   * **Fullscreen mode**: Creates a dedicated " MCE Bible" scene with
-   * a background source + browser overlay. That scene is added as a
-   * nested scene-source into the user's target scene.
+   * **Fullscreen mode**: Uses the unified `MCE Browser - Bible` source in
+   * `MCE Presentation`; the browser source renders both text and background.
    *
    * **Lower-third mode**: Uses a direct browser source in the user's
    * scene (lightweight, no background needed).
    */
-  async pushBible(data: {
-    book: string;
-    chapter: number;
-    verse: number;
-    verseEnd?: number;
-    verseRange?: string;
-    referenceLabel?: string;
-    translation: string;
-    theme?: string;
-    verseText?: string;
-    overlayMode?: "fullscreen" | "lower-third";
-    ltTheme?: DockLTThemeRef;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
-    compareEnabled?: boolean;
-    compareLayout?: "line-by-line" | "side-by-side";
-    translationA?: string;
-    translationB?: string;
-    compare?: {
-      enabled?: boolean;
-      layout?: "line-by-line" | "side-by-side";
-      columns?: Array<{
-        book: string;
-        chapter: number;
-        verse: number;
-        verseEnd?: number;
-        verseRange?: string;
-        referenceLabel: string;
-        translation: string;
-        verseText: string;
-      }>;
-    } | null;
-    /** Override target scene instead of using getTargetScene() */
-    targetScene?: string;
-  }): Promise<void> {
+  async pushBible(
+    data: DockBiblePushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     return this.runSerializedBibleMutation(async () => {
       const resources = getDockResources();
+      if (await this.tryPushRestoredLiveBiblePacket(data)) return;
+      // OBS scene-change events keep this cache current. Re-querying OBS for
+      // every verse adds one more request to the live projection path and can
+      // compound into a long backlog on a busy service computer.
       const currentProgramSceneBeforeTarget = await this.getCurrentProgramSceneName().catch(() => "");
+      // Fullscreen Bible goes straight into MCE Presentation and therefore
+      // does not pass through getPresentationTargetScene(), which is where
+      // the other Bible route normally records the pre-push Program scene.
+      // Record it here so clearBible() can honor the sidebar restore option.
+      this.rememberUserScene(currentProgramSceneBeforeTarget, "bible");
       let sceneName: string;
-      let studioMode = false;
 
       // Detect mode switch early. Keep the active sources in place and only
       // reset cached signatures so fullscreen/lower-third can morph without
       // the hard preview/program tear-down that causes visible flashing.
       const mode = data.overlayMode ?? "fullscreen";
+      const bibleBrowserSourceName = this._fullscreenSceneDefs["bible"]?.browserSourceName;
+      const isFirstLowerThirdBootstrap = mode === "lower-third"
+        && (
+          !this._bibleLtInitialized
+          || !bibleBrowserSourceName
+          || !Object.prototype.hasOwnProperty.call(
+            this._lastBrowserSourceUrlBySource,
+            bibleBrowserSourceName,
+          )
+        );
       const prevMode = this._lastBibleMode;
       const modeChanged = prevMode !== "" && prevMode !== mode;
       if (modeChanged) {
@@ -5330,8 +6991,7 @@ class DockObsClient {
             .then(() => { this._knownScenes.add(sceneName); })
             .catch(() => { });
         }
-        studioMode = await this.isStudioModeEnabled().catch(() => false);
-        if (studioMode) {
+        if (await this.isStudioModeEnabled().catch(() => false)) {
           // Save original preview scene before switching to custom target
           const originalPreview = await this.getCurrentPreviewSceneName().catch(() => "");
           await this.setCurrentPreviewScene(sceneName);
@@ -5343,21 +7003,27 @@ class DockObsClient {
         if (data.overlayMode === "fullscreen") {
           // Fullscreen mode: always use MCE Presentation scene
           sceneName = PRESENTATION_SCENE_NAME;
-          studioMode = await this.isStudioModeEnabled().catch(() => false);
         } else {
           const target = await this.getPresentationTargetScene("bible", { activate: false });
           sceneName = target.sceneName;
-          studioMode = target.studioMode;
         }
       }
 
       if (!sceneName) throw new Error("Could not determine the current OBS scene.");
 
-      // Initial setup/recovery must wire the live program scene behind MCE
-      // overlays. Repeated fullscreen verse clicks skip this expensive scene
-      // graph check and only update the browser source content.
-      if (mode !== "fullscreen" || !this._lastBibleFullscreenSetupSignature) {
-        await this.ensureProgramSceneAsSourceInPresentation();
+      // Wire the current Program scene behind the overlay only when the
+      // route actually changes. Repeating this scene mutation for every verse
+      // can make OBS redraw the whole presentation frame.
+      if (!data.targetScene && currentProgramSceneBeforeTarget !== this._lastBibleProgramScenePrepared) {
+        // Fullscreen Bible writes directly to MCE Presentation, so it does
+        // not pass through getPresentationTargetScene(), which already opts
+        // into the non-Studio-Mode path. Pass the captured Program scene
+        // explicitly so the Program background setting is honored there too.
+        await this.ensureProgramSceneAsSourceInPresentation(true, {
+          allowWithoutStudioMode: mode === "fullscreen",
+          programSceneName: mode === "fullscreen" ? currentProgramSceneBeforeTarget : undefined,
+        });
+        this._lastBibleProgramScenePrepared = currentProgramSceneBeforeTarget;
       }
 
       const pushSignature = this.buildBiblePushSignature(sceneName, currentProgramSceneBeforeTarget, data);
@@ -5372,7 +7038,7 @@ class DockObsClient {
             // was deleted in OBS so the cached theme/background state can be
             // applied to a fresh browser source.
             this._lastFullscreenSceneItemSignature[browserSrc] = "";
-            await this._ensureFullscreenScene("bible").catch(() => { });
+            await this._ensureFullscreenScene("bible", mode).catch(() => { });
             await this.ensureActiveMceOverlaySource(
               PRESENTATION_SCENE_NAME,
               browserSrc,
@@ -5380,7 +7046,7 @@ class DockObsClient {
               resources,
             ).catch(() => { });
           } else {
-            await this._ensureFullscreenScene("bible").catch(() => { });
+            await this._ensureFullscreenScene("bible", mode).catch(() => { });
             await this.ensureOverlaySource(sourceScene, browserSrc, undefined, undefined, true).catch(() => { });
           }
           const cachedPacket = this._lastCssOverlayPacketBySource[browserSrc];
@@ -5404,16 +7070,32 @@ class DockObsClient {
       const ref = data.referenceLabel ?? `${data.book} ${data.chapter}:${verseRange}`;
       const backgroundOnly = Boolean(data.backgroundOnly);
       const primaryText = backgroundOnly ? "" : (data.verseText || ref);
-      const referenceText = backgroundOnly ? "" : `${ref} (${data.translation})`;
+      const referenceText = backgroundOnly
+        ? ""
+        : this.formatBibleReferenceDisplayText(ref, data.translation, data.displayReferenceLabel);
       const displayVerseRange = backgroundOnly ? "" : verseRange;
       const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
+      const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
       const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
       const compareColumns = compareEnabled && Array.isArray(data.compare?.columns)
-        ? data.compare.columns.filter(Boolean).slice(0, 2)
+        ? data.compare.columns.filter(Boolean).slice(0, compareMode === "passages" ? 3 : 2)
         : [];
-      const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
-        data.bibleThemeSettings,
-        data.liveOverrides,
+
+      // Compare passages replaces the single-verse output. Clean up any
+      // legacy Bible content layers in both the shared presentation and the
+      // current target scene before the unified browser source is updated.
+      if (compareEnabled) {
+        const activeBibleSourceName = bibleBrowserSourceName ?? FULLSCREEN_SOURCE_NAMES.BIBLE;
+        const cleanupScenes = [...new Set([PRESENTATION_SCENE_NAME, sceneName])];
+        await Promise.all(cleanupScenes.map((target) => (
+          this.hideLegacyBibleContentSources(target, activeBibleSourceName)
+        )));
+      }
+      const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
+        this.mergeThemeSettingsWithLiveOverrides(
+          data.bibleThemeSettings,
+          data.liveOverrides,
+        ),
       );
 
       // Update mode tracking (modeChanged was computed earlier for clone cleanup)
@@ -5434,14 +7116,18 @@ class DockObsClient {
 
         // Ensure the unified source exists.
         if (modeChanged || !this._bibleLtInitialized || !this._lastFullscreenSceneItemSignature[browserSourceName]) {
-          await this._ensureFullscreenScene("bible");
+          await this._ensureFullscreenScene("bible", mode, false);
         }
 
-        const compareSlide = compareColumns.length === 2
+        const hasCompareSlide = compareMode === "passages"
+          ? compareColumns.length >= 2
+          : compareColumns.length === 2;
+        const compareSlide = hasCompareSlide
           ? {
             id: "dock-bible-compare-slide",
             layout: "compare",
             compareEnabled: true,
+            compareMode,
             compareLayout,
             reference: referenceText,
             text: primaryText,
@@ -5471,7 +7157,10 @@ class DockObsClient {
           if (!this._bibleLtInitialized) {
             // Clean up any leftover fullscreen scene sources from previous mode
             const fsDef = this._fullscreenSceneDefs["bible"];
-            if (fsDef) {
+            // MCE Presentation may be the intentional last-added layer inside
+            // a managed Multiview scene. It is not a temporary Bible source
+            // and must remain in that scene while lower-third initializes.
+            if (fsDef && !DockObsClient.isManagedMultiviewSceneName(userScene)) {
               try {
                 const resp = await this.call("GetSceneItemList", { sceneName: userScene }) as {
                   sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -5488,7 +7177,7 @@ class DockObsClient {
             await this.hideFullscreenBg(sceneName, resources);
 
             // Add the unified source to user's scene (source stays in MCE Presentation too — CSS handles mode)
-            await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
+            await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, false);
             await this.ensureTickerAboveSource(sceneName, browserSourceName);
 
             // Render background via the browser overlay CSS instead of a
@@ -5505,15 +7194,11 @@ class DockObsClient {
           }
 
           // Recover if the shared browser source was manually deleted in OBS.
-          await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
-
-          // Only keep the browser source active — background is applied
-          // automatically via injected CSS/overlay data.
-          await this.ensureActiveMceOverlaySource(sceneName, browserSourceName, [browserSourceName], resources);
+          await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, false);
 
           const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
           themeCss = css;
-          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
           cssOverlayPacket = {
             slide,
             theme: ltClean ?? null,
@@ -5523,18 +7208,18 @@ class DockObsClient {
             mode,
           };
           // Unified bible overlay document — packet.mode drives lower-third layout + morph.
-          cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
           // ── Lower-third without theme settings: same unified fullscreen HTML ──
           // Add to user's scene (source stays in MCE Presentation too — CSS handles mode)
           if (!this._bibleLtInitialized) {
-            await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
+            await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, false);
             await this.ensureTickerAboveSource(sceneName, browserSourceName);
           }
 
-          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange);
+          const slide = compareSlide ?? this.buildBibleSlide(primaryText, referenceText, displayVerseRange, "", "original-first", data.lineCount);
           cssOverlayPacket = {
             slide,
             theme: null,
@@ -5543,7 +7228,7 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
 
@@ -5558,14 +7243,7 @@ class DockObsClient {
           }
 
           // Recover if the shared browser source was manually deleted in OBS.
-          await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, true);
-
-          await this.ensureActiveMceOverlaySource(
-            sceneName,
-            browserSourceName,
-            [browserSourceName],
-            resources,
-          );
+          await this.ensureOverlaySource(sceneName, browserSourceName, undefined, undefined, false);
         }
         // Keep the source visible during mode morph — do not hard-cut enable/disable.
         // Full canvas fit so HTML can animate LT bar within the full frame (no OBS crop cut).
@@ -5576,17 +7254,22 @@ class DockObsClient {
 
         const { cleanSettings, css } = this.stripThemeDataUris(effectiveThemeSettings);
         themeCss = css;
-        const slide = compareColumns.length === 2
+        const hasCompareSlide = compareMode === "passages"
+          ? compareColumns.length >= 2
+          : compareColumns.length === 2;
+        const slide = hasCompareSlide
           ? {
             id: "dock-bible-compare-slide",
             layout: "compare",
             compareEnabled: true,
+            compareMode,
             compareLayout,
             reference: referenceText,
             text: primaryText,
             verseRange: displayVerseRange,
             index: 0,
             total: 1,
+            lineCount: data.lineCount,
             translationA: data.translationA ?? compareColumns[0].translation,
             translationB: data.translationB ?? compareColumns[1].translation,
             columns: compareColumns.map((column) => ({
@@ -5607,6 +7290,7 @@ class DockObsClient {
             verseRange: displayVerseRange,
             index: 0,
             total: 1,
+            lineCount: data.lineCount,
           };
         const packet = {
           slide,
@@ -5617,10 +7301,17 @@ class DockObsClient {
           mode,
         };
         cssOverlayPacket = packet;
-        cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+        cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(
+          "bible",
+          this._fullscreenSceneDefs["bible"].browserSourceName,
+        );
         useCssOverlayTransport = true;
 
         const def = this._fullscreenSceneDefs["bible"];
+        // Bible backgrounds are rendered inside the unified browser source.
+        // Remove any legacy native BG slots left by older builds so OBS keeps
+        // one Bible source instead of showing MCE BG - Bible / Bible 2.
+        await this._removeFullscreenBgSources("bible").catch(() => { });
         const fullscreenSetupSignature = this.buildBibleFullscreenSetupSignature(
           sceneName,
           currentProgramSceneBeforeTarget,
@@ -5629,8 +7320,6 @@ class DockObsClient {
         if (!modeChanged && this._lastBibleFullscreenSetupSignature === fullscreenSetupSignature) {
           const packetWithMode: Record<string, unknown> = { ...packet, mode };
           try {
-            await this.bringBibleOverlayForward(mode).catch(() => { });
-
             this.publishFullscreenOverlayPacket({
               slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
               theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -5638,7 +7327,7 @@ class DockObsClient {
               blanked: Boolean(packetWithMode.blanked),
               timestamp: Number(packetWithMode.timestamp) || Date.now(),
               mode: String(mode || "fullscreen"),
-            }, "bible", themeCss);
+            }, "bible", themeCss, def.browserSourceName);
 
             await this.deliverCssOverlayPacket(
               def.browserSourceName,
@@ -5647,7 +7336,16 @@ class DockObsClient {
               cssOverlayBaseUrl,
               themeCss,
             ).catch(() => { });
-            await this.fitSceneSourceToCanvas(PRESENTATION_SCENE_NAME, def.browserSourceName).catch(() => { });
+
+            await this.ensureActiveMceOverlaySource(
+              data.targetScene ? sceneName : PRESENTATION_SCENE_NAME,
+              def.browserSourceName,
+              [def.browserSourceName],
+              resources,
+            ).catch(() => { });
+            if (!data.targetScene) {
+              await this.focusMcePresentationModule("bible").catch(() => { });
+            }
 
             this._bibleLtInitialized = true;
             this._lastBiblePushSignature = pushSignature;
@@ -5657,11 +7355,29 @@ class DockObsClient {
           }
         }
 
+        // A Dock refresh clears this client's in-memory setup signature, but
+        // OBS still has the live Bible source. Preserve that already-selected
+        // source while replacing its packet so a refresh does not produce an
+        // unnecessary off/on flash. A missing or newly-added source still
+        // follows the normal hidden-until-ready path.
+        const preserveExistingLiveBibleSource = !data.targetScene
+          && readNativeDockSetting<unknown>(MCE_PRESENTATION_ACTIVE_MODULE_KEY) === "bible"
+          && Boolean(await this.getSceneItemBySource(
+            PRESENTATION_SCENE_NAME,
+            def.browserSourceName,
+          ));
+
         // Ensure the unified source exists in MCE Presentation. Follow with
         // ensureOverlaySource so a stale cache or manual OBS source deletion
         // cannot leave the presentation scene with no visible Bible item.
-        await this._ensureFullscreenScene("bible");
-        await this.ensureOverlaySource(sceneName, def.browserSourceName, undefined, undefined, true);
+        await this._ensureFullscreenScene("bible", mode, preserveExistingLiveBibleSource);
+        await this.ensureOverlaySource(
+          sceneName,
+          def.browserSourceName,
+          undefined,
+          undefined,
+          preserveExistingLiveBibleSource,
+        );
 
         // Hide the source in user's scene if it was there from lower-third mode
         const userScene = currentProgramSceneBeforeTarget || sceneName;
@@ -5669,12 +7385,10 @@ class DockObsClient {
           await this.hideOverlaySource(userScene, def.browserSourceName);
         }
 
-        // Apply background through the browser overlay CSS so the browser
-        // and background act as a single OBS source. Hide any existing
-        // fullscreen BG sources to avoid duplicate layers.
-        await this._hideFullscreenBgSource("bible");
+        // The browser overlay renders both the Bible text and its background
+        // as one OBS source. A newly-created source stays hidden until its
+        // packet arrives; a restored live source remains visible in place.
         this.invalidateActiveMceOverlayState(sceneName);
-        await this.ensureActiveMceOverlaySource(sceneName, def.browserSourceName, [def.browserSourceName], resources);
         await this.fitSceneSourceToOverlayMode(sceneName, def.browserSourceName, mode).catch(() => { });
 
         // Keep the URL stable, but still push the latest packet through OBS CSS.
@@ -5709,13 +7423,6 @@ class DockObsClient {
           if (browserItem) {
             sceneItemId = browserItem.sceneItemId;
             alreadyImported = true;
-            if (!modeChanged) {
-              await this.call("SetSceneItemEnabled", {
-                sceneName,
-                sceneItemId: browserItem.sceneItemId,
-                sceneItemEnabled: true,
-              });
-            }
           }
         } catch { /* ignore */ }
 
@@ -5727,13 +7434,13 @@ class DockObsClient {
         if (sceneItemId === null) {
           try {
             const canvas = await this.getCanvasSize();
-            const overlayUrl = this.buildOverlayHtmlUrl(def.overlayFile, { tab: "bible" });
+            const overlayUrl = this.buildCssOverlayHtmlUrlForTab("bible", def.browserSourceName);
             const created = await this.call("CreateInput", {
               sceneName,
               inputName: def.browserSourceName,
               inputKind: "browser_source",
               inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, css: "", bgcolor: "#00000000", shutdown: false, restart_when_active: false },
-              sceneItemEnabled: true,
+              sceneItemEnabled: false,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
             await this.fitSceneItemToCanvas(sceneName, sceneItemId);
@@ -5741,7 +7448,7 @@ class DockObsClient {
             const msg = err instanceof Error ? err.message : String(err);
             if (msg.includes("already exists") || msg.includes("600")) {
               try {
-                const added = await this.call("CreateSceneItem", { sceneName, sourceName: def.browserSourceName, sceneItemEnabled: true }) as { sceneItemId: number };
+                const added = await this.call("CreateSceneItem", { sceneName, sourceName: def.browserSourceName, sceneItemEnabled: false }) as { sceneItemId: number };
                 sceneItemId = added.sceneItemId;
                 await this.fitSceneItemToCanvas(sceneName, sceneItemId);
               } catch { /* ignore */ }
@@ -5762,8 +7469,6 @@ class DockObsClient {
             });
           } catch { /* best effort */ }
         }
-
-        await this.promotePresentationScene("bible").catch(() => { });
 
         const animation = effectiveThemeSettings?.animation as string | undefined;
         if (!modeChanged && animation && animation !== "none" && sceneItemId && !alreadyImported) {
@@ -5787,8 +7492,6 @@ class DockObsClient {
           mode,
         };
 
-        await this.bringBibleOverlayForward(mode).catch(() => { });
-
         this.publishFullscreenOverlayPacket({
           slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
           theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -5796,7 +7499,7 @@ class DockObsClient {
           blanked: Boolean(packetWithMode.blanked),
           timestamp: Number(packetWithMode.timestamp) || Date.now(),
           mode: String(mode || "fullscreen"),
-        }, "bible", themeCss);
+        }, "bible", themeCss, this._fullscreenSceneDefs["bible"].browserSourceName);
 
         const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
         const nextBaseUrl = cssOverlayBaseUrl || url;
@@ -5807,26 +7510,46 @@ class DockObsClient {
           nextBaseUrl,
           themeCss,
         );
-        if (mode === "fullscreen") {
-          await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, this._fullscreenSceneDefs["bible"].browserSourceName, mode).catch(() => { });
-          if (modeChanged) {
-            await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, this._fullscreenSceneDefs["bible"].browserSourceName, true).catch(() => { });
-          }
+
+        await this.ensureActiveMceOverlaySource(
+          mode === "fullscreen" && !data.targetScene ? PRESENTATION_SCENE_NAME : sceneName,
+          browserSourceName,
+          [browserSourceName],
+          resources,
+        ).catch(() => { });
+        if (!data.targetScene) {
+          await this.focusMcePresentationModule("bible").catch(() => { });
         }
       }
 
-      if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
-        await this.waitForOverlayRenderAck(
-          "bible",
-          Number(cssOverlayPacket.timestamp) || Date.now(),
-          mode,
-        ).catch(() => { });
+      let renderMeasurement: DockOverlayFontFitMeasurement | null = null;
+      if (useCssOverlayTransport && cssOverlayPacket) {
+        const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
+        const renderTimeout = mode === "lower-third"
+          ? (isFirstLowerThirdBootstrap ? 3500 : 500)
+          : (options?.timeoutMs ?? 700);
+        if (options?.waitForFit) {
+          renderMeasurement = await this.waitForOverlayRenderMeasurement(
+            "bible",
+            Number(cssOverlayPacket.timestamp) || Date.now(),
+            mode,
+            renderTimeout,
+            browserSourceName,
+          ).catch(() => null);
+        } else if (mode === "lower-third") {
+          await this.waitForOverlayRenderAck(
+            "bible",
+            Number(cssOverlayPacket.timestamp) || Date.now(),
+            mode,
+            renderTimeout,
+            undefined,
+            browserSourceName,
+          ).catch(() => { });
+        }
       }
 
       if (mode === "lower-third") {
-        await this.promotePresentationScene("bible").catch(() => { });
         const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-        await this.fitSceneSourceToOverlayMode(PRESENTATION_SCENE_NAME, browserSourceName, mode).catch(() => { });
         if (modeChanged) {
           await this.setSceneSourceEnabledByName(PRESENTATION_SCENE_NAME, browserSourceName, true).catch(() => { });
           if (sceneName !== PRESENTATION_SCENE_NAME) {
@@ -5836,6 +7559,7 @@ class DockObsClient {
       }
 
       this._lastBiblePushSignature = pushSignature;
+      return renderMeasurement;
     });
   }
 
@@ -5843,13 +7567,14 @@ class DockObsClient {
    * Fast path for lower-third overlay updates (theme changes, verse text changes).
    *
    * Keeps the browser source document stable and sends only overlay packets
-   * for verse text changes. It still re-routes OBS to the presentation scene
-   * so search-result "Show" clicks become visible even after the user changed
-   * Program scenes.
+   * for verse text changes. It does not change OBS Preview or Program scene
+   * routing; the existing presentation layer remains where the user left it.
    *
    * Falls back to the full `pushBible` if the source hasn't been bootstrapped yet.
    */
-  async pushBibleOverlayFast(data: {
+  async pushBibleOverlayFast(
+    data: {
+    lineCount?: number;
     verseText?: string;
     referenceText?: string;
     verseRange?: string;
@@ -5857,11 +7582,14 @@ class DockObsClient {
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     themeId?: string;
     compareEnabled?: boolean;
+    compareMode?: "translations" | "passages";
     compareLayout?: string;
     compare?: Record<string, unknown> | null;
     translationA?: string;
     translationB?: string;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
     const mode = "lower-third";
 
@@ -5878,8 +7606,10 @@ class DockObsClient {
         book: "",
         chapter: 1,
         verse: 1,
+        lineCount: data.lineCount,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        displayReferenceLabel: refText,
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
@@ -5887,6 +7617,7 @@ class DockObsClient {
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: data.compareEnabled,
+        compareMode: data.compareMode,
         compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
         compare: data.compare ? {
           ...data.compare,
@@ -5898,7 +7629,7 @@ class DockObsClient {
         } : undefined,
         translationA: data.translationA,
         translationB: data.translationB,
-      });
+      }, options);
     }
 
     // Compare mode needs the full pushBible path — the fast path only handles single verses
@@ -5909,8 +7640,10 @@ class DockObsClient {
         book: "",
         chapter: 1,
         verse: 1,
+        lineCount: data.lineCount,
         verseRange,
         referenceLabel: refText.replace(/\s\(.*\)$/, ""),
+        displayReferenceLabel: refText,
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
@@ -5918,6 +7651,7 @@ class DockObsClient {
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: true,
+        compareMode: data.compareMode,
         compareLayout: (data.compareLayout || "line-by-line") as "line-by-line" | "side-by-side",
         compare: {
           ...data.compare,
@@ -5929,12 +7663,14 @@ class DockObsClient {
         },
         translationA: data.translationA,
         translationB: data.translationB,
-      });
+      }, options);
     }
 
-    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
-      data.bibleThemeSettings,
-      data.liveOverrides,
+    const effectiveThemeSettings = await this.prepareBrowserThemeAssets(
+      this.mergeThemeSettingsWithLiveOverrides(
+        data.bibleThemeSettings,
+        data.liveOverrides,
+      ),
     );
 
     if (!effectiveThemeSettings) {
@@ -5942,81 +7678,109 @@ class DockObsClient {
       return;
     }
 
-    this._lastBibleMode = mode;
-    const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
-    const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
-    const themeCss = css;
+    // Keep fast lower-third updates on the same latest-update queue as the
+    // full Bible path. Otherwise a quick verse/background change can finish
+    // out of order and briefly repaint an older pattern after the new one.
+    return this.runSerializedBibleMutation(async () => {
+      this._lastBibleMode = mode;
+      const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+      const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
+      const themeCss = css;
 
-    const slide = this.buildBibleSlide(
-      data.verseText ?? "",
-      data.referenceText ?? "",
-      data.verseRange ?? "",
-    );
+      const slide = this.buildBibleSlide(
+        data.verseText ?? "",
+        data.referenceText ?? "",
+        data.verseRange ?? "",
+        "",
+        "original-first",
+        data.lineCount,
+      );
 
-    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+      const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
 
-    const cssOverlayPacket: Record<string, unknown> = {
-      slide,
-      theme: ltClean ?? null,
-      live: true,
-      blanked: false,
-      timestamp: Date.now(),
-      mode,
-    };
+      const cssOverlayPacket: Record<string, unknown> = {
+        slide,
+        theme: ltClean ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Date.now(),
+        mode,
+      };
 
-    const packetWithMode: Record<string, unknown> = { ...cssOverlayPacket, mode };
+      const packetWithMode: Record<string, unknown> = { ...cssOverlayPacket, mode };
 
-    await this.bringBibleOverlayForward(mode).catch(() => { });
+      this.publishFullscreenOverlayPacket({
+        slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
+        theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
+        live: true,
+        blanked: false,
+        timestamp: Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+      }, "bible", themeCss, browserSourceName);
 
-    this.publishFullscreenOverlayPacket({
-      slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
-      theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
-      live: true,
-      blanked: false,
-      timestamp: Number(packetWithMode.timestamp) || Date.now(),
-      mode,
-    }, "bible", themeCss);
+      await this.deliverCssOverlayPacket(
+        browserSourceName,
+        "bible",
+        packetWithMode,
+        cssOverlayBaseUrl,
+        themeCss,
+      );
 
-    await this.deliverCssOverlayPacket(
-      browserSourceName,
-      "bible",
-      packetWithMode,
-      cssOverlayBaseUrl,
-      themeCss,
-    );
-    await this.prepareFastOverlayScene(
-      "bible",
-      browserSourceName,
-      (sceneName) => this.fitSceneSourceToCanvas(sceneName, browserSourceName),
-    );
+      // Deliver the new verse while the source is still hidden, then switch
+      // the active MCE source. This prevents OBS from revealing the previous
+      // verse during the visibility/focus mutation.
+      await this.focusMcePresentationModule("bible").catch(() => { });
+
+      if (options?.waitForFit) {
+        return this.waitForOverlayRenderMeasurement(
+          "bible",
+          Number(packetWithMode.timestamp) || Date.now(),
+          mode,
+          options.timeoutMs ?? 700,
+          browserSourceName,
+        );
+      }
+      return null;
+    });
   }
 
-  async pushWorshipOverlayFast(data: {
+  async pushWorshipOverlayFast(
+    data: {
     sectionText: string;
+    translationText?: string;
+    translationOrder?: DockTranslationOrder;
     sectionLabel: string;
     songTitle: string;
     artist?: string;
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     backgroundOnly?: boolean;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const resources = getDockResources();
     const sourceName = resources.worshipSource;
     const mode = "lower-third";
+    const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("worship", sourceName);
 
-    if (
-      !this._worshipInitialized
-      || !this._lastBrowserSourceUrlBySource[sourceName]
-    ) {
+    if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
+      if (canReuseLoadedSource) {
+        this._worshipInitialized = true;
+      }
+    }
+
+    if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
       return this.pushWorshipLyrics({
         ...data,
         overlayMode: mode,
-      });
+      }, options);
     }
 
     this._lastOverlayMode[sourceName] = mode;
     const backgroundOnly = Boolean(data.backgroundOnly);
     const sectionText = backgroundOnly ? "" : data.sectionText;
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
       data.liveOverrides,
@@ -6032,8 +7796,7 @@ class DockObsClient {
       themeCss = stripCompatModeCSS(css);
     }
 
-    const slide = this.buildBibleSlide(sectionText, "");
-    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-worship-overlay.html");
+    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
     const packetWithMode: Record<string, unknown> = {
       slide,
       theme: cleanTheme,
@@ -6043,8 +7806,6 @@ class DockObsClient {
       mode,
     };
 
-    await this.bringWorshipOverlayForward(mode).catch(() => { });
-
     this.publishFullscreenOverlayPacket({
       slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
       theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -6052,7 +7813,7 @@ class DockObsClient {
       blanked: false,
       timestamp: Number(packetWithMode.timestamp) || Date.now(),
       mode,
-    }, "worship", themeCss);
+    }, "worship", themeCss, sourceName);
 
     await this.deliverCssOverlayPacket(
       sourceName,
@@ -6061,11 +7822,26 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
+
+    // The packet must be in the browser source before it is made visible and
+    // promoted above the other MCE sources.
     await this.prepareFastOverlayScene(
       "worship",
       sourceName,
       (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
     );
+    await this.focusMcePresentationModule("worship").catch(() => { });
+    await this.promotePresentationScene("worship").catch(() => { });
+    if (options?.waitForFit) {
+      return this.waitForOverlayRenderMeasurement(
+        "worship",
+        Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+        options.timeoutMs ?? 700,
+        sourceName,
+      );
+    }
+    return null;
   }
 
   async bringNotesOverlayForward(_mode: DockOverlayMode = "lower-third"): Promise<void> {
@@ -6075,7 +7851,8 @@ class DockObsClient {
   async primeNotesOverlay(data: PrimeWorshipOverlayData): Promise<void> {
     const mode = data.overlayMode ?? "fullscreen";
     const backgroundOnly = Boolean(data.backgroundOnly);
-    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const sectionText = backgroundOnly ? "" : (data.sectionText ?? "");
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
       data.liveOverrides,
@@ -6085,7 +7862,7 @@ class DockObsClient {
       : effectiveThemeSettings;
     const { cleanSettings, css } = this.stripThemeDataUris(themeForOverlay);
     const themeCss = mode === "lower-third" ? stripCompatModeCSS(css) : css;
-    const slide = this.buildBibleSlide(sectionText, "");
+    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
     const packet: Record<string, unknown> = {
       slide,
       theme: cleanSettings ?? null,
@@ -6095,7 +7872,11 @@ class DockObsClient {
       mode,
     };
     const sourceName = getDockResources().notesSource;
-    const baseUrl = this.buildOverlayHtmlUrl("mce-note.html");
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
+
+    if (await this.keepLoadedCssOverlaySourceStable(sourceName, "notes", packet, baseUrl, themeCss)) {
+      return;
+    }
 
     this.publishFullscreenOverlayPacket({
       slide,
@@ -6104,36 +7885,47 @@ class DockObsClient {
       blanked: false,
       timestamp: Number(packet.timestamp) || Date.now(),
       mode,
-    }, "notes", themeCss);
+    }, "notes", themeCss, sourceName);
     await this.deliverCssOverlayPacket(sourceName, "notes", packet, baseUrl, themeCss).catch(() => { });
   }
 
-  async pushNotesOverlayFast(data: {
+  async pushNotesOverlayFast(
+    data: {
     sectionText: string;
+    translationText?: string;
+    translationOrder?: DockTranslationOrder;
     sectionLabel: string;
     songTitle: string;
     artist?: string;
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
     backgroundOnly?: boolean;
-  }): Promise<void> {
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const resources = getDockResources();
     const sourceName = resources.notesSource;
     const mode = "lower-third";
+    const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
 
-    if (
-      !this._notesInitialized
-      || !this._lastBrowserSourceUrlBySource[sourceName]
-    ) {
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
+      if (canReuseLoadedSource) {
+        this._notesInitialized = true;
+      }
+    }
+
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
       return this.pushNotesLyrics({
         ...data,
         overlayMode: mode,
-      });
+      }, options);
     }
 
     this._lastOverlayMode[sourceName] = mode;
     const backgroundOnly = Boolean(data.backgroundOnly);
     const sectionText = backgroundOnly ? "" : data.sectionText;
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
       data.liveOverrides,
@@ -6149,8 +7941,7 @@ class DockObsClient {
       themeCss = stripCompatModeCSS(css);
     }
 
-    const slide = this.buildBibleSlide(sectionText, "");
-    const cssOverlayBaseUrl = this.buildOverlayHtmlUrl("mce-note.html");
+    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
     const packetWithMode: Record<string, unknown> = {
       slide,
       theme: cleanTheme,
@@ -6160,8 +7951,6 @@ class DockObsClient {
       mode,
     };
 
-    await this.bringMceOverlayForward(sourceName).catch(() => { });
-
     this.publishFullscreenOverlayPacket({
       slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
       theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
@@ -6169,7 +7958,7 @@ class DockObsClient {
       blanked: false,
       timestamp: Number(packetWithMode.timestamp) || Date.now(),
       mode,
-    }, "notes", themeCss);
+    }, "notes", themeCss, sourceName);
 
     await this.deliverCssOverlayPacket(
       sourceName,
@@ -6178,11 +7967,24 @@ class DockObsClient {
       cssOverlayBaseUrl,
       themeCss,
     );
+
     await this.prepareFastOverlayScene(
       "notes",
       sourceName,
       (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
     );
+    await this.focusMcePresentationModule("notes").catch(() => { });
+    await this.promotePresentationScene("notes").catch(() => { });
+    if (options?.waitForFit) {
+      return this.waitForOverlayRenderMeasurement(
+        "notes",
+        Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+        options.timeoutMs ?? 700,
+        sourceName,
+      );
+    }
+    return null;
   }
 
   /**
@@ -6209,7 +8011,7 @@ class DockObsClient {
 
       // Also hide the unified Bible source from the user's current scene
       // (lower-third mode adds it there)
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       if (currentScene && currentScene !== scene) {
         await Promise.all([
           this.hideOverlaySource(currentScene, browserSourceName).catch(() => { }),
@@ -6219,9 +8021,10 @@ class DockObsClient {
         ]);
         this.invalidateActiveMceOverlayState(currentScene);
 
-        // Remove fullscreen scene source from user's scene if present
+        // A Multiview scene may intentionally contain MCE Presentation as its
+        // last-added source. Clearing Bible must never remove that scene item.
         const fsDef = this._fullscreenSceneDefs["bible"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const resp = await this.call("GetSceneItemList", { sceneName: currentScene }) as {
               sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -6239,7 +8042,15 @@ class DockObsClient {
       this._lastBibleFullscreenSetupSignature = "";
       this._bibleLtInitialized = false;
       this._lastBibleMode = "";
-      this.publishBlankFullscreenOverlayPacket("bible", "lower-third");
+      this._restoredLiveBibleSource = false;
+      if (readNativeDockSetting<unknown>(MCE_PRESENTATION_ACTIVE_MODULE_KEY) === "bible") {
+        writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, null);
+      }
+      this.publishBlankFullscreenOverlayPacket(
+        "bible",
+        "lower-third",
+        this._fullscreenSceneDefs["bible"].browserSourceName,
+      );
 
       // Clean up the bible clone scene (studio mode)
       await this.deleteClone(undefined, "bible").catch(() => { });
@@ -6269,6 +8080,7 @@ class DockObsClient {
     bibleThemeSettings?: Record<string, unknown> | null;
     liveOverrides?: Record<string, unknown> | null;
     compareEnabled?: boolean;
+    compareMode?: "translations" | "passages";
     compareLayout?: string;
     compare?: Record<string, unknown> | null;
     transitionId: number;
@@ -6280,7 +8092,7 @@ class DockObsClient {
     const sceneName = DOCK_PRESENTATION_SCENE;
     const existing = await this.getSceneItemBySource(sceneName, sourceName).catch(() => null);
     if (!existing) {
-      await this._ensureFullscreenScene("bible");
+      await this._ensureFullscreenScene("bible", data.mode);
     }
 
     // Build theme: merge with live overrides, apply mode-specific wrapping
@@ -6295,13 +8107,17 @@ class DockObsClient {
 
     // Build slide
     const compareColumns = data.compareEnabled && Array.isArray(data.compare?.columns)
-      ? (data.compare.columns as Array<Record<string, unknown>>).filter(Boolean).slice(0, 2)
+      ? (data.compare.columns as Array<Record<string, unknown>>).filter(Boolean).slice(0, data.compareMode === "passages" ? 3 : 2)
       : [];
-    const slide = compareColumns.length === 2
+    const hasCompareSlide = data.compareMode === "passages"
+      ? compareColumns.length >= 2
+      : compareColumns.length === 2;
+    const slide = hasCompareSlide
       ? {
           id: "dock-bible-compare-slide",
           layout: "compare",
           compareEnabled: true,
+          compareMode: data.compareMode ?? "translations",
           compareLayout: data.compareLayout ?? "line-by-line",
           reference: data.referenceText,
           text: data.verseText,
@@ -6335,7 +8151,7 @@ class DockObsClient {
       transitionId: data.transitionId,
     };
 
-    const baseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", { tab: "bible" });
+    const baseUrl = this.buildCssOverlayHtmlUrlForTab("bible", sourceName);
     await this.deliverCssOverlayPacket(sourceName, "bible", packet, baseUrl, "");
 
     this._lastBibleMode = data.mode;
@@ -6381,8 +8197,91 @@ class DockObsClient {
         restart_when_active: false,
       },
     });
+    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+    const parsed = this.parseOverlayPayloadUrl(url);
+    if (parsed) {
+      this._lastCssOverlayPacketBySource[resources.ltSource] = parsed.payload;
+      this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
+      this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
+    }
 
     await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
+  }
+
+  /**
+   * Replace a live Ministry lower-third without reloading the OBS browser source.
+   * The overlay page queues the new packet while the old one exits, then plays
+   * the new entry animation from the same browser document.
+   */
+  async replaceLiveLowerThirdOverlayUrl(
+    url: string,
+    options?: { sourceWidth?: number; sourceHeight?: number },
+    waitMs = FULLSCREEN_CLEAR_WAIT_MS,
+  ): Promise<void> {
+    const resources = getDockResources();
+    const target = await this.getPresentationTargetScene("lower-third");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("Could not determine the MCE Presentation scene.");
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+
+    const parsed = this.parseOverlayPayloadUrl(url);
+    const existing = await this.getSceneItemBySource(sceneName, resources.ltSource).catch(() => null);
+    if (!parsed || !existing) {
+      if (existing) {
+        await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+      }
+      await this.pushLowerThirdOverlayUrl(url, options);
+      return;
+    }
+
+    await this.call("SetSceneItemEnabled", {
+      sceneName,
+      sceneItemId: existing.sceneItemId,
+      sceneItemEnabled: true,
+    }).catch(() => { });
+    await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
+
+    const nextPacket = {
+      ...parsed.payload,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+    };
+    const overlayCss = this.buildCssOverlayDataCss(nextPacket, "");
+
+    let delivered = false;
+    try {
+      const exitDelivered = await this.emitBrowserOverlayPacket("lower-third", {
+        action: "animate-out",
+        timestamp: Date.now(),
+      }, "");
+      nextPacket.timestamp = Date.now();
+      delivered = exitDelivered && await this.emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss);
+    } catch {
+      delivered = false;
+    }
+
+    if (!delivered) {
+      await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+      await this.pushLowerThirdOverlayUrl(url, options);
+      return;
+    }
+
+    try {
+      await this.call("SetInputSettings", {
+        inputName: resources.ltSource,
+        // Persist both transports. OBS can refresh the browser source when its
+        // CSS changes; leaving the old URL here would bring the previous size
+        // back after the live packet briefly renders.
+        inputSettings: { url, css: overlayCss },
+      });
+    } catch { /* keep the live event result */ }
+
+    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+    this._lastCssOverlayPacketBySource[resources.ltSource] = nextPacket;
+    this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
+    this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
   }
 
   /**
@@ -6620,10 +8519,10 @@ class DockObsClient {
       blanked: false,
       timestamp: Date.now(),
     };
-    const baseUrl = this.buildOverlayHtmlUrl(
-      mode === "fullscreen" ? "mce-bible-overlay.html" : "bible-overlay-lower-third.html",
-      { tab: "sermon" },
-    );
+    const baseUrl = this.buildOverlayHtmlUrl("mce-bible-overlay.html", {
+      tab: "sermon",
+      mode,
+    });
 
     this.publishFullscreenOverlayPacket(packet, "sermon", css);
     const sourceSignature = JSON.stringify({
@@ -6724,12 +8623,13 @@ class DockObsClient {
   }
 
   /**
-   * Animate the dock lower-third source out with a prepared blanked URL, then
-   * hide/remove it after the theme's exit duration.
+   * Animate the dock lower-third source out using the currently loaded
+   * payload, then hide/remove it after the theme's exit duration.
    */
   async animateLowerThirdOverlayUrlOut(
-    url: string,
+    _url: string,
     waitMs = FULLSCREEN_CLEAR_WAIT_MS,
+    options?: { restoreProgram?: boolean },
   ): Promise<void> {
     const resources = getDockResources();
     const scenes = new Set<string>();
@@ -6745,22 +8645,36 @@ class DockObsClient {
 
     let delivered = false;
     try {
-      await this.call("SetInputSettings", {
-        inputName: resources.ltSource,
-        inputSettings: {
-          url,
-          bgcolor: "#00000000",
-          shutdown: false,
-          restart_when_active: false,
-          fps_custom: true,
-          fps: 60,
-        },
-      });
-      this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
-      delivered = true;
+      delivered = await this.emitBrowserOverlayPacket("lower-third", {
+        action: "animate-out",
+        timestamp: Date.now(),
+      }, "");
     } catch {
-      await this.clearLowerThirds(waitMs);
-      return;
+      delivered = false;
+    }
+
+    if (!delivered) {
+      try {
+        const exitUrl = await this.buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "");
+        if (!exitUrl) {
+          throw new Error("No current lower-third payload is available for exit animation.");
+        }
+        await this.call("SetInputSettings", {
+          inputName: resources.ltSource,
+          inputSettings: {
+            url: exitUrl,
+            bgcolor: "#00000000",
+            shutdown: false,
+            restart_when_active: false,
+            fps_custom: true,
+            fps: 60,
+          },
+        });
+        this._lastBrowserSourceUrlBySource[resources.ltSource] = exitUrl;
+        delivered = true;
+      } catch {
+        delivered = false;
+      }
     }
 
     if (delivered) {
@@ -6775,7 +8689,7 @@ class DockObsClient {
       }
     }
 
-    await this.sleep(waitMs);
+    await this.sleep(delivered ? waitMs : 0);
 
     for (const sceneName of scenes) {
       await this.hideOverlaySource(sceneName, resources.ltSource);
@@ -6790,7 +8704,9 @@ class DockObsClient {
     delete this._lastCssOverlayBaseUrlBySource[resources.ltSource];
     delete this._lastCssOverlayThemeCssBySource[resources.ltSource];
 
-    await this.restoreProgramSceneBeforePush("lower-third");
+    if (options?.restoreProgram !== false) {
+      await this.restoreProgramSceneBeforePush("lower-third");
+    }
   }
 
   // ── Worship lyrics overlay ──
@@ -6799,67 +8715,33 @@ class DockObsClient {
    * Push worship lyrics to OBS as an overlay in the current scene.
    * Supports both fullscreen and lower-third overlay modes.
    */
-  async pushWorshipLyrics(data: {
-    sectionText: string;
-    sectionLabel: string;
-    songTitle: string;
-    artist?: string;
-    overlayMode?: "fullscreen" | "lower-third";
-    ltTheme?: DockLTThemeRef;
-    values?: Record<string, string>;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
-  }): Promise<void> {
-    return this._pushTabContent(data, "worship");
+  async pushWorshipLyrics(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "worship", options);
   }
 
-  async pushAnnouncement(data: {
-    sectionText: string;
-    sectionLabel: string;
-    songTitle: string;
-    artist?: string;
-    overlayMode?: "fullscreen" | "lower-third";
-    ltTheme?: DockLTThemeRef;
-    values?: Record<string, string>;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
-  }): Promise<void> {
-    return this._pushTabContent(data, "announcements");
+  async pushAnnouncement(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "announcements", options);
   }
 
-  async pushNotesLyrics(data: {
-    sectionText: string;
-    sectionLabel: string;
-    songTitle: string;
-    artist?: string;
-    overlayMode?: "fullscreen" | "lower-third";
-    ltTheme?: DockLTThemeRef;
-    values?: Record<string, string>;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
-  }): Promise<void> {
-    return this._pushTabContent(data, "notes");
+  async pushNotesLyrics(
+    data: DockTabContentPushData,
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    return this._pushTabContent(data, "notes", options);
   }
 
   /** Shared tab-content push for worship, announcements, and notes */
   private async _pushTabContent(
-    data: {
-      sectionText: string;
-      sectionLabel: string;
-      songTitle: string;
-      artist?: string;
-      overlayMode?: "fullscreen" | "lower-third";
-      ltTheme?: DockLTThemeRef;
-      values?: Record<string, string>;
-      bibleThemeSettings?: Record<string, unknown> | null;
-      liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-      backgroundOnly?: boolean;
-    },
+    data: DockTabContentPushData,
     tab: "worship" | "announcements" | "notes",
-  ): Promise<void> {
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const isWorship = tab === "worship";
     const isNotes = tab === "notes";
     const stableCssOverlayTab = isWorship || isNotes;
@@ -6891,6 +8773,7 @@ class DockObsClient {
       if (
         (isWorship || isNotes)
         && mode === "fullscreen"
+        && !modeChanged
         && getInitialized()
         && this._lastBrowserSourceUrlBySource[sourceName]
       ) {
@@ -6899,6 +8782,7 @@ class DockObsClient {
         }
         const backgroundOnly = Boolean(data.backgroundOnly);
         const sectionText = backgroundOnly ? "" : data.sectionText;
+        const translationText = backgroundOnly ? "" : (data.translationText ?? "");
         const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
           data.bibleThemeSettings,
           data.liveOverrides,
@@ -6909,6 +8793,8 @@ class DockObsClient {
           id: `dock-${tab}-slide`,
           reference: "",
           text: sectionText,
+          translationText,
+          translationOrder: data.translationOrder ?? "original-first",
           verseRange: "",
           index: 0,
           total: 1,
@@ -6921,9 +8807,7 @@ class DockObsClient {
           timestamp: Date.now(),
           mode,
         };
-        const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab);
-
-        await this.bringMceOverlayForward(sourceName).catch(() => { });
+        const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab, sourceName);
 
         this.publishFullscreenOverlayPacket({
           slide: (packet.slide as Record<string, unknown> | null) ?? null,
@@ -6932,13 +8816,24 @@ class DockObsClient {
           blanked: false,
           timestamp: Number(packet.timestamp) || Date.now(),
           mode,
-        }, tab, themeCss);
+        }, tab, themeCss, sourceName);
 
         await this.deliverCssOverlayPacket(sourceName, tab, packet, cssOverlayBaseUrl, themeCss);
-        await this.fitSceneSourceToCanvas(resources.worshipScene, sourceName).catch(() => { });
+        if (isWorship || isNotes) {
+          await this.focusMcePresentationModule(isWorship ? "worship" : "notes").catch(() => { });
+        }
         this._lastOverlayMode[sourceName] = mode;
         setLastPushSignature("");
-        return;
+        if (options?.waitForFit) {
+          return this.waitForOverlayRenderMeasurement(
+            tab,
+            Number(packet.timestamp) || Date.now(),
+            mode,
+            options.timeoutMs ?? 700,
+            sourceName,
+          );
+        }
+        return null;
       }
 
       if (modeChanged && !stableCssOverlayTab) {
@@ -6978,13 +8873,21 @@ class DockObsClient {
       );
       if (pushSignature === getLastPushSignature()) {
         const recoveryScene = mode === "fullscreen" ? resources.worshipScene : sceneName;
-        await this.ensureOverlaySource(recoveryScene, sourceName, undefined, undefined, true).catch(() => { });
-        await this.ensureActiveMceOverlaySource(
+        await this.ensureOverlaySource(
           recoveryScene,
           sourceName,
-          [sourceName],
-          resources,
+          undefined,
+          undefined,
+          stableCssOverlayTab ? false : true,
         ).catch(() => { });
+        if (!stableCssOverlayTab) {
+          await this.ensureActiveMceOverlaySource(
+            recoveryScene,
+            sourceName,
+            [sourceName],
+            resources,
+          ).catch(() => { });
+        }
 
         if (mode === "fullscreen" && !presentationLive && resources.worshipScene !== sceneName) {
           await this.ensureSceneSourceInTarget(sceneName, resources.worshipScene, true).catch(() => { });
@@ -7007,14 +8910,22 @@ class DockObsClient {
           await this.fitSceneSourceToLowerThirdWindow(recoveryScene, sourceName).catch(() => { });
         }
 
-        if (mode === "lower-third") {
-          await this.promotePresentationScene(tab).catch(() => { });
+        if (stableCssOverlayTab) {
+          await this.ensureActiveMceOverlaySource(
+            recoveryScene,
+            sourceName,
+            [sourceName],
+            resources,
+          ).catch(() => { });
+          await this.focusMcePresentationModule(isWorship ? "worship" : "notes").catch(() => { });
         }
+        await this.promotePresentationScene(tab).catch(() => { });
         return;
       }
 
       const backgroundOnly = Boolean(data.backgroundOnly);
       const sectionText = backgroundOnly ? "" : data.sectionText;
+      const translationText = backgroundOnly ? "" : (data.translationText ?? "");
       // Keep worship section labels available in the operator UI, but do not
       // render them into OBS preview/program overlays.
       const sectionLabel = backgroundOnly
@@ -7038,7 +8949,7 @@ class DockObsClient {
           await this.hideOverlaySource(sceneName, sourceName);
           await this._hideLowerThirdBgSource(sceneName).catch(() => { });
           await this.ensureDedicatedScene(resources.worshipScene);
-          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, true);
+          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, false);
           // Use browser overlay CSS for background; hide separate fullscreen
           // BG sources to keep the browser + background as a single OBS source.
           await this._hideFullscreenBgSource("worship");
@@ -7053,7 +8964,7 @@ class DockObsClient {
           }
           setInitialized(true);
         } else {
-          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, true).catch(() => { });
+          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, false).catch(() => { });
           // Ensure no separate fullscreen BG inputs are left behind; the
           // background will be rendered via the browser overlay CSS.
           await this._hideFullscreenBgSource("worship");
@@ -7062,13 +8973,9 @@ class DockObsClient {
           }
         }
 
-        // Only keep the overlay browser source active; BG is applied via CSS.
-        await this.ensureActiveMceOverlaySource(resources.worshipScene, sourceName, [sourceName], resources);
+        // Keep the overlay browser source hidden until its new packet has been
+        // delivered. Visibility is reconciled after delivery below.
         await this.fitSceneSourceToOverlayMode(resources.worshipScene, sourceName, mode).catch(() => { });
-
-        if (presentationLive) {
-          await this.promotePresentationScene(tab).catch(() => { });
-        }
 
         const { cleanSettings, css } = this.stripThemeDataUris(effectiveThemeSettings);
         themeCss = stripCompatModeCSS(css);
@@ -7076,6 +8983,7 @@ class DockObsClient {
           id: `dock-${tab}-slide`,
           reference: "",
           text: sectionText,
+          translationText,
           verseRange: sectionLabel,
           index: 0,
           total: 1,
@@ -7091,7 +8999,7 @@ class DockObsClient {
 
         this._hasSeparateFullscreenBg(effectiveThemeSettings);
         cssOverlayPacket = packet;
-        cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab);
+        cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab, sourceName);
         useCssOverlayTransport = true;
         url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(packet))}`;
       } else {
@@ -7102,18 +9010,20 @@ class DockObsClient {
             await this.hideSceneSource(sceneName, resources.worshipScene);
             await this.hideFullscreenBg(sceneName, resources);
             await this._hideLowerThirdBgSource(sceneName).catch(() => { });
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true).catch(() => { });
           }
 
-          await this.ensureActiveMceOverlaySource(
-            sceneName,
-            sourceName,
-            [sourceName],
-            resources,
-          );
+          if (!stableCssOverlayTab) {
+            await this.ensureActiveMceOverlaySource(
+              sceneName,
+              sourceName,
+              [sourceName],
+              resources,
+            );
+          }
 
           const ltThemeRef: DockLTThemeRef = {
             id: data.ltTheme.id,
@@ -7130,20 +9040,22 @@ class DockObsClient {
             await this.clearAllOverlays(sourceName, sceneName, resources);
             await this.hideSceneSource(sceneName, resources.worshipScene);
             await this.hideFullscreenBg(sceneName, resources);
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true).catch(() => { });
           }
 
           // Background is rendered by the browser overlay; hide any
           // lower-third BG inputs and only activate the browser source.
           await this._hideLowerThirdBgSource(sceneName).catch(() => { });
-          await this.ensureActiveMceOverlaySource(sceneName, sourceName, [sourceName], resources);
+          if (!stableCssOverlayTab) {
+            await this.ensureActiveMceOverlaySource(sceneName, sourceName, [sourceName], resources);
+          }
 
           const { cleanSettings: wltClean, css } = this.stripThemeDataUris(overlayTheme);
           themeCss = stripCompatModeCSS(css);
-          const slide = this.buildBibleSlide(sectionText, sectionLabel);
+          const slide = this.buildBibleSlide(sectionText, sectionLabel, "", translationText, data.translationOrder);
           cssOverlayPacket = {
             slide,
             theme: wltClean ?? null,
@@ -7152,19 +9064,19 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab);
+          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab, sourceName);
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
         } else {
           if (shouldRebuildSceneGraph()) {
             await this.clearAllOverlays(sourceName, sceneName, resources);
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true).catch(() => { });
           }
 
-          const slide = this.buildBibleSlide(sectionText, sectionLabel);
+          const slide = this.buildBibleSlide(sectionText, sectionLabel, "", translationText, data.translationOrder);
           cssOverlayPacket = {
             slide,
             theme: null,
@@ -7173,19 +9085,21 @@ class DockObsClient {
             timestamp: Date.now(),
             mode,
           };
-          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab);
+          cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab(tab, sourceName);
           useCssOverlayTransport = true;
           url = `${cssOverlayBaseUrl}#data=${encodeURIComponent(JSON.stringify(cssOverlayPacket))}`;
 
           await this.hideFullscreenBg(sceneName, resources);
           await this.hideSceneSource(sceneName, resources.worshipScene);
 
-          await this.ensureActiveMceOverlaySource(
-            sceneName,
-            sourceName,
-            [sourceName],
-            resources,
-          );
+          if (!stableCssOverlayTab) {
+            await this.ensureActiveMceOverlaySource(
+              sceneName,
+              sourceName,
+              [sourceName],
+              resources,
+            );
+          }
         }
       }
       if (mode === "lower-third") {
@@ -7193,10 +9107,6 @@ class DockObsClient {
       }
 
       if (useCssOverlayTransport && cssOverlayPacket) {
-        if (stableCssOverlayTab) {
-          await this.bringMceOverlayForward(sourceName).catch(() => { });
-        }
-
         this.publishFullscreenOverlayPacket({
           slide: (cssOverlayPacket.slide as Record<string, unknown> | null) ?? null,
           theme: (cssOverlayPacket.theme as Record<string, unknown> | null) ?? null,
@@ -7204,7 +9114,7 @@ class DockObsClient {
           blanked: Boolean(cssOverlayPacket.blanked),
           timestamp: Number(cssOverlayPacket.timestamp) || Date.now(),
           mode: String(mode || "fullscreen"),
-        }, tab, themeCss);
+        }, tab, themeCss, sourceName);
         await this.deliverCssOverlayPacket(
           sourceName,
           tab,
@@ -7214,20 +9124,49 @@ class DockObsClient {
         );
         if (mode === "fullscreen") {
           await this.fitSceneSourceToOverlayMode(resources.worshipScene, sourceName, mode).catch(() => { });
-          if (modeChanged) {
-            await this.setSceneSourceEnabledByName(resources.worshipScene, sourceName, true).catch(() => { });
-          }
         }
       } else {
         await this.setBrowserSourceUrl(sourceName, url, modeChanged, themeCss || undefined);
       }
 
-      if (mode === "lower-third" && useCssOverlayTransport && cssOverlayPacket) {
-        await this.waitForOverlayRenderAck(
-          tab,
-          Number(cssOverlayPacket.timestamp) || Date.now(),
-          mode,
+      if (stableCssOverlayTab) {
+        const activeScene = mode === "fullscreen" ? resources.worshipScene : sceneName;
+        await this.ensureActiveMceOverlaySource(
+          activeScene,
+          sourceName,
+          [sourceName],
+          resources,
         ).catch(() => { });
+
+        // The packet is now current. Only after that do we isolate this tab's
+        // source and move the presentation into the live output.
+        await this.focusMcePresentationModule(isWorship ? "worship" : "notes").catch(() => { });
+        if (mode === "fullscreen" && presentationLive) {
+          await this.promotePresentationScene(tab).catch(() => { });
+        }
+      }
+
+      let renderMeasurement: DockOverlayFontFitMeasurement | null = null;
+      if (useCssOverlayTransport && cssOverlayPacket) {
+        const renderTimestamp = Number(cssOverlayPacket.timestamp) || Date.now();
+        if (options?.waitForFit) {
+          renderMeasurement = await this.waitForOverlayRenderMeasurement(
+            tab,
+            renderTimestamp,
+            mode,
+            options.timeoutMs ?? 700,
+            sourceName,
+          ).catch(() => null);
+        } else if (mode === "lower-third") {
+          await this.waitForOverlayRenderAck(
+            tab,
+            renderTimestamp,
+            mode,
+            500,
+            undefined,
+            sourceName,
+          ).catch(() => { });
+        }
       }
 
       if (mode === "lower-third") {
@@ -7242,6 +9181,7 @@ class DockObsClient {
       }
 
       setLastPushSignature(pushSignature);
+      return renderMeasurement;
     });
   }
 
@@ -7296,7 +9236,7 @@ class DockObsClient {
         ltBg.b,
       ];
 
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       let currentNames: string[] = [];
       if (currentScene && currentScene !== scene) {
         const curLtBg = this._ltBgNames(currentScene);
@@ -7333,10 +9273,11 @@ class DockObsClient {
 
       // ── Phase 3: remaining cleanup (non-hide operations) ──
 
-      // Remove fullscreen scene source from user's scene if present
+      // Keep MCE Presentation inside managed Multiview scenes. It is the
+      // user's last-added presentation layer, not a temporary overlay item.
       if (currentScene && currentScene !== scene) {
         const fsDef = this._fullscreenSceneDefs["worship"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const items = await this.getSceneItemListCached(currentScene);
             const fsItems = items.filter((i) => i.sourceName.startsWith(fsDef.sceneName));
@@ -7356,7 +9297,7 @@ class DockObsClient {
 
       // Reset so next push does full setup
       this._worshipInitialized = false;
-      this.publishBlankFullscreenOverlayPacket("worship", "lower-third");
+      this.publishBlankFullscreenOverlayPacket("worship", "lower-third", getDockResources().worshipSource);
     });
   }
 
@@ -7381,7 +9322,7 @@ class DockObsClient {
         ltBg.b,
       ];
 
-      const currentScene = await this.getCurrentProgramSceneName().catch(() => "");
+      const currentScene = await this.getCurrentProgramSceneName(true).catch(() => "");
       let currentNames: string[] = [];
       if (currentScene && currentScene !== scene) {
         const curLtBg = this._ltBgNames(currentScene);
@@ -7415,7 +9356,7 @@ class DockObsClient {
 
       if (currentScene && currentScene !== scene) {
         const fsDef = this._fullscreenSceneDefs["notes"];
-        if (fsDef) {
+        if (fsDef && !DockObsClient.isManagedMultiviewSceneName(currentScene)) {
           try {
             const items = await this.getSceneItemListCached(currentScene);
             const fsItems = items.filter((i) => i.sourceName.startsWith(fsDef.sceneName));
@@ -7430,7 +9371,7 @@ class DockObsClient {
       await this.deleteClone(undefined, "notes").catch(() => { });
       await this.restoreProgramSceneBeforePush("notes");
       this._notesInitialized = false;
-      this.publishBlankFullscreenOverlayPacket("notes", "lower-third");
+      this.publishBlankFullscreenOverlayPacket("notes", "lower-third", getDockResources().notesSource);
     });
   }
 
@@ -7500,6 +9441,7 @@ class DockObsClient {
     await this.clearAllOverlays(resources.tickerSource, sceneName, resources);
 
     await this.ensureOverlaySource(sceneName, resources.tickerSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(resources.tickerSource).catch(() => { });
     const resolvedLTTheme = this.resolveLTTheme(data.ltTheme, "ticker");
 
     const url = this.buildTickerUrl(
@@ -7513,6 +9455,78 @@ class DockObsClient {
     await this.setBrowserSourceUrl(resources.tickerSource, url);
     await this.promotePresentationScene("ministry").catch(() => { });
 
+  }
+
+  /**
+   * Push the Dock's fully-rendered ticker HTML through the same OBS ticker
+   * source used by the Ministry tab. The mobile companion uses this instead
+   * of the legacy lower-third ticker URL so theme, divider, spacing, and
+   * branding remain identical on every control surface.
+   */
+  async pushDockTickerHtml(data: {
+    html: string;
+    position: "top" | "bottom";
+  }): Promise<void> {
+    const resources = getDockResources();
+    const sceneName = DOCK_PRESENTATION_SCENE;
+    const tickerHeight = 80;
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+    await this.clearAllOverlays(resources.tickerSource, sceneName, resources);
+
+    const canvas = await this.getCanvasSize();
+    await this.ensureOverlaySource(
+      sceneName,
+      resources.tickerSource,
+      canvas.width,
+      tickerHeight,
+      true,
+    );
+    await this.applyMcePresentationSourceVisibility(resources.tickerSource).catch(() => { });
+
+    const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(data.html);
+    await this.setBrowserSourceUrl(resources.tickerSource, dataUrl);
+
+    const items = await this.getSceneItemListCached(sceneName);
+    const tickerItem = items.find((item) => item.sourceName === resources.tickerSource);
+    if (tickerItem) {
+      await this.call("SetSceneItemTransform", {
+        sceneName,
+        sceneItemId: tickerItem.sceneItemId,
+        sceneItemTransform: {
+          positionX: 0,
+          positionY: data.position === "top" ? 0 : canvas.height - tickerHeight,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          boundsType: "OBS_BOUNDS_STRETCH",
+          boundsWidth: canvas.width,
+          boundsHeight: tickerHeight,
+          boundsAlignment: 0,
+          cropLeft: 0,
+          cropTop: 0,
+          cropRight: 0,
+          cropBottom: 0,
+        },
+      });
+    }
+
+    await this.ensureTickerAboveSource(sceneName, resources.tickerSource).catch(() => { });
+    await this.syncLowerThirdTickerClearance(sceneName).catch(() => { });
+    await this.promotePresentationScene("ministry").catch(() => { });
+  }
+
+  async pushTickerToScene(data: {
+    badge: string;
+    tickerText: string;
+    ltTheme?: DockLTThemeRef;
+  }, sceneName: string): Promise<void> {
+    const resolvedLTTheme = this.resolveLTTheme(data.ltTheme, "ticker");
+    await this.pushSceneRouteBrowserSource({
+      module: "ticker",
+      sceneName,
+      url: this.buildTickerUrl(data.badge, data.tickerText, false, false, resolvedLTTheme),
+    });
   }
 
   // ── State Recovery ──
@@ -7529,6 +9543,7 @@ class DockObsClient {
       overlayMode: string;
       compare: {
         enabled: boolean;
+        mode: string;
         layout: string;
         columns: Array<{
           book: string;
@@ -7542,7 +9557,7 @@ class DockObsClient {
         }>;
       } | null;
     } | null;
-    worship: { sectionLabel: string; sectionText: string; songTitle: string; artist: string; overlayMode: string } | null;
+    worship: { sectionLabel: string; sectionText: string; translationText?: string; songTitle: string; artist: string; overlayMode: string } | null;
     lowerThird: { name: string; role: string } | null;
   }> {
     const result: {
@@ -7550,9 +9565,10 @@ class DockObsClient {
         reference: string;
         text: string;
         overlayMode: string;
-        compare: {
-          enabled: boolean;
-          layout: string;
+      compare: {
+        enabled: boolean;
+        mode: string;
+        layout: string;
           columns: Array<{
             book: string;
             chapter: number;
@@ -7565,7 +9581,7 @@ class DockObsClient {
           }>;
         } | null;
       } | null;
-      worship: { sectionLabel: string; sectionText: string; songTitle: string; artist: string; overlayMode: string } | null;
+      worship: { sectionLabel: string; sectionText: string; translationText?: string; songTitle: string; artist: string; overlayMode: string } | null;
       lowerThird: { name: string; role: string } | null;
     } = { bible: null, worship: null, lowerThird: null };
 
@@ -7574,6 +9590,7 @@ class DockObsClient {
     const sourcesToCheck = [
       { name: this._fullscreenSceneDefs["bible"].browserSourceName, type: "bible" as const },
       { name: DOCK_WORSHIP_SOURCE, type: "worship" as const },
+      { name: DOCK_NOTES_SOURCE, type: "notes" as const },
       { name: DOCK_LT_SOURCE, type: "lowerThird" as const },
     ];
 
@@ -7610,6 +9627,10 @@ class DockObsClient {
           inputSettings: { url?: string; css?: string };
         };
         const url = resp.inputSettings?.url || "";
+        const documentUrl = this.normalizeBrowserSourceDocumentUrl(url);
+        if (documentUrl) {
+          this._lastBrowserSourceUrlBySource[name] = documentUrl;
+        }
         const cssPacket = this.extractOverlayPacketFromCss(resp.inputSettings?.css);
         const urlPacket = url && url !== "about:blank" && url.includes("#data=")
           ? (() => {
@@ -7623,6 +9644,29 @@ class DockObsClient {
           : null;
         const data = cssPacket ?? urlPacket;
         if (!data) continue;
+
+        // Rebuild the in-memory transport cache from the packet that is
+        // already inside OBS. A Dock reload must reuse the live browser
+        // document; otherwise the first click after reconnect takes the full
+        // bootstrap path, which can briefly reveal a stale verse/background
+        // or make the source appear to turn off.
+        const recoveredTab: CssOverlayPacketTab =
+          type === "worship" ? "worship" : type === "notes" ? "notes" : "bible";
+        const recoveredBaseUrl = this.buildCssOverlayHtmlUrlForTab(recoveredTab, name);
+        this.rememberCssOverlayTransport(name, data, recoveredBaseUrl, "", recoveredTab);
+        const recoveredMode = data.mode === "fullscreen" || data.mode === "lower-third"
+          ? data.mode
+          : type === "bible"
+            ? "fullscreen"
+            : "lower-third";
+        if (type === "bible") {
+          this._lastBibleMode = recoveredMode;
+          if (recoveredMode === "lower-third") this._bibleLtInitialized = true;
+        } else if (type === "worship") {
+          if (recoveredMode === "lower-third") this._worshipInitialized = true;
+        } else if (type === "notes") {
+          if (recoveredMode === "lower-third") this._notesInitialized = true;
+        }
 
         let isEnabled = false;
         if (currentProgramScene === PRESENTATION_SCENE_NAME) {
@@ -7678,9 +9722,13 @@ class DockObsClient {
                     ? "lower-third"
                     : "fullscreen",
               compare:
-                slide.layout === "compare" && compareColumns.length === 2
+                slide.layout === "compare"
+                  && (slide.compareMode === "passages"
+                    ? compareColumns.length >= 2
+                    : compareColumns.length === 2)
                   ? {
                     enabled: true,
+                    mode: slide.compareMode === "passages" ? "passages" : "translations",
                     layout: typeof slide.compareLayout === "string"
                       ? slide.compareLayout
                       : "line-by-line",
@@ -7728,6 +9776,7 @@ class DockObsClient {
             result.worship = {
               sectionLabel: ref[1] || String(slide.verseRange || ""),
               sectionText: typeof slide.text === "string" ? slide.text : "",
+              translationText: typeof slide.translationText === "string" ? slide.translationText : "",
               songTitle: (ref[0] || "").split(" — ")[0] || "",
               artist: (ref[0] || "").split(" — ")[1] || "",
               overlayMode: "fullscreen",
@@ -7749,6 +9798,7 @@ class DockObsClient {
                     : typeof values.name === "string"
                       ? values.name
                       : "",
+              translationText: typeof values.translationText === "string" ? values.translationText : "",
               songTitle:
                 typeof values.songName === "string"
                   ? values.songName
@@ -8123,6 +10173,61 @@ class DockObsClient {
   }
 
   /**
+   * Push one audio file as a native OBS source. Local OBS sessions use the
+   * ffmpeg source so the track is available immediately; remote sessions use
+   * the existing VLC playlist transport so the remote OBS host can read the
+   * served upload URL.
+   */
+  async pushAudio(
+    filePath: string,
+    _fileName: string,
+    options: Pick<DockMediaSendOptions, "looping" | "muted"> = {},
+  ): Promise<void> {
+    const sourceName = "MCE Media - Audio";
+    if (this.isRemotePresentationSession()) {
+      await this.pushVlcPlaylist({
+        sourceName,
+        playlist: [filePath],
+        loop: options.looping ?? false,
+        muted: options.muted ?? false,
+      });
+      return;
+    }
+
+    await this.focusMcePresentationModule("media").catch(() => { });
+    const target = await this.getPresentationTargetScene("media");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("No active scene found in OBS");
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+    await this._ensureSceneInputSource(
+      sceneName,
+      sourceName,
+      "ffmpeg_source",
+      {
+        local_file: filePath,
+        looping: options.looping ?? false,
+        is_local_file: true,
+        restart_on_activate: true,
+      },
+      true,
+    );
+
+    try {
+      await this.call("SetInputMute", {
+        inputName: sourceName,
+        inputMuted: options.muted ?? false,
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+    } catch { /* source playback controls vary slightly by OBS version */ }
+
+    await this.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
+  }
+
+  /**
    * Push a media file to OBS using native sources (ffmpeg_source for video,
    * image_source for images) instead of a browser source.
    * @param filePath  Absolute local file path (e.g. ~/Documents/MakeChurchEasy/uploads/video.mp4)
@@ -8134,14 +10239,36 @@ class DockObsClient {
     fileName: string,
     options: DockMediaSendOptions = {},
   ): Promise<void> {
-    const ext = fileName.split(".").pop()?.toLowerCase() || "";
-    const isImage = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(ext);
+    const getExtension = (value: string): string => {
+      const cleanValue = value.split(/[?#]/)[0].trim();
+      return cleanValue.match(/\.([a-z0-9]+)(?:\s+·\s+page(?:\s+\d+(?:\/\d+)?)?)?$/i)?.[1]?.toLowerCase() || "";
+    };
+    const imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"];
+    const pathExtension = getExtension(filePath);
+    const nameExtension = getExtension(fileName);
+    const ext = imageExtensions.includes(pathExtension) || ["mp4", "webm", "mov", "mkv", "avi", "m4v"].includes(pathExtension)
+      ? pathExtension
+      : nameExtension;
+    const isImage = imageExtensions.includes(ext);
+    const audioExtensions = ["mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus"];
+    const isAudio = audioExtensions.includes(ext);
+
+    if (isAudio) {
+      await this.pushAudio(filePath, fileName, options);
+      return;
+    }
 
     const mediaVideoSource = "MCE Media - Video";
     const mediaImageSource = "MCE Media - Image";
     const mediaPatternSource = "MCE Media - Pattern";
     const mediaImageAudioSource = "MCE Media - Image Audio";
     const mediaTextSource = "MCE Media - Text";
+    const remoteMediaSource = "MCE Media - Remote";
+
+    // Complete source-family reconciliation before resolving the target scene
+    // or local file. Awaiting it prevents the image/video handoff from racing
+    // a focus update that could re-enable the source just hidden.
+    await this.focusMcePresentationModule("media").catch(() => { });
 
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
@@ -8150,10 +10277,29 @@ class DockObsClient {
     // Ensure the live program scene is visible behind overlays in MCE Presentation
     await this.ensureProgramSceneAsSourceInPresentation();
 
-    // Hide the sources we DON'T need — only hide the opposite type with animation
+    // Fade transitions use the browser media source so the old native media can
+    // remain underneath while the new page fades in. Cut keeps the native path.
     const mediaSource = isImage ? mediaImageSource : mediaVideoSource;
+    const isDocument = Boolean(options.document);
     const hidePromises: Promise<void>[] = [];
-    if (isImage) {
+    if (options.transition === "fade" && !isDocument) {
+      hidePromises.push(this.hideOverlaySource(sceneName, mediaPatternSource).catch(() => { }));
+      hidePromises.push(this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { }));
+    } else if (isDocument) {
+      // Document pages always use the browser overlay. Disable any older
+      // native media in one OBS batch instead of animating it out twice.
+      hidePromises.push((async () => {
+        try {
+          const requests = await this._buildHideBatchRequests(sceneName, [
+            mediaVideoSource,
+            mediaImageSource,
+            mediaPatternSource,
+            mediaImageAudioSource,
+          ]);
+          if (requests.length > 0) await this.callBatch(requests);
+        } catch { /* stale media sources are optional */ }
+      })());
+    } else if (isImage) {
       // Switching to image: hide video with animation, just disable the rest
       hidePromises.push(this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource));
       hidePromises.push(this.hideOverlaySource(sceneName, mediaPatternSource).catch(() => { }));
@@ -8168,6 +10314,79 @@ class DockObsClient {
       })());
     }
     await Promise.allSettled(hidePromises);
+
+    if (this.isRemotePresentationSession() || options.transition === "fade" || options.document) {
+      if (options.transition !== "fade" && !isDocument) {
+        await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource).catch(() => { });
+        await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource).catch(() => { });
+        await this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { });
+      }
+
+      const mediaUrl = await this.toRemoteServedMediaUrl(filePath, fileName);
+      if (!mediaUrl) {
+        throw new Error("Could not create a network media URL for remote OBS.");
+      }
+
+      const canvas = await this.getCanvasSize();
+      const sceneItemId = await this.ensureOverlaySource(
+        sceneName,
+        remoteMediaSource,
+        canvas.width,
+        canvas.height,
+        true,
+      );
+      await this.applyMcePresentationSourceVisibility(remoteMediaSource).catch(() => { });
+      const packet = {
+        url: mediaUrl,
+        title: fileName,
+        isImage,
+        fitMode: options.fitMode ?? "cover",
+        looping: options.looping ?? true,
+        muted: isImage ? true : options.muted ?? true,
+        transition: options.transition ?? "cut",
+        document: options.document,
+        timestamp: Date.now(),
+      };
+      const overlayUrl = `${this.buildOverlayHtmlUrl("mce-media-overlay.html")}#data=${encodeURIComponent(JSON.stringify(packet))}`;
+
+      // Hash changes are enough for the document overlay to render the next
+      // page. Avoid blanking/reloading CEF, which adds visible latency.
+      await this.setBrowserSourceUrl(remoteMediaSource, overlayUrl, !isDocument);
+      await this.applyMediaFitMode(sceneName, sceneItemId, options.fitMode ?? "cover");
+
+      if (!isImage) {
+        try {
+          await this.call("SetInputMute", {
+            inputName: remoteMediaSource,
+            inputMuted: options.muted ?? true,
+          });
+        } catch { /* ignore */ }
+      }
+
+      if (options.transition === "fade") {
+        if (!isDocument) {
+          await this.sleep(150);
+          await Promise.allSettled([
+            this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource),
+            this.hideMediaSourceWithAnimation(sceneName, mediaImageSource),
+          ]);
+        }
+      } else if (!isDocument) {
+        await this.animateMediaSceneItem(sceneName, sceneItemId, "in");
+      }
+
+      if (!isDocument) {
+        try {
+          await this.bringSceneSourceToFront(sceneName, mediaTextSource);
+        } catch { /* ignore */ }
+
+        try {
+          await this.ensureTickerAboveSource(sceneName, remoteMediaSource);
+        } catch { /* ignore */ }
+      }
+
+      return;
+    }
 
     if (isImage) {
       const sceneItemId = await this._ensureNativeMediaSource(
@@ -8243,6 +10462,8 @@ class DockObsClient {
       await this.ensureTickerAboveSource(sceneName, mediaSource);
     } catch { /* ignore */ }
 
+    await this.applyMcePresentationSourceVisibility(mediaSource).catch(() => { });
+
   }
 
   /**
@@ -8257,13 +10478,25 @@ class DockObsClient {
   }): Promise<void> {
     const { sourceName, playlist, loop = true, shuffle = false, muted = true } = options;
 
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     // Get the current scene via clone workflow
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
-    // Build playlist items for VLC source
-    const vlcPlaylist = playlist.map((path) => ({ path, selected: true }));
+    // A remote OBS instance cannot read this computer's absolute paths. Serve
+    // those files first, while keeping local OBS playback on native paths.
+    const playlistPaths = this.isRemotePresentationSession()
+      ? await Promise.all(playlist.map(async (path) => {
+        const fileName = path.split(/[\\/]/).pop()?.split(/[?#]/)[0] || sourceName;
+        return this.toRemoteServedMediaUrl(path, fileName);
+      }))
+      : playlist;
+
+    // OBS reads each VLC playlist location from the `value` property.
+    const vlcPlaylist = buildVlcPlaylistItems(playlistPaths);
+    if (vlcPlaylist.length === 0) throw new Error("VLC playlist is empty");
 
     // Remove existing VLC source with same name if present
     try {
@@ -8284,7 +10517,7 @@ class DockObsClient {
     } catch { /* ignore */ }
 
     // Create VLC Video Source
-    await this.call("CreateInput", {
+    const created = await this.call("CreateInput", {
       sceneName,
       inputName: sourceName,
       inputKind: "vlc_source",
@@ -8296,7 +10529,22 @@ class DockObsClient {
         network_caching: 1000,
       },
       sceneItemEnabled: true,
-    });
+    }) as { sceneItemId?: number } | undefined;
+
+    // CreateInput returns the scene item, but resolve it again for OBS builds
+    // that omit the id so the playlist fills the canvas in either case.
+    let sceneItemId = Number.isFinite(created?.sceneItemId) ? created?.sceneItemId : undefined;
+    if (sceneItemId === undefined) {
+      try {
+        const sceneItems = await this.call("GetSceneItemList", { sceneName }) as {
+          sceneItems?: Array<{ sourceName: string; sceneItemId: number }>;
+        };
+        sceneItemId = sceneItems.sceneItems?.find((item) => item.sourceName === sourceName)?.sceneItemId;
+      } catch { /* ignore — OBS may still be finishing source creation */ }
+    }
+    if (sceneItemId !== undefined) {
+      await this.applyMediaFitMode(sceneName, sceneItemId, "cover");
+    }
 
     // Mute if requested
     if (muted) {
@@ -8327,6 +10575,8 @@ class DockObsClient {
   }): Promise<void> {
     const { sourceName, images, loop = true, slideTime = 3000 } = options;
     if (images.length === 0) return;
+
+    void this.focusMcePresentationModule("media").catch(() => { });
 
     // Stop any existing rotation timer for this source
     this.stopImageSlideshow(sourceName);
@@ -8494,6 +10744,60 @@ class DockObsClient {
     }
   }
 
+  async addAudioSourceToScene(options: {
+    sceneName: string;
+    sourceName: string;
+    filePath: string;
+    looping?: boolean;
+    muted?: boolean;
+  }): Promise<void> {
+    const sceneName = options.sceneName.trim();
+    const sourceName = options.sourceName.trim();
+    const filePath = options.filePath.trim();
+
+    if (!sceneName) throw new Error("Scene name is required");
+    if (!sourceName) throw new Error("Source name is required");
+    if (!filePath) throw new Error("Audio file path is required");
+
+    if (!(await this.hasObsScene(sceneName))) {
+      await this.call("CreateScene", { sceneName });
+    }
+
+    await this._ensureNativeMediaSource(
+      sceneName,
+      sourceName,
+      "ffmpeg_source",
+      {
+        local_file: filePath,
+        looping: options.looping ?? false,
+        is_local_file: true,
+        restart_on_activate: true,
+        close_when_inactive: false,
+        clear_on_media_end: false,
+      },
+      true,
+    );
+
+    try {
+      await this.call("SetInputMute", {
+        inputName: sourceName,
+        inputMuted: options.muted ?? false,
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+    } catch {
+      // Ignore playback-control failures for arbitrary user scenes.
+    }
+
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch {
+      // Ignore ticker ordering failures for arbitrary user scenes.
+    }
+  }
+
   /**
    * Stop a running image-slideshow rotation timer.
    */
@@ -8521,6 +10825,8 @@ class DockObsClient {
     const mediaPatternSource = "MCE Media - Pattern";
     const mediaTextSource = "MCE Media - Text";
 
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
@@ -8532,6 +10838,7 @@ class DockObsClient {
 
     // Ensure pattern browser source exists directly in target scene
     await this.ensureOverlaySource(sceneName, mediaPatternSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(mediaPatternSource).catch(() => { });
 
     // Ensure ticker is on top after source exists
     try {
@@ -8545,6 +10852,48 @@ class DockObsClient {
     await this.bringSceneSourceToFront(sceneName, mediaPatternSource);
     await this.bringSceneSourceToFront(sceneName, mediaTextSource);
 
+  }
+
+  /**
+   * Interpret and display a structured MCE template in OBS. The template is
+   * rendered by the app-owned browser overlay; no PNG export is needed.
+   */
+  async pushEditableTemplate(template: EditableTemplate): Promise<void> {
+    const resources = getDockResources();
+    const target = await this.getPresentationTargetScene("media");
+    const sceneName = target.sceneName;
+    if (!sceneName) throw new Error("No active scene found in OBS");
+    const packageText = await createMceTemplateBlob(template).text();
+
+    await this.ensureProgramSceneAsSourceInPresentation();
+
+    await Promise.all([
+      this.hideMediaSourceWithAnimation(sceneName, resources.mediaVideoSource),
+      this.hideMediaSourceWithAnimation(sceneName, resources.mediaImageSource),
+      this.hideOverlaySource(sceneName, resources.mediaImageAudioSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaPatternSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaTextSource).catch(() => { }),
+      this.hideOverlaySource(sceneName, resources.mediaTemplateSource).catch(() => { }),
+    ]);
+
+    const sourceName = resources.mediaTemplateSource;
+    await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(sourceName).catch(() => { });
+    await this.setBrowserSourceUrl(
+      sourceName,
+      `${this.buildOverlayHtmlUrl("mce-template-overlay.html")}#data=${encodeURIComponent(JSON.stringify({
+        package: packageText,
+        timestamp: Date.now(),
+      }))}`,
+      true,
+    );
+    await this.fitSceneSourceToCanvas(sceneName, sourceName).catch(() => { });
+    await this.bringSceneSourceToFront(sceneName, sourceName);
+    try {
+      await this.ensureTickerAboveSource(sceneName, sourceName);
+    } catch {
+      // Ticker ordering is optional for template playback.
+    }
   }
 
   async setMediaTextOverlay(
@@ -8590,11 +10939,14 @@ class DockObsClient {
       return;
     }
 
+    void this.focusMcePresentationModule("media").catch(() => { });
+
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
     await this.ensureOverlaySource(sceneName, mediaTextSource, undefined, undefined, true);
+    await this.applyMcePresentationSourceVisibility(mediaTextSource).catch(() => { });
     await this.setBrowserSourceUrl(
       mediaTextSource,
       this.buildMediaTextOverlayUrl({
@@ -8792,9 +11144,12 @@ class DockObsClient {
     // Hide all media sources in MCE Presentation
     await this.hideOverlaySource(scene, "MCE Media - Video").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image").catch(() => { });
+    await this.hideOverlaySource(scene, "MCE Media - Audio").catch(() => { });
+    await this.hideOverlaySource(scene, "MCE Media - Remote").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Pattern").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Image Audio").catch(() => { });
     await this.hideOverlaySource(scene, "MCE Media - Text").catch(() => { });
+    await this.hideOverlaySource(scene, DOCK_MEDIA_TEMPLATE_SOURCE).catch(() => { });
 
     // Restore Program scene to what it was before Media was pushed
     await this.restoreProgramSceneBeforePush("media");
@@ -8860,19 +11215,31 @@ class DockObsClient {
    * Ensure a fullscreen source exists in MCE Presentation.
    * No longer creates separate scenes — everything lives in MCE Presentation.
    */
-  private async _ensureFullscreenScene(key: string): Promise<{ sceneName: string; browserItemId: number }> {
+  private async _ensureFullscreenScene(
+    key: string,
+    initialMode?: "fullscreen" | "lower-third",
+    enable = true,
+  ): Promise<{ sceneName: string; browserItemId: number }> {
     const def = this._fullscreenSceneDefs[key];
     if (!def) throw new Error(`Unknown fullscreen scene key: ${key}`);
 
     const canvas = await this.getCanvasSize();
-    const overlayUrl = this.buildOverlayHtmlUrl(
-      def.overlayFile,
-      key === "countdown" ? undefined : { tab: key },
-    );
+    const shouldBootstrapBibleMode = key === "bible"
+      && Boolean(initialMode)
+      && !Object.prototype.hasOwnProperty.call(
+        this._lastBrowserSourceUrlBySource,
+        def.browserSourceName,
+      );
+    const overlayUrl = key === "bible" && shouldBootstrapBibleMode
+      ? this.buildCssOverlayHtmlUrlForTab("bible", def.browserSourceName, initialMode)
+      : this.buildOverlayHtmlUrl(
+        def.overlayFile,
+        key === "countdown" ? undefined : { tab: key },
+      );
     const sourceSignature = `${overlayUrl}|${canvas.width}x${canvas.height}`;
 
     // Ensure MCE Presentation exists
-    await this.ensureDedicatedScene(DOCK_PRESENTATION_SCENE);
+    await this.ensurePresentationSceneReady();
 
     // Ensure browser source exists inside MCE Presentation
     let browserItemId: number | null = null;
@@ -8888,6 +11255,7 @@ class DockObsClient {
             inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, bgcolor: "#00000000", shutdown: false, restart_when_active: false },
           });
           this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
+          void this.refreshBrowserSourceCache(def.browserSourceName);
         }
       }
     } catch { /* empty scene */ }
@@ -8899,7 +11267,7 @@ class DockObsClient {
           inputName: def.browserSourceName,
           inputKind: "browser_source",
           inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, css: "", bgcolor: "#00000000", shutdown: false, restart_when_active: false },
-          sceneItemEnabled: true,
+          sceneItemEnabled: enable,
         }) as { sceneItemId: number };
         browserItemId = created.sceneItemId;
         createdSceneItem = true;
@@ -8909,7 +11277,7 @@ class DockObsClient {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("already exists") || msg.includes("600")) {
           try {
-            const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: true }) as { sceneItemId: number };
+            const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: enable }) as { sceneItemId: number };
             browserItemId = added.sceneItemId;
             createdSceneItem = true;
             this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
@@ -8932,6 +11300,13 @@ class DockObsClient {
     if (browserItemId !== null) {
       const sceneItemSignature = `${sourceSignature}|item:${browserItemId}`;
       if (!createdSceneItem && this._lastFullscreenSceneItemSignature[def.browserSourceName] === sceneItemSignature) {
+        if (!enable) {
+          await this.call("SetSceneItemEnabled", {
+            sceneName: DOCK_PRESENTATION_SCENE,
+            sceneItemId: browserItemId,
+            sceneItemEnabled: false,
+          }).catch(() => { });
+        }
         return { sceneName: DOCK_PRESENTATION_SCENE, browserItemId };
       }
       try {
@@ -8957,7 +11332,11 @@ class DockObsClient {
           });
         }
         await this.ensureTickerAboveSource(DOCK_PRESENTATION_SCENE, def.browserSourceName).catch(() => { });
-        await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: true });
+        if (enable) {
+          await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: true });
+        } else {
+          await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: false }).catch(() => { });
+        }
         this._lastFullscreenSceneItemSignature[def.browserSourceName] = sceneItemSignature;
       } catch { /* best effort */ }
     }
@@ -9160,6 +11539,7 @@ class DockObsClient {
       const item = items.find((i) => i.sourceName === inputName);
       if (item) {
         await this.call("RemoveSceneItem", { sceneName: def.sceneName, sceneItemId: item.sceneItemId }).catch(() => { });
+        this.invalidateSceneItemListCache(def.sceneName);
       }
     } catch { /* ignore */ }
     await this.call("RemoveInput", { inputName }).catch(() => { });
@@ -9172,6 +11552,25 @@ class DockObsClient {
     await this._hideBgSceneItem(key, names.a);
     await this._hideBgSceneItem(key, names.b);
     this._activeFullscreenBgSignature[key] = "__hidden__";
+  }
+
+  /**
+   * Remove native fullscreen BG inputs created by older builds.
+   *
+   * Bible now renders its background inside MCE Browser - Bible, so keeping
+   * these inputs around only creates a duplicate OBS source. The cleanup is
+   * intentionally one-time per OBS session to avoid extra websocket work on
+   * every verse push.
+   */
+  private async _removeFullscreenBgSources(key: string): Promise<void> {
+    if (this._legacyFullscreenBgCleanupDone[key]) return;
+
+    const names = this._bgSourceNames(key);
+    await this._destroyBgInput(key, names.a);
+    await this._destroyBgInput(key, names.b);
+    this._activeFullscreenBgSignature[key] = "__hidden__";
+    this._bgActiveSlot[key] = "A";
+    this._legacyFullscreenBgCleanupDone[key] = true;
   }
 
   // ── Lower-third persistent BG (reuses double-buffer pattern) ──
@@ -9382,6 +11781,69 @@ class DockObsClient {
     await this._ensureFullscreenScene(key);
     const def = this._fullscreenSceneDefs[key];
     await this.call("SetInputSettings", { inputName: def.browserSourceName, inputSettings: { css } });
+  }
+
+  /**
+   * Programmatically triggers OBS Browser Source "Refresh cache of current page".
+   * Calls OBS WebSocket v5 `PressInputPropertiesButton` with propertyName: "refreshnocache".
+   */
+  async refreshBrowserSourceCache(inputName: string): Promise<boolean> {
+    if (isFreeDockPlan()) return false;
+    try {
+      await this.call("PressInputPropertiesButton", {
+        inputName,
+        propertyName: "refreshnocache",
+      });
+      return true;
+    } catch (err) {
+      console.warn(`[DockObsClient] Failed to refresh cache for input "${inputName}":`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Refreshes the cache of all MCE browser sources (Bible, Worship, Notes, Countdown).
+   */
+  async refreshAllOverlayCaches(): Promise<void> {
+    if (isFreeDockPlan()) return;
+    const sources = Object.values(this._fullscreenSceneDefs).map((d) => d.browserSourceName);
+    await Promise.allSettled(sources.map((name) => this.refreshBrowserSourceCache(name)));
+  }
+
+  /**
+   * Capture a lightweight JPEG screenshot of the current presentation or program output.
+   * Silently returns null if OBS is disconnected or capture fails.
+   */
+  async captureScreenshot(sourceName?: string, imageWidth = 1280): Promise<string | null> {
+    try {
+      if (!this.isConnected) return null;
+
+      let targetSource = (sourceName || "").trim();
+      if (!targetSource) {
+        // Try to capture MCE Presentation scene first, or fall back to Program scene
+        const scenes = await this.getObsSceneNames().catch(() => [] as string[]);
+        if (scenes.includes(DOCK_PRESENTATION_SCENE)) {
+          targetSource = DOCK_PRESENTATION_SCENE;
+        } else {
+          targetSource = await this.getCurrentProgramSceneName().catch(() => "");
+        }
+      }
+
+      if (!targetSource) return null;
+
+      const resp = await this.call("GetSourceScreenshot", {
+        sourceName: targetSource,
+        imageFormat: "jpeg",
+        imageWidth,
+        imageCompressionQuality: 80,
+      });
+
+      const imageData = (resp as { imageData?: string })?.imageData;
+      return typeof imageData === "string" && imageData.length > 0 ? imageData : null;
+    } catch (err) {
+      console.warn("[DockObsClient] captureScreenshot failed:", err);
+      return null;
+    }
   }
 }
 

@@ -11,20 +11,20 @@ import { DEFAULT_THEME_SETTINGS } from "../types";
 
 const defaultDarkFullscreenSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 56,
-  fontWeight: "bold",
+  fontWeight: "black",
   fontColor: "#F7F8FB",
   lineHeight: 1.58,
   textAlign: "center",
-  textShadow: "0 10px 30px rgba(0,0,0,0.62), 0 2px 8px rgba(0,0,0,0.42)",
-  textOutline: false,
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
+  textOutline: true,
   textOutlineColor: "#000000",
-  textOutlineWidth: 0,
+  textOutlineWidth: 4,
 
-  refFontSize: 22,
-  refFontColor: "#C9D2E5",
-  refFontWeight: "bold",
+  refFontSize: 38,
+  refFontColor: "#F7F8FB",
+  refFontWeight: "black",
   refPosition: "bottom",
 
   backgroundColor: "#06070B",
@@ -70,20 +70,20 @@ const defaultDarkFullscreen: BibleTheme = {
 
 const defaultDarkLowerThirdSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 40,
-  fontWeight: "bold",
+  fontWeight: "black",
   fontColor: "#F6F8FC",
   lineHeight: 1.42,
   textAlign: "left",
-  textShadow: "0 4px 18px rgba(0,0,0,0.52)",
-  textOutline: false,
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
+  textOutline: true,
   textOutlineColor: "#000000",
-  textOutlineWidth: 0,
+  textOutlineWidth: 4,
 
-  refFontSize: 18,
-  refFontColor: "#AEB9D1",
-  refFontWeight: "bold",
+  refFontSize: 28,
+  refFontColor: "#F6F8FC",
+  refFontWeight: "black",
   refPosition: "bottom",
 
   backgroundColor: "#0B0E14",
@@ -129,20 +129,20 @@ const defaultDarkLowerThird: BibleTheme = {
 
 const classicDarkSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 52,
-  fontWeight: "normal",
+  fontWeight: "black",
   fontColor: "#FFFFFF",
   lineHeight: 1.7,
   textAlign: "center",
-  textShadow: "0 2px 12px rgba(0,0,0,0.8)",
-  textOutline: false,
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
+  textOutline: true,
   textOutlineColor: "#000000",
-  textOutlineWidth: 0,
+  textOutlineWidth: 4,
 
-  refFontSize: 22,
-  refFontColor: "#aaaaaa",
-  refFontWeight: "normal",
+  refFontSize: 36,
+  refFontColor: "#FFFFFF",
+  refFontWeight: "black",
   refPosition: "bottom",
 
   backgroundColor: "#0a0a14",
@@ -168,7 +168,7 @@ const classicDark: BibleTheme = {
   id: "classic-dark",
   name: "Classic Dark",
   description:
-    "Elegant dark background with centered white serif text. Perfect for traditional worship.",
+    "Traditional white-on-dark presentation style. High contrast, highly legible for all congregation sizes.",
   source: "builtin",
   templateType: "fullscreen",
   settings: classicDarkSettings,
@@ -182,7 +182,7 @@ const classicDark: BibleTheme = {
 
 const modernLightSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
   fontSize: 44,
   fontWeight: "bold",
   fontColor: "#FFFFFF",
@@ -193,8 +193,8 @@ const modernLightSettings: BibleThemeSettings = {
   textOutlineColor: "#000000",
   textOutlineWidth: 0,
 
-  refFontSize: 20,
-  refFontColor: "#e0e0e0",
+  refFontSize: 32,
+  refFontColor: "#FFFFFF",
   refFontWeight: "bold",
   refPosition: "bottom",
 
@@ -235,20 +235,20 @@ const modernLight: BibleTheme = {
 
 const cinematicSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans Bold", "CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Bold", "CMG Sans", sans-serif',
   fontSize: 56,
-  fontWeight: "bold",
+  fontWeight: "black",
   fontColor: "#FFFFFF",
   lineHeight: 1.8,
   textAlign: "center",
-  textShadow: "0 4px 20px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.5)",
+  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
   textOutline: true,
-  textOutlineColor: "rgba(0,0,0,0.3)",
-  textOutlineWidth: 1,
+  textOutlineColor: "#000000",
+  textOutlineWidth: 4,
 
-  refFontSize: 20,
-  refFontColor: "#d4af37",
-  refFontWeight: "bold",
+  refFontSize: 38,
+  refFontColor: "#FFFFFF",
+  refFontWeight: "black",
   refPosition: "bottom",
 
   backgroundColor: "#000000",
@@ -288,9 +288,9 @@ const cinematic: BibleTheme = {
 
 const cleanMinimalSettings: BibleThemeSettings = {
   ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"CMG Sans Light", "CMG Sans", sans-serif',
+  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Light", "CMG Sans", sans-serif',
   fontSize: 40,
-  fontWeight: "light",
+  fontWeight: "bold",
   fontColor: "#333333",
   lineHeight: 1.6,
   textAlign: "center",
@@ -299,9 +299,9 @@ const cleanMinimalSettings: BibleThemeSettings = {
   textOutlineColor: "#000000",
   textOutlineWidth: 0,
 
-  refFontSize: 18,
-  refFontColor: "#888888",
-  refFontWeight: "normal",
+  refFontSize: 28,
+  refFontColor: "#333333",
+  refFontWeight: "bold",
   refPosition: "bottom",
 
   backgroundColor: "#f8f8f8",

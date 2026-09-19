@@ -11,16 +11,13 @@
  * is its own line. Interim text is a separate active entry with a live indicator.
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { dockBridge } from "./dockBridge";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
-import { createScriptureSpeechState, resolveScriptureSpeech, type ScriptureSpeechState } from "./scriptureParser";
 import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
 import { DETECTION_SPEED_CONFIG } from "./voiceBibleTypes";
-import { getVoiceBibleSettings } from "./voiceBibleSettings";
+import { hasTauriInvoke, safeTauriInvoke, safeTauriListen, type TauriUnlisten } from "./tauriSafe";
 
 /**
  * Detect hallucinated transcripts from AssemblyAI.
@@ -59,7 +56,8 @@ export interface LmDockSnapshot {
   status: LmServiceStatus;
   entries: TranscriptEntry[];
   candidates: VoiceBibleCandidate[];
-  queue: VoiceBibleCandidate[];      // Auto-pushed to OBS (reference commands)
+  latestMatch?: VoiceBibleCandidate | null;
+  queue: VoiceBibleCandidate[];      // High-confidence detections eligible for auto-push or manual review
   suggestions: VoiceBibleCandidate[]; // Manual push only (quote matches)
   matching: boolean;
   error?: string;
@@ -69,7 +67,54 @@ export interface LmDockSnapshot {
   telemetry?: LmDockTelemetry;
 }
 
+/** Suggestions are provisional and must be materially stronger than noise. */
+const MIN_LIVE_QUOTE_CONFIDENCE = 0.55;
+const MIN_SILENCE_QUOTE_CONFIDENCE = 0.08;
+
+type QuoteSearchMode = "strict" | "closest";
+
+interface QueueQuoteSearchOptions {
+  mode?: QuoteSearchMode;
+  contextText?: string;
+}
+
+/**
+ * A live quote search is provisional. An empty result can be caused by the
+ * next few spoken words not being enough to match yet, so it must not erase a
+ * suggestion that is still waiting for the operator to click it. Suggestions
+ * are replaced by the next positive result and explicitly cleared when the
+ * listening session stops.
+ */
+export function retainSuggestionsUntilReplacement(
+  current: VoiceBibleCandidate[],
+  next: VoiceBibleCandidate[],
+): VoiceBibleCandidate[] {
+  return next.length > 0 ? next.slice(0, 20) : current;
+}
+
 type SnapshotListener = (snapshot: LmDockSnapshot) => void;
+
+class LmStartupTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LmStartupTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new LmStartupTimeoutError(message)), ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function isLocalStartupFailure(message: string): boolean {
+  return /microphone|mic|audio stream|input device|permission|timed out|timeout|default input|enumerate devices/i.test(message);
+}
 
 /**
  * Relay URL helper — builds absolute URLs to the overlay server's HTTP relay.
@@ -85,7 +130,7 @@ function nextEntryId(): string {
   return `e${++_entryId}`;
 }
 
-class LmDockService {
+export class LmDockService {
   private initialized = false;
   private unsubscribeDock: (() => void) | null = null;
   private listeners = new Set<SnapshotListener>();
@@ -97,13 +142,14 @@ class LmDockService {
     suggestions: [],
     matching: false,
     inputLevel: 0,
-    detectionSpeed: "balanced",
+    detectionSpeed: "sharp",
   };
 
   // Audio refs — Rust-side AssemblyAI realtime STT (via Tauri commands)
-  private transcriptUnlisten: UnlistenFn | null = null;
-  private statusUnlisten: UnlistenFn | null = null;
-  private levelUnlisten: UnlistenFn | null = null;
+  private transcriptUnlisten: TauriUnlisten | null = null;
+  private statusUnlisten: TauriUnlisten | null = null;
+  private levelUnlisten: TauriUnlisten | null = null;
+  private trayStopUnlisten: TauriUnlisten | null = null;
   private visibilityHandler: (() => void) | null = null;
   private focusHandler: (() => void) | null = null;
   private blurHandler: (() => void) | null = null;
@@ -113,27 +159,48 @@ class LmDockService {
   private lastSpeechTime = 0;
   private pauseCheckTimer: ReturnType<typeof setInterval> | null = null;
   private commandPollTimer: ReturnType<typeof setInterval> | null = null;
-  /** Async queue for matching — ensures chunks are processed in order */
-  private matchingQueue: Promise<void> = Promise.resolve();
+  /** Serialized final chunks plus one latest-wins interim chunk. */
+  private matchingQueueRunning = false;
+  private pendingFinalChunks: Array<{ text: string; isFinal: true }> = [];
+  private pendingInterimChunk: string | null = null;
   /** Throttled live quote search state */
   private liveQuoteSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private liveQuoteSearchPendingText = "";
   private lastLiveQuoteSearchAt = 0;
-  /** Cooldown: prevent auto-push to OBS more than once every 3 seconds */
-  private lastAutoPushTime = 0;
-  private static readonly AUTO_PUSH_COOLDOWN_MS = 3000;
-  /** One-shot flag: auto-push to OBS only once per listening session */
-  private hasAutoPushed = false;
+  /** Quote searches are latest-wins so slow semantic work cannot backlog speech. */
+  private quoteSearchInFlight = false;
+  private pendingQuoteSearch: {
+    text: string;
+    timestamp: number;
+    options: QueueQuoteSearchOptions;
+    searchId: number;
+  } | null = null;
   /** Resolved overlay base URL (http://127.0.0.1:<port>) — set once at init */
   private overlayBaseUrl: string | null = null;
+  /** The relay only needs the newest snapshot; serialize writes to prevent stale posts winning. */
+  private relayPostInFlight = false;
+  private relayPendingPayload: Record<string, unknown> | null = null;
+
+  /** User intent survives an unexpected native stream close, but never a manual stop. */
+  private shouldKeepListening = false;
+  private activeMicId: string | undefined;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private nativeStopPromise: Promise<void> | null = null;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
   private sentenceBuffer = "";
   /** Monotonically increasing search ID — discards stale results */
   private latestSearchId = 0;
-  private static readonly PAUSE_THRESHOLD_MS = 1000;
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
+  /** The dock only renders recent lines; never serialize an entire service into each live relay packet. */
+  private static readonly MAX_RELAY_TRANSCRIPT_ENTRIES = 60;
+  private static readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private static readonly RECONNECT_DELAYS_MS = [750, 1_500, 3_000, 5_000, 8_000];
+  private static readonly MIC_START_TIMEOUT_MS = 12_000;
+  private lastQueuedQuoteSearchKey = "";
+  private lastQueuedQuoteSearchAt = 0;
 
   // ── Interim provisional search ────────────────────────────────────────────
   /** Debounce timer for provisional quote search on interim text */
@@ -148,15 +215,13 @@ class LmDockService {
   private lastLevelNotifyAt = 0;
   private lastLevelValue = 0;
 
-  // ── Detection speed ───────────────────────────────────────────────────────
-  /** Current detection speed mode */
-  private detectionSpeed: DetectionSpeed = "balanced";
-  /** Cached detection speed config */
+  // ── Detection profile ─────────────────────────────────────────────────────
+  /** Fixed sharp detection mode. Kept as a typed field for Rust/settings compatibility. */
+  private detectionSpeed: DetectionSpeed = "sharp";
+  /** Cached sharp-profile config */
   private get speedConfig() {
     return DETECTION_SPEED_CONFIG[this.detectionSpeed];
   }
-  /** Fast speech-state resolver for continuations and corrections */
-  private scriptureSpeechState: ScriptureSpeechState = createScriptureSpeechState();
 
   // ── Telemetry ─────────────────────────────────────────────────────────────
   private telemetry: LmDockTelemetry = {
@@ -219,10 +284,57 @@ class LmDockService {
         ? this.telemetry.lastSearchAt - this.lastSpeechReceivedAt
         : 0;
 
-      this.matchingQueue = this.matchingQueue.then(() =>
-        this.runQuoteSearchWithText(pending, Date.now()),
-      );
+      this.queueQuoteSearch(pending);
     }, delay);
+  }
+
+  private queueQuoteSearch(text: string, options: QueueQuoteSearchOptions = {}): void {
+    if (this.snapshot.status !== "listening") return;
+    const trimmed = text.trim();
+    if (trimmed.length < 10) return;
+
+    const mode = options.mode ?? "strict";
+    const now = Date.now();
+    const normalized = trimmed.toLowerCase().replace(/\s+/g, " ");
+    const key = `${mode}:${normalized}:${options.contextText ?? ""}`;
+    if (key === this.lastQueuedQuoteSearchKey && now - this.lastQueuedQuoteSearchAt < 1_000) {
+      return;
+    }
+
+    this.lastQueuedQuoteSearchKey = key;
+    this.lastQueuedQuoteSearchAt = now;
+    this.pendingQuoteSearch = {
+      text: trimmed,
+      timestamp: now,
+      options: { ...options, mode },
+      searchId: ++this.latestSearchId,
+    };
+
+    // Abort the current search as soon as newer speech arrives. The drain
+    // below will process only the newest pending query after the abort settles.
+    if (this.quoteSearchInFlight) {
+      this.scriptureEngine.cancelQuoteSearchPublic();
+      return;
+    }
+
+    this.quoteSearchInFlight = true;
+    void this.drainQuoteSearches();
+  }
+
+  private async drainQuoteSearches(): Promise<void> {
+    try {
+      while (this.pendingQuoteSearch && this.snapshot.status === "listening") {
+        const job = this.pendingQuoteSearch;
+        this.pendingQuoteSearch = null;
+        await this.runQuoteSearchWithText(job.text, job.timestamp, job.options, job.searchId);
+      }
+    } finally {
+      this.quoteSearchInFlight = false;
+      if (this.pendingQuoteSearch && this.snapshot.status === "listening") {
+        this.quoteSearchInFlight = true;
+        void this.drainQuoteSearches();
+      }
+    }
   }
 
   init(): () => void {
@@ -258,6 +370,21 @@ class LmDockService {
       }
     });
 
+    // The macOS menu-bar VoiceAI action must use the same stop path as the
+    // in-app button so reconnection, timers, listeners, and native capture are
+    // all shut down together.
+    void safeTauriListen("voiceai-tray-stop", () => {
+      this.stopListening();
+    }).then((unlisten) => {
+      if (!this.initialized) {
+        unlisten();
+        return;
+      }
+      this.trayStopUnlisten = unlisten;
+    }).catch(() => {
+      // Browser/dock contexts do not expose Tauri events.
+    });
+
     // HTTP command polling — cross-process fallback for OBS CEF dock
     // BroadcastChannel only works within the same browser process.
     // In OBS, the dock runs in CEF (separate process), so we need HTTP relay.
@@ -267,11 +394,11 @@ class LmDockService {
         const res = await fetch(url);
         const raw = (await res.json()) as unknown;
         // Rust returns Vec<String> (raw JSON strings), not Vec<Value>
-        const commands: Array<{ type: string; payload?: unknown }> = Array.isArray(raw)
+        const commands: Array<{ type: string; commandId?: string; payload?: unknown }> = Array.isArray(raw)
           ? raw.map((item) =>
             typeof item === "string"
-              ? (JSON.parse(item) as { type: string; payload?: unknown })
-              : (item as { type: string; payload?: unknown }),
+              ? (JSON.parse(item) as { type: string; commandId?: string; payload?: unknown })
+              : (item as { type: string; commandId?: string; payload?: unknown }),
           )
           : [];
         for (const cmd of commands) {
@@ -282,7 +409,15 @@ class LmDockService {
           } else if (cmd.type === "lm:stop") {
             this.stopListening();
           } else if (cmd.type === "lm:navigate") {
-            // Forward to dockBridge for main app handlers
+            // The LM dock can run in a separate OBS CEF process. Re-broadcast
+            // the relayed command so the Bible dock can focus the reference
+            // and push it through its OBS output path.
+            dockBridge.sendCommand({
+              type: "lm:navigate",
+              commandId: cmd.commandId,
+              payload: cmd.payload,
+              timestamp: Date.now(),
+            });
             dockBridge.sendState({ type: "state:lm-status", payload: { ...this.snapshot }, timestamp: Date.now() });
           }
         }
@@ -301,6 +436,8 @@ class LmDockService {
         clearInterval(this.commandPollTimer);
         this.commandPollTimer = null;
       }
+      this.trayStopUnlisten?.();
+      this.trayStopUnlisten = null;
       this.stopListening();
       this.initialized = false;
     };
@@ -345,7 +482,7 @@ class LmDockService {
     dockBridge.sendState({
       type: "state:lm-transcript",
       payload: {
-        entries: this.snapshot.entries,
+        entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
       },
       timestamp: Date.now(),
     });
@@ -354,50 +491,46 @@ class LmDockService {
 
   /** POST snapshot to overlay server relay for cross-process LM Dock communication */
   private postToRelay(): void {
-    try {
-      const payload = {
-        status: this.snapshot.status,
-        entries: this.snapshot.entries,
-        candidates: this.snapshot.candidates,
-        queue: this.snapshot.queue,
-        suggestions: this.snapshot.suggestions,
-        matching: this.snapshot.matching,
-        error: this.snapshot.error,
-      };
-
-      // Use the eagerly-resolved overlay URL (http://127.0.0.1:<port>).
-      // Falls back to async getOverlayBaseUrl() if cache hasn't resolved yet.
-      // Must NOT use window.location.origin (Vite dev server or tauri://) —
-      // that would hit the Vite proxy which forwards to the wrong port.
-      const base = this.overlayBaseUrl;
-      if (!base) {
-        // URL not yet resolved — wait for it (first few posts after init)
-        void getOverlayBaseUrl().then((resolved) => {
-          this.overlayBaseUrl = resolved;
-          this._postToRelayDirect(resolved, payload);
-        }).catch((err) => {
-          console.warn("[lmDockService] postToRelay: overlay URL resolve failed:", err);
-        });
-        return;
-      }
-
-      this._postToRelayDirect(base, payload);
-    } catch (err) {
-      console.warn("[lmDockService] postToRelay error:", err);
-    }
+    this.relayPendingPayload = {
+      status: this.snapshot.status,
+      startedAt: this.snapshot.startedAt,
+      entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
+      candidates: this.snapshot.candidates,
+      queue: this.snapshot.queue,
+      suggestions: this.snapshot.suggestions,
+      matching: this.snapshot.matching,
+      error: this.snapshot.error,
+    };
+    void this.flushRelaySnapshot();
   }
 
-  private _postToRelayDirect(baseUrl: string, payload: Record<string, unknown>): void {
-    const url = `${baseUrl}/api/lm-state`;
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).then((r) => {
-      if (!r.ok) console.warn("[lmDockService] postToRelay HTTP", r.status, r.statusText);
-    }).catch((err) => {
-      console.warn("[lmDockService] postToRelay fetch FAILED:", url, err);
-    });
+  private async flushRelaySnapshot(): Promise<void> {
+    if (this.relayPostInFlight) return;
+    this.relayPostInFlight = true;
+
+    try {
+      while (this.relayPendingPayload) {
+        const payload = this.relayPendingPayload;
+        this.relayPendingPayload = null;
+        const baseUrl = this.overlayBaseUrl || await getOverlayBaseUrl();
+        this.overlayBaseUrl = baseUrl;
+
+        const response = await fetch(`${baseUrl}/api/lm-state`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          console.warn("[lmDockService] postToRelay HTTP", response.status, response.statusText);
+        }
+      }
+    } catch (err) {
+      console.warn("[lmDockService] postToRelay failed:", err);
+    } finally {
+      this.relayPostInFlight = false;
+      // A snapshot may arrive between the final loop check and clearing the lock.
+      if (this.relayPendingPayload) void this.flushRelaySnapshot();
+    }
   }
 
   /** Get all finalized text joined for Bible matching */
@@ -457,72 +590,95 @@ class LmDockService {
   // ── Bible matching (incremental) ────────────────────────────────────────
 
   /**
-   * Process a transcript chunk through the Scripture Detection Engine.
-   * Uses async queue — chunks are processed in order, but never block transcript.
+   * Process transcript chunks through the Scripture Detection Engine. Final
+   * chunks stay ordered; interim revisions are coalesced to the newest value
+   * so matching work cannot grow faster than speech.
    */
-  private async processChunk(text: string, isFinal: boolean): Promise<void> {
+  private processChunk(text: string, isFinal: boolean): void {
     if (!text.trim()) return;
-    if (this.snapshot.status === "idle") return;
+    if (this.snapshot.status !== "listening") return;
 
-    // Queue the chunk behind any in-flight processing
-    this.matchingQueue = this.matchingQueue.then(async () => {
-      // Re-check idle inside the queue — status may have changed since enqueue
-      const s: LmServiceStatus = this.snapshot.status;
-      if (s === "idle") return;
-      try {
-        const result = await this.scriptureEngine.processChunk(text, isFinal);
-        // Re-check — stop may have been called while awaiting
-        if (this.snapshot.status === "idle") return;
-        this.handleMatchResult(result);
-      } catch (err) {
-        console.warn("[LmDockService] processChunk error:", err);
+    if (isFinal || this.scriptureEngine.isReferenceSpeech(text)) {
+      this.latestSearchId++;
+      this.pendingQuoteSearch = null;
+      this.scriptureEngine.cancelQuoteSearchPublic();
+      if (this.liveQuoteSearchTimer) clearTimeout(this.liveQuoteSearchTimer);
+      this.liveQuoteSearchTimer = null;
+      this.liveQuoteSearchPendingText = "";
+      this.snapshot = { ...this.snapshot, matching: false };
+    }
+    if (isFinal) {
+      // A final ASR result supersedes the currently pending interim revision.
+      this.pendingInterimChunk = null;
+      this.pendingFinalChunks.push({ text, isFinal: true });
+    } else {
+      this.pendingInterimChunk = text;
+    }
+
+    void this.drainMatchingChunks();
+  }
+
+  private async drainMatchingChunks(): Promise<void> {
+    if (this.matchingQueueRunning) return;
+    this.matchingQueueRunning = true;
+
+    try {
+      while (this.snapshot.status === "listening") {
+        const nextFinal = this.pendingFinalChunks.shift();
+        const next = nextFinal ?? (
+          this.pendingInterimChunk
+            ? { text: this.pendingInterimChunk, isFinal: false as const }
+            : null
+        );
+        if (!next) break;
+        if (!next.isFinal) this.pendingInterimChunk = null;
+
+        try {
+          const token = this.sessionToken;
+          const result = await this.scriptureEngine.processChunk(next.text, next.isFinal);
+          if (token !== this.sessionToken) continue;
+          if (this.snapshot.status !== "listening") return;
+          this.handleMatchResult(result);
+          if (next.isFinal) {
+            if (result.handledReference) this.sentenceBuffer = "";
+            else this.onTranscriptFinal(next.text);
+          }
+        } catch (err) {
+          console.warn("[LmDockService] processChunk error:", err);
+        }
       }
-    });
+    } finally {
+      this.matchingQueueRunning = false;
+      if (
+        this.snapshot.status === "listening" &&
+        (this.pendingFinalChunks.length > 0 || this.pendingInterimChunk)
+      ) {
+        void this.drainMatchingChunks();
+      }
+    }
   }
 
   private handleMatchResult(
     result: { matches: Array<{ candidate: VoiceBibleCandidate; source: string; confidence: number; navigationOnly?: boolean }> },
   ): void {
     if (result.matches.length > 0) {
-      const newCandidates = result.matches.map((m) => m.candidate);
+      const newCandidates = result.matches.map((m) => ({ ...m.candidate, detectedAt: Date.now() }));
 
-      // Confidence routing:
-      // - source=reference OR confidence >= 0.90 → auto-push (queue)
-      // - navigationOnly (chapter-only open) → suggestions only (no auto-push)
-      // - confidence >= 0.75 → suggestion
-      // - confidence < 0.75 → low-confidence suggestion
+        // Confidence routing:
+        // - source=reference OR confidence >= 0.90 → queue for configured push behavior
+        // - navigationOnly (chapter-only open) → suggestions only (no auto-push)
+        // - confidence >= 0.75 → suggestion
+        // - confidence < 0.75 → low-confidence suggestion
       const isReferenceCommand = result.matches.some((m) => m.source === "reference");
       const highConfidence = result.matches.some((m) => m.confidence >= 0.90);
       const isNavigationOnly = result.matches.some((m) => m.navigationOnly === true);
 
       if ((isReferenceCommand || highConfidence) && !isNavigationOnly) {
-        const existingQueueKeys = new Set(this.snapshot.queue.map((c) => `${c.book}:${c.chapter}:${c.verse}`));
-        const uniqueNew = newCandidates.filter((c) => !existingQueueKeys.has(`${c.book}:${c.chapter}:${c.verse}`));
-
-        // Always place the newest match at the front so auto-push targets the
-        // most recent navigation result, even if the verse already existed in
-        // the queue (e.g. navigating back then forward again).
-        const queue = [...uniqueNew, ...this.snapshot.queue].slice(0, 20);
-        // Remove duplicates that snuck in via the old queue
-        const dedupedQueue = queue.filter(
-          (c, i, arr) => arr.findIndex((x) => `${x.book}:${x.chapter}:${x.verse}` === `${c.book}:${c.chapter}:${c.verse}`) === i,
-        );
-        // Move the newest candidate to the front even if it was already queued
-        const primary = newCandidates[0];
-        if (primary) {
-          const idx = dedupedQueue.findIndex((c) => `${c.book}:${c.chapter}:${c.verse}` === `${primary.book}:${primary.chapter}:${primary.verse}`);
-          if (idx > 0) {
-            dedupedQueue.splice(idx, 1);
-            dedupedQueue.unshift(primary);
-          }
-        }
-        this.snapshot = { ...this.snapshot, queue: dedupedQueue.slice(0, 20) };
+        const newKeys = new Set(newCandidates.map((c) => `${c.book}:${c.chapter}:${c.verse}`));
+        const queue = [...newCandidates, ...this.snapshot.queue.filter((c) => !newKeys.has(`${c.book}:${c.chapter}:${c.verse}`))].slice(0, 20);
+        this.snapshot = { ...this.snapshot, queue, suggestions: [] };
 
 
-        // Only auto-push when a NEW verse was added to the queue
-        if (uniqueNew.length > 0) {
-          void this.autoPushToObs(this.snapshot.queue[0]);
-        }
       } else {
         // REPLACE suggestions — same principle as runQuoteSearchWithText.
         // Each new match result represents the latest detection, not an
@@ -532,7 +688,7 @@ class LmDockService {
       }
 
       const candidates = [...this.snapshot.queue, ...this.snapshot.suggestions].slice(0, 20);
-      this.snapshot = { ...this.snapshot, candidates };
+      this.snapshot = { ...this.snapshot, candidates, latestMatch: newCandidates[0] };
       this.pushCandidates();
       return;
     }
@@ -541,13 +697,8 @@ class LmDockService {
   // ── Sentence detection ────────────────────────────────────────────────────
 
   /**
-   * Called on EVERY ASR final. Accumulates text, detects sentence boundaries,
-   * and immediately triggers verse search. This is the primary search trigger.
-   *
-   * Triggers on:
-   *   - end_of_turn = true (every final)
-   *   - sentence-ending punctuation (. ? !)
-   *   - pause > 1s (via flushSentenceBuffer)
+   * Called after a finalized ASR turn has been checked for references.
+   * Keep a bounded context for quotes split across adjacent turns.
    */
   private onTranscriptFinal(text: string): void {
     const now = Date.now();
@@ -555,81 +706,16 @@ class LmDockService {
     // Record speech timestamp for telemetry
     this.telemetry.lastSpeechAt = now;
 
-    // Skip quote search for Bible references — processChunk handles these.
-    // Running quote search on reference text (e.g. "1 corinthians 1:1") would
-    // always return 0 results and clear suggestions, making the reference appear
-    // to show "nothing" even though processChunk already detected it.
-    const ref = resolveScriptureSpeech(text, this.scriptureSpeechState, now);
-    if (ref) {
-      return;
-    }
-
-    // Accumulate into sentence buffer
-    this.sentenceBuffer += (this.sentenceBuffer ? " " : "") + text;
-
-    // Check for sentence boundary — split into individual sentences
-    if (/[.?!]/.test(this.sentenceBuffer)) {
-      // Split on sentence-ending punctuation followed by whitespace or end-of-string
-      const parts = this.sentenceBuffer.split(/(?<=[.?!])(?:\s+|$)/).filter(Boolean);
-
-      // Classify: parts ending with punctuation are complete sentences
-      const complete: string[] = [];
-      let trailing = "";
-      for (const part of parts) {
-        if (/[.?!]$/.test(part)) {
-          complete.push(part);
-        } else {
-          trailing = part;
-        }
-      }
-
-      // Keep any trailing incomplete text in buffer
-      this.sentenceBuffer = trailing;
-
-      // Queue each complete sentence for independent, sequential search.
-      // Using matchingQueue ensures earlier searches aren't cancelled by
-      // later ones — each sentence gets its own results.
-      for (const sentence of complete) {
-        const s = sentence.trim();
-        if (s.length < 10) continue;
-        this.matchingQueue = this.matchingQueue.then(() =>
-          this.runQuoteSearchWithText(s, Date.now()),
-        );
-      }
-    } else {
-      // No punctuation yet — search the accumulated buffer anyway
-      const trimmed = this.sentenceBuffer.trim();
-      if (trimmed.length >= 10) {
-        this.matchingQueue = this.matchingQueue.then(() =>
-          this.runQuoteSearchWithText(trimmed, now),
-        );
-      }
-    }
-  }
-
-  /**
-   * Called when a sentence is complete (boundary detected or pause timeout).
-   * Queues the search through matchingQueue so concurrent calls don't cancel
-   * each other — each sentence gets its own independent search.
-   */
-  private onSentenceComplete(sentence: string): void {
-    const trimmed = sentence.trim();
-    if (!trimmed || trimmed.length < 10) return;
-
-    const now = Date.now();
-    this.matchingQueue = this.matchingQueue.then(() =>
-      this.runQuoteSearchWithText(trimmed, now),
-    );
-  }
-
-  /**
-   * Flush the sentence buffer on silence timeout — treat as sentence boundary.
-   */
-  private flushSentenceBuffer(): void {
-    if (this.sentenceBuffer.trim().length >= 10) {
-      this.onSentenceComplete(this.sentenceBuffer);
-    }
-    this.sentenceBuffer = "";
+    // A short final may complete the quotation from the previous ASR turn.
+    // Search the whole turn so punctuation plus a short trailing "Amen" cannot
+    // cancel a verse search that has just started.
+    const words = text.trim().split(/\s+/);
+    const previous = this.sentenceBuffer;
+    const searchText = words.length < 6 && previous
+      ? `${previous} ${text}`
+      : text;
+    this.sentenceBuffer = searchText.split(/\s+/).slice(-60).join(" ");
+    this.queueQuoteSearch(text, { mode: "closest", contextText: words.length < 6 ? previous : undefined });
   }
 
   /**
@@ -637,14 +723,19 @@ class LmDockService {
    * Cancels any in-flight search. Results are discarded if a newer search
    * has started by the time they arrive.
    */
-  private async runQuoteSearchWithText(text: string, _transcriptTimestamp: number): Promise<void> {
-    if (this.snapshot.status === "idle") return;
+  private async runQuoteSearchWithText(
+    text: string,
+    _transcriptTimestamp: number,
+    options: QueueQuoteSearchOptions = {},
+    searchId = ++this.latestSearchId,
+  ): Promise<void> {
+    if (this.snapshot.status !== "listening") return;
 
     // Cancel any in-flight search — we only care about the latest
     this.scriptureEngine.cancelQuoteSearchPublic();
 
-    const searchId = ++this.latestSearchId;
-    const boundBook = this.scriptureEngine.getBoundBook();
+    const token = this.sessionToken;
+    const boundPassage = this.scriptureEngine.getBoundPassage();
     const searchStartedAt = Date.now();
     this.telemetry.lastSearchAt = searchStartedAt;
     this.telemetry.speechToSearchMs = this.lastSpeechReceivedAt > 0
@@ -656,10 +747,14 @@ class LmDockService {
     this.pushStatus();
 
     try {
-      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(text, boundBook);
+      const quoteMatches = await this.scriptureEngine.searchQuotesWithText(
+        text,
+        boundPassage,
+        { ...options, mode: options.mode ?? "strict" },
+      );
 
       // Freshness guard: discard if a newer search has started
-      if (searchId !== this.latestSearchId) {
+      if (searchId !== this.latestSearchId || token !== this.sessionToken || this.snapshot.status !== "listening") {
         return;
       }
 
@@ -670,28 +765,34 @@ class LmDockService {
       this.latencySum += this.telemetry.searchToResultsMs;
       this.telemetry.avgLatencyMs = Math.round(this.latencySum / this.telemetry.searchCount);
 
-      if (quoteMatches.length > 0) {
-        // REPLACE suggestions — every new search represents the latest quote.
-        const suggestions = quoteMatches.map((m) => m.candidate).slice(0, 20);
+      const minConfidence = options.mode === "closest"
+        ? MIN_SILENCE_QUOTE_CONFIDENCE
+        : MIN_LIVE_QUOTE_CONFIDENCE;
+      const usableQuoteMatches = quoteMatches.filter((match) => match.confidence >= minConfidence);
+
+      if (usableQuoteMatches.length > 0) {
+        // Replace suggestions only when a newer search has a real match.
+        // Empty interim searches must not remove a clickable suggestion.
+        const suggestions = retainSuggestionsUntilReplacement(
+          this.snapshot.suggestions,
+          usableQuoteMatches.map((m) => ({ ...m.candidate, detectedAt: Date.now() })),
+        );
         const candidates = [...this.snapshot.queue, ...suggestions].slice(0, 20);
-        this.snapshot = { ...this.snapshot, suggestions, candidates };
+        this.snapshot = { ...this.snapshot, suggestions, candidates, latestMatch: suggestions[0] };
         this.telemetry.lastResultsAt = Date.now();
         this.telemetry.totalLatencyMs = this.lastSpeechReceivedAt > 0
           ? searchCompletedAt - this.lastSpeechReceivedAt
           : this.telemetry.searchToResultsMs;
         this.pushCandidates();
       } else {
-        // Clear stale suggestions — the new query found nothing, so the
-        // previous match is no longer relevant. Without this, a verse from
-        // a prior search persists on screen even after the topic changes.
-        if (this.snapshot.suggestions.length > 0) {
-          this.snapshot = { ...this.snapshot, suggestions: [], candidates: [...this.snapshot.queue] };
-          this.pushCandidates();
-        }
+        // Keep the previous suggestion visible. The dock owns its configured
+        // suggestion lifetime, and the next partial search may simply be too
+        // short to match while the pastor is still speaking.
       }
     } catch (err) {
       console.warn("[LmDockService] Sentence quote search failed:", err);
     } finally {
+      if (searchId !== this.latestSearchId || token !== this.sessionToken) return;
       this.snapshot = { ...this.snapshot, matching: false };
       // Don't push status after stop — the stop handler already pushed idle
       if (this.snapshot.status !== "idle") {
@@ -700,70 +801,61 @@ class LmDockService {
     }
   }
 
-  // ── Auto-push to OBS ─────────────────────────────────────────────────────
-
-  /**
-   * Auto-push a verse to OBS when a reference command is detected.
-   * Loads the full chapter and pushes surrounding context (up to 10 preceding
-   * verses + the target verse) so the broadcast shows passage context, not
-   * just the single target verse.
-   */
-  private async autoPushToObs(candidate: VoiceBibleCandidate): Promise<void> {
-    // Don't push to OBS if listening has stopped
-    if (this.snapshot.status !== "listening") {
-      return;
-    }
-
-    // One-shot: only auto-push once per listening session
-    if (this.hasAutoPushed) {
-      return;
-    }
-
-    // Cooldown — prevent continuous pushing when ASR detects rapid-fire verses
-    const now = Date.now();
-    if (now - this.lastAutoPushTime < LmDockService.AUTO_PUSH_COOLDOWN_MS) {
-      return;
-    }
-    this.lastAutoPushTime = now;
-
-    try {
-      const { bibleObsService } = await import("../bible/bibleObsService");
-      const { getChapter } = await import("../bible/bibleData");
-
-      // Load the full chapter to get surrounding verse context
-      const passage = await getChapter(candidate.book, candidate.chapter, candidate.translation);
-      const targetVerse = candidate.verse;
-
-      // Select a window: up to 10 preceding verses + target verse
-      const targetIdx = passage.verses.findIndex((v) => v.verse === targetVerse);
-      const startIdx = Math.max(0, targetIdx - 10);
-      const selectedVerses = passage.verses.slice(startIdx, targetIdx + 1);
-
-      const verseText = selectedVerses
-        .map((v) => `${candidate.book} ${candidate.chapter}:${v.verse}  ${v.text}`)
-        .join("\n\n");
-
-      const slide = {
-        id: `speech-${candidate.book}-${candidate.chapter}-${candidate.verse}`,
-        text: verseText || candidate.snippet || `${candidate.book} ${candidate.chapter}:${candidate.verse}`,
-        reference: `${candidate.label} (${candidate.translation})`,
-        verseRange: selectedVerses.length > 1
-          ? `${selectedVerses[0].verse}-${selectedVerses[selectedVerses.length - 1].verse}`
-          : String(targetVerse),
-        index: 0,
-        total: selectedVerses.length,
-      };
-
-      await bibleObsService.pushSlide(slide, null, true, false, "fullscreen");
-      this.hasAutoPushed = true;
-    } catch (err) {
-      console.warn("[LmDockService] Auto-push to OBS failed:", err);
-    }
-  }
-
   // ── Start / Stop ────────────────────────────────────────────────────────
 
-  async startListening(micId?: string): Promise<void> {
+  private recoverFromUnexpectedStreamEnd(reason: string): void {
+    if (!this.shouldKeepListening || this.reconnectTimer) return;
+
+    const isConfigurationFailure = /api key|unauthori[sz]ed|forbidden|invalid.*key/i.test(reason);
+    if (isConfigurationFailure) {
+      this.shouldKeepListening = false;
+      void this.cleanup();
+      return;
+    }
+
+    const nextAttempt = this.reconnectAttempts + 1;
+    if (nextAttempt > LmDockService.MAX_RECONNECT_ATTEMPTS) {
+      this.shouldKeepListening = false;
+      this.snapshot = {
+        ...this.snapshot,
+        status: "error",
+        error: "Speech connection stopped. Start listening again to retry.",
+      };
+      this.pushStatus();
+      void this.cleanup();
+      return;
+    }
+
+    this.reconnectAttempts = nextAttempt;
+    void this.cleanup().finally(() => {
+      if (!this.shouldKeepListening || this.reconnectTimer) return;
+
+      const delay = LmDockService.RECONNECT_DELAYS_MS[nextAttempt - 1] ?? 8_000;
+      this.snapshot = {
+        ...this.snapshot,
+        status: "connecting",
+        error: `Reconnecting speech service (${nextAttempt}/${LmDockService.MAX_RECONNECT_ATTEMPTS})…`,
+      };
+      this.pushStatus();
+
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        if (!this.shouldKeepListening) return;
+        void this.startListening(this.activeMicId, { reconnect: true });
+      }, delay);
+    });
+  }
+
+  async startListening(micId?: string, options: { reconnect?: boolean } = {}): Promise<void> {
+    if (!options.reconnect) {
+      this.shouldKeepListening = true;
+      this.reconnectAttempts = 0;
+    }
+    this.activeMicId = micId;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status);
     if (
       this.startInFlight ||
@@ -777,13 +869,7 @@ class LmDockService {
     this.startInFlight = true;
     const token = ++this.sessionToken;
 
-    // Load detection speed from settings
-    try {
-      const settings = await getVoiceBibleSettings();
-      this.detectionSpeed = settings.detectionSpeed;
-    } catch {
-      // Use default "balanced" if settings load fails
-    }
+    this.detectionSpeed = "sharp";
 
     // Reset telemetry for new session
     this.telemetry = {
@@ -803,45 +889,47 @@ class LmDockService {
       candidates: [],
       queue: [],
       suggestions: [],
+      latestMatch: null,
       matching: false,
       inputLevel: 0,
-      startedAt: Date.now(),
+      startedAt: options.reconnect
+        ? this.snapshot.startedAt ?? Date.now()
+        : Date.now(),
       entries: this.snapshot.entries,
       detectionSpeed: this.detectionSpeed,
     };
-    this.scriptureEngine.reset();
-    this.scriptureSpeechState = createScriptureSpeechState();
-    this.hasAutoPushed = false;
+    this.scriptureEngine.cancelQuoteSearchPublic();
+    this.scriptureEngine = new ScriptureDetectionEngine();
+    this.latestSearchId++;
+    this.sentenceBuffer = "";
+    this.lastQueuedQuoteSearchKey = "";
+    this.lastQueuedQuoteSearchAt = 0;
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
     this.pushStatus();
 
+    let nativeStartCompleted = false;
+
     try {
+      if (!hasTauriInvoke()) {
+        throw new Error("Speech listening must run inside the desktop app so the microphone engine can start.");
+      }
       if (token !== this.sessionToken) return;
 
-      // Preload Bible data to avoid first-call latency
-      await this.scriptureEngine.preload();
-      if (token !== this.sessionToken) {
-        await this.cleanup();
-        return;
-      }
+      // Heavy scripture data must not block microphone startup. The first
+      // transcript can still trigger lazy loading if this has not finished yet.
+      void this.scriptureEngine.preload().catch((err) => {
+        console.warn("[LmDockService] Scripture preload failed:", err);
+      });
 
-      // Check if offline - try to load Whisper model
+      // Check if offline - warm the Whisper model without blocking mic startup.
       if (!navigator.onLine) {
-        const { loadWhisperModel } = await import("./whisperService");
-        await loadWhisperModel();
-        if (token !== this.sessionToken) {
-          await this.cleanup();
-          return;
-        }
-      }
-
-      // Start Rust-side AssemblyAI realtime STT — captures mic + streams turns from backend.
-      // Immune to WebView throttling, AudioContext suspension, and App Nap.
-      this.snapshot = { ...this.snapshot, status: "connecting" };
-      this.pushStatus();
-
-      if (token !== this.sessionToken) {
-        await this.cleanup();
-        return;
+        void import("./whisperService")
+          .then(({ loadWhisperModel }) => loadWhisperModel())
+          .catch((err) => {
+            console.warn("[LmDockService] Whisper preload failed:", err);
+          });
       }
 
       const apiKey = getAssemblyAiKey();
@@ -850,12 +938,13 @@ class LmDockService {
       }
 
       // Listen for transcript events from Rust backend
-      this.transcriptUnlisten = await listen<{
-        text: string;
-        end_of_turn: boolean;
-        audio_start: number;
-        audio_end: number;
-      }>("assemblyai-transcript", (event) => {
+      this.transcriptUnlisten = await withTimeout(
+        safeTauriListen<{
+          text: string;
+          end_of_turn: boolean;
+          audio_start: number;
+          audio_end: number;
+        }>("assemblyai-transcript", (event) => {
         if (token !== this.sessionToken) return;
         const { text, end_of_turn, audio_start, audio_end } = event.payload;
         this.lastSpeechReceivedAt = Date.now();
@@ -867,8 +956,10 @@ class LmDockService {
         }
 
         if (end_of_turn) {
+          if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
           this.finalizeCurrent(text, audio_start, audio_end);
           this.pushTranscript();
+          this.lastSpeechTime = Date.now();
 
           // Process final text through scripture engine (reference parsing)
           // Only process the final text — the speechBuffer may overlap with
@@ -876,8 +967,6 @@ class LmDockService {
           this.speechBuffer = "";
           void this.processChunk(text, true);
 
-          // Sentence detection: accumulate finals, detect boundaries, trigger verse search
-          this.onTranscriptFinal(text);
         } else {
           // Interim — update buffer, track timestamp, and run live matching
           this.upsertInterim(text, audio_start, audio_end);
@@ -885,12 +974,11 @@ class LmDockService {
           this.speechBuffer = text;
           this.lastSpeechTime = Date.now();
 
-          const interimRef = resolveScriptureSpeech(text, this.scriptureSpeechState, Date.now());
+          const interimRef = this.scriptureEngine.isReferenceSpeech(text);
 
-          // Run scripture engine on interim text for live suggestions.
-          // Accurate mode waits for final/sentence text unless this is a
-          // direct reference command like "John three sixteen".
-          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 15)) {
+          // Run scripture engine on interim text for live reference commands
+          // such as "John three sixteen" while quote search continues below.
+          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 8)) {
             void this.processChunk(text, false);
           }
 
@@ -899,10 +987,8 @@ class LmDockService {
           // Uses a throttle so updates can happen during speech instead of
           // waiting for a full pause.
           //
-          // Word minimum and throttle window are controlled by detection speed mode:
-          //   fast:      3 words, 250ms throttle
-          //   balanced:  5 words, 300ms throttle
-          //   accurate:  8 words, 400ms throttle
+          // The fixed best profile searches after enough words are present
+          // and throttles updates so live speech stays responsive.
           const interimWordCount = text.split(/\s+/).filter(Boolean).length;
           const minWords = this.speedConfig.minWords;
           if (
@@ -914,30 +1000,39 @@ class LmDockService {
             this.scheduleLiveQuoteSearch(text);
           }
         }
-      });
+        }),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing audio events.",
+      );
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
       }
 
       // Listen for status events from Rust backend
-      this.statusUnlisten = await listen<{ status: string }>(
-        "assemblyai-status",
-        (event) => {
+      this.statusUnlisten = await withTimeout(
+        safeTauriListen<{ status: string }>(
+          "assemblyai-status",
+          (event) => {
           if (token !== this.sessionToken) return;
           const { status } = event.payload;
           if (status === "connected") {
+            this.reconnectAttempts = 0;
             this.snapshot = { ...this.snapshot, status: "listening" };
             this.pushStatus();
           } else if (status.startsWith("error")) {
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
-            this.cleanup();
+            this.recoverFromUnexpectedStreamEnd(status);
           } else if (status === "stopped") {
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
+            this.recoverFromUnexpectedStreamEnd("The speech connection closed unexpectedly.");
           }
-        },
+          },
+        ),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing connection events.",
       );
       if (token !== this.sessionToken) {
         await this.cleanup();
@@ -945,9 +1040,10 @@ class LmDockService {
       }
 
       // Listen for audio level events from Rust backend
-      this.levelUnlisten = await listen<{ level: number }>(
-        "assemblyai-audio-level",
-        (event) => {
+      this.levelUnlisten = await withTimeout(
+        safeTauriListen<{ level: number }>(
+          "assemblyai-audio-level",
+          (event) => {
           if (token !== this.sessionToken) return;
           const level = event.payload.level;
           this.snapshot = { ...this.snapshot, inputLevel: level };
@@ -965,7 +1061,10 @@ class LmDockService {
             this.lastLevelValue = level;
             this.notifyListeners();
           }
-        },
+          },
+        ),
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone startup timed out while preparing the audio meter.",
       );
       if (token !== this.sessionToken) {
         await this.cleanup();
@@ -978,47 +1077,75 @@ class LmDockService {
           const silenceMs = Date.now() - this.lastSpeechTime;
           const wordCount = this.speechBuffer.split(/\s+/).filter(Boolean).length;
 
-          // Trigger search after 500ms silence with enough content
-          if (silenceMs > 500 && (this.speechBuffer.length > 20 || wordCount > 4)) {
+          // Trigger search quickly after a short pause with enough content.
+          if (silenceMs > 180 && (this.speechBuffer.length > 8 || wordCount >= this.speedConfig.minWords)) {
             const phrase = this.speechBuffer.trim();
             this.speechBuffer = "";
             void this.processChunk(phrase, false);
           }
         }
 
-        // Sentence boundary on silence: flush accumulated sentence buffer
-        if (this.sentenceBuffer.length > 0 && this.lastSpeechTime > 0) {
-          const silenceMs = Date.now() - this.lastSpeechTime;
-          if (silenceMs > LmDockService.PAUSE_THRESHOLD_MS) {
-            this.flushSentenceBuffer();
-          }
-        }
       }, 100);
 
       // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
-      const gainMultiplier = (mvSettings.inputGain ?? 100) / 100;
-      await invoke("start_assemblyai_stream", {
+      const rawGain = Number(mvSettings.inputGain ?? 100);
+      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0, Math.min(3, rawGain / 100)) : 1;
+      const nativeStartPromise = safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
         detectionSpeed: this.detectionSpeed,
       });
+      void nativeStartPromise
+        .then(() => {
+          if (token !== this.sessionToken) {
+            void this.cleanup();
+          }
+        })
+        .catch(() => {
+          // The awaited path below owns visible errors.
+        });
+      await withTimeout(
+        nativeStartPromise,
+        LmDockService.MIC_START_TIMEOUT_MS,
+        "Microphone start timed out. Check microphone permission, the default input device, or choose another input.",
+      );
+      nativeStartCompleted = true;
       if (token !== this.sessionToken) {
         await this.cleanup();
         return;
       }
+      if (this.snapshot.status === "requesting-mic") {
+        this.snapshot = { ...this.snapshot, status: "connecting" };
+        this.pushStatus();
+      }
       // Apply current gain (separate call so it's live-updatable)
-      await invoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
+      await safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
     } catch (err) {
       if (token !== this.sessionToken) {
         return;
       }
       console.warn("[LmDockService] Failed to start listening:", err);
       const msg = err instanceof Error ? err.message : String(err);
+      // Errors thrown from this method happen during startup. Runtime network
+      // failures are reported through `assemblyai-status` and handled by the
+      // reconnect path there. Retrying an unhandled startup error would keep
+      // cycling the UI back to "Requesting Mic" forever.
+      const stopStartup = !nativeStartCompleted || err instanceof LmStartupTimeoutError || isLocalStartupFailure(msg);
+      if (stopStartup) {
+        this.shouldKeepListening = false;
+        this.startInFlight = false;
+        if (err instanceof LmStartupTimeoutError) {
+          this.sessionToken++;
+        }
+        void this.cleanup();
+      }
       this.snapshot = { ...this.snapshot, status: "error", error: msg };
       this.pushStatus();
-      this.cleanup();
+      if (!stopStartup) {
+        this.recoverFromUnexpectedStreamEnd(msg);
+      }
     } finally {
       if (token === this.sessionToken) {
         this.startInFlight = false;
@@ -1027,6 +1154,13 @@ class LmDockService {
   }
 
   stopListening(): void {
+    this.shouldKeepListening = false;
+    this.activeMicId = undefined;
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.sessionToken++;
     this.startInFlight = false;
     if (this.pauseCheckTimer) {
@@ -1046,12 +1180,18 @@ class LmDockService {
     this.lastSpeechReceivedAt = 0;
     this.sentenceBuffer = "";
     this.lastInterimSearched = "";
+    this.lastQueuedQuoteSearchKey = "";
+    this.lastQueuedQuoteSearchAt = 0;
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
+    this.scriptureEngine.cancelQuoteSearchPublic();
     this.latestSearchId++;
     this.liveQuoteSearchPendingText = "";
     this.lastLevelNotifyAt = 0;
     this.lastLevelValue = 0;
 
-    this.cleanup();
+    void this.cleanup();
 
     this.snapshot = {
       ...this.snapshot,
@@ -1062,6 +1202,7 @@ class LmDockService {
       candidates: [],
       queue: [],
       suggestions: [],
+      latestMatch: null,
       matching: false,
     };
     this.pushStatus();
@@ -1074,10 +1215,10 @@ class LmDockService {
    */
   async setInputGain(gainPercent: number): Promise<void> {
     const gain = Math.max(0, Math.min(3, gainPercent / 100));
-    await invoke("set_microphone_gain", { gain }).catch(() => { });
+    await safeTauriInvoke("set_microphone_gain", { gain }).catch(() => { });
   }
 
-  private cleanup(): void {
+  private cleanup(): Promise<void> {
     // Unlisten Tauri event listeners
     this.transcriptUnlisten?.();
     this.transcriptUnlisten = null;
@@ -1097,6 +1238,10 @@ class LmDockService {
       clearTimeout(this.interimSearchTimer);
       this.interimSearchTimer = null;
     }
+    this.pendingFinalChunks = [];
+    this.pendingInterimChunk = null;
+    this.pendingQuoteSearch = null;
+    this.scriptureEngine.cancelQuoteSearchPublic();
 
     // Remove focus/visibility handlers
     if (this.visibilityHandler) {
@@ -1112,10 +1257,19 @@ class LmDockService {
       this.focusHandler = null;
     }
 
-    // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task)
-    invoke("stop_assemblyai_stream").catch((err) => {
-      console.warn("[LmDockService] Failed to stop voice stream:", err);
-    });
+    // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task).
+    // Keep one shared promise so a reconnect never races a previous shutdown.
+    if (!this.nativeStopPromise) {
+      this.nativeStopPromise = safeTauriInvoke("stop_assemblyai_stream")
+        .then(() => undefined)
+        .catch((err) => {
+          console.warn("[LmDockService] Failed to stop voice stream:", err);
+        })
+        .finally(() => {
+          this.nativeStopPromise = null;
+        });
+    }
+    return this.nativeStopPromise;
   }
 
   subscribe(listener: SnapshotListener): () => void {
@@ -1129,7 +1283,10 @@ class LmDockService {
     // Browser navigator.mediaDevices returns macOS Core Audio UIDs which don't
     // match cpal device names, so we must not mix the two.
     try {
-      const devices = await invoke<Array<{ id: string; name: string; is_default: boolean }>>(
+      if (!hasTauriInvoke()) {
+        return [{ id: "", label: "Default microphone" }];
+      }
+      const devices = await safeTauriInvoke<Array<{ id: string; name: string; is_default: boolean }>>(
         "list_audio_devices",
       );
       return devices.map((d) => ({ id: d.id, label: d.name }));
@@ -1200,14 +1357,15 @@ class LmDockService {
   }
 
   /**
-   * Change detection speed mode at runtime.
-   * Takes effect immediately — no restart needed.
+   * Compatibility shim for older UI/settings callers. The runtime always uses
+   * the fixed sharp profile.
    */
-  setDetectionSpeed(speed: DetectionSpeed): void {
+  setDetectionSpeed(_speed: DetectionSpeed): void {
+    const speed: DetectionSpeed = "sharp";
     this.detectionSpeed = speed;
     this.snapshot = { ...this.snapshot, detectionSpeed: speed };
     this.pushStatus();
-    invoke("set_assemblyai_stream_speed", { detectionSpeed: speed }).catch((err) => {
+    safeTauriInvoke("set_assemblyai_stream_speed", { detectionSpeed: speed }).catch((err) => {
       console.warn("[LmDockService] Failed to update AssemblyAI stream speed:", err);
     });
   }

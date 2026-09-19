@@ -1,13 +1,19 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies, headers } from "next/headers";
 import { DEFAULT_LOCALE, getLocaleCandidates, resolveLocalePreference } from "./routing";
+import { getInitialMongoUser } from "@/lib/serverAuth";
 
 export default getRequestConfig(async () => {
+  const initialMongoUser = await getInitialMongoUser();
   const cookieStore = await cookies();
   const headerStore = await headers();
   const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
   const acceptLanguage = headerStore.get("accept-language");
-  const locale = resolveLocalePreference(localeCookie, undefined, acceptLanguage) || DEFAULT_LOCALE;
+  const locale = resolveLocalePreference(
+    initialMongoUser?.language || localeCookie,
+    initialMongoUser?.country,
+    acceptLanguage,
+  ) || DEFAULT_LOCALE;
 
   let messages: Record<string, unknown> | undefined;
   for (const candidate of getLocaleCandidates(locale)) {

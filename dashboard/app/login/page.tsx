@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Loader2, Mail, ArrowLeft, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { countries } from "@/lib/countries";
 import { AppLogo } from "@/components/AppLogo";
 import { useTranslations } from "next-intl";
 import {
@@ -15,6 +14,12 @@ import {
 import Link from "next/link";
 
 type Mode = "login" | "signup" | "forgot-password" | "check-email" | "signup-success" | "migrate" | "verify-email";
+
+const PENDING_REFERRAL_CODE_KEY = "mce_pending_referral_code";
+
+function normalizeReferralCode(value: string | null): string {
+  return (value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 export default function Login() {
   return (
@@ -48,7 +53,6 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [churchName, setChurchName] = useState("");
-  const [country, setCountry] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
@@ -67,6 +71,15 @@ function LoginInner() {
   const verifyResendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const referralCode = normalizeReferralCode(
+      searchParams.get("ref") ||
+      searchParams.get("referral") ||
+      searchParams.get("referralCode"),
+    );
+    if (referralCode) {
+      localStorage.setItem(PENDING_REFERRAL_CODE_KEY, referralCode);
+    }
+
     const modeParam = searchParams.get("mode");
     if (modeParam === "signup") {
       setMode("signup");
@@ -80,6 +93,7 @@ function LoginInner() {
         token_exchange_failed: "Google sign-in failed — could not complete authentication",
         no_email: "Google account has no email address",
         google_auth_failed: "Google sign-in failed. Please try again.",
+        registrations_disabled: "New account registration is currently disabled.",
       };
       setError(errorMessages[errorParam] || `Google sign-in error: ${errorParam}`);
     }
@@ -154,7 +168,16 @@ function LoginInner() {
     setError("");
     setLoading(true);
     try {
-      const result = await signUpWithEmail(email, password, name, churchName, country);
+      const referralCode = normalizeReferralCode(
+        localStorage.getItem(PENDING_REFERRAL_CODE_KEY),
+      );
+      const result = await signUpWithEmail(
+        email,
+        password,
+        name,
+        churchName,
+        referralCode || undefined,
+      );
       if (result.needsEmailVerification) {
         setMode("verify-email");
         setVerifyEmailCode("");
@@ -749,32 +772,16 @@ function LoginInner() {
           ) : mode === "signup" ? (
             <>
               <form onSubmit={handleSignup} className="flex flex-col gap-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{t("common.fullName")}</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      className="h-11 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 text-sm text-slate-900 dark:text-white outline-none transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600"
-                      placeholder={t("auth.signup.namePlaceholder")}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{t("common.country")}</label>
-                    <select
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      required
-                      className="h-11 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 text-sm text-slate-900 dark:text-white outline-none transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600"
-                    >
-                      <option value="">{t("common.selectCountry")}</option>
-                      {countries.map((c) => (
-                        <option key={c.code} value={c.code}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{t("common.fullName")}</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="h-11 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 text-sm text-slate-900 dark:text-white outline-none transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600"
+                    placeholder={t("auth.signup.namePlaceholder")}
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{t("common.churchName")}</label>

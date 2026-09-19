@@ -21,8 +21,8 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{t("title")}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-white">{t("title")}</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
           {t("description")}
         </p>
       </div>
@@ -69,8 +69,8 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
           {data.emergencyLock && (
             <div className="px-6 py-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-900">{t("lockDelay")}</p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-sm font-medium text-white">{t("lockDelay")}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
                   {t("lockDelayDescription")}
                 </p>
               </div>
@@ -79,7 +79,7 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
                 onChange={(e) =>
                   update({ emergencyLockDelay: Number(e.target.value) })
                 }
-                className="h-11 px-3 py-1.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="h-11 px-3 py-1.5 text-sm border border-slate-700 rounded-xl bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
               >
                 <option value={0}>{t("immediate")}</option>
                 <option value={12}>12 {t("hours")}</option>
@@ -91,7 +91,7 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
           )}
 
           {data.emergencyLock && (
-            <div className="mx-6 my-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs flex items-center gap-2">
+            <div className="mx-6 my-2 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               {data.emergencyLockDelay > 0
                 ? t("emergencyLockActive", { hours: data.emergencyLockDelay })
@@ -153,7 +153,7 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
                 label="Release Notes URL"
                 value={data.releaseNotesUrl}
                 onChange={(e) => update({ releaseNotesUrl: e.target.value })}
-                placeholder="https://makechurcheasy.creatorstudioslabs.stream/downloads/release-notes"
+                placeholder="https://makechurcheazy.com/downloads/release-notes"
               />
             </div>
           </div>
@@ -164,19 +164,19 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
                 label="Windows Download URL"
                 value={data.windowsDownloadUrl}
                 onChange={(e) => update({ windowsDownloadUrl: e.target.value })}
-                placeholder="https://makechurcheasy.creatorstudioslabs.stream/downloads/windows"
+                placeholder="https://makechurcheazy.com/downloads/windows"
               />
               <Input
                 label="Mac Download URL"
                 value={data.macDownloadUrl}
                 onChange={(e) => update({ macDownloadUrl: e.target.value })}
-                placeholder="https://makechurcheasy.creatorstudioslabs.stream/downloads/mac"
+                placeholder="https://makechurcheazy.com/downloads/mac"
               />
               <Input
                 label="Linux Download URL"
                 value={data.linuxDownloadUrl}
                 onChange={(e) => update({ linuxDownloadUrl: e.target.value })}
-                placeholder="https://makechurcheasy.creatorstudioslabs.stream/downloads/linux"
+                placeholder="https://makechurcheazy.com/downloads/linux"
               />
             </div>
           </div>

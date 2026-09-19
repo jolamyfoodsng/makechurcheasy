@@ -17,10 +17,111 @@
     rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
+  <style>
+    /* Instant Boot Preloader before React hydrates */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #0f172a;
+      color: #f8fafc;
+      height: 100%;
+      overflow: hidden;
+    }
+    #root {
+      height: 100%;
+      min-height: 100vh;
+    }
+    .app-preloader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      height: 100%;
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      position: relative;
+      overflow: hidden;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    .app-preloader__glow {
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(29, 78, 216, 0.22) 0%, rgba(56, 189, 248, 0.06) 50%, transparent 70%);
+      filter: blur(32px);
+      pointer-events: none;
+      animation: preloader-pulse 2s ease-in-out infinite alternate;
+    }
+    .app-preloader__content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .app-preloader__logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #1d4ed8, #0284c7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35);
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .app-preloader__spinner {
+      position: relative;
+      width: 32px;
+      height: 32px;
+    }
+    .app-preloader__spinner-ring {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 3px solid rgba(148, 163, 184, 0.18);
+      border-top-color: #38bdf8;
+      border-right-color: #2563eb;
+      box-sizing: border-box;
+      animation: preloader-spin 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .app-preloader__text {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: #f1f5f9;
+      margin: 0;
+    }
+    @keyframes preloader-spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes preloader-pulse {
+      0% { transform: scale(0.9); opacity: 0.4; }
+      100% { transform: scale(1.15); opacity: 0.8; }
+    }
+  </style>
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="app-preloader" role="status" aria-live="polite" aria-label="Loading MakeChurchEasy">
+      <div class="app-preloader__glow" aria-hidden="true"></div>
+      <div class="app-preloader__content">
+        <div class="app-preloader__logo" aria-hidden="true">✦</div>
+        <div class="app-preloader__spinner" aria-hidden="true">
+          <div class="app-preloader__spinner-ring"></div>
+        </div>
+        <p class="app-preloader__text">MakeChurchEasy</p>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

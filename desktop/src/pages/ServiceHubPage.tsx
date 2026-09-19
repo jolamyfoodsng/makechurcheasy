@@ -30,5 +30,5 @@ export default function ServiceHubPage() {
   if (mapped.source) {
     next.set("source", mapped.source);
   }
-  return <Navigate to={`/presentation/console?${next.toString()}`} replace />;
+  return <Navigate to={`/presentation/link?${next.toString()}`} replace />;
 }

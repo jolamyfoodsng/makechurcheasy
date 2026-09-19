@@ -32,11 +32,16 @@ type DownloadStatus = "idle" | "downloading" | "downloaded" | "error";
 type PlatformKey = "windows" | "macos-silicon" | "macos-intel";
 
 function detectOS(): { os: DetectedOS; arch: MacArch } {
-  if (typeof window === "undefined") return { os: "mac", arch: null };
+  if (typeof window === "undefined") return { os: "mac", arch: "arm64" };
   const ua = navigator.userAgent;
   if (/mac os/i.test(ua)) {
-    const arch = /arm64|aarch64/i.test(navigator.userAgent) ? "arm64" : "x64";
-    return { os: "mac", arch: arch as MacArch };
+    const navAny = navigator as any;
+    const uaDataArch = navAny.userAgentData?.architecture?.toLowerCase?.();
+    if (uaDataArch === "arm") return { os: "mac", arch: "arm64" };
+    if (uaDataArch === "x86") return { os: "mac", arch: "x64" };
+    if (/arm64|aarch64/i.test(ua)) return { os: "mac", arch: "arm64" };
+    // Apple Silicon is standard for Macs since 2020; default to arm64
+    return { os: "mac", arch: "arm64" };
   }
   if (/windows/i.test(ua)) return { os: "windows", arch: null };
   return { os: "unsupported", arch: null };
@@ -52,9 +57,9 @@ const REPO_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/relea
 function getPlatformKey(filename: string): PlatformKey | null {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".exe")) return "windows";
-  if (lower.includes("aarch64")) return "macos-silicon";
-  if (lower.includes("x64")) return "macos-intel";
-  if (lower.endsWith(".dmg")) return "macos-intel";
+  if (lower.includes("aarch64") || lower.includes("arm64")) return "macos-silicon";
+  if (lower.includes("x64") || lower.includes("x86_64")) return "macos-intel";
+  if (lower.endsWith(".dmg")) return "macos-silicon";
   return null;
 }
 
@@ -105,9 +110,23 @@ export default function DownloadPage() {
   const [status, setStatus] = useState<DownloadStatus>("idle");
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
-  const detected = detectOS();
+  const [detected, setDetected] = useState<{ os: DetectedOS; arch: MacArch }>(detectOS);
 
   useEffect(() => {
+    const navAny = navigator as any;
+    if (navAny.userAgentData?.getHighEntropyValues) {
+      navAny.userAgentData
+        .getHighEntropyValues(["architecture"])
+        .then((hints: any) => {
+          if (hints?.architecture === "x86") {
+            setDetected((prev) => (prev.os === "mac" ? { os: "mac", arch: "x64" } : prev));
+          } else if (hints?.architecture === "arm") {
+            setDetected((prev) => (prev.os === "mac" ? { os: "mac", arch: "arm64" } : prev));
+          }
+        })
+        .catch(() => {});
+    }
+
     fetch("/api/releases/latest", {
       headers: { Accept: "application/json" },
     })
@@ -390,7 +409,7 @@ export default function DownloadPage() {
               </div>
               <div>
                 <h4 className="text-sm font-bold text-[#0F172A] mb-1">Need more help?</h4>
-                <p className="text-sm text-[#64748B]">Contact <a href="mailto:support@makechurcheasy.com" className="text-[#1D4ED8] font-semibold hover:underline">support@makechurcheasy.com</a>.</p>
+                <p className="text-sm text-[#64748B]">Contact <a href="mailto:support@makechurcheazy.com" className="text-[#1D4ED8] font-semibold hover:underline">support@makechurcheazy.com</a>.</p>
               </div>
             </div>
           </div>

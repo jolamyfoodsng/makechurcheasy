@@ -1,0 +1,12 @@
+{
+  "source_file": "/Users/pc/Downloads/SPIRIT OF GRACE AND SUPPLICATION..mp3",
+  "source_size_bytes": 22707504,
+  "provider": "AssemblyAI",
+  "transcript_id": "61b85ac0-ee0b-471d-8506-00d85a8c6f05",
+  "status": "completed",
+  "speech_model_used": "universal-3-pro",
+  "language_code": "en_us",
+  "audio_duration_seconds": 3785,
+  "sentence_count": 759,
+  "created_at": "2026-09-02T21:53:21.047964+00:00"
+}

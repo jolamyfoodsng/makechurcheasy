@@ -41,6 +41,7 @@ import {
   isActiveTrial as isCanonicalTrialActive,
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
+import { getLocalDevPlanOverride } from "./localDevPlanOverride";
 
 export type { PlanTier } from "./planConfigTypes";
 
@@ -139,7 +140,7 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 1, devices: 1, bibleVersions: 4,
         multiviewTemplates: 0, tickerThemes: 0, themePresets: 0, cloudStorageGB: 0,
         multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
-        proPresenterImport: false, translation: false, speechToScripture: false,
+        proPresenterImport: false, translation: false, speechToScripture: true,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, presentationMode: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
@@ -242,22 +243,30 @@ function getCurrentFeatureRequiredPlan(): Record<string, PlanTier> {
 
 /**
  * Returns the effective plan for a user.
- * Priority: Pro key → Subscription cache (offline-aware) → User's plan → "free"
+ * Priority: full-access key → Subscription cache (offline-aware) → User's plan → "free"
  *
  * If the offline verification window has expired, reverts to "free"
  * regardless of what the cached plan says.
  */
 export function getUserPlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
+  const localDevOverride = getLocalDevPlanOverride(user);
+  if (localDevOverride) return localDevOverride;
+
   const normalizedUserPlan = normalizePlanId(user.plan);
+  const resolvedUserPlan = resolveCanonicalPlan(user as any);
+
+  if (resolvedUserPlan === "free" && normalizedUserPlan !== "free") {
+    return "free";
+  }
+  if (normalizedUserPlan === "free") {
+    return "free";
+  }
 
   const cached = getCachedPlan();
   if (cached && cached !== "free") {
     if (isOfflineValid()) {
       const normalizedCachedPlan = normalizePlanId(cached);
-      if (!isInTrial(user) && normalizedUserPlan === "free" && normalizedCachedPlan !== "free") {
-        return normalizedUserPlan as PlanTier;
-      }
       return normalizedCachedPlan as PlanTier;
     }
   }
@@ -295,6 +304,12 @@ export function getTrialDaysRemaining(user: AuthUser | null): number {
  */
 export function getEffectivePlan(user: AuthUser | null): PlanTier {
   if (!user) return "free";
+  const localDevOverride = getLocalDevPlanOverride(user);
+  if (localDevOverride) {
+    console.debug("[licenseService] local development plan override=%s", localDevOverride);
+    return localDevOverride;
+  }
+
   const userPlan = getUserPlan(user);
   const plan = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
   console.debug(
@@ -311,14 +326,15 @@ export function getEffectivePlan(user: AuthUser | null): PlanTier {
 let fallbackLimits: Record<PlanTier, PlanLimits> | null = null;
 
 export function getPlanLimits(plan: PlanTier): PlanLimits {
-  if (cachedLimits) return cachedLimits[plan] || cachedLimits.free;
+  const normalizedPlan = normalizePlanId(plan) as PlanTier;
+  if (cachedLimits) return cachedLimits[normalizedPlan] || cachedLimits.free;
   // Should only happen in the brief window before initFromCache runs.
   // Build fallback from DEFAULT_PLAN_CONFIG so every tier gets correct limits.
   if (!fallbackLimits) fallbackLimits = buildAllLimits(DEFAULT_PLAN_CONFIG);
-  return fallbackLimits[plan] || fallbackLimits.free;
+  return fallbackLimits[normalizedPlan] || fallbackLimits.free;
 }
 
-/** Get limits for a user (considering trial and pro key). */
+/** Get limits for a user (considering trial and full-access key). */
 export function getUserPlanLimits(user: AuthUser | null): PlanLimits {
   return getPlanLimits(getEffectivePlan(user));
 }
@@ -604,7 +620,7 @@ const PLAN_ORDER: Record<string, number> = {
   free: 0,
   basic: 1,
   growth: 2,
-  pro: 3,
+  pro: 2,
 };
 
 function planAtLeast(plan: PlanTier, minimum: PlanTier): boolean {

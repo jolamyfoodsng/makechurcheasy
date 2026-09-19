@@ -1,0 +1,11 @@
+{
+  "provider": "AssemblyAI",
+  "status": "completed",
+  "audio_duration_seconds": 222,
+  "language": "en",
+  "words": 512,
+  "sentences": 54,
+  "paragraphs": 13,
+  "caption_cues": 85,
+  "source_unchanged": true
+}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/mce_theme.dart';
-import 'login_screen.dart';
+import '../widgets/mce_brand_logo.dart';
+import 'connection_wizard_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -23,19 +24,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingPageData(
       icon: Icons.speed,
       title: 'Control OBS\nFrom Anywhere',
-      subtitle: 'Start and stop streaming\nSwitch scenes live\nControl your broadcast in real time',
+      subtitle:
+          'Start and stop streaming\nSwitch scenes live\nControl your broadcast in real time',
       features: [],
     ),
     _OnboardingPageData(
       icon: Icons.book,
       title: 'Bible & Worship\nBuilt In',
-      subtitle: 'Search and display Bible verses\nAccess your full song library\nControl lyrics and slides live',
+      subtitle:
+          'Search and display Bible verses\nAccess your full song library\nControl lyrics and slides live',
       features: [],
     ),
     _OnboardingPageData(
       icon: Icons.link,
       title: 'Connect To Your\nChurch Computer',
-      subtitle: 'Scan the QR code on your desktop app\nOr enter the connection code manually\nYou\'ll be connected in seconds',
+      subtitle:
+          'Scan the QR code on your desktop app\nOr enter the connection code manually\nYou\'ll be connected in seconds',
       features: [],
     ),
   ];
@@ -43,21 +47,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _next() {
     if (_currentPage < 3) {
       _controller.nextPage(
-        duration: const Duration(milliseconds: 300),
+        duration: Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
-      _goToLogin();
+      _goToPairing();
     }
   }
 
-  void _goToLogin() {
+  void _goToPairing() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => ConnectionWizardScreen()),
     );
   }
 
-  void _skip() => _goToLogin();
+  void _skip() => _goToPairing();
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +96,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 itemBuilder: (context, i) {
                   final p = _pages[i];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: MCESpacing.xxl),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: MCESpacing.xxl,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -101,27 +107,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           width: 120,
                           height: 120,
                           decoration: BoxDecoration(
-                            color: MCEColors.primaryBlue.withValues(alpha: 0.15),
+                            color: MCEColors.primaryBlue.withValues(
+                              alpha: 0.15,
+                            ),
                             borderRadius: BorderRadius.circular(MCERadius.xl),
                             border: Border.all(
-                              color: MCEColors.primaryBlue.withValues(alpha: 0.3),
+                              color: MCEColors.primaryBlue.withValues(
+                                alpha: 0.3,
+                              ),
                             ),
                           ),
-                          child: Icon(
-                            p.icon,
-                            size: 56,
-                            color: MCEColors.primaryBlue,
-                          ),
+                          child: i == 0
+                              ? MCEBrandMark(size: 56)
+                              : Icon(
+                                  p.icon,
+                                  size: 56,
+                                  color: MCEColors.primaryBlue,
+                                ),
                         ),
-                        const SizedBox(height: MCESpacing.xxl),
+                        SizedBox(height: MCESpacing.xxl),
 
                         // Title
                         Text(
                           p.title,
                           textAlign: TextAlign.center,
-                          style: MCETypography.sectionTitle.copyWith(fontSize: 28),
+                          style: MCETypography.sectionTitle.copyWith(
+                            fontSize: 28,
+                          ),
                         ),
-                        const SizedBox(height: MCESpacing.lg),
+                        SizedBox(height: MCESpacing.lg),
 
                         // Subtitle
                         Text(
@@ -150,7 +164,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     children: List.generate(4, (i) {
                       final isActive = _currentPage == i;
                       return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
+                        duration: Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
                         width: isActive ? 24 : 8,
                         height: 8,
@@ -163,7 +177,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     }),
                   ),
-                  const SizedBox(height: MCESpacing.xxl),
+                  SizedBox(height: MCESpacing.xxl),
 
                   // Button
                   SizedBox(
@@ -181,7 +195,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       child: Text(
                         _currentPage == 3 ? 'Connect Now' : 'Get Started',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),

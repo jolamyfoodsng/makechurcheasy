@@ -25,6 +25,12 @@ import {
   type LockReason,
 } from "@/services/licenseGuard";
 import { getDashboardBaseForAuth } from "@/services/authService";
+import ForcedUpdateOverlay from "./ForcedUpdateOverlay";
+import {
+  getForcedUpdateState,
+  refreshAppSettings,
+  type ForcedUpdateState,
+} from "../services/forcedUpdateService";
 import Icon from "./Icon";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
@@ -33,9 +39,71 @@ interface LicenseGuardProps {
   children: ReactNode;
 }
 
+const CURRENT_APP_VERSION =
+  typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+
+/**
+ * Version-gate responses happen before the license payload is returned, so
+ * the license guard cannot use the normal license retry screen to update.
+ * Reuse the real updater overlay instead and load the admin download settings
+ * so Update Now can install the configured release.
+ */
+function ForcedUpgradeScreen() {
+  const [state, setState] = useState<ForcedUpdateState>(() => ({
+    blocked: true,
+    active: true,
+    lockType: "forced-update",
+    requiredVersion: "",
+    hoursRemaining: null,
+    gracePeriodHours: null,
+    startedAt: null,
+    lockAt: null,
+    updateMessage: "A mandatory update is required to continue using MakeChurchEasy.",
+    currentVersion: CURRENT_APP_VERSION,
+    downloadUrl: "",
+    releaseNotesUrl: "",
+    loading: true,
+  }));
+
+  useEffect(() => {
+    let mounted = true;
+    void refreshAppSettings().then((settings) => {
+      if (!mounted) return;
+      const next = getForcedUpdateState(settings, CURRENT_APP_VERSION);
+      setState({
+        ...next,
+        blocked: true,
+        active: true,
+        lockType: "forced-update",
+        hoursRemaining: null,
+        gracePeriodHours: null,
+        loading: false,
+      });
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return <ForcedUpdateOverlay state={state} />;
+}
+
 export default function LicenseGuard({ children }: LicenseGuardProps) {
-  const { unlocked, lockReason, payload, verifying } = useLicenseGuardState();
+  const { unlocked, lockReason, payload, verifying, daysOffline, offlineWarning } = useLicenseGuardState();
   const [showDowngradeBanner, setShowDowngradeBanner] = useState(false);
+
+  // Automatically retry verification when internet reconnects
+  useEffect(() => {
+    const handleOnline = () => {
+      void retryVerification();
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
+  const handleRetry = async () => {
+    await retryVerification();
+  };
 
   const handleManageSubscription = async () => {
     try {
@@ -60,6 +128,29 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
   return (
     <>
       {children}
+      {offlineWarning && unlocked && (
+        <div className="license-offline-warning-banner" role="alert">
+          <div className="license-offline-warning-banner__icon" aria-hidden="true">
+            <Icon name="wifi_off" size={18} />
+          </div>
+          <div className="license-offline-warning-banner__content">
+            <p className="license-offline-warning-banner__title">Connect to the internet</p>
+            <p className="license-offline-warning-banner__description">
+              You have not connected to the internet for {daysOffline} days. Please connect to the internet soon to keep MakeChurchEasy verified and synchronized.
+            </p>
+          </div>
+          <div className="license-offline-warning-banner__actions">
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={verifying}
+              className="license-offline-warning-banner__action"
+            >
+              {verifying ? "Checking…" : "Check Connection"}
+            </button>
+          </div>
+        </div>
+      )}
       {showDowngradeBanner && (
         <div className="license-downgrade-banner" role="alert">
           <div className="license-downgrade-banner__icon" aria-hidden="true">
@@ -91,13 +182,15 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
           </div>
         </div>
       )}
-      {!unlocked && (
+      {!unlocked && lockReason === "forced_upgrade" ? (
+        <ForcedUpgradeScreen />
+      ) : !unlocked ? (
         <LicenseLockScreen
           reason={lockReason}
           payload={payload}
           verifying={verifying}
         />
-      )}
+      ) : null}
     </>
   );
 }
@@ -218,18 +311,30 @@ function LicenseLockScreen({
   }, [getFocusableElements]);
 
   return (
-    <div ref={overlayRef} className="license-guard-overlay" role="dialog" aria-modal="true" aria-label="License required">
+    <div
+      ref={overlayRef}
+      className="license-guard-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={config.title}
+    >
       <div className="license-guard-modal">
         <div className="license-guard-banner">
-          <Icon name="lock" size={16} />
-          <span>License Verification</span>
+          <Icon name={reason === "internet_required" ? "wifi_off" : "lock"} size={16} />
+          <span>{reason === "internet_required" ? "Internet Connection Required" : "License Verification"}</span>
         </div>
 
         <div className="license-guard-header">
           <div className="license-guard-icon-wrapper">
             <Icon name={config.icon} size={32} />
           </div>
-          <p className="license-guard-eyebrow">Access to MakeChurchEasy is currently blocked</p>
+          <p className="license-guard-eyebrow">
+            {reason === "too_many_devices"
+              ? "This device cannot be verified yet"
+              : reason === "internet_required"
+              ? "Offline limit reached (3 weeks offline)"
+              : "Access to MakeChurchEasy is currently blocked"}
+          </p>
           <h2 className="license-guard-title">{config.title}</h2>
         </div>
 
@@ -239,7 +344,7 @@ function LicenseLockScreen({
           {verifying && (
             <div className="license-guard-verifying" aria-live="polite">
               <div className="license-guard-spinner" />
-              <span>Verifying your license…</span>
+              <span>{reason === "internet_required" ? "Checking internet connection…" : "Verifying your license…"}</span>
             </div>
           )}
 

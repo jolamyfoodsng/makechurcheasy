@@ -1,12 +1,34 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Globe2 } from "lucide-react";
 import { countries } from "@/lib/countries";
 import { updateUser } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 /** List of required profile fields. Add more fields here in the future. */
 const requiredProfileFields = ["country"];
+const COUNTRY_REQUIRED_EVENT = "mce:country-required";
+const pendingCountrySelectionResolvers = new Set<() => void>();
+
+/**
+ * Open the shared country modal from a flow that needs a saved country.
+ * The promise resolves after the country has been persisted and the auth
+ * context has been refreshed, so callers can safely retry their action.
+ */
+export function requestCountrySelection(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+
+  return new Promise((resolve) => {
+    pendingCountrySelectionResolvers.add(resolve);
+    window.dispatchEvent(new Event(COUNTRY_REQUIRED_EVENT));
+  });
+}
+
+function resolvePendingCountrySelections() {
+  for (const resolve of pendingCountrySelectionResolvers) resolve();
+  pendingCountrySelectionResolvers.clear();
+}
 
 /**
  * Check if the user profile has missing required fields.
@@ -26,6 +48,19 @@ export function ProfileCompletionModal() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasOpenedRef = useRef(false);
+
+  // Payment and other protected flows can request the same modal without
+  // creating a second, competing dialog in the page.
+  useEffect(() => {
+    function handleCountryRequired() {
+      hasOpenedRef.current = true;
+      setError(null);
+      setOpen(true);
+    }
+
+    window.addEventListener(COUNTRY_REQUIRED_EVENT, handleCountryRequired);
+    return () => window.removeEventListener(COUNTRY_REQUIRED_EVENT, handleCountryRequired);
+  }, []);
 
   // Check on mount and when user changes — but only open once per session
   useEffect(() => {
@@ -60,6 +95,7 @@ export function ProfileCompletionModal() {
       await updateUser(mongoUser._id, { country });
       await refreshMongoUser();
       setOpen(false);
+      resolvePendingCountrySelections();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save. Please try again.");
     } finally {
@@ -72,18 +108,26 @@ export function ProfileCompletionModal() {
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      role="presentation"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="w-full max-w-[420px] mx-4 bg-white rounded-xl shadow-2xl p-7 animate-in fade-in zoom-in-95 duration-200">
+      <div
+        className="mx-4 w-full max-w-[420px] rounded-xl border border-slate-200 bg-white p-7 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="country-selection-title"
+      >
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="text-4xl mb-3">👤</div>
-          <h2 className="text-lg font-bold text-slate-900 mb-2">
-            Complete Your Profile
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <Globe2 className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <h2 id="country-selection-title" className="mb-2 text-lg font-bold text-slate-900">
+            Choose your country
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed">
-            We noticed your country information is missing. Please select your
-            country to continue using MakeChurchEasy.
+            Select your country so we can show the correct currency and start
+            your payment securely. You only need to do this once.
           </p>
         </div>
 
@@ -95,7 +139,8 @@ export function ProfileCompletionModal() {
           <select
             value={country}
             onChange={(e) => setCountry(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 appearance-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+            aria-label="Country"
+            className="h-11 w-full appearance-none rounded-lg border border-slate-300 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           >
             <option value="" disabled>Select your country...</option>
             {countries.map((c) => (
@@ -116,9 +161,9 @@ export function ProfileCompletionModal() {
           type="button"
           onClick={handleSave}
           disabled={!canSave || saving}
-          className={`w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-colors ${canSave && !saving
-            ? "bg-blue-600 hover:bg-blue-700 active:bg-blue-800"
-            : "bg-slate-300 cursor-not-allowed"
+          className={`h-11 w-full rounded-lg text-sm font-semibold text-white transition-colors ${canSave && !saving
+            ? "bg-blue-700 hover:bg-blue-800 active:bg-blue-900"
+            : "cursor-not-allowed bg-slate-300"
             }`}
         >
           {saving ? "Saving..." : "Save & Continue"}

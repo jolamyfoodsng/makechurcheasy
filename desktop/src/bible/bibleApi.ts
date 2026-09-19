@@ -15,6 +15,7 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { BIBLE_BOOKS } from "./types";
 import type { RawBibleData, CatalogBible } from "./types";
+import { filterDownloadableCatalogBibles } from "./bibleValidation";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -143,11 +144,14 @@ export async function searchCatalog(
     let result: CatalogResponse;
     // Normalize: API may return the array directly or wrapped in { items, total, ... }
     if (Array.isArray(json)) {
-      result = { items: json, total: json.length, page: 1, limit: json.length, pages: 1 };
+      const items = filterDownloadableCatalogBibles(json);
+      result = { items, total: items.length, page: 1, limit: items.length, pages: 1 };
     } else {
       // Ensure expected shape
-      const items = json.items ?? json.data ?? [];
-      const total = json.total ?? json.count ?? 0;
+      const rawItems = json.items ?? json.data ?? [];
+      const items = filterDownloadableCatalogBibles(rawItems);
+      const hiddenOnPage = rawItems.length - items.length;
+      const total = Math.max(0, (json.total ?? json.count ?? items.length) - hiddenOnPage);
       const limit = json.limit ?? 20;
       const page = json.page ?? 1;
       const pages = json.pages ?? json.totalPages ?? Math.max(1, Math.ceil(total / limit));

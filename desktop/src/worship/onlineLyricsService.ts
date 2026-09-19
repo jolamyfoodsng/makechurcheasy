@@ -11,6 +11,7 @@ export interface OnlineLyricsSearchResult {
   preview: string;
   lyrics: string;
   thumbnailUrl?: string | null;
+  score?: number;
 }
 
 interface WordPressLyricsSource {
@@ -63,7 +64,18 @@ const WORDPRESS_LYRICS_SOURCES: WordPressLyricsSource[] = [
     sourceName: "CeeNaija",
     apiUrl: "https://www.ceenaija.com/wp-json/wp/v2/posts",
   },
+  {
+    sourceId: "gospelsongs",
+    sourceName: "GospelSongs.com.ng",
+    apiUrl: "https://gospelsongs.com.ng/wp-json/wp/v2/posts",
+  },
 ];
+
+const AFRICAN_GOSPEL_LYRICS_SOURCE: WordPressLyricsSource = {
+  sourceId: "africangospellyrics",
+  sourceName: "African Gospel Lyrics",
+  apiUrl: "",
+};
 
 const ONLINE_LYRICS_RESULT_LIMIT = 12;
 const ONLINE_LYRICS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -303,6 +315,26 @@ function buildPreview(text: string): string {
     .slice(0, 180);
 }
 
+function stripLrcTimestamps(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((rawLine) => {
+      let line = rawLine.trim();
+      while (line.startsWith("[")) {
+        const close = line.indexOf("]");
+        if (close < 0) break;
+        const tag = line.slice(1, close);
+        const isTimestamp = /^\d{1,3}:\d{2}(?:\.\d{1,3})?$/.test(tag);
+        const isMetadata = /^(?:ar|ti|al|by|offset):/i.test(tag);
+        if (!isTimestamp && !isMetadata) break;
+        line = line.slice(close + 1).trimStart();
+      }
+      return line;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function tokenize(value: string): string[] {
   return unicodeSearchNormalize(value)
     .split(" ")
@@ -393,6 +425,7 @@ function buildWordPressResult(
     preview,
     lyrics,
     thumbnailUrl: post.jetpack_featured_media_url ?? null,
+    score,
   };
 }
 
@@ -423,9 +456,61 @@ async function searchWordPressLyricsSource(
     .filter((result): result is OnlineLyricsSearchResult => result !== null);
 }
 
+async function searchAfricanGospelLyricsSource(query: string): Promise<OnlineLyricsSearchResult[]> {
+  const searchUrl = new URL("https://africangospellyrics.com/");
+  searchUrl.searchParams.set("s", query);
+
+  const response = await fetch(searchUrl.toString(), {
+    headers: { Accept: "text/html" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`${AFRICAN_GOSPEL_LYRICS_SOURCE.sourceName} returned HTTP ${response.status}`);
+  }
+
+  if (typeof DOMParser === "undefined") {
+    throw new Error(`${AFRICAN_GOSPEL_LYRICS_SOURCE.sourceName} requires a browser parser`);
+  }
+
+  const searchDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+  const posts = Array.from(searchDocument.querySelectorAll("div.post")).slice(0, 5);
+  const settledResults = await Promise.allSettled(
+    posts.map(async (post) => {
+      const link = post.querySelector<HTMLAnchorElement>("h2.post-title a");
+      const url = cleanInlineText(link?.href ?? "");
+      const title = cleanInlineText(link?.textContent ?? "");
+      if (!url || !title) return null;
+
+      const detailResponse = await fetch(url, {
+        headers: { Accept: "text/html" },
+      });
+      if (!detailResponse.ok) return null;
+
+      const detailDocument = new DOMParser().parseFromString(await detailResponse.text(), "text/html");
+      const rawContent = detailDocument.querySelector("div.post-content")?.innerHTML ?? "";
+      return buildWordPressResult(
+        AFRICAN_GOSPEL_LYRICS_SOURCE,
+        {
+          link: url,
+          title: { rendered: title },
+          content: { rendered: rawContent },
+        },
+        query,
+      );
+    }),
+  );
+
+  return settledResults
+    .flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+    .filter((result): result is OnlineLyricsSearchResult => result !== null)
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+}
+
 function buildLrcLibResult(track: LrcLibTrack, query: string): OnlineLyricsSearchResult | null {
   const id = typeof track.id === "number" ? String(track.id) : "";
-  const lyrics = pruneLyricsText(track.plainLyrics ?? "");
+  const plainLyrics = pruneLyricsText(track.plainLyrics ?? "");
+  const syncedLyrics = pruneLyricsText(stripLrcTimestamps(track.syncedLyrics ?? ""));
+  const lyrics = plainLyrics || syncedLyrics;
   const title = cleanInlineText(track.trackName ?? track.name ?? "");
   const artist = cleanInlineText(track.artistName ?? "");
   const preview = buildPreview(lyrics);
@@ -445,6 +530,7 @@ function buildLrcLibResult(track: LrcLibTrack, query: string): OnlineLyricsSearc
     preview,
     lyrics,
     thumbnailUrl: null,
+    score,
   };
 }
 
@@ -453,7 +539,10 @@ async function searchLrcLibLyricsSource(query: string): Promise<OnlineLyricsSear
   url.searchParams.set("q", query);
 
   const response = await fetch(url.toString(), {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "Lrclib-Client": "MakeChurchEasy/1.0",
+    },
   });
 
   if (!response.ok) {
@@ -471,17 +560,21 @@ async function searchLrcLibLyricsSource(query: string): Promise<OnlineLyricsSear
 }
 
 async function searchOnlineSongLyricsFallback(query: string): Promise<OnlineLyricsSearchResult[]> {
-  const settledResults = await Promise.allSettled(
-    [
-      ...WORDPRESS_LYRICS_SOURCES.map((source) => searchWordPressLyricsSource(source, query)),
-      searchLrcLibLyricsSource(query),
-    ],
-  );
+  const sourceSearches = [
+    () => searchLrcLibLyricsSource(query),
+    ...WORDPRESS_LYRICS_SOURCES.map((source) => () => searchWordPressLyricsSource(source, query)),
+    () => searchAfricanGospelLyricsSource(query),
+  ];
+  const settledResults = await Promise.allSettled(sourceSearches.map((search) => search()));
   const results = settledResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 
   if (results.length === 0 && settledResults.every((result) => result.status === "rejected")) {
     const firstError = settledResults.find((result) => result.status === "rejected");
-    throw new Error(firstError?.reason ? errorMessage(firstError.reason) : "No online lyrics sources responded");
+    throw new Error(
+      firstError?.reason
+        ? errorMessage(firstError.reason)
+        : "No online lyrics sources responded",
+    );
   }
 
   const seenUrls = new Set<string>();
@@ -494,6 +587,7 @@ async function searchOnlineSongLyricsFallback(query: string): Promise<OnlineLyri
       seenUrls.add(key);
       return true;
     })
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
     .slice(0, ONLINE_LYRICS_RESULT_LIMIT);
 }
 

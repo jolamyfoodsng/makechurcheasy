@@ -11,6 +11,7 @@
  */
 
 import { HnswIndex } from "./hnswIndex";
+import type { FeatureExtractionPipeline } from "@xenova/transformers";
 
 export interface EmbeddedVerse {
   book: string;
@@ -33,17 +34,41 @@ export interface EmbeddingSearchResult {
 // In-memory storage
 let verses: EmbeddedVerse[] = [];
 let hnswIndex: HnswIndex | null = null;
+let embeddingsLoadPromise: Promise<void> | null = null;
 
 // Query embedding cache (LRU)
 const queryCache = new Map<string, Float32Array>();
 const QUERY_CACHE_MAX = 100;
+let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
+
+function getQueryExtractor(): Promise<FeatureExtractionPipeline> {
+  extractorPromise ??= import("@xenova/transformers")
+    .then(({ pipeline }) => pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2"))
+    .catch((error) => {
+      extractorPromise = null;
+      throw error;
+    });
+  return extractorPromise;
+}
 
 /**
  * Load pre-computed embeddings and build HNSW index.
  * Call once on app init — subsequent searches use the in-memory index.
  */
-export async function loadBibleEmbeddings(): Promise<void> {
-  if (hnswIndex) return;
+export function loadBibleEmbeddings(): Promise<void> {
+  if (hnswIndex) return Promise.resolve();
+  // A transcript can produce several quote searches at the same time. Share
+  // one load/build operation so concurrent searches never parse the 245 MB
+  // JSON asset more than once.
+  if (embeddingsLoadPromise) return embeddingsLoadPromise;
+
+  embeddingsLoadPromise = loadBibleEmbeddingsInternal().finally(() => {
+    embeddingsLoadPromise = null;
+  });
+  return embeddingsLoadPromise;
+}
+
+async function loadBibleEmbeddingsInternal(): Promise<void> {
 
   // Try loading pre-built HNSW index first (faster)
   try {
@@ -143,8 +168,7 @@ export async function embedQuery(text: string): Promise<Float32Array | null> {
   if (cached) return cached;
 
   try {
-    const { pipeline } = await import("@xenova/transformers");
-    const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    const extractor = await getQueryExtractor();
     const output = await extractor(normalized, { pooling: "mean", normalize: true });
     const embedding = new Float32Array(output.data);
 

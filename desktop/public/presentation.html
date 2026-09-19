@@ -5,12 +5,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MakeChurchEasy Presentation</title>
+  <link href="/fonts/google/google-fonts.css" rel="stylesheet" />
+  <link href="/fonts/cmg-sans-fonts.css" rel="stylesheet" />
   <style>
+    @font-face {
+      font-family: "Charis SIL";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("/fonts/charis-sil/CharisSIL-Regular.ttf") format("truetype");
+    }
+
+    @font-face {
+      font-family: "Charis SIL";
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url("/fonts/charis-sil/CharisSIL-Bold.ttf") format("truetype");
+    }
+
     :root {
       color-scheme: dark;
       --bg: #000000;
       --fg: #f8fafc;
-      --muted: rgba(226, 232, 240, 0.78);
+      --muted: #ffffff;
       --panel: rgba(15, 23, 42, 0.86);
       --border: rgba(148, 163, 184, 0.24);
       --accent: #38bdf8;
@@ -35,7 +53,7 @@
       overflow: hidden;
       background: var(--bg);
       color: var(--fg);
-      font-family: "Inter", "Segoe UI", sans-serif;
+      font-family: "CMG Sans Black", "CMG Sans", "Noto Sans", "Charis SIL", "Inter", "Segoe UI", sans-serif;
       position: relative;
     }
 
@@ -50,9 +68,30 @@
 
     .remote-stage {
       position: absolute;
-      inset: 0;
+      top: 50%;
+      left: 50%;
+      width: min(100vw, calc(100vh * 16 / 9));
+      height: min(100vh, calc(100vw * 9 / 16));
+      transform: translate(-50%, -50%);
+      aspect-ratio: 16 / 9;
       background: transparent;
       overflow: hidden;
+    }
+
+    .remote-stage.remote-stage--media {
+      position: fixed;
+      inset: 0;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+      transform: none;
+      aspect-ratio: auto;
+      border: none;
+      margin: 0;
+      padding: 0;
     }
 
     .stage-bg,
@@ -70,6 +109,11 @@
       background: #000;
     }
 
+    .stage-bg .stage-pattern {
+      object-fit: cover;
+      background: transparent;
+    }
+
     .stage-overlay {
       position: absolute;
       inset: 0;
@@ -82,6 +126,7 @@
       align-items: center;
       justify-content: center;
       padding: clamp(28px, 4vw, 72px);
+      transform-origin: center center;
     }
 
     .stage-box {
@@ -113,26 +158,62 @@
     }
 
     .stage-reference {
-      font-size: clamp(16px, 1.4vw, 26px);
-      font-weight: 700;
-      color: var(--muted);
+      font-size: clamp(28px, 2.2vw, 42px);
+      font-weight: inherit;
+      color: #ffffff;
     }
 
     .stage-title {
-      font-size: clamp(28px, 2.6vw, 56px);
-      font-weight: 700;
+      font-size: clamp(46px, 4vw, 90px);
+      font-weight: inherit;
       line-height: 1.08;
     }
 
     .stage-subtitle {
-      font-size: clamp(18px, 1.5vw, 30px);
-      color: var(--muted);
+      font-size: clamp(30px, 2.4vw, 48px);
+      color: #ffffff;
     }
 
     .stage-body {
-      font-size: clamp(34px, 4vw, 86px);
-      font-weight: 700;
+      font-size: clamp(68px, 6.8vw, 156px);
+      font-weight: inherit;
       line-height: 1.2;
+    }
+
+    .stage-box--compare {
+      max-width: min(1840px, 100%);
+      width: 100%;
+    }
+
+    .stage-compare {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      column-gap: clamp(16px, 5vw, 96px);
+      row-gap: clamp(8px, 1.4vw, 18px);
+      width: 100%;
+      align-items: center;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .stage-compare-reference {
+      justify-self: center;
+      line-height: 1.15;
+      font-weight: 800;
+      color: #ffffff;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .stage-compare-text {
+      min-width: 0;
+      line-height: 1.2;
+      font-weight: 700;
+      color: inherit;
+      text-align: center;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     .media-layer,
@@ -142,12 +223,15 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      background: #000;
+      border: none;
+      margin: 0;
+      padding: 0;
     }
 
     .media-layer img,
     .media-layer video {
       object-position: center center;
+      background: transparent;
     }
 
     .countdown-shell {
@@ -160,7 +244,7 @@
 
     .countdown-clock {
       font-variant-numeric: tabular-nums;
-      font-size: clamp(84px, 10vw, 210px);
+      font-size: clamp(100px, 11vw, 240px);
       line-height: 1;
       font-weight: 800;
     }
@@ -260,6 +344,25 @@
       display: none !important;
     }
 
+    .zoom-indicator {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10;
+      padding: 6px 14px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #f0f0f5;
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .zoom-indicator.hidden {
+      opacity: 0;
+    }
+
     @keyframes ticker-rtl {
       from {
         transform: translateX(100%);
@@ -297,6 +400,7 @@
       </div>
     </div>
     <div id="stage" class="remote-stage"></div>
+    <div id="zoomIndicator" class="zoom-indicator hidden">100%</div>
   </div>
 
   <script>
@@ -305,6 +409,81 @@
       const waitingState = document.getElementById("waitingState");
       const invalidState = document.getElementById("invalidState");
       const stage = document.getElementById("stage");
+      const screen = document.querySelector(".remote-screen");
+      const zoomIndicator = document.getElementById("zoomIndicator");
+      let zoomIndicatorTimer = null;
+
+      console.log("[presentation] page zoom loaded");
+
+      // Simple page zoom (like browser Ctrl+/-)
+      let pageZoom = 1;
+      const MIN_PAGE_ZOOM = 0.5;
+      const MAX_PAGE_ZOOM = 2;
+      const PAGE_ZOOM_STEP = 0.1;
+
+      function showZoomIndicator() {
+        if (!zoomIndicator) return;
+        zoomIndicator.textContent = `${Math.round(pageZoom * 100)}%`;
+        zoomIndicator.classList.remove("hidden");
+        if (zoomIndicatorTimer) window.clearTimeout(zoomIndicatorTimer);
+        zoomIndicatorTimer = window.setTimeout(function () {
+          zoomIndicator.classList.add("hidden");
+          zoomIndicatorTimer = null;
+        }, 1500);
+      }
+
+      function applyPageZoom() {
+        console.log("[presentation] applyPageZoom:", pageZoom);
+        if (!screen) { console.warn("[presentation] screen not found"); return; }
+        if (pageZoom === 1) {
+          screen.style.transform = "";
+          return;
+        }
+        screen.style.transformOrigin = "center center";
+        screen.style.transform = `scale(${pageZoom})`;
+      }
+
+      function resetPageZoom() {
+        pageZoom = 1;
+        applyPageZoom();
+        showZoomIndicator();
+      }
+
+      function handleZoomKeydown(e) {
+        if (e.ctrlKey || e.metaKey) return;
+        let changed = false;
+        switch (e.key) {
+          case "+":
+          case "=":
+            pageZoom = Math.min(MAX_PAGE_ZOOM, pageZoom + PAGE_ZOOM_STEP);
+            changed = true;
+            break;
+          case "-":
+          case "_":
+            pageZoom = Math.max(MIN_PAGE_ZOOM, pageZoom - PAGE_ZOOM_STEP);
+            changed = true;
+            break;
+          case "0":
+            resetPageZoom();
+            return;
+        }
+        if (changed) {
+          applyPageZoom();
+          showZoomIndicator();
+        }
+      }
+
+      function handleZoomWheel(e) {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          pageZoom = Math.min(MAX_PAGE_ZOOM, pageZoom + PAGE_ZOOM_STEP);
+        } else {
+          pageZoom = Math.max(MIN_PAGE_ZOOM, pageZoom - PAGE_ZOOM_STEP);
+        }
+        applyPageZoom();
+        showZoomIndicator();
+      }
 
       let sessionId = "";
       let wsPort = 0;
@@ -316,6 +495,12 @@
       let pollTimer = null;
       let countdownTimer = null;
       let lastResolvedState = undefined;
+      const initialParams = new URLSearchParams(window.location.search);
+      const isPreviewFrame = initialParams.get("preview") === "1";
+      const PREVIEW_MAX_FONT_SIZE = 75;
+      const PREVIEW_DEFAULT_FONT_SIZE = 50;
+
+
 
       const reconnectDelays = [1000, 3000, 5000, 10000];
 
@@ -362,33 +547,42 @@
       }
 
       function showInvalid() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
         invalidState.classList.remove("hidden");
         waitingState.classList.add("hidden");
-        stage.innerHTML = "";
       }
 
       function showWaiting() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
         invalidState.classList.add("hidden");
         waitingState.classList.remove("hidden");
-        stage.innerHTML = "";
       }
 
       function showBlank() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         invalidState.classList.add("hidden");
         waitingState.classList.add("hidden");
-        stage.innerHTML = "";
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
       }
 
       function getContentUrl(value) {
@@ -407,39 +601,215 @@
         return item && item.style ? item.style : {};
       }
 
+      function getOutputViewportScale() {
+        const widthScale = (window.innerWidth || 1280) / 1280;
+        const heightScale = (window.innerHeight || 720) / 720;
+        const scale = Math.min(widthScale, heightScale);
+        if (!Number.isFinite(scale)) return 1;
+        return Math.max(0.32, Math.min(1, scale));
+      }
+
+      function isTransparentColor(value) {
+        const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+        return !normalized ||
+          normalized === "transparent" ||
+          normalized === "#0000" ||
+          normalized === "#00000000" ||
+          normalized === "rgba(0,0,0,0)";
+      }
+
+      function normalizeGradientAngle(value) {
+        const angle = Number(value);
+        if (!Number.isFinite(angle)) return 180;
+        return Math.max(0, Math.min(360, angle));
+      }
+
+      function getStageBackground(style) {
+        const backgroundType = String(style.backgroundType || "").trim().toLowerCase();
+        const bgImage = getContentUrl(style.backgroundImage);
+        const bgVideo = getContentUrl(style.backgroundVideo);
+        const bgPattern = getContentUrl(style.backgroundPattern);
+        if (backgroundType === "off") return "transparent";
+
+        const start = String(style.backgroundColor || "").trim();
+        const end = String(style.backgroundColorEnd || "").trim();
+        const hasStart = !isTransparentColor(start);
+        const hasEnd = !isTransparentColor(end);
+        const sameColor = start.trim().toLowerCase() === end.trim().toLowerCase();
+
+        if (hasStart && hasEnd && !sameColor) {
+          return `linear-gradient(${normalizeGradientAngle(style.bgGradientAngle)}deg, ${start}, ${end})`;
+        }
+        if (hasStart) return start;
+        if (hasEnd) return end;
+        if (bgImage || bgVideo || bgPattern) return "transparent";
+        return "#000000";
+      }
+
+      function getPresentationZoom(item) {
+        const zoom = Number(item && item.meta ? item.meta.zoom : 1);
+        if (!Number.isFinite(zoom)) return 1;
+        return Math.max(0.8, Math.min(1.8, zoom));
+      }
+
+      function zoomClamp(minPx, viewportVw, maxPx, zoom) {
+        return `clamp(${Math.round(minPx * zoom)}px, ${(viewportVw * zoom).toFixed(2)}vw, ${Math.round(maxPx * zoom)}px)`;
+      }
+
+      function getPreviewTextFontSize(value) {
+        const raw = Number(value);
+        if (!isPreviewFrame) return raw;
+        if (!Number.isFinite(raw) || raw <= 0) return PREVIEW_DEFAULT_FONT_SIZE;
+        return Math.max(24, Math.min(PREVIEW_MAX_FONT_SIZE, raw));
+      }
+
+      function formatScaledTextSize(size, zoom) {
+        const scaled = Math.round(size * zoom);
+        return `${isPreviewFrame ? Math.min(PREVIEW_MAX_FONT_SIZE, scaled) : scaled}px`;
+      }
+
+      function fitBibleTextSize(text, requestedSize, style, viewportScale, overlayOpacity) {
+        const stageWidth = stage && stage.clientWidth ? stage.clientWidth : (window.innerWidth || 1280);
+        const stageHeight = stage && stage.clientHeight ? stage.clientHeight : (window.innerHeight || 720);
+        const outerPadding = Math.max(4, Math.round(Number(style.safeArea || style.padding || 48) * viewportScale));
+        const boxPadding = overlayOpacity > 0 ? Math.max(12, Number(style.padding || 24)) : 0;
+        const availableWidth = Math.max(240, stageWidth - (outerPadding + boxPadding) * 2);
+        const availableHeight = Math.max(180, stageHeight - (outerPadding + boxPadding) * 2);
+        const lineHeight = Math.max(1, Number(style.lineHeight || 1.2));
+        let size = Math.max(30, Number(requestedSize) || 72);
+        const content = String(text || "").trim();
+        if (!content) return size;
+
+        // Estimate wrapping from the rendered width and step down until the
+        // complete verse fits inside the 16:9 stage instead of being clipped.
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const charsPerLine = Math.max(8, Math.floor(availableWidth / (size * 0.56)));
+          const lineCount = Math.max(1, content.split("\n").reduce(function (total, line) {
+            return total + Math.max(1, Math.ceil(line.length / charsPerLine));
+          }, 0));
+          if (lineCount * size * lineHeight <= availableHeight) return Math.round(size);
+          size *= 0.88;
+        }
+        return Math.round(Math.max(30, size));
+      }
+
+      function getBibleCompareColumns(item) {
+        const compare = item && item.bibleCompare;
+        if (!compare || !Array.isArray(compare.columns)) return [];
+        return compare.columns
+          .map(function (column) {
+            const reference = String(column && column.reference || "").trim();
+            const translation = String(column && column.translation || "").trim();
+            const text = String(column && column.text || "").trim();
+            if (!text) return null;
+            return {
+              reference,
+              translation,
+              text,
+            };
+          })
+          .filter(Boolean)
+          .slice(0, 3);
+      }
+
+      function renderBibleCompareMarkup(columns, bodySize, referenceSize) {
+        if (columns.length < 2) return "";
+        const columnCount = Math.max(2, Math.min(3, columns.length));
+        return `
+          <div class="stage-compare" style="grid-template-columns:repeat(${columnCount}, minmax(0, 1fr));">
+            ${columns.map(function (column) {
+              const label = [column.reference, column.translation ? `(${column.translation})` : ""].filter(Boolean).join(" ");
+              return `<div class="stage-compare-reference" style="font-size:${referenceSize};">${escapeHtml(label)}</div>`;
+            }).join("")}
+            ${columns.map(function (column) {
+              return `<div class="stage-compare-text" style="font-size:${bodySize};">${escapeHtml(column.text)}</div>`;
+            }).join("")}
+          </div>
+        `;
+      }
+
       function renderTextLayer(item) {
         const style = getStyle(item);
+        const viewportScale = getOutputViewportScale();
+        const zoom = getPresentationZoom(item) * viewportScale;
+        const meta = item.meta || {};
         const alignClass = `align-${style.textAlign || "center"}`;
-        const bodySize = style.fontSize ? `${Math.max(18, Number(style.fontSize))}px` : "";
+        const rawFontSize = Number(style.fontSize || 0);
+        const effectiveFontSize = isPreviewFrame ? getPreviewTextFontSize(rawFontSize) : rawFontSize;
+        const isBible = item.source === "bible";
+        const baseBodySize = effectiveFontSize
+          ? isPreviewFrame
+            ? effectiveFontSize
+            : isBible
+              ? Math.min(96, Math.max(48, effectiveFontSize * 1.15))
+              : Math.max(68, effectiveFontSize * 1.45)
+          : 0;
+        const titleSize = baseBodySize
+          ? formatScaledTextSize(Math.max(42, baseBodySize * 0.58), zoom)
+          : zoomClamp(46, 4, 90, zoom);
+        const subtitleSize = baseBodySize
+          ? formatScaledTextSize(Math.max(28, baseBodySize * 0.34), zoom)
+          : zoomClamp(30, 2.4, 48, zoom);
+        const referenceSize = baseBodySize
+          ? formatScaledTextSize(Math.max(24, baseBodySize * 0.28), zoom)
+          : zoomClamp(28, 2.2, 42, zoom);
+        const compareFontSize = effectiveFontSize || rawFontSize;
+        const compareBodySize = compareFontSize
+          ? formatScaledTextSize(Math.max(28, Math.min(54, compareFontSize)), zoom)
+          : zoomClamp(28, 3, 54, zoom);
+        const compareReferenceSize = compareFontSize
+          ? formatScaledTextSize(Math.max(18, Math.min(28, compareFontSize * 0.52)), zoom)
+          : referenceSize;
+        const contentPadding = Math.max(4, Math.round(Number(style.safeArea || style.padding || 48) * viewportScale));
         const bodyColor = style.textColor || "#ffffff";
         const boxOpacity = Number(style.overlayOpacity || 0);
+        const backgroundOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)));
+        const overlayOpacity = Math.max(0, Math.min(1, Number(style.overlayOpacity || 0)));
+        const overlayColor = style.overlayColor || "#000000";
+        const showReference = meta.showReference !== false;
+        const showTitle = meta.showTitle !== false;
+        const showSubtitle = meta.showSubtitle !== false;
+        const compareColumns = isBible ? getBibleCompareColumns(item) : [];
+        const hasBibleCompare = compareColumns.length >= 2;
+        const boxAlignClass = hasBibleCompare ? "align-center stage-box--compare" : alignClass;
+        const requestedBodySize = (baseBodySize || (isBible ? 72 : 0)) * zoom;
+        const fittedBodySize = isBible && item.body
+          ? fitBibleTextSize(item.body, requestedBodySize, style, viewportScale, overlayOpacity)
+          : requestedBodySize;
+        const bodySize = fittedBodySize ? `${fittedBodySize}px` : "";
 
         const bgImage = getContentUrl(style.backgroundImage);
         const bgVideo = getContentUrl(style.backgroundVideo);
-        const hasText = item.title || item.body || item.reference || item.subtitle;
+        const bgPattern = getContentUrl(style.backgroundPattern);
+        const hasText = hasBibleCompare || item.body || (showTitle && item.title) || (showReference && item.reference) || (showSubtitle && item.subtitle);
 
         return `
-          <div class="stage-bg">
-            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};" />` : ""}
-            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity || 1)))};"></video>` : ""}
+          <div class="stage-bg" style="background:${escapeHtml(getStageBackground(style))};">
+            ${bgPattern ? `<img class="stage-pattern" src="${escapeHtml(bgPattern)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
           </div>
-          <div class="stage-overlay" style="opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          <div class="stage-overlay" style="background:${escapeHtml(overlayColor)};opacity:${overlayOpacity};"></div>
           ${hasText ? `
-            <div class="stage-content" style="padding:${Math.max(0, Number(style.safeArea || style.padding || 48))}px;">
-              <div class="stage-box ${alignClass}" style="
+            <div class="stage-content" style="padding:${contentPadding}px;">
+              <div class="stage-box ${boxAlignClass}" style="
                 color:${escapeHtml(bodyColor)};
                 font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
                 font-weight:${escapeHtml(String(style.fontWeight || 700))};
                 line-height:${Math.max(1, Number(style.lineHeight || 1.2))};
                 text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+                ${style.textOutline ? `paint-order:stroke fill;-webkit-text-stroke:${Math.max(1, Number(style.textOutlineWidth || 2))}px ${escapeHtml(style.textOutlineColor || "#000000")};` : ""}
                 border-radius:${Math.max(0, Number(style.padding || 0) * 0.25)}px;
                 padding:${boxOpacity > 0 ? `${Math.max(12, Number(style.padding || 24))}px` : "0"};
                 opacity:1;
               ">
-                ${item.reference ? `<div class="stage-reference">${escapeHtml(item.reference)}</div>` : ""}
-                ${item.title ? `<div class="stage-title">${escapeHtml(item.title)}</div>` : ""}
-                ${item.subtitle ? `<div class="stage-subtitle">${escapeHtml(item.subtitle)}</div>` : ""}
-                ${item.body ? `<div class="stage-body" style="font-size:${bodySize || "clamp(34px, 4vw, 86px)"};">${escapeHtml(item.body)}</div>` : ""}
+                ${hasBibleCompare ? ""
+                  : `${showReference && item.reference ? `<div class="stage-reference" style="font-size:${referenceSize};">${escapeHtml(item.reference)}</div>` : ""}
+                ${showTitle && item.title ? `<div class="stage-title" style="font-size:${titleSize};">${escapeHtml(item.title)}</div>` : ""}
+                ${showSubtitle && item.subtitle ? `<div class="stage-subtitle" style="font-size:${subtitleSize};">${escapeHtml(item.subtitle)}</div>` : ""}`}
+                ${hasBibleCompare
+                  ? renderBibleCompareMarkup(compareColumns, compareBodySize, compareReferenceSize)
+                  : item.body ? `<div class="stage-body" style="font-size:${bodySize || (isBible ? zoomClamp(42, 3.2, 72, zoom) : zoomClamp(68, 6.8, 156, zoom))};">${escapeHtml(item.body)}</div>` : ""}
               </div>
             </div>
           ` : ""}
@@ -448,11 +818,12 @@
 
       function getMediaFit(value) {
         switch (value) {
+          case "stretch":
+            return "fill";
           case "fit":
           case "contain":
             return "contain";
-          case "stretch":
-            return "fill";
+          case "cover":
           case "fill":
           default:
             return "cover";
@@ -487,12 +858,14 @@
         const background = media.backgroundColor || "#000000";
         const src = getContentUrl(media.url || item.imageUrl || item.videoUrl);
         const isVideo = media.kind === "video" || Boolean(item.videoUrl);
+        const zoom = getPresentationZoom(item);
+        const mediaZoomStyle = zoom !== 1 ? `transform:scale(${zoom});transform-origin:center center;` : "";
 
         return `
           <div class="media-layer" style="background:${escapeHtml(background)};">
             ${isVideo
-              ? `<video id="stageVideo" src="${escapeHtml(src)}" autoplay muted loop playsinline style="object-fit:${fit};"></video>`
-              : `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title || "Presentation media")}" style="object-fit:${fit};" />`}
+              ? `<video id="stageVideo" src="${escapeHtml(src)}" autoplay muted loop playsinline style="object-fit:${fit};${mediaZoomStyle}"></video>`
+              : `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title || "Presentation media")}" style="object-fit:${fit};${mediaZoomStyle}" />`}
           </div>
         `;
       }
@@ -542,27 +915,34 @@
       function renderCountdownLayer(item) {
         const payload = item.countdown || {};
         const style = getStyle(item);
+        const zoom = getPresentationZoom(item) * getOutputViewportScale();
         const bgImage = getContentUrl(style.backgroundImage);
         const bgVideo = getContentUrl(style.backgroundVideo);
+        const bgPattern = getContentUrl(style.backgroundPattern);
         const textColor = style.textColor || "#ffffff";
+        const backgroundOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)));
+        const overlayOpacity = Math.max(0, Math.min(1, Number(style.overlayOpacity || 0)));
+        const overlayColor = style.overlayColor || "#000000";
         const title = payload.showTitle === false ? "" : (payload.title || item.title || "Countdown");
         const message = payload.completionMessage || item.subtitle || "";
 
         return `
-          <div class="stage-bg">
-            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;" />` : ""}
-            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;"></video>` : ""}
+          <div class="stage-bg" style="background:${escapeHtml(getStageBackground(style))};">
+            ${bgPattern ? `<img class="stage-pattern" src="${escapeHtml(bgPattern)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
+            ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
           </div>
-          <div class="stage-overlay" style="opacity:${Math.max(0, Math.min(1, Number(style.backgroundOpacity == null ? 1 : style.backgroundOpacity)))};"></div>
+          <div class="stage-overlay" style="background:${escapeHtml(overlayColor)};opacity:${overlayOpacity};"></div>
           <div class="stage-content">
             <div class="countdown-shell" style="
               color:${escapeHtml(textColor)};
               font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
               text-shadow:${escapeHtml(style.textShadow || "0 12px 40px rgba(0,0,0,0.45)")};
+              ${style.textOutline ? `paint-order:stroke fill;-webkit-text-stroke:${Math.max(1, Number(style.textOutlineWidth || 2))}px ${escapeHtml(style.textOutlineColor || "#000000")};` : ""}
             ">
-              ${title ? `<div class="stage-title">${escapeHtml(title)}</div>` : ""}
-              <div id="countdownClock" class="countdown-clock"></div>
-              ${message ? `<div class="countdown-message">${escapeHtml(message)}</div>` : ""}
+              ${title ? `<div class="stage-title" style="font-size:${zoomClamp(46, 4, 90, zoom)};">${escapeHtml(title)}</div>` : ""}
+              <div id="countdownClock" class="countdown-clock" style="font-size:${zoomClamp(100, 11, 240, zoom)};"></div>
+              ${message ? `<div class="countdown-message" style="font-size:${zoomClamp(20, 1.8, 34, zoom)};">${escapeHtml(message)}</div>` : ""}
             </div>
           </div>
         `;
@@ -587,6 +967,7 @@
               background:${escapeHtml(ticker.backgroundColor || "#000000")};
               color:${escapeHtml(ticker.textColor || "#ffffff")};
               font-size:${Math.max(16, Number(ticker.fontSize || 32))}px;
+              font-family:${escapeHtml(ticker.fontFamily || '"CMG Sans Black", "CMG Sans", "Noto Sans", "Charis SIL", "Inter", "Segoe UI", sans-serif')};
               font-weight:700;
             ">
               <div class="ticker-track ${directionClass} ${pausedClass}" style="animation-duration:${durationSeconds}s;">
@@ -609,6 +990,13 @@
 
         const isCountdown = Boolean(item.countdown);
         const isMedia = Boolean(item.media) || Boolean(item.imageUrl) || Boolean(item.videoUrl);
+
+        if (isMedia) {
+          stage.classList.add("remote-stage--media");
+        } else {
+          stage.classList.remove("remote-stage--media");
+        }
+
         const tickerMarkup = item.ticker ? renderTickerLayer(item) : "";
         const stageMarkup = isCountdown
           ? renderCountdownLayer(item)
@@ -617,9 +1005,9 @@
               : renderTextLayer(item);
 
         if (body) {
-          body.style.background = getStyle(item).backgroundColor || "#000000";
+          body.style.background = isMedia ? "transparent" : getStageBackground(getStyle(item));
         }
-        stage.style.background = getStyle(item).backgroundColor || "#000000";
+        stage.style.background = isMedia ? "transparent" : getStageBackground(getStyle(item));
         stage.innerHTML = `${stageMarkup}${tickerMarkup}`;
 
         if (isCountdown) {
@@ -646,6 +1034,17 @@
       }
 
       function applyRemoteState(nextState) {
+        // A healthy WebSocket delivers updates immediately. The no-store poll
+        // below is a recovery path for browser sources that keep a half-open
+        // socket after a network interruption, so ignore snapshots we've
+        // already rendered rather than restarting video/countdown content.
+        if (
+          nextState &&
+          lastResolvedState &&
+          Number(nextState.updatedAt) === Number(lastResolvedState.updatedAt)
+        ) {
+          return;
+        }
         lastResolvedState = nextState;
         if (nextState === undefined) {
           showWaiting();
@@ -737,8 +1136,7 @@
         pollTimer = window.setInterval(function () {
           if (document.visibilityState === "hidden") return;
           void fetchState();
-          void sendHeartbeat();
-        }, 12000);
+        }, 3000);
       }
 
       function clearReconnectTimer() {
@@ -785,7 +1183,8 @@
 
         socket.addEventListener("open", function () {
           reconnectAttempt = 0;
-          stopPolling();
+          // Keep polling as a recovery path in case the socket becomes
+          // half-open and never emits a close event.
           socket.send(JSON.stringify({
             type: "viewer_hello",
             sessionId,
@@ -844,6 +1243,9 @@
         startPolling();
         void sendHeartbeat();
       }
+
+      document.addEventListener("keydown", handleZoomKeydown);
+      document.addEventListener("wheel", handleZoomWheel, { passive: false });
 
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible") {

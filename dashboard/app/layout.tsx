@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import I18nProvider from "@/i18n/provider";
-import { isValidLocale, DEFAULT_LOCALE } from "@/i18n/routing";
+import { DEFAULT_LOCALE, resolveLocalePreference } from "@/i18n/routing";
 import { getInitialMongoUser } from "@/lib/serverAuth";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 export const metadata: Metadata = {
   title: {
@@ -30,11 +31,11 @@ export const metadata: Metadata = {
   authors: [{ name: "MakeChurchEasy" }],
   creator: "MakeChurchEasy",
   publisher: "MakeChurchEasy",
-  metadataBase: new URL("https://makechurcheasy.com"),
+  metadataBase: new URL("https://makechurcheazy.com"),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://makechurcheasy.com",
+    url: "https://makechurcheazy.com",
     siteName: "MakeChurchEasy",
     title: "MakeChurchEasy | Church Presentation Software for OBS",
     description:
@@ -80,15 +81,57 @@ export const metadata: Metadata = {
   },
 };
 
+const siteJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://makechurcheazy.com/#website",
+      url: "https://makechurcheazy.com",
+      name: "MakeChurchEasy",
+      description:
+        "MakeChurchEasy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
+      publisher: { "@id": "https://makechurcheazy.com/#organization" },
+      inLanguage: "en",
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://makechurcheazy.com/#organization",
+      name: "MakeChurchEasy",
+      url: "https://makechurcheazy.com",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://makechurcheazy.com/logos/make_church_easy_logo.png",
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://makechurcheazy.com/#software",
+      name: "MakeChurchEasy",
+      url: "https://makechurcheazy.com",
+      description:
+        "Church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, announcements, and livestream graphics.",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: ["macOS", "Windows"],
+    },
+  ],
+};
+
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
-  const locale = isValidLocale(localeCookie) ? localeCookie : DEFAULT_LOCALE;
   const initialMongoUser = await getInitialMongoUser();
+  const cookieStore = await cookies();
+  const headerStore = await headers();
+  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
+  const acceptLanguage = headerStore.get("accept-language");
+  const locale = resolveLocalePreference(
+    initialMongoUser?.language || localeCookie,
+    initialMongoUser?.country,
+    acceptLanguage,
+  ) || DEFAULT_LOCALE;
 
   let messages: Record<string, unknown> = {};
   try {
@@ -98,7 +141,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={locale} className="dark">
+    <html lang={locale} className="dark" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -113,6 +156,13 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-white antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(siteJsonLd).replace(/</g, "\\u003c"),
+          }}
+        />
+        <GoogleAnalytics />
         <I18nProvider locale={locale} messages={messages}>
           <AuthProvider initialMongoUser={initialMongoUser}>{children}</AuthProvider>
         </I18nProvider>

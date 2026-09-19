@@ -22,7 +22,7 @@ class MCECard extends StatelessWidget {
       child: Container(
         padding: padding ?? const EdgeInsets.all(MCESpacing.lg),
         decoration: BoxDecoration(
-          color: MCEColors.surface.withValues(alpha: 0.6),
+          color: MCEColors.surface,
           borderRadius: BorderRadius.circular(MCERadius.lg),
           border: Border.all(
             color: highlighted ? MCEColors.primaryBlue : MCEColors.border,

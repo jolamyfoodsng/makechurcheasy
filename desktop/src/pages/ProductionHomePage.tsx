@@ -2,64 +2,49 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Activity,
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   BookOpen,
-  Calendar,
   Check,
   ChevronDown,
   ChevronRight,
-  Coins,
   Copy,
   Crown,
-  ExternalLink,
-  HelpCircle,
   History,
   Image as ImageIcon,
   Images,
   Info,
   Link,
-  ListMusic,
   Mic,
   Monitor,
   MonitorSmartphone,
-  Moon,
   Music,
-  Newspaper,
-  Play,
-  RotateCcw,
-  Sun,
-  Video
+  Play
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import DashboardTutorial, {
-  isDashboardTutorialCompleted,
-  markDashboardTutorialCompleted,
-  resetDashboardTutorial,
-} from "./DashboardTutorial";
-
 import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
-import { TutorialModal } from "../components/TutorialModal";
 import { useAuth } from "../contexts/AuthContext";
-import { useAppTheme } from "../hooks/useAppTheme";
 import { useCountryPricing } from "../hooks/useCountryPricing";
 import { getAllMedia } from "../library/libraryDb";
 import { getSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
-import { fetchCreditDetails, getCreditsBalance } from "../services/credits";
-import { getEffectivePlan, getTrialDaysRemaining, getUserPlan, getUserPlanLimits, isInTrial } from "../services/licenseService";
+import { getTrialDaysRemaining, getUserPlan, isInTrial } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService, type ConnectionStatus } from "../services/obsService";
 import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
-import { getPlanConfig, getPlanLabel } from "../services/planConfig";
-import { getCachedSubscription } from "../services/subscriptionCache";
+import { confirmStopVoiceBibleForPresentation } from "../services/voiceBiblePresentationGuard";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
+import MovePluginInstallModal from "../components/MovePluginInstallModal";
+import {
+  ensureMoveTransition,
+  getObsMovePluginStatus,
+  isMceBridgeLoaded,
+  isMovePluginLoaded,
+} from "../services/obsMovePlugin";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
-import { getEnvConfig } from "../services/envConfig";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -99,8 +84,7 @@ interface DashboardHeaderProps {
   obsStatus: ConnectionStatus;
   dockAvailable: boolean;
   onConnectObs: () => void;
-  onOpenTutorials: () => void;
-  onOpenTutorialsWithReset: () => void;
+  onWatchTutorials: () => void;
 }
 
 function DashboardHeader({
@@ -108,29 +92,33 @@ function DashboardHeader({
   obsStatus,
   dockAvailable,
   onConnectObs,
-  onOpenTutorials,
-  onOpenTutorialsWithReset,
+  onWatchTutorials,
 }: DashboardHeaderProps) {
   const { t } = useTranslation();
   const greetingKey = useMemo(() => getGreetingKey(), []);
-  const { effective, setTheme } = useAppTheme();
-  const isLight = effective === "light";
-  const now = useMemo(() => {
-    const d = new Date();
-    return d.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
+
+  // Determine if it is within the first week of installation (7 days)
+  const isFirstWeek = useMemo(() => {
+    const installKey = "mce_installed_at";
+    try {
+      let installedAt = localStorage.getItem(installKey);
+      if (!installedAt) {
+        installedAt = Date.now().toString();
+        localStorage.setItem(installKey, installedAt);
+      }
+      const diffMs = Date.now() - Number(installedAt);
+      return diffMs < 7 * 24 * 60 * 60 * 1000;
+    } catch {
+      return true;
+    }
   }, []);
 
   const obsConnected = obsStatus === "connected";
 
   return (
     <>
-      <header className="header-container" data-dt-tutorial="header">
+      <header className="header-container">
         <div className="header-left">
-
           <div>
             <h2 className="header-title">
               {t(greetingKey)},{" "}
@@ -146,25 +134,28 @@ function DashboardHeader({
         </div>
         <div className="header-right">
           <button
-            className="btn-secondary"
-            onClick={() => onOpenTutorialsWithReset()}
-            title={t("dt.button.tooltip")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            type="button"
+            className={`header-tutorial-btn ${isFirstWeek ? "header-tutorial-btn--pulsing" : ""}`}
+            onClick={onWatchTutorials}
+            title={t("dashboard.header.watchTutorials", "Watch Tutorials")}
           >
-            <HelpCircle size={16} /> {t("dt.button")}
+            <span className="header-tutorial-btn__icon-box">
+              <Play className="header-tutorial-btn__icon" />
+            </span>
+            <span className="header-tutorial-btn__label">
+              {t("dashboard.header.watchTutorials", "Watch Tutorials")}
+            </span>
+            {isFirstWeek && (
+              <span className="header-tutorial-btn__badge">
+                <span className="header-tutorial-btn__pulse-dot" />
+                NEW
+              </span>
+            )}
           </button>
-          <button
-            className="header-theme-toggle"
-            onClick={() => setTheme(isLight ? "dark" : "light")}
-            title={isLight ? t("dashboard.header.themeToggle.dark") : t("dashboard.header.themeToggle.light")}
-          >
-            {isLight ? <Moon className="header-theme-icon" /> : <Sun className="header-theme-icon" />}
-          </button>
-          <div className="header-date">{now}</div>
         </div>
       </header>
 
-      <div className="status-panel" data-dt-tutorial="status-panel">
+      <div className="status-panel">
         <div className="status-item">
           <Monitor className="status-icon" />
           <div>
@@ -224,150 +215,8 @@ function DashboardHeader({
             </>
           )}
         </button>
-        <button className="btn-secondary" onClick={onOpenTutorials} title={t("dashboard.btn.openInNewTab")}>
-          <Play className="btn-icon" /> {t("dashboard.btn.watchTutorials")} <ExternalLink className="btn-icon" />
-        </button>
       </div>
     </>
-  );
-}
-
-// ── Dashboard Summary Cards ────────────────────────────────────────────────
-
-interface SummaryCardData {
-  plan: string;
-  planLabel: string;
-  credits: number | null;
-  creditsTotal: number;
-  creditsConsumed: number | null;
-  deviceLimit: number;
-  deviceUnlimited: boolean;
-  renewalDate: string | null;
-  trialActive: boolean;
-  trialDaysLeft: number;
-}
-
-function DashboardSummaryCards() {
-  if (getEnvConfig().isTest) return null;
-
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const [data, setData] = useState<SummaryCardData | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const plan = getEffectivePlan(user);
-        const actualPlan = getUserPlan(user);
-        const limits = getUserPlanLimits(user);
-        const trial = isInTrial(user);
-        const trialDays = getTrialDaysRemaining(user);
-        const creditDetails = await fetchCreditDetails();
-        const sub = getCachedSubscription();
-        const config = await getPlanConfig();
-        const planLabel = getPlanLabel(config, actualPlan);
-
-        if (!mounted) return;
-        setData({
-          plan,
-          planLabel,
-          credits: creditDetails?.credits ?? getCreditsBalance(),
-          creditsTotal: creditDetails?.planAllocation ?? 0,
-          creditsConsumed: creditDetails?.totalConsumed ?? null,
-          deviceLimit: limits.devices,
-          deviceUnlimited: limits.unlimitedDevices,
-          renewalDate: sub?.payload?.expiresAt ?? null,
-          trialActive: trial,
-          trialDaysLeft: trialDays,
-        });
-      } catch {
-        if (!mounted) return;
-        setData(null);
-      }
-    };
-
-    load();
-    return () => { mounted = false; };
-  }, [user]);
-
-  if (!data) return null;
-
-  const renewalLabel = data.trialActive
-    ? t("dashboard.summary.renewalTrial", { date: data.renewalDate ? new Date(data.renewalDate).toLocaleDateString() : `${data.trialDaysLeft}d` })
-    : data.renewalDate
-      ? t("dashboard.summary.renewalActive", { date: new Date(data.renewalDate).toLocaleDateString() })
-      : t("dashboard.summary.renewalNone");
-
-  const creditsLabel = data.credits === null
-    ? "—"
-    : data.creditsTotal <= 0
-      ? t("dashboard.summary.creditsUnlimited")
-      : `${data.credits}`;
-
-  const deviceLabel = data.deviceUnlimited
-    ? t("dashboard.summary.devicesUnlimited")
-    : `${data.deviceLimit}`;
-
-  return (
-    <div className="summary-cards" data-dt-tutorial="summary-cards">
-      <div className="summary-card summary-card--plan">
-        <div className="summary-card-icon-wrap summary-card-icon--plan">
-          <Crown size={18} />
-        </div>
-        <div className="summary-card-body">
-          <span className="summary-card-label">{t("dashboard.summary.plan")}</span>
-          <span className="summary-card-value">{data.planLabel || t("dashboard.summary.planFree")}</span>
-          <span className="summary-card-sub">
-            {data.trialActive
-              ? t("dashboard.summary.planTrial") + ` — ${data.trialDaysLeft}d`
-              : t("dashboard.summary.planSubtitle")}
-          </span>
-        </div>
-      </div>
-
-      <div className="summary-card summary-card--credits">
-        <div className="summary-card-icon-wrap summary-card-icon--credits">
-          <Coins size={18} />
-        </div>
-        <div className="summary-card-body">
-          <span className="summary-card-label">{t("dashboard.summary.credits")}</span>
-          <span className="summary-card-value">{creditsLabel}</span>
-          <span className="summary-card-sub">
-            {data.creditsTotal > 0
-              ? t("dashboard.summary.creditsOf", { used: data.creditsConsumed ?? data.creditsTotal })
-              : t("dashboard.summary.creditsSubtitle")}
-          </span>
-        </div>
-      </div>
-
-      <div className="summary-card summary-card--devices">
-        <div className="summary-card-icon-wrap summary-card-icon--devices">
-          <MonitorSmartphone size={18} />
-        </div>
-        <div className="summary-card-body">
-          <span className="summary-card-label">{t("dashboard.summary.devices")}</span>
-          <span className="summary-card-value">{deviceLabel}</span>
-          <span className="summary-card-sub">
-            {data.deviceUnlimited
-              ? t("dashboard.summary.devicesUnlimited")
-              : t("dashboard.summary.devicesSubtitle", { limit: data.deviceLimit })}
-          </span>
-        </div>
-      </div>
-
-      <div className="summary-card summary-card--renewal">
-        <div className="summary-card-icon-wrap summary-card-icon--renewal">
-          <Calendar size={18} />
-        </div>
-        <div className="summary-card-body">
-          <span className="summary-card-label">{t("dashboard.summary.renewal")}</span>
-          <span className="summary-card-value summary-card-value--renewal">{renewalLabel}</span>
-          <span className="summary-card-sub">{t("dashboard.summary.renewalSubtitle")}</span>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -377,7 +226,8 @@ function PlanUpgradeBanner() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { getFormattedPlanPrice, loading } = useCountryPricing();
-  const trialActive = isInTrial(user);
+  const storedPlan = String(user?.plan || "free").trim().toLowerCase();
+  const trialActive = storedPlan === "free" && isInTrial(user);
   const plan = getUserPlan(user);
   const isFree = plan === "free";
   const promoText = t("common.upgradePlansStartToday", {
@@ -388,7 +238,7 @@ function PlanUpgradeBanner() {
   if (!trialActive && !isFree) return null;
 
   const handleUpgrade = () => {
-    openUrl("https://makechurcheasy.creatorstudioslabs.stream/subscription/plans");
+    openUrl("https://makechurcheazy.com/subscription/plans");
   };
 
   if (trialActive) {
@@ -435,44 +285,6 @@ function PlanUpgradeBanner() {
 
 
 
-// ── What's New Section ─────────────────────────────────────────────────────
-
-function WhatsNewSection() {
-  if (getEnvConfig().isTest) return null;
-
-  const { t } = useTranslation();
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  return (
-    <div className="panel whatsnew-panel" data-dt-tutorial="whats-new">
-      <div className="whatsnew-header">
-        <div className="whatsnew-header-left">
-          <Newspaper size={18} className="whatsnew-icon" />
-          <h3 className="panel-title" style={{ marginBottom: 0 }}>{t("dashboard.whatsNew.title")}</h3>
-          <span className="whatsnew-badge">{t("dashboard.whatsNew.version", { version: "2.4" })}</span>
-        </div>
-        <button className="whatsnew-dismiss" onClick={() => setDismissed(true)} title={t("dashboard.whatsNew.dismiss")}>
-          ✕
-        </button>
-      </div>
-      <div className="whatsnew-body">
-        <ul className="whatsnew-list">
-          <li>{t("dashboard.monthlyUsage.title")} — track your AI and credit usage at a glance</li>
-          <li>Remote Presentation — control slides from any device</li>
-          <li>Dashboard summary cards — plan, credits, devices, renewal at a glance</li>
-        </ul>
-        <div className="whatsnew-footer">
-          <a className="whatsnew-link" href="https://github.com/MakeChurchEasy/makechurcheasy/releases" target="_blank" rel="noreferrer" title={t("dashboard.whatsNew.readMore")}>
-            {t("dashboard.whatsNew.readMore")}
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Feature Grid ───────────────────────────────────────────────────────────
 
 interface FeatureGridProps {
@@ -484,7 +296,6 @@ interface FeatureGridProps {
   recentSongCount: number;
   mediaCount: number;
   recentMediaCount: number;
-  onStartVoiceBible: () => void;
   onNavigate: (path: string) => void;
 }
 
@@ -497,112 +308,202 @@ function FeatureGrid({
   recentSongCount,
   mediaCount,
   recentMediaCount,
-  onStartVoiceBible,
   onNavigate,
 }: FeatureGridProps) {
   const { t } = useTranslation();
-  const vbStatusLabel = useMemo(() => {
-    switch (voiceBibleStatus) {
-      case "listening":
-        return t("dashboard.vb.listening");
-      case "connecting":
-        return t("dashboard.vb.connecting");
-      case "requesting-mic":
-        return t("dashboard.vb.requestingMic");
-      case "error":
-        return t("dashboard.vb.error");
-      default:
-        return voiceBibleConnected ? t("dashboard.vb.ready") : t("dashboard.vb.disconnected");
-    }
-  }, [voiceBibleStatus, voiceBibleConnected, t]);
 
   return (
-    <div className="grid-container" data-dt-tutorial="feature-grid">
-      {/* Voice Bible */}
-      <div className="feature-card group card-purple" data-dt-tutorial="voice-bible">
-        <div className="card-bg-purple" />
-        <div className="icon-wrapper icon-wrapper-purple">
-          <Mic className="feature-icon icon-purple" />
+    <div className="dashboard-action-deck">
+      {/* 1. Speech to Scripture */}
+      <div
+        className="dash-card dash-card--purple"
+        onClick={() => {
+          track("dashboard_card_clicked", { card: "voice-bible-transcribe" });
+          onNavigate("/speech-to-scripture");
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            onNavigate("/speech-to-scripture");
+          }
+        }}
+      >
+        <div className="dash-card__header">
+          <div className="dash-card__icon-box dash-card__icon-box--purple">
+            <Mic className="dash-card__icon" />
+          </div>
+          {voiceBibleStatus === "listening" ? (
+            <span className="dash-card__badge dash-card__badge--live">
+              <span className="dash-card__badge-pulse" />
+              {t("dashboard.vb.listening", "LISTENING")}
+            </span>
+          ) : voiceBibleStatus === "connecting" ? (
+            <span className="dash-card__badge dash-card__badge--purple">
+              {t("dashboard.vb.connecting", "CONNECTING")}
+            </span>
+          ) : voiceBibleConnected ? (
+            <span className="dash-card__badge dash-card__badge--purple">
+              {t("dashboard.vb.ready", "AI READY")}
+            </span>
+          ) : (
+            <span className="dash-card__badge dash-card__badge--muted">
+              {t("dashboard.vb.disconnected", "OFFLINE")}
+            </span>
+          )}
         </div>
-        <h3 className="card-title">{t("dashboard.vb.title")}</h3>
-        <p className="card-subtitle card-subtitle-purple">
-          {vbStatusLabel}
-        </p>
-        <p className="card-info">
-          {voiceBibleConnected ? t("dashboard.vb.voiceReady") : t("dashboard.vb.notConnected")}
-        </p>
-        <button
-          className="card-btn card-btn-purple"
-          onClick={onStartVoiceBible}
-          title={t("dashboard.vb.start")}>
-          <Mic className="card-btn-icon" />{" "}
-          {voiceBibleStatus === "listening"
-            ? t("dashboard.vb.stopListening")
-            : t("dashboard.vb.startListening")}
-        </button>
+
+        <div className="dash-card__body">
+          <h3 className="dash-card__title">{t("dashboard.vb.title")}</h3>
+          <p className="dash-card__subtitle">
+            {voiceBibleStatus === "listening"
+              ? "Transcribing service speech..."
+              : voiceBibleConnected
+              ? t("dashboard.vb.voiceReady")
+              : t("dashboard.vb.notConnected")}
+          </p>
+        </div>
+
+        <div className="dash-card__footer">
+          <button
+            type="button"
+            className="dash-card__action-btn dash-card__action-btn--purple"
+            onClick={(e) => {
+              e.stopPropagation();
+              track("dashboard_card_clicked", { card: "voice-bible-transcribe" });
+              onNavigate("/speech-to-scripture");
+            }}
+            title="Go to Transcribe"
+          >
+            <Mic className="card-btn-icon" />
+            <span>Go to Transcribe</span>
+            <ChevronRight className="dash-card__arrow-icon" />
+          </button>
+        </div>
       </div>
 
-      {/* Bible */}
-      <div className="feature-card group card-blue">
-        <div className="card-bg-blue" />
-        <div className="icon-wrapper icon-wrapper-blue">
-          <BookOpen className="feature-icon icon-blue" />
+      {/* 2. Scriptures / Bible */}
+      <div
+        className="dash-card dash-card--blue"
+        onClick={() => {
+          track("dashboard_card_clicked", { card: "bible" });
+          onNavigate("/resources?tab=bible");
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            track("dashboard_card_clicked", { card: "bible" });
+            onNavigate("/resources?tab=bible");
+          }
+        }}
+      >
+        <div className="dash-card__header">
+          <div className="dash-card__icon-box dash-card__icon-box--blue">
+            <BookOpen className="dash-card__icon" />
+          </div>
+          <span className="dash-card__badge dash-card__badge--blue">
+            {activeTranslation || "KJV"} • {translationCount} Ver.
+          </span>
         </div>
-        <h3 className="card-title">{t("dashboard.bible.title")}</h3>
-        <p className="card-subtitle card-subtitle-blue">
-          {t("dashboard.bible.active", { translation: activeTranslation })}
-        </p>
-        <p className="card-info">
-          {t("dashboard.bible.translationsInstalled", { count: translationCount })}
-        </p>
-        <button
-          className="card-btn card-btn-blue"
-          onClick={() => { track("dashboard_card_clicked", { card: "bible" }); onNavigate("/resources?tab=bible"); }}
-          title={t("dashboard.bible.open")}>
-          <BookOpen className="card-btn-icon" /> {t("dashboard.bible.open")}
-        </button>
+
+        <div className="dash-card__body">
+          <h3 className="dash-card__title">{t("dashboard.bible.title")}</h3>
+          <p className="dash-card__subtitle">
+            {t("dashboard.bible.translationsInstalled", { count: translationCount })}
+          </p>
+        </div>
+
+        <div className="dash-card__footer">
+          <div className="dash-card__action-link dash-card__action-link--blue">
+            <span>{t("dashboard.bible.open")}</span>
+            <ChevronRight className="dash-card__arrow-icon" />
+          </div>
+        </div>
       </div>
 
-      {/* Worship */}
-      <div className="feature-card group card-green">
-        <div className="card-bg-green" />
-        <div className="icon-wrapper icon-wrapper-green">
-          <Music className="feature-icon icon-green" />
+      {/* 3. Worship */}
+      <div
+        className="dash-card dash-card--green"
+        onClick={() => {
+          track("dashboard_card_clicked", { card: "worship" });
+          onNavigate("/resources?tab=worship");
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            track("dashboard_card_clicked", { card: "worship" });
+            onNavigate("/resources?tab=worship");
+          }
+        }}
+      >
+        <div className="dash-card__header">
+          <div className="dash-card__icon-box dash-card__icon-box--green">
+            <Music className="dash-card__icon" />
+          </div>
+          <span className="dash-card__badge dash-card__badge--green">
+            {t("dashboard.worship.songs", { count: songCount })}
+          </span>
         </div>
-        <h3 className="card-title">{t("dashboard.worship.title")}</h3>
-        <p className="card-subtitle card-subtitle-green">
-          {t("dashboard.worship.songs", { count: songCount })}
-        </p>
-        <p className="card-info">
-          {t("dashboard.worship.recentlyUsed", { count: recentSongCount })}
-        </p>
-        <button
-          className="card-btn card-btn-green"
-          onClick={() => { track("dashboard_card_clicked", { card: "worship" }); onNavigate("/resources?tab=worship"); }}
-          title={t("dashboard.worship.open")}>
-          <ListMusic className="card-btn-icon" /> {t("dashboard.worship.open")}
-        </button>
+
+        <div className="dash-card__body">
+          <h3 className="dash-card__title">{t("dashboard.worship.title")}</h3>
+          <p className="dash-card__subtitle">
+            {recentSongCount > 0
+              ? t("dashboard.worship.recentlyUsed", { count: recentSongCount })
+              : "Hymns, modern songs & slides"}
+          </p>
+        </div>
+
+        <div className="dash-card__footer">
+          <div className="dash-card__action-link dash-card__action-link--green">
+            <span>{t("dashboard.worship.open")}</span>
+            <ChevronRight className="dash-card__arrow-icon" />
+          </div>
+        </div>
       </div>
 
-      {/* Media */}
-      <div className="feature-card group card-orange">
-        <div className="card-bg-orange" />
-        <div className="icon-wrapper icon-wrapper-orange">
-          <Images className="feature-icon icon-orange" />
+      {/* 4. Media */}
+      <div
+        className="dash-card dash-card--orange"
+        onClick={() => {
+          track("dashboard_card_clicked", { card: "media" });
+          onNavigate("/resources?tab=media");
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            track("dashboard_card_clicked", { card: "media" });
+            onNavigate("/resources?tab=media");
+          }
+        }}
+      >
+        <div className="dash-card__header">
+          <div className="dash-card__icon-box dash-card__icon-box--orange">
+            <Images className="dash-card__icon" />
+          </div>
+          <span className="dash-card__badge dash-card__badge--orange">
+            {t("dashboard.media.assets", { count: mediaCount })}
+          </span>
         </div>
-        <h3 className="card-title">{t("dashboard.media.title")}</h3>
-        <p className="card-subtitle card-subtitle-orange">
-          {t("dashboard.media.assets", { count: mediaCount })}
-        </p>
-        <p className="card-info">
-          {t("dashboard.media.recentUploads", { count: recentMediaCount })}
-        </p>
-        <button
-          className="card-btn card-btn-orange"
-          onClick={() => { track("dashboard_card_clicked", { card: "media" }); onNavigate("/resources?tab=media"); }}
-          title={t("dashboard.media.open")}>
-          <Video className="card-btn-icon" /> {t("dashboard.media.open")}
-        </button>
+
+        <div className="dash-card__body">
+          <h3 className="dash-card__title">{t("dashboard.media.title")}</h3>
+          <p className="dash-card__subtitle">
+            {recentMediaCount > 0
+              ? t("dashboard.media.recentUploads", { count: recentMediaCount })
+              : "Motion loops, stills & video"}
+          </p>
+        </div>
+
+        <div className="dash-card__footer">
+          <div className="dash-card__action-link dash-card__action-link--orange">
+            <span>{t("dashboard.media.open")}</span>
+            <ChevronRight className="dash-card__arrow-icon" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -674,10 +575,12 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
         </div>
 
         <div className="urls-group">
-          <span className="url-label-text text-green">{t("dashboard.urls.scriptureAssistant")}</span>
-          <p className="url-label-desc">
-            {t("dashboard.urls.scriptureAssistantDesc")}
-          </p>
+          <div className="url-label-block">
+            <span className="url-label-text text-green">{t("dashboard.urls.scriptureAssistant")}</span>
+            <p className="url-label-desc">
+              {t("dashboard.urls.scriptureAssistantDesc")}
+            </p>
+          </div>
           <div className="url-input-group">
             <input
               className="url-input input-green"
@@ -740,54 +643,19 @@ function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
 
 interface ActivityAndStatusProps {
   activities: ActivityEntry[];
-  obsStatus: ConnectionStatus;
-  dockAvailable: boolean;
-  voiceBibleStatus: LmDockSnapshot["status"];
-  translationCount: number;
-  mediaCount: number;
-  songCount: number;
   onNavigate: (path: string) => void;
 }
 
 function ActivityAndStatus({
   activities,
-  obsStatus,
-  dockAvailable,
-  voiceBibleStatus,
-  translationCount,
-  mediaCount,
-  songCount,
   onNavigate,
 }: ActivityAndStatusProps) {
   const { t } = useTranslation();
-  const obsConnected = obsStatus === "connected";
-  const vbStatusLabel = useMemo(() => {
-    switch (voiceBibleStatus) {
-      case "listening":
-        return t("dashboard.vb.listening");
-      case "connecting":
-        return t("dashboard.vb.connecting");
-      case "requesting-mic":
-        return t("dashboard.vb.requestingMic");
-      case "error":
-        return t("dashboard.vb.error");
-      case "idle":
-        return t("dashboard.vb.ready");
-      default:
-        return t("dashboard.vb.disconnected");
-    }
-  }, [voiceBibleStatus, t]);
-
-  const vbStatusColor = useMemo(() => {
-    if (voiceBibleStatus === "listening") return "var(--success)";
-    if (voiceBibleStatus === "error") return "var(--error)";
-    return "var(--text-secondary)";
-  }, [voiceBibleStatus]);
 
   return (
-    <div className="activity-status-grid">
+    <div className="activity-status-grid activity-status-grid--single">
       {/* Recent Activity */}
-      <div className="panel">
+      <div className="panel" style={{ gridColumn: "1 / -1" }}>
         <div className="panel-header">
           <h3 className="panel-title">
             <History className="panel-icon" /> {t("dashboard.activity.recentActivity")}
@@ -833,111 +701,6 @@ function ActivityAndStatus({
           })}
         </div>
       </div>
-
-      {/* System Status */}
-      <div className="panel">
-        <h3 className="panel-title panel-title-mb">
-          <Activity className="panel-icon" /> {t("dashboard.status.systemStatus")}
-        </h3>
-
-        <div className="status-grid">
-          <div className="status-card">
-            <div className="status-card-header">
-              <Monitor className="status-card-icon icon-variant" />
-              {obsConnected && <span className="status-dot" />}
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.obs")}</p>
-              <p
-                className={`status-card-subtitle ${obsConnected ? "text-secondary-color" : ""
-                  }`}
-                style={
-                  !obsConnected ? { color: "var(--text-muted)" } : undefined
-                }
-              >
-                {obsConnected ? t("dashboard.status.connected") : t("dashboard.status.disconnected")}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-header">
-              <MonitorSmartphone className="status-card-icon icon-variant" />
-              {dockAvailable && <span className="status-dot" />}
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.dock")}</p>
-              <p
-                className={`status-card-subtitle ${dockAvailable ? "text-secondary-color" : ""
-                  }`}
-                style={
-                  !dockAvailable ? { color: "var(--text-muted)" } : undefined
-                }
-              >
-                {dockAvailable ? t("dashboard.status.connected") : t("dashboard.status.unavailable")}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-header">
-              <Mic className="status-card-icon icon-variant" />
-              {(voiceBibleStatus === "listening" ||
-                voiceBibleStatus === "idle") && (
-                  <span
-                    className="status-dot"
-                    style={{ backgroundColor: vbStatusColor }}
-                  />
-                )}
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.voiceBible")}</p>
-              <p
-                className="status-card-subtitle"
-                style={{ color: vbStatusColor }}
-              >
-                {vbStatusLabel}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-header">
-              <BookOpen className="status-card-icon text-blue-color" />
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.bible")}</p>
-              <p className="status-card-subtitle text-blue-color">
-                {t("dashboard.status.installed", { count: translationCount })}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-header">
-              <ImageIcon className="status-card-icon text-orange-color" />
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.media")}</p>
-              <p className="status-card-subtitle text-orange-color">
-                {t("dashboard.media.assets", { count: mediaCount })}
-              </p>
-            </div>
-          </div>
-
-          <div className="status-card">
-            <div className="status-card-header">
-              <Music className="status-card-icon text-green-color" />
-            </div>
-            <div>
-              <p className="status-card-title">{t("dashboard.status.worship")}</p>
-              <p className="status-card-subtitle text-green-color">
-                {t("dashboard.worship.songs", { count: songCount })}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -950,6 +713,8 @@ export default function ProductionHomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useTranslation();
+  const [showMovePluginPrompt, setShowMovePluginPrompt] = useState(false);
+  const moveTransitionEnsureAttempt = useRef(false);
 
   // ── Settings ──
   const [pastorName, setPastorName] = useState("");
@@ -962,7 +727,7 @@ export default function ProductionHomePage() {
   // ── Dock ──
   const [dockAvailable, setDockAvailable] = useState(false);
 
-  // ── Voice Bible ──
+  // ── Speech to Scripture ──
   const [voiceBible, setVoiceBible] = useState<LmDockSnapshot>({
     status: "idle",
     entries: [],
@@ -971,7 +736,7 @@ export default function ProductionHomePage() {
     suggestions: [],
     matching: false,
     inputLevel: 0,
-    detectionSpeed: "balanced",
+    detectionSpeed: "sharp",
   });
 
   // ── Bible ──
@@ -988,10 +753,6 @@ export default function ProductionHomePage() {
 
   // ── Activity ──
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
-
-  // ── Tutorial state ──
-  const [tourActive, setTourActive] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // ── Add activity entry ──
   const addActivity = useCallback(
@@ -1109,14 +870,44 @@ export default function ProductionHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, t]);
 
-  // ── Auto-start tutorial on first visit ──
+  // Older installations and users who skipped onboarding still get the
+  // bundled Move plugin offer from the dashboard.
   useEffect(() => {
-    if (!isDashboardTutorialCompleted() && !tourActive) {
-      const timer = setTimeout(() => setTourActive(true), 600);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    getObsMovePluginStatus()
+      .then(async (status) => {
+        if (active && status.bundled && status.bridgeBundled && (!status.installed || !status.bridgeInstalled)) {
+          setShowMovePluginPrompt(true);
+        }
+        if (active && status.installed && status.bridgeInstalled && obsService.isConnected) {
+          const [moveLoaded, bridgeLoaded] = await Promise.all([
+            isMovePluginLoaded(),
+            isMceBridgeLoaded(),
+          ]);
+          if (moveLoaded && bridgeLoaded) {
+            void ensureMoveTransition();
+          }
+        }
+      })
+      .catch(() => { });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  // Apply the bridge once after OBS becomes available. This keeps the setup
+  // automatic without repeatedly replacing a transition during normal use.
+  useEffect(() => {
+    if (obsStatus !== "connected" || moveTransitionEnsureAttempt.current) return;
+    moveTransitionEnsureAttempt.current = true;
+    getObsMovePluginStatus()
+      .then(async (status) => {
+        if (status.installed && status.bridgeInstalled) {
+          await ensureMoveTransition();
+        }
+      })
+      .catch(() => { });
+  }, [obsStatus]);
 
   // ── Subscribe to OBS status ──
   useEffect(() => {
@@ -1126,7 +917,7 @@ export default function ProductionHomePage() {
     return unsub;
   }, []);
 
-  // ── Subscribe to Voice Bible state ──
+  // ── Subscribe to Speech to Scripture state ──
   useEffect(() => {
     const unsub = lmDockService.subscribe((snapshot) => {
       setVoiceBible(snapshot);
@@ -1143,7 +934,7 @@ export default function ProductionHomePage() {
     }
   }, [obsStatus, addActivity, t]);
 
-  // ── Track Voice Bible events ──
+  // ── Track Speech to Scripture events ──
   const prevVbStatus = useMemo(() => voiceBible.status, [voiceBible.status]);
   useEffect(() => {
     if (voiceBible.status === "listening" && prevVbStatus !== "listening") {
@@ -1157,21 +948,13 @@ export default function ProductionHomePage() {
   // ── Actions ──
   const handleNavigate = useCallback(
     (path: string) => {
+      if (!confirmStopVoiceBibleForPresentation(path)) return;
       navigate(path);
     },
     [navigate],
   );
 
-  const handleToggleVoiceBible = useCallback(() => {
-    if (voiceBible.status === "listening") {
-      lmDockService.stopListening();
-    } else {
-      lmDockService.startListening();
-    }
-  }, [voiceBible.status]);
 
-  // ── Tutorial Modal ──
-  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const handleConnectObs = useCallback(async () => {
     try {
@@ -1189,33 +972,9 @@ export default function ProductionHomePage() {
     }
   }, [navigate]);
 
-  const handleOpenTutorials = useCallback(() => {
-    track("tutorial_modal_opened");
-    openUrl("https://www.youtube.com/playlist?list=PLRua6gJfgC0o");
-  }, []);
-
   return (
     <div className="app-page__inner">
       <OnboardingResumeBanner />
-
-      {/* ── Incomplete tutorial banner ── */}
-      {!tourActive && !isDashboardTutorialCompleted() && !bannerDismissed && (
-        <div className="tst-tutorial-banner" style={{ marginBottom: 12 }}>
-          <AlertTriangle size={14} />
-          <span>{t("dt.banner")}</span>
-          <div className="tst-tutorial-banner-actions">
-            <button className="tst-banner-btn tst-banner-btn--primary" onClick={() => setTourActive(true)}>
-              {t("dt.banner.continue")}
-            </button>
-            <button className="tst-banner-btn" onClick={() => { resetDashboardTutorial(); setTourActive(true); setBannerDismissed(false); }}>
-              <RotateCcw size={12} /> {t("dt.banner.restart")}
-            </button>
-            <button className="tst-banner-btn" onClick={() => setBannerDismissed(true)}>
-              {t("dt.banner.dismiss")}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* <AppIdCard /> */}
       <DashboardHeader
@@ -1223,14 +982,8 @@ export default function ProductionHomePage() {
         obsStatus={obsStatus}
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
-        onOpenTutorials={handleOpenTutorials}
-        onOpenTutorialsWithReset={() => {
-          resetDashboardTutorial();
-          setTourActive(true);
-          setBannerDismissed(false);
-        }}
+        onWatchTutorials={() => navigate("/tutorials")}
       />
-      <DashboardSummaryCards />
       <PlanUpgradeBanner />
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
@@ -1241,35 +994,18 @@ export default function ProductionHomePage() {
         recentSongCount={recentSongCount}
         mediaCount={mediaCount}
         recentMediaCount={recentMediaCount}
-        onStartVoiceBible={handleToggleVoiceBible}
         onNavigate={handleNavigate}
       />
-      <div data-dt-tutorial="connection-urls">
-        <ConnectionUrls obsStatus={obsStatus} />
-      </div>
+      <ConnectionUrls obsStatus={obsStatus} />
       {/* <RemotePresentationStatus /> */}
-      <div data-dt-tutorial="activity-log">
-        <ActivityAndStatus
-          activities={activities}
-          obsStatus={obsStatus}
-          dockAvailable={dockAvailable}
-          voiceBibleStatus={voiceBible.status}
-          translationCount={translationCount}
-          mediaCount={mediaCount}
-          songCount={songCount}
-          onNavigate={handleNavigate}
-        />
-      </div>
+      <ActivityAndStatus
+        activities={activities}
+        onNavigate={handleNavigate}
+      />
       {/* <WhatsNewSection /> */}
-      <TutorialModal
-        open={tutorialOpen}
-        onClose={() => setTutorialOpen(false)}
-      />
-      <DashboardTutorial
-        isActive={tourActive}
-        onClose={() => setTourActive(false)}
-        onFinish={() => { markDashboardTutorialCompleted(); setTourActive(false); }}
-      />
+      {showMovePluginPrompt && (
+        <MovePluginInstallModal onClose={() => setShowMovePluginPrompt(false)} />
+      )}
     </div>
   );
 }

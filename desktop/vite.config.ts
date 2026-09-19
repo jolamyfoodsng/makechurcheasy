@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { DEFAULT_PLAN_CONFIG, FEATURE_LABELS, deriveFeatureRequiredPlan } from "./src/services/planConfigTypes";
@@ -8,10 +9,38 @@ import { DEFAULT_PLAN_CONFIG, FEATURE_LABELS, deriveFeatureRequiredPlan } from "
 const host = process.env.TAURI_DEV_HOST;
 
 const root: string = import.meta.dirname ?? ".";
+const PUBLIC_DIR = resolve(root, "public");
 
 // Read version from package.json at build time
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));
 const APP_VERSION: string = pkg.version;
+
+// OBS caches browser-source documents aggressively. Keep the URL token tied to
+// the actual bundled overlay HTML so a changed renderer gets a new document,
+// while verse packets can continue using the stable in-place event path.
+const OVERLAY_HTML_FILES = [
+  "mce-bible-overlay.html",
+  "mce-worship-overlay.html",
+  "mce-note.html",
+  "mce-media-overlay.html",
+  "lower-third-overlay.html",
+  "pre-service-countdown.html",
+  "countdown-overlay.html",
+  "countdown-bg-overlay.html",
+  "live-tool-overlay.html",
+  "bible-overlay-bg.html",
+];
+
+const OVERLAY_HTML_FINGERPRINT = createHash("sha256")
+  .update(
+    OVERLAY_HTML_FILES
+      .map((fileName) => `${fileName}\n${readFileSync(resolve(PUBLIC_DIR, fileName), "utf-8")}`)
+      .join("\n"),
+  )
+  .digest("hex")
+  .slice(0, 12);
+
+const OVERLAY_HTML_VERSION = `${APP_VERSION}-${OVERLAY_HTML_FINGERPRINT}`;
 
 // Auth session file — written by desktop app, read by OBS dock.
 // In dev the overlay server doesn't have the Rust auth endpoints yet,
@@ -21,14 +50,9 @@ const SESSION_FILE = resolve(root, "makechurcheasy-session.json");
 // The overlay server (Rust) reads from ~/Documents/MakeChurchEasy/makechurcheasy-session.json.
 // On logout we must delete from BOTH locations so the dock can't still see a stale session.
 const OVERLAY_SESSION_FILE = resolve(homedir(), "Documents", "MakeChurchEasy", "makechurcheasy-session.json");
-const PUBLIC_DIR = resolve(root, "public");
 const ALLOWED_APP_DOCUMENTS = new Set([
   "/",
   "/index.html",
-  "/dock",
-  "/dock.html",
-  "/lm-dock",
-  "/lm-dock.html",
 ]);
 
 // ── Entitlement Server Config ─────────────────────────────────────────────────
@@ -41,21 +65,34 @@ for (const [tier, config] of Object.entries(DEFAULT_PLAN_CONFIG.plans)) {
 
 // Minimum plan tier required for each feature — derived at runtime, NOT hardcoded.
 const FEATURE_REQUIRED_PLAN: Record<string, string> = deriveFeatureRequiredPlan(DEFAULT_PLAN_CONFIG);
+const PURCHASED_PLAN_HIERARCHY = ["free", "basic", "growth"] as const;
+
+function findRequiredPlan(feature: string, currentCount: number = 0): string {
+  for (const tier of PURCHASED_PLAN_HIERARCHY) {
+    const value = DEFAULT_ENTITLEMENTS[tier]?.[feature];
+    if (typeof value === "boolean" && value) return tier;
+    if (typeof value === "number" && (value === -1 || currentCount < value)) return tier;
+  }
+  return FEATURE_REQUIRED_PLAN[feature] || "growth";
+}
 
 function readStoredOverlaySession(): unknown | null {
-  if (!existsSync(SESSION_FILE)) {
-    return null;
+  for (const sessionFile of [SESSION_FILE, OVERLAY_SESSION_FILE]) {
+    if (!existsSync(sessionFile)) continue;
+
+    try {
+      const data = JSON.parse(readFileSync(sessionFile, "utf-8"));
+      const hasUser = Boolean(data?.user && typeof data.user.id === "string" && data.user.id.trim());
+      const hasDevice = typeof data?.deviceId === "string" && data.deviceId.trim();
+      const isLive = typeof data?.expiresAt === "number" && Date.now() < data.expiresAt;
+      if (hasUser && hasDevice && isLive) return data;
+    } catch {
+      // Try the other session store. A malformed or expired file must not
+      // make a standalone Dock document reachable.
+    }
   }
 
-  try {
-    const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
-    if (typeof data?.expiresAt === "number" && Date.now() >= data.expiresAt) {
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function hasStoredOverlaySession(): boolean {
@@ -210,20 +247,10 @@ function authSessionPlugin(): Plugin {
       server.middlewares.use("/api/auth/status", (_req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Access-Control-Allow-Origin", "*");
-        if (existsSync(SESSION_FILE)) {
-          try {
-            const data = JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
-            if (data.expiresAt && Date.now() < data.expiresAt) {
-              res.end(JSON.stringify({ ...data, authenticated: true }));
-            } else {
-              res.end('{"authenticated":false,"deviceId":null}');
-            }
-          } catch {
-            res.end('{"authenticated":false,"deviceId":null}');
-          }
-        } else {
-          res.end('{"authenticated":false,"deviceId":null}');
-        }
+        const data = readStoredOverlaySession();
+        res.end(data
+          ? JSON.stringify({ ...data as Record<string, unknown>, authenticated: true })
+          : '{"authenticated":false,"deviceId":null}');
       });
 
       server.middlewares.use("/api/auth/session", (req, res) => {
@@ -308,7 +335,7 @@ function entitlementServerPlugin(): Plugin {
             const entitlements = DEFAULT_ENTITLEMENTS[planKey] || DEFAULT_ENTITLEMENTS.free;
             const limit = entitlements[feature as keyof typeof entitlements];
             const label = FEATURE_LABELS[feature] || feature;
-            const requiredPlan = FEATURE_REQUIRED_PLAN[feature] || "basic";
+            const requiredPlan = findRequiredPlan(feature, currentCount);
 
             // Boolean features (multiview, tickers, massImport, etc.)
             if (typeof limit === "boolean") {
@@ -387,15 +414,17 @@ export default defineConfig(async () => ({
   // Expose version to the app at build time
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __MCE_OVERLAY_HTML_VERSION__: JSON.stringify(OVERLAY_HTML_VERSION),
   },
 
-  // Multi-page build: main app + standalone dock + LM dock
+  // Multi-page build: main app + standalone dock + LM dock + floating assistant
   build: {
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),
         dock: resolve(root, "dock.html"),
         "lm-dock": resolve(root, "lm-dock.html"),
+        makechatgpt: resolve(root, "makechatgpt.html"),
       },
     },
   },
@@ -408,7 +437,10 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Development-only LAN access: a second laptop on the same Wi-Fi can
+    // open the dev Dock using this computer's LAN address. Production builds
+    // do not use Vite's dev server.
+    host: host || "0.0.0.0",
     hmr: host
       ? {
         protocol: "ws",

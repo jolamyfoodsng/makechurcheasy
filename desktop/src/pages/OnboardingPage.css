@@ -117,22 +117,45 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  padding: 16px 24px 20px;
+  gap: clamp(14px, 3vw, 22px);
+  padding: 14px 18px 16px;
+  min-height: 52px;
   background: var(--surface);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ob-step-labels::-webkit-scrollbar {
+  display: none;
 }
 
 .ob-step-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
+  position: relative;
+  flex: 0 0 auto;
+  padding: 8px 2px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  transition: color 0.2s;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  transition: color 0.2s, opacity 0.2s;
 }
 
 .ob-step-label.is-active {
-  color: var(--primary);
+  color: var(--text);
+}
+
+.ob-step-label.is-active::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  left: 2px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--primary);
 }
 
 .ob-step-label.is-done {
@@ -147,6 +170,248 @@
   align-items: center;
   padding: 40px 24px 60px;
   overflow-y: auto;
+}
+
+.ob-layout {
+  width: 100%;
+  max-width: 1040px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ob-layout--with-tutorial {
+  max-width: 1240px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+  align-items: stretch;
+  gap: 16px;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.ob-step-stage {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+
+.ob-layout--with-tutorial .ob-step-stage {
+  align-items: stretch;
+  padding: 0;
+}
+
+.ob-layout--with-tutorial .ob-step-stage > .ob-card {
+  max-width: none;
+  height: 100%;
+}
+
+.ob-tutorial-panel {
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
+}
+
+.ob-tutorial-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ob-tutorial-heading {
+  min-width: 0;
+}
+
+.ob-tutorial-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.ob-tutorial-heading h2 {
+  margin: 6px 0 4px;
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ob-tutorial-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ob-tutorial-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition),
+    background var(--transition);
+}
+
+.ob-tutorial-icon-btn:hover {
+  color: var(--text);
+  background: var(--primary-soft);
+  border-color: var(--primary-soft-border);
+}
+
+.ob-tutorial-video-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.ob-tutorial-guide {
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 auto -2px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.ob-tutorial-guide span {
+  flex: 1;
+}
+
+.ob-tutorial-video-shell iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.ob-tutorial-footer {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ob-tutorial-playing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.ob-tutorial-live-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+
+.ob-tutorial-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  color: var(--text);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition);
+}
+
+.ob-tutorial-watch-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.ob-tutorial-note {
+  width: 100%;
+  max-width: none;
+  margin-inline: auto;
+  margin: -4px auto 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.ob-tutorial-embed-fallback {
+  margin: -4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.ob-tutorial-embed-fallback button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ob-tutorial-embed-fallback button:hover {
+  text-decoration: underline;
 }
 
 .ob-card {
@@ -178,6 +443,15 @@
 .ob-card--dock-install .ob-hero p {
   line-height: 1.45;
   max-width: 680px;
+}
+
+/* The step and tutorial are one onboarding page. Keep the existing step
+   content styling, but let the shared page shell own the border and radius. */
+.ob-layout .ob-step-stage > .ob-card {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 /* ── Screen: Welcome ── */
@@ -564,6 +838,70 @@
   line-height: 1.35;
 }
 
+/* ── OBS plugin setup ── */
+.ob-plugin-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-plugin-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ob-plugin-card__version {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ob-plugin-state {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+.ob-plugin-state--ready {
+  border-color: rgba(var(--success-rgb), 0.35);
+  color: var(--success);
+  background: rgba(var(--success-rgb), 0.08);
+}
+
+.ob-plugin-state--pending {
+  border-color: rgba(var(--warning-rgb, 245, 158, 11), 0.35);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb, 245, 158, 11), 0.08);
+}
+
+.ob-plugin-card__detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.ob-plugin-card__detail svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--success);
+}
+
 /* ── Mock OBS UI ── */
 .ob-mock {
   background: var(--surface-raised);
@@ -821,9 +1159,44 @@
   margin-top: 1px;
 }
 
+@media (max-width: 980px) {
+  .ob-step-stage {
+    padding: 24px;
+  }
+
+  .ob-layout--with-tutorial {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+    gap: 12px;
+  }
+
+  .ob-layout--with-tutorial .ob-tutorial-panel {
+    min-height: 0;
+    padding: 14px;
+  }
+}
+
 @media (max-width: 760px) {
   .ob-content {
     padding: 20px 12px 28px;
+  }
+
+  .ob-step-stage {
+    padding: 18px;
+  }
+
+  .ob-layout--with-tutorial {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ob-layout--with-tutorial .ob-step-stage {
+    padding: 0;
+  }
+
+  .ob-layout--with-tutorial .ob-tutorial-panel {
+    height: auto;
+    min-height: 0;
+    padding: 14px;
   }
 
   .ob-card--dock-install {

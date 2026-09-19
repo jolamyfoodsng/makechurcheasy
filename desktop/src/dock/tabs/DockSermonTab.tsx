@@ -16,7 +16,9 @@ import { dockObsClient } from "../dockObsClient";
 import type { DockStagedItem } from "../dockTypes";
 import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { useTranslation } from "react-i18next";
+import { trackOverlayModeSwitched } from "../../services/tracking";
 
 const STORAGE_KEY = "ocs-dock-sermon-items-v1";
 const OLD_STORAGE_KEY = "ocs-dock-sermon";
@@ -354,7 +356,8 @@ function saveItems(items: SermonItem[]): void {
 
 function loadViewPrefs(): { activeItemId: string | null; selectedSlideId: string | null; overlayMode: OverlayMode } {
   try {
-    const parsed = JSON.parse(localStorage.getItem(getUserScopedKey(VIEW_PREFS_KEY)) || "{}") as {
+    const raw = readNativeDockSetting<unknown>(VIEW_PREFS_KEY);
+    const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw ?? {}) as {
       activeItemId?: unknown;
       selectedSlideId?: unknown;
       overlayMode?: unknown;
@@ -370,9 +373,7 @@ function loadViewPrefs(): { activeItemId: string | null; selectedSlideId: string
 }
 
 function saveViewPrefs(activeItemId: string | null, selectedSlideId: string | null, overlayMode: OverlayMode): void {
-  try {
-    localStorage.setItem(getUserScopedKey(VIEW_PREFS_KEY), JSON.stringify({ activeItemId, selectedSlideId, overlayMode }));
-  } catch { /* ignore OBS CEF storage failures */ }
+  writeNativeDockSetting(VIEW_PREFS_KEY, { activeItemId, selectedSlideId, overlayMode });
 }
 
 interface SermonThemePrefs {
@@ -382,7 +383,8 @@ interface SermonThemePrefs {
 
 function loadThemePrefs(): SermonThemePrefs {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(THEME_PREFS_KEY));
+    const stored = readNativeDockSetting<unknown>(THEME_PREFS_KEY);
+    const raw = typeof stored === "string" ? stored : stored ? JSON.stringify(stored) : null;
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
       if (parsed && typeof parsed === "object") {
@@ -401,9 +403,7 @@ function loadThemePrefs(): SermonThemePrefs {
 }
 
 function saveThemePrefs(prefs: SermonThemePrefs): void {
-  try {
-    localStorage.setItem(getUserScopedKey(THEME_PREFS_KEY), JSON.stringify(prefs));
-  } catch { /* ignore */ }
+  writeNativeDockSetting(THEME_PREFS_KEY, prefs);
 }
 
 interface SermonThemeSettings {
@@ -431,7 +431,8 @@ interface SermonThemeSettings {
 
 function loadSermonThemeSettings(): SermonThemeSettings {
   try {
-    const raw = localStorage.getItem(getUserScopedKey(SERMON_THEME_SETTINGS_KEY));
+    const stored = readNativeDockSetting<unknown>(SERMON_THEME_SETTINGS_KEY);
+    const raw = typeof stored === "string" ? stored : stored ? JSON.stringify(stored) : null;
     if (!raw) return {};
     const parsed = JSON.parse(raw) as SermonThemeSettings;
     return parsed && typeof parsed === "object" ? parsed : {};
@@ -441,9 +442,7 @@ function loadSermonThemeSettings(): SermonThemeSettings {
 }
 
 function saveSermonThemeSettings(settings: SermonThemeSettings): void {
-  try {
-    localStorage.setItem(getUserScopedKey(SERMON_THEME_SETTINGS_KEY), JSON.stringify(settings));
-  } catch { /* ignore */ }
+  writeNativeDockSetting(SERMON_THEME_SETTINGS_KEY, settings);
 }
 
 function makeDraft(type: SermonItemType = "quote"): ItemDraft {
@@ -1658,14 +1657,24 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               <button
                 type="button"
                 className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
-                onClick={() => setOverlayMode("fullscreen")}
+                onClick={() => {
+                  if (overlayMode !== "fullscreen") {
+                    setOverlayMode("fullscreen");
+                    trackOverlayModeSwitched("sermon", "fullscreen");
+                  }
+                }}
                 title={t('sermon.full')}>
                 {t('sermon.full')}
               </button>
               <button
                 type="button"
                 className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
-                onClick={() => setOverlayMode("lower-third")}
+                onClick={() => {
+                  if (overlayMode !== "lower-third") {
+                    setOverlayMode("lower-third");
+                    trackOverlayModeSwitched("sermon", "lower-third");
+                  }
+                }}
                 title={t('sermon.lt')}>
                 {t('sermon.lt')}
               </button>

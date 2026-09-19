@@ -8,7 +8,11 @@ import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
+import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
+import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
+import { useDockSceneRoute } from "../dockSceneRouting";
 import type { CountdownConfig, BackgroundSettings, BackgroundType, ImageFit, MessageSettings, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
 // countdownDefaults removed — editBg initialized inline
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
@@ -18,9 +22,14 @@ import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/count
 import type { MediaItem } from "../../library/libraryTypes";
 import {
   DOCK_COUNTDOWN_BG_SOURCE_NAME,
+  DOCK_PRESENTATION_SCENE_NAME,
   DOCK_COUNTDOWN_SOURCE_NAME,
   resolveCountdownTargetScene,
 } from "./dockCountdownScene";
+import {
+  clearPresentationScreen,
+  publishCountdownToPresentation,
+} from "../../services/presentationPublish";
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
@@ -52,7 +61,7 @@ function makeCountdown(title: string, minutes: number, templateId: "minimal" | "
   };
 }
 
-const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
+export const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
   makeCountdown("Pre-Service", 15, "minimal"),
   makeCountdown("Worship Set", 5, "circular"),
   makeCountdown("Sermon Start", 10, "modern"),
@@ -175,6 +184,7 @@ function CountdownCard({
   onSelect,
   onAdjustTime,
   onSetTime,
+  onSetTitle,
   onShowObs,
   onPause,
   onResume,
@@ -182,7 +192,7 @@ function CountdownCard({
   onEdit,
   onReset,
   onUpdateObs,
-  onUpdateMessage,
+  isCompact = false,
 }: {
   cd: CountdownConfig;
   isLive: boolean;
@@ -192,6 +202,7 @@ function CountdownCard({
   onSelect: () => void;
   onAdjustTime: (deltaSeconds: number) => void;
   onSetTime: (seconds: number) => void;
+  onSetTitle: (title: string) => void;
   onShowObs: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -199,15 +210,15 @@ function CountdownCard({
   onEdit: () => void;
   onReset: () => void;
   onUpdateObs: (patch: Partial<OBSSettings>) => void;
-  onUpdateMessage: (msg: MessageSettings | undefined) => void;
+  isCompact?: boolean;
 }) {
   const { t } = useTranslation();
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState(cd.title);
   const [editingTime, setEditingTime] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAutoSwitch, setShowAutoSwitch] = useState(false);
-  const [msgOpen, setMsgOpen] = useState(false);
-  const [msgDraft, setMsgDraft] = useState<MessageSettings>({ text: "", color: "#ffffff", position: "below" });
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -222,35 +233,134 @@ function CountdownCard({
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
+  // Editing a live countdown could change what is already on screen.
+  // Keep the card controls read-only until the countdown is stopped.
+  useEffect(() => {
+    if (!isLive) return;
+    setEditingTitle(false);
+    setEditingTime(false);
+    setMenuOpen(false);
+  }, [isLive]);
+
   // Theme-aware timer display
   const theme = cd.textThemeId ? getTextTheme(cd.textThemeId) : null;
   if (theme) loadTextThemeFont(theme);
   const timerFont = theme ? theme.fontFamily : "monospace";
   const timerWeight = theme ? theme.fontWeight : 700;
-  const timerColor = theme ? theme.timerColor : "#fff";
+  const timerColor = "var(--dock-text, #F8FAFC)";
   const timerShadow = theme ? theme.timerShadow : "none";
+
+  const startTitleEdit = () => {
+    if (isLive) return;
+    setEditTitleValue(cd.title);
+    setEditingTitle(true);
+  };
+
+  const commitTitleEdit = () => {
+    const nextTitle = editTitleValue.trim();
+    if (nextTitle) onSetTitle(nextTitle);
+    setEditingTitle(false);
+  };
+
+  const cancelTitleEdit = () => {
+    setEditTitleValue(cd.title);
+    setEditingTitle(false);
+  };
+
+  const parseTimeInput = (value: string): number => {
+    const parts = value.split(":").map((part) => Number.parseInt(part.trim(), 10));
+    if (parts.some((part) => Number.isNaN(part))) return 0;
+    if (parts.length === 3) return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
+    if (parts.length === 2) return Math.max(0, parts[0] * 60 + parts[1]);
+    return Math.max(0, parts[0] || 0);
+  };
+
+  const commitTimeEdit = () => {
+    onSetTime(parseTimeInput(editValue));
+    setEditingTime(false);
+  };
+
+  const cancelTimeEdit = () => {
+    setEditValue(formattedTime);
+    setEditingTime(false);
+  };
 
   return (
     <div
       onClick={onSelect}
       style={{
-        borderRadius: 10,
+        borderRadius: isCompact ? 7 : 10,
         border: `1px solid ${isLive ? "rgba(34,197,94,0.5)" : "var(--dock-border, rgba(255,255,255,0.08))"}`,
         background: isLive ? "rgba(34,197,94,0.06)" : "var(--dock-surface, rgba(255,255,255,0.04))",
         cursor: "pointer",
         transition: "all 0.15s",
-        padding: 12,
+        padding: isCompact ? "6px 8px" : 12,
         display: "flex",
         flexDirection: "column",
-        gap: 4,
+        gap: isCompact ? 3 : 4,
       }}
     >
-      {/* Title + Live badge + three-dot menu */}
+      {/* Title + edit cue + Live badge + three-dot menu */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden", minWidth: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {cd.title}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1, overflow: "visible" }}>
+          {editingTitle ? (
+            <>
+              <input
+                autoFocus
+                type="text"
+                value={editTitleValue}
+                onChange={(e) => setEditTitleValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    commitTitleEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cancelTitleEdit();
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={t("countdowns.editTitle", "Countdown title")}
+                style={{ flex: "1 1 120px", minWidth: 0, maxWidth: 170, height: 24, boxSizing: "border-box", background: "var(--dock-input-bg, rgba(0,0,0,0.3))", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 5, padding: "3px 7px", color: "var(--dock-text)", fontSize: 11, outline: "none", textOverflow: "ellipsis" }}
+              />
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); commitTitleEdit(); }}
+                title={t("common.save", "Save")}
+                aria-label={t("common.save", "Save")}
+                style={{ width: 24, height: 24, background: "rgba(34,197,94,0.16)", border: "1px solid rgba(34,197,94,0.45)", borderRadius: 5, padding: 0, cursor: "pointer", color: "#86efac", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                <Icon name="check" size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); cancelTitleEdit(); }}
+                title={t("common.cancel", "Cancel")}
+                aria-label={t("common.cancel", "Cancel")}
+                style={{ width: 24, height: 24, background: "rgba(255,255,255,0.06)", border: "1px solid var(--dock-border, rgba(255,255,255,0.12))", borderRadius: 5, padding: 0, cursor: "pointer", color: "var(--dock-text-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: "var(--dock-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {cd.title}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); startTitleEdit(); }}
+                disabled={isLive}
+                title={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTitle", "Edit countdown title")}
+                aria-label={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTitle", "Edit countdown title")}
+                style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: "4px 6px", cursor: isLive ? "not-allowed" : "pointer", color: "var(--dock-text-dim)", opacity: isLive ? 0.4 : 1, display: "flex", alignItems: "center", flexShrink: 0 }}
+              >
+                <Icon name="edit" size={13} />
+              </button>
+            </>
+          )}
           {cd.obs.autoSwitchEnabled && cd.obs.autoSwitchScene && (
             <span style={{ fontSize: 8, fontWeight: 600, background: "rgba(99,102,241,0.8)", color: "#fff", borderRadius: 3, padding: "1px 4px", whiteSpace: "nowrap", flexShrink: 0 }}>
               {(() => {
@@ -288,12 +398,14 @@ function CountdownCard({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit(); }}
-                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px", background: "none", border: "none", borderRadius: 4, cursor: "pointer", color: "var(--dock-text)", fontSize: 12, textAlign: "left" }}
+                  disabled={isLive}
+                  title={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : undefined}
+                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px", background: "none", border: "none", borderRadius: 4, cursor: isLive ? "not-allowed" : "pointer", color: "var(--dock-text)", opacity: isLive ? 0.4 : 1, fontSize: 12, textAlign: "left" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                 >
-                  <Icon name="edit" size={13} />
-                  <span>{t("common.edit", "Edit")}</span>
+                  <Icon name="tune" size={13} />
+                  <span>{t("countdowns.editCountdownSettings", "Edit countdown settings")}</span>
                 </button>
                 <button
                   type="button"
@@ -312,125 +424,99 @@ function CountdownCard({
       </div>
 
       {/* Timer (click to edit inline) */}
-      <div
-        style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0", cursor: isLive ? "default" : "pointer" }}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!isLive && !editingTime) {
-            setEditValue(formattedTime);
-            setEditingTime(true);
-          }
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: isCompact ? 28 : 42, minWidth: 0 }}>
         {editingTime ? (
-          <input
-            autoFocus
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === "Enter") {
-                const parts = editValue.split(":").map(Number);
-                let secs = 0;
-                if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
-                else secs = parts[0] || 0;
-                onSetTime(Math.max(0, secs));
-                setEditingTime(false);
-              } else if (ev.key === "Escape") {
-                setEditingTime(false);
-              }
-            }}
-            onBlur={() => setEditingTime(false)}
-            onClick={(ev) => ev.stopPropagation()}
-            style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 4, padding: "2px 6px", width: "100%", letterSpacing: 1, lineHeight: 1, outline: "none" }}
-          />
+          <>
+            <input
+              autoFocus
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  commitTimeEdit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cancelTimeEdit();
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={t("countdowns.editTime", "Edit countdown time")}
+              style={{ flex: "0 1 auto", width: cd.timer.showHours ? 142 : 112, maxWidth: "100%", height: isCompact ? 24 : 30, boxSizing: "border-box", fontSize: isCompact ? 16 : 20, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "var(--dock-input-bg, rgba(0,0,0,0.3))", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 5, padding: "2px 6px", letterSpacing: 1, lineHeight: 1, outline: "none" }}
+            />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); commitTimeEdit(); }}
+              title={t("common.save", "Save")}
+              aria-label={t("common.save", "Save")}
+              style={{ width: isCompact ? 22 : 26, height: isCompact ? 22 : 26, background: "rgba(34,197,94,0.16)", border: "1px solid rgba(34,197,94,0.45)", borderRadius: 5, padding: 0, cursor: "pointer", color: "#86efac", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            >
+              <Icon name="check" size={isCompact ? 12 : 15} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); cancelTimeEdit(); }}
+              title={t("common.cancel", "Cancel")}
+              aria-label={t("common.cancel", "Cancel")}
+              style={{ width: isCompact ? 22 : 26, height: isCompact ? 22 : 26, background: "rgba(255,255,255,0.06)", border: "1px solid var(--dock-border, rgba(255,255,255,0.12))", borderRadius: 5, padding: 0, cursor: "pointer", color: "var(--dock-text-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            >
+              <Icon name="close" size={isCompact ? 12 : 15} />
+            </button>
+          </>
         ) : (
-          formattedTime
+          <>
+            <div
+              style={{ fontSize: isCompact ? 18 : 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: isCompact ? "2px 0" : "8px 0", cursor: "pointer", flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isLive) return;
+                  setEditValue(formattedTime);
+                  setEditingTime(true);
+                }}
+            >
+              {formattedTime}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); if (!isLive) { setEditValue(formattedTime); setEditingTime(true); } }}
+              disabled={isLive}
+              title={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTime", "Edit countdown time")}
+              aria-label={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTime", "Edit countdown time")}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: isCompact ? "3px 4px" : "5px 6px", cursor: isLive ? "not-allowed" : "pointer", color: "var(--dock-text-dim)", opacity: isLive ? 0.4 : 1, display: "flex", alignItems: "center", flexShrink: 0 }}
+            >
+              <Icon name="edit" size={isCompact ? 12 : 14} />
+            </button>
+          </>
         )}
       </div>
 
       {/* Timer adjust controls */}
-      <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: 4 }}>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title="-1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>-1m</button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title="-10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title="+10 seconds" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title="+1 minute" style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
+      <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: isCompact ? 1 : 4 }}>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title={t("countdowns.minusOneMinute", "-1 minute")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}>-1m</button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title={t("countdowns.minusTenSeconds", "-10 seconds")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={isCompact ? 9 : 10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title={t("countdowns.plusTenSeconds", "+10 seconds")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={isCompact ? 9 : 10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title={t("countdowns.plusOneMinute", "+1 minute")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}>+1m</button>
       </div>
 
-      {/* Push to separate scene toggle */}
-
-
-
-      {/* Push & Start / Pause / Stop + Message */}
-      <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+      {/* Push & Start / Pause / Stop */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: isCompact ? 1 : 2 }}>
         {isLive ? (
           <>
-            <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onStop(); }} style={{ fontSize: 10, padding: "4px 6px", display: "flex", alignItems: "center", gap: 3 }}>
+            <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onStop(); }} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px", display: "flex", alignItems: "center", gap: 3 }}>
               <Icon name="stop" size={10} /> {t("countdowns.stopAndRemove", "Stop & Remove")}
             </button>
-            <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); isPaused ? onResume() : onPause(); }} title={isPaused ? t("countdowns.resume", "Resume") : t("countdowns.pause", "Pause")} style={{ fontSize: 10, padding: "4px 6px" }}>
+            <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); isPaused ? onResume() : onPause(); }} title={isPaused ? t("countdowns.resume", "Resume") : t("countdowns.pause", "Pause")} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px" }}>
               <Icon name={isPaused ? "play_arrow" : "pause"} size={10} />
             </button>
           </>
         ) : (
-          <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={(e) => { e.stopPropagation(); onShowObs(); }} style={{ fontSize: 10, padding: "4px 6px" }}>
+          <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={(e) => { e.stopPropagation(); onShowObs(); }} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px" }}>
             {t("countdowns.pushAndStart", "Push & Start")}
           </button>
         )}
-        {/* Message icon + inline editor */}
-        <div style={{ position: "relative", marginLeft: "auto" }}>
-          <button
-            type="button"
-            title={cd.message?.text?.trim() ? `Message: ${cd.message.text}` : "Add message to overlay"}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (msgOpen) { setMsgOpen(false); return; }
-              setMsgDraft(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
-              setMsgOpen(true);
-            }}
-            style={{ background: cd.message?.text?.trim() ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: "4px 6px", cursor: "pointer", color: cd.message?.text?.trim() ? "#a5b4fc" : "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", gap: 2, lineHeight: 1 }}
-          >
-            <Icon name="chat_bubble" size={12} />
-          </button>
-          {msgOpen && (
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: "var(--dock-surface, #1a1a2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, width: 220, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--dock-text)" }}>Message (OBS Overlay)</span>
-              <input
-                type="text"
-                value={msgDraft.text}
-                onChange={(e) => setMsgDraft((p) => ({ ...p, text: e.target.value }))}
-                placeholder="e.g. Welcome to our service"
-                autoFocus
-                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "5px 8px", color: "var(--dock-text)", fontSize: 11, outline: "none", width: "100%" }}
-              />
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="color" value={msgDraft.color} onChange={(e) => setMsgDraft((p) => ({ ...p, color: e.target.value }))}
-                  style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
-                <div style={{ display: "flex", gap: 3, flex: 1 }}>
-                  {(["above", "below"] as const).map((pos) => (
-                    <button key={pos} type="button" onClick={() => setMsgDraft((p) => ({ ...p, position: pos }))}
-                      style={{ flex: 1, padding: "3px 0", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: msgDraft.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 10, cursor: "pointer", textTransform: "capitalize" }}>
-                      {pos}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                {cd.message?.text?.trim() && (
-                  <button type="button" onClick={() => { onUpdateMessage(undefined); setMsgOpen(false); }}
-                    style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#fca5a5", fontSize: 10, cursor: "pointer" }}>
-                    Clear
-                  </button>
-                )}
-                <button type="button" onClick={() => { onUpdateMessage(msgDraft.text.trim() ? { ...msgDraft } : undefined); setMsgOpen(false); }}
-                  style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontSize: 10, cursor: "pointer", fontWeight: 600 }}>
-                  Save
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Auto Scene Switch */}
@@ -502,13 +588,21 @@ function CountdownCard({
 
 // ── Main Tab ───────────────────────────────────────────────────────────────
 
-export default function DockCountdownsTab() {
+export default function DockCountdownsTab({
+  presentationOutputTarget = "obs",
+}: {
+  presentationOutputTarget?: DockPresentationOutputTarget;
+} = {}) {
   const { t } = useTranslation();
+  const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
+  const [sceneRoute, updateSceneRoute] = useDockSceneRoute("countdown");
+  const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>(HARDCODED_COUNTDOWNS);
   const [liveCountdownId, setLiveCountdownId] = useState<string | null>(() => readLivePersistState()?.id ?? null);
   const livePersistRef = useRef<LivePersistState | null>(readLivePersistState());
   const restoredRef = useRef(false);
   const autoSwitchTriggeredRef = useRef(false);
+  const autoSwitchInFlightRef = useRef(false);
   const obsControlArmedRef = useRef(false);
 
   // Edit modal state
@@ -522,8 +616,6 @@ export default function DockCountdownsTab() {
     source: "upload", imageFit: "cover", loop: true, muted: true, flyerMode: false,
   });
   const [editMessage, setEditMessage] = useState<MessageSettings>({ text: "", color: "#ffffff", position: "below" });
-  const [showBgSection, setShowBgSection] = useState(false);
-  const [showMsgSection, setShowMsgSection] = useState(false);
   const [editBgMediaModal, setEditBgMediaModal] = useState(false);
   const [editMediaSearch, setEditMediaSearch] = useState("");
   const [editMediaItems, setEditMediaItems] = useState<MediaItem[]>([]);
@@ -537,6 +629,16 @@ export default function DockCountdownsTab() {
   const [playbackState, setPlaybackState] = useState<"running" | "paused">("running");
   const activeCd = countdowns.find((c) => c.id === activeId) ?? null;
   const timer = useCountdownTimer(activeCd);
+  const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      setIsUltraCompactHeight(window.innerHeight <= 400);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // Restore activeId when liveCountdownId is set but activeId is not
   useEffect(() => {
@@ -603,7 +705,9 @@ export default function DockCountdownsTab() {
     }
   }, [timer.isComplete, liveCountdownId]);
 
-  // Auto scene switch: fire once when remaining drops to or below the trigger
+  // Auto scene switch: fire once when remaining drops to or below the trigger.
+  // Keep the request in flight until OBS confirms the call, so enabling the
+  // switch and choosing a scene cannot silently leave it unarmed.
   useEffect(() => {
     if (!activeCd) return;
     const autoEnabled = activeCd.obs.autoSwitchEnabled;
@@ -616,28 +720,69 @@ export default function DockCountdownsTab() {
       !autoSwitchTriggeredRef.current &&
       timer.remaining <= triggerTime
     ) {
-      autoSwitchTriggeredRef.current = true;
-      ensureObsConnected().then(() => {
-        if (dockObsClient.isConnected) {
-          dockObsClient.call("SetCurrentProgramScene", { sceneName: targetScene });
+      if (presentationLinkMode) return;
+      if (autoSwitchInFlightRef.current) return;
+      autoSwitchInFlightRef.current = true;
+      void (async () => {
+        try {
+          await ensureObsConnected();
+          if (!dockObsClient.isConnected) {
+            throw new Error("OBS is not connected");
+          }
+          await dockObsClient.call("SetCurrentProgramScene", { sceneName: targetScene });
+          autoSwitchTriggeredRef.current = true;
+        } catch (err) {
+          autoSwitchTriggeredRef.current = false;
+          console.warn("[DockCountdowns] Auto scene switch failed:", err);
+        } finally {
+          autoSwitchInFlightRef.current = false;
         }
-      }).catch((err) => {
-        console.warn("[DockCountdowns] Auto scene switch failed:", err);
-      });
+      })();
     }
-  }, [timer.remaining, activeCd]);
+  }, [timer.remaining, activeCd, presentationLinkMode]);
 
   // Load OBS scenes on mount so card dropdowns have data
   useEffect(() => {
+    if (presentationLinkMode) {
+      setObsScenes([]);
+      return;
+    }
     loadObsScenes().then(setObsScenes);
-  }, []);
+  }, [presentationLinkMode]);
 
   // ── OBS ─────────────────────────────────────────────────────────────────
 
   const COUNTDOWN_SOURCE = DOCK_COUNTDOWN_SOURCE_NAME;
   const BG_SOURCE = DOCK_COUNTDOWN_BG_SOURCE_NAME;
 
+  const getObsTargets = useCallback((cd: CountdownConfig) => {
+    if (!hasSceneRoute) {
+      return [{
+        sceneName: resolveCountdownTargetScene(cd.obs.sceneName),
+        contentSourceName: COUNTDOWN_SOURCE,
+        backgroundSourceName: BG_SOURCE,
+      }];
+    }
+
+    const selectedTargets = sceneRoute.targets.map((target) => ({
+      sceneName: target.sceneName,
+      contentSourceName: dockObsClient.getSceneRouteSourceName("countdown", target.sceneName),
+      backgroundSourceName: dockObsClient.getSceneRouteSourceName("countdown", target.sceneName, "Background"),
+    }));
+    if (!sceneRoute.syncPresentation) return selectedTargets;
+
+    return [
+      ...selectedTargets,
+      {
+        sceneName: resolveCountdownTargetScene(),
+        contentSourceName: COUNTDOWN_SOURCE,
+        backgroundSourceName: BG_SOURCE,
+      },
+    ];
+  }, [hasSceneRoute, sceneRoute.targets, sceneRoute.syncPresentation]);
+
   async function loadObsScenes(): Promise<string[]> {
+    if (presentationLinkMode) return [];
     try {
       await ensureObsConnected();
       if (!dockObsClient.isConnected) return [];
@@ -718,13 +863,12 @@ export default function DockCountdownsTab() {
     }
   }
 
-  async function hideObsSource(sourceName: string, sceneName?: string): Promise<void> {
-    const target = resolveCountdownTargetScene(sceneName);
-    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName: target }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
+  async function hideObsSource(sourceName: string, sceneName: string): Promise<void> {
+    const sceneItems = await dockObsClient.call("GetSceneItemList", { sceneName }) as { sceneItems: Array<{ sceneItemId: number; sourceName: string }> };
     const item = sceneItems.sceneItems.find((i) => i.sourceName === sourceName);
     if (item) {
       await dockObsClient.call("SetSceneItemEnabled", {
-        sceneName: target,
+        sceneName,
         sceneItemId: item.sceneItemId,
         sceneItemEnabled: false,
       });
@@ -732,40 +876,78 @@ export default function DockCountdownsTab() {
   }
 
   const pushToObs = useCallback(async (cd: CountdownConfig, sync?: OverlaySyncState) => {
+    if (presentationLinkMode) {
+      await publishCountdownToPresentation(cd);
+      return;
+    }
+
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
     try {
       const baseUrl = getOverlayBaseUrlSync();
-      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync, reveal: false };
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
-
-      await ensureObsSource(COUNTDOWN_SOURCE, url, targetScene);
+      const targets = getObsTargets(cd);
+      for (const target of targets) {
+        await ensureObsSource(target.contentSourceName, url, target.sceneName);
+      }
+      if (targets.some((target) => (
+        target.sceneName === DOCK_PRESENTATION_SCENE_NAME
+        && target.contentSourceName === COUNTDOWN_SOURCE
+      ))) {
+        await dockObsClient.applyMcePresentationSourceVisibility(COUNTDOWN_SOURCE);
+      }
     } catch (err) {
       console.warn("[DockCountdowns] Failed to push to OBS:", err);
     }
-  }, []);
+  }, [getObsTargets, presentationLinkMode]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
 
   const handleShowInObs = useCallback(async (cd: CountdownConfig) => {
+    if (presentationLinkMode) {
+      setActiveId(cd.id);
+      setPlaybackState("running");
+      obsControlArmedRef.current = true;
+      autoSwitchTriggeredRef.current = false;
+      autoSwitchInFlightRef.current = false;
+      const remaining = Math.floor(cd.timer.durationSeconds);
+      writeLivePersistState({ id: cd.id, remaining, running: true, savedAt: Date.now() });
+      setLiveCountdownId(cd.id);
+      await publishCountdownToPresentation(cd);
+      timer.start();
+      return;
+    }
+
     await ensureObsConnected();
     if (!dockObsClient.isConnected) return;
 
     try {
       // 1. Push BG first, then countdown overlay ONCE with running state
       const baseUrl = getOverlayBaseUrlSync();
-      const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
+      const targets = getObsTargets(cd);
+
+      // Hide any old countdown text before preparing the new background.
+      // This prevents the previous text from appearing over a still-loading background.
+      for (const target of targets) {
+        await hideObsSource(target.contentSourceName, target.sceneName);
+      }
 
       const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
       const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
+      for (const target of targets) {
+        await ensureObsSource(target.backgroundSourceName, bgUrl, target.sceneName, { setTransform: true });
+      }
+
+      // Give OBS a frame to paint the background before enabling the text source.
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
 
       setActiveId(cd.id);
       setPlaybackState("running");
       obsControlArmedRef.current = true;
       autoSwitchTriggeredRef.current = false;
+      autoSwitchInFlightRef.current = false;
 
       // Use config's durationSeconds (reflects any inline edits via handleSetTime)
       const remaining = Math.floor(cd.timer.durationSeconds);
@@ -773,15 +955,23 @@ export default function DockCountdownsTab() {
       setLiveCountdownId(cd.id);
 
       const sync: OverlaySyncState = { paused: false, remaining };
-      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync };
+      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync, reveal: true };
       const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
+      for (const target of targets) {
+        await ensureObsSource(target.contentSourceName, contentUrl, target.sceneName, { setTransform: true });
+      }
+      if (targets.some((target) => (
+        target.sceneName === DOCK_PRESENTATION_SCENE_NAME
+        && target.contentSourceName === COUNTDOWN_SOURCE
+      ))) {
+        await dockObsClient.applyMcePresentationSourceVisibility(COUNTDOWN_SOURCE);
+      }
 
       timer.start();
     } catch (err) {
       console.warn("[DockCountdowns] Failed to show in OBS:", err);
     }
-  }, [timer, pushToObs]);
+  }, [getObsTargets, presentationLinkMode, timer]);
 
   const handlePause = useCallback(async (cd: CountdownConfig) => {
     const currentRemaining = timer.pause();
@@ -800,6 +990,7 @@ export default function DockCountdownsTab() {
     }
     obsControlArmedRef.current = true;
     autoSwitchTriggeredRef.current = false;
+    autoSwitchInFlightRef.current = false;
     timer.start();
     setPlaybackState("running");
     const remaining = timer.remaining;
@@ -811,28 +1002,36 @@ export default function DockCountdownsTab() {
   const handleStopAndRemove = useCallback(async (cd: CountdownConfig) => {
     timer.reset();
     autoSwitchTriggeredRef.current = false;
+    autoSwitchInFlightRef.current = false;
     obsControlArmedRef.current = true;
     setActiveId(null);
     setPlaybackState("running");
-    const targetScene = resolveCountdownTargetScene(cd.obs.sceneName);
+    const targets = getObsTargets(cd);
     try {
-      await ensureObsConnected();
-      if (dockObsClient.isConnected) {
-        await hideObsSource(BG_SOURCE, targetScene);
-        await hideObsSource(COUNTDOWN_SOURCE, targetScene);
+      if (presentationLinkMode) {
+        await clearPresentationScreen();
+      } else {
+        await ensureObsConnected();
+      }
+      if (!presentationLinkMode && dockObsClient.isConnected) {
+        for (const target of targets) {
+          await hideObsSource(target.backgroundSourceName, target.sceneName);
+          await hideObsSource(target.contentSourceName, target.sceneName);
+        }
       }
     } catch (err) {
       console.warn("[DockCountdowns] Failed to hide OBS sources:", err);
     }
     writeLivePersistState(null);
     setLiveCountdownId(null);
-  }, [timer]);
+  }, [getObsTargets, presentationLinkMode, timer]);
 
   const handleAdjustTime = useCallback(async (cd: CountdownConfig, deltaSeconds: number) => {
     const oldRemaining = timer.remaining;
     const newRemaining = Math.max(0, oldRemaining + deltaSeconds);
+    const updatedCd = { ...cd, timer: { ...cd.timer, durationSeconds: newRemaining } };
     setCountdowns((prev) => prev.map((c) =>
-      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: newRemaining } } : c,
+      c.id === cd.id ? updatedCd : c,
     ));
     if (activeId === cd.id) {
       timer.adjustTime(deltaSeconds);
@@ -840,40 +1039,59 @@ export default function DockCountdownsTab() {
         writeLivePersistState({ id: cd.id, remaining: newRemaining, running: timer.isRunning, savedAt: Date.now() });
       }
       const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(newRemaining) };
-      await pushToObs(cd, sync);
+      await pushToObs(updatedCd, sync);
     }
   }, [timer, pushToObs, liveCountdownId, activeId]);
 
-  const handleSetTime = useCallback(async (cd: CountdownConfig, seconds: number) => {
+  const handleSetTime = useCallback((cd: CountdownConfig, seconds: number) => {
+    const updatedCd = { ...cd, timer: { ...cd.timer, durationSeconds: seconds } };
     setCountdowns((prev) => prev.map((c) =>
-      c.id === cd.id ? { ...c, timer: { ...c.timer, durationSeconds: seconds } } : c,
+      c.id === cd.id ? updatedCd : c,
     ));
     if (activeId === cd.id) {
       timer.setRemainingDirect(seconds);
       if (liveCountdownId === cd.id) {
         writeLivePersistState({ id: cd.id, remaining: seconds, running: timer.isRunning, savedAt: Date.now() });
       }
-      const sync: OverlaySyncState = { paused: !timer.isRunning, remaining: Math.floor(seconds) };
-      await pushToObs(cd, sync);
     }
-  }, [timer, pushToObs, liveCountdownId, activeId]);
+  }, [timer, liveCountdownId, activeId]);
+
+  const handleSetTitle = useCallback((cd: CountdownConfig, title: string) => {
+    const updatedCd: CountdownConfig = {
+      ...cd,
+      title,
+      text: { ...cd.text, title },
+      message: cd.message?.text === cd.title ? { ...cd.message, text: title } : cd.message,
+      updatedAt: new Date().toISOString(),
+    };
+    setCountdowns((prev) => prev.map((c) =>
+      c.id === cd.id ? updatedCd : c,
+    ));
+  }, []);
 
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="dock-tab-content" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.08))", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isUltraCompactHeight ? "4px 8px" : "8px 12px", borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.08))", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Icon name="timer" size={14} style={{ color: "var(--dock-accent, #3b82f6)" }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.myCountdowns")}</span>
+          <Icon name="hourglass" size={14} style={{ color: "var(--dock-accent, #3b82f6)" }} />
+          <span style={{ fontSize: isUltraCompactHeight ? 11 : 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.myCountdowns")}</span>
           <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>({countdowns.length})</span>
         </div>
+        <DockSceneRoutingControl
+          module="countdown"
+          route={sceneRoute}
+          onRouteChange={updateSceneRoute}
+          disabled={presentationLinkMode}
+          title={t("sceneRouting.countdownOutput", "Countdown output")}
+        />
       </div>
 
       {/* Countdown list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isUltraCompactHeight ? "6px 8px" : 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: isUltraCompactHeight ? 4 : 6 }}>
           {countdowns.map((cd) => {
             const isThisLive = liveCountdownId === cd.id;
             const isThisActive = activeId === cd.id;
@@ -890,18 +1108,19 @@ export default function DockCountdownsTab() {
                 onSelect={() => setActiveId(cd.id)}
                 onAdjustTime={(delta) => handleAdjustTime(cd, delta)}
                 onSetTime={(secs) => handleSetTime(cd, secs)}
+                onSetTitle={(title) => handleSetTitle(cd, title)}
                 onShowObs={() => handleShowInObs(cd)}
                 onPause={() => handlePause(cd)}
                 onResume={() => handleResume(cd)}
                 onStop={() => handleStopAndRemove(cd)}
+                isCompact={isUltraCompactHeight}
                 onEdit={async () => {
+                  if (isThisLive) return;
                   setEditingCd(cd);
                   setEditTitle(cd.title);
                   setEditMinutes(String(cd.timer.durationSeconds / 60));
                   setEditBg({ ...cd.background });
                   setEditMessage(cd.message ? { ...cd.message } : { text: "", color: "#ffffff", position: "below" });
-                  setShowBgSection(false);
-                  setShowMsgSection(false);
                   setEditBgUploadError("");
                   setEditBgUploading(false);
                   const scenes = await loadObsScenes();
@@ -911,6 +1130,7 @@ export default function DockCountdownsTab() {
                   if (liveCountdownId === cd.id) {
                     timer.reset();
                     autoSwitchTriggeredRef.current = false;
+                    autoSwitchInFlightRef.current = false;
                     obsControlArmedRef.current = true;
                     const sync: OverlaySyncState = { paused: true, remaining: cd.timer.durationSeconds };
                     pushToObs(cd, sync);
@@ -920,13 +1140,18 @@ export default function DockCountdownsTab() {
                   }
                 }}
                 onUpdateObs={(patch) => {
+                  if (
+                    patch.autoSwitchEnabled !== undefined
+                    || patch.autoSwitchScene !== undefined
+                    || patch.autoSwitchAtSeconds !== undefined
+                  ) {
+                    // A changed switch setting is a new instruction, even if
+                    // this countdown has already crossed the old trigger.
+                    autoSwitchTriggeredRef.current = false;
+                    autoSwitchInFlightRef.current = false;
+                  }
                   setCountdowns((prev) => prev.map((c) =>
                     c.id === cd.id ? { ...c, obs: { ...c.obs, ...patch } } : c,
-                  ));
-                }}
-                onUpdateMessage={(msg) => {
-                  setCountdowns((prev) => prev.map((c) =>
-                    c.id === cd.id ? { ...c, message: msg } : c,
                   ));
                 }}
               />
@@ -937,50 +1162,81 @@ export default function DockCountdownsTab() {
 
       {/* Edit Modal */}
       {editingCd && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }}
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 12, background: "rgba(3,7,18,0.72)", backdropFilter: "blur(4px)" }}
           onClick={() => setEditingCd(null)}>
-          <div style={{ background: "var(--dock-surface, #1e1e2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 12, padding: 20, width: 380, maxHeight: "85vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}
+          <div style={{ background: "var(--dock-surface, #1e1e2e)", border: "1px solid var(--dock-border, rgba(255,255,255,0.14))", borderRadius: 14, width: "min(430px, 100%)", maxHeight: "min(720px, 92vh)", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 18px 60px rgba(0,0,0,0.45)" }}
             onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--dock-text)" }}>{t("countdowns.editCountdown", "Edit Countdown")}</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 18px", borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.08))" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--dock-accent, #3b82f6)", background: "rgba(59,130,246,0.12)" }}>
+                  <Icon name="edit" size={17} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dock-text)" }}>{t("countdowns.editCountdown", "Edit Countdown")}</div>
+                  <div style={{ marginTop: 2, fontSize: 10, color: "var(--dock-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t("countdowns.editCountdownHint", "Update what appears before your service starts.")}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCd(null)}
+                aria-label={t("common.close", "Close")}
+                title={t("common.close", "Close")}
+                style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 7, background: "transparent", color: "var(--dock-text-dim)", cursor: "pointer" }}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>{t("common.title", "Title")}</span>
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
-              />
-            </label>
-
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>{t("countdowns.durationMinutes", "Duration (minutes)")}</span>
-              <input
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={editMinutes}
-                onChange={(e) => setEditMinutes(e.target.value)}
-                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
-              />
-            </label>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Essentials */}
+              <div style={{ padding: 12, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 10, background: "rgba(255,255,255,0.025)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                  <Icon name="tune" size={15} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("countdowns.basics", "Basics")}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 124px", gap: 10 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("common.title", "Title")}</span>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder={t("countdowns.titlePlaceholder", "Countdown title")}
+                      style={{ background: "rgba(0,0,0,0.22)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 7, padding: "8px 9px", color: "var(--dock-text)", fontSize: 12, outline: "none", minWidth: 0 }}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.durationMinutes", "Minutes")}</span>
+                    <input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      value={editMinutes}
+                      onChange={(e) => setEditMinutes(e.target.value)}
+                      style={{ background: "rgba(0,0,0,0.22)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 7, padding: "8px 9px", color: "var(--dock-text)", fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                  </label>
+                </div>
+              </div>
 
             {/* ── Background Section ─────────────────────────────── */}
-            <div style={{ borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.08))", paddingTop: 10 }}>
-              <button type="button" onClick={() => setShowBgSection(!showBgSection)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: showBgSection ? "rgba(99,102,241,0.1)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>🎨 {t("countdowns.background", "Background")}</span>
-                <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{showBgSection ? "▲" : "▼"}</span>
-              </button>
-
-              {showBgSection && (
-                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ padding: 12, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 10, background: "rgba(255,255,255,0.025)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                <Icon name="image" size={15} />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("countdowns.background", "Background")}</div>
+                  <div style={{ marginTop: 2, fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.backgroundHint", "Choose the visual behind the countdown.")}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {/* Type selector */}
                   <div style={{ display: "flex", gap: 4 }}>
                     {(["solid", "gradient", "image", "video", "transparent"] as BackgroundType[]).map((bgType) => (
                       <button key={bgType} type="button" onClick={() => { setEditBgUploadError(""); setEditBg((prev) => ({ ...prev, type: bgType })); }}
                         style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
-                        {bgType}
+                        {t(`countdowns.backgroundType.${bgType}`, bgType)}
                       </button>
                     ))}
                   </div>
@@ -1000,7 +1256,7 @@ export default function DockCountdownsTab() {
                     <>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Start</span>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("common.start", "Start")}</span>
                           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                             <input type="color" value={editBg.gradientStart} onChange={(e) => setEditBg((p) => ({ ...p, gradientStart: e.target.value }))}
                               style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
@@ -1009,7 +1265,7 @@ export default function DockCountdownsTab() {
                           </div>
                         </div>
                         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>End</span>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("bgPicker.end", "End")}</span>
                           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                             <input type="color" value={editBg.gradientEnd} onChange={(e) => setEditBg((p) => ({ ...p, gradientEnd: e.target.value }))}
                               style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
@@ -1019,7 +1275,7 @@ export default function DockCountdownsTab() {
                         </div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Angle: {editBg.gradientAngle}°</span>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("bgPicker.angle", "Angle")}: {editBg.gradientAngle}°</span>
                         <input type="range" min={0} max={360} value={editBg.gradientAngle}
                           onChange={(e) => setEditBg((p) => ({ ...p, gradientAngle: Number(e.target.value) }))}
                           style={{ width: "100%", accentColor: "#6366f1" }} />
@@ -1035,12 +1291,12 @@ export default function DockCountdownsTab() {
                           <img src={editBg.imageUrl} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
                           <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
                             <button type="button" onClick={() => editBgFileRef.current?.click()}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.replace", "Replace")}</button>
                             <button type="button" onClick={async () => {
                               if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                               setEditBg((p) => ({ ...p, type: "solid", imageUrl: "", assetId: "", builtinId: "", source: "upload" }));
                             }}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.remove", "Remove")}</button>
                           </div>
                         </div>
                       ) : (
@@ -1048,12 +1304,12 @@ export default function DockCountdownsTab() {
                           <div style={{ display: "flex", gap: 6 }}>
                             {editBgUploading ? (
                               <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                Uploading…
+                                {t("common.uploading", "Uploading…")}
                               </div>
                             ) : (
                               <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
                                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                <Upload size={14} /> Upload
+                                <Upload size={14} /> {t("common.upload", "Upload")}
                               </button>
                             )}
                             <button type="button" onClick={async () => {
@@ -1067,7 +1323,7 @@ export default function DockCountdownsTab() {
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 Library
+                              📁 {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (
@@ -1080,12 +1336,12 @@ export default function DockCountdownsTab() {
                         {(["cover", "contain", "stretch"] as ImageFit[]).map((fit) => (
                           <button key={fit} type="button" onClick={() => setEditBg((p) => ({ ...p, imageFit: fit }))}
                             style={{ flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 10, fontWeight: 500, border: `1px solid ${editBg.imageFit === fit ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.imageFit === fit ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.imageFit === fit ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
-                            {fit}
+                            {t(`countdowns.imageFit.${fit}`, fit)}
                           </button>
                         ))}
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>Brightness: {editBg.brightness}%</span>
+                        <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.brightness", "Brightness")}: {editBg.brightness}%</span>
                         <input type="range" min={10} max={200} value={editBg.brightness}
                           onChange={(e) => setEditBg((p) => ({ ...p, brightness: Number(e.target.value) }))}
                           style={{ width: "100%", accentColor: "#6366f1" }} />
@@ -1101,12 +1357,12 @@ export default function DockCountdownsTab() {
                           <video src={editBg.videoUrl} muted loop style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
                           <div style={{ position: "absolute", bottom: 4, right: 4, display: "flex", gap: 4 }}>
                             <button type="button" onClick={() => editBgFileRef.current?.click()}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Replace</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.replace", "Replace")}</button>
                             <button type="button" onClick={async () => {
                               if (editBg.assetId) await deleteCountdownAsset(editBg.assetId).catch(() => { });
                               setEditBg((p) => ({ ...p, type: "solid", videoUrl: "", assetId: "", builtinId: "", source: "upload" }));
                             }}
-                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>Remove</button>
+                              style={{ padding: "3px 8px", borderRadius: 4, background: "rgba(220,38,38,0.8)", color: "#fff", fontSize: 10, border: "none", cursor: "pointer" }}>{t("common.remove", "Remove")}</button>
                           </div>
                         </div>
                       ) : (
@@ -1114,12 +1370,12 @@ export default function DockCountdownsTab() {
                           <div style={{ display: "flex", gap: 6 }}>
                             {editBgUploading ? (
                               <div style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                Uploading…
+                                {t("common.uploading", "Uploading…")}
                               </div>
                             ) : (
                               <button type="button" onClick={() => { setEditBgUploadError(""); editBgFileRef.current?.click(); }}
                                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                <Upload size={14} /> Upload
+                                <Upload size={14} /> {t("common.upload", "Upload")}
                               </button>
                             )}
                             <button type="button" onClick={async () => {
@@ -1133,7 +1389,7 @@ export default function DockCountdownsTab() {
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 Library
+                              📁 {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (
@@ -1143,10 +1399,10 @@ export default function DockCountdownsTab() {
                       )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 4 }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
-                          <input type="checkbox" checked={editBg.loop} onChange={(e) => setEditBg((p) => ({ ...p, loop: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Loop
+                          <input type="checkbox" checked={editBg.loop} onChange={(e) => setEditBg((p) => ({ ...p, loop: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> {t("ministry.loop", "Loop")}
                         </label>
                         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--dock-text-dim)", cursor: "pointer" }}>
-                          <input type="checkbox" checked={editBg.muted} onChange={(e) => setEditBg((p) => ({ ...p, muted: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> Muted
+                          <input type="checkbox" checked={editBg.muted} onChange={(e) => setEditBg((p) => ({ ...p, muted: e.target.checked }))} style={{ accentColor: "#6366f1" }} /> {t("countdowns.muted", "Muted")}
                         </label>
                       </div>
                     </>
@@ -1163,7 +1419,7 @@ export default function DockCountdownsTab() {
                       const file = files[0];
                       const result = validateMediaFile(file);
                       if (!result.valid) {
-                        setEditBgUploadError(result.error || "Unsupported file type");
+                        setEditBgUploadError(result.error || t("media.unsupportedFileType", "Unsupported file type"));
                         if (editBgFileRef.current) editBgFileRef.current.value = "";
                         return;
                       }
@@ -1196,17 +1452,17 @@ export default function DockCountdownsTab() {
                   {editBgMediaModal && (
                     <div style={{ border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 8, padding: 10, background: "rgba(0,0,0,0.3)" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>Choose from Library</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("common.chooseFromLibrary", "Choose from Library")}</span>
                         <button type="button" onClick={() => { setEditBgMediaModal(false); setEditMediaSearch(""); }}
                           style={{ background: "none", border: "none", color: "var(--dock-text-dim)", cursor: "pointer", fontSize: 16 }}>×</button>
                       </div>
-                      <input type="text" placeholder="Search..." value={editMediaSearch} onChange={(e) => setEditMediaSearch(e.target.value)}
+                      <input type="text" placeholder={t("common.searchEllipsis", "Search...")} value={editMediaSearch} onChange={(e) => setEditMediaSearch(e.target.value)}
                         style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", width: "100%", marginBottom: 8 }} />
                       <div style={{ maxHeight: 180, overflowY: "auto" }}>
                         {editMediaLoading ? (
-                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>Loading...</div>
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>{t("common.loading", "Loading…")}</div>
                         ) : editMediaItems.length === 0 ? (
-                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>No media files found</div>
+                          <div style={{ padding: 16, textAlign: "center", color: "var(--dock-text-dim)", fontSize: 12 }}>{t("media.noMediaFilesFound", "No media files found")}</div>
                         ) : (
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                             {editMediaItems
@@ -1239,53 +1495,57 @@ export default function DockCountdownsTab() {
                     </div>
                   )}
                 </div>
-              )}
             </div>
 
             {/* ── Message Section ────────────────────────────────── */}
-            <div style={{ borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.08))", paddingTop: 10 }}>
-              <button type="button" onClick={() => setShowMsgSection(!showMsgSection)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: showMsgSection ? "rgba(99,102,241,0.1)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>💬 {t("countdowns.message", "Message")}</span>
-                <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{showMsgSection ? "▲" : "▼"}</span>
-              </button>
-
-              {showMsgSection && (
-                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Message Text</span>
-                    <input
-                      type="text"
-                      value={editMessage.text}
-                      onChange={(e) => setEditMessage((p) => ({ ...p, text: e.target.value }))}
-                      placeholder="e.g. Welcome to our service"
-                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
-                    />
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Color</span>
-                    <input type="color" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
-                      style={{ width: 28, height: 28, borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
-                    <input type="text" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
-                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 6, padding: "6px 10px", color: "var(--dock-text)", fontSize: 12, outline: "none", fontFamily: "monospace", flex: 1 }} />
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--dock-text-dim)" }}>Position</span>
+            <div style={{ padding: 12, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 10, background: "rgba(255,255,255,0.025)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                <Icon name="text_fields" size={15} />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--dock-text)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("countdowns.message", "Message")}</div>
+                  <div style={{ marginTop: 2, fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.messageHint", "Add a short line below or above the timer.")}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("countdowns.messageText", "Message text")}</span>
+                  <input
+                    type="text"
+                    value={editMessage.text}
+                    onChange={(e) => setEditMessage((p) => ({ ...p, text: e.target.value }))}
+                    placeholder={t("countdowns.messagePlaceholder", "e.g. Welcome to our service")}
+                    style={{ background: "rgba(0,0,0,0.22)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 7, padding: "8px 9px", color: "var(--dock-text)", fontSize: 12, outline: "none" }}
+                  />
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>{t("common.color", "Color")}</span>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input type="color" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
+                        style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", cursor: "pointer", padding: 1, background: "transparent" }} />
+                      <input type="text" value={editMessage.color} onChange={(e) => setEditMessage((p) => ({ ...p, color: e.target.value }))}
+                        style={{ background: "rgba(0,0,0,0.22)", border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 7, padding: "8px 7px", color: "var(--dock-text)", fontSize: 11, outline: "none", fontFamily: "monospace", flex: 1, minWidth: 0 }} />
+                    </div>
+                  </label>
+                  <div>
+                    <span style={{ display: "block", marginBottom: 4, fontSize: 10, color: "var(--dock-text-dim)" }}>{t("ministry.position", "Position")}</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       {(["above", "below"] as const).map((pos) => (
                         <button key={pos} type="button" onClick={() => setEditMessage((p) => ({ ...p, position: pos }))}
-                          style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: editMessage.position === pos ? "rgba(99,102,241,0.3)" : "rgba(0,0,0,0.2)", color: "var(--dock-text)", fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
-                          {pos}
+                          style={{ flex: 1, padding: "8px 4px", borderRadius: 7, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", background: editMessage.position === pos ? "rgba(59,130,246,0.18)" : "rgba(0,0,0,0.18)", color: editMessage.position === pos ? "var(--dock-accent, #60a5fa)" : "var(--dock-text-dim)", fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
+                          {t(`countdowns.messagePosition.${pos}`, pos)}
                         </button>
                       ))}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* ── Actions ────────────────────────────────────────── */}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+            </div>
+
+            {/* Actions stay visible while the editor content scrolls. */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 18px", borderTop: "1px solid var(--dock-border, rgba(255,255,255,0.08))", background: "var(--dock-surface, #1e1e2e)", flexShrink: 0 }}>
               <button type="button" className="dock-btn dock-btn--small" onClick={() => setEditingCd(null)} style={{ fontSize: 11 }}>
                 {t("common.cancel", "Cancel")}
               </button>
@@ -1301,25 +1561,6 @@ export default function DockCountdownsTab() {
                 };
                 setCountdowns((prev) => prev.map((c) => c.id === editingCd.id ? updatedCd : c));
                 setEditingCd(null);
-
-                if (liveCountdownId === updatedCd.id) {
-                  try {
-                    await ensureObsConnected();
-                    if (dockObsClient.isConnected) {
-                      const baseUrl = getOverlayBaseUrlSync();
-                      const targetScene = resolveCountdownTargetScene(updatedCd.obs.sceneName);
-                      const bgPayload = { config: updatedCd, baseUrl, timestamp: Date.now() };
-                      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-                      await ensureObsSource(BG_SOURCE, bgUrl, targetScene, { setTransform: true });
-                      const sync: OverlaySyncState = { paused: playbackState === "paused", remaining: Math.floor(timer.remaining) };
-                      const payload: CountdownOverlayPayload = { config: updatedCd, baseUrl, timestamp: Date.now(), sync };
-                      const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
-                      await ensureObsSource(COUNTDOWN_SOURCE, contentUrl, targetScene, { setTransform: true });
-                    }
-                  } catch (err) {
-                    console.warn("[DockCountdowns] Failed to update OBS after edit:", err);
-                  }
-                }
               }} style={{ fontSize: 11 }}>
                 {t("common.save", "Save")}
               </button>

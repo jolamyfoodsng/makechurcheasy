@@ -1,11 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { flushSync } from "react-dom";
 import type { BibleTheme } from "../../bible/types";
 import Icon from "../DockIcon";
-import BackgroundPickerCard from "./BackgroundPickerCard";
+import BackgroundPickerCard, { type BibleReferenceFormat } from "./BackgroundPickerCard";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
+
+export interface DockThemeSettingsSaveContext {
+  backgroundPreset?: DockBackgroundPreset | null;
+  selectedTheme?: BibleTheme | null;
+  referenceFormat?: BibleReferenceFormat;
+  referenceVersionVisible?: boolean;
+  sceneProfileId?: string;
+}
+
+export interface DockThemeSceneProfile {
+  id: string;
+  label: string;
+}
 
 interface Props {
   selectedThemeId: string | null;
@@ -15,7 +28,11 @@ interface Props {
   sampleReference?: string;
   quickSettings: DockFullscreenQuickThemeSettings;
   defaultQuickSettings?: DockFullscreenQuickThemeSettings;
-  onQuickSettingsSave: (settings: DockFullscreenQuickThemeSettings) => void | Promise<void>;
+  onQuickSettingsSave: (
+    settings: DockFullscreenQuickThemeSettings,
+    context?: DockThemeSettingsSaveContext,
+  ) => void | Promise<void>;
+  onSaveFeedback?: (message: string) => void;
   resolveThemeQuickSettings?: (theme: BibleTheme) => DockFullscreenQuickThemeSettings;
   title: string;
   subtitle: string;
@@ -27,30 +44,58 @@ interface Props {
   overlayMode?: "fullscreen" | "lower-third";
   /** Show the Reference section in BackgroundPickerCard (only for Bible tab) */
   showReferences?: boolean;
+  /** Bible-only reference display preferences surfaced in the Reference sub-tab */
+  referenceFormat?: BibleReferenceFormat;
+  referenceVersionVisible?: boolean;
+  referenceTranslation?: string;
+  onReferenceFormatChange?: (format: BibleReferenceFormat) => void;
+  onReferenceVersionVisibleChange?: (visible: boolean) => void;
+  onReferenceSettingsSave?: (format: BibleReferenceFormat, versionVisible: boolean) => void;
   /** Active display mode — controls whether Compare Layout section is visible */
   displayMode?: "single" | "compare";
-  initialTab?: "text" | "background" | "compare";
+  initialTab?: "text" | "layout" | "background" | "compare";
   /** Keeps BackgroundPickerCard local styles separate per dock section */
   storageScope?: "bible" | "worship" | "notes" | "global";
   /** When true and displayMode is "compare", BackgroundPickerCard shows only the Compare tab */
   hideBackgroundOnCompare?: boolean;
+  /** Optional scene-scoped Quick Edit profiles shown above the text/background editor. */
+  sceneProfiles?: DockThemeSceneProfile[];
+  activeSceneProfileId?: string;
+  onSceneProfileChange?: (profileId: string) => void;
 }
 
 type StudioView = "closed" | "settings";
 
-/* ── Section Divider ── */
-function SectionDivider() {
-  return <div className="dtb-section-divider" />;
+function getThemeSettingsForMode(
+  theme: BibleTheme,
+  overlayMode: NonNullable<Props["overlayMode"]>,
+) {
+  const variant = overlayMode === "lower-third"
+    ? theme.variants?.lowerThird
+    : theme.variants?.fullscreen;
+  return variant?.settings ?? theme.settings;
 }
 
-/* ── Section Label (ThemeModalStitch style) ── */
-function SectionLabel({ icon, label, accent }: { icon: string; label: string; accent?: boolean }) {
-  return (
-    <h3 className={`dtb-section-label${accent ? " dtb-section-label--accent" : ""}`}>
-      <Icon name={icon} size={14} className="dtb-section-label__icon" />
-      <span>{label}</span>
-    </h3>
-  );
+function resolveFallbackThemeQuickSettings(
+  theme: BibleTheme,
+  overlayMode: NonNullable<Props["overlayMode"]>,
+  current: DockFullscreenQuickThemeSettings,
+): DockFullscreenQuickThemeSettings {
+  const settings = getThemeSettingsForMode(theme, overlayMode);
+  return {
+    ...current,
+    ...settings,
+    backgroundType: "theme",
+    backgroundImage: settings.backgroundImage ?? "",
+    backgroundImageFilePath: settings.backgroundImageFilePath ?? "",
+    backgroundPattern: settings.backgroundPattern ?? "",
+    backgroundVideo: settings.backgroundVideo ?? "",
+    backgroundVideoFilePath: settings.backgroundVideoFilePath ?? "",
+    backgroundOpacity: settings.backgroundOpacity ?? current.backgroundOpacity,
+    backgroundColor: settings.backgroundColor || current.backgroundColor,
+    backgroundColorEnd: settings.backgroundColorEnd ?? current.backgroundColorEnd,
+    bgGradientAngle: settings.bgGradientAngle ?? current.bgGradientAngle,
+  };
 }
 
 /* ── Main Component ── */
@@ -63,6 +108,7 @@ export default function DockThemeSettingsModal({
   quickSettings,
   defaultQuickSettings,
   onQuickSettingsSave,
+  onSaveFeedback,
   resolveThemeQuickSettings,
   title,
   subtitle,
@@ -71,10 +117,19 @@ export default function DockThemeSettingsModal({
   onBackgroundPresetChange,
   overlayMode = "fullscreen",
   showReferences = true,
+  referenceFormat,
+  referenceVersionVisible = false,
+  referenceTranslation = "KJV",
+  onReferenceFormatChange,
+  onReferenceVersionVisibleChange,
+  onReferenceSettingsSave,
   displayMode = "single",
   initialTab = "text",
   storageScope = "global",
   hideBackgroundOnCompare = false,
+  sceneProfiles,
+  activeSceneProfileId,
+  onSceneProfileChange,
 }: Props) {
   const { t } = useTranslation();
   const [internalView, setInternalView] = useState<StudioView>("closed");
@@ -89,16 +144,20 @@ export default function DockThemeSettingsModal({
     setInternalView(v);
   }, [externalIsOpen, externalOnClose]);
   const [draftSettings, setDraftSettings] = useState(quickSettings);
+  const [draftReferenceFormat, setDraftReferenceFormat] = useState<BibleReferenceFormat | undefined>(referenceFormat);
+  const [draftReferenceVersionVisible, setDraftReferenceVersionVisible] = useState(referenceVersionVisible);
   const [draftSelectedThemeId, setDraftSelectedThemeId] = useState<string | null>(selectedThemeId);
   const [draftSelectedTheme, setDraftSelectedTheme] = useState<BibleTheme | null>(null);
   const draftSettingsRef = useRef(quickSettings);
+  const draftReferenceFormatRef = useRef<BibleReferenceFormat | undefined>(referenceFormat);
+  const draftReferenceVersionVisibleRef = useRef(referenceVersionVisible);
   const draftSelectedThemeRef = useRef<BibleTheme | null>(null);
   const pendingBackgroundPresetRef = useRef<DockBackgroundPreset | null>(null);
   const [saving, setSaving] = useState(false);
-  const [effectsOpen, setEffectsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(view !== "closed");
   const originalSettingsRef = useRef(quickSettings);
+  const previousSceneProfileIdRef = useRef(activeSceneProfileId);
 
   useEffect(() => {
     const isOpen = view !== "closed";
@@ -108,12 +167,29 @@ export default function DockThemeSettingsModal({
       originalSettingsRef.current = quickSettings;
       draftSettingsRef.current = quickSettings;
       setDraftSettings(quickSettings);
+      draftReferenceFormatRef.current = referenceFormat;
+      setDraftReferenceFormat(referenceFormat);
+      draftReferenceVersionVisibleRef.current = referenceVersionVisible;
+      setDraftReferenceVersionVisible(referenceVersionVisible);
       setDraftSelectedThemeId(selectedThemeId);
       draftSelectedThemeRef.current = null;
       setDraftSelectedTheme(null);
       pendingBackgroundPresetRef.current = null;
     }
-  }, [view, quickSettings, selectedThemeId]);
+  }, [referenceFormat, referenceVersionVisible, view, quickSettings, selectedThemeId]);
+
+  useEffect(() => {
+    if (previousSceneProfileIdRef.current === activeSceneProfileId) return;
+    previousSceneProfileIdRef.current = activeSceneProfileId;
+    if (view === "closed") return;
+    originalSettingsRef.current = quickSettings;
+    draftSettingsRef.current = quickSettings;
+    setDraftSettings(quickSettings);
+    setDraftSelectedThemeId(selectedThemeId);
+    draftSelectedThemeRef.current = null;
+    setDraftSelectedTheme(null);
+    pendingBackgroundPresetRef.current = null;
+  }, [activeSceneProfileId, quickSettings, selectedThemeId, view]);
 
   const updateDraft = useCallback(
     (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => {
@@ -124,63 +200,15 @@ export default function DockThemeSettingsModal({
     [],
   );
 
-  const EFFECT_DEFS = useMemo(() => [
-    {
-      id: "fadeIn",
-      label: t('worship.fadeIn'),
-      icon: "opacity",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "fade",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "fade" ? "none" : "fade",
-        animationDuration: 400,
-      }),
-    },
-    {
-      id: "glow",
-      label: t('worship.glow'),
-      icon: "wb_sunny",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow.includes("0 0"),
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        textShadow: s.textShadow.includes("0 0")
-          ? "0 2px 8px rgba(0,0,0,0.6)"
-          : "0 0 24px rgba(255,255,220,0.8), 0 0 48px rgba(255,255,220,0.4)",
-      }),
-    },
-    {
-      id: "subtleZoom",
-      label: t('worship.subtleZoom'),
-      icon: "zoom_in",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "scale-in",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "scale-in" ? "none" : "scale-in",
-        animationDuration: 400,
-      }),
-    },
-    {
-      id: "verseReveal",
-      label: t('worship.verseReveal'),
-      icon: "visibility",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.animation === "reveal-bg-then-text",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        animation: s.animation === "reveal-bg-then-text" ? "none" : "reveal-bg-then-text",
-        animationDuration: 600,
-      }),
-    },
-    {
-      id: "textShadow",
-      label: t('worship.textShadow'),
-      icon: "blur_on",
-      isActive: (s: DockFullscreenQuickThemeSettings) => s.textShadow !== "none" && s.textShadow !== "",
-      toggle: (s: DockFullscreenQuickThemeSettings): DockFullscreenQuickThemeSettings => ({
-        ...s,
-        textShadow: s.textShadow !== "none" && s.textShadow !== "" ? "none" : "0 2px 8px rgba(0,0,0,0.6)",
-      }),
-    },
-  ], [t]);
+  const updateDraftReferenceFormat = useCallback((format: BibleReferenceFormat) => {
+    draftReferenceFormatRef.current = format;
+    setDraftReferenceFormat(format);
+  }, []);
+
+  const updateDraftReferenceVersionVisible = useCallback((visible: boolean) => {
+    draftReferenceVersionVisibleRef.current = visible;
+    setDraftReferenceVersionVisible(visible);
+  }, []);
 
   useEffect(() => {
     if (view === "closed") return undefined;
@@ -194,31 +222,32 @@ export default function DockThemeSettingsModal({
   const openSettings = useCallback(() => {
     draftSettingsRef.current = quickSettings;
     setDraftSettings(quickSettings);
+    draftReferenceFormatRef.current = referenceFormat;
+    setDraftReferenceFormat(referenceFormat);
+    draftReferenceVersionVisibleRef.current = referenceVersionVisible;
+    setDraftReferenceVersionVisible(referenceVersionVisible);
     setDraftSelectedThemeId(selectedThemeId);
     draftSelectedThemeRef.current = null;
     setDraftSelectedTheme(null);
     pendingBackgroundPresetRef.current = null;
     setView("settings");
-  }, [quickSettings, selectedThemeId]);
+  }, [quickSettings, referenceFormat, referenceVersionVisible, selectedThemeId]);
 
   const handleThemeSelect = useCallback((theme: BibleTheme) => {
     draftSelectedThemeRef.current = theme;
     setDraftSelectedTheme(theme);
     setDraftSelectedThemeId(theme.id);
     pendingBackgroundPresetRef.current = "theme";
-    onSelect(theme);
-    onBackgroundPresetChange?.("theme");
-    const nextSettings = resolveThemeQuickSettings?.(theme);
-    if (nextSettings) {
-      draftSettingsRef.current = nextSettings;
-      setDraftSettings(nextSettings);
-      return;
-    }
-    updateDraft((prev) => ({ ...prev, backgroundType: "theme" }));
-  }, [onBackgroundPresetChange, onSelect, resolveThemeQuickSettings, updateDraft]);
+    const nextSettings = resolveThemeQuickSettings?.(theme)
+      ?? resolveFallbackThemeQuickSettings(theme, overlayMode, draftSettingsRef.current);
+    draftSettingsRef.current = nextSettings;
+    setDraftSettings(nextSettings);
+  }, [overlayMode, resolveThemeQuickSettings]);
 
   const handleSave = useCallback(() => {
     const nextSettings = { ...draftSettingsRef.current };
+    const nextReferenceFormat = draftReferenceFormatRef.current;
+    const nextReferenceVersionVisible = draftReferenceVersionVisibleRef.current;
     const nextTheme = draftSelectedThemeRef.current;
     const nextPreset = pendingBackgroundPresetRef.current;
     setSaving(true);
@@ -231,11 +260,35 @@ export default function DockThemeSettingsModal({
         if (nextPreset) {
           onBackgroundPresetChange?.(nextPreset);
         }
+        if (nextReferenceFormat && (
+          nextReferenceFormat !== referenceFormat
+          || nextReferenceVersionVisible !== referenceVersionVisible
+        )) {
+          if (onReferenceSettingsSave) {
+            onReferenceSettingsSave(nextReferenceFormat, nextReferenceVersionVisible);
+          } else {
+            if (nextReferenceFormat !== referenceFormat) {
+              onReferenceFormatChange?.(nextReferenceFormat);
+            }
+            if (nextReferenceVersionVisible !== referenceVersionVisible) {
+              onReferenceVersionVisibleChange?.(nextReferenceVersionVisible);
+            }
+          }
+        }
       } catch (error) {
         console.warn("[DockThemeSettingsModal] pre-save apply failed:", error);
       }
 
-      void Promise.resolve(onQuickSettingsSave(nextSettings))
+      void Promise.resolve(onQuickSettingsSave(nextSettings, {
+        backgroundPreset: nextPreset,
+        selectedTheme: nextTheme,
+        referenceFormat: nextReferenceFormat,
+        referenceVersionVisible: nextReferenceFormat ? nextReferenceVersionVisible : undefined,
+        sceneProfileId: activeSceneProfileId,
+      }))
+        .then(() => {
+          onSaveFeedback?.(t("dock.feedback.bibleSettingsSaved", "Bible theme settings saved."));
+        })
         .catch((error) => console.warn("[DockThemeSettingsModal] quick settings save failed:", error))
         .finally(() => setSaving(false));
     };
@@ -244,7 +297,7 @@ export default function DockThemeSettingsModal({
       return;
     }
     window.setTimeout(commit, 0);
-  }, [draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onSelect]);
+  }, [activeSceneProfileId, draftSelectedTheme, draftSettings, onBackgroundPresetChange, onQuickSettingsSave, onReferenceFormatChange, onReferenceSettingsSave, onReferenceVersionVisibleChange, onSaveFeedback, onSelect, referenceFormat, referenceVersionVisible, t]);
 
   const handleReset = useCallback(() => {
     const nextSettings = defaultQuickSettings ?? originalSettingsRef.current;
@@ -273,7 +326,7 @@ export default function DockThemeSettingsModal({
       {view !== "closed" && (
         <div className="dtb-studio__backdrop" onClick={() => setView("closed")} role="presentation">
           <div
-            className="dtb-studio__modal"
+            className={`dtb-studio__modal${view === "settings" ? " dtb-studio__modal--picker" : ""}`}
             ref={modalRef}
             role="dialog"
             aria-modal="true"
@@ -282,30 +335,52 @@ export default function DockThemeSettingsModal({
           >
             {/* ── Header ── */}
             <div className="dtb-studio__header">
-              <div className="dtb-studio__header-spacer" />
-              <div className="dtb-studio__header-center">
-                <h2 className="dtb-studio__title">{t('worship.openThemeSettings')}</h2>
-                <p className="dtb-studio__subtitle">{subtitle}</p>
-              </div>
+              <span className="dtb-studio__header-label">{title || subtitle}</span>
               <button
                 type="button"
-                className="dtb-studio__close"
+                className="dtb-studio__close dtb-studio__close--strong"
                 onClick={() => setView("closed")}
                 aria-label={t('common.close')}
                 title={t('common.close')}>
-                <Icon name="close" size={16} />
+                <Icon name="close" size={18} />
               </button>
             </div>
 
             {/* ── Settings View ── */}
             {view === "settings" && (
-              <div className="dtb-studio__settings-view">
+              <div className="dtb-studio__settings-view dtb-studio__settings-view--picker">
+
+                {sceneProfiles && sceneProfiles.length > 0 && (
+                  <div className="dtb-studio__scene-profile-bar">
+                    <div className="dtb-studio__scene-profile-copy">
+                      <span className="dtb-studio__scene-profile-label">
+                        {t("dock.sceneProfile", "Output profile")}
+                      </span>
+                      <span className="dtb-studio__scene-profile-help">
+                        {t("dock.sceneProfileHelp", "Choose which scene receives these settings.")}
+                      </span>
+                    </div>
+                    <select
+                      className="dtb-studio__scene-profile-select"
+                      value={activeSceneProfileId ?? sceneProfiles[0].id}
+                      onChange={(event) => onSceneProfileChange?.(event.target.value)}
+                      aria-label={t("dock.sceneProfile", "Output profile")}
+                    >
+                      {sceneProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>{profile.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* ═══ Background Section ═══ */}
                 <BackgroundPickerCard
                   quickSettings={draftSettings}
                   onQuickSettingsChange={(updater) => updateDraft(updater)}
-                  onQuickSettingsSave={(settings) => onQuickSettingsSave(settings)}
+                  onQuickSettingsSave={(settings) => onQuickSettingsSave(settings, {
+                    sceneProfileId: activeSceneProfileId,
+                  })}
+                  onSaveFeedback={onSaveFeedback}
                   selectedThemeId={draftSelectedThemeId}
                   onThemeSelect={handleThemeSelect}
                   allowedCategories={allowedCategories}
@@ -313,58 +388,19 @@ export default function DockThemeSettingsModal({
                   sampleReference={sampleReference}
                   onBackgroundPresetChange={(preset) => {
                     pendingBackgroundPresetRef.current = preset;
-                    onBackgroundPresetChange?.(preset);
                   }}
                   showReferences={showReferences}
+                  referenceFormat={draftReferenceFormat}
+                  referenceVersionVisible={draftReferenceVersionVisible}
+                  referenceTranslation={referenceTranslation}
+                  onReferenceFormatChange={updateDraftReferenceFormat}
+                  onReferenceVersionVisibleChange={updateDraftReferenceVersionVisible}
                   overlayMode={overlayMode}
                   displayMode={displayMode}
                   initialTab={initialTab}
                   storageScope={storageScope}
                   hideBackgroundOnCompare={hideBackgroundOnCompare}
                 />
-
-                {/* Lower-Third Positioning — only shown in lower-third mode */}
-
-                <SectionDivider />
-
-                {/* ═══ Effects Section (collapsed by default) ═══ */}
-                <div className="dtb-section">
-                  <button
-                    type="button"
-                    className="dtb-section-toggle"
-                    onClick={() => setEffectsOpen((o) => !o)}
-                    aria-expanded={effectsOpen}
-                  >
-                    <SectionLabel icon="auto_awesome" label={t('worship.textStyle')} />
-                    <Icon
-                      name={effectsOpen ? "expand_less" : "expand_more"}
-                      size={14}
-                      className="dtb-section-toggle__chevron"
-                    />
-                  </button>
-
-                  {effectsOpen && (
-                    <div className="dtb-effects-grid">
-                      {EFFECT_DEFS.map((effect) => (
-                        <button
-                          key={effect.id}
-                          type="button"
-                          className={`dtb-effect-toggle${effect.isActive(draftSettings) ? " dtb-effect-toggle--active" : ""}`}
-                          aria-pressed={effect.isActive(draftSettings)}
-                          onClick={() => updateDraft((c) => effect.toggle(c))}
-                        >
-                          <Icon name={effect.icon} size={14} />
-                          <span>{effect.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <SectionDivider />
-
-                {/* ═══ Quick Presets Section ═══ */}
-
                 {/* Spacer for sticky footer */}
                 <div className="dtb-studio__spacer" />
               </div>

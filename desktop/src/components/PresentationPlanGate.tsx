@@ -26,7 +26,7 @@ export default function PresentationPlanGate({ children }: PresentationPlanGateP
   if (access.allowed) return <>{children}</>;
 
   const message =
-    "Presentation Mode is available on Growth and Pro. Free trial users can use it during the trial. Upgrade to Growth to open the presentation hub and use the local screen link.";
+    "Presentation Mode is available on Growth. Free trial users can use it during the trial. Upgrade to Growth to open the presentation hub and use the local screen link.";
   const promoText = t("common.upgradePlansStartToday", {
     amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
     defaultValue: UPGRADE_PROMO_FALLBACK,

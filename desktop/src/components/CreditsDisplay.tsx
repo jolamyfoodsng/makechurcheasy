@@ -69,7 +69,9 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
       // If a deduction happened while the fetch was in flight, discard
       // the stale response — the deduction already set the correct balance.
       if (!cancelled && genBefore === genRef.current) {
-        if (result === -1) {
+        if (result === null) {
+          setSynced(false);
+        } else if (result === -1) {
           setIsUnlimited(true);
           setSynced(true);
         } else if (result >= 0) {

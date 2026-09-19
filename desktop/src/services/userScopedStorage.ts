@@ -29,6 +29,94 @@ export function getUserScopedKey(baseKey: string): string {
   return uid ? `${baseKey}:${uid}` : baseKey;
 }
 
+function storedValueTimestamp(raw: string): number {
+  try {
+    const parsed = JSON.parse(raw) as { updatedAt?: unknown };
+    const parsedTimestamp = typeof parsed?.updatedAt === "string"
+      ? Date.parse(parsed.updatedAt)
+      : Number(parsed?.updatedAt);
+    return Number.isFinite(parsedTimestamp) ? parsedTimestamp : 0;
+  } catch {
+    // Non-object values are still valid; treat them as undated fallbacks.
+    return 0;
+  }
+}
+
+/**
+ * Read a user-owned value while tolerating the auth/storage timing that is
+ * common in an embedded OBS browser. Older builds wrote the bare key before
+ * the user id was available, so migrate that value into the scoped key when
+ * the id becomes available. When the dock is cold-started before auth, look
+ * for the most recently written scoped value as a last-resort recovery path.
+ */
+export function readUserScopedStorage(baseKey: string): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const scopedKey = getUserScopedKey(baseKey);
+    const scopedValue = localStorage.getItem(scopedKey);
+    const legacyValue = scopedKey === baseKey ? null : localStorage.getItem(baseKey);
+
+    if (scopedValue !== null && legacyValue !== null) {
+      const scopedTimestamp = storedValueTimestamp(scopedValue);
+      const legacyTimestamp = storedValueTimestamp(legacyValue);
+      if (legacyTimestamp > scopedTimestamp) {
+        try {
+          localStorage.setItem(scopedKey, legacyValue);
+        } catch {
+          // Embedded browser storage can be temporarily unavailable.
+        }
+        return legacyValue;
+      }
+      return scopedValue;
+    }
+
+    if (scopedValue !== null) {
+      return scopedValue;
+    }
+
+    if (legacyValue !== null) {
+      try {
+        localStorage.setItem(scopedKey, legacyValue);
+      } catch {
+        // Embedded browser storage can be temporarily unavailable.
+      }
+      return legacyValue;
+    }
+
+    // Auth can arrive after the dock document has already rendered. Only use
+    // this fallback in dock documents; the main app must not guess another
+    // account's preferences during an auth transition.
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
+    const isDockDocument = /^(dock|lm-dock)(?:\.html)?$/i.test(path);
+    if (!isDockDocument) return null;
+
+    let newest: { raw: string; timestamp: number } | null = null;
+    const prefix = `${baseKey}:`;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key || !key.startsWith(prefix)) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const timestamp = storedValueTimestamp(raw);
+      if (!newest || timestamp >= newest.timestamp) newest = { raw, timestamp };
+    }
+    return newest?.raw ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Write a user-owned value under the currently resolved user scope. */
+export function writeUserScopedStorage(baseKey: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getUserScopedKey(baseKey), value);
+  } catch {
+    // Ignore storage quota and embedded-browser failures.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Key registry — every user-scoped key prefix used in the desktop app
 // ---------------------------------------------------------------------------
@@ -49,8 +137,10 @@ const USER_SCOPED_KEY_PREFIXES = [
   "voiceBibleUsage",
 
   // Plan / entitlements
+  "mce-local-dev-plan-override",
   "ocs-dock-plan",
   "ocs-dock-entitlements",
+  "ocs-dock-free-plan-notice-v1",
   "ocs-dock-song-limit",
 
   // Bible
@@ -61,6 +151,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-bible-custom-themes",
 
   // Worship
+  "ocs-dock-auto-advance-worship",
   "ocs-dock-worship-preferences",
   "ocs-dock-worship-ui-preferences",
   "ocs-dock-worship-song-defaults-v1",
@@ -71,6 +162,11 @@ const USER_SCOPED_KEY_PREFIXES = [
   // Media
   "ocs-dock-media-preferences-v1",
   "ocs-dock-media-library-v1",
+
+  // Notes
+  "ocs-dock-auto-advance-notes",
+  "ocs-dock-notes-preferences",
+  "ocs-dock-notes-v1",
 
   // Sermon
   "ocs-dock-sermon-items-v1",
@@ -93,9 +189,14 @@ const USER_SCOPED_KEY_PREFIXES = [
   "service-hub.speaker.theme-order",
   "service-hub.lt.presets",
   "service-hub.lt.version-history",
+  "dock-ministry-lower-third-size",
+  "dock-scene-routing-v1",
   "ocs-lt-global-defaults",
   "ocs-lt-duration-configs",
   "dock-lt-saved",
+
+  // Tutorials
+  "ocs-tutorial-progress-v1",
 
   // Service state
   "ocs-service-state",
@@ -107,13 +208,16 @@ const USER_SCOPED_KEY_PREFIXES = [
   // Multiview
   "dock-mv-saved",
   "dock-mv-layouts",
+  "mvg-added-ids",
   "mv-settings",
   "mv-recovery-layout",
   "mv-onboarding-complete",
   "mce-presentation-text-slides",
   "mce-presentation-tickers",
+  "mce-editable-template-overrides-v1",
 
   // Theme
+  "ocs-app-appearance",
   "obs-church-studio.theme-preference",
   "ocs-fav-obs-themes",
   "ocs-fav-bible-themes",
@@ -133,10 +237,20 @@ const USER_SCOPED_KEY_PREFIXES = [
   "ocs-dock-projection-settings",
 
   // Misc user state
+  "mce-automation-macros-v1",
+  "mce-automation-rules-v1",
+  "mce-automation-logs-v1",
+  "ocs-dock-typography",
   "ocs-song-title-counter-v1",
+  "ocs-dock-font-family",
+  "ocs-dock-font-scale",
+  "ocs-dock-output-typography",
   "ocs-dock-lt-speaker-hint-seen",
+  "ocs-speech-to-scripture-mic-id",
   "bible-skip-layout-confirm",
   "dtb-bg-picker-type",
+  "dtb-bg-picker-tab",
+  "dtb-bg-picker-local-styles",
   "voice-bible-settings",
 
   // Onboarding (user-scoped)
@@ -166,7 +280,7 @@ export function clearAllUserScopedStorage(): void {
 
     // Check if this key matches any known user-scoped prefix
     for (const prefix of USER_SCOPED_KEY_PREFIXES) {
-      if (key === prefix || key.startsWith(`${prefix}:`)) {
+      if (key.startsWith(`${prefix}:`)) {
         keysToRemove.push(key);
         break;
       }

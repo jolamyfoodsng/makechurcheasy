@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { LOCALES, Locale, resolveLocalePreference } from "@/i18n/routing";
 import { Globe, X } from "lucide-react";
+import { updateUser } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LanguageSelectorProps {
   isOpen: boolean;
@@ -10,33 +12,38 @@ interface LanguageSelectorProps {
 }
 
 export default function LanguageSelector({ isOpen, onClose }: LanguageSelectorProps) {
+  const { mongoUser, refreshMongoUser } = useAuth();
   const [selectedLocale, setSelectedLocale] = useState<string>(() => {
     if (typeof document === "undefined") return LOCALES[0].code;
     const cookieMatch = document.cookie.match(/NEXT_LOCALE=([^;]+)/)?.[1];
     return resolveLocalePreference(cookieMatch || undefined, undefined, navigator.language);
   });
-
-  useEffect(() => {
-    // Check if user has already selected a language
-    const hasSelectedLanguage = localStorage.getItem("language_selected");
-    if (hasSelectedLanguage) {
-      onClose();
-    }
-  }, [onClose]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSelectLanguage = (locale: Locale) => {
     setSelectedLocale(locale.code);
   };
 
-  const handleConfirm = () => {
-    // Store the selected language
-    localStorage.setItem("language_selected", "true");
-    
-    // Set the locale cookie
-    document.cookie = `NEXT_LOCALE=${selectedLocale}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`;
-    
-    // Reload the page to apply the language
-    window.location.reload();
+  const handleConfirm = async () => {
+    if (!mongoUser?._id) {
+      setError("Could not identify your account. Please try again.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      await updateUser(mongoUser._id, { language: selectedLocale });
+      await refreshMongoUser();
+      document.cookie = `NEXT_LOCALE=${selectedLocale}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`;
+      onClose();
+      window.location.reload();
+    } catch {
+      setError("Could not save your language. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -87,10 +94,17 @@ export default function LanguageSelector({ isOpen, onClose }: LanguageSelectorPr
             ))}
           </div>
 
+          {error && (
+            <p role="alert" className="mt-3 text-sm text-red-600">
+              {error}
+            </p>
+          )}
+
           {/* Confirm Button */}
           <button
             onClick={handleConfirm}
-            className="w-full mt-6 bg-gradient-to-r from-[#1D4ED8] to-[#7C3AED] text-white px-6 py-3.5 rounded-xl text-sm font-semibold hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+            disabled={saving}
+            className="w-full mt-6 bg-gradient-to-r from-[#1D4ED8] to-[#7C3AED] text-white px-6 py-3.5 rounded-xl text-sm font-semibold hover:shadow-lg transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             Continue with {LOCALES.find(l => l.code === selectedLocale)?.nativeName}
           </button>

@@ -46,6 +46,7 @@ const CATEGORY_LABELS: Record<DashboardCategory, string> = {
   sermon: "Sermon",
   worship: "Worship",
   announcement: "Announcement",
+  multimedia: "Multimedia",
   ceremony: "Ceremony",
   "multi-camera": "Multi-Camera",
   youth: "Youth",
@@ -58,6 +59,7 @@ const CATEGORY_ICONS: Record<DashboardCategory, string> = {
   sermon: "church",
   worship: "music_note",
   announcement: "campaign",
+  multimedia: "perm_media",
   ceremony: "celebration",
   "multi-camera": "videocam",
   youth: "groups",
@@ -70,6 +72,7 @@ const CATEGORIES: DashboardCategory[] = [
   "sermon",
   "worship",
   "announcement",
+  "multimedia",
   "ceremony",
   "multi-camera",
   "youth",
@@ -644,16 +647,14 @@ export function MVTemplatesDashboard() {
   const handleCreateLayout = async () => {
     if (!selectedTemplate) return;
 
-    // Enforce layout limit for non-unlimited plans (e.g. Basic = 2 layouts)
+    // Enforce the plan's multiview template limit (Basic = five layouts).
     const user = getCurrentUser();
     const plan = getEffectivePlan(user);
-    const { allowed: unlimitedMultiview } = checkEntitlementSync("multiview", plan);
-    if (!unlimitedMultiview) {
-      const existingLayouts = await db.getAllLayouts();
-      if (existingLayouts.length >= 2) {
-        showToast("Layout limit reached. Upgrade to Growth for unlimited layouts.");
-        return;
-      }
+    const existingLayouts = await db.getUserLayouts();
+    const access = checkEntitlementSync("multiviewTemplates", plan, existingLayouts.length);
+    if (!access.allowed) {
+      showToast(access.reason || "You have reached the five-template Basic plan limit. Upgrade to Growth for more.");
+      return;
     }
 
     setCreatingLayout(true);

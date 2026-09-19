@@ -20,6 +20,8 @@ export function SecuritySection({ data, onChange, onSave, saving }: Props) {
     onChange({ ...data, ...fields });
 
   const [confirmDialog, setConfirmDialog] = useState<string | null>(null);
+  const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
+  const [forceLogoutError, setForceLogoutError] = useState<string | null>(null);
 
   const handleToggle = (field: keyof PlatformSettings["security"]) => {
     if (field === "maintenanceMode" && !data.maintenanceMode) {
@@ -30,14 +32,35 @@ export function SecuritySection({ data, onChange, onSave, saving }: Props) {
   };
 
   const handleForceLogout = () => {
+    setForceLogoutError(null);
     setConfirmDialog("forceLogout");
+  };
+
+  const confirmForceLogout = async () => {
+    setForceLogoutLoading(true);
+    setForceLogoutError(null);
+    try {
+      const res = await fetch("/api/admin/security/force-logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to force logout users");
+      }
+      setConfirmDialog(null);
+    } catch (error) {
+      setForceLogoutError(error instanceof Error ? error.message : "Failed to force logout users");
+    } finally {
+      setForceLogoutLoading(false);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{t("title")}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-white">{t("title")}</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
           {t("description")}
         </p>
       </div>
@@ -160,14 +183,15 @@ export function SecuritySection({ data, onChange, onSave, saving }: Props) {
       <ConfirmDialog
         open={confirmDialog === "forceLogout"}
         title={t("forceLogoutConfirm")}
-        description={t("forceLogoutConfirmDescription")}
+        description={forceLogoutError || t("forceLogoutConfirmDescription")}
         confirmLabel={t("forceLogoutButton")}
         destructive
-        onConfirm={() => {
-          // TODO: API call to force logout
+        loading={forceLogoutLoading}
+        onConfirm={confirmForceLogout}
+        onCancel={() => {
+          setForceLogoutError(null);
           setConfirmDialog(null);
         }}
-        onCancel={() => setConfirmDialog(null)}
       />
     </div>
   );

@@ -103,8 +103,8 @@ export function CreditsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{t("title")}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-white">{t("title")}</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
           {t("description")}
         </p>
       </div>
@@ -156,13 +156,6 @@ export function CreditsSection() {
               min={0}
               value={plans.growth?.credits ?? 0}
               onChange={(e) => updatePlanCredit("growth", Number(e.target.value))}
-            />
-            <Input
-              label={t("proPlanCredits")}
-              type="number"
-              value={plans.pro?.credits ?? -1}
-              onChange={(e) => updatePlanCredit("pro", Number(e.target.value))}
-              placeholder={t("unlimitedHint")}
             />
           </div>
         </div>

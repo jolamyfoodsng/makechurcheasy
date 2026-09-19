@@ -1,13 +1,8 @@
 import type { MVSettings } from "../multiview/mvStore";
 
 export function applyBrandingSettingsToDom(settings: Pick<MVSettings, "brandColor" | "churchName">) {
-  const root = document.documentElement;
-  // Branding defaults should not recolor the app UI. Keep app theme colors static.
-  // Clear any previously injected variables so CSS falls back to App.css defaults.
-  root.style.removeProperty("--primary");
-  root.style.removeProperty("--primary-hover");
-  root.style.removeProperty("--primary-rgb");
-
+  // Branding metadata must not clear the shared app/Dock appearance tokens.
+  // Those variables are owned by useAppTheme and remain active across routes.
   const churchName = settings.churchName.trim();
   document.title = churchName ? `${churchName} · MakeChurchEasy` : "MakeChurchEasy";
 }

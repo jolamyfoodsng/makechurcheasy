@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": upstream.headers.get("content-type") || "application/json",
       "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
-      Vary: "Cookie, CF-IPCountry, X-Vercel-IP-Country",
+      Vary: "Cookie, CF-IPCountry, X-Vercel-IP-Country, X-MCE-Geo-Country",
     },
   });
 }

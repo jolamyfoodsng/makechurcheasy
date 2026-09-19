@@ -28,7 +28,7 @@ export default function VoiceBibleResumeBanner() {
         <Icon name="mic" size={16} />
         <div className="voice-bible-resume-banner__copy">
           <strong className="voice-bible-resume-banner__title">
-            {t("verseAi.resumeBannerTitle", { defaultValue: "Voice Bible is still transcribing" })}
+            {t("verseAi.resumeBannerTitle", { defaultValue: "Speech to Scripture is still transcribing" })}
           </strong>
           <span>
             {latestReference
@@ -47,9 +47,9 @@ export default function VoiceBibleResumeBanner() {
         type="button"
         className="app-btn app-btn--primary voice-bible-resume-banner__action"
         onClick={() => navigate("/speech-to-scripture")}
-        title={t("verseAi.returnToVoiceBible", { defaultValue: "Return to Voice Bible" })}
+        title={t("verseAi.returnToVoiceBible", { defaultValue: "Return to Speech to Scripture" })}
       >
-        <span>{t("verseAi.returnToVoiceBible", { defaultValue: "Return to Voice Bible" })}</span>
+        <span>{t("verseAi.returnToVoiceBible", { defaultValue: "Return to Speech to Scripture" })}</span>
         <Icon name="arrow_forward" size={14} />
       </button>
     </div>

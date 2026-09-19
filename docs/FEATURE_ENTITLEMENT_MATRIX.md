@@ -4,16 +4,20 @@ This matrix maps plan-controlled features to the entitlement checks that must be
 
 | Feature | Required Plan | Source Entitlement | Frontend Check | Backend Check |
 |---|---|---|---|---|
-| Songs | Free limit 3, Basic limit 50, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxSongs` | `checkEntitlementSync("songs", effectivePlan, currentCount)` | Local DB / route-specific count enforcement |
-| Images | Free limit 3, Basic limit 50, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxImages` | `checkEntitlementSync("images", effectivePlan, currentCount)` | Route-specific count enforcement |
-| Videos | Free limit 2, Basic limit 50, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxVideos` | `checkEntitlementSync("videos", effectivePlan, currentCount)` | Route-specific count enforcement |
-| Bible Versions | Free limit 3, Basic limit 10, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxBibleVersions` | `checkEntitlementSync("bibleVersions", effectivePlan, currentCount)` | Route-specific count enforcement |
+| Songs | Free limit 3, Basic limit 100, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxSongs` | `checkEntitlementSync("songs", effectivePlan, currentCount)` | Local DB / route-specific count enforcement |
+| Images | Free limit 3, Basic limit 100, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxImages` | `checkEntitlementSync("images", effectivePlan, currentCount)` | Route-specific count enforcement |
+| Videos | Free limit 2, Basic limit 100, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxVideos` | `checkEntitlementSync("videos", effectivePlan, currentCount)` | Route-specific count enforcement |
+| Bible Versions | Free limit 3, Basic unlimited, Growth/Pro unlimited | `PLAN_ENTITLEMENTS[plan].maxBibleVersions` | `checkEntitlementSync("bibleVersions", effectivePlan, currentCount)` | Route-specific count enforcement |
 | Devices | Free limit 1, Basic limit 3, Growth/Pro limit 10 | `PLAN_ENTITLEMENTS[plan].maxDevices` | `checkEntitlementSync("devices", effectivePlan, currentCount)` | Device registration / profile routes |
 | Team Members | Free limit 3, Basic limit 5, Growth/Pro limit 20 | `PLAN_ENTITLEMENTS[plan].maxTeams` | Dashboard/team UI count checks | `api/src/app/api/team/members/*.ts` |
-| Credits | Free 50, Basic 300, Growth 1000, Pro 3000 | `PLAN_ENTITLEMENTS[plan].credits` | Credit guards + premium action checks | credit reservation / check-access routes |
-| Tickers | Basic+ | `PLAN_ENTITLEMENTS[plan].tickers` | `checkEntitlementSync("tickers", effectivePlan)` | OBS/dock action enforcement |
-| Lower Thirds | Basic+ | `PLAN_ENTITLEMENTS[plan].lowerThirds` | `checkEntitlementSync("lowerThirds", effectivePlan)` | `api/src/app/api/themes/route.ts` for lower-third theme creation |
-| Multiview | Basic+ | `PLAN_ENTITLEMENTS[plan].multiview` | `FeatureGuard feature="multiview"`, `checkEntitlementSync("multiview", effectivePlan)` | Premium action / route gate |
+| Credits | Free 50, Basic 100, Growth 2000 | `PLAN_ENTITLEMENTS[plan].credits` | Credit guards + premium action checks | credit reservation / check-access routes |
+| Verse AI / Speech to Scripture | Free with 15 minutes/day (20 on Sunday); Basic+ with credits | `PLAN_ENTITLEMENTS[plan].speechToScripture` | `checkEntitlementSync("speechToScripture", effectivePlan)` | `api/src/app/api/device/speech-to-scripture/check-access/route.ts` plus daily usage cap |
+| Transcript Translation | Growth+ with credits | `PLAN_ENTITLEMENTS[plan].translation` | `checkPremiumAccess("translation")` | `api/src/app/api/device/check-access/route.ts` |
+| Tickers | Growth+ | `PLAN_ENTITLEMENTS[plan].tickers` | `checkEntitlementSync("tickers", effectivePlan)` | OBS/dock action enforcement |
+| Lower Thirds | Growth+ | `PLAN_ENTITLEMENTS[plan].lowerThirds` | `checkEntitlementSync("lowerThirds", effectivePlan)` | `api/src/app/api/themes/route.ts` for lower-third theme creation |
+| Countdowns | Growth+ | `PLAN_ENTITLEMENTS[plan].countdowns` | `checkEntitlementSync("countdowns", effectivePlan)` | Dock/action enforcement |
+| Multiview access | Basic+ | `PLAN_ENTITLEMENTS[plan].multiview` | `FeatureGuard feature="multiview"`, `checkEntitlementSync("multiview", effectivePlan)` | Premium action / route gate |
+| Multiview templates | Free 0, Basic 5, Growth unlimited | `PLAN_ENTITLEMENTS[plan].maxMultiviewTemplates` → legacy `multiviewTemplates` | `checkEntitlementSync("multiviewTemplates", effectivePlan, currentCount)` | `/api/entitlement/check` numeric limit |
 | Remote Control | Growth+ | `PLAN_ENTITLEMENTS[plan].remoteControl` | Derived mobile/remote UI checks | Canonical feature checks for remote workflows |
 | Mobile Controller | Growth+ | `PLAN_ENTITLEMENTS[plan].mobileSupport` | Derived `mobileControl` checks in desktop/dock | Canonical feature checks for remote workflows |
 | Bulk Import | Growth+ | `PLAN_ENTITLEMENTS[plan].bulkImport` | `checkEntitlementSync("massImport", effectivePlan)` | Import route/action validation |
@@ -21,7 +25,7 @@ This matrix maps plan-controlled features to the entitlement checks that must be
 | ProPresenter Import | Growth+ | `PLAN_ENTITLEMENTS[plan].propresenterImport` | `checkEntitlementSync("proPresenterImport", effectivePlan)` | Import route/action validation |
 | Cloud Sync | Growth+ | `PLAN_ENTITLEMENTS[plan].cloudSync` | Cloud sync UI + dock prompts | `api/src/app/api/cloud-sync/*.ts` |
 | Translation | Growth+ | derived legacy entitlement from canonical plan | `checkEntitlementSync("translation", effectivePlan)` and `checkPremiumAccess("translation")` | `api/src/app/api/device/check-access/route.ts` |
-| Speech to Scripture | Growth+ | derived legacy entitlement from canonical plan | `checkEntitlementSync("speechToScripture", effectivePlan)` and `checkPremiumAccess("speechToScripture")` | `api/src/app/api/device/speech-to-scripture/check-access/route.ts` |
+| Speech to Scripture | Free with daily allowance; Basic+ | derived legacy entitlement from canonical plan | `checkEntitlementSync("speechToScripture", effectivePlan)` | `api/src/app/api/device/speech-to-scripture/check-access/route.ts` plus daily usage cap |
 | AI Features | Growth+ | derived legacy entitlement from canonical plan | `checkEntitlementSync("aiFeatures", effectivePlan)` and `checkPremiumAccess(...)` | `api/src/app/api/ai/*.ts` |
 | Advanced Analytics | Pro | derived legacy entitlement from canonical plan | `checkEntitlementSync("advancedAnalytics", effectivePlan)` | `api/src/app/api/user/analytics/route.ts` |
 | Custom Reports | Pro | derived legacy entitlement from canonical plan | `checkEntitlementSync("customReports", effectivePlan)` | Route-specific report checks |

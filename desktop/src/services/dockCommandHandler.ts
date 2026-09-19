@@ -13,6 +13,7 @@ import { bibleObsService } from "../bible/bibleObsService";
 import type { BibleSlide } from "../bible/types";
 import { lowerThirdObsService } from "../lowerthirds/lowerThirdObsService";
 import { getLTThemeById, LT_THEMES } from "../lowerthirds/themes";
+import { isDockObsCommand, isFreeDockPlan } from "../dock/dockMutationPolicy";
 
 // ---------------------------------------------------------------------------
 // Handle speaker commands — push as lower third
@@ -208,6 +209,11 @@ export function initDockCommandHandler(): () => void {
   const unsub = dockBridge.onCommand(async (cmd: DockCommand) => {
     // Skip state requests (handled separately in App.tsx)
     if (cmd.type === "request-state" || cmd.type === "ping") return;
+
+    if (isFreeDockPlan() && isDockObsCommand(cmd.type)) {
+      console.info("[DockCmd] Free plan blocked OBS command:", cmd.type);
+      return;
+    }
 
     // Preview routing is handled directly inside the OBS dock via
     // dockObsClient. Legacy BroadcastChannel preview commands used the

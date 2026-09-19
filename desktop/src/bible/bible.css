@@ -3496,7 +3496,8 @@ bible-preview-toggle>span {
 
 .preview-frame-textbox {
   text-align: center;
-  max-width: 90%;
+  width: 100%;
+  max-width: 95%;
 }
 
 .preview-frame-verse {
@@ -3509,6 +3510,7 @@ bible-preview-toggle>span {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  width: 100%;
 }
 
 .preview-frame-reference {
@@ -5117,6 +5119,147 @@ bible-preview-toggle>span {
   color: #fff;
   font-size: 13px;
   font-weight: 600;
+}
+
+/* ── Free Plan Banner ── */
+.bible-free-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 16px 8px;
+  padding: 12px 16px;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 10px;
+  color: var(--b-text-1, #e0e0e0);
+}
+
+.bible-free-mode-banner--limit {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.bible-free-mode-banner__left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bible-free-mode-banner__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.bible-free-mode-banner--limit .bible-free-mode-banner__icon {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.bible-free-mode-banner__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bible-free-mode-banner__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.bible-free-mode-banner__tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+
+.bible-free-mode-banner--limit .bible-free-mode-banner__tag {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.bible-free-mode-banner__limit-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--b-text-2, #94a3b8);
+}
+
+.bible-free-mode-banner__text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--b-text-2, #cbd5e1);
+  margin: 0;
+}
+
+.bible-free-mode-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bible-free-mode-banner__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.bible-free-mode-banner__btn--primary {
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid #3b82f6;
+}
+
+.bible-free-mode-banner__btn--primary:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.bible-free-mode-banner__btn--secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--b-text-1, #e0e0e0);
+  border: 1px solid var(--b-border, #475569);
+}
+
+.bible-free-mode-banner__btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #64748b;
+}
+
+@media (max-width: 680px) {
+  .bible-free-mode-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bible-free-mode-banner__actions {
+    justify-content: flex-end;
+  }
 }
 
 /* ── Body ── */

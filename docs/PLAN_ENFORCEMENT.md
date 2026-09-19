@@ -269,7 +269,7 @@ These features are locked behind specific plans. The server must deny access for
 | Translation | Basic | entitlement |
 | Transcription | Basic | entitlement |
 | AI Summary | Basic | entitlement |
-| Verse AI | Basic | entitlement |
+| Verse AI | Free with 15 minutes/day (20 on Sunday), then Basic+ | entitlement plus daily usage cap |
 | Mobile App | Growth | entitlement |
 | Team Members | Growth | entitlement (with limit) |
 | Devices | Growth | entitlement (with limit) |

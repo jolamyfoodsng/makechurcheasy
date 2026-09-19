@@ -34,8 +34,8 @@ export function SystemControlsSection({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">System Controls</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-white">System Controls</h2>
+        <p className="text-sm text-slate-400 mt-0.5">
           Operational controls that immediately affect registration, billing, and feature access.
         </p>
       </div>

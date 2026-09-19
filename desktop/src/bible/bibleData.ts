@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { BIBLE_BOOKS, BOOK_ABBREVS } from "./types";
 import { getTranslationData } from "./bibleDb";
+import { getConceptVerses, matchVerseAlias } from "./scriptureReranker";
 
 // ---------------------------------------------------------------------------
 // Cache
@@ -32,6 +33,43 @@ const translationCache = new Map<string, RawBibleData>();
 const corpusCache = new Map<string, BibleCorpusEntry[]>();
 const searchVocabularyCache = new Map<string, Map<string, number>>();
 const normalizedSearchVocabularyCache = new Map<string, Map<string, number>>();
+const rankedSearchCache = new Map<string, RankedSearchResult[]>();
+
+interface CorpusSearchIndex {
+  tokens: Map<string, number[]>;
+  numbers: Map<number, number[]>;
+  references: Map<string, number[]>;
+}
+// The index lives exactly as long as its cached corpus, including after a
+// downloaded translation is replaced or removed.
+const corpusSearchIndexes = new WeakMap<BibleCorpusEntry[], CorpusSearchIndex>();
+
+function getCorpusSearchIndex(corpus: BibleCorpusEntry[]): CorpusSearchIndex {
+  const cached = corpusSearchIndexes.get(corpus);
+  if (cached) return cached;
+  const index: CorpusSearchIndex = { tokens: new Map(), numbers: new Map(), references: new Map() };
+  const add = <T,>(map: Map<T, number[]>, key: T, id: number) => {
+    const ids = map.get(key);
+    if (ids) ids.push(id);
+    else map.set(key, [id]);
+  };
+  corpus.forEach((entry, id) => {
+    for (const token of entry.searchTokenSet ?? []) add(index.tokens, token, id);
+    const numbers = new Set([entry.chapter]);
+    for (let verse = entry.verse; verse <= entry.endVerse; verse++) numbers.add(verse);
+    for (const number of numbers) add(index.numbers, number, id);
+    add(index.references, `${normalizeSearchScopeBook(entry.book)} ${entry.chapter}:${entry.verse}`, id);
+  });
+  corpusSearchIndexes.set(corpus, index);
+  return index;
+}
+
+/** Warm once while listening starts, so the first phrase can use the index. */
+export async function preloadBibleSearch(translation: BibleTranslation = "KJV"): Promise<void> {
+  const data = await loadTranslation(translation);
+  getCorpusSearchIndex(await getBibleCorpus(translation, 3));
+  buildNormalizedSearchVocabulary(translation, data);
+}
 
 export interface BibleCorpusEntry {
   book: string;
@@ -122,6 +160,9 @@ async function loadTranslation(t: BibleTranslation): Promise<RawBibleData> {
 export function evictTranslationCache(t: string): void {
   const key = t.toUpperCase();
   translationCache.delete(key);
+  searchVocabularyCache.delete(key);
+  normalizedSearchVocabularyCache.delete(key);
+  rankedSearchCache.clear();
   for (const cacheKey of [...corpusCache.keys()]) {
     if (cacheKey.startsWith(`${key}:`)) {
       corpusCache.delete(cacheKey);
@@ -303,10 +344,61 @@ export interface RankedSearchResult extends SearchResult {
   score: number;
 }
 
+/**
+ * Optional passage boundary for live sermon matching.
+ * When present, quote search must stay inside this book/chapter.
+ */
+export interface BibleSearchScope {
+  book?: string;
+  chapter?: number;
+}
+
+interface BibleSearchSignals {
+  aliasReference: string | null;
+  conceptReferences: Set<string>;
+}
+
+function parseSearchReference(reference: string): {
+  book: string;
+  chapter: number;
+  verse: number;
+} | null {
+  const match = reference.match(/^(.+?)\s+(\d+):(\d+)$/);
+  if (!match) return null;
+
+  return {
+    book: normalizeSearchScopeBook(match[1]),
+    chapter: Number(match[2]),
+    verse: Number(match[3]),
+  };
+}
+
+function buildBibleSearchSignals(query: string): BibleSearchSignals {
+  const aliasQueryVariants = [
+    query,
+    query
+      .replace(/\b(me|my|mine)\b/gi, "you")
+      .replace(/\b(thee|thou|thy|thine|ye)\b/gi, "you"),
+  ];
+
+  return {
+    aliasReference: aliasQueryVariants
+      .map((variant) => matchVerseAlias(variant))
+      .find((reference): reference is string => Boolean(reference)) ?? null,
+    conceptReferences: new Set(getConceptVerses(query)),
+  };
+}
+
+function normalizeSearchScopeBook(book: string): string {
+  const normalized = book.toLowerCase().replace(/\s+/g, " ").trim();
+  return normalized === "psalm" ? "psalms" : normalized;
+}
+
 const SEARCH_STOP_WORDS = new Set([
   "a",
   "an",
   "and",
+  "are",
   "as",
   "at",
   "be",
@@ -362,6 +454,63 @@ const COMMON_SEARCH_TOKEN_ALIASES = new Map<string, string>([
   ["must", "should"],
 ]);
 
+// Treat common British and American spellings as the same search term. The
+// corpus can come from different translations, so normalizing both the query
+// and the verse tokens keeps searches portable across translations.
+const SEARCH_SPELLING_VARIANTS = new Map<string, string>([
+  ["favour", "favor"],
+  ["favours", "favors"],
+  ["favourite", "favorite"],
+  ["favourites", "favorites"],
+  ["colour", "color"],
+  ["colours", "colors"],
+  ["honour", "honor"],
+  ["honours", "honors"],
+  ["honoured", "honored"],
+  ["honouring", "honoring"],
+  ["labour", "labor"],
+  ["labours", "labors"],
+  ["neighbour", "neighbor"],
+  ["neighbours", "neighbors"],
+  ["behaviour", "behavior"],
+  ["behaviours", "behaviors"],
+  ["saviour", "savior"],
+  ["saviours", "saviors"],
+  ["valour", "valor"],
+  ["centre", "center"],
+  ["centres", "centers"],
+  ["theatre", "theater"],
+  ["theatres", "theaters"],
+  ["metre", "meter"],
+  ["metres", "meters"],
+  ["litre", "liter"],
+  ["litres", "liters"],
+  ["fibre", "fiber"],
+  ["fibres", "fibers"],
+  ["organise", "organize"],
+  ["organised", "organized"],
+  ["organising", "organizing"],
+  ["recognise", "recognize"],
+  ["recognised", "recognized"],
+  ["recognising", "recognizing"],
+  ["realise", "realize"],
+  ["realised", "realized"],
+  ["realising", "realizing"],
+  ["apologise", "apologize"],
+  ["authorise", "authorize"],
+  ["emphasise", "emphasize"],
+  ["baptise", "baptize"],
+  ["evangelise", "evangelize"],
+  ["programme", "program"],
+  ["programmes", "programs"],
+  ["judgement", "judgment"],
+  ["fulfil", "fulfill"],
+  ["fulfilment", "fulfillment"],
+  ["travelling", "traveling"],
+  ["labelled", "labeled"],
+  ["cancelled", "canceled"],
+]);
+
 const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["hath", "has"],
   ["hast", "has"],
@@ -384,7 +533,80 @@ const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["wherefore", "why"],
   ["whosoever", "whoever"],
   ["whatsoever", "whatever"],
+  // Modern query wording should match common KJV inflections.
+  ["loved", "love"],
+  ["loves", "love"],
+  ["loving", "love"],
+  ["loveth", "love"],
+  ["lovest", "love"],
+  ["hated", "hate"],
+  ["hates", "hate"],
+  ["hating", "hate"],
+  ["hateth", "hate"],
+  ["hatest", "hate"],
+  ["cometh", "come"],
+  ["goeth", "go"],
+  ["giveth", "give"],
+  ["maketh", "make"],
+  ["seeketh", "seek"],
+  ["asketh", "ask"],
+  ["speaketh", "speak"],
+  ["worketh", "work"],
+  ["leaveth", "leave"],
+  // Common irregular forms used in natural-language searches.
+  ["men", "man"],
+  ["women", "woman"],
+  ["children", "child"],
 ]);
+
+const SEARCH_NUMBER_UNDER_TWENTY = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
+] as const;
+
+const SEARCH_NUMBER_TENS = new Map<number, string>([
+  [20, "twenty"],
+  [30, "thirty"],
+  [40, "forty"],
+  [50, "fifty"],
+  [60, "sixty"],
+  [70, "seventy"],
+  [80, "eighty"],
+  [90, "ninety"],
+]);
+
+function numberSearchWord(token: string): string | null {
+  if (!/^\d+$/.test(token)) return null;
+
+  const value = Number(token);
+  if (!Number.isSafeInteger(value) || value < 0) return null;
+  if (value < SEARCH_NUMBER_UNDER_TWENTY.length) {
+    return SEARCH_NUMBER_UNDER_TWENTY[value];
+  }
+  return SEARCH_NUMBER_TENS.get(value) ?? null;
+}
+
+function canonicalizeSearchSpelling(token: string): string {
+  return SEARCH_SPELLING_VARIANTS.get(token) ?? token;
+}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -402,43 +624,63 @@ function tokenizeSearch(value: string): string[] {
     .filter(Boolean);
 
   const filtered = tokens.filter(
-    (token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token),
+    (token) =>
+      (token.length > 1 || /^\d+$/.test(token)) &&
+      !SEARCH_STOP_WORDS.has(token),
   );
 
-  return filtered.length > 0 ? filtered : tokens.filter((token) => token.length > 1);
+  return filtered.length > 0
+    ? filtered
+    : tokens.filter((token) => token.length > 1 || /^\d+$/.test(token));
 }
 
 function normalizeSearchToken(token: string): string {
-  const direct = SEARCH_TOKEN_NORMALIZATIONS.get(token);
-  if (direct) return direct;
+  const numericWord = numberSearchWord(token);
+  if (numericWord) return numericWord;
 
-  if (token.length <= 4) return token;
+  const spellingNormalized = canonicalizeSearchSpelling(token);
+  const direct = SEARCH_TOKEN_NORMALIZATIONS.get(spellingNormalized);
+  if (direct) return canonicalizeSearchSpelling(direct);
 
-  if (token.endsWith("eth") && token.length > 5) {
-    const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
+  if (spellingNormalized.length <= 4) return spellingNormalized;
+
+  if (spellingNormalized.endsWith("eth") && spellingNormalized.length > 5) {
+    const normalized = spellingNormalized.slice(0, -3);
+    return canonicalizeSearchSpelling(
+      SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized),
+    );
   }
-  if (token.endsWith("est") && token.length > 5) {
-    const normalized = token.slice(0, -3);
-    return SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? normalized;
+  if (spellingNormalized.endsWith("est") && spellingNormalized.length > 5) {
+    const normalized = spellingNormalized.slice(0, -3);
+    return canonicalizeSearchSpelling(
+      SEARCH_TOKEN_NORMALIZATIONS.get(normalized) ?? restoreSilentE(normalized),
+    );
   }
-  if (token.endsWith("ing") && token.length > 6) {
-    return token.slice(0, -3);
+  if (spellingNormalized.endsWith("ing") && spellingNormalized.length > 6) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -3));
   }
-  if (token.endsWith("ed") && token.length > 5) {
-    return token.slice(0, -2);
+  if (spellingNormalized.endsWith("ed") && spellingNormalized.length > 5) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -2));
   }
-  if (token.endsWith("es") && token.length > 5) {
-    return token.slice(0, -2);
+  if (spellingNormalized.endsWith("es") && spellingNormalized.length > 5) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -2));
   }
-  if (token.endsWith("s") && token.length > 4) {
-    return token.slice(0, -1);
+  if (spellingNormalized.endsWith("s") && spellingNormalized.length > 4) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -1));
   }
-  if (token.endsWith("e") && token.length > 6) {
-    return token.slice(0, -1);
+  if (spellingNormalized.endsWith("e") && spellingNormalized.length > 6) {
+    return canonicalizeSearchSpelling(spellingNormalized.slice(0, -1));
   }
 
-  return token;
+  return spellingNormalized;
+}
+
+/**
+ * KJV often drops the final silent e before an inflectional suffix
+ * (loveth → lov, giveth → giv). Restore it so modern queries match too.
+ */
+function restoreSilentE(token: string): string {
+  return token.endsWith("v") ? `${token}e` : token;
 }
 
 function buildNormalizedSearchVocabulary(
@@ -694,6 +936,37 @@ function contentPhraseCoverage(queryContent: string[], textContent: string[]): n
   return bestRun / queryContent.length;
 }
 
+function numericReferenceCoverage(queryTokens: string[], entry: BibleCorpusEntry): number {
+  const numericTokens = Array.from(
+    new Set(queryTokens.filter((token) => /^\d+$/.test(token))),
+  );
+  if (numericTokens.length === 0) return 0;
+
+  const entryEndVerse = Math.max(entry.verse, entry.endVerse);
+  const matchedTokens = numericTokens.filter((token) => {
+    const value = Number(token);
+    return (
+      Number.isSafeInteger(value) &&
+      (entry.chapter === value || (entry.verse <= value && value <= entryEndVerse))
+    );
+  });
+
+  return matchedTokens.length / numericTokens.length;
+}
+
+function denseContentCoverageBonus(queryContent: string[], textContent: string[]): number {
+  if (queryContent.length < 4 || textContent.length === 0) return 0;
+  if (!queryContent.some((token) => token.length >= 6)) return 0;
+
+  const textTokenSet = new Set(textContent);
+  const matchedCount = queryContent.filter((token) => textTokenSet.has(token)).length;
+  const coverage = matchedCount / queryContent.length;
+
+  if (coverage >= 0.9) return 0.16;
+  if (coverage >= 0.8) return 0.10;
+  return 0;
+}
+
 function firstStrongTokenBonus(queryContent: string[], textContent: string[]): number {
   const firstStrongToken = queryContent.find((token) => token.length >= 5);
   if (!firstStrongToken) return 0;
@@ -739,7 +1012,7 @@ function scoreVerseMatch(
   const normalizedText = entry.normalizedText ?? normalizeSearchText(entry.text);
   if (!normalizedText) return 0;
 
-  if (normalizedText.includes(normalizedQuery)) {
+  if (` ${normalizedText} `.includes(` ${normalizedQuery} `)) {
     return 1;
   }
 
@@ -750,40 +1023,89 @@ function scoreVerseMatch(
 
   const textTokenSet = entry.searchTokenSet ?? new Set(textTokens);
   const tokenMatches = normalizedQueryTokens.filter((token) => textTokenSet.has(token)).length;
-  if (tokenMatches === 0) return 0;
+  const numericReferenceMatch = numericReferenceCoverage(queryTokens, entry);
+  if (tokenMatches === 0 && numericReferenceMatch === 0) return 0;
 
   const tokenCoverage = weightedTokenCoverage(normalizedQueryTokens, textTokenSet, queryTokenWeights);
   const orderedCoverage = weightedOrderedTokenCoverage(normalizedQueryTokens, textTokens, queryTokenWeights);
   const pairCoverage = nearbyPairCoverage(normalizedQueryTokens, textTokens);
   const textContent = entry.searchContentTokens ?? contentTokens(textTokens);
+  // A compact phrase beats words scattered through a long verse/window.
+  // Keep a little separation below an exact quotation for inflection changes
+  // and omitted connecting words.
+  const compactPhrase = queryContent.length >= 2 &&
+    ` ${textContent.join(" ")} `.includes(` ${queryContent.join(" ")} `);
   const contentCoverage = contentPhraseCoverage(queryContent, textContent);
+  const denseCoverageBonus = denseContentCoverageBonus(queryContent, textContent);
   const prefixBonus =
     queryTokens.length > 0 && normalizedText.startsWith(queryTokens[0]) ? 0.06 : 0;
   const strongStartBonus = firstStrongTokenBonus(queryContent, textContent);
 
-  return Math.min(
-    1,
+  const textMatchScore = Math.min(
+    entry.endVerse > entry.verse && contentCoverage < 1 ? 0.89 : compactPhrase ? 0.98 : 0.94,
     tokenCoverage * 0.42 +
     orderedCoverage * 0.22 +
     pairCoverage * 0.12 +
     contentCoverage * 0.20 +
+    denseCoverageBonus +
     prefixBonus +
     strongStartBonus,
   );
+
+  // A number is also useful as a chapter/verse search. This keeps inputs such
+  // as "30" or "30%" searchable even when the translation spells the number
+  // out in the verse text instead of storing it as digits.
+  return Math.min(1, Math.max(textMatchScore, numericReferenceMatch * 0.78));
+}
+
+function scoreVerseUpperBound(
+  entry: BibleCorpusEntry,
+  tokens: string[],
+  weights: number[],
+  queryContent: string[],
+): number {
+  const textTokens = entry.searchTokenSet!;
+  const coverage = weightedTokenCoverage(tokens, textTokens, weights);
+  const contentMatches = queryContent.filter((token) => textTokens.has(token)).length;
+  const contentCoverage = queryContent.length >= 2 ? contentMatches / queryContent.length : 0;
+  const possiblePairs = tokens.slice(1).filter((token, i) => textTokens.has(tokens[i]) && textTokens.has(token)).length;
+  const pairCoverage = tokens.length >= 2 ? possiblePairs / (tokens.length - 1) : 0;
+  const denseBonus = queryContent.length >= 4 && queryContent.some((token) => token.length >= 6)
+    ? contentCoverage >= 0.9 ? 0.16 : contentCoverage >= 0.8 ? 0.10 : 0
+    : 0;
+  // Exact substring matches also have complete token coverage.
+  return Math.min(1, coverage * 0.64 + pairCoverage * 0.12 + contentCoverage * 0.20 + denseBonus + 0.12);
 }
 
 async function searchBibleInTranslation(
   query: string,
   translation: BibleTranslation,
   limit: number,
+  scope?: BibleSearchScope,
+  minScore = 0.42,
+  signals: BibleSearchSignals = {
+    aliasReference: null,
+    conceptReferences: new Set<string>(),
+  },
 ): Promise<RankedSearchResult[]> {
   const data = await loadTranslation(translation);
   const corpus = await getBibleCorpus(translation, 3);
+  const aliasTarget = signals.aliasReference
+    ? parseSearchReference(signals.aliasReference)
+    : null;
+  const conceptTargets = Array.from(signals.conceptReferences)
+    .map(parseSearchReference)
+    .filter((target): target is NonNullable<typeof target> => Boolean(target));
   const results: RankedSearchResult[] = [];
   const repairedQuery = repairSearchQuery(query, translation, data);
   const normalizedVocabulary = buildNormalizedSearchVocabulary(translation, data);
   const queryVariants = Array.from(
-    new Set([normalizeSearchText(query), normalizeSearchText(repairedQuery)].filter(Boolean)),
+    new Set([
+      normalizeSearchText(query),
+      normalizeSearchText(repairedQuery),
+      // Modal wording varies between spoken quotations and translations.
+      normalizeSearchText(query).replace(/\bshall\b/g, "should"),
+    ].filter(Boolean)),
   ).map((variant) => ({
     normalizedQuery: variant,
     queryTokens: tokenizeSearch(variant),
@@ -796,7 +1118,56 @@ async function searchBibleInTranslation(
     ),
   }));
 
-  for (const entry of corpus) {
+  const scopedBook = scope?.book ? normalizeSearchScopeBook(scope.book) : undefined;
+
+  // Look up words once, then score the most complete matches first. This is
+  // lossless: the upper bound below only skips entries that cannot beat the
+  // current results, even with every order/proximity bonus applied.
+  const index = getCorpusSearchIndex(corpus);
+  const candidateCoverage = new Map<number, number>();
+  for (const variant of queryVariants) {
+    const weights = new Map<number, number>();
+    const totalWeight = variant.queryTokenWeights.reduce((sum, weight) => sum + weight, 0);
+    variant.normalizedQueryTokens.forEach((token, tokenIndex) => {
+      for (const id of index.tokens.get(token) ?? []) {
+        weights.set(id, (weights.get(id) ?? 0) + variant.queryTokenWeights[tokenIndex]);
+      }
+    });
+    for (const [id, weight] of weights) {
+      candidateCoverage.set(id, Math.max(candidateCoverage.get(id) ?? 0, weight / totalWeight));
+    }
+    for (const token of variant.queryTokens.filter((token) => /^\d+$/.test(token))) {
+      for (const id of index.numbers.get(Number(token)) ?? []) {
+        candidateCoverage.set(id, Math.max(candidateCoverage.get(id) ?? 0, 1));
+      }
+    }
+  }
+  for (const reference of [signals.aliasReference, ...signals.conceptReferences]) {
+    const target = reference ? parseSearchReference(reference) : null;
+    if (!target) continue;
+    for (const id of index.references.get(`${target.book} ${target.chapter}:${target.verse}`) ?? []) {
+      candidateCoverage.set(id, 1);
+    }
+  }
+  const candidates = [...candidateCoverage].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  let cutoff = minScore;
+
+  for (const [id, coverage] of candidates) {
+    const entry = corpus[id];
+    if (
+      (scopedBook && normalizeSearchScopeBook(entry.book) !== scopedBook) ||
+      (scope?.chapter !== undefined && entry.chapter !== scope.chapter)
+    ) {
+      continue;
+    }
+
+    if (coverage < 1 && queryVariants.every((variant) =>
+      Math.max(
+        scoreVerseUpperBound(entry, variant.normalizedQueryTokens, variant.queryTokenWeights, variant.queryContent),
+        numericReferenceCoverage(variant.queryTokens, entry) * 0.78,
+      ) + 1e-9 < cutoff,
+    )) continue;
+
     let bestScore = 0;
     let bestTokens: string[] = [];
 
@@ -816,8 +1187,31 @@ async function searchBibleInTranslation(
     }
 
     const windowSize = Math.max(1, entry.endVerse - entry.verse + 1);
-    const score = Math.max(0, bestScore - (windowSize - 1) * 0.02);
-    if (score < 0.42) continue;
+    const aliasMatch = Boolean(
+      aliasTarget &&
+      normalizeSearchScopeBook(entry.book) === aliasTarget.book &&
+      entry.chapter === aliasTarget.chapter &&
+      entry.verse === aliasTarget.verse,
+    );
+    const conceptMatch = conceptTargets.some(
+      (target) =>
+        normalizeSearchScopeBook(entry.book) === target.book &&
+        entry.chapter === target.chapter &&
+        entry.verse === target.verse,
+    );
+
+    // Quote aliases and curated Bible concepts are stronger than a generic
+    // word overlap. Keep the boost modest so ordinary keyword searches still
+    // return every relevant passage, while a known phrase reaches the top.
+    const bibleSignalBoost = (aliasMatch ? 0.70 : 0) + (conceptMatch ? 0.10 : 0);
+    const score = aliasMatch
+      ? Math.max(0, bestScore - (windowSize - 1) * 0.02 + bibleSignalBoost)
+      : Math.min(1, Math.max(0, bestScore - (windowSize - 1) * 0.02 + bibleSignalBoost));
+    if (score < minScore && !aliasMatch) continue;
+    if (score < cutoff) continue;
+    if (results.some((best) => best.score >= score && best.book === entry.book &&
+      best.chapter === entry.chapter && entry.verse <= best.verse &&
+      entry.endVerse >= (best.endVerse ?? best.verse))) continue;
 
     results.push({
       book: entry.book,
@@ -828,6 +1222,16 @@ async function searchBibleInTranslation(
       snippet: buildSearchSnippet(entry.text, bestTokens),
       score,
     });
+    // Keep enough independent passages without filling the shortlist with
+    // two- and three-verse windows surrounding the same exact verse.
+    results.sort((a, b) => b.score - a.score ||
+      (a.endVerse ?? a.verse) - a.verse - ((b.endVerse ?? b.verse) - b.verse));
+    const distinct = results.filter((candidate, candidateIndex) => !results.slice(0, candidateIndex).some((best) =>
+      best.book === candidate.book && best.chapter === candidate.chapter &&
+      candidate.verse <= best.verse && (candidate.endVerse ?? candidate.verse) >= (best.endVerse ?? best.verse),
+    ));
+    results.splice(0, results.length, ...distinct.slice(0, limit));
+    cutoff = results.length >= limit ? Math.max(minScore, results[results.length - 1].score) : minScore;
   }
 
   results.sort((a, b) => b.score - a.score);
@@ -835,24 +1239,37 @@ async function searchBibleInTranslation(
 }
 
 /**
- * Keyword search across the entire Bible.
+ * Keyword search across the Bible, or inside an optional book/chapter scope.
  * Returns up to `limit` results.
  */
 export async function searchBibleRanked(
   query: string,
   translation: BibleTranslation = "KJV",
-  limit = 50
+  limit = 50,
+  scope?: BibleSearchScope,
+  minScore = 0.42,
 ): Promise<RankedSearchResult[]> {
-  if (!query.trim()) return [];
+  if (!query.trim() || limit <= 0) return [];
 
   const selectedTranslation = translation.toUpperCase() as BibleTranslation;
-  const primaryResults = await searchBibleInTranslation(query, selectedTranslation, limit);
+  const cacheKey = JSON.stringify([selectedTranslation, normalizeSearchText(query), limit, scope?.book, scope?.chapter, minScore]);
+  const cached = rankedSearchCache.get(cacheKey);
+  if (cached) return cached.map((result) => ({ ...result }));
+  const signals = buildBibleSearchSignals(query);
+  const primaryResults = await searchBibleInTranslation(
+    query,
+    selectedTranslation,
+    limit,
+    scope,
+    minScore,
+    signals,
+  );
   const shouldSearchKjv =
     selectedTranslation !== "KJV" &&
     (primaryResults.length === 0 || primaryResults[0].score < 0.78);
 
   const fallbackResults = shouldSearchKjv
-    ? await searchBibleInTranslation(query, "KJV", limit)
+    ? await searchBibleInTranslation(query, "KJV", limit, scope, minScore, signals)
     : [];
 
   const merged = [...primaryResults, ...fallbackResults]
@@ -873,15 +1290,20 @@ export async function searchBibleRanked(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
-  return merged;
+  // Bound memory during long sermons. Repeated ASR interim/final revisions
+  // should reuse their answers instead of re-running the same search.
+  if (rankedSearchCache.size >= 32) rankedSearchCache.delete(rankedSearchCache.keys().next().value!);
+  rankedSearchCache.set(cacheKey, merged);
+  return merged.map((result) => ({ ...result }));
 }
 
 export async function searchBible(
   query: string,
   translation: BibleTranslation = "KJV",
-  limit = 50
+  limit = 50,
+  scope?: BibleSearchScope,
 ): Promise<SearchResult[]> {
-  const merged = await searchBibleRanked(query, translation, limit);
+  const merged = await searchBibleRanked(query, translation, limit, scope);
   return merged.map(({ score: _score, ...result }) => result);
 }
 
@@ -920,6 +1342,10 @@ export async function getBibleCorpus(
 
   const data = await loadTranslation(translation);
   const entries: BibleCorpusEntry[] = [];
+  // A microphone preload and the first transcript can arrive together.
+  // Another caller may have built the corpus while this one awaited data.
+  const loaded = corpusCache.get(key);
+  if (loaded) return loaded;
 
   for (const book of BIBLE_BOOKS) {
     const bookData = data[book];

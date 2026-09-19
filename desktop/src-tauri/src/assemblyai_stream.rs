@@ -21,12 +21,13 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, StreamConfig};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::{interval, timeout, MissedTickBehavior};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
@@ -41,7 +42,110 @@ const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
 const REALTIME_MODEL: &str = "universal-3-5-pro";
 const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
-const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, and worship phrases.";
+const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
+const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
+
+// Bible vocabulary boosts recognition without guessing a book in the parser.
+const REALTIME_KEYTERMS: &[&str] = &[
+    "Genesis",
+    "Exodus",
+    "Leviticus",
+    "Numbers",
+    "Deuteronomy",
+    "Joshua",
+    "Judges",
+    "Ruth",
+    "1 Samuel",
+    "2 Samuel",
+    "1 Kings",
+    "2 Kings",
+    "1 Chronicles",
+    "2 Chronicles",
+    "Ezra",
+    "Nehemiah",
+    "Esther",
+    "Job",
+    "Psalms",
+    "Proverbs",
+    "Ecclesiastes",
+    "Song of Solomon",
+    "Isaiah",
+    "Jeremiah",
+    "Lamentations",
+    "Ezekiel",
+    "Daniel",
+    "Hosea",
+    "Joel",
+    "Amos",
+    "Obadiah",
+    "Jonah",
+    "Micah",
+    "Nahum",
+    "Habakkuk",
+    "Zephaniah",
+    "Haggai",
+    "Zechariah",
+    "Malachi",
+    "Matthew",
+    "Mark",
+    "Luke",
+    "John",
+    "Acts",
+    "Romans",
+    "1 Corinthians",
+    "2 Corinthians",
+    "Galatians",
+    "Ephesians",
+    "Philippians",
+    "Colossians",
+    "1 Thessalonians",
+    "2 Thessalonians",
+    "1 Timothy",
+    "2 Timothy",
+    "Titus",
+    "Philemon",
+    "Hebrews",
+    "James",
+    "1 Peter",
+    "2 Peter",
+    "1 John",
+    "2 John",
+    "3 John",
+    "Jude",
+    "Revelation",
+    "First Samuel",
+    "Second Samuel",
+    "First Kings",
+    "Second Kings",
+    "First Chronicles",
+    "Second Chronicles",
+    "First Corinthians",
+    "Second Corinthians",
+    "First Thessalonians",
+    "Second Thessalonians",
+    "First Timothy",
+    "Second Timothy",
+    "First Peter",
+    "Second Peter",
+    "First John",
+    "Second John",
+    "Third John",
+    "First Cor",
+    "Second Cor",
+    "First Thess",
+    "Second Thess",
+    "First Tim",
+    "Second Tim",
+    "First Sam",
+    "Second Sam",
+    "First Chron",
+    "Second Chron",
+];
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -56,20 +160,23 @@ struct RealtimeProfile {
     min_turn_silence_ms: u32,
     max_turn_silence_ms: u32,
     interruption_delay_ms: u32,
-    force_endpoint_min_words: Option<usize>,
-    force_endpoint_cooldown_ms: u64,
 }
 
 fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
     match detection_speed {
+        Some("sharp") => RealtimeProfile {
+            label: "sharp",
+            realtime_mode: "min_latency",
+            min_turn_silence_ms: 200,
+            max_turn_silence_ms: 1_000,
+            interruption_delay_ms: 0,
+        },
         Some("fast") => RealtimeProfile {
             label: "fast",
             realtime_mode: "min_latency",
             min_turn_silence_ms: 100,
             max_turn_silence_ms: 700,
             interruption_delay_ms: 0,
-            force_endpoint_min_words: Some(8),
-            force_endpoint_cooldown_ms: 1_200,
         },
         Some("accurate") => RealtimeProfile {
             label: "accurate",
@@ -77,8 +184,6 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
             min_turn_silence_ms: 700,
             max_turn_silence_ms: 1_800,
             interruption_delay_ms: 500,
-            force_endpoint_min_words: Some(32),
-            force_endpoint_cooldown_ms: 5_000,
         },
         _ => RealtimeProfile {
             label: "balanced",
@@ -86,8 +191,6 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
             min_turn_silence_ms: 300,
             max_turn_silence_ms: 1_200,
             interruption_delay_ms: 250,
-            force_endpoint_min_words: Some(14),
-            force_endpoint_cooldown_ms: 2_500,
         },
     }
 }
@@ -95,24 +198,24 @@ fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
 /// Managed state for the AssemblyAI realtime STT capture pipeline.
 pub struct AssemblyAiStreamState {
     /// cpal mic stream — dropped to stop capture.
-    stream: Mutex<StreamBox>,
+    stream: Arc<Mutex<StreamBox>>,
     /// Sends `()` to signal the WS forwarding task to shut down.
     shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     /// Sends runtime timing-profile changes to the WS forwarding task.
     profile_tx: Mutex<Option<mpsc::Sender<RealtimeProfile>>>,
     /// Handle for the async WS task so we can await / abort it.
     task_handle: Mutex<Option<JoinHandle<()>>>,
-    is_streaming: Mutex<bool>,
+    is_streaming: Arc<Mutex<bool>>,
 }
 
 impl Default for AssemblyAiStreamState {
     fn default() -> Self {
         Self {
-            stream: Mutex::new(StreamBox(None)),
+            stream: Arc::new(Mutex::new(StreamBox(None))),
             shutdown_tx: Mutex::new(None),
             profile_tx: Mutex::new(None),
             task_handle: Mutex::new(None),
-            is_streaming: Mutex::new(false),
+            is_streaming: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -147,18 +250,11 @@ struct RealtimeWord {
 struct RealtimeTranscriptMessage {
     #[serde(rename = "type")]
     message_type: String,
-    turn_order: Option<u64>,
     transcript: Option<String>,
     end_of_turn: Option<bool>,
     words: Option<Vec<RealtimeWord>>,
     error: Option<String>,
     message: Option<String>,
-}
-
-struct RealtimeTurnInfo {
-    turn_order: Option<u64>,
-    end_of_turn: bool,
-    word_count: usize,
 }
 
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
@@ -192,8 +288,12 @@ pub async fn start_assemblyai_stream(
     }
 
     // Channel: audio capture → WS sender task.
-    // Capacity 64 buffers ≈ ~6 s of 100 ms chunks — enough headroom.
-    let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(64);
+    // Each item is 50 ms, so 128 items provide about 6.4 s of headroom.
+    // The ready gate below prevents startup audio from consuming this queue
+    // while the WebSocket is still negotiating.
+    let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(128);
+    let audio_ready = Arc::new(AtomicBool::new(false));
+    let audio_drop_count = Arc::new(AtomicU32::new(0));
     let (profile_tx, profile_rx) = mpsc::channel::<RealtimeProfile>(4);
     let profile = realtime_profile(detection_speed.as_deref());
 
@@ -242,6 +342,8 @@ pub async fn start_assemblyai_stream(
 
     let app_clone = app.clone();
     let audio_tx_clone = audio_tx.clone();
+    let audio_ready_clone = Arc::clone(&audio_ready);
+    let audio_drop_count_clone = Arc::clone(&audio_drop_count);
 
     // Accumulator lives inside the audio callback closure.
     let stream = match sample_format {
@@ -255,6 +357,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -272,6 +376,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -292,6 +398,8 @@ pub async fn start_assemblyai_stream(
                     target_rate,
                     chunk_target,
                     &audio_tx_clone,
+                    &audio_ready_clone,
+                    &audio_drop_count_clone,
                     &app_clone,
                 );
             },
@@ -326,17 +434,34 @@ pub async fn start_assemblyai_stream(
 
     // ── 2. Spawn the AssemblyAI realtime STT task ─────────────────────────
     let realtime_app = app.clone();
+    let task_stream = Arc::clone(&state.stream);
+    let task_is_streaming = Arc::clone(&state.is_streaming);
+    let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
-        if let Err(error) = run_realtime_transcriber(
+        let result = run_realtime_transcriber(
             realtime_app.clone(),
             api_key,
             audio_rx,
             shutdown_rx,
             profile_rx,
             profile,
+            Arc::clone(&task_audio_ready),
+            Arc::clone(&audio_drop_count),
         )
-        .await
-        {
+        .await;
+
+        task_audio_ready.store(false, Ordering::Release);
+
+        // A network close can end the WebSocket without an explicit stop command.
+        // Release the microphone and start guard so the UI can reconnect immediately.
+        if let Ok(mut stream) = task_stream.lock() {
+            stream.0 = None;
+        }
+        if let Ok(mut is_streaming) = task_is_streaming.lock() {
+            *is_streaming = false;
+        }
+
+        if let Err(error) = result {
             eprintln!("[AssemblyAI Realtime] Stream failed: {error}");
             let _ = realtime_app.emit(
                 "assemblyai-status",
@@ -374,6 +499,8 @@ async fn run_realtime_transcriber(
     mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
     mut profile_rx: mpsc::Receiver<RealtimeProfile>,
     initial_profile: RealtimeProfile,
+    audio_ready: Arc<AtomicBool>,
+    audio_drop_count: Arc<AtomicU32>,
 ) -> Result<(), String> {
     let endpoint = build_realtime_endpoint(&initial_profile);
     let mut request = endpoint
@@ -384,8 +511,9 @@ async fn run_realtime_transcriber(
         .map_err(|e| format!("Invalid AssemblyAI API key header: {e}"))?;
     request.headers_mut().insert("Authorization", auth);
 
-    let (ws_stream, _) = connect_async(request)
+    let (ws_stream, _) = timeout(WS_CONNECT_TIMEOUT, connect_async(request))
         .await
+        .map_err(|_| "Realtime WebSocket connection timed out".to_string())?
         .map_err(|e| format!("Realtime WebSocket connection failed: {e}"))?;
     let (mut write, mut read) = ws_stream.split();
 
@@ -395,72 +523,92 @@ async fn run_realtime_transcriber(
             status: "connected".to_string(),
         },
     );
+    // cpal starts before this task so device startup stays responsive, but no
+    // samples are accepted until AssemblyAI has completed the WS handshake.
+    audio_ready.store(true, Ordering::Release);
     println!("[AssemblyAI Realtime] WebSocket connected");
 
-    let mut profile = initial_profile;
-    let mut forced_turn_order: Option<u64> = None;
-    let mut last_force_endpoint_at: Option<Instant> = None;
+    let mut last_server_activity = Instant::now();
+    let mut heartbeat = interval(WS_HEARTBEAT_INTERVAL);
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    // `interval` fires immediately on its first tick; consume that tick so
+    // the first heartbeat is sent after the connection has had time to settle.
+    heartbeat.tick().await;
 
     loop {
+        if audio_drop_count.load(Ordering::Relaxed) >= MAX_AUDIO_QUEUE_DROPS {
+            return Err(
+                "Realtime WebSocket fell behind the microphone; restarting the speech connection."
+                    .to_string(),
+            );
+        }
+
         tokio::select! {
             _ = &mut shutdown_rx => {
                 println!("[AssemblyAI Realtime] Shutdown signal received");
                 let terminate = serde_json::json!({ "type": "Terminate" }).to_string();
-                let _ = write.send(Message::Text(terminate.into())).await;
-                let _ = write.close().await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.send(Message::Text(terminate.into()))).await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.close()).await;
                 break;
             }
             maybe_pcm = audio_rx.recv() => {
                 let Some(pcm_bytes) = maybe_pcm else {
                     break;
                 };
-                write
-                    .send(Message::Binary(pcm_bytes.into()))
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Binary(pcm_bytes.into())),
+                )
                     .await
+                    .map_err(|_| "Realtime WebSocket audio send timed out".to_string())?
                     .map_err(|e| format!("Failed to send realtime audio: {e}"))?;
             }
             maybe_profile = profile_rx.recv() => {
                 if let Some(next_profile) = maybe_profile {
-                    send_realtime_profile_update(&mut write, &next_profile).await?;
-                    profile = next_profile;
-                    forced_turn_order = None;
-                    last_force_endpoint_at = None;
-                    println!("[AssemblyAI Realtime] Profile updated to {}", profile.label);
+                    timeout(
+                        WS_WRITE_TIMEOUT,
+                        send_realtime_profile_update(&mut write, &next_profile),
+                    )
+                        .await
+                        .map_err(|_| "Realtime WebSocket profile update timed out".to_string())??;
+                    println!("[AssemblyAI Realtime] Profile updated to {}", next_profile.label);
                 }
+            }
+            _ = heartbeat.tick() => {
+                if last_server_activity.elapsed() > WS_IDLE_TIMEOUT {
+                    return Err(format!(
+                        "Realtime WebSocket stalled: no server response for {} seconds",
+                        WS_IDLE_TIMEOUT.as_secs(),
+                    ));
+                }
+
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Ping(Vec::new().into())),
+                )
+                    .await
+                    .map_err(|_| "Realtime WebSocket heartbeat timed out".to_string())?
+                    .map_err(|e| format!("Failed to send realtime heartbeat: {e}"))?;
             }
             maybe_message = read.next() => {
                 let Some(message) = maybe_message else {
                     break;
                 };
+                last_server_activity = Instant::now();
                 match message {
                     Ok(Message::Text(text)) => {
-                        if let Some(turn) = handle_realtime_message(&app, text.as_ref())? {
-                            maybe_force_endpoint(
-                                &mut write,
-                                &turn,
-                                &profile,
-                                &mut forced_turn_order,
-                                &mut last_force_endpoint_at,
-                            )
-                            .await?;
-                        }
+                        handle_realtime_message(&app, text.as_ref())?;
                     }
                     Ok(Message::Binary(bytes)) => {
                         if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
-                            if let Some(turn) = handle_realtime_message(&app, text)? {
-                                maybe_force_endpoint(
-                                    &mut write,
-                                    &turn,
-                                    &profile,
-                                    &mut forced_turn_order,
-                                    &mut last_force_endpoint_at,
-                                )
-                                .await?;
-                            }
+                            handle_realtime_message(&app, text)?;
                         }
                     }
                     Ok(Message::Ping(payload)) => {
-                        let _ = write.send(Message::Pong(payload)).await;
+                        timeout(WS_WRITE_TIMEOUT, write.send(Message::Pong(payload)))
+                            .await
+                            .map_err(|_| "Realtime WebSocket pong timed out".to_string())?
+                            .map_err(|e| format!("Failed to send realtime pong: {e}"))?;
                     }
                     Ok(Message::Close(frame)) => {
                         if let Some(frame) = frame {
@@ -497,6 +645,10 @@ fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
         ("min_turn_silence", profile.min_turn_silence_ms.to_string()),
         ("max_turn_silence", profile.max_turn_silence_ms.to_string()),
         ("prompt", REALTIME_PROMPT.to_string()),
+        (
+            "keyterms_prompt",
+            serde_json::json!(REALTIME_KEYTERMS).to_string(),
+        ),
     ];
 
     let query = params
@@ -519,6 +671,7 @@ where
     let update = serde_json::json!({
         "type": "UpdateConfiguration",
         "prompt": REALTIME_PROMPT,
+        "keyterms_prompt": REALTIME_KEYTERMS,
         "min_turn_silence": profile.min_turn_silence_ms,
         "max_turn_silence": profile.max_turn_silence_ms,
     })
@@ -530,85 +683,32 @@ where
         .map_err(|e| format!("Failed to update realtime profile: {e}"))
 }
 
-async fn maybe_force_endpoint<S>(
-    write: &mut S,
-    turn: &RealtimeTurnInfo,
-    profile: &RealtimeProfile,
-    forced_turn_order: &mut Option<u64>,
-    last_force_endpoint_at: &mut Option<Instant>,
-) -> Result<(), String>
-where
-    S: SinkExt<Message> + Unpin,
-    <S as futures_util::Sink<Message>>::Error: std::fmt::Display,
-{
-    if turn.end_of_turn {
-        if turn.turn_order.is_some() && turn.turn_order == *forced_turn_order {
-            *forced_turn_order = None;
-        }
-        return Ok(());
+// Do not force a turn to end after a word count. A partial may stop inside
+// a book name or number ("seventeen" was finalized as "seven" in live tests).
+// Let the configured silence detection determine when the speech is complete.
+fn realtime_transcript_payload(message: &RealtimeTranscriptMessage) -> Option<TranscriptPayload> {
+    let text = message.transcript.as_deref()?.trim();
+    if text.is_empty() {
+        return None;
     }
-
-    let Some(force_endpoint_min_words) = profile.force_endpoint_min_words else {
-        return Ok(());
-    };
-
-    if turn.word_count < force_endpoint_min_words {
-        return Ok(());
-    }
-
-    if let (Some(current), Some(forced)) = (turn.turn_order, *forced_turn_order) {
-        if current == forced {
-            return Ok(());
-        }
-    }
-
-    if last_force_endpoint_at
-        .map(|instant| {
-            instant.elapsed() < Duration::from_millis(profile.force_endpoint_cooldown_ms)
-        })
-        .unwrap_or(false)
-    {
-        return Ok(());
-    }
-
-    let force_endpoint = serde_json::json!({ "type": "ForceEndpoint" }).to_string();
-    write
-        .send(Message::Text(force_endpoint.into()))
-        .await
-        .map_err(|e| format!("Failed to force realtime endpoint: {e}"))?;
-
-    *forced_turn_order = turn.turn_order;
-    *last_force_endpoint_at = Some(Instant::now());
-    Ok(())
+    let (audio_start, audio_end) = extract_realtime_word_range(&message.words);
+    Some(TranscriptPayload {
+        text: text.to_string(),
+        end_of_turn: message.end_of_turn.unwrap_or(false),
+        audio_start,
+        audio_end,
+    })
 }
 
-fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<Option<RealtimeTurnInfo>, String> {
+fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<(), String> {
     let message: RealtimeTranscriptMessage = serde_json::from_str(raw)
         .map_err(|e| format!("Failed to parse realtime message: {e}: {raw}"))?;
 
     match message.message_type.as_str() {
         "Turn" => {
-            let transcript = message.transcript.unwrap_or_default();
-            let transcript = transcript.trim();
-            if transcript.is_empty() {
-                return Ok(None);
+            if let Some(payload) = realtime_transcript_payload(&message) {
+                let _ = app.emit("assemblyai-transcript", payload);
             }
-
-            let (audio_start, audio_end) = extract_realtime_word_range(&message.words);
-            let end_of_turn = message.end_of_turn.unwrap_or(false);
-            let word_count = transcript.split_whitespace().count();
-            let payload = TranscriptPayload {
-                text: transcript.to_string(),
-                end_of_turn,
-                audio_start,
-                audio_end,
-            };
-            let _ = app.emit("assemblyai-transcript", payload);
-            return Ok(Some(RealtimeTurnInfo {
-                turn_order: message.turn_order,
-                end_of_turn,
-                word_count,
-            }));
         }
         "Begin" => {
             let _ = app.emit(
@@ -641,7 +741,7 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<Option<Realtime
         _ => {}
     }
 
-    Ok(None)
+    Ok(())
 }
 
 fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) {
@@ -762,12 +862,22 @@ fn process_and_send_f32(
     target_rate: u32,
     chunk_target: usize,
     audio_tx: &mpsc::Sender<Vec<u8>>,
+    audio_ready: &AtomicBool,
+    audio_drop_count: &AtomicU32,
     app: &AppHandle,
 ) {
     use std::cell::RefCell;
     thread_local! {
         static ACCUMULATOR: RefCell<Vec<f32>> = RefCell::new(Vec::with_capacity(8192));
         static STATE: RefCell<AudioState> = RefCell::new(AudioState::new());
+    }
+
+    // Do not fill the bounded queue while the WebSocket is connecting. Clear
+    // any callback-local state so a reconnect starts with fresh audio.
+    if !audio_ready.load(Ordering::Acquire) {
+        ACCUMULATOR.with(|acc| acc.borrow_mut().clear());
+        STATE.with(|state| *state.borrow_mut() = AudioState::new());
+        return;
     }
 
     // Mix down to mono
@@ -860,7 +970,11 @@ fn process_and_send_f32(
                     })
                     .collect();
 
-                let _ = audio_tx.try_send(pcm16_bytes);
+                if let Err(tokio::sync::mpsc::error::TrySendError::Full(_)) =
+                    audio_tx.try_send(pcm16_bytes)
+                {
+                    audio_drop_count.fetch_add(1, Ordering::Relaxed);
+                }
                 let _ = app.emit("assemblyai-audio-level", LevelPayload { level });
             }
         });
@@ -925,4 +1039,63 @@ fn blackman_window(n: i32, half_len: i32) -> f32 {
     let n_f = (n_f + half_len as f32) / (2.0 * half_len as f32); // normalize to [0, 1]
     0.42 - 0.5 * (2.0 * std::f32::consts::PI * n_f).cos()
         + 0.08 * (4.0 * std::f32::consts::PI * n_f).cos()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_formatted_partial_reference_stays_provisional() {
+        let message: RealtimeTranscriptMessage = serde_json::from_value(serde_json::json!({
+            "type": "Turn",
+            "transcript": "Second Corinthians chapter five verse seven",
+            "end_of_turn": false,
+            "turn_is_formatted": true,
+            "words": [{ "start": 0, "end": 1500 }]
+        }))
+        .unwrap();
+        let payload = realtime_transcript_payload(&message).unwrap();
+        assert!(!payload.end_of_turn);
+        assert_eq!(payload.audio_end, 1500.0);
+    }
+
+    #[test]
+    fn a_completed_reference_preserves_the_providers_number() {
+        let message: RealtimeTranscriptMessage = serde_json::from_value(serde_json::json!({
+            "type": "Turn",
+            "transcript": " Second Corinthians chapter 5 verse 17. ",
+            "end_of_turn": true
+        }))
+        .unwrap();
+        let payload = realtime_transcript_payload(&message).unwrap();
+        assert!(payload.end_of_turn);
+        assert_eq!(payload.text, "Second Corinthians chapter 5 verse 17.");
+    }
+
+    #[test]
+    fn all_profiles_send_the_complete_bible_vocabulary_within_provider_limits() {
+        let books: serde_json::Value =
+            serde_json::from_str(include_str!("../../public/bible-kjv.json")).unwrap();
+        for speed in ["sharp", "fast", "balanced", "accurate"] {
+            let endpoint = build_realtime_endpoint(&realtime_profile(Some(speed)));
+            let url = reqwest::Url::parse(&endpoint).unwrap();
+            let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+            let terms: Vec<String> = serde_json::from_str(&params["keyterms_prompt"]).unwrap();
+            assert!(terms.len() <= 100);
+            assert!(terms.iter().all(|term| term.chars().count() <= 50));
+            for book in books.as_object().unwrap().keys() {
+                assert!(terms.contains(book), "Missing Bible book: {book}");
+            }
+            for alias in [
+                "First Cor",
+                "Second Cor",
+                "First Kings",
+                "Second Kings",
+                "Third John",
+            ] {
+                assert!(terms.iter().any(|term| term == alias));
+            }
+        }
+    }
 }

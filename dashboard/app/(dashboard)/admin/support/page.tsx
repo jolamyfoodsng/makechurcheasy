@@ -12,6 +12,10 @@ import {
   Lightbulb,
 } from "lucide-react";
 
+const SUPPORT_EMAIL = "support@makechurcheazy.com";
+const COMMUNITY_URL = "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t";
+const DOCS_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/wiki";
+
 export default function AdminSupportPage() {
   const t = useTranslations();
 
@@ -20,21 +24,21 @@ export default function AdminSupportPage() {
       icon: Mail,
       title: t("admin.support.emailSupport"),
       description: t("admin.support.emailDescription"),
-      action: "mailto:support@makechurcheasy.com",
+      action: `mailto:${SUPPORT_EMAIL}`,
       iconColor: "bg-sky-500/15 text-sky-400",
     },
     {
       icon: MessageSquare,
       title: t("admin.support.liveChat"),
       description: t("admin.support.liveChatDescription"),
-      action: "#",
+      action: COMMUNITY_URL,
       iconColor: "bg-emerald-500/15 text-emerald-400",
     },
     {
       icon: BookOpen,
       title: t("admin.support.documentation"),
       description: t("admin.support.documentationDescription"),
-      action: "#",
+      action: DOCS_URL,
       iconColor: "bg-violet-500/15 text-violet-400",
     },
   ];
@@ -44,18 +48,21 @@ export default function AdminSupportPage() {
       icon: Bug,
       title: t("admin.support.reportBug"),
       description: t("admin.support.reportBugDescription"),
+      action: `mailto:${SUPPORT_EMAIL}?subject=Bug%20Report%20-%20MakeChurchEasy`,
       iconColor: "bg-red-500/15 text-red-400",
     },
     {
       icon: Lightbulb,
       title: t("admin.support.featureRequest"),
       description: t("admin.support.featureRequestDescription"),
+      action: `mailto:${SUPPORT_EMAIL}?subject=Feature%20Request%20-%20MakeChurchEasy`,
       iconColor: "bg-amber-500/15 text-amber-400",
     },
     {
       icon: HelpCircle,
       title: t("admin.support.faq"),
       description: t("admin.support.faqDescription"),
+      action: DOCS_URL,
       iconColor: "bg-slate-500/15 text-slate-400",
     },
   ];
@@ -80,6 +87,8 @@ export default function AdminSupportPage() {
             <a
               key={channel.title}
               href={channel.action}
+              target={channel.action.startsWith("http") ? "_blank" : undefined}
+              rel={channel.action.startsWith("http") ? "noopener noreferrer" : undefined}
               className="group rounded-2xl bg-gray-900 border border-slate-700 p-6 hover:border-slate-600 transition-colors"
             >
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${channel.iconColor}`}>
@@ -107,8 +116,11 @@ export default function AdminSupportPage() {
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
-              <button
+              <a
                 key={action.title}
+                href={action.action}
+                target={action.action.startsWith("http") ? "_blank" : undefined}
+                rel={action.action.startsWith("http") ? "noopener noreferrer" : undefined}
                 className="flex items-start gap-4 p-4 rounded-xl bg-gray-800 border border-slate-700 hover:border-slate-600 transition-colors text-left"
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${action.iconColor}`}>
@@ -120,7 +132,7 @@ export default function AdminSupportPage() {
                   </h3>
                   <p className="text-xs text-slate-400">{action.description}</p>
                 </div>
-              </button>
+              </a>
             );
           })}
         </div>

@@ -5,10 +5,64 @@ import ministrySource from "./DockMinistryTab.tsx?raw";
 import lowerThirdOverlayHtml from "../../../public/lower-third-overlay.html?raw";
 
 describe("Dock lower-third animate out wiring", () => {
-  it("passes the prepared blanked URL to OBS instead of discarding it", () => {
+  it("routes animate out through the dock client instead of discarding the prepared URL", () => {
     expect(editorSource).toContain("onAnimateOut(url)");
     expect(ministrySource).toContain("animateLowerThirdOverlayUrlOut(url, exitDuration)");
     expect(ministrySource).not.toContain("onAnimateOut={async (url) => {\n                      void url;");
+  });
+
+  it("uses an OBS browser event for lower-third exit before falling back to URL updates", () => {
+    const methodStart = dockObsClientSource.indexOf("async animateLowerThirdOverlayUrlOut(");
+    const methodEnd = dockObsClientSource.indexOf("\n  // ── Worship lyrics overlay ──", methodStart);
+    const methodSource = dockObsClientSource.slice(methodStart, methodEnd);
+    const eventIndex = methodSource.indexOf('emitBrowserOverlayPacket("lower-third"');
+    const fallbackIndex = methodSource.indexOf('buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "")');
+    expect(eventIndex).toBeGreaterThan(-1);
+    expect(fallbackIndex).toBeGreaterThan(-1);
+    expect(eventIndex).toBeLessThan(fallbackIndex);
+    expect(methodSource).toContain("_url: string");
+  });
+
+  it("replaces a live Ministry lower third without reloading the OBS browser URL", () => {
+    const replaceIndex = ministrySource.indexOf("await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);");
+    const firstPushIndex = ministrySource.indexOf("await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);");
+    expect(replaceIndex).toBeGreaterThan(-1);
+    expect(firstPushIndex).toBeGreaterThan(-1);
+    expect(replaceIndex).toBeLessThan(firstPushIndex);
+    expect(dockObsClientSource).toContain("async replaceLiveLowerThirdOverlayUrl");
+    expect(dockObsClientSource).toContain('emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss)');
+    expect(dockObsClientSource).toContain('inputSettings: { url, css: overlayCss }');
+  });
+
+  it("stages the Ministry size until the user presses Go Live", () => {
+    expect(editorSource).toContain("const url = buildOverlayUrl(");
+    expect(editorSource).toContain("size,");
+    expect(editorSource).not.toContain("pendingLiveSizeUpdateRef");
+    expect(editorSource).not.toContain("latestHandleSendRef.current()");
+    expect(ministrySource).not.toContain("live={ltLive}");
+    expect(ministrySource).toContain("writeNativeDockSetting(MINISTRY_LT_SIZE_STORAGE_KEY, s)");
+  });
+
+  it("keeps Appearance behind an accessible collapsible section", () => {
+    expect(editorSource).toContain("const [appearanceOpen, setAppearanceOpen] = useState(false);");
+    expect(editorSource).toContain("aria-expanded={appearanceOpen}");
+    expect(editorSource).toContain("aria-controls={LT_APPEARANCE_PANEL_ID}");
+    expect(editorSource).toContain("id={LT_APPEARANCE_PANEL_ID}");
+    expect(editorSource).toContain("{appearanceOpen && (");
+  });
+
+  it("uses compact visible Ministry labels while keeping full accessible labels", () => {
+    expect(ministrySource).toContain('t("ministry.tickerShort", "Ticker")');
+    expect(ministrySource).toContain('t("ministry.lowerThirdsShort", "Low")');
+    expect(ministrySource).toContain('t("ministry.timeShort", "Time")');
+    expect(ministrySource).toContain('aria-label={t("ministry.lowerThirds")}');
+    expect(ministrySource).toContain('aria-label={t("ministry.time", "Time")}');
+  });
+
+  it("keeps Bible verse themes in the Bible tab instead of mixing them into Low", () => {
+    expect(ministrySource).not.toContain("loadDockFavoriteBibleThemes");
+    expect(ministrySource).not.toContain('entries.push({ kind: "bible"');
+    expect(ministrySource).toContain("For Scripture, choose the lower-third theme in Bible.");
   });
 
   it("keeps theme-defined exit animations as the default", () => {
@@ -16,17 +70,26 @@ describe("Dock lower-third animate out wiring", () => {
   });
 
   it("injects theme CSS before blanked/out rendering", () => {
-    const cssInjectionIndex = lowerThirdOverlayHtml.indexOf("cssEl.textContent = compactEntryMotionCss(css);");
+    const cssInjectionIndex = lowerThirdOverlayHtml.indexOf("injectThemeCss(data);");
     const blankedIndex = lowerThirdOverlayHtml.indexOf("if (blanked) {");
     expect(cssInjectionIndex).toBeGreaterThan(-1);
     expect(blankedIndex).toBeGreaterThan(-1);
     expect(cssInjectionIndex).toBeLessThan(blankedIndex);
   });
 
+  it("listens for OBS browser lower-third exit events without reloading the browser source", () => {
+    expect(lowerThirdOverlayHtml).toContain('window.addEventListener("mce-overlay-packet", readFromObsBrowserEvent)');
+    expect(lowerThirdOverlayHtml).toContain('if (packet.action === "animate-out")');
+    expect(lowerThirdOverlayHtml).toContain("if (isExiting) return true;");
+    expect(lowerThirdOverlayHtml).toContain("pendingThemePayload");
+    expect(lowerThirdOverlayHtml).toContain("readCssOverlayData");
+    expect(lowerThirdOverlayHtml).toContain('writeRenderAck(packet, "lower-third")');
+  });
+
   it("keeps the source visible until the exit duration completes", () => {
     expect(dockObsClientSource).toContain("async animateLowerThirdOverlayUrlOut");
     expect(dockObsClientSource).toContain("sceneItemEnabled: true");
-    expect(dockObsClientSource).toContain("await this.sleep(waitMs)");
+    expect(dockObsClientSource).toContain("await this.sleep(delivered ? waitMs : 0)");
     expect(dockObsClientSource).toContain("await this.hideOverlaySource(sceneName, resources.ltSource)");
   });
 });

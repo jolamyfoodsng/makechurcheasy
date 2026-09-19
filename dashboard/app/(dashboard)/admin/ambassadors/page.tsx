@@ -43,6 +43,21 @@ interface AmbassadorsResponse {
   ambassadors: AmbassadorEntry[];
 }
 
+function isAmbassadorActive(
+  ambassador: AmbassadorEntry["ambassador"],
+  nowMs: number = Date.now(),
+): boolean {
+  if (!ambassador.active) return false;
+  if (!ambassador.expiresAt) return true;
+  const expiresAtMs = new Date(ambassador.expiresAt).getTime();
+  return !Number.isFinite(expiresAtMs) || expiresAtMs > nowMs;
+}
+
+function countActiveAmbassadors(ambassadors: AmbassadorEntry[]): number {
+  const nowMs = Date.now();
+  return ambassadors.filter((a) => isAmbassadorActive(a.ambassador, nowMs)).length;
+}
+
 function SkeletonBlock({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-2xl bg-gray-800 ${className}`} />;
 }
@@ -117,7 +132,7 @@ export default function AdminAmbassadorsPage() {
             }
             : a
         );
-        const active = ambassadors.filter((a) => new Date(a.ambassador.expiresAt) > new Date()).length;
+        const active = countActiveAmbassadors(ambassadors);
         return {
           stats: { total: ambassadors.length, active, expired: ambassadors.length - active },
           ambassadors,
@@ -146,7 +161,7 @@ export default function AdminAmbassadorsPage() {
         const ambassadors = prev.ambassadors.map((a) =>
           a.id === id ? { ...a, ambassador: { ...a.ambassador, active: false } } : a
         );
-        const active = ambassadors.filter((a) => a.ambassador.active).length;
+        const active = countActiveAmbassadors(ambassadors);
         return {
           stats: { total: ambassadors.length, active, expired: ambassadors.length - active },
           ambassadors,
@@ -163,7 +178,7 @@ export default function AdminAmbassadorsPage() {
 
   const now = Date.now();
   const filtered = (data?.ambassadors || []).filter((a) => {
-    const isActive = new Date(a.ambassador.expiresAt).getTime() > now;
+    const isActive = isAmbassadorActive(a.ambassador, now);
     const matchesStatus =
       statusFilter === "all" ||
       (statusFilter === "active" && isActive) ||
@@ -328,7 +343,7 @@ export default function AdminAmbassadorsPage() {
             </thead>
             <tbody>
               {filtered.map((amb) => {
-                const isActive = new Date(amb.ambassador.expiresAt).getTime() > now;
+                const isActive = isAmbassadorActive(amb.ambassador, now);
                 return (
                   <tr key={amb.id} className="border-b border-slate-800/60 hover:bg-gray-800/50 transition-colors">
                     <td className="px-4 py-3">

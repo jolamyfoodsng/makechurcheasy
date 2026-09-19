@@ -8,8 +8,8 @@ export interface MediaItem {
   id: string;
   /** Display name, e.g. "Welcome_Loop.mp4" */
   name: string;
-  /** "image" | "video" */
-  type: "image" | "video";
+  /** "image" | "video" | "audio" */
+  type: "image" | "video" | "audio";
   /**
    * Overlay-server URL for preview/playback in the UI, e.g.
    * "http://127.0.0.1:45678/uploads/Welcome_Loop.mp4"
@@ -33,7 +33,7 @@ export interface MediaItem {
   width?: number;
   /** Optional native pixel height */
   height?: number;
-  /** Duration in seconds (videos only) */
+  /** Duration in seconds (videos and audio) */
   durationSec?: number;
   /** File size in bytes */
   fileSize?: number;
@@ -41,10 +41,20 @@ export interface MediaItem {
   mimeType?: string;
   /** ISO date string */
   createdAt: string;
+  /** ISO date string captured when the file was uploaded by a user */
+  uploadedAt?: string;
   /** ISO date string for when a remote-backed asset was saved locally */
   downloadedAt?: string;
-  /** Optional origin marker for remote-backed assets saved locally */
-  source?: "local" | "template-cloudflare";
+  /** Optional origin marker for remote-backed/generated assets saved locally */
+  source?: "local" | "template-cloudflare" | "document-conversion";
+  /** Original document name when this item is a rendered PDF/DOCX/PPTX page. */
+  documentSourceName?: string;
+  /** Stable id shared by all rendered pages from one document import. */
+  documentId?: string;
+  /** 1-based page/slide number when rendered from a document. */
+  documentPageNumber?: number;
+  /** Total rendered pages/slides in the source document. */
+  documentPageCount?: number;
   /** Original remote video URL for revalidation/debugging */
   remoteUrl?: string;
   /** Remote asset id from the source catalog */

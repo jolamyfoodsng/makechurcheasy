@@ -43,9 +43,9 @@ type PlatformKey = "windows" | "macos-silicon" | "macos-intel";
 function getPlatformKey(filename: string): PlatformKey | null {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".exe")) return "windows";
-  if (lower.includes("aarch64")) return "macos-silicon";
-  if (lower.includes("x64")) return "macos-intel";
-  if (lower.endsWith(".dmg")) return "macos-intel";
+  if (lower.includes("aarch64") || lower.includes("arm64")) return "macos-silicon";
+  if (lower.includes("x64") || lower.includes("x86_64")) return "macos-intel";
+  if (lower.endsWith(".dmg")) return "macos-silicon";
   return null;
 }
 
@@ -71,7 +71,6 @@ const PLATFORM_META: Record<PlatformKey, Omit<PlatformDownload, "filename" | "si
     iconColor: "text-blue-700",
     title: "Windows",
     subtitle: "Windows 10 (64-bit) or later",
-    recommended: true,
   },
   "macos-silicon": {
     icon: Command,
@@ -89,7 +88,21 @@ const PLATFORM_META: Record<PlatformKey, Omit<PlatformDownload, "filename" | "si
   },
 };
 
-function deduplicatePlatforms(assets: GitHubAsset[]): PlatformDownload[] {
+function detectClientPlatform(): PlatformKey {
+  if (typeof window === "undefined") return "macos-silicon";
+  const ua = navigator.userAgent;
+  if (/windows/i.test(ua)) return "windows";
+  if (/mac os/i.test(ua)) {
+    const navAny = navigator as any;
+    if (navAny.userAgentData?.architecture?.toLowerCase?.() === "x86") {
+      return "macos-intel";
+    }
+    return "macos-silicon";
+  }
+  return "macos-silicon";
+}
+
+function deduplicatePlatforms(assets: GitHubAsset[], recommendedKey: PlatformKey = "macos-silicon"): PlatformDownload[] {
   const best = new Map<PlatformKey, { asset: GitHubAsset; priority: number }>();
 
   for (const asset of assets) {
@@ -104,6 +117,7 @@ function deduplicatePlatforms(assets: GitHubAsset[]): PlatformDownload[] {
 
   return Array.from(best.entries()).map(([key, { asset }]) => ({
     ...PLATFORM_META[key],
+    recommended: key === recommendedKey,
     filename: asset.name,
     size: "",
   }));
@@ -126,7 +140,8 @@ export default function Downloads() {
       })
       .then((data: GitHubRelease) => {
         setRelease(data);
-        const matched = deduplicatePlatforms(data.assets);
+        const clientPlatform = detectClientPlatform();
+        const matched = deduplicatePlatforms(data.assets, clientPlatform);
         matched.forEach((p) => {
           const asset = data.assets.find((a) => a.name === p.filename);
           if (asset) p.size = formatFileSize(asset.size);

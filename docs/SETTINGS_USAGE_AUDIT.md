@@ -293,7 +293,7 @@ Settings referenced in the audit request but **do not exist** in any schema, typ
 | `ambassador.welcomeSubject` | Not in schema — does not exist |
 | `ambassador.welcomeBody` | Not in schema — does not exist |
 | `ambassador.cooldownDays` | Not in schema — does not exist |
-| `notifications.fromName` | Not in schema — hardcoded as `"support@creatorstudioslabs.stream"` in `emailTemplates.ts` |
+| `notifications.fromName` | Not in schema — defaulted in `emailTemplates.ts` |
 | `notifications.fromEmail` | Not in schema — hardcoded in `emailTemplates.ts` |
 | `notifications.replyToEmail` | Not in schema |
 | `notifications.footerText` | Not in schema |

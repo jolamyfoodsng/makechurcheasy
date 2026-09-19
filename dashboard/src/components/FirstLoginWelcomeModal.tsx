@@ -10,7 +10,7 @@ const WELCOME_KEY = "mce_first_login_welcome_shown";
 
 const STEPS = [
   { key: "completeChurchProfile", icon: Church, route: "/church-profile" },
-  { key: "setupFirstPresentation", icon: Presentation, route: "/presentations" },
+  { key: "setupFirstPresentation", icon: Presentation, route: "/downloads" },
   { key: "connectDevice", icon: Smartphone, route: "/devices" },
   { key: "exploreTutorials", icon: BookOpen, route: "/tutorials" },
 ] as const;

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import {
   deleteUserAccount,
   registerSession,
@@ -21,7 +22,7 @@ interface AuthContextValue {
   verifyTwoFactor: (token: string) => Promise<void>;
   cancelTwoFactor: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; email?: string }>;
-  signUpWithEmail: (email: string, password: string, name: string, churchName: string, country: string) => Promise<{ needsEmailVerification?: boolean; email?: string; existingAccount?: boolean }>;
+  signUpWithEmail: (email: string, password: string, name: string, churchName: string, referralCode?: string) => Promise<{ needsEmailVerification?: boolean; email?: string; existingAccount?: boolean }>;
   signInWithGoogle: (returnUrl?: string) => Promise<boolean>;
   logOut: () => Promise<void>;
   sendVerificationEmail: () => Promise<void>;
@@ -34,11 +35,17 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_OPTIONAL_PATHS = new Set(["/", "/download", "/support", "/tutorials", "/signup"]);
+
+function isAuthOptionalPath(pathname: string | null): boolean {
+  return AUTH_OPTIONAL_PATHS.has(pathname || "/");
+}
 
 async function fetchMongoUser(): Promise<MongoUser | null> {
   try {
     const res = await fetch("/api/auth/status", {
       credentials: "include",
+      cache: "no-store",
     });
     const data = await res.json();
     if (data.authenticated && data.user) {
@@ -69,13 +76,28 @@ function detectBrowser(): string {
   return "Unknown";
 }
 
-function getOrCreateSessionId(): string {
-  let sessionId = localStorage.getItem("mce_session_id");
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    localStorage.setItem("mce_session_id", sessionId);
+function createSessionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
   }
-  return sessionId;
+
+  // Older browsers and restrictive privacy modes may not expose randomUUID.
+  // This identifier is only used to distinguish a browser session.
+  return `web-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function getOrCreateSessionId(): string {
+  try {
+    const sessionId = localStorage.getItem("mce_session_id");
+    if (sessionId) return sessionId;
+
+    const generatedSessionId = createSessionId();
+    localStorage.setItem("mce_session_id", generatedSessionId);
+    return generatedSessionId;
+  } catch {
+    // Session registration remains useful even when browser storage is blocked.
+    return createSessionId();
+  }
 }
 
 export function AuthProvider({
@@ -85,13 +107,24 @@ export function AuthProvider({
   children: ReactNode;
   initialMongoUser?: MongoUser | null;
 }) {
+  const pathname = usePathname();
+  const authOptionalPath = isAuthOptionalPath(pathname);
   const [mongoUser, setMongoUser] = useState<MongoUser | null>(initialMongoUser);
-  const [loading, setLoading] = useState(() => !initialMongoUser);
+  const [loading, setLoading] = useState(() => !initialMongoUser && !authOptionalPath);
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const signingUpRef = useState(false)[0];
+  const AUTH_REFRESH_INTERVAL_MS = 30_000;
 
   useEffect(() => {
     let cancelled = false;
+
+    if (authOptionalPath && !initialMongoUser?._id) {
+      setMongoUser(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const refreshSession = async () => {
       try {
@@ -115,7 +148,7 @@ export function AuthProvider({
     return () => {
       cancelled = true;
     };
-  }, [initialMongoUser]);
+  }, [initialMongoUser, authOptionalPath]);
 
   useEffect(() => {
     if (!mongoUser?._id) {
@@ -142,6 +175,33 @@ export function AuthProvider({
       browser: detectBrowser(),
     }).catch(() => { });
   }, [mongoUser?._id, mongoUser?.language, mongoUser?.country]);
+
+  useEffect(() => {
+    if (!mongoUser?._id) return;
+    let cancelled = false;
+
+    const refreshSession = async () => {
+      const mongo = await fetchMongoUser();
+      if (!cancelled) setMongoUser(mongo);
+    };
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshSession();
+    }, AUTH_REFRESH_INTERVAL_MS);
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshSession();
+    };
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
+  }, [mongoUser?._id]);
 
   async function refreshMongoUser() {
     const mongo = await fetchMongoUser();
@@ -201,14 +261,14 @@ export function AuthProvider({
     password: string,
     name: string,
     churchName: string,
-    country: string
+    referralCode?: string
   ): Promise<{ needsEmailVerification?: boolean; email?: string; existingAccount?: boolean }> {
     // The API creates the user, generates PIN, sends email, and sets the session cookie
     const signupRes = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, email, password, churchName, country }),
+      body: JSON.stringify({ name, email, password, churchName, referralCode }),
     });
 
     if (!signupRes.ok) {

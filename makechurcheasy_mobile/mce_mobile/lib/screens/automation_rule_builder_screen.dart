@@ -77,7 +77,10 @@ class _AutomationRuleBuilderScreenState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $e'), backgroundColor: MCEColors.danger),
+        SnackBar(
+          content: Text('Failed to save: $e'),
+          backgroundColor: MCEColors.danger,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -98,28 +101,26 @@ class _AutomationRuleBuilderScreenState
                 horizontal: MCESpacing.lg,
                 vertical: MCESpacing.md,
               ),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: MCEColors.surface,
                 border: Border(bottom: BorderSide(color: MCEColors.border)),
               ),
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: _step == 0
-                        ? () => Navigator.pop(context)
-                        : _back,
-                    child: const Icon(
+                    onTap: _step == 0 ? () => Navigator.pop(context) : _back,
+                    child: Icon(
                       Icons.arrow_back,
                       color: MCEColors.textSecondary,
                       size: 24,
                     ),
                   ),
-                  const SizedBox(width: MCESpacing.md),
+                  SizedBox(width: MCESpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'New Rule',
                           style: TextStyle(
                             fontSize: 18,
@@ -164,10 +165,12 @@ class _AutomationRuleBuilderScreenState
                 return Expanded(
                   child: Container(
                     height: 4,
-                    margin: i < 3 ? const EdgeInsets.only(right: 4) : EdgeInsets.zero,
+                    margin: i < 3
+                        ? const EdgeInsets.only(right: 4)
+                        : EdgeInsets.zero,
                     decoration: BoxDecoration(
                       color: isDone || isActive
-                          ? const Color(0xFF7C3AED)
+                          ? MCEColors.primaryPurple
                           : MCEColors.border,
                       borderRadius: BorderRadius.circular(2),
                     ),
@@ -202,12 +205,12 @@ class _AutomationRuleBuilderScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('When should this rule fire?', style: MCETypography.sectionTitle),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         Text(
           'Select an event that triggers this automation',
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
         ),
-        const SizedBox(height: MCESpacing.xl),
+        SizedBox(height: MCESpacing.xl),
         ...AutomationTriggerType.values.map((type) {
           final isSelected = _selectedTrigger == type;
           return GestureDetector(
@@ -220,12 +223,12 @@ class _AutomationRuleBuilderScreenState
               padding: const EdgeInsets.all(MCESpacing.md),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFF7C3AED).withValues(alpha: 0.15)
+                    ? MCEColors.primaryPurple.withValues(alpha: 0.15)
                     : MCEColors.elevated,
                 borderRadius: BorderRadius.circular(MCERadius.md),
                 border: Border.all(
                   color: isSelected
-                      ? const Color(0xFF7C3AED)
+                      ? MCEColors.primaryPurple
                       : MCEColors.border,
                   width: isSelected ? 2 : 1,
                 ),
@@ -235,11 +238,11 @@ class _AutomationRuleBuilderScreenState
                   Icon(
                     type.icon,
                     color: isSelected
-                        ? const Color(0xFF7C3AED)
+                        ? MCEColors.primaryPurple
                         : MCEColors.textSecondary,
                     size: 22,
                   ),
-                  const SizedBox(width: MCESpacing.md),
+                  SizedBox(width: MCESpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,9 +265,9 @@ class _AutomationRuleBuilderScreenState
                     ),
                   ),
                   if (isSelected)
-                    const Icon(
+                    Icon(
                       Icons.check_circle,
-                      color: Color(0xFF7C3AED),
+                      color: MCEColors.primaryPurple,
                       size: 20,
                     ),
                 ],
@@ -274,12 +277,12 @@ class _AutomationRuleBuilderScreenState
         }),
         // Scene picker for sceneChanged trigger
         if (_selectedTrigger == AutomationTriggerType.sceneChanged) ...[
-          const SizedBox(height: MCESpacing.lg),
+          SizedBox(height: MCESpacing.lg),
           _buildScenePicker(),
         ],
         // Time picker for timeReached trigger
         if (_selectedTrigger == AutomationTriggerType.timeReached) ...[
-          const SizedBox(height: MCESpacing.lg),
+          SizedBox(height: MCESpacing.lg),
           _buildTimeTriggerPicker(),
         ],
       ],
@@ -291,8 +294,8 @@ class _AutomationRuleBuilderScreenState
       future: context.apiService.getScenes(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+          return Center(
+            child: CircularProgressIndicator(color: MCEColors.primaryPurple),
           );
         }
         final scenes = snapshot.data!;
@@ -300,7 +303,7 @@ class _AutomationRuleBuilderScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Select Scene', style: MCETypography.bodyBold),
-            const SizedBox(height: MCESpacing.sm),
+            SizedBox(height: MCESpacing.sm),
             ...scenes.map((scene) {
               final isSelected = _triggerParams['sceneId'] == scene.id;
               return ListTile(
@@ -308,12 +311,12 @@ class _AutomationRuleBuilderScreenState
                 leading: Icon(
                   Icons.dashboard_outlined,
                   color: isSelected
-                      ? const Color(0xFF7C3AED)
+                      ? MCEColors.primaryPurple
                       : MCEColors.textSecondary,
                 ),
                 title: Text(scene.name),
                 trailing: isSelected
-                    ? const Icon(Icons.check_circle, color: Color(0xFF7C3AED))
+                    ? Icon(Icons.check_circle, color: MCEColors.primaryPurple)
                     : null,
                 onTap: () {
                   setState(() {
@@ -336,15 +339,15 @@ class _AutomationRuleBuilderScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Select Time', style: MCETypography.bodyBold),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.schedule, color: MCEColors.textSecondary),
+          leading: Icon(Icons.schedule, color: MCEColors.textSecondary),
           title: Text(
             _triggerParams['time'] as String? ?? 'Tap to pick time',
             style: MCETypography.body,
           ),
-          trailing: const Icon(Icons.chevron_right, color: MCEColors.textSecondary),
+          trailing: Icon(Icons.chevron_right, color: MCEColors.textSecondary),
           onTap: () async {
             final time = await showTimePicker(
               context: context,
@@ -371,12 +374,12 @@ class _AutomationRuleBuilderScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Any conditions?', style: MCETypography.sectionTitle),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         Text(
           'Add optional conditions that must be true for the rule to execute',
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
         ),
-        const SizedBox(height: MCESpacing.xl),
+        SizedBox(height: MCESpacing.xl),
 
         // Existing conditions
         for (int i = 0; i < _conditions.length; i++)
@@ -390,12 +393,17 @@ class _AutomationRuleBuilderScreenState
             ),
             child: Row(
               children: [
-                const Icon(Icons.filter_alt, color: MCEColors.warning, size: 18),
-                const SizedBox(width: MCESpacing.sm),
-                Expanded(child: Text(_conditions[i].describe(), style: MCETypography.body)),
+                Icon(Icons.filter_alt, color: MCEColors.warning, size: 18),
+                SizedBox(width: MCESpacing.sm),
+                Expanded(
+                  child: Text(
+                    _conditions[i].describe(),
+                    style: MCETypography.body,
+                  ),
+                ),
                 GestureDetector(
                   onTap: () => setState(() => _conditions.removeAt(i)),
-                  child: const Icon(Icons.close, color: MCEColors.danger, size: 18),
+                  child: Icon(Icons.close, color: MCEColors.danger, size: 18),
                 ),
               ],
             ),
@@ -415,7 +423,7 @@ class _AutomationRuleBuilderScreenState
                 style: BorderStyle.solid,
               ),
             ),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.add, color: MCEColors.textSecondary, size: 18),
@@ -429,7 +437,7 @@ class _AutomationRuleBuilderScreenState
           ),
         ),
 
-        const SizedBox(height: MCESpacing.lg),
+        SizedBox(height: MCESpacing.lg),
         Text(
           'Tip: Skip this step if you want the rule to fire unconditionally',
           style: MCETypography.caption.copyWith(
@@ -445,7 +453,7 @@ class _AutomationRuleBuilderScreenState
     showModalBottomSheet(
       context: context,
       backgroundColor: MCEColors.surface,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
       ),
       builder: (_) => _ConditionPicker(
@@ -463,12 +471,12 @@ class _AutomationRuleBuilderScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('What should happen?', style: MCETypography.sectionTitle),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         Text(
           'Add one or more actions to execute',
           style: MCETypography.body.copyWith(color: MCEColors.textSecondary),
         ),
-        const SizedBox(height: MCESpacing.xl),
+        SizedBox(height: MCESpacing.xl),
 
         // Existing actions
         for (int i = 0; i < _actions.length; i++)
@@ -479,17 +487,26 @@ class _AutomationRuleBuilderScreenState
               color: MCEColors.elevated,
               borderRadius: BorderRadius.circular(MCERadius.md),
               border: Border.all(
-                color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                color: MCEColors.primaryPurple.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
               children: [
-                Icon(_actions[i].type.icon, color: const Color(0xFF7C3AED), size: 18),
-                const SizedBox(width: MCESpacing.sm),
-                Expanded(child: Text(_actions[i].describe(), style: MCETypography.body)),
+                Icon(
+                  _actions[i].type.icon,
+                  color: MCEColors.primaryPurple,
+                  size: 18,
+                ),
+                SizedBox(width: MCESpacing.sm),
+                Expanded(
+                  child: Text(
+                    _actions[i].describe(),
+                    style: MCETypography.body,
+                  ),
+                ),
                 GestureDetector(
                   onTap: () => setState(() => _actions.removeAt(i)),
-                  child: const Icon(Icons.close, color: MCEColors.danger, size: 18),
+                  child: Icon(Icons.close, color: MCEColors.danger, size: 18),
                 ),
               ],
             ),
@@ -506,7 +523,7 @@ class _AutomationRuleBuilderScreenState
               borderRadius: BorderRadius.circular(MCERadius.md),
               border: Border.all(color: MCEColors.border),
             ),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.add, color: MCEColors.textSecondary, size: 18),
@@ -528,7 +545,7 @@ class _AutomationRuleBuilderScreenState
       context: context,
       backgroundColor: MCEColors.surface,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
       ),
       builder: (_) => _ActionPicker(
@@ -546,35 +563,37 @@ class _AutomationRuleBuilderScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Name your rule', style: MCETypography.sectionTitle),
-        const SizedBox(height: MCESpacing.sm),
+        SizedBox(height: MCESpacing.sm),
         TextField(
           controller: _nameController,
           style: MCETypography.body,
           decoration: InputDecoration(
             hintText: 'e.g. Start Stream on Countdown',
-            hintStyle: MCETypography.body.copyWith(color: MCEColors.textSecondary),
+            hintStyle: MCETypography.body.copyWith(
+              color: MCEColors.textSecondary,
+            ),
             filled: true,
             fillColor: MCEColors.elevated,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(MCERadius.md),
-              borderSide: const BorderSide(color: MCEColors.border),
+              borderSide: BorderSide(color: MCEColors.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(MCERadius.md),
-              borderSide: const BorderSide(color: MCEColors.border),
+              borderSide: BorderSide(color: MCEColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(MCERadius.md),
-              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+              borderSide: BorderSide(color: MCEColors.primaryPurple),
             ),
           ),
           onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: MCESpacing.xl),
+        SizedBox(height: MCESpacing.xl),
 
         // Summary
         Text('Summary', style: MCETypography.bodyBold),
-        const SizedBox(height: MCESpacing.md),
+        SizedBox(height: MCESpacing.md),
 
         _buildSummaryRow(
           Icons.bolt,
@@ -594,26 +613,28 @@ class _AutomationRuleBuilderScreenState
           '${_actions.length} action(s)',
         ),
 
-        const SizedBox(height: MCESpacing.xl),
+        SizedBox(height: MCESpacing.xl),
 
         // Action list
-        ..._actions.map((a) => Container(
-              margin: const EdgeInsets.only(bottom: MCESpacing.sm),
-              padding: const EdgeInsets.all(MCESpacing.md),
-              decoration: BoxDecoration(
-                color: MCEColors.elevated,
-                borderRadius: BorderRadius.circular(MCERadius.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(a.type.icon, color: const Color(0xFF7C3AED), size: 16),
-                  const SizedBox(width: MCESpacing.sm),
-                  Expanded(
-                    child: Text(a.describe(), style: MCETypography.caption),
-                  ),
-                ],
-              ),
-            )),
+        ..._actions.map(
+          (a) => Container(
+            margin: const EdgeInsets.only(bottom: MCESpacing.sm),
+            padding: const EdgeInsets.all(MCESpacing.md),
+            decoration: BoxDecoration(
+              color: MCEColors.elevated,
+              borderRadius: BorderRadius.circular(MCERadius.sm),
+            ),
+            child: Row(
+              children: [
+                Icon(a.type.icon, color: MCEColors.primaryPurple, size: 16),
+                SizedBox(width: MCESpacing.sm),
+                Expanded(
+                  child: Text(a.describe(), style: MCETypography.caption),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -623,13 +644,15 @@ class _AutomationRuleBuilderScreenState
       padding: const EdgeInsets.only(bottom: MCESpacing.sm),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF7C3AED)),
-          const SizedBox(width: MCESpacing.sm),
+          Icon(icon, size: 16, color: MCEColors.primaryPurple),
+          SizedBox(width: MCESpacing.sm),
           Text('$label: ', style: MCETypography.captionBold),
           Expanded(
             child: Text(
               value,
-              style: MCETypography.caption.copyWith(color: MCEColors.textSecondary),
+              style: MCETypography.caption.copyWith(
+                color: MCEColors.textSecondary,
+              ),
             ),
           ),
         ],
@@ -654,7 +677,7 @@ class _ConditionPicker extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Add Condition', style: MCETypography.cardTitle),
-          const SizedBox(height: MCESpacing.lg),
+          SizedBox(height: MCESpacing.lg),
           ...AutomationConditionType.values.map((type) {
             return ListTile(
               contentPadding: EdgeInsets.zero,
@@ -663,7 +686,10 @@ class _ConditionPicker extends StatelessWidget {
                 color: MCEColors.textSecondary,
               ),
               title: Text(type.label, style: MCETypography.body),
-              trailing: const Icon(Icons.chevron_right, color: MCEColors.textSecondary),
+              trailing: Icon(
+                Icons.chevron_right,
+                color: MCEColors.textSecondary,
+              ),
               onTap: () {
                 Navigator.pop(context);
                 if (type == AutomationConditionType.sceneEquals ||
@@ -686,14 +712,11 @@ class _ConditionPicker extends StatelessWidget {
   IconData _iconForCondition(AutomationConditionType type) {
     return switch (type) {
       AutomationConditionType.sceneEquals ||
-      AutomationConditionType.sceneNotEquals =>
-        Icons.dashboard_outlined,
+      AutomationConditionType.sceneNotEquals => Icons.dashboard_outlined,
       AutomationConditionType.streaming ||
-      AutomationConditionType.notStreaming =>
-        Icons.cell_tower,
+      AutomationConditionType.notStreaming => Icons.cell_tower,
       AutomationConditionType.recording ||
-      AutomationConditionType.notRecording =>
-        Icons.fiber_manual_record,
+      AutomationConditionType.notRecording => Icons.fiber_manual_record,
       AutomationConditionType.timeBetween => Icons.schedule,
     };
   }
@@ -706,8 +729,10 @@ class _ConditionPicker extends StatelessWidget {
       showModalBottomSheet(
         context: context,
         backgroundColor: MCEColors.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(MCERadius.lg),
+          ),
         ),
         builder: (_) => Container(
           padding: const EdgeInsets.all(MCESpacing.xxl),
@@ -716,19 +741,26 @@ class _ConditionPicker extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Select Scene', style: MCETypography.cardTitle),
-              const SizedBox(height: MCESpacing.lg),
-              ...scenes.map((scene) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.dashboard_outlined, color: MCEColors.textSecondary),
-                    title: Text(scene.name),
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelected(AutomationCondition(
+              SizedBox(height: MCESpacing.lg),
+              ...scenes.map(
+                (scene) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.dashboard_outlined,
+                    color: MCEColors.textSecondary,
+                  ),
+                  title: Text(scene.name),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onSelected(
+                      AutomationCondition(
                         type: type,
                         params: {'sceneId': scene.id, 'sceneName': scene.name},
-                      ));
-                    },
-                  )),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -736,7 +768,10 @@ class _ConditionPicker extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load scenes: $e'), backgroundColor: MCEColors.danger),
+        SnackBar(
+          content: Text('Failed to load scenes: $e'),
+          backgroundColor: MCEColors.danger,
+        ),
       );
     }
   }
@@ -747,23 +782,25 @@ class _ConditionPicker extends StatelessWidget {
   ) async {
     final start = await showTimePicker(
       context: context,
-      initialTime: const TimeOfDay(hour: 9, minute: 0),
+      initialTime: TimeOfDay(hour: 9, minute: 0),
     );
     if (start == null || !context.mounted) return;
 
     final end = await showTimePicker(
       context: context,
-      initialTime: const TimeOfDay(hour: 12, minute: 0),
+      initialTime: TimeOfDay(hour: 12, minute: 0),
     );
     if (end == null) return;
 
-    final fmt = (TimeOfDay t) =>
+    String fmt(TimeOfDay t) =>
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-    onSelected(AutomationCondition(
-      type: type,
-      params: {'start': fmt(start), 'end': fmt(end)},
-    ));
+    onSelected(
+      AutomationCondition(
+        type: type,
+        params: {'start': fmt(start), 'end': fmt(end)},
+      ),
+    );
   }
 }
 
@@ -783,16 +820,19 @@ class _ActionPicker extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Add Action', style: MCETypography.cardTitle),
-          const SizedBox(height: MCESpacing.lg),
+          SizedBox(height: MCESpacing.lg),
           Flexible(
             child: ListView(
               shrinkWrap: true,
               children: AutomationActionType.values.map((type) {
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(type.icon, color: const Color(0xFF7C3AED)),
+                  leading: Icon(type.icon, color: MCEColors.primaryPurple),
                   title: Text(type.label, style: MCETypography.body),
-                  trailing: const Icon(Icons.chevron_right, color: MCEColors.textSecondary),
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: MCEColors.textSecondary,
+                  ),
                   onTap: () {
                     Navigator.pop(context);
                     if (type.needsParam) {
@@ -821,8 +861,10 @@ class _ActionPicker extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => Container(
             padding: const EdgeInsets.all(MCESpacing.xxl),
@@ -831,19 +873,29 @@ class _ActionPicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Select Scene', style: MCETypography.cardTitle),
-                const SizedBox(height: MCESpacing.lg),
-                ...scenes.map((scene) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.dashboard_outlined, color: MCEColors.textSecondary),
-                      title: Text(scene.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onSelected(AutomationAction(
+                SizedBox(height: MCESpacing.lg),
+                ...scenes.map(
+                  (scene) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.dashboard_outlined,
+                      color: MCEColors.textSecondary,
+                    ),
+                    title: Text(scene.name),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onSelected(
+                        AutomationAction(
                           type: type,
-                          params: {'sceneId': scene.id, 'sceneName': scene.name},
-                        ));
-                      },
-                    )),
+                          params: {
+                            'sceneId': scene.id,
+                            'sceneName': scene.name,
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -851,7 +903,10 @@ class _ActionPicker extends StatelessWidget {
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load scenes: $e'), backgroundColor: MCEColors.danger),
+          SnackBar(
+            content: Text('Failed to load scenes: $e'),
+            backgroundColor: MCEColors.danger,
+          ),
         );
       }
     } else if (type == AutomationActionType.playMedia) {
@@ -861,8 +916,10 @@ class _ActionPicker extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => Container(
             padding: const EdgeInsets.all(MCESpacing.xxl),
@@ -871,24 +928,28 @@ class _ActionPicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Select Media', style: MCETypography.cardTitle),
-                const SizedBox(height: MCESpacing.lg),
-                ...media.map((item) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        item.type == 'video'
-                            ? Icons.videocam_outlined
-                            : Icons.image_outlined,
-                        color: MCEColors.textSecondary,
-                      ),
-                      title: Text(item.name, style: MCETypography.body),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onSelected(AutomationAction(
+                SizedBox(height: MCESpacing.lg),
+                ...media.map(
+                  (item) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      item.type == 'video'
+                          ? Icons.videocam_outlined
+                          : Icons.image_outlined,
+                      color: MCEColors.textSecondary,
+                    ),
+                    title: Text(item.name, style: MCETypography.body),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onSelected(
+                        AutomationAction(
                           type: type,
                           params: {'mediaId': item.id, 'mediaName': item.name},
-                        ));
-                      },
-                    )),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -896,7 +957,10 @@ class _ActionPicker extends StatelessWidget {
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load media: $e'), backgroundColor: MCEColors.danger),
+          SnackBar(
+            content: Text('Failed to load media: $e'),
+            backgroundColor: MCEColors.danger,
+          ),
         );
       }
     } else if (type == AutomationActionType.executeMacro) {
@@ -906,8 +970,10 @@ class _ActionPicker extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => Container(
             padding: const EdgeInsets.all(MCESpacing.xxl),
@@ -916,19 +982,26 @@ class _ActionPicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Select Macro', style: MCETypography.cardTitle),
-                const SizedBox(height: MCESpacing.lg),
-                ...macros.map((macro) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.bolt, color: MCEColors.textSecondary),
-                      title: Text(macro.name, style: MCETypography.body),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onSelected(AutomationAction(
+                SizedBox(height: MCESpacing.lg),
+                ...macros.map(
+                  (macro) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.bolt, color: MCEColors.textSecondary),
+                    title: Text(macro.name, style: MCETypography.body),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onSelected(
+                        AutomationAction(
                           type: type,
-                          params: {'macroId': macro.id, 'macroName': macro.name},
-                        ));
-                      },
-                    )),
+                          params: {
+                            'macroId': macro.id,
+                            'macroName': macro.name,
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -936,7 +1009,10 @@ class _ActionPicker extends StatelessWidget {
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load macros: $e'), backgroundColor: MCEColors.danger),
+          SnackBar(
+            content: Text('Failed to load macros: $e'),
+            backgroundColor: MCEColors.danger,
+          ),
         );
       }
     } else if (type == AutomationActionType.showLowerThird ||
@@ -947,8 +1023,10 @@ class _ActionPicker extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           backgroundColor: MCEColors.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(MCERadius.lg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(MCERadius.lg),
+            ),
           ),
           builder: (_) => Container(
             padding: const EdgeInsets.all(MCESpacing.xxl),
@@ -957,20 +1035,29 @@ class _ActionPicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Select Lower Third', style: MCETypography.cardTitle),
-                const SizedBox(height: MCESpacing.lg),
-                ...lowers.map((lt) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.short_text, color: MCEColors.textSecondary),
-                      title: Text(lt.title, style: MCETypography.body),
-                      subtitle: lt.subtitle != null ? Text(lt.subtitle!, style: MCETypography.caption) : null,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onSelected(AutomationAction(
+                SizedBox(height: MCESpacing.lg),
+                ...lowers.map(
+                  (lt) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.short_text,
+                      color: MCEColors.textSecondary,
+                    ),
+                    title: Text(lt.title, style: MCETypography.body),
+                    subtitle: lt.subtitle != null
+                        ? Text(lt.subtitle!, style: MCETypography.caption)
+                        : null,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onSelected(
+                        AutomationAction(
                           type: type,
                           params: {'id': lt.id, 'title': lt.title},
-                        ));
-                      },
-                    )),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -978,7 +1065,10 @@ class _ActionPicker extends StatelessWidget {
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load lower thirds: $e'), backgroundColor: MCEColors.danger),
+          SnackBar(
+            content: Text('Failed to load lower thirds: $e'),
+            backgroundColor: MCEColors.danger,
+          ),
         );
       }
     }

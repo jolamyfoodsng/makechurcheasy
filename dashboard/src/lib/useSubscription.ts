@@ -130,7 +130,7 @@ export interface SubscriptionState {
   maxCredits: number;
   /** Whether credits are unlimited */
   isUnlimited: boolean;
-  /** Whether plan is free */
+  /** Whether effective access is on the free tier */
   isFreePlan: boolean;
   /** Plan display label */
   planLabel: string;
@@ -210,7 +210,7 @@ export function useSubscription(): SubscriptionState {
   const trialEndsAt = trialEndsAtStr ? new Date(trialEndsAtStr) : null;
   const trialStartedAtStr = mongoUser?.trial?.startedAt || null;
   const trialStartedAt = trialStartedAtStr ? new Date(trialStartedAtStr) : null;
-  const trialDurationDays = mongoUser?.trial?.durationDays ?? 20;
+  const trialDurationDays = mongoUser?.trial?.durationDays ?? 14;
   const now = new Date();
   const trialDaysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
@@ -252,7 +252,7 @@ export function useSubscription(): SubscriptionState {
   const planTier = planConfig?.plans[plan] || planConfig?.plans.free || null;
   const maxCredits = planTier?.credits ?? 0;
   const isUnlimited = maxCredits === -1;
-  const isFreePlan = basePlan === "free";
+  const isFreePlan = plan === "free";
 
   // ── Derived subscription state (single source of truth for trial UI) ──
   const trialState = getSubscriptionState(mongoUser, planTier?.label);

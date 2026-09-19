@@ -40,13 +40,15 @@ export type DockCommandType =
   | "worship:clear-lyrics"
   | "worship:song-save"
   | "worship:save-preferences"
+  // Notes
+  | "notes:append"
   // Media
   | "media:save"
   | "media:delete"
   // Service Planner
   | "request-service-plans"
   | "service-plan:save"
-  // Voice Bible
+  // Speech to Scripture
   | "voice-bible:start"
   | "voice-bible:stop"
   | "voice-bible:cancel"
@@ -75,6 +77,7 @@ export type DockStateType =
   | "state:library-updated"
   | "state:songs-data"
   | "state:worship-song-save-result"
+  | "state:notes-updated"
   | "state:service-plans"
   | "state:service-plan-save-result"
   | "state:live-tools"
@@ -85,9 +88,11 @@ export type DockStateType =
   | "state:lm-status"
   | "state:lm-transcript"
   | "state:lm-candidates"
+  | "state:bible-theme-updated"
   | "state:song-limit"
   | "state:plan-update"
   | "state:countdowns"
+  | "state:favorite-themes-updated"
   | "state:pong"
   | "state:language-changed";
 
@@ -104,8 +109,25 @@ export interface DockStateMessage {
 const DOCK_COMMAND_CHANNEL = "ocs-dock-commands";
 const DOCK_STATE_CHANNEL = "ocs-dock-state";
 const DOCK_STORAGE_EVENT_KEY = "ocs-dock-storage-event";
+export const DOCK_BIBLE_LIVE_THEME_KEY = "ocs-dock-bible-live-theme";
 
-type StorageEventType = "library-updated" | "songs-data" | "branding-updated";
+function persistLiveBibleThemeSnapshot(msg: DockStateMessage): void {
+  if (msg.type !== "state:bible-theme-updated") return;
+  try {
+    localStorage.setItem(
+      getUserScopedKey(DOCK_BIBLE_LIVE_THEME_KEY),
+      JSON.stringify(msg.payload ?? null),
+    );
+  } catch {
+    // Ignore storage failures; BroadcastChannel remains the live transport.
+  }
+}
+
+type StorageEventType =
+  | "library-updated"
+  | "songs-data"
+  | "branding-updated"
+  | "favorite-themes-updated";
 
 interface StorageEventPayload {
   type: StorageEventType;
@@ -188,8 +210,18 @@ class DockBridge {
     return () => this.handlers.delete(handler);
   }
 
+  /** Forward a command from the main app to dock clients. */
+  sendCommand(cmd: DockCommand): void {
+    try {
+      this.commandChannel?.postMessage(cmd);
+    } catch {
+      // Channel might be closed during app shutdown.
+    }
+  }
+
   /** Send a state update to the dock */
   sendState(msg: DockStateMessage) {
+    persistLiveBibleThemeSnapshot(msg);
     try {
       this.stateChannel?.postMessage(msg);
     } catch {
@@ -240,6 +272,15 @@ class DockBridge {
       payload,
       timestamp: Date.now(),
     });
+  }
+
+  sendFavoriteThemesUpdated(payload: Record<string, unknown> | null = null) {
+    this.sendState({
+      type: "state:favorite-themes-updated",
+      payload,
+      timestamp: Date.now(),
+    });
+    postStorageEvent("favorite-themes-updated", payload);
   }
 
   /** Notify all dock instances that the interface language changed */
@@ -310,6 +351,21 @@ class DockClient {
         if (event.type === "library-updated") {
           // Trigger a refresh by requesting library data
           this.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+          return;
+        }
+        if (event.type === "favorite-themes-updated") {
+          const msg: DockStateMessage = {
+            type: "state:favorite-themes-updated",
+            payload: event.payload ?? null,
+            timestamp: event.timestamp,
+          };
+          for (const handler of this.handlers) {
+            try {
+              handler(msg);
+            } catch (e) {
+              console.error("[DockClient] Handler error:", e);
+            }
+          }
         }
       });
 
@@ -324,6 +380,16 @@ class DockClient {
   sendCommand(cmd: DockCommand) {
     try {
       this.commandChannel?.postMessage(cmd);
+    } catch {
+      // Channel might be closed
+    }
+  }
+
+  /** Share a dock-owned live snapshot with sibling dock tabs. */
+  sendState(msg: DockStateMessage) {
+    persistLiveBibleThemeSnapshot(msg);
+    try {
+      this.stateChannel?.postMessage(msg);
     } catch {
       // Channel might be closed
     }

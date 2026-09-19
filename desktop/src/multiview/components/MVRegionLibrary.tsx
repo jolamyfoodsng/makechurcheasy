@@ -18,7 +18,6 @@ import { nanoid } from "nanoid";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme } from "../../bible/types";
 import { getCustomThemes } from "../../bible/bibleDb";
-import { LT_BIBLE_THEMES, LT_WORSHIP_THEMES, LT_GENERAL_THEMES } from "../../lowerthirds/themes";
 import Icon from "../../components/Icon";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 
@@ -117,7 +116,7 @@ export function MVRegionLibrary() {
 
   // ── Slot popover (empty slot → click to add) ──
   const [slotPopover, setSlotPopover] = useState<SlotPopover | null>(null);
-  const [slotPopoverTab, setSlotPopoverTab] = useState<"scenes" | "bible" | "worship" | "lower-third">("scenes");
+  const [slotPopoverTab, setSlotPopoverTab] = useState<"scenes" | "bible" | "worship">("scenes");
 
   // ── Missing scenes modal ──
   const [missingScene, setMissingScene] = useState<{ regionId: RegionId; sceneName: string } | null>(null);
@@ -1362,10 +1361,6 @@ export function MVRegionLibrary() {
               onClick={() => setSlotPopoverTab("worship")} title="Music">
               <Icon name="music_note" size={13} /> Worship
             </button>
-            <button className={`mv-popover-tab ${slotPopoverTab === "lower-third" ? "mv-popover-tab--active" : ""}`}
-              onClick={() => setSlotPopoverTab("lower-third")} title="Subtitles">
-              <Icon name="subtitles" size={13} /> LT
-            </button>
           </div>
 
           {/* Tab: Scenes */}
@@ -1453,42 +1448,6 @@ export function MVRegionLibrary() {
             </div>
           )}
 
-          {/* Tab: Lower Third Themes */}
-          {slotPopoverTab === "lower-third" && (
-            <div className="mv-popover-list">
-              {[
-                { label: "Bible", themes: LT_BIBLE_THEMES },
-                { label: "Worship", themes: LT_WORSHIP_THEMES },
-                { label: "General", themes: LT_GENERAL_THEMES },
-              ].map((group) => (
-                <div key={group.label}>
-                  <div style={{ padding: "6px 10px", fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>{group.label}</div>
-                  {group.themes.map((theme) => (
-                    <button key={theme.id} className="mv-popover-item"
-                      onClick={() => {
-                        const defaults: Record<string, string> = {};
-                        theme.variables.forEach((v) => { defaults[v.key] = v.defaultValue ?? ""; });
-                        updateRegion(slotPopover.regionId, {
-                          name: `LT: ${theme.name}`,
-                          themeId: theme.id,
-                          ltValues: defaults,
-                          ltEnabled: true,
-                          ltSize: "medium",
-                          themeSettings: undefined,
-                          fontOverrides: undefined,
-                        } as any);
-                        setSlotPopover(null);
-                      }} title="inline-flex">
-                      <span style={{ width: 20, height: 20, borderRadius: 4, background: theme.accentColor || "#333", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Icon name={theme.icon || "subtitles"} size={12} style={{ color: "#fff" }} />
-                      </span>
-                      <span>{theme.name}</span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

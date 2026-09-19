@@ -12,9 +12,9 @@ import { isActiveTrial as isCanonicalTrialActive, normalizePlanId } from "@/lib/
 export interface TrialState {
   /** "trial" if active trial, "subscription" otherwise */
   type: "trial" | "subscription";
-  /** Display plan name: "Growth Trial" for trial users, "Pro Plan" for paid, etc. */
+  /** Display plan name: "Growth Trial" for trial users, "Growth Plan" for paid, etc. */
   plan: string;
-  /** Human-readable plan label for UI: "Growth Trial", "Growth", "Pro", etc. */
+  /** Human-readable plan label for UI: "Growth Trial", "Growth", "Basic", etc. */
   planLabel: string;
   /** Days remaining in trial (only when type === "trial") */
   daysRemaining?: number;

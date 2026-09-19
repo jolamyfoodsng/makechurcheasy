@@ -564,12 +564,6 @@ function MVEditorInner({
         return;
       }
 
-      // ── Open Settings (Cmd+,)
-      if (meta && key === ",") {
-        e.preventDefault();
-        navigate("/settings");
-        return;
-      }
     },
     [dispatch, state.selectedRegionIds, state.layout, state.zoom, save, snapshot, alignRegions, distributeRegions, lockAll, unlockAll, selectNextRegion, selectPrevRegion, navigate, handlePushToOBS, showToast]
   );

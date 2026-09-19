@@ -2,6 +2,7 @@ import { dockBridge } from "./dockBridge";
 import {
   loadVoiceBibleDockCommand,
   saveVoiceBibleDockState,
+  VOICE_BIBLE_STATUS_EVENT_NAME,
   VOICE_BIBLE_DOCK_COMMAND_TYPES,
   type VoiceBibleDockCommandType,
 } from "./voiceBibleDockInterop";
@@ -17,6 +18,7 @@ import {
   transcribeVoiceAudio,
 } from "./voiceBibleSettings";
 import { getLocalLlmRuntimeStatus } from "./localLlm";
+import { safeTauriEmit } from "./tauriSafe";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type {
   VoiceBibleContextPayload,
@@ -654,6 +656,9 @@ class VoiceBibleService {
   }
 
   private pushStatus(): void {
+    void safeTauriEmit(VOICE_BIBLE_STATUS_EVENT_NAME, this.getSnapshot()).catch(() => {
+      // The service also runs in browser-only contexts where Tauri events are unavailable.
+    });
     this.notifyListeners();
     dockBridge.sendState({
       type: "state:voice-bible-status",
@@ -1142,7 +1147,7 @@ class VoiceBibleService {
   ): Promise<{ deviceId?: string; sourceLabel: string }> {
     if (settings.audioSourceMode === "obs-input") {
       if (!settings.obsInputName) {
-        throw new Error("Select an OBS input source in Voice Bible settings.");
+        throw new Error("Select an OBS input source in Speech to Scripture settings.");
       }
 
       const obsInputs = await listObsAudioInputs();
@@ -1615,7 +1620,7 @@ class VoiceBibleService {
       this.snapshot = {
         ...this.snapshot,
         status: "error",
-        detail: "Voice Bible failed",
+        detail: "Speech to Scripture failed",
         transcript: this.snapshot.transcript,
         matchDetail: undefined,
         matching: false,

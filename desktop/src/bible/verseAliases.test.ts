@@ -5,6 +5,14 @@ describe("Verse alias engine — quote detection independence", () => {
   // ── Core quote detection (Tier 1 aliases) ──
 
   describe("Universally quoted verses", () => {
+    it("Jacob I love, Esau I hate → Romans 9:13", () => {
+      expect(matchVerseAlias("JACOB I LOVE, ESAU I HATE")).toBe("Romans 9:13");
+    });
+
+    it("I love Jacob → Romans 9:13", () => {
+      expect(matchVerseAlias("I love Jacob")).toBe("Romans 9:13");
+    });
+
     it("for god so loved the world → John 3:16", () => {
       expect(matchVerseAlias("for god so loved the world")).toBe("John 3:16");
     });

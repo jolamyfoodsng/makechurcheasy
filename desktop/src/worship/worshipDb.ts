@@ -7,10 +7,13 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 import type { Song } from "./types";
-import { getCurrentUserId } from "../services/db";
+import { clearStore, getByKey, getCentralDb, getCurrentUserId, putRecord, STORES } from "../services/db";
 
 const DB_NAME = "obs-church-studio-worship";
 const DB_VERSION = 4;
+
+/** Emitted after any song create/update/archive/restore so open app views refresh. */
+export const WORSHIP_SONGS_UPDATED_EVENT = "mce-worship-songs-updated";
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -33,6 +36,12 @@ function sortArchivedSongs(songs: Song[]): Song[] {
 }
 
 function notifySongsChanged(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(WORSHIP_SONGS_UPDATED_EVENT));
+  } catch {
+    // Non-browser callers (tests/import scripts) do not have a window.
+  }
+
   syncSongsToDock()
     .then(() => {
       import("../services/dockBridge").then((m) => m.dockBridge.sendLibraryUpdated());
@@ -41,6 +50,90 @@ function notifySongsChanged(): void {
 
   // Push updated usage counts to the server immediately
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
+}
+
+function songUpdatedTime(song: Song): number {
+  return new Date(song.updatedAt || song.createdAt || 0).getTime();
+}
+
+function mergeSongs(...groups: Song[][]): Song[] {
+  const merged = new Map<string, Song>();
+  for (const group of groups) {
+    for (const song of group) {
+      if (!song?.id) continue;
+      const current = merged.get(song.id);
+      if (!current || songUpdatedTime(song) >= songUpdatedTime(current)) {
+        merged.set(song.id, song);
+      }
+    }
+  }
+  return Array.from(merged.values());
+}
+
+type StoredSong = Song & { userId?: string | null };
+
+function songBelongsToCurrentUser(song: StoredSong, uid: string | null): boolean {
+  if (!uid) return true;
+  return !song.userId || song.userId === uid;
+}
+
+async function readSongsFromLegacyDb(): Promise<Song[]> {
+  const db = await getDb();
+  const uid = getCurrentUserId();
+  const songs = await db.getAll("songs") as StoredSong[];
+  return songs.filter((song) => songBelongsToCurrentUser(song, uid));
+}
+
+async function readSongsFromCentralDb(): Promise<Song[]> {
+  try {
+    const db = await getCentralDb();
+    const uid = getCurrentUserId();
+    const songs = await db.getAll(STORES.WORSHIP_SONGS) as StoredSong[];
+    return songs.filter((song) => songBelongsToCurrentUser(song, uid));
+  } catch {
+    return [];
+  }
+}
+
+async function backfillSongsToStores(songs: Song[], legacySongs: Song[], centralSongs: Song[]): Promise<void> {
+  if (songs.length === 0) return;
+  try {
+    const db = await getDb();
+    const uid = getCurrentUserId();
+    const legacyById = new Map(legacySongs.map((song) => [song.id, song as StoredSong]));
+    const centralById = new Map(centralSongs.map((song) => [song.id, song as StoredSong]));
+    await Promise.all(songs.map(async (song) => {
+      const tagged = uid ? { ...song, userId: uid } : song;
+      const legacySong = legacyById.get(song.id);
+      const centralSong = centralById.get(song.id);
+      if (!legacySong || (uid && !legacySong.userId)) {
+        await db.put("songs", tagged);
+      }
+      if (!centralSong || (uid && !centralSong.userId)) {
+        await putRecord(STORES.WORSHIP_SONGS, tagged);
+      }
+    }));
+  } catch (err) {
+    console.warn("[worshipDb] Failed to backfill songs:", err);
+  }
+}
+
+async function readMergedSongs(): Promise<Song[]> {
+  const [legacySongs, centralSongs] = await Promise.all([
+    readSongsFromLegacyDb().catch(() => []),
+    readSongsFromCentralDb(),
+  ]);
+  const merged = mergeSongs(legacySongs, centralSongs);
+  backfillSongsToStores(merged, legacySongs, centralSongs).catch(() => { });
+  return merged;
+}
+
+async function writeSongToCentralDb(song: Song): Promise<void> {
+  try {
+    await putRecord(STORES.WORSHIP_SONGS, song);
+  } catch (err) {
+    console.warn("[worshipDb] Failed to mirror song to central IndexedDB:", err);
+  }
 }
 
 export interface SaveSongOptions {
@@ -156,34 +249,26 @@ function getDb(): Promise<IDBPDatabase> {
 
 /** Get all songs for the current user, sorted by updatedAt descending */
 export async function getAllSongs(): Promise<Song[]> {
-  const db = await getDb();
-  const uid = getCurrentUserId();
-  let all: Song[];
-  if (uid) {
-    all = await db.getAllFromIndex("songs", "userId", uid) as Song[];
-  } else {
-    all = await db.getAll("songs") as Song[];
-  }
+  const all = await readMergedSongs();
   return sortSongs(all.filter((song) => !isSongArchived(song)));
 }
 
 /** Get archived songs for the current user, newest archived first */
 export async function getArchivedSongs(): Promise<Song[]> {
-  const db = await getDb();
-  const uid = getCurrentUserId();
-  let all: Song[];
-  if (uid) {
-    all = await db.getAllFromIndex("songs", "userId", uid) as Song[];
-  } else {
-    all = await db.getAll("songs") as Song[];
-  }
+  const all = await readMergedSongs();
   return sortArchivedSongs(all.filter((song) => isSongArchived(song)));
 }
 
 /** Get a single song by id */
 export async function getSong(id: string): Promise<Song | undefined> {
   const db = await getDb();
-  return db.get("songs", id) as Promise<Song | undefined>;
+  const legacy = await db.get("songs", id) as Song | undefined;
+  const central = await getByKey<Song>(STORES.WORSHIP_SONGS, id).catch(() => undefined);
+  const [song] = mergeSongs(legacy ? [legacy] : [], central ? [central] : []);
+  if (song) {
+    backfillSongsToStores([song], legacy ? [legacy] : [], central ? [central] : []).catch(() => { });
+  }
+  return song;
 }
 
 /** Create or update a song — auto-injects userId for the current user */
@@ -197,6 +282,7 @@ export async function saveSong(song: Song, options: SaveSongOptions = {}): Promi
   const uid = getCurrentUserId();
   const tagged = uid ? { ...song, userId: uid } : song;
   await db.put("songs", tagged);
+  await writeSongToCentralDb(tagged);
   if (options.notify !== false) {
     notifySongsChanged();
   }
@@ -212,15 +298,18 @@ export async function saveSongsBatch(songs: Song[], options: SaveSongsBatchOptio
   const db = await getDb();
   const uid = getCurrentUserId();
   const tx = db.transaction("songs", "readwrite");
+  const taggedSongs: Song[] = [];
 
   for (let i = 0; i < songs.length; i += 1) {
     const song = songs[i];
     const tagged = uid ? { ...song, userId: uid } : song;
+    taggedSongs.push(tagged);
     await tx.store.put(tagged);
     options.onProgress?.(i + 1, songs.length);
   }
 
   await tx.done;
+  await Promise.all(taggedSongs.map((song) => writeSongToCentralDb(song)));
 
   if (options.notify !== false) {
     notifySongsChanged();
@@ -230,30 +319,35 @@ export async function saveSongsBatch(songs: Song[], options: SaveSongsBatchOptio
 /** Archive a song by id so it is removed from active views without being deleted */
 export async function archiveSong(id: string): Promise<void> {
   const db = await getDb();
-  const existing = (await db.get("songs", id)) as Song | undefined;
+  const existing = await getSong(id);
   if (!existing || isSongArchived(existing)) return;
-
-  await db.put("songs", {
+  const updatedAt = new Date().toISOString();
+  const archived = {
     ...existing,
     archived: true,
-    archivedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+    archivedAt: updatedAt,
+    updatedAt,
+  };
+
+  await db.put("songs", archived);
+  await writeSongToCentralDb(archived);
   notifySongsChanged();
 }
 
 /** Restore an archived song back into the active worship library */
 export async function restoreSong(id: string): Promise<void> {
   const db = await getDb();
-  const existing = (await db.get("songs", id)) as Song | undefined;
+  const existing = await getSong(id);
   if (!existing || !isSongArchived(existing)) return;
-
-  await db.put("songs", {
+  const restored = {
     ...existing,
     archived: false,
     archivedAt: null,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  await db.put("songs", restored);
+  await writeSongToCentralDb(restored);
   notifySongsChanged();
 }
 
@@ -280,6 +374,9 @@ export async function clearAllSongs(): Promise<void> {
     await tx.objectStore("songs").clear();
     await tx.done;
   }
+  await clearStore(STORES.WORSHIP_SONGS).catch((err) => {
+    console.warn("[worshipDb] Failed to clear central song store:", err);
+  });
   notifySongsChanged();
 }
 
