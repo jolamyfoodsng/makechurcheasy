@@ -1313,7 +1313,7 @@ function DockWorshipTab({
   const { t } = useTranslation();
   const tabRootRef = useRef<HTMLDivElement>(null);
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
-  const fullscreenOnlyMode = presentationLinkMode || fullscreenOnly;
+  const fullscreenOnlyMode = Boolean(fullscreenOnly);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("worship");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
 
@@ -4059,7 +4059,6 @@ function DockWorshipTab({
                         module="worship"
                         route={sceneRoute}
                         onRouteChange={updateSceneRoute}
-                        disabled={presentationLinkMode}
                         title={t("sceneRouting.bible", "Output")}
                         placement="above"
                         showLabel

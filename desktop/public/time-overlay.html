@@ -7,29 +7,58 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
-    body { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+    body { font-family: Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
 
     #time-card {
       position: fixed;
-      display: grid;
-      grid-template-columns: 6px minmax(0, 1fr);
-      gap: 16px;
-      min-width: 320px;
-      max-width: min(640px, calc(100vw - 112px));
-      padding: 18px 22px 19px 18px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      max-width: min(680px, calc(100vw - 60px));
+      padding: 10px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
       color: #f8fafc;
-      background: rgba(12, 18, 30, 0.94);
-      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
       opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
     }
 
     #time-card.is-ready { opacity: 1; }
 
-    #time-card.mode-lower-third.placement-left { left: 56px; bottom: 88px; }
-    #time-card.mode-lower-third.placement-right { right: 56px; bottom: 88px; }
+    /* ── Placements ── */
+    #time-card.mode-lower-third.placement-left,
+    #time-card.mode-lower-third.placement-bottom-left {
+      left: 48px;
+      bottom: 56px;
+      top: auto;
+      right: auto;
+    }
+    #time-card.mode-lower-third.placement-right,
+    #time-card.mode-lower-third.placement-bottom-right {
+      right: 48px;
+      bottom: 56px;
+      top: auto;
+      left: auto;
+    }
+    #time-card.mode-lower-third.placement-top-left {
+      left: 48px;
+      top: 48px;
+      bottom: auto;
+      right: auto;
+    }
+    #time-card.mode-lower-third.placement-top-right {
+      right: 48px;
+      top: 48px;
+      bottom: auto;
+      left: auto;
+    }
 
+    /* ── Fullscreen Mode ── */
     #time-card.mode-fullscreen {
       inset: 0;
       min-width: 0;
@@ -37,85 +66,225 @@
       padding: 40px;
       border: 0;
       border-radius: 0;
-      background: transparent;
-      box-shadow: none;
+      background: transparent !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      box-shadow: none !important;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
+      gap: 16px;
     }
 
-    .accent { width: 100%; min-height: 100%; border-radius: 4px; background: #ea580c; }
-    .content { min-width: 0; }
+    /* ── Transparent Mode (clean floating text/clock) ── */
+    #time-card.is-transparent {
+      background: transparent !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    #time-card.is-transparent .eyebrow,
+    #time-card.is-transparent .time-value,
+    #time-card.is-transparent .date-value {
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9), 0 0 24px rgba(0, 0, 0, 0.7);
+    }
+
+    .accent {
+      display: none;
+    }
+
+    .content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
     .eyebrow {
-      margin: 0 0 6px;
-      color: #cbd5e1;
-      font-size: clamp(14px, 1.15vw, 22px);
-      font-weight: 800;
-      letter-spacing: 0.14em;
+      margin: 0 0 2px;
+      color: #94a3b8;
+      font-size: clamp(11px, 1vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
       line-height: 1.2;
       text-transform: uppercase;
     }
+    .eyebrow[hidden] { display: none !important; }
+
     .time-value {
       margin: 0;
       color: #ffffff;
-      font-size: clamp(54px, 7.2vw, 128px);
+      font-size: clamp(36px, 5vw, 96px);
       font-weight: 800;
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.045em;
-      line-height: 0.98;
-      text-shadow: 0 3px 18px rgba(0, 0, 0, 0.36);
+      letter-spacing: -0.035em;
+      line-height: 1;
+      text-shadow: 0 3px 18px rgba(0, 0, 0, 0.4);
       white-space: nowrap;
     }
+
     .date-value {
-      margin: 9px 0 0;
+      margin: 4px 0 0;
       color: #cbd5e1;
-      font-size: clamp(15px, 1.4vw, 28px);
+      font-size: clamp(12px, 1.1vw, 22px);
       font-weight: 600;
       line-height: 1.2;
     }
-    .date-value[hidden], .eyebrow[hidden] { display: none; }
+    .date-value[hidden] { display: none !important; }
 
-    #time-card.mode-fullscreen .accent { display: none; }
     #time-card.mode-fullscreen .content {
-      display: flex;
-      max-width: 80%;
-      flex-direction: column;
       align-items: center;
+      text-align: center;
     }
     #time-card.mode-fullscreen .time-value {
-      font-size: clamp(80px, 16vw, 360px);
-      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 0, 0, 0.3);
+      font-size: clamp(72px, 14vw, 280px);
+      text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8), 0 0 50px rgba(0, 0, 0, 0.4);
     }
     #time-card.mode-fullscreen .eyebrow {
-      margin-bottom: 14px;
-      color: #ffffff;
-      font-size: clamp(16px, 3vw, 48px);
-      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.3);
+      margin-bottom: 8px;
+      color: #cbd5e1;
+      font-size: clamp(16px, 2.4vw, 36px);
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
     }
     #time-card.mode-fullscreen .date-value {
-      margin-top: 14px;
-      color: #ffffff;
-      font-size: clamp(16px, 3vw, 48px);
-      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.3);
+      margin-top: 12px;
+      color: #e2e8f0;
+      font-size: clamp(16px, 2.4vw, 36px);
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+    }
+
+    /* ── SVG Analog Clock ── */
+    .analog-clock-wrap {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+    }
+    .theme-analog-wall .analog-clock-wrap {
+      display: flex;
+    }
+    .analog-dial {
+      width: 64px;
+      height: 64px;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+    }
+    #time-card.mode-fullscreen .analog-dial {
+      width: clamp(180px, 30vw, 420px);
+      height: clamp(180px, 30vw, 420px);
+      filter: drop-shadow(0 10px 32px rgba(0,0,0,0.7));
+    }
+
+    /* ── Theme: Broadcast Pill ── */
+    #time-card.theme-broadcast-pill:not(.is-transparent) {
+      border-radius: 9999px;
+      padding: 8px 20px 8px 16px;
+      background: rgba(15, 23, 42, 0.9);
+      gap: 10px;
+    }
+    #time-card.theme-broadcast-pill .pill-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: pulse-dot 2s infinite ease-in-out;
+      margin-right: 6px;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+    #time-card.theme-broadcast-pill .time-value {
+      font-size: clamp(24px, 3vw, 44px);
+    }
+
+    /* ── Theme: Neon ── */
+    #time-card.theme-neon:not(.is-transparent) {
+      border-color: rgba(6, 182, 212, 0.4);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+    }
+    #time-card.theme-neon .time-value {
+      color: #67e8f9;
+      text-shadow: 0 0 12px rgba(6, 182, 212, 0.8), 0 0 28px rgba(6, 182, 212, 0.4);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    #time-card.theme-neon .eyebrow {
+      color: #38bdf8;
+      text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    }
+
+    /* ── Theme: Elegant Gold ── */
+    #time-card.theme-elegant:not(.is-transparent) {
+      border-color: rgba(234, 179, 8, 0.3);
+      background: rgba(20, 18, 14, 0.88);
+    }
+    #time-card.theme-elegant .time-value {
+      color: #fef3c7;
+      font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    #time-card.theme-elegant .eyebrow {
+      color: #fbbf24;
+      letter-spacing: 0.15em;
     }
 
     @media (max-width: 720px) {
-      #time-card.mode-lower-third.placement-left { left: 28px; bottom: 56px; }
-      #time-card.mode-lower-third.placement-right { right: 28px; bottom: 56px; }
-      #time-card.mode-fullscreen { min-width: 0; max-width: none; padding: 28px; }
+      #time-card.mode-lower-third.placement-left,
+      #time-card.mode-lower-third.placement-bottom-left { left: 20px; bottom: 36px; }
+      #time-card.mode-lower-third.placement-right,
+      #time-card.mode-lower-third.placement-bottom-right { right: 20px; bottom: 36px; }
+      #time-card.mode-lower-third.placement-top-left { left: 20px; top: 28px; }
+      #time-card.mode-lower-third.placement-top-right { right: 20px; top: 28px; }
+      #time-card.mode-fullscreen { padding: 20px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       #time-card { transition: none; }
+      #time-card.theme-broadcast-pill .pill-dot { animation: none; }
     }
   </style>
 </head>
 <body>
-  <section id="time-card" class="mode-fullscreen placement-left" aria-live="off">
-    <div class="accent" aria-hidden="true"></div>
+  <section id="time-card" class="mode-lower-third placement-bottom-right theme-digital-modern is-transparent" aria-live="off">
+    <!-- SVG Analog Clock Face -->
+    <div class="analog-clock-wrap" id="analog-clock-wrap" aria-hidden="true">
+      <svg class="analog-dial" viewBox="0 0 100 100">
+        <!-- Bezel -->
+        <circle cx="50" cy="50" r="46" fill="rgba(15, 23, 42, 0.75)" stroke="#cbd5e1" stroke-width="2" />
+        <!-- Hour Markers (12 ticks) -->
+        <g stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round">
+          <line x1="50" y1="8" x2="50" y2="14" stroke="#f8fafc" stroke-width="2.5" />
+          <line x1="92" y1="50" x2="86" y2="50" stroke="#f8fafc" stroke-width="2.5" />
+          <line x1="50" y1="92" x2="50" y2="86" stroke="#f8fafc" stroke-width="2.5" />
+          <line x1="8" y1="50" x2="14" y2="50" stroke="#f8fafc" stroke-width="2.5" />
+          <line x1="71" y1="13.5" x2="68" y2="18.7" />
+          <line x1="86.5" y1="29" x2="81.3" y2="32" />
+          <line x1="86.5" y1="71" x2="81.3" y2="68" />
+          <line x1="71" y1="86.5" x2="68" y2="81.3" />
+          <line x1="29" y1="86.5" x2="32" y2="81.3" />
+          <line x1="13.5" y1="71" x2="18.7" y2="68" />
+          <line x1="13.5" y1="29" x2="18.7" y2="32" />
+          <line x1="29" y1="13.5" x2="32" y2="18.7" />
+        </g>
+        <!-- Hour Hand -->
+        <line id="analog-hour-hand" x1="50" y1="50" x2="50" y2="26" stroke="#f8fafc" stroke-width="3.5" stroke-linecap="round" />
+        <!-- Minute Hand -->
+        <line id="analog-min-hand" x1="50" y1="50" x2="50" y2="16" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round" />
+        <!-- Second Hand -->
+        <line id="analog-sec-hand" x1="50" y1="58" x2="50" y2="12" stroke="#ea580c" stroke-width="1.2" stroke-linecap="round" />
+        <!-- Center Pin -->
+        <circle cx="50" cy="50" r="3" fill="#ea580c" />
+      </svg>
+    </div>
+
     <div class="content">
-      <p id="eyebrow" class="eyebrow"></p>
+      <p id="eyebrow" class="eyebrow" hidden></p>
       <p id="time-value" class="time-value">00:00</p>
       <p id="date-value" class="date-value" hidden></p>
     </div>
@@ -127,6 +296,9 @@
       var eyebrow = document.getElementById("eyebrow");
       var timeValue = document.getElementById("time-value");
       var dateValue = document.getElementById("date-value");
+      var hourHand = document.getElementById("analog-hour-hand");
+      var minHand = document.getElementById("analog-min-hand");
+      var secHand = document.getElementById("analog-sec-hand");
       var activePacket = null;
       var routeSource = "";
 
@@ -141,24 +313,6 @@
         } catch (_) { return null; }
       }
 
-      function pad(value) { return String(value).padStart(2, "0"); }
-
-      function formatTimer(totalSeconds) {
-        var safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
-        var hours = Math.floor(safe / 3600);
-        var minutes = Math.floor((safe % 3600) / 60);
-        var seconds = safe % 60;
-        return hours > 0
-          ? pad(hours) + ":" + pad(minutes) + ":" + pad(seconds)
-          : pad(minutes) + ":" + pad(seconds);
-      }
-
-      function getTimerSeconds(timer) {
-        var base = Math.max(0, Math.floor(Number(timer && timer.elapsedSeconds) || 0));
-        if (!timer || !timer.running || !timer.startedAt) return base;
-        return base + Math.max(0, Math.floor((Date.now() - Number(timer.startedAt)) / 1000));
-      }
-
       function formatClock(now, clock) {
         var options = { hour: "numeric", minute: "2-digit" };
         if (clock && clock.showSeconds) options.second = "2-digit";
@@ -170,28 +324,66 @@
         return now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
       }
 
+      function updateAnalogHands(now) {
+        var ms = now.getMilliseconds();
+        var sec = now.getSeconds() + ms / 1000;
+        var min = now.getMinutes() + sec / 60;
+        var hr = (now.getHours() % 12) + min / 60;
+
+        var secDeg = sec * 6;
+        var minDeg = min * 6;
+        var hrDeg = hr * 30;
+
+        if (hourHand) hourHand.setAttribute("transform", "rotate(" + hrDeg.toFixed(1) + " 50 50)");
+        if (minHand) minHand.setAttribute("transform", "rotate(" + minDeg.toFixed(1) + " 50 50)");
+        if (secHand) secHand.setAttribute("transform", "rotate(" + secDeg.toFixed(1) + " 50 50)");
+      }
+
       function render() {
         if (!activePacket) return;
-        var tool = activePacket.tool === "clock" ? "clock" : "timer";
         var mode = activePacket.mode === "lower-third" ? "lower-third" : "fullscreen";
-        var placement = activePacket.placement === "right" ? "right" : "left";
+        var placement = activePacket.placement || "bottom-right";
         var clock = activePacket.clock || {};
-        var label = String(activePacket.label || (tool === "clock" ? "Current time" : "Timer")).trim();
+        var theme = clock.theme || "digital-modern";
+        var transparent = clock.transparentBg !== false;
+        var label = (activePacket.label && typeof activePacket.label === "string") ? activePacket.label.trim() : "";
         var now = new Date();
 
-        card.className = "is-ready mode-" + mode + " placement-" + placement;
-        eyebrow.textContent = label;
-        eyebrow.hidden = !label;
-        timeValue.textContent = tool === "clock"
-          ? formatClock(now, clock)
-          : formatTimer(getTimerSeconds(activePacket.timer || {}));
+        var classes = [
+          "is-ready",
+          "mode-" + mode,
+          "placement-" + placement,
+          "theme-" + theme
+        ];
+        if (transparent) classes.push("is-transparent");
+
+        card.className = classes.join(" ");
+
+        if (label) {
+          eyebrow.textContent = label;
+          eyebrow.hidden = false;
+        } else {
+          eyebrow.textContent = "";
+          eyebrow.hidden = true;
+        }
+
+        var formattedTime = formatClock(now, clock);
+        if (theme === "broadcast-pill") {
+          timeValue.innerHTML = '<span class="pill-dot" aria-hidden="true"></span>' + formattedTime;
+        } else {
+          timeValue.textContent = formattedTime;
+        }
+
         dateValue.textContent = formatDate(now);
-        dateValue.hidden = tool !== "clock" || !clock.showDate;
+        dateValue.hidden = !clock.showDate;
+
+        if (theme === "analog-wall") {
+          updateAnalogHands(now);
+        }
       }
 
       function applyPacket(packet) {
         if (!packet || typeof packet !== "object") return false;
-        if (packet.tool !== "timer" && packet.tool !== "clock") return false;
         activePacket = packet;
         render();
         return true;
@@ -211,7 +403,7 @@
       window.addEventListener("mce-overlay-packet", readFromObsBrowserEvent);
       window.addEventListener("hashchange", function () { applyPacket(parseHashPacket()); });
       applyPacket(parseHashPacket());
-      window.setInterval(render, 250);
+      window.setInterval(render, 100);
     })();
   </script>
 </body>

@@ -1,0 +1,28 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/subscription-lifecycle",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/trial-check",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/lifecycle-emails",
+      "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/cron/ambassador-expiry",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/temporary-plan-expiry",
+      "schedule": "45 3 * * *"
+    },
+    {
+      "path": "/api/cron/signup-report",
+      "schedule": "0 22 * * *"
+    }
+  ]
+}

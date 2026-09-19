@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   ArrowUp,
   ArrowDown,
@@ -81,6 +83,7 @@ export default function SubscriptionPage() {
     loading: subLoading,
   } = useSubscription();
 
+  const [cancellingChange, setCancellingChange] = useState(false);
   const entitlements = planTier?.entitlements as PlanEntitlements | undefined;
   const credits = mongoUser?.credits ?? 0;
   const currency = subscription?.currency || "USD";
@@ -205,7 +208,9 @@ export default function SubscriptionPage() {
         )}
 
         {/* Scheduled change banner */}
-        {subscription?.pendingPlan && subscription?.pendingChangeType && (
+        {subscription?.pendingPlan &&
+          subscription?.pendingChangeType &&
+          subscription.pendingPlan.toLowerCase() !== (plan || "").toLowerCase() && (
           <Card padding="md" className="border-blue-200 bg-blue-50">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -227,19 +232,28 @@ export default function SubscriptionPage() {
                 </div>
               </div>
               <button
+                disabled={cancellingChange}
                 onClick={async () => {
+                  setCancellingChange(true);
                   try {
                     const res = await fetch("/api/subscriptions", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ action: "cancelPendingChange" }),
                     });
-                    if (res.ok) window.location.reload();
-                  } catch {}
+                    if (res.ok) {
+                      window.location.reload();
+                    } else {
+                      setCancellingChange(false);
+                    }
+                  } catch {
+                    setCancellingChange(false);
+                  }
                 }}
-                className="text-xs font-semibold text-blue-600 hover:underline shrink-0"
+                className="text-xs font-semibold text-blue-600 hover:underline shrink-0 disabled:opacity-50 flex items-center gap-1.5"
               >
-                Cancel Scheduled Change
+                {cancellingChange && <Loader2 className="w-3 h-3 animate-spin" />}
+                {cancellingChange ? "Cancelling..." : "Cancel Scheduled Change"}
               </button>
             </div>
           </Card>

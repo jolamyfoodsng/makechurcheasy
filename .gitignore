@@ -1,2 +1,38 @@
-# Local Netlify folder
-.netlify
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js & Build Artifacts
+.next/
+**/.next/
+.open-next/
+**/.open-next/
+out/
+dist/
+build/
+
+# Deployments & Cloud
+.netlify/
+**/.netlify/
+.vercel/
+**/.vercel/
+.wrangler/
+**/.wrangler/
+
+# Environment Variables & Secrets
+.env
+.env.*
+.env*.local
+!.env.example
+!.env.local.example
+!.env.vercel.example
+
+# OS & Logs
+.DS_Store
+**/.DS_Store
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+*.log
+npm-debug.log*

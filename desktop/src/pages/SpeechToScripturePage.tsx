@@ -587,6 +587,27 @@ export default function SpeechToScripturePage() {
     };
   }, [isTranscribing, snapshot.startedAt]);
 
+  const handleInactivityStop = useCallback(() => {
+    confirmStop();
+    lmDockService.stopDueToInactivity();
+  }, [confirmStop]);
+
+  // ── Auto-stop when inactivity countdown reaches 0 ──
+  useEffect(() => {
+    if (snapshot.inactivityPrompt?.active && snapshot.inactivityPrompt.remainingSeconds === 0 && isTranscribing) {
+      handleInactivityStop();
+    }
+  }, [snapshot.inactivityPrompt, isTranscribing, handleInactivityStop]);
+
+  // ── Auto-clear inactivity notice after 6 seconds ──
+  useEffect(() => {
+    if (!snapshot.inactivityNotice) return;
+    const timer = setTimeout(() => {
+      lmDockService.clearInactivityNotice();
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [snapshot.inactivityNotice]);
+
   useEffect(() => {
     if (!isTranscribing || sessionLimitSeconds === null || sessionLimitSeconds <= 0 || elapsed < sessionLimitSeconds || limitStopTriggeredRef.current) return;
     limitStopTriggeredRef.current = true;
@@ -1442,6 +1463,55 @@ export default function SpeechToScripturePage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Inactivity Prompt Modal ── */}
+      {snapshot.inactivityPrompt?.active && (
+        <div className="sts3-modal-overlay">
+          <div className="sts3-modal sts3-modal--small" onClick={(e) => e.stopPropagation()}>
+            <div className="sts3-modal-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Clock size={20} style={{ color: "var(--warning)" }} />
+              <h3 className="sts3-modal-title">Are you still using Voice AI?</h3>
+            </div>
+            <div className="sts3-modal-body">
+              <p className="sts3-modal-text">
+                No speech detected for {snapshot.inactivityPrompt.intervalMinutes} minutes. Listening will automatically stop in{" "}
+                <strong>{snapshot.inactivityPrompt.remainingSeconds}s</strong> to conserve credits.
+              </p>
+            </div>
+            <div className="sts3-modal-footer">
+              <button
+                className="sts3-modal-btn sts3-modal-btn--ghost"
+                onClick={handleInactivityStop}
+                title="Stop listening"
+              >
+                Stop
+              </button>
+              <button
+                className="sts3-modal-btn sts3-modal-btn--primary"
+                onClick={() => lmDockService.confirmStillUsing()}
+                title="I'm still using it"
+              >
+                I'm still using it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Inactivity Notice Toast ── */}
+      {snapshot.inactivityNotice && (
+        <div className="sts3-inactivity-toast">
+          <Clock size={18} className="sts3-inactivity-toast__icon" />
+          <span>{snapshot.inactivityNotice}</span>
+          <button
+            className="sts3-inactivity-toast__close"
+            onClick={() => lmDockService.clearInactivityNotice()}
+            title="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 

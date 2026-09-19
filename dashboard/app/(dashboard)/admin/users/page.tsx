@@ -855,11 +855,6 @@ export default function AdminUsersPage() {
                     {t('admin.users.tableHeaders.plan')} <SortIcon field="plan" />
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden lg:table-cell">
-                  <button onClick={() => toggleSort("credits")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
-                    {t('admin.users.tableHeaders.credits')} <SortIcon field="credits" />
-                  </button>
-                </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden lg:table-cell">{t('admin.users.tableHeaders.status')}</th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden md:table-cell">
                   <button onClick={() => toggleSort("lastActive")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
@@ -909,9 +904,6 @@ export default function AdminUsersPage() {
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className="text-slate-300 font-medium">{user.credits.toLocaleString()}</span>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <div className="flex items-center gap-1.5">
@@ -969,12 +961,6 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <a
-                        href={"mailto:" + encodeURIComponent(user.email)}
-                        className="hidden sm:inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium text-slate-300 hover:bg-gray-800 hover:text-slate-100"
-                      >
-                        <Mail className="h-4 w-4" /> Email
-                      </a>
                       <Link
                         href={"/admin/users/" + user.id}
                         className="inline-flex h-9 items-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20"
@@ -1005,7 +991,7 @@ export default function AdminUsersPage() {
               ))}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
                     {t('admin.users.noUsersFound')}
                   </td>
                 </tr>

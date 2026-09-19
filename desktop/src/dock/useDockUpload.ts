@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { isSupportedMediaFile } from "../services/mediaValidation";
 import {
   uploadFileToDock,
   dedupeMediaItems,
@@ -35,12 +36,6 @@ function uid(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function isAcceptedFile(file: File): boolean {
-  if (file.type.startsWith("image/") || file.type.startsWith("video/")) return true;
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "mp4", "mov", "webm", "mkv"].includes(ext);
-}
-
 export function useDockUpload(): UseDockUploadReturn {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
@@ -63,7 +58,7 @@ export function useDockUpload(): UseDockUploadReturn {
     if (processingRef.current) return;
     processingRef.current = true;
 
-    const valid = files.filter(isAcceptedFile);
+    const valid = files.filter(isSupportedMediaFile);
     const invalid = files.length - valid.length;
 
     if (invalid > 0) {

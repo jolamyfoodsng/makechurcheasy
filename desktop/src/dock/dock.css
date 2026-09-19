@@ -8089,17 +8089,17 @@ body.dock-modal-open {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  min-width: 18px;
-  height: 48px;
-  padding: 4px 0;
+  width: 26px;
+  min-width: 26px;
+  height: 60px;
+  padding: 6px 0;
   border: 1px solid var(--dock-border);
   border-right: 0;
-  border-radius: 6px 0 0 6px;
+  border-radius: 7px 0 0 7px;
   background: var(--dock-surface-alt);
   color: var(--dock-text-dim);
   font: inherit;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
@@ -8112,15 +8112,16 @@ body.dock-modal-open {
 .dock-bible-reader__quick-actions--menu-right .dock-bible-reader__quick-actions-trigger {
   border-right: 1px solid var(--dock-border);
   border-left: 0;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 7px 7px 0;
 }
 
 .dock-bible-reader__quick-actions-label {
   display: inline-block;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  letter-spacing: 0.08em;
-  font-size: 7.5px;
+  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -8780,7 +8781,7 @@ body.dock-modal-open {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 200;
+  z-index: 20000;
   min-width: 240px;
   max-width: min(320px, calc(100vw - 24px));
   max-height: min(640px, calc(100vh - 24px));
@@ -11166,6 +11167,11 @@ body.dock-modal-open {
   flex-shrink: 0;
 }
 
+.dock-bible-chapter-bar:has(.dock-bible-picker-popover),
+.dock-bible-chapter-bar--picker-open {
+  z-index: 10005;
+}
+
 .dock-bible-chapter-bar__btn {
   display: flex;
   align-items: center;
@@ -11231,8 +11237,8 @@ body.dock-modal-open {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
-  padding: 12px;
-  z-index: 1001;
+  padding: 10px;
+  z-index: 10010;
   backdrop-filter: blur(12px);
 }
 
@@ -11315,12 +11321,18 @@ body.dock-modal-open {
 
 .dock-bible-picker-books-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  max-height: 180px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  max-height: 190px;
   overflow-y: auto;
   margin-bottom: 4px;
   padding-right: 2px;
+}
+
+@media (max-width: 280px) {
+  .dock-bible-picker-books-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .dock-bible-picker-book-btn {
@@ -11329,9 +11341,12 @@ body.dock-modal-open {
   border-radius: 6px;
   color: #cbd5e1;
   font-size: 11px;
-  font-weight: 500;
-  padding: 6px 4px;
-  text-align: center;
+  font-weight: 600;
+  padding: 4px 2px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -11353,11 +11368,17 @@ body.dock-modal-open {
 
 .dock-bible-picker-chapters-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 5px;
-  max-height: 180px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-height: 190px;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+@media (max-width: 280px) {
+  .dock-bible-picker-chapters-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
 
 .dock-bible-picker-chapter-btn {
@@ -11365,8 +11386,9 @@ body.dock-modal-open {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   color: #e2e8f0;
-  font-size: 12px;
-  height: 28px;
+  font-size: 11px;
+  font-weight: 500;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11453,6 +11475,40 @@ body.dock-modal-open {
 .dock-bible-reader__verse-nav-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.dock-bible-reader__quick-edit-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dock-bible-reader__quick-edit-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 320px) {
+  .dock-bible-reader__quick-edit-label {
+    display: none;
+  }
+  .dock-bible-reader__quick-edit-toolbar-btn {
+    padding: 0;
+    width: 34px;
+  }
 }
 
 .dock-module--bible .dock-btm-toolbar__clear--inline,
@@ -16951,8 +17007,8 @@ body.dock-modal-open {
 
 .dock-bible-search-row__input .dock_search__input {
   min-height: 16px;
-  font-size: 12px;
-  padding: 8px;
+  font-size: clamp(10.5px, calc(11.5px * var(--dock-font-scale, 1)), 13px);
+  padding: 6px 8px;
 }
 
 .dock-bible-search-row__translation {
@@ -30027,6 +30083,8 @@ body.dock-modal-open {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: color 0.15s, border-color 0.15s;
 }
 
@@ -30146,6 +30204,32 @@ body.dock-modal-open {
   margin-bottom: 10px;
 }
 
+.dock-time-toolbar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+  padding: 4px;
+}
+
+.dock-time-toolbar-options__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text, #f8fafc);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+}
+
+.dock-time-switches--toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+}
+
 .dock-time-panel__format,
 .dock-time-live {
   display: inline-flex;
@@ -30179,26 +30263,59 @@ body.dock-modal-open {
 
 .dock-time-preview__card {
   position: absolute;
-  display: grid;
-  grid-template-columns: 4px minmax(0, 1fr);
+  display: flex;
+  align-items: center;
   gap: 8px;
-  min-width: min(230px, calc(100% - 20px));
+  min-width: min(210px, calc(100% - 20px));
   max-width: calc(100% - 20px);
-  padding: 9px 11px 10px 9px;
+  padding: 8px 12px 9px 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 5px;
+  border-radius: 6px;
   background: rgba(17, 24, 39, 0.94);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
 }
 
-.dock-time-preview--lower-third.dock-time-preview--left .dock-time-preview__card {
+.dock-time-preview--lower-third.dock-time-preview--left .dock-time-preview__card,
+.dock-time-preview--lower-third.dock-time-preview--bottom-left .dock-time-preview__card {
   left: 10px;
   bottom: 10px;
+  top: auto;
+  right: auto;
 }
 
-.dock-time-preview--lower-third.dock-time-preview--right .dock-time-preview__card {
+.dock-time-preview--lower-third.dock-time-preview--right .dock-time-preview__card,
+.dock-time-preview--lower-third.dock-time-preview--bottom-right .dock-time-preview__card {
   right: 10px;
   bottom: 10px;
+  top: auto;
+  left: auto;
+}
+
+.dock-time-preview--lower-third.dock-time-preview--top-left .dock-time-preview__card {
+  left: 10px;
+  top: 10px;
+  bottom: auto;
+  right: auto;
+}
+
+.dock-time-preview--lower-third.dock-time-preview--top-right .dock-time-preview__card {
+  right: 10px;
+  top: 10px;
+  bottom: auto;
+  left: auto;
+}
+
+.dock-time-preview--transparent .dock-time-preview__card {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.dock-time-preview--transparent .dock-time-preview__value,
+.dock-time-preview--transparent .dock-time-preview__label,
+.dock-time-preview--transparent .dock-time-preview__date {
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 0, 0, 0.7);
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__card {
@@ -30211,15 +30328,19 @@ body.dock-modal-open {
   background: transparent;
   box-shadow: none;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
 }
 
 .dock-time-preview__accent {
-  min-height: 100%;
+  width: 4px;
+  min-height: 28px;
+  align-self: stretch;
   border-radius: 3px;
   background: var(--dock-accent, #f97316);
+  flex-shrink: 0;
 }
 
 .dock-time-preview__content {
@@ -30241,12 +30362,73 @@ body.dock-modal-open {
 }
 
 .dock-time-preview__value {
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--dock-text, #f8fafc);
-  font-size: 28px;
+  font-size: 24px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
   line-height: 1;
+}
+
+/* ── Preview Analog Clock ── */
+.dock-time-analog-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dock-time-analog-dial {
+  width: 36px;
+  height: 36px;
+}
+
+.dock-time-preview--fullscreen .dock-time-analog-dial {
+  width: 64px;
+  height: 64px;
+}
+
+/* ── Preview Theme Styles ── */
+.dock-time-preview--theme-broadcast-pill .dock-time-preview__card {
+  border-radius: 9999px;
+  padding: 6px 14px 6px 10px;
+}
+
+.dock-time-pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.dock-time-preview--theme-broadcast-pill .dock-time-preview__value {
+  font-size: 18px;
+}
+
+.dock-time-preview--theme-neon .dock-time-preview__card {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.25);
+}
+
+.dock-time-preview--theme-neon .dock-time-preview__value {
+  color: #67e8f9;
+  font-family: monospace;
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+}
+
+.dock-time-preview--theme-elegant .dock-time-preview__card {
+  border-color: rgba(234, 179, 8, 0.4);
+  background: linear-gradient(135deg, rgba(28, 24, 18, 0.95), rgba(15, 23, 42, 0.95));
+}
+
+.dock-time-preview--theme-elegant .dock-time-preview__value {
+  color: #fef3c7;
+  font-family: Georgia, serif;
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__accent { display: none; }
@@ -30263,7 +30445,7 @@ body.dock-modal-open {
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__value {
-  font-size: 40px;
+  font-size: 36px;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
 }
 
@@ -30273,7 +30455,7 @@ body.dock-modal-open {
 }
 
 .dock-time-preview__date {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--dock-text-dim, #cbd5e1);
   font-size: 9px;
   font-weight: 600;
@@ -30285,15 +30467,157 @@ body.dock-modal-open {
   margin-top: 10px;
 }
 
+/* ── Theme Grid & Cards ── */
+.dock-time-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+@media (max-width: 360px) {
+  .dock-time-theme-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dock-time-theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 3px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #172033);
+  color: var(--dock-text-dim, #94a3b8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.dock-time-theme-card:hover {
+  background: var(--dock-hover, #1e293b);
+  color: var(--dock-text, #f8fafc);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dock-time-theme-card--active {
+  border-color: var(--dock-accent, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--dock-accent, #f97316);
+  font-weight: 700;
+}
+
+.dock-time-theme-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-time-theme-card__name {
+  text-align: center;
+  line-height: 1.15;
+  font-size: 9.5px;
+  word-break: break-word;
+}
+
+/* ── Corner Placement Grid ── */
+.dock-time-placement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dock-time-placement-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+  color: var(--dock-text-dim, #94a3b8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-time-placement-btn:hover {
+  background: var(--dock-hover, #1e293b);
+  color: var(--dock-text, #f8fafc);
+}
+
+.dock-time-placement-btn--active {
+  border-color: var(--dock-accent, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--dock-accent, #f97316);
+  font-weight: 700;
+}
+
 .dock-time-field {
   display: grid;
   gap: 5px;
+}
+
+.dock-time-field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .dock-time-field__label {
   color: var(--dock-text-dim, #94a3b8);
   font-size: 10px;
   font-weight: 700;
+}
+
+.dock-time-field__hint {
+  font-size: 10px;
+  color: var(--dock-text-dim, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-time-select {
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  outline: none;
+  background: var(--dock-surface, #111827);
+  color: var(--dock-text, #f8fafc);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 28px 0 9px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dock-time-select:hover {
+  background-color: var(--dock-hover, #1e293b);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.dock-time-select:focus {
+  border-color: var(--dock-accent, #f97316);
 }
 
 .dock-time-field input[type="text"] {
@@ -30314,57 +30638,6 @@ body.dock-modal-open {
   border-color: var(--dock-accent, #f97316);
 }
 
-.dock-time-segmented {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.dock-time-segmented__button { min-height: 30px; padding: 6px; }
-
-.dock-time-timer-readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 10px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 4px;
-  background: var(--dock-surface-alt, #172033);
-}
-
-.dock-time-timer-readout span {
-  color: var(--dock-text-dim, #94a3b8);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.dock-time-timer-readout strong {
-  color: var(--dock-text, #f8fafc);
-  font-size: 19px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-}
-
-.dock-time-switches {
-  display: grid;
-  gap: 7px;
-  padding: 9px 10px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 4px;
-  background: var(--dock-surface-alt, #172033);
-}
-
-.dock-time-switches label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--dock-text-dim, #cbd5e1);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.dock-time-switches input { accent-color: var(--dock-accent, #f97316); }
-
 .dock-time-message {
   margin-top: 10px;
   border: 1px solid var(--dock-border, #334155);
@@ -30377,13 +30650,6 @@ body.dock-modal-open {
 .dock-time-message--info { color: var(--dock-text-dim, #cbd5e1); }
 .dock-time-message--success { border-color: rgba(34, 197, 94, 0.45); color: #86efac; }
 .dock-time-message--error { border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
-
-.dock-time-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
 
 .dock-mv-tab__header {
   display: flex;
@@ -31666,6 +31932,127 @@ body.dock-modal-open {
   margin-top: 8px;
 }
 
+/* ── Unified Studio Properties Group (Frame, Background, Spacing) ── */
+.dock-mv-properties-group {
+  margin: 8px 0 10px 0;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.dock-mv-properties-group__header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--dock-text-dim, #94a3b8);
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+  border-radius: 5px;
+}
+
+.dock-mv-properties-group__header:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--dock-text, #f1f5f9);
+}
+
+.dock-mv-properties-group__header--open {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.dock-mv-properties-group__header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dock-mv-properties-group__title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--dock-text, #f1f5f9);
+}
+
+.dock-mv-properties-group__summary {
+  font-size: 11px;
+  color: var(--dock-text-dim, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 4px;
+  opacity: 0.85;
+}
+
+.dock-mv-properties-group__chevron {
+  color: var(--dock-text-dim, #94a3b8);
+  flex-shrink: 0;
+}
+
+.dock-mv-properties-group .dock-mv-property {
+  margin: 0;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+}
+
+.dock-mv-properties-group .dock-mv-property:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dock-mv-properties-group .dock-mv-property__label {
+  width: 74px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text-dim, #94a3b8);
+  text-transform: capitalize;
+  letter-spacing: 0.2px;
+}
+
+.dock-mv-properties-group .dock-mv-property__row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: unset;
+}
+
+.dock-mv-properties-group .dock-mv-property__value {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dock-text, #f1f5f9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-properties-group .dock-mv-property__action {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
 .dock-mv-property__label {
   display: block;
   font-size: 11px;
@@ -31743,6 +32130,316 @@ body.dock-modal-open {
 
 .dock-mv-property__select:focus {
   border-color: var(--dock-border-active);
+}
+
+/* ── Multi-View Margin Section & Affect Background ── */
+.dock-mv-margin-section {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--dock-surface, #1E293B);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dock-mv-margin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-margin-label-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text-dim, #94A3B8);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dock-mv-margin-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--dock-accent-bg, rgba(99, 102, 241, 0.15));
+  color: var(--dock-accent, #818CF8);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.dock-mv-margin-reset-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.dock-mv-margin-reset-btn:hover {
+  border-color: var(--dock-border-active, #6366F1);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-margin-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dock-mv-margin-slider {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  accent-color: var(--dock-accent, #6366F1);
+  cursor: pointer;
+}
+
+.dock-mv-margin-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dock-mv-margin-preset-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--dock-border, #334155);
+  background: var(--dock-bg, #0F172A);
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-mv-margin-preset-chip:hover {
+  border-color: var(--dock-accent, #6366F1);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-margin-preset-chip--active {
+  background: var(--dock-accent, #6366F1);
+  border-color: var(--dock-accent, #6366F1);
+  color: #FFFFFF;
+}
+
+/* Affect Background Card — stylish, clean, and intuitive */
+.dock-mv-affect-bg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--dock-border, #334155);
+  background: var(--dock-bg, #0F172A);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.dock-mv-affect-bg-card:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.dock-mv-affect-bg-card--active {
+  border-color: var(--dock-accent, #6366F1);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.dock-mv-affect-bg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-affect-bg-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-mv-affect-bg-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dock-text-dim, #94A3B8);
+  transition: all 0.2s ease;
+}
+
+.dock-mv-affect-bg-card--active .dock-mv-affect-bg-icon {
+  background: var(--dock-accent, #6366F1);
+  color: #FFFFFF;
+}
+
+.dock-mv-affect-bg-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text, #F8FAFC);
+}
+
+/* Stylish Toggle Switch */
+.dock-mv-switch {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  border-radius: 9px;
+  background: var(--dock-border, #334155);
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dock-mv-switch--active {
+  background: var(--dock-accent, #6366F1);
+}
+
+.dock-mv-switch-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dock-mv-switch--active .dock-mv-switch-knob {
+  transform: translateX(14px);
+}
+
+.dock-mv-affect-bg-desc {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--dock-text-dim, #94A3B8);
+  margin: 0;
+}
+
+.dock-mv-affect-bg-card--active .dock-mv-affect-bg-desc {
+  color: rgba(248, 250, 252, 0.85);
+}
+
+/* ── Multi-View Spacing & Margin Modal ── */
+.dock-mv-spacing-modal {
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(88vh, 600px);
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-mv-spacing-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.dock-mv-spacing-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+}
+
+.dock-mv-spacing-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-mv-spacing-group-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-mv-spacing-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-spacing-group-desc {
+  font-size: 10px;
+  color: var(--dock-text-dim, #94A3B8);
+}
+
+/* Stepper Increaser / Decreaser */
+.dock-mv-stepper {
+  display: flex;
+  align-items: center;
+}
+
+.dock-mv-stepper__control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 6px;
+  background: var(--dock-bg, #0F172A);
+  overflow: hidden;
+}
+
+.dock-mv-stepper__btn {
+  width: 28px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.dock-mv-stepper__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dock-accent, #6366F1);
+}
+
+.dock-mv-stepper__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dock-mv-stepper__val {
+  min-width: 44px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+  padding: 0 4px;
+  user-select: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dock-mv-spacing-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dock-border, #334155);
+  background: rgba(15, 23, 42, 0.4);
 }
 
 /* Background editor modal */
@@ -35989,11 +36686,11 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-module--bible--compact .dock-bible-reader__quick-actions-trigger {
-  width: 18px;
-  min-width: 18px;
-  height: 44px;
-  padding: 3px 0;
-  font-size: 7.5px;
+  width: 22px;
+  min-width: 22px;
+  height: 52px;
+  padding: 4px 0;
+  font-size: 8.5px;
 }
 
 .dock-module--bible--compact .dock-bible-reader__quick-actions {
@@ -38703,6 +39400,7 @@ button.dock-btm-toolbar__clear--inline,
   min-height: 32px;
   padding-block: 4px;
   line-height: 20px;
+  font-size: clamp(10.5px, calc(11.5px * var(--dock-font-scale, 1)), 13px);
 }
 
 .dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,

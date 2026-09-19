@@ -7574,26 +7574,27 @@ export class DockObsClient {
    */
   async pushBibleOverlayFast(
     data: {
-    lineCount?: number;
-    verseText?: string;
-    referenceText?: string;
-    verseRange?: string;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    themeId?: string;
-    compareEnabled?: boolean;
-    compareMode?: "translations" | "passages";
-    compareLayout?: string;
-    compare?: Record<string, unknown> | null;
-    translationA?: string;
-    translationB?: string;
+      lineCount?: number;
+      verseText?: string;
+      referenceText?: string;
+      verseRange?: string;
+      bibleThemeSettings?: Record<string, unknown> | null;
+      liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+      themeId?: string;
+      overlayMode?: "fullscreen" | "lower-third";
+      compareEnabled?: boolean;
+      compareMode?: "translations" | "passages";
+      compareLayout?: string;
+      compare?: Record<string, unknown> | null;
+      translationA?: string;
+      translationB?: string;
     },
     options?: DockOverlayFitOptions,
   ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const browserSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
-    const mode = "lower-third";
+    const mode = data.overlayMode || "lower-third";
 
-    // If the LT source is not already active in the current mode, use the full push.
+    // If the LT/Fullscreen source is not already active in the current mode, use the full push.
     if (
       !this._bibleLtInitialized
       || !this._lastBrowserSourceUrlBySource[browserSourceName]
@@ -7613,7 +7614,7 @@ export class DockObsClient {
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
-        overlayMode: "lower-third",
+        overlayMode: mode,
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: data.compareEnabled,
@@ -7647,7 +7648,7 @@ export class DockObsClient {
         translation: "KJV",
         theme: data.themeId,
         verseText: data.verseText,
-        overlayMode: "lower-third",
+        overlayMode: mode,
         bibleThemeSettings: data.bibleThemeSettings,
         liveOverrides: data.liveOverrides ?? null,
         compareEnabled: true,
@@ -7678,13 +7679,19 @@ export class DockObsClient {
       return;
     }
 
-    // Keep fast lower-third updates on the same latest-update queue as the
+    // Keep fast updates on the same latest-update queue as the
     // full Bible path. Otherwise a quick verse/background change can finish
     // out of order and briefly repaint an older pattern after the new one.
     return this.runSerializedBibleMutation(async () => {
       this._lastBibleMode = mode;
-      const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
-      const { cleanSettings: ltClean, css } = this.stripThemeDataUris(overlayTheme);
+      let themeSettingsForClean: Record<string, unknown>;
+      if (mode === "lower-third") {
+        const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+        themeSettingsForClean = overlayTheme ?? effectiveThemeSettings;
+      } else {
+        themeSettingsForClean = effectiveThemeSettings;
+      }
+      const { cleanSettings, css } = this.stripThemeDataUris(themeSettingsForClean);
       const themeCss = css;
 
       const slide = this.buildBibleSlide(
@@ -7696,11 +7703,11 @@ export class DockObsClient {
         data.lineCount,
       );
 
-      const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName);
+      const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", browserSourceName, mode);
 
       const cssOverlayPacket: Record<string, unknown> = {
         slide,
-        theme: ltClean ?? null,
+        theme: cleanSettings ?? null,
         live: true,
         blanked: false,
         timestamp: Date.now(),
@@ -7746,21 +7753,22 @@ export class DockObsClient {
 
   async pushWorshipOverlayFast(
     data: {
-    sectionText: string;
-    translationText?: string;
-    translationOrder?: DockTranslationOrder;
-    sectionLabel: string;
-    songTitle: string;
-    artist?: string;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
+      sectionText: string;
+      translationText?: string;
+      translationOrder?: DockTranslationOrder;
+      sectionLabel: string;
+      songTitle: string;
+      artist?: string;
+      overlayMode?: "fullscreen" | "lower-third";
+      bibleThemeSettings?: Record<string, unknown> | null;
+      liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+      backgroundOnly?: boolean;
     },
     options?: DockOverlayFitOptions,
   ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
     const resources = getDockResources();
     const sourceName = resources.worshipSource;
-    const mode = "lower-third";
+    const mode = data.overlayMode || "lower-third";
     const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("worship", sourceName);
 
     if (!this._worshipInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
@@ -7790,8 +7798,14 @@ export class DockObsClient {
     let cleanTheme: Record<string, unknown> | null = null;
 
     if (effectiveThemeSettings) {
-      const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
-      const { cleanSettings, css } = this.stripThemeDataUris(overlayTheme);
+      let themeForClean: Record<string, unknown>;
+      if (mode === "lower-third") {
+        const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+        themeForClean = overlayTheme ?? effectiveThemeSettings;
+      } else {
+        themeForClean = effectiveThemeSettings;
+      }
+      const { cleanSettings, css } = this.stripThemeDataUris(themeForClean);
       cleanTheme = cleanSettings ?? null;
       themeCss = stripCompatModeCSS(css);
     }
@@ -7828,13 +7842,122 @@ export class DockObsClient {
     await this.prepareFastOverlayScene(
       "worship",
       sourceName,
-      (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
+      (sceneName) => mode === "fullscreen"
+        ? this.fitSceneSourceToCanvas(sceneName, sourceName)
+        : this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
     );
     await this.focusMcePresentationModule("worship").catch(() => { });
     await this.promotePresentationScene("worship").catch(() => { });
     if (options?.waitForFit) {
       return this.waitForOverlayRenderMeasurement(
         "worship",
+        Number(packetWithMode.timestamp) || Date.now(),
+        mode,
+        options.timeoutMs ?? 700,
+        sourceName,
+      );
+    }
+    return null;
+  }
+
+  async pushNotesOverlayFast(
+    data: {
+      sectionText: string;
+      translationText?: string;
+      translationOrder?: DockTranslationOrder;
+      sectionLabel: string;
+      songTitle: string;
+      artist?: string;
+      overlayMode?: "fullscreen" | "lower-third";
+      bibleThemeSettings?: Record<string, unknown> | null;
+      liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
+      backgroundOnly?: boolean;
+    },
+    options?: DockOverlayFitOptions,
+  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
+    const resources = getDockResources();
+    const sourceName = resources.notesSource;
+    const mode = data.overlayMode || "lower-third";
+    const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
+
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
+      if (canReuseLoadedSource) {
+        this._notesInitialized = true;
+      }
+    }
+
+    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
+      return this.pushNotesLyrics({
+        ...data,
+        overlayMode: mode,
+      }, options);
+    }
+
+    this._lastOverlayMode[sourceName] = mode;
+    const backgroundOnly = Boolean(data.backgroundOnly);
+    const sectionText = backgroundOnly ? "" : data.sectionText;
+    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
+    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
+      data.bibleThemeSettings,
+      data.liveOverrides,
+    );
+
+    let themeCss = "";
+    let cleanTheme: Record<string, unknown> | null = null;
+
+    if (effectiveThemeSettings) {
+      let themeForClean: Record<string, unknown>;
+      if (mode === "lower-third") {
+        const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
+        themeForClean = overlayTheme ?? effectiveThemeSettings;
+      } else {
+        themeForClean = effectiveThemeSettings;
+      }
+      const { cleanSettings, css } = this.stripThemeDataUris(themeForClean);
+      cleanTheme = cleanSettings ?? null;
+      themeCss = stripCompatModeCSS(css);
+    }
+
+    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
+    const packetWithMode: Record<string, unknown> = {
+      slide,
+      theme: cleanTheme,
+      live: true,
+      blanked: false,
+      timestamp: Date.now(),
+      mode,
+    };
+
+    this.publishFullscreenOverlayPacket({
+      slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
+      theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
+      live: true,
+      blanked: false,
+      timestamp: Number(packetWithMode.timestamp) || Date.now(),
+      mode,
+    }, "notes", themeCss, sourceName);
+
+    await this.deliverCssOverlayPacket(
+      sourceName,
+      "notes",
+      packetWithMode,
+      cssOverlayBaseUrl,
+      themeCss,
+    );
+
+    await this.prepareFastOverlayScene(
+      "notes",
+      sourceName,
+      (sceneName) => mode === "fullscreen"
+        ? this.fitSceneSourceToCanvas(sceneName, sourceName)
+        : this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
+    );
+    await this.focusMcePresentationModule("notes").catch(() => { });
+    await this.promotePresentationScene("notes").catch(() => { });
+    if (options?.waitForFit) {
+      return this.waitForOverlayRenderMeasurement(
+        "notes",
         Number(packetWithMode.timestamp) || Date.now(),
         mode,
         options.timeoutMs ?? 700,
@@ -7887,104 +8010,6 @@ export class DockObsClient {
       mode,
     }, "notes", themeCss, sourceName);
     await this.deliverCssOverlayPacket(sourceName, "notes", packet, baseUrl, themeCss).catch(() => { });
-  }
-
-  async pushNotesOverlayFast(
-    data: {
-    sectionText: string;
-    translationText?: string;
-    translationOrder?: DockTranslationOrder;
-    sectionLabel: string;
-    songTitle: string;
-    artist?: string;
-    bibleThemeSettings?: Record<string, unknown> | null;
-    liveOverrides?: DockLiveThemeOverrides | Record<string, unknown> | null;
-    backgroundOnly?: boolean;
-    },
-    options?: DockOverlayFitOptions,
-  ): Promise<DockOverlayFontFitMeasurement | null | undefined> {
-    const resources = getDockResources();
-    const sourceName = resources.notesSource;
-    const mode = "lower-third";
-    const cssOverlayBaseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
-
-    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
-      const canReuseLoadedSource = await this.canReuseStableCssOverlaySource(sourceName, cssOverlayBaseUrl);
-      if (canReuseLoadedSource) {
-        this._notesInitialized = true;
-      }
-    }
-
-    if (!this._notesInitialized || !this._lastBrowserSourceUrlBySource[sourceName]) {
-      return this.pushNotesLyrics({
-        ...data,
-        overlayMode: mode,
-      }, options);
-    }
-
-    this._lastOverlayMode[sourceName] = mode;
-    const backgroundOnly = Boolean(data.backgroundOnly);
-    const sectionText = backgroundOnly ? "" : data.sectionText;
-    const translationText = backgroundOnly ? "" : (data.translationText ?? "");
-    const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
-      data.bibleThemeSettings,
-      data.liveOverrides,
-    );
-
-    let themeCss = "";
-    let cleanTheme: Record<string, unknown> | null = null;
-
-    if (effectiveThemeSettings) {
-      const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
-      const { cleanSettings, css } = this.stripThemeDataUris(overlayTheme);
-      cleanTheme = cleanSettings ?? null;
-      themeCss = stripCompatModeCSS(css);
-    }
-
-    const slide = this.buildBibleSlide(sectionText, "", "", translationText, data.translationOrder);
-    const packetWithMode: Record<string, unknown> = {
-      slide,
-      theme: cleanTheme,
-      live: true,
-      blanked: false,
-      timestamp: Date.now(),
-      mode,
-    };
-
-    this.publishFullscreenOverlayPacket({
-      slide: (packetWithMode.slide as Record<string, unknown> | null) ?? null,
-      theme: (packetWithMode.theme as Record<string, unknown> | null) ?? null,
-      live: true,
-      blanked: false,
-      timestamp: Number(packetWithMode.timestamp) || Date.now(),
-      mode,
-    }, "notes", themeCss, sourceName);
-
-    await this.deliverCssOverlayPacket(
-      sourceName,
-      "notes",
-      packetWithMode,
-      cssOverlayBaseUrl,
-      themeCss,
-    );
-
-    await this.prepareFastOverlayScene(
-      "notes",
-      sourceName,
-      (sceneName) => this.fitSceneSourceToLowerThirdWindow(sceneName, sourceName),
-    );
-    await this.focusMcePresentationModule("notes").catch(() => { });
-    await this.promotePresentationScene("notes").catch(() => { });
-    if (options?.waitForFit) {
-      return this.waitForOverlayRenderMeasurement(
-        "notes",
-        Number(packetWithMode.timestamp) || Date.now(),
-        mode,
-        options.timeoutMs ?? 700,
-        sourceName,
-      );
-    }
-    return null;
   }
 
   /**
@@ -8643,26 +8668,44 @@ export class DockObsClient {
       if (currentProgramScene) scenes.add(currentProgramScene);
     } catch { /* ignore */ }
 
+    // BroadcastChannel message for local/embedded browser sources
+    try {
+      const bc1 = new BroadcastChannel("ocs-lower-third");
+      bc1.postMessage({ type: "animate-out", action: "animate-out", timestamp: Date.now() });
+      bc1.close();
+      const bc2 = new BroadcastChannel(`ocs-lower-third:${resources.ltSource}`);
+      bc2.postMessage({ type: "animate-out", action: "animate-out", timestamp: Date.now() });
+      bc2.close();
+    } catch { /* ignore */ }
+
     let delivered = false;
     try {
-      delivered = await this.emitBrowserOverlayPacket("lower-third", {
+      const deliveredSpecific = await this.emitBrowserOverlayPacket("lower-third", {
+        action: "animate-out",
+        timestamp: Date.now(),
+      }, "", resources.ltSource);
+      const deliveredGlobal = await this.emitBrowserOverlayPacket("lower-third", {
         action: "animate-out",
         timestamp: Date.now(),
       }, "");
+      delivered = deliveredSpecific || deliveredGlobal;
     } catch {
       delivered = false;
     }
 
     if (!delivered) {
       try {
-        const exitUrl = await this.buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "");
+        const exitUrl = _url || await this.buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "");
         if (!exitUrl) {
           throw new Error("No current lower-third payload is available for exit animation.");
         }
+        const parsed = this.parseOverlayPayloadUrl(exitUrl);
+        const overlayCss = parsed ? this.buildCssOverlayDataCss({ ...parsed.payload, blanked: true, action: "animate-out" }, "") : "";
         await this.call("SetInputSettings", {
           inputName: resources.ltSource,
           inputSettings: {
             url: exitUrl,
+            css: overlayCss,
             bgcolor: "#00000000",
             shutdown: false,
             restart_when_active: false,
@@ -10783,9 +10826,36 @@ export class DockObsClient {
         inputName: sourceName,
         inputMuted: options.muted ?? false,
       });
+    } catch {
+      // Ignore mute failures for arbitrary user scenes.
+    }
+
+    try {
+      await this.call("SetInputVolume", {
+        inputName: sourceName,
+        inputVolumeMul: 1.0,
+      });
+    } catch {
+      // Ignore volume failures
+    }
+
+    try {
+      await this.call("SetInputAudioMonitorType", {
+        inputName: sourceName,
+        monitorType: "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT",
+      });
+    } catch {
+      // Ignore monitor type failures
+    }
+
+    try {
       await this.call("TriggerMediaInputAction", {
         inputName: sourceName,
         mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
       });
     } catch {
       // Ignore playback-control failures for arbitrary user scenes.

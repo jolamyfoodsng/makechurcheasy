@@ -64,6 +64,36 @@ function storageKey(themeId: string, editorId: string): string {
   return `${STORAGE_PREFIX}-${themeId}-${editorId}`;
 }
 
+const ACTIVE_SLOT_STORAGE_PREFIX = "mce-lt-active-slot";
+
+/**
+ * Load the saved active slot index for a given theme+editor combination.
+ * Defaults to 0 if not found or invalid.
+ */
+export function loadActiveSlotIndex(themeId: string, editorId = "default"): number {
+  try {
+    const raw = localStorage.getItem(`${ACTIVE_SLOT_STORAGE_PREFIX}-${themeId}-${editorId}`);
+    if (raw !== null) {
+      const idx = Number.parseInt(raw, 10);
+      if (!Number.isNaN(idx) && idx >= 0 && idx < MAX_SLOTS) {
+        return idx;
+      }
+    }
+  } catch { /* ignore */ }
+  return 0;
+}
+
+/**
+ * Persist the active slot index for a given theme+editor combination.
+ */
+export function saveActiveSlotIndex(themeId: string, editorId = "default", index: number): void {
+  try {
+    if (index >= 0 && index < MAX_SLOTS) {
+      localStorage.setItem(`${ACTIVE_SLOT_STORAGE_PREFIX}-${themeId}-${editorId}`, String(index));
+    }
+  } catch { /* ignore */ }
+}
+
 /**
  * Load all slots for a given theme+editor combination.
  * Returns an array of length MAX_SLOTS (empty slots are null).

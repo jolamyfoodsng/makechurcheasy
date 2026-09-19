@@ -1,0 +1,23 @@
+name = "mce-api-router"
+main = "src/index.ts"
+compatibility_date = "2026-07-18"
+workers_dev = true
+
+[env.development]
+name = "mce-api-router-dev"
+
+[env.production]
+name = "mce-api-router"
+
+[vars]
+HEALTH_PATH = "/api/health"
+ORIGIN_TIMEOUT_MS = "12000"
+ORIGINS = """
+[
+  {
+    "name": "vercel",
+    "url": "https://mce-api-failover.vercel.app",
+    "weight": 100
+  }
+]
+"""

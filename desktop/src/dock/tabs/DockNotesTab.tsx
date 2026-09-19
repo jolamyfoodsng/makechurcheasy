@@ -884,6 +884,8 @@ export default function DockNotesTab({
             slideIdx: idx,
             overlayMode,
             theme: theme.id,
+            bibleThemeSettings: resolvedThemeSettings,
+            liveOverrides: null,
           },
         },
         obsData: {
@@ -1148,7 +1150,13 @@ export default function DockNotesTab({
     setActionError("");
     try {
       if (presentationLinkMode) {
-        setOverlayVisible((visible) => !visible);
+        if (overlayVisible) {
+          onStage(null);
+          setOverlayVisible(false);
+        } else if (activeSlideIndex !== null) {
+          pushNoteSlide(activeSlideIndex);
+          setOverlayVisible(true);
+        }
         return;
       }
       await ensureObsConnected();
@@ -1673,17 +1681,15 @@ export default function DockNotesTab({
                       <Icon name="edit" size={14} />
                       <span>{t("worship.quickEdits", "Quick Edits")}</span>
                     </button>
-                    {!presentationLinkMode && (
-                      <DockSceneRoutingControl
-                        module="notes"
-                        route={sceneRoute}
-                        onRouteChange={updateSceneRoute}
-                        title={t("sceneRouting.bible", "Output")}
-                        placement="above"
-                        showLabel
-                        iconName="cast"
-                      />
-                    )}
+                    <DockSceneRoutingControl
+                      module="notes"
+                      route={sceneRoute}
+                      onRouteChange={updateSceneRoute}
+                      title={t("sceneRouting.bible", "Output")}
+                      placement="above"
+                      showLabel
+                      iconName="cast"
+                    />
                   </>
                 )}
               />

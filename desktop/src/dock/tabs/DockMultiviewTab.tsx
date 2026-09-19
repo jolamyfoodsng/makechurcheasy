@@ -117,6 +117,12 @@ interface SavedMultiView {
   frameColor: string;
   /** Per-slot frame override: "inherit" = use layoutFrameId, "none" = no frame, {frameId} = custom */
   slotFrames: Record<string, string>;
+  /** Outer margin around layout/frame in pixels (0-80, default 0) */
+  margin: number;
+  /** Whether the margin affects the background (true = margin surrounds whole background & lightbox; false = margin only around scenes) */
+  affectBackground: boolean;
+  /** Inner spacing/gap between adjacent layout slots in pixels (0-60, default 0) */
+  slotGap: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -376,13 +382,16 @@ async function generateCompositeFramePng(
   cornerRadius: number,
   opacity: number,
   color: string,
+  margin: number = 0,
+  slotGap: number = 0,
 ): Promise<Uint8Array | null> {
   // Resolve effective frame per slot
   const slotDefs = layout.slots.map(slot => {
     const effectiveFrameId = resolveEffectiveFrameId(slotFrames?.[slot.id], frameId);
     const frame = resolveFrame(effectiveFrameId);
+    const eff = calculateMultiviewMarginSlotRect(slot, margin, slotGap);
     return frame
-      ? { rect: { x: slot.x, y: slot.y, w: slot.width, h: slot.height }, frame }
+      ? { rect: { x: eff.x, y: eff.y, w: eff.width, h: eff.height }, frame }
       : null;
   }).filter((entry): entry is { rect: { x: number; y: number; w: number; h: number }; frame: MultiviewFrame } => Boolean(entry));
 
@@ -478,7 +487,14 @@ function normalizeLoadedMultiView(item: SavedMultiView): SavedMultiView {
     }
   }
 
-  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails } : item;
+  const margin = typeof item.margin === "number" ? item.margin : 0;
+  const affectBackground = Boolean(item.affectBackground);
+  const slotGap = typeof item.slotGap === "number" ? item.slotGap : 0;
+  if (typeof item.margin !== "number" || typeof item.affectBackground !== "boolean" || typeof item.slotGap !== "number") {
+    changed = true;
+  }
+
+  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails, margin, affectBackground, slotGap } : item;
 }
 
 // ---------------------------------------------------------------------------
@@ -806,6 +822,8 @@ export async function updateMultiviewBackgroundSource(
   multiviewId: string,
   background: MVBackground,
   previousBackground?: MVBackground,
+  margin: number = 0,
+  affectBackground: boolean = false,
 ): Promise<void> {
   const inputName = `${multiviewId}::BACKGROUND`;
   const existing = await dockObsClient.call("GetSceneItemList", { sceneName }) as {
@@ -876,18 +894,24 @@ export async function updateMultiviewBackgroundSource(
     }
   }
 
+  const m = (affectBackground && margin > 0) ? Math.min(margin, 200) : 0;
+  const bgX = m;
+  const bgY = m;
+  const bgW = m > 0 ? CANVAS_W - 2 * m : CANVAS_W;
+  const bgH = m > 0 ? CANVAS_H - 2 * m : CANVAS_H;
+
   await dockObsClient.call("SetSceneItemTransform", {
     sceneName,
     sceneItemId,
     sceneItemTransform: {
-      positionX: 0,
-      positionY: 0,
+      positionX: bgX,
+      positionY: bgY,
       scaleX: 1,
       scaleY: 1,
       rotation: 0,
       boundsType: "OBS_BOUNDS_STRETCH",
-      boundsWidth: CANVAS_W,
-      boundsHeight: CANVAS_H,
+      boundsWidth: bgW,
+      boundsHeight: bgH,
       boundsAlignment: 0,
       cropLeft: 0,
       cropTop: 0,
@@ -912,7 +936,21 @@ function SlotTypeIcon({ contentType }: { contentType: GallerySlot["contentType"]
   );
 }
 
-const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, slotFraming, frameId, slotFrames, frameThickness, frameCornerRadius, frameOpacity, frameColor }: {
+const LayoutMiniPreview = memo(function LayoutMiniPreview({
+  layout,
+  thumbnails,
+  slotFraming,
+  frameId,
+  slotFrames,
+  frameThickness,
+  frameCornerRadius,
+  frameOpacity,
+  frameColor,
+  margin = 0,
+  affectBackground = false,
+  slotGap = 0,
+  background,
+}: {
   layout: GalleryLayout;
   thumbnails?: Record<string, string>;
   slotFraming?: SavedMultiView["slotFraming"];
@@ -922,9 +960,12 @@ const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, 
   frameCornerRadius?: number;
   frameOpacity?: number;
   frameColor?: string;
+  margin?: number;
+  affectBackground?: boolean;
+  slotGap?: number;
+  background?: MVBackground;
 }) {
-  const scaleX = 100 / CANVAS_W;
-  const scaleY = 100 / CANVAS_H;
+  const m = margin > 0 ? Math.min(margin, 200) : 0;
   const hasThumbs = thumbnails && Object.keys(thumbnails).length > 0;
 
   // Resolve frames per slot for SVG overlay
@@ -933,40 +974,96 @@ const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, 
     return { slot, frame: resolveFrame(effId) };
   }).filter((s): s is { slot: GallerySlot; frame: MultiviewFrame } => !!s.frame);
 
+  const bgType = background?.type ?? "color";
+  const bgColor = background?.color && background.color !== "transparent" ? background.color : "#111111";
+  const isBgInset = affectBackground && m > 0;
+
+  const bgStyle: React.CSSProperties = isBgInset
+    ? {
+        position: "absolute",
+        left: `${(m / CANVAS_W) * 100}%`,
+        top: `${(m / CANVAS_H) * 100}%`,
+        width: `${((CANVAS_W - 2 * m) / CANVAS_W) * 100}%`,
+        height: `${((CANVAS_H - 2 * m) / CANVAS_H) * 100}%`,
+        borderRadius: 4,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        overflow: "hidden",
+        background: bgType === "color" ? bgColor : "#1E293B",
+      }
+    : {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: "100%",
+        height: "100%",
+        background: bgType === "color" ? bgColor : "#1E293B",
+        overflow: "hidden",
+      };
+
   return (
-    <div className="dock-mv-layout-preview" style={{ position: "relative", width: "100%", aspectRatio: `${CANVAS_W}/${CANVAS_H}`, overflow: "hidden", background: "#111", borderRadius: 3 }}>
-      {/* Thumbnail images overlaid */}
+    <div
+      className="dock-mv-layout-preview"
+      style={{
+        position: "relative",
+        width: "100%",
+        aspectRatio: `${CANVAS_W}/${CANVAS_H}`,
+        overflow: "hidden",
+        background: isBgInset ? "#080C14" : "#111",
+        borderRadius: 4,
+        border: "1px solid var(--dock-border, #334155)",
+      }}
+    >
+      {/* Background layer */}
+      <div style={bgStyle}>
+        {bgType === "image" && background?.filePath && (
+          <img
+            src={background.filePath.startsWith("data:") || background.filePath.startsWith("http") || background.filePath.startsWith("/") ? background.filePath : `file://${background.filePath}`}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        )}
+      </div>
+
+      {/* Thumbnail images overlaid at inset position */}
       {hasThumbs && layout.slots.map((slot) => {
         const thumb = thumbnails?.[slot.id];
         if (!thumb) return null;
+        const eff = calculateMultiviewMarginSlotRect(slot, margin, slotGap);
+        const { x: effX, y: effY, width: effW, height: effH } = eff;
+
         const framing = slotFraming?.[slot.id] ?? DEFAULT_SLOT_FRAMING;
         const tx = calculateSlotTransform(
           320,
           180,
-          slot,
+          { x: effX, y: effY, width: effW, height: effH },
           { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
         );
         return (
           <div key={slot.id}
             style={{
-              position: "absolute", left: `${slot.x * scaleX}%`, top: `${slot.y * scaleY}%`,
-              width: `${slot.width * scaleX}%`, height: `${slot.height * scaleY}%`,
+              position: "absolute",
+              left: `${(effX / CANVAS_W) * 100}%`,
+              top: `${(effY / CANVAS_H) * 100}%`,
+              width: `${(effW / CANVAS_W) * 100}%`,
+              height: `${(effH / CANVAS_H) * 100}%`,
               overflow: "hidden",
             }}
           >
             <img src={thumb} alt=""
               style={{
                 position: "absolute",
-                left: `${((tx.positionX - slot.x) / slot.width) * 100}%`,
-                top: `${((tx.positionY - slot.y) / slot.height) * 100}%`,
-                width: `${(tx.renderedWidth / slot.width) * 100}%`,
-                height: `${(tx.renderedHeight / slot.height) * 100}%`,
+                left: `${((tx.positionX - effX) / effW) * 100}%`,
+                top: `${((tx.positionY - effY) / effH) * 100}%`,
+                width: `${(tx.renderedWidth / effW) * 100}%`,
+                height: `${(tx.renderedHeight / effH) * 100}%`,
                 objectFit: "fill",
                 display: "block",
               }} />
           </div>
         );
       })}
+
       {/* SVG overlay: unassigned slot outlines + frame layer borders */}
       <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         {/* Frame layers for assigned slots */}
@@ -975,6 +1072,9 @@ const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, 
           const scale = t / 2;
           const alpha = (frameOpacity ?? 100) / 100;
           const rOverride = frameCornerRadius ?? 0;
+          const eff = calculateMultiviewMarginSlotRect(slot, margin, slotGap);
+          const { x: effX, y: effY, width: effW, height: effH } = eff;
+
           return (
             <g key={`frm-${slot.id}`}>
               {frame.layers.map((layer, li) => {
@@ -983,8 +1083,8 @@ const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, 
                 const r = rOverride > 0 ? rOverride : Math.max(0, layer.radius - inset);
                 return (
                   <rect key={li}
-                    x={slot.x + inset} y={slot.y + inset}
-                    width={slot.width - inset * 2} height={slot.height - inset * 2}
+                    x={effX + inset} y={effY + inset}
+                    width={effW - inset * 2} height={effH - inset * 2}
                     fill="none" stroke={frameColor || layer.color} strokeWidth={lw}
                     rx={r} ry={r} opacity={alpha}
                   />
@@ -997,10 +1097,12 @@ const LayoutMiniPreview = memo(function LayoutMiniPreview({ layout, thumbnails, 
         {layout.slots.map((slot) => {
           if (thumbnails?.[slot.id]) return null;
           const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
+          const eff = calculateMultiviewMarginSlotRect(slot, margin, slotGap);
+          const { x: effX, y: effY, width: effW, height: effH } = eff;
           return (
             <g key={slot.id}>
-              <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill={info.color} opacity={0.3} />
-              <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} fill="none" stroke={info.color} strokeWidth={2} opacity={0.6} />
+              <rect x={effX} y={effY} width={effW} height={effH} fill={info.color} opacity={0.3} />
+              <rect x={effX} y={effY} width={effW} height={effH} fill="none" stroke={info.color} strokeWidth={2} opacity={0.6} />
             </g>
           );
         })}
@@ -1161,6 +1263,66 @@ async function getSceneItemSourceSize(sceneName: string, sceneItemId: number): P
   } catch {
     return normalizeSourceSize();
   }
+}
+
+export function calculateMultiviewMarginSlotRect(
+  slot: { x: number; y: number; width: number; height: number },
+  margin: number,
+  slotGap: number = 0,
+  canvasW: number = CANVAS_W,
+  canvasH: number = CANVAS_H,
+): { x: number; y: number; width: number; height: number } {
+  const m = margin > 0 ? Math.min(margin, 200) : 0;
+  const g = slotGap > 0 ? Math.min(slotGap, 100) : 0;
+  if (m === 0 && g === 0) return { ...slot };
+  const scaleX = m > 0 ? (canvasW - 2 * m) / canvasW : 1;
+  const scaleY = m > 0 ? (canvasH - 2 * m) / canvasH : 1;
+
+  let x = m > 0 ? m + slot.x * scaleX : slot.x;
+  let y = m > 0 ? m + slot.y * scaleY : slot.y;
+  let w = m > 0 ? slot.width * scaleX : slot.width;
+  let h = m > 0 ? slot.height * scaleY : slot.height;
+
+  if (g > 0) {
+    const halfG = g / 2;
+    if (slot.x > 1) {
+      x += halfG;
+      w -= halfG;
+    }
+    if (slot.x + slot.width < canvasW - 1) {
+      w -= halfG;
+    }
+    if (slot.y > 1) {
+      y += halfG;
+      h -= halfG;
+    }
+    if (slot.y + slot.height < canvasH - 1) {
+      h -= halfG;
+    }
+  }
+
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.max(10, Math.round(w)),
+    height: Math.max(10, Math.round(h)),
+  };
+}
+
+export function calculateMultiviewBackgroundRect(
+  margin: number,
+  affectBackground: boolean,
+  canvasW: number = CANVAS_W,
+  canvasH: number = CANVAS_H,
+): { x: number; y: number; width: number; height: number } {
+  const m = (affectBackground && margin > 0) ? Math.min(margin, 200) : 0;
+  if (m === 0) return { x: 0, y: 0, width: canvasW, height: canvasH };
+  return {
+    x: m,
+    y: m,
+    width: canvasW - 2 * m,
+    height: canvasH - 2 * m,
+  };
 }
 
 export function calculateSlotTransform(
@@ -1629,7 +1791,7 @@ function SlotContentMenu({
               onSelect();
             }}
           >
-            {t("multiview.changeContent")}
+            {t("multiview.changeContent", "Change Scene")}
           </button>
           <div className="dock-mv-slot-row__dropdown-divider" />
           <button
@@ -1641,7 +1803,7 @@ function SlotContentMenu({
               onRemove();
             }}
           >
-            {t("multiview.removeContent")}
+            {t("multiview.removeContent", "Remove Scene")}
           </button>
         </div>,
         document.body,
@@ -2549,6 +2711,243 @@ function BackgroundSection({
 }
 
 // ---------------------------------------------------------------------------
+// Stepper (Minus / Plus Increaser)
+// ---------------------------------------------------------------------------
+
+function NumberStepper({
+  value,
+  min = 0,
+  max = 80,
+  step = 2,
+  unit = "px",
+  onChange,
+  label,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  onChange: (val: number) => void;
+  label: string;
+}) {
+  return (
+    <div className="dock-mv-stepper">
+      <div className="dock-mv-stepper__control">
+        <button
+          type="button"
+          className="dock-mv-stepper__btn"
+          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, value - step))}
+          aria-label={`Decrease ${label}`}
+          title={`Decrease ${label}`}
+        >
+          <Icon name="remove" size={13} />
+        </button>
+        <span className="dock-mv-stepper__val">{value}{unit}</span>
+        <button
+          type="button"
+          className="dock-mv-stepper__btn"
+          disabled={value >= max}
+          onClick={() => onChange(Math.min(max, value + step))}
+          aria-label={`Increase ${label}`}
+          title={`Increase ${label}`}
+        >
+          <Icon name="add" size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Spacing Modal — triggered via button/icon, not permanently taking up card space
+// ---------------------------------------------------------------------------
+
+function SpacingModal({
+  open,
+  margin,
+  slotGap,
+  affectBackground,
+  onChangeMargin,
+  onChangeSlotGap,
+  onToggleAffectBackground,
+  onClose,
+}: {
+  open: boolean;
+  margin: number;
+  slotGap: number;
+  affectBackground: boolean;
+  onChangeMargin: (m: number) => void;
+  onChangeSlotGap: (gap: number) => void;
+  onToggleAffectBackground: (affect: boolean) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!open) return null;
+
+  const marginPresets = [0, 16, 24, 40];
+  const gapPresets = [0, 8, 16, 24];
+
+  return (
+    <div className="dock-mv-modal-overlay" onClick={onClose}>
+      <div className="dock-mv-content-picker dock-mv-spacing-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="dock-mv-content-picker__header">
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="aspect_ratio" size={16} />
+            <span className="dock-mv-content-picker__title">Spacing & Layout Margins</span>
+          </div>
+          <button type="button" className="dock-mv-content-picker__close" onClick={onClose} title={t("common.close")}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+
+        <div className="dock-mv-spacing-body">
+          {/* Outer Margin */}
+          <div className="dock-mv-spacing-group">
+            <div className="dock-mv-spacing-group-head">
+              <div className="dock-mv-spacing-group-info">
+                <span className="dock-mv-spacing-group-title">Outer Margin</span>
+                <span className="dock-mv-spacing-group-desc">Spacing around the canvas edges</span>
+              </div>
+              <NumberStepper
+                label="Outer Margin"
+                value={margin}
+                min={0}
+                max={80}
+                step={2}
+                onChange={onChangeMargin}
+              />
+            </div>
+            <div className="dock-mv-margin-slider-row">
+              <input
+                type="range"
+                min={0}
+                max={80}
+                step={2}
+                value={margin}
+                onChange={(e) => onChangeMargin(parseInt(e.target.value, 10) || 0)}
+                className="dock-mv-margin-slider"
+                aria-label="Outer margin slider"
+              />
+            </div>
+            <div className="dock-mv-margin-presets">
+              {marginPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`dock-mv-margin-preset-chip${margin === preset ? " dock-mv-margin-preset-chip--active" : ""}`}
+                  onClick={() => onChangeMargin(preset)}
+                >
+                  {preset === 0 ? "None" : `${preset}px`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Inner Gap / Space Between Elements */}
+          <div className="dock-mv-spacing-group">
+            <div className="dock-mv-spacing-group-head">
+              <div className="dock-mv-spacing-group-info">
+                <span className="dock-mv-spacing-group-title">Inner Gap</span>
+                <span className="dock-mv-spacing-group-desc">Spacing between camera slots</span>
+              </div>
+              <NumberStepper
+                label="Inner Gap"
+                value={slotGap}
+                min={0}
+                max={48}
+                step={2}
+                onChange={onChangeSlotGap}
+              />
+            </div>
+            <div className="dock-mv-margin-slider-row">
+              <input
+                type="range"
+                min={0}
+                max={48}
+                step={2}
+                value={slotGap}
+                onChange={(e) => onChangeSlotGap(parseInt(e.target.value, 10) || 0)}
+                className="dock-mv-margin-slider"
+                aria-label="Inner gap slider"
+              />
+            </div>
+            <div className="dock-mv-margin-presets">
+              {gapPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`dock-mv-margin-preset-chip${slotGap === preset ? " dock-mv-margin-preset-chip--active" : ""}`}
+                  onClick={() => onChangeSlotGap(preset)}
+                >
+                  {preset === 0 ? "None" : `${preset}px`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Affect Background toggle */}
+          <div
+            className={`dock-mv-affect-bg-card${affectBackground ? " dock-mv-affect-bg-card--active" : ""}`}
+            onClick={() => onToggleAffectBackground(!affectBackground)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onToggleAffectBackground(!affectBackground);
+              }
+            }}
+          >
+            <div className="dock-mv-affect-bg-head">
+              <div className="dock-mv-affect-bg-title-wrap">
+                <div className="dock-mv-affect-bg-icon">
+                  <Icon name={affectBackground ? "fit_screen" : "crop_free"} size={13} />
+                </div>
+                <span className="dock-mv-affect-bg-title">Affect Background</span>
+              </div>
+              <div className={`dock-mv-switch${affectBackground ? " dock-mv-switch--active" : ""}`} aria-hidden="true">
+                <div className="dock-mv-switch-knob" />
+              </div>
+            </div>
+            <p className="dock-mv-affect-bg-desc">
+              {affectBackground
+                ? "Background shrinks with margin (lightbox border effect)."
+                : "Background stays full screen edge-to-edge behind slots."}
+            </p>
+          </div>
+        </div>
+
+        <div className="dock-mv-spacing-footer">
+          {(margin > 0 || slotGap > 0) && (
+            <button
+              type="button"
+              className="dock-btn dock-btn--sm"
+              onClick={() => {
+                onChangeMargin(0);
+                onChangeSlotGap(0);
+              }}
+              style={{ background: "transparent", border: "1px solid var(--dock-border)" }}
+            >
+              Reset All
+            </button>
+          )}
+          <button
+            type="button"
+            className="dock-btn dock-btn--sm dock-btn--primary"
+            onClick={onClose}
+            style={{ marginLeft: "auto" }}
+          >
+            {t("common.done", "Done")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Frame Picker Modal
 // ---------------------------------------------------------------------------
 
@@ -2667,6 +3066,9 @@ const MVCard = memo(function MVCard({
   onUpdateFrameOpacity,
   onUpdateFrameColor,
   onUpdateSlotFrame: _onUpdateSlotFrame,
+  onUpdateMargin,
+  onUpdateAffectBackground,
+  onUpdateSlotGap,
   onDuplicate,
   onDelete,
 }: {
@@ -2693,6 +3095,9 @@ const MVCard = memo(function MVCard({
   onUpdateFrameOpacity: (id: string, opacity: number) => void;
   onUpdateFrameColor: (id: string, color: string) => void;
   onUpdateSlotFrame: (id: string, slotId: string, frameMode: string) => void;
+  onUpdateMargin: (id: string, margin: number) => void;
+  onUpdateAffectBackground: (id: string, affectBackground: boolean) => void;
+  onUpdateSlotGap: (id: string, slotGap: number) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -2705,6 +3110,8 @@ const MVCard = memo(function MVCard({
   const cardMenuRef = useRef<HTMLDivElement>(null);
   const [showFramePicker, setShowFramePicker] = useState(false);
   const [showFrameSettings, setShowFrameSettings] = useState(false);
+  const [showSpacingModal, setShowSpacingModal] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
   const frameSettingsRef = useRef<HTMLDivElement>(null);
   const layout = resolveLayout(mv.layoutId);
   const assignedCount = Object.values(mv.assignments).filter(Boolean).length;
@@ -2869,92 +3276,169 @@ const MVCard = memo(function MVCard({
       </div>
 
       {/* Layout Preview — shown below template */}
-      {layout && <LayoutMiniPreview layout={layout} thumbnails={mv.slotThumbnails} slotFraming={mv.slotFraming} frameId={mv.layoutFrameId} slotFrames={mv.slotFrames} frameThickness={mv.frameThickness} frameCornerRadius={mv.frameCornerRadius} frameOpacity={mv.frameOpacity} frameColor={mv.frameColor} />}
+      {layout && (
+        <LayoutMiniPreview
+          layout={layout}
+          thumbnails={mv.slotThumbnails}
+          slotFraming={mv.slotFraming}
+          frameId={mv.layoutFrameId}
+          slotFrames={mv.slotFrames}
+          frameThickness={mv.frameThickness}
+          frameCornerRadius={mv.frameCornerRadius}
+          frameOpacity={mv.frameOpacity}
+          frameColor={mv.frameColor}
+          margin={mv.margin ?? 0}
+          affectBackground={Boolean(mv.affectBackground)}
+          slotGap={mv.slotGap ?? 0}
+          background={getMvBg(mv)}
+        />
+      )}
 
-      {/* Frames — compact property row */}
-      <div className="dock-mv-property">
-        <span className="dock-mv-property__label">{t('multiview.frame')}</span>
-        <div className="dock-mv-property__row">
-          {mv.layoutFrameId ? (
-            <span className="dock-mv-property__value">{resolveFrame(mv.layoutFrameId)?.name ?? "Unknown"}</span>
-          ) : (
-            <span className="dock-mv-property__value dock-mv-property__value--empty">No frame selected</span>
-          )}
-          <div style={{ display: "flex", gap: 4 }}>
-            <button type="button" className="dock-mv-property__action" onClick={() => setShowFramePicker(true)}>
-              {mv.layoutFrameId ? "Change" : "+ Add Frame"}
-            </button>
-            <div ref={frameSettingsRef} style={{ position: "relative" }}>
-              <button
-                type="button"
-                className="dock-mv-property__action"
-                disabled={!mv.layoutFrameId}
-                onClick={() => setShowFrameSettings(s => !s)}
-                title="Frame settings"
-                style={{ opacity: mv.layoutFrameId ? 1 : 0.4 }}
-              >
-                <Icon name="tune" size={12} />
-              </button>
-              {showFrameSettings && mv.layoutFrameId && (
-                <div style={{
-                  position: "absolute", right: 0, top: "100%", marginTop: 4,
-                  background: "var(--dock-surface, #1E293B)", border: "1px solid var(--dock-border, #334155)",
-                  borderRadius: 4, padding: 10, zIndex: 50, minWidth: 180,
-                  display: "flex", flexDirection: "column", gap: 8,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Thickness</span>
-                    <input type="range" min={1} max={16} step={1} value={mv.frameThickness ?? 2}
-                      onChange={(e) => onUpdateFrameThickness(mv.id, parseInt(e.target.value))}
-                      style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameThickness ?? 2}px</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Radius</span>
-                    <input type="range" min={0} max={40} step={2} value={mv.frameCornerRadius ?? 0}
-                      onChange={(e) => onUpdateFrameCornerRadius(mv.id, parseInt(e.target.value))}
-                      style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameCornerRadius ?? 0}px</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Opacity</span>
-                    <input type="range" min={10} max={100} step={5} value={mv.frameOpacity ?? 100}
-                      onChange={(e) => onUpdateFrameOpacity(mv.id, parseInt(e.target.value))}
-                      style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameOpacity ?? 100}%</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Color</span>
-                    <input type="color" value={mv.frameColor || "#D4A853"}
-                      onChange={(e) => onUpdateFrameColor(mv.id, e.target.value)}
-                      style={{ width: 28, height: 20, border: "none", borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }} />
-                    <button type="button" style={{ fontSize: 9, color: "var(--dock-text-dim)", border: "none", background: "transparent", cursor: "pointer" }}
-                      onClick={() => onUpdateFrameColor(mv.id, "")}>Reset</button>
-                  </div>
-                  <div style={{ borderTop: "1px solid var(--dock-border)", paddingTop: 6 }}>
-                    <button type="button" className="dock-btn dock-btn--sm dock-btn--danger" style={{ width: "100%", fontSize: 10 }}
-                      onClick={() => { onUpdateFrame(mv.id, null); setShowFrameSettings(false); }}>
-                      Remove Frame
+      {/* Studio Properties (Frame, Background, Spacing) */}
+      <div className="dock-mv-properties-group">
+        <button
+          type="button"
+          className={`dock-mv-properties-group__header ${propertiesOpen ? "dock-mv-properties-group__header--open" : ""}`}
+          onClick={() => setPropertiesOpen((prev) => !prev)}
+          aria-expanded={propertiesOpen}
+        >
+          <div className="dock-mv-properties-group__header-left">
+            <Icon name="palette" size={12} />
+            <span className="dock-mv-properties-group__title">
+              {t('multiview.styling', 'Styling & Spacing')}
+            </span>
+            {!propertiesOpen && (
+              <span className="dock-mv-properties-group__summary">
+                {mv.layoutFrameId ? (resolveFrame(mv.layoutFrameId)?.name ?? "Frame") : t('multiview.noFrame', 'No frame')}
+                {" · "}
+                {mv.margin || mv.slotGap ? `${mv.margin ?? 0}px margin · ${mv.slotGap ?? 0}px gap` : "0px"}
+              </span>
+            )}
+          </div>
+          <Icon name={propertiesOpen ? "expand_less" : "expand_more"} size={14} className="dock-mv-properties-group__chevron" />
+        </button>
+
+        {propertiesOpen && (
+          <div className="dock-mv-properties-group__body">
+            {/* Frames */}
+            <div className="dock-mv-property">
+              <span className="dock-mv-property__label">{t('multiview.frame', 'Frame')}</span>
+              <div className="dock-mv-property__row">
+                {mv.layoutFrameId ? (
+                  <span className="dock-mv-property__value">{resolveFrame(mv.layoutFrameId)?.name ?? "Unknown"}</span>
+                ) : (
+                  <span className="dock-mv-property__value dock-mv-property__value--empty">No frame selected</span>
+                )}
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button type="button" className="dock-mv-property__action" onClick={() => setShowFramePicker(true)}>
+                    {mv.layoutFrameId ? "Change" : "+ Add Frame"}
+                  </button>
+                  <div ref={frameSettingsRef} style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      className="dock-mv-property__action"
+                      disabled={!mv.layoutFrameId}
+                      onClick={() => setShowFrameSettings(s => !s)}
+                      title="Frame settings"
+                      style={{ opacity: mv.layoutFrameId ? 1 : 0.4 }}
+                    >
+                      <Icon name="tune" size={12} />
                     </button>
+                    {showFrameSettings && mv.layoutFrameId && (
+                      <div style={{
+                        position: "absolute", right: 0, top: "100%", marginTop: 4,
+                        background: "var(--dock-surface, #1E293B)", border: "1px solid var(--dock-border, #334155)",
+                        borderRadius: 4, padding: 10, zIndex: 50, minWidth: 180,
+                        display: "flex", flexDirection: "column", gap: 8,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Thickness</span>
+                          <input type="range" min={1} max={16} step={1} value={mv.frameThickness ?? 2}
+                            onChange={(e) => onUpdateFrameThickness(mv.id, parseInt(e.target.value))}
+                            style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameThickness ?? 2}px</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Radius</span>
+                          <input type="range" min={0} max={40} step={2} value={mv.frameCornerRadius ?? 0}
+                            onChange={(e) => onUpdateFrameCornerRadius(mv.id, parseInt(e.target.value))}
+                            style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameCornerRadius ?? 0}px</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Opacity</span>
+                          <input type="range" min={10} max={100} step={5} value={mv.frameOpacity ?? 100}
+                            onChange={(e) => onUpdateFrameOpacity(mv.id, parseInt(e.target.value))}
+                            style={{ flex: 1, height: 3, accentColor: "var(--dock-accent)" }} />
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 22 }}>{mv.frameOpacity ?? 100}%</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 52 }}>Color</span>
+                          <input type="color" value={mv.frameColor || "#D4A853"}
+                            onChange={(e) => onUpdateFrameColor(mv.id, e.target.value)}
+                            style={{ width: 28, height: 20, border: "none", borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }} />
+                          <button type="button" style={{ fontSize: 9, color: "var(--dock-text-dim)", border: "none", background: "transparent", cursor: "pointer" }}
+                            onClick={() => onUpdateFrameColor(mv.id, "")}>Reset</button>
+                        </div>
+                        <div style={{ borderTop: "1px solid var(--dock-border)", paddingTop: 6 }}>
+                          <button type="button" className="dock-btn dock-btn--sm dock-btn--danger" style={{ width: "100%", fontSize: 10 }}
+                            onClick={() => { onUpdateFrame(mv.id, null); setShowFrameSettings(false); }}>
+                            Remove Frame
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
+              <FramePicker
+                open={showFramePicker}
+                selectedId={mv.layoutFrameId}
+                onSelect={(frameId) => { onUpdateFrame(mv.id, frameId); setShowFramePicker(false); }}
+                onClose={() => setShowFramePicker(false)}
+              />
+            </div>
+
+            {/* Background */}
+            <BackgroundSection
+              background={getMvBg(mv)}
+              onChange={(bg) => onUpdateBackground(mv.id, bg)}
+              obsScenes={obsScenes}
+            />
+
+            {/* Spacing & Margins */}
+            <div className="dock-mv-property">
+              <span className="dock-mv-property__label">{t('multiview.spacing', 'Spacing')}</span>
+              <div className="dock-mv-property__row">
+                <span className="dock-mv-property__value">
+                  {mv.margin || mv.slotGap
+                    ? `${mv.margin ?? 0}px margin · ${mv.slotGap ?? 0}px gap`
+                    : t('common.none', 'None')}
+                </span>
+                <button
+                  type="button"
+                  className="dock-mv-property__action"
+                  onClick={() => setShowSpacingModal(true)}
+                  title="Adjust layout margin and gap"
+                >
+                  <Icon name="tune" size={12} />
+                  <span>{t('common.adjust', 'Adjust')}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <FramePicker
-          open={showFramePicker}
-          selectedId={mv.layoutFrameId}
-          onSelect={(frameId) => { onUpdateFrame(mv.id, frameId); setShowFramePicker(false); }}
-          onClose={() => setShowFramePicker(false)}
-        />
+        )}
       </div>
 
-      {/* Background — compact property row */}
-      <BackgroundSection
-        background={getMvBg(mv)}
-        onChange={(bg) => onUpdateBackground(mv.id, bg)}
-        obsScenes={obsScenes}
+      <SpacingModal
+        open={showSpacingModal}
+        margin={mv.margin ?? 0}
+        slotGap={mv.slotGap ?? 0}
+        affectBackground={Boolean(mv.affectBackground)}
+        onChangeMargin={(val) => onUpdateMargin(mv.id, val)}
+        onChangeSlotGap={(val) => onUpdateSlotGap(mv.id, val)}
+        onToggleAffectBackground={(val) => onUpdateAffectBackground(mv.id, val)}
+        onClose={() => setShowSpacingModal(false)}
       />
 
       {layout && (<><div className="dock-mv-assign-section">
@@ -3191,8 +3675,8 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           changed = true;
           return { ...m, obsSceneName, background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) } };
         }
-        // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness exist
-        if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string") {
+        // Migrate: ensure slotThumbnails, layoutFrameId, slotFrames, frameThickness, margin, affectBackground exist
+        if (!m.slotThumbnails || !("layoutFrameId" in m) || !m.slotFrames || typeof m.frameThickness !== "number" || !m.background || typeof (m.background as Partial<MVBackground>).patternSrc !== "string" || typeof m.margin !== "number" || typeof m.affectBackground !== "boolean") {
           changed = true;
           return {
             ...m,
@@ -3204,6 +3688,8 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             frameOpacity: (m as any).frameOpacity ?? 100,
             frameColor: (m as any).frameColor ?? "",
             background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
+            margin: typeof m.margin === "number" ? m.margin : 0,
+            affectBackground: Boolean(m.affectBackground),
           };
         }
         return m;
@@ -3233,6 +3719,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           frameOpacity: 100,
           frameColor: "",
           background: { ...DEFAULT_MV_BG },
+          margin: 0,
+          affectBackground: false,
+          slotGap: 0,
           createdAt: now,
           updatedAt: now,
         });
@@ -3526,46 +4015,27 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
 
   const handleUpdateBackground = useCallback((id: string, bg: MVBackground) => {
     const current = savedListRef.current;
-    const previous = current.find(m => m.id === id);
-    if (!previous) return;
-
     const next = current.map(m => m.id === id ? { ...m, background: bg, updatedAt: new Date().toISOString() } : m);
     commitSavedList(next);
+  }, [commitSavedList]);
 
-    // Persisting the card is not enough when its managed OBS scene already
-    // exists. Apply the latest background directly to that scene so changing
-    // a background does not require rebuilding the whole layout.
-    void (async () => {
-      try {
-        const sceneWasAlreadyKnown = obsScenes.includes(previous.obsSceneName);
-        if (!sceneWasAlreadyKnown && !dockObsClient.isConnected) return;
+  const handleUpdateMargin = useCallback((id: string, margin: number) => {
+    const current = savedListRef.current;
+    const next = current.map(m => m.id === id ? { ...m, margin, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
-        await ensureObsConnected();
-        if (!dockObsClient.isConnected) return;
+  const handleUpdateSlotGap = useCallback((id: string, slotGap: number) => {
+    const current = savedListRef.current;
+    const next = current.map(m => m.id === id ? { ...m, slotGap, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
-        let sceneExists = sceneWasAlreadyKnown;
-        if (!sceneExists) {
-          const response = await dockObsClient.call("GetSceneList") as {
-            scenes?: Array<{ sceneName: string }>;
-          };
-          sceneExists = Boolean(response.scenes?.some((scene) => scene.sceneName === previous.obsSceneName));
-        }
-        if (!sceneExists) return;
-
-        await updateMultiviewBackgroundSource(
-          previous.obsSceneName,
-          previous.id,
-          bg,
-          getMvBg(previous),
-        );
-      } catch (err) {
-        console.warn("[DockMultiview] Live background update failed", err);
-        if (mountedRef.current) {
-          showFeedback("error", err instanceof Error ? err.message : "Background update failed");
-        }
-      }
-    })();
-  }, [commitSavedList, ensureObsConnected, obsScenes, showFeedback]);
+  const handleUpdateAffectBackground = useCallback((id: string, affectBackground: boolean) => {
+    const current = savedListRef.current;
+    const next = current.map(m => m.id === id ? { ...m, affectBackground, updatedAt: new Date().toISOString() } : m);
+    commitSavedList(next);
+  }, [commitSavedList]);
 
   const handleUpdateFrame = useCallback((id: string, frameId: string | null) => {
     const next = savedListRef.current.map(m => m.id === id ? { ...m, layoutFrameId: frameId, updatedAt: new Date().toISOString() } : m);
@@ -3613,6 +4083,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
       obsSceneName: nextObsSceneName(current),
       assignments: { ...src.assignments },
       background: { ...(src.background ?? DEFAULT_MV_BG) },
+      margin: src.margin ?? 0,
+      affectBackground: Boolean(src.affectBackground),
+      slotGap: src.slotGap ?? 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -3790,7 +4263,17 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
 
       // ── Phase 1.5: Generate composite frame overlay (one transparent PNG with all frames) ──
       const frameSourceName = "MCE · Frames";
-      const pngBytes = await generateCompositeFramePng(layout, mv.layoutFrameId, mv.slotFrames, mv.frameThickness ?? 2, mv.frameCornerRadius ?? 0, mv.frameOpacity ?? 100, mv.frameColor ?? "");
+      const pngBytes = await generateCompositeFramePng(
+        layout,
+        mv.layoutFrameId,
+        mv.slotFrames,
+        mv.frameThickness ?? 2,
+        mv.frameCornerRadius ?? 0,
+        mv.frameOpacity ?? 100,
+        mv.frameColor ?? "",
+        mv.margin ?? 0,
+        mv.slotGap ?? 0,
+      );
       if (pngBytes) {
         const framePath = await saveFramePngToDisk(pngBytes);
         if (framePath) {
@@ -3813,14 +4296,20 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       // ── Phase 2: Apply transforms ──────────────────────────────────────
+      const m = (mv.margin ?? 0) > 0 ? Math.min(mv.margin, 200) : 0;
+
       for (const entry of entries) {
         if (entry.slotId === "bg") {
+          const bgX = (mv.affectBackground && m > 0) ? m : 0;
+          const bgY = (mv.affectBackground && m > 0) ? m : 0;
+          const bgW = (mv.affectBackground && m > 0) ? (CANVAS_W - 2 * m) : CANVAS_W;
+          const bgH = (mv.affectBackground && m > 0) ? (CANVAS_H - 2 * m) : CANVAS_H;
           await dockObsClient.call("SetSceneItemTransform", {
             sceneName,
             sceneItemId: entry.sceneItemId,
             sceneItemTransform: {
-              positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0,
-              boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: CANVAS_W, boundsHeight: CANVAS_H,
+              positionX: bgX, positionY: bgY, scaleX: 1, scaleY: 1, rotation: 0,
+              boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: bgW, boundsHeight: bgH,
               boundsAlignment: 0, cropLeft: 0, cropTop: 0, cropRight: 0, cropBottom: 0,
             },
           });
@@ -3840,9 +4329,14 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           if (!slot) continue;
           const framing = mv.slotFraming?.[entry.slotId] ?? DEFAULT_SLOT_FRAMING;
           const sourceSize = entry.sourceSize ?? normalizeSourceSize();
+          const eff = calculateMultiviewMarginSlotRect(slot, mv.margin ?? 0, mv.slotGap ?? 0, CANVAS_W, CANVAS_H);
+          const effX = eff.x;
+          const effY = eff.y;
+          const effW = eff.width;
+          const effH = eff.height;
           const tx = calculateSlotTransform(
             sourceSize.width, sourceSize.height,
-            { x: slot.x, y: slot.y, width: slot.width, height: slot.height },
+            { x: effX, y: effY, width: effW, height: effH },
             { mode: framing.displayMode, focalX: framing.focalX ?? 0.5, focalY: framing.focalY ?? 0.5, zoom: framing.zoom ?? 1 },
           );
           const hasCrop = (tx.cropLeft ?? 0) > 0 || (tx.cropRight ?? 0) > 0 || (tx.cropTop ?? 0) > 0 || (tx.cropBottom ?? 0) > 0;
@@ -3850,8 +4344,8 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             sceneName,
             sceneItemId: entry.sceneItemId,
             sceneItemTransform: {
-              positionX: hasCrop ? slot.x : tx.positionX,
-              positionY: hasCrop ? slot.y : tx.positionY,
+              positionX: hasCrop ? effX : tx.positionX,
+              positionY: hasCrop ? effY : tx.positionY,
               scaleX: tx.scaleX ?? tx.scale,
               scaleY: tx.scaleY ?? tx.scale,
               rotation: 0,
@@ -4009,6 +4503,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             onUpdateFrameOpacity={handleUpdateFrameOpacity}
             onUpdateFrameColor={handleUpdateFrameColor}
             onUpdateSlotFrame={handleUpdateSlotFrame}
+            onUpdateMargin={handleUpdateMargin}
+            onUpdateSlotGap={handleUpdateSlotGap}
+            onUpdateAffectBackground={handleUpdateAffectBackground}
             onDuplicate={handleDuplicate}
             onDelete={handleDelete}
           />

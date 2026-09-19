@@ -839,13 +839,7 @@ function DockMediaTab({
   );
   const animationsLocked = !animationEntitlement.allowed;
 
-  useEffect(() => {
-    if (!presentationLinkMode || textOverlay.background.mode !== "lower-third") return;
-    setTextOverlay((current) => ({
-      ...current,
-      background: { ...current.background, mode: "fullscreen" },
-    }));
-  }, [presentationLinkMode, textOverlay.background.mode]);
+
 
   // ── Video Loop / Playlist state ──
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1434,6 +1428,18 @@ function DockMediaTab({
       return item.filePath;
     }
 
+    let dir = uploadsDir;
+    if (!dir) {
+      try {
+        const res = await fetch("/api/uploads-dir");
+        if (res.ok) {
+          const data = await res.json();
+          dir = data.path || null;
+          if (dir) setUploadsDir(dir);
+        }
+      } catch { /* ignore */ }
+    }
+
     if (item.url.startsWith("data:")) {
       const res = await fetch("/api/save-media", {
         method: "POST",
@@ -1446,14 +1452,14 @@ function DockMediaTab({
       return data.path;
     }
 
-    if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
+    if (dir && !item.url.startsWith("http") && !item.url.startsWith("blob:") && !item.url.startsWith("data:")) {
       return item.url;
     }
 
-    if (uploadsDir) {
-      const fileName = item.url.split("/").pop() || item.name;
-      const sep = uploadsDir.includes("\\") ? "\\" : "/";
-      return `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
+    if (dir) {
+      const fileName = item.diskFileName || item.url.split("/").pop() || item.name;
+      const sep = dir.includes("\\") ? "\\" : "/";
+      return `${dir}${sep}${decodeURIComponent(fileName)}`;
     }
 
     throw new Error("Cannot resolve media to a local file path");
@@ -1908,7 +1914,8 @@ function DockMediaTab({
           sceneName: sceneSendSelection,
           sourceName: buildSceneMediaSourceName(entry),
           filePath,
-          looping: false,
+          looping: entryPrefs.loop ?? false,
+          muted: false,
         });
       }
 
@@ -5266,7 +5273,7 @@ function DockMediaTab({
                           { key: "box" as OverlayDisplayMode, label: t('media.displayBox'), icon: "square" },
                           { key: "lower-third" as OverlayDisplayMode, label: t('media.displayLowerThird'), icon: "move_down" },
                           { key: "fullscreen" as OverlayDisplayMode, label: t('media.displayFullscreen'), icon: "fullscreen" },
-                        ]).filter((opt) => !presentationLinkMode || opt.key !== "lower-third").map((opt) => (
+                        ]).map((opt) => (
                           <button
                             key={opt.key}
                             type="button"
@@ -6507,7 +6514,11 @@ function DockMediaTab({
             >
               <Icon name="delete" size={13} />
               <span className="dock-media-context-menu__label">
-                {contextEntry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
+                {contextEntry.kind === "video"
+                  ? t('media.deleteVideo')
+                  : contextEntry.kind === "audio"
+                  ? t('media.deleteAudio', 'Delete Audio')
+                  : t('media.deleteImage')}
               </span>
             </button>
           </div>

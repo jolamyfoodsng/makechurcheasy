@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -36,6 +36,17 @@ import {
   Tv,
   ExternalLink,
   Image as ImageIcon,
+  MoreHorizontal,
+  Globe,
+  Phone,
+  MapPin,
+  Key,
+  Users,
+  Share2,
+  Laptop,
+  CheckCircle2,
+  XCircle,
+  UserCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -46,17 +57,55 @@ import {
   getAdminManagedPlanCredits,
 } from "@/lib/adminManagedSubscriptionForm";
 
+function getCountryFlagEmoji(countryCode?: string | null): string {
+  if (!countryCode || countryCode.trim().length !== 2) return "";
+  const code = countryCode.trim().toUpperCase();
+  const codePoints = [...code].map((c) => 127397 + c.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
+function getCountryDisplayName(countryCode?: string | null): string {
+  if (!countryCode || !countryCode.trim()) return "—";
+  const code = countryCode.trim().toUpperCase();
+  const flag = getCountryFlagEmoji(code);
+  try {
+    const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+    const name = regionNames.of(code);
+    return name ? `${flag} ${name} (${code})` : `${flag} ${code}`;
+  } catch {
+    return `${flag} ${code}`;
+  }
+}
+
 interface UserDetail {
   id: string;
   name: string;
   email: string;
+  avatar?: string;
+  phone?: string;
+  country?: string;
+  language?: string;
+  city?: string;
+  state?: string;
   churchName: string;
+  churchRole?: string;
+  denomination?: string;
+  churchSize?: string;
+  appVersion?: string;
+  appPlatform?: string;
+  authProvider?: string;
+  emailVerified?: boolean;
+  twoFactorEnabled?: boolean;
+  referralCode?: string;
+  referredBy?: string;
+  lastIp?: string;
   role: string;
   accountStatus?: "active" | "suspended";
   credits: number;
   plan: string;
   createdAt: string | null;
   lastLogin: string | null;
+  lastActive: string | null;
   appId: string;
   activationMilestones?: {
     firstPresentation?: boolean;
@@ -142,6 +191,9 @@ interface UserDetail {
     properties: Record<string, unknown>;
     timestamp: string | null;
   }>;
+  activityPage?: number;
+  activityPageCount?: number;
+  activityCount?: number;
   devices?: Array<{
     deviceId: string;
     deviceName: string;
@@ -187,8 +239,45 @@ export default function AdminUserDetailPage() {
   const [paymentPageLoading, setPaymentPageLoading] = useState(false);
   const [paymentPageError, setPaymentPageError] = useState("");
   const [paymentPage, setPaymentPage] = useState(1);
+  const [activityPageLoading, setActivityPageLoading] = useState(false);
+  const [activityPageError, setActivityPageError] = useState("");
+  const [activityPage, setActivityPage] = useState(1);
+  const [selectedPaymentReceipt, setSelectedPaymentReceipt] = useState<NonNullable<UserDetail["payments"]>[number] | null>(null);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "success" | "failed" | "cancelled" | "pending">("all");
+
+  const activityScore = useMemo(() => user ? calculateUserActivityScore(user) : null, [user]);
+
+  const filteredPayments = useMemo(() => {
+    if (!user?.payments) return [];
+    if (paymentStatusFilter === "all") return user.payments;
+    if (paymentStatusFilter === "success") {
+      return user.payments.filter((p) => p.status === "success" || p.status === "paid");
+    }
+    if (paymentStatusFilter === "failed") {
+      return user.payments.filter((p) => p.status === "failed" || p.status === "failure" || p.status === "error");
+    }
+    if (paymentStatusFilter === "cancelled") {
+      return user.payments.filter((p) => p.status === "cancelled" || p.status === "canceled" || p.status === "abandoned");
+    }
+    if (paymentStatusFilter === "pending") {
+      return user.payments.filter((p) => p.status === "pending" || p.status === "processing");
+    }
+    return user.payments;
+  }, [user?.payments, paymentStatusFilter]);
+
+  const paymentCounts = useMemo(() => {
+    const list = user?.payments || [];
+    return {
+      all: list.length,
+      success: list.filter((p) => p.status === "success" || p.status === "paid").length,
+      failed: list.filter((p) => p.status === "failed" || p.status === "failure" || p.status === "error").length,
+      cancelled: list.filter((p) => p.status === "cancelled" || p.status === "canceled" || p.status === "abandoned").length,
+      pending: list.filter((p) => p.status === "pending" || p.status === "processing").length,
+    };
+  }, [user?.payments]);
 
   // Trial action state
+  const [showTrialModal, setShowTrialModal] = useState(false);
   const [trialAction, setTrialAction] = useState<string | null>(null);
   const [ambassadorLoading, setAmbassadorLoading] = useState(false);
   const [ambassadorError, setAmbassadorError] = useState("");
@@ -243,6 +332,49 @@ export default function AdminUserDetailPage() {
   const [discountError, setDiscountError] = useState("");
   const [discountCopied, setDiscountCopied] = useState(false);
 
+  // Admin Action Dropdown Modals State
+  const [showGrantCredits, setShowGrantCredits] = useState(false);
+  const [creditsAmount, setCreditsAmount] = useState("");
+  const [grantingCredits, setGrantingCredits] = useState(false);
+
+  const [showChangePlan, setShowChangePlan] = useState(false);
+  const [newPlan, setNewPlan] = useState("growth");
+  const [subscriptionBillingCycle, setSubscriptionBillingCycle] = useState("monthly");
+  const [subscriptionAmount, setSubscriptionAmount] = useState("");
+  const [subscriptionCurrency, setSubscriptionCurrency] = useState("NGN");
+  const [subscriptionReference, setSubscriptionReference] = useState("");
+  const [subscriptionNote, setSubscriptionNote] = useState("");
+  const [notifySubscriptionUser, setNotifySubscriptionUser] = useState(true);
+  const [changingPlan, setChangingPlan] = useState(false);
+
+  const [showTemporaryPlan, setShowTemporaryPlan] = useState(false);
+  const [showEndTemporaryPlan, setShowEndTemporaryPlan] = useState(false);
+  const [temporaryPlan, setTemporaryPlan] = useState("growth");
+  const [temporaryDurationDays, setTemporaryDurationDays] = useState("30");
+  const [temporaryReason, setTemporaryReason] = useState("");
+  const [savingTemporaryPlan, setSavingTemporaryPlan] = useState(false);
+  const [endingTemporaryPlan, setEndingTemporaryPlan] = useState(false);
+
+  const [showAmbassador, setShowAmbassador] = useState(false);
+  const [showRevokeAmbassador, setShowRevokeAmbassador] = useState(false);
+  const [ambassadorDuration, setAmbassadorDuration] = useState("6");
+  const [ambassadorCredits, setAmbassadorCredits] = useState("");
+  const [ambassadorNotes, setAmbassadorNotes] = useState("");
+  const [defaultAmbassadorCredits, setDefaultAmbassadorCredits] = useState<number | null>(null);
+  const [grantingAmbassador, setGrantingAmbassador] = useState(false);
+  const [revokingAmbassador, setRevokingAmbassador] = useState(false);
+
+  const [showGrantTrial, setShowGrantTrial] = useState(false);
+  const [grantTrialDays, setGrantTrialDays] = useState("14");
+  const [grantingTrial, setGrantingTrial] = useState(false);
+
+  const [showExtendTrial, setShowExtendTrial] = useState(false);
+  const [extendTrialDays, setExtendTrialDays] = useState("30");
+  const [extendingTrial, setExtendingTrial] = useState(false);
+
+  const [showCancelTrial, setShowCancelTrial] = useState(false);
+  const [cancellingTrial, setCancellingTrial] = useState(false);
+
   const fetchUser = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/users/${params.id}`, {
@@ -252,6 +384,7 @@ export default function AdminUserDetailPage() {
       const data = await res.json();
       setUser(data);
       setPaymentPage(data.paymentPage || 1);
+      setActivityPage(data.activityPage || 1);
       setTempPlan(data.plan === "free" ? "growth" : "free");
       setManagedPlan(data.plan === "free" ? "growth" : data.plan);
       setManagedBillingCycle(data.adminManagedSubscription?.billingCycle || data.subscription?.billingCycle || "monthly");
@@ -338,7 +471,7 @@ export default function AdminUserDetailPage() {
     setPaymentPageLoading(true);
     setPaymentPageError("");
     try {
-      const res = await fetch(`/api/admin/users/${params.id}?paymentsPage=${nextPage}`, { credentials: "include" });
+      const res = await fetch(`/api/admin/users/${params.id}?paymentsPage=${nextPage}&activityPage=${activityPage}`, { credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setUser((current) => current ? {
@@ -354,7 +487,30 @@ export default function AdminUserDetailPage() {
     } finally {
       setPaymentPageLoading(false);
     }
-  }, [params.id, user?.paymentPageCount]);
+  }, [params.id, user?.paymentPageCount, activityPage]);
+
+  const loadActivityPage = useCallback(async (nextPage: number) => {
+    if (nextPage < 1 || (user?.activityPageCount && nextPage > user.activityPageCount)) return;
+    setActivityPageLoading(true);
+    setActivityPageError("");
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}?activityPage=${nextPage}&paymentsPage=${paymentPage}`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setUser((current) => current ? {
+        ...current,
+        activity: data.activity || [],
+        activityPage: data.activityPage || nextPage,
+        activityPageCount: data.activityPageCount || 1,
+        activityCount: data.activityCount || 0,
+      } : current);
+      setActivityPage(data.activityPage || nextPage);
+    } catch (err: any) {
+      setActivityPageError(err?.message || "Could not load activity history.");
+    } finally {
+      setActivityPageLoading(false);
+    }
+  }, [params.id, user?.activityPageCount, paymentPage]);
 
   useEffect(() => {
     fetchUser();
@@ -379,9 +535,14 @@ export default function AdminUserDetailPage() {
     fetch("/api/admin/platform-settings", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((data) => {
+        const credits = data?.ambassador?.creditsPerAmbassador;
+        if (typeof credits === "number" && credits > 0) {
+          setDefaultAmbassadorCredits(credits);
+        }
         const configuredTrialDays = Number(data?.trial?.defaultDurationDays);
         if (Number.isInteger(configuredTrialDays) && configuredTrialDays > 0) {
           setTrialDays(configuredTrialDays);
+          setGrantTrialDays(String(configuredTrialDays));
         }
       })
       .catch(() => { });
@@ -390,6 +551,18 @@ export default function AdminUserDetailPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!showChangePlan) return;
+    setSubscriptionAmount(
+      getAdminManagedPlanAmount(
+        planConfig,
+        newPlan,
+        subscriptionBillingCycle,
+        subscriptionCurrency,
+      ),
+    );
+  }, [newPlan, planConfig, showChangePlan, subscriptionBillingCycle, subscriptionCurrency]);
 
   useEffect(() => {
     setManagedAmount(
@@ -401,6 +574,284 @@ export default function AdminUserDetailPage() {
       ),
     );
   }, [managedBillingCycle, managedCurrency, managedPlan, planConfig]);
+
+  const handleGrantCredits = async () => {
+    if (!user) return;
+    const amount = parseFloat(creditsAmount);
+    if (!amount || amount <= 0) return;
+    setGrantingCredits(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/credits`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? { ...prev, credits: data.credits } : null));
+      setAccountActionMessage(t('admin.users.flash.grantedCredits', { amount }));
+      setShowGrantCredits(false);
+      setCreditsAmount("");
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.grantCreditsFailed'));
+    } finally {
+      setGrantingCredits(false);
+    }
+  };
+
+  const handleChangePlan = async () => {
+    if (!user) return;
+    setChangingPlan(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/plan`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: newPlan,
+          billingCycle: subscriptionBillingCycle,
+          amountPaid: subscriptionAmount || undefined,
+          currency: subscriptionCurrency || "NGN",
+          paymentReference: subscriptionReference || undefined,
+          note: subscriptionNote || undefined,
+          notifyUser: notifySubscriptionUser,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: data.plan || newPlan,
+        ...(data.credits !== undefined ? { credits: data.credits } : {}),
+        adminManagedSubscription: data.adminManagedSubscription,
+        subscriptionExpiresAt: data.subscriptionExpiresAt,
+        scheduledDowngradeAt: data.scheduledDowngradeAt,
+        ...(data.trial !== undefined ? { trial: data.trial } : {}),
+        ...(data.plan !== "free" ? { adminTemporaryPlan: { ...(prev.adminTemporaryPlan || {}), active: false } } : {}),
+      } : null));
+      setAccountActionMessage(data.emailSent ? t('admin.users.flash.planChangedEmail', { plan: data.plan || newPlan }) : t('admin.users.flash.planChanged', { plan: data.plan || newPlan }));
+      setShowChangePlan(false);
+      setSubscriptionAmount("");
+      setSubscriptionReference("");
+      setSubscriptionNote("");
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.changePlanFailed'));
+    } finally {
+      setChangingPlan(false);
+    }
+  };
+
+  const handleSaveTemporaryPlan = async () => {
+    if (!user) return;
+    const durationDays = parseInt(temporaryDurationDays, 10);
+    if (!temporaryPlan || !durationDays || durationDays <= 0) return;
+    setSavingTemporaryPlan(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/temporary-plan`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: temporaryPlan,
+          durationDays,
+          reason: temporaryReason || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: data.plan,
+        ...(data.credits !== undefined ? { credits: data.credits } : {}),
+        adminTemporaryPlan: data.adminTemporaryPlan,
+      } : null));
+      setAccountActionMessage(data.emailSent ? t('admin.users.flash.temporaryPlanSavedEmail') : t('admin.users.flash.temporaryPlanSaved'));
+      setShowTemporaryPlan(false);
+      setTemporaryReason("");
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.temporaryPlanFailed'));
+    } finally {
+      setSavingTemporaryPlan(false);
+    }
+  };
+
+  const handleEndTemporaryPlan = async () => {
+    if (!user) return;
+    setEndingTemporaryPlan(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/temporary-plan`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: "free",
+        ...(data.credits !== undefined ? { credits: data.credits } : {}),
+        adminTemporaryPlan: data.adminTemporaryPlan,
+      } : null));
+      setAccountActionMessage(t('admin.users.flash.temporaryPlanEnded'));
+      setShowEndTemporaryPlan(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.temporaryPlanEndFailed'));
+    } finally {
+      setEndingTemporaryPlan(false);
+    }
+  };
+
+  const handleGrantAmbassador = async () => {
+    if (!user) return;
+    setGrantingAmbassador(true);
+    try {
+      const parsedCredits = ambassadorCredits ? parseInt(ambassadorCredits) : undefined;
+      const res = await fetch(`/api/admin/users/${user.id}/ambassador`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          durationMonths: parseInt(ambassadorDuration),
+          ...(parsedCredits && parsedCredits > 0 ? { credits: parsedCredits } : {}),
+          notes: ambassadorNotes || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: "growth",
+        credits: data.ambassador?.creditsGranted ?? prev.credits,
+        ambassador: data.ambassador,
+      } : null));
+      setAccountActionMessage(t('admin.users.flash.ambassadorGranted'));
+      setShowAmbassador(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.ambassadorGrantFailed'));
+    } finally {
+      setGrantingAmbassador(false);
+    }
+  };
+
+  const handleRevokeAmbassadorModal = async () => {
+    if (!user) return;
+    setRevokingAmbassador(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/ambassador`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: data.revertedPlan,
+        ...(data.credits !== undefined ? { credits: data.credits } : {}),
+        ambassador: { ...(prev.ambassador || {}), active: false },
+      } : null));
+      setAccountActionMessage(t('admin.users.flash.ambassadorRevoked', { plan: data.revertedPlan }));
+      setShowRevokeAmbassador(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.ambassadorRevokeFailed'));
+    } finally {
+      setRevokingAmbassador(false);
+    }
+  };
+
+  const handleGrantTrial = async () => {
+    if (!user) return;
+    setGrantingTrial(true);
+    try {
+      const days = parseInt(grantTrialDays, 10);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        throw new Error("Trial duration must be between 1 and 365 days");
+      }
+      const res = await fetch(`/api/admin/users/${user.id}/trial`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", days }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: "growth",
+        trial: data.trial,
+      } : null));
+      setAccountActionMessage(`Trial granted for ${days} days`);
+      setShowGrantTrial(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || "Failed to grant trial");
+    } finally {
+      setGrantingTrial(false);
+    }
+  };
+
+  const handleExtendTrial = async () => {
+    if (!user) return;
+    setExtendingTrial(true);
+    try {
+      const days = parseInt(extendTrialDays, 10);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        throw new Error("Extension days must be between 1 and 3650");
+      }
+      const res = await fetch(`/api/admin/users/${user.id}/trial`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "extend", days }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        trial: data.trial,
+      } : null));
+      setAccountActionMessage(t('admin.users.flash.trialExtended', { days }));
+      setShowExtendTrial(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.extendTrialFailed'));
+    } finally {
+      setExtendingTrial(false);
+    }
+  };
+
+  const handleCancelTrial = async () => {
+    if (!user) return;
+    setCancellingTrial(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/trial`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
+      const data = await res.json();
+      setUser((prev) => (prev ? {
+        ...prev,
+        plan: "free",
+        ...(data.credits !== undefined ? { credits: data.credits } : {}),
+        trial: { ...(prev.trial || {}), active: false },
+      } : null));
+      setAccountActionMessage(t('admin.users.flash.trialCancelled'));
+      setShowCancelTrial(false);
+      fetchUser();
+    } catch (err: any) {
+      setAccountActionMessage(err?.message || t('admin.users.errors.cancelTrialFailed'));
+    } finally {
+      setCancellingTrial(false);
+    }
+  };
 
   const performTrialAction = useCallback(
     async (action: string, days?: number, reason?: string) => {
@@ -422,21 +873,27 @@ export default function AdminUserDetailPage() {
           text: t('admin.userDetail.trial.actionSuccess', { action }),
         });
         if (data.trial && user) {
-          setUser({ ...user, trial: data.trial });
+          setUser({
+            ...user,
+            trial: data.trial,
+            plan: data.trial?.active ? "growth" : user.plan === "growth" && action === "stop" ? "free" : user.plan,
+          });
         } else {
           fetchUser();
         }
         setTimeout(() => setTrialMsg(null), 4000);
+        return true;
       } catch (err: any) {
         setTrialMsg({
           type: "error",
           text: err?.message || t('admin.userDetail.trial.actionFailed', { action }),
         });
+        return false;
       } finally {
         setTrialAction(null);
       }
     },
-    [params.id, user, fetchUser]
+    [params.id, user, fetchUser, t]
   );
 
   const performAccountAction = useCallback(async (action: "suspend" | "unsuspend") => {
@@ -665,6 +1122,7 @@ export default function AdminUserDetailPage() {
     !!subscriptionExpiryDate &&
     subscriptionExpiryDate.getTime() > Date.now();
   const selectedManagedCredits = getAdminManagedPlanCredits(planConfig, managedPlan);
+  const selectedSubscriptionCredits = getAdminManagedPlanCredits(planConfig, newPlan);
 
   function planBadgeClasses(plan: string) {
     const colors: Record<string, string> = {
@@ -695,58 +1153,185 @@ export default function AdminUserDetailPage() {
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-start gap-5 mb-7">
         <div className="flex items-start gap-4 min-w-0 flex-1">
-        <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 text-xl font-bold shrink-0">
-          {user.name?.charAt(0)?.toUpperCase() || "?"}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold text-slate-50">
-              {user.name || t('admin.userDetail.unnamedUser')}
-            </h1>
-            {user.role === "admin" && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-700/50">
-                <Shield className="w-3 h-3" /> {t('admin.userDetail.adminBadge')}
-              </span>
-            )}
-            {user.ambassador?.active && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-700/50">
-                <Crown className="w-3 h-3" /> {t('admin.userDetail.ambassadorBadge')}
-              </span>
-            )}
+          <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 text-xl font-bold shrink-0">
+            {user.name?.charAt(0)?.toUpperCase() || "?"}
           </div>
-          <p className="text-sm text-slate-400 mt-0.5 flex items-center gap-1.5">
-            <Mail className="w-3.5 h-3.5" /> {user.email}
-          </p>
-          {user.churchName && (
-            <p className="text-sm text-slate-400 mt-0.5 flex items-center gap-1.5">
-              <Church className="w-3.5 h-3.5" /> {user.churchName}
-            </p>
-          )}
-        </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold text-slate-50">
+                {user.name || t('admin.userDetail.unnamedUser')}
+              </h1>
+              {user.role === "admin" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-700/50">
+                  <Shield className="w-3 h-3" /> {t('admin.userDetail.adminBadge')}
+                </span>
+              )}
+              {user.ambassador?.active && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-700/50">
+                  <Crown className="w-3 h-3" /> {t('admin.userDetail.ambassadorBadge')}
+                </span>
+              )}
+              {user.accountStatus === "suspended" ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-950/60 text-red-300 border border-red-800/60">
+                  <AlertTriangle className="w-3 h-3" /> Blocked
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                  <Check className="w-3 h-3" /> Active
+                </span>
+              )}
+              {user.emailVerified ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/40 text-emerald-300 border border-emerald-800/40">
+                  <CheckCircle2 className="w-3 h-3" /> Verified
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-950/40 text-amber-300 border border-amber-800/40">
+                  <Clock className="w-3 h-3" /> Unverified
+                </span>
+              )}
+              {user.country && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                  {getCountryDisplayName(user.country)}
+                </span>
+              )}
+              {user.appVersion && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
+                  <Laptop className="w-3 h-3" /> v{user.appVersion}{user.appPlatform ? ` (${user.appPlatform})` : ""}
+                </span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-4 flex-wrap text-xs sm:text-sm text-slate-400">
+              <p className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {user.email}
+              </p>
+              {user.phone && (
+                <p className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {user.phone}
+                </p>
+              )}
+              {user.churchName && (
+                <p className="flex items-center gap-1.5">
+                  <Church className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {user.churchName}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          {user.role !== "admin" && (
-            <>
-              <label className="sr-only" htmlFor="header-trial-days">Trial duration in days</label>
-              <input
-                id="header-trial-days"
-                type="number"
-                min={1}
-                max={365}
-                value={trialDays}
-                onChange={(event) => setTrialDays(Number(event.target.value))}
-                className="h-10 w-20 px-2 text-sm text-center border border-slate-700 rounded-lg bg-gray-900 text-slate-100"
-              />
+          {/* Actions Dropdown */}
+          <details className="relative">
+            <summary className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-700 bg-gray-900 px-3 text-sm font-medium text-slate-200 hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+              <MoreHorizontal className="h-4 w-4" /> Actions
+            </summary>
+            <div className="absolute right-0 z-30 mt-2 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-slate-700 bg-gray-900 p-1.5 shadow-2xl">
               <button
-                onClick={() => performTrialAction(isTrialActive ? "extend" : "start", trialDays)}
-                disabled={!!trialAction || !trialDays || trialDays < 1 || trialDays > 365}
-                className="h-10 px-3 inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
+                type="button"
+                onClick={() => { setShowGrantCredits(true); setCreditsAmount(""); }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
               >
-                <Clock className="w-4 h-4" />
-                {isTrialActive ? "Extend trial" : "Grant trial"}
+                Grant credits
               </button>
-            </>
-          )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChangePlan(true);
+                  setNewPlan(user.plan === "free" ? "growth" : user.plan);
+                  setSubscriptionBillingCycle(user.adminManagedSubscription?.billingCycle || "monthly");
+                  setSubscriptionAmount("");
+                  setSubscriptionCurrency(user.adminManagedSubscription?.currency || "NGN");
+                  setSubscriptionReference("");
+                  setSubscriptionNote("");
+                  setNotifySubscriptionUser(true);
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
+              >
+                Change plan
+              </button>
+              {!(user.plan === "free" && user.trial?.active) && (
+                <button
+                  type="button"
+                  onClick={() => { setShowGrantTrial(true); setGrantTrialDays(String(trialDays || 14)); }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
+                >
+                  Grant trial
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (user.adminTemporaryPlan?.active) {
+                    setShowEndTemporaryPlan(true);
+                    return;
+                  }
+                  setShowTemporaryPlan(true);
+                  setTemporaryPlan(user.plan === "free" ? "growth" : "free");
+                  setTemporaryDurationDays("30");
+                  setTemporaryReason("");
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
+              >
+                {user.adminTemporaryPlan?.active ? "End temporary plan" : "Set temporary plan"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (user.ambassador?.active) {
+                    setShowRevokeAmbassador(true);
+                  } else {
+                    setShowAmbassador(true);
+                    setAmbassadorDuration("6");
+                    setAmbassadorCredits("");
+                    setAmbassadorNotes("");
+                  }
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
+              >
+                {user.ambassador?.active ? "Revoke ambassador" : "Grant ambassador"}
+              </button>
+              {user.plan === "free" && user.trial?.active && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setShowExtendTrial(true); setExtendTrialDays("30"); }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
+                  >
+                    Extend trial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelTrial(true)}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs text-red-300 hover:bg-red-950/40"
+                  >
+                    Cancel trial
+                  </button>
+                </>
+              )}
+              <div className="my-1 border-t border-slate-800" />
+              {user.role !== "admin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscountModal(true);
+                    handleDiscountPresetChange("half_off_2m");
+                    setDiscountResult(null);
+                    setDiscountError("");
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-xs text-indigo-300 hover:bg-indigo-500/10"
+                >
+                  Send discount
+                </button>
+              )}
+              {user.role !== "admin" && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmAccountAction(user.accountStatus === "suspended" ? "unsuspend" : "suspend")}
+                  className={`w-full rounded-lg px-3 py-2 text-left text-xs ${user.accountStatus === "suspended" ? "text-emerald-300 hover:bg-emerald-950/40" : "text-red-300 hover:bg-red-950/40"}`}
+                >
+                  {user.accountStatus === "suspended" ? "Unblock user" : "Block user"}
+                </button>
+              )}
+            </div>
+          </details>
           <a
             href={`mailto:${encodeURIComponent(user.email)}`}
             className="h-10 px-3 inline-flex items-center gap-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-200 hover:bg-gray-800"
@@ -797,9 +1382,14 @@ export default function AdminUserDetailPage() {
             type="button"
             aria-current={activeTab === tab ? "page" : undefined}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? "border-indigo-400 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors inline-flex items-center gap-2 ${activeTab === tab ? "border-indigo-400 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"}`}
           >
             {label}
+            {tab === "activity" && activityScore && (
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${activityScore.badgeBg}`}>
+                {activityScore.score}%
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -986,7 +1576,7 @@ export default function AdminUserDetailPage() {
           </details>
         </div>
 
-        {/* Account Info Card */}
+        {/* Account & Identity Card */}
         <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
@@ -994,26 +1584,110 @@ export default function AdminUserDetailPage() {
             </div>
             <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.accountInfo')}</h2>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
+            <InfoRow label="Full name" value={user.name || "—"} />
+            <InfoRow label="Email address">
+              <div className="flex items-center gap-1.5 justify-end">
+                <span className="text-sm text-slate-300 font-medium truncate">{user.email}</span>
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${user.emailVerified ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700/50" : "bg-amber-900/60 text-amber-300 border border-amber-700/50"}`}>
+                  {user.emailVerified ? "Verified" : "Unverified"}
+                </span>
+              </div>
+            </InfoRow>
+            <InfoRow label="Phone number" value={user.phone || "—"} />
+            <InfoRow label="Country" value={getCountryDisplayName(user.country)} />
+            <InfoRow label="Location (City / State)" value={[user.city, user.state].filter(Boolean).join(", ") || "—"} />
+            <InfoRow label="Preferred language" value={user.language ? user.language.toUpperCase() : "English (EN)"} />
+            <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
+            <InfoRow label="Role" value={user.role} />
+            <InfoRow label="Account status" value={user.accountStatus === "suspended" ? "Blocked / Suspended" : "Active"} />
+            <InfoRow label="Two-Factor Auth (2FA)">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.twoFactorEnabled ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                <Key className="w-3 h-3" /> {user.twoFactorEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </InfoRow>
+            <InfoRow label="Auth provider" value={user.authProvider ? user.authProvider.toUpperCase() : "CREDENTIALS"} />
+          </div>
+        </div>
+
+        {/* Church & Ministry Profile Card */}
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/15 flex items-center justify-center">
+              <Church className="w-4 h-4 text-purple-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-50">Church & Ministry Profile</h2>
+          </div>
+          <div className="space-y-1">
+            <InfoRow label="Church name" value={user.churchName || "—"} />
+            <InfoRow label="Church role / Position" value={user.churchRole || "—"} />
+            <InfoRow label="Denomination" value={user.denomination || "—"} />
+            <InfoRow label="Congregation size" value={user.churchSize || "—"} />
+          </div>
+        </div>
+
+        {/* Desktop App & Hardware Details Card */}
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center">
+              <Monitor className="w-4 h-4 text-sky-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-50">App & Hardware Details</h2>
+          </div>
+          <div className="space-y-1">
+            <InfoRow label="App version" value={user.appVersion ? `v${user.appVersion}` : "—"} />
+            <InfoRow label="Platform / OS" value={user.appPlatform || "—"} />
+            <InfoRow label="Connected devices" value={`${user.devices?.length ?? 0} active device${user.devices?.length === 1 ? "" : "s"}`} />
+            <InfoRow label="Hardware paired">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.devicePaired ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                {user.activationMilestones?.devicePaired ? "Paired" : "Not paired"}
+              </span>
+            </InfoRow>
+            <InfoRow label="App downloaded">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.appDownloaded ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                {user.activationMilestones?.appDownloaded ? "Downloaded" : "Pending"}
+              </span>
+            </InfoRow>
+            <InfoRow label="OBS connected">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.obsConnected ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                {user.activationMilestones?.obsConnected ? "Connected" : "Not connected"}
+              </span>
+            </InfoRow>
+            <InfoRow label="First presentation">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.firstPresentation ? "bg-amber-950/60 text-amber-300 border border-amber-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                {user.activationMilestones?.firstPresentation ? `Achieved (${user.activationMilestones?.firstPresentationType || "Live"})` : "Pending"}
+              </span>
+            </InfoRow>
+          </div>
+        </div>
+
+        {/* Growth, Referral & Access Card */}
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6 md:col-span-2">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+              <Share2 className="w-4 h-4 text-emerald-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-50">Growth, Referrals & Network</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+            <InfoRow label="Referral code" value={user.referralCode || "—"} />
+            <InfoRow label="Referred by" value={user.referredBy || "Direct / None"} />
+            <InfoRow label="IP Address" value={user.lastIp || "—"} />
             <InfoRow
               label={t('common.signedUp')}
-              value={
-                user.createdAt
-                  ? new Date(user.createdAt).toLocaleDateString()
-                  : "—"
-              }
+              value={formatRelativeTime(user.createdAt)}
+              subValue={user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null}
             />
             <InfoRow
               label={t('common.lastLogin')}
-              value={
-                user.lastLogin
-                  ? new Date(user.lastLogin).toLocaleString()
-                  : t('common.never')
-              }
+              value={user.lastLogin ? formatRelativeTime(user.lastLogin) : t('common.never')}
+              subValue={user.lastLogin ? new Date(user.lastLogin).toLocaleString() : null}
             />
-            <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
-            <InfoRow label="Account status" value={user.accountStatus === "suspended" ? "Blocked" : "Active"} />
-            <InfoRow label="Connected devices" value={String(user.devices?.length ?? 0)} />
+            <InfoRow
+              label="Effective last active"
+              value={user.lastActive ? formatRelativeTime(user.lastActive) : "—"}
+              subValue={user.lastActive ? new Date(user.lastActive).toLocaleString() : null}
+            />
             <InfoRow
               label={t('admin.userDetail.activeStatus')}
               value={
@@ -1026,6 +1700,68 @@ export default function AdminUserDetailPage() {
             />
           </div>
         </div>
+
+        {/* User Activity & Engagement Health Score Card */}
+        {activityScore && (
+          <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6 md:col-span-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/15 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-sm font-semibold text-slate-50">User Activity & Engagement Score</h2>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${activityScore.badgeBg}`}>
+                      {activityScore.grade}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Multi-factor engagement score calculated from login recency, connected hardware, live presentation, content usage, and subscription health.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-baseline gap-1 self-start sm:self-auto shrink-0 bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2">
+                <span className={`text-2xl font-bold font-mono ${activityScore.color}`}>{activityScore.score}%</span>
+                <span className="text-xs text-slate-500">/ 100%</span>
+              </div>
+            </div>
+
+            {/* Score progress bar */}
+            <div className="mt-4">
+              <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden p-0.5">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${activityScore.barColor}`}
+                  style={{ width: `${Math.max(4, activityScore.score)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Metrics Breakdown Grid */}
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {activityScore.breakdown.map((item) => (
+                <div
+                  key={item.category}
+                  className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-3 flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[11px] font-medium text-slate-400 truncate">{item.category}</span>
+                    <span className="text-xs font-semibold font-mono text-slate-200">
+                      {item.score}/{item.maxScore}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate" title={item.detail}>{item.detail}</p>
+                  <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${item.score === item.maxScore ? "bg-emerald-500" : item.score > 0 ? "bg-indigo-500" : "bg-slate-700"}`}
+                      style={{ width: `${(item.score / item.maxScore) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Temporary Plan Card */}
         <details className="bg-gray-900 border border-slate-700 rounded-2xl p-6 md:col-span-2">
@@ -1474,19 +2210,39 @@ export default function AdminUserDetailPage() {
       </section>
 
       <section aria-label="User activity" hidden={activeTab !== "activity"} className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Signed up</p>
-          <p className="mt-2 text-sm font-semibold text-slate-100">{formatDateTime(user.createdAt)}</p>
+          <p className="mt-2 text-base font-semibold text-slate-100">{formatRelativeTime(user.createdAt)}</p>
+          <p className="mt-1 text-xs text-slate-500">{formatDateTime(user.createdAt)}</p>
         </div>
         <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last sign-in</p>
-          <p className="mt-2 text-sm font-semibold text-slate-100">{formatDateTime(user.lastLogin)}</p>
+          <p className="mt-2 text-base font-semibold text-slate-100">{user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never"}</p>
+          <p className="mt-1 text-xs text-slate-500">{formatDateTime(user.lastLogin)}</p>
         </div>
         <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Connected devices</p>
-          <p className="mt-2 text-sm font-semibold text-slate-100">{user.devices?.length ?? 0}</p>
+          <p className="mt-2 text-base font-semibold text-slate-100">{user.devices?.length ?? 0} active</p>
+          <p className="mt-1 text-xs text-slate-500">{user.activationMilestones?.devicePaired ? "Hardware paired" : "No devices"}</p>
         </div>
+        {activityScore && (
+          <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Activity Score</p>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${activityScore.badgeBg}`}>
+                {activityScore.grade}
+              </span>
+            </div>
+            <p className={`mt-2 text-2xl font-bold font-mono ${activityScore.color}`}>{activityScore.score}%</p>
+            <div className="mt-1.5 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${activityScore.barColor}`}
+                style={{ width: `${Math.max(4, activityScore.score)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* First Presentation Milestone & OBS Screenshot Banner */}
@@ -1610,23 +2366,41 @@ export default function AdminUserDetailPage() {
               {user.activity.map((event, index) => {
                 const props = (event.properties || {}) as Record<string, unknown>;
                 const screenshotUrl = typeof props.screenshotUrl === "string" ? props.screenshotUrl : null;
-                const isFirstPresentation = event.event === "first_presentation";
+                const isFirstPresentation = event.event === "first_presentation" || event.event === "first_presentation_milestone";
                 const isModeSwitched = event.event === "overlay_mode_switched";
                 const isBiblePresent = event.event === "bible_present";
                 const isWorshipPresent = event.event === "worship_song_presented";
+                const isPaymentSuccess = event.event === "payment_made" || event.event === "payment_success" || event.event === "billing_success";
+                const isPaymentFailure = event.event === "payment_failure" || event.event === "payment_failed" || event.event === "billing_failed";
+                const isPaymentCancelled = event.event === "payment_cancelled" || event.event === "subscription_cancelled";
+                const isTrialEvent = event.event.startsWith("trial_");
+                const isAmbassadorEvent = event.event.includes("ambassador");
+                const isPasscodeEvent = event.event.includes("passcode");
+                const isAdminEvent = event.event.startsWith("admin_");
+                const isDowngradeEvent = event.event.includes("downgrade");
 
                 return (
                   <li key={`${event.event}-${event.timestamp || index}`} className="flex gap-3 border-l border-slate-700 pl-4 pb-5 last:pb-0">
                     <span className={`-ml-[21px] mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full border-2 bg-gray-900 ${
-                      isFirstPresentation
-                        ? "border-amber-400 bg-amber-400/30"
-                        : isModeSwitched
-                          ? "border-purple-400"
-                          : isBiblePresent
-                            ? "border-sky-400"
-                            : isWorshipPresent
-                              ? "border-pink-400"
-                              : "border-indigo-400"
+                      isPaymentFailure
+                        ? "border-red-400 bg-red-400/40"
+                        : isPaymentSuccess
+                          ? "border-emerald-400 bg-emerald-400/40"
+                          : isPaymentCancelled
+                            ? "border-amber-400 bg-amber-400/40"
+                            : isAmbassadorEvent || isPasscodeEvent
+                              ? "border-purple-400 bg-purple-400/30"
+                              : isTrialEvent
+                                ? "border-indigo-400 bg-indigo-400/30"
+                                : isFirstPresentation
+                                  ? "border-amber-400 bg-amber-400/30"
+                                  : isModeSwitched
+                                    ? "border-purple-400"
+                                    : isBiblePresent
+                                      ? "border-sky-400"
+                                      : isWorshipPresent
+                                        ? "border-pink-400"
+                                        : "border-slate-400"
                     }`} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1634,6 +2408,46 @@ export default function AdminUserDetailPage() {
                         {isFirstPresentation && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/50">
                             <Star className="w-2.5 h-2.5" /> Milestone
+                          </span>
+                        )}
+                        {isPaymentSuccess && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-700/50">
+                            <Check className="w-2.5 h-2.5" /> Payment Success
+                          </span>
+                        )}
+                        {isPaymentFailure && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-red-900/50 text-red-300 border border-red-700/50">
+                            <AlertTriangle className="w-2.5 h-2.5" /> Payment Failed
+                          </span>
+                        )}
+                        {isPaymentCancelled && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-700/50">
+                            Cancelled
+                          </span>
+                        )}
+                        {isAmbassadorEvent && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-900/40 text-purple-300 border border-purple-700/50">
+                            <Crown className="w-2.5 h-2.5" /> Ambassador
+                          </span>
+                        )}
+                        {isPasscodeEvent && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-900/40 text-purple-300 border border-purple-700/50">
+                            Passcode
+                          </span>
+                        )}
+                        {isTrialEvent && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-900/40 text-indigo-300 border border-indigo-700/50">
+                            <Clock className="w-2.5 h-2.5" /> Trial
+                          </span>
+                        )}
+                        {isAdminEvent && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-900/40 text-sky-300 border border-sky-700/50">
+                            <Shield className="w-2.5 h-2.5" /> Admin
+                          </span>
+                        )}
+                        {isDowngradeEvent && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                            Downgraded
                           </span>
                         )}
                         {typeof props.mode === "string" && props.mode && (
@@ -1730,6 +2544,79 @@ export default function AdminUserDetailPage() {
           ) : (
             <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">No activity events recorded yet.</p>
           )}
+
+          {activityPageError && (
+            <p role="alert" className="mt-4 rounded-xl border border-red-800/60 bg-red-950/40 px-4 py-2.5 text-xs text-red-300">
+              {activityPageError}
+            </p>
+          )}
+
+          {/* Activity Numbered Pagination Bar */}
+          {user.activityPageCount && user.activityPageCount > 1 ? (
+            <div className="mt-5 border-t border-slate-800 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">
+                Page {activityPage} of {user.activityPageCount} · {user.activityCount?.toLocaleString() ?? 0} total events
+              </p>
+              <div className="flex items-center gap-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void loadActivityPage(activityPage - 1)}
+                  disabled={activityPage <= 1 || activityPageLoading}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: user.activityPageCount }, (_, i) => i + 1)
+                  .filter((pageNum) => {
+                    if (pageNum === 1 || pageNum === user.activityPageCount) return true;
+                    return Math.abs(pageNum - activityPage) <= 2;
+                  })
+                  .reduce<(number | string)[]>((acc, pageNum, idx, arr) => {
+                    if (idx > 0) {
+                      const prev = arr[idx - 1];
+                      if (typeof prev === "number" && pageNum - prev > 1) {
+                        acc.push(`ellipsis-${prev}`);
+                      }
+                    }
+                    acc.push(pageNum);
+                    return acc;
+                  }, [])
+                  .map((item) => {
+                    if (typeof item === "string") {
+                      return (
+                        <span key={item} className="px-1.5 text-xs text-slate-600 select-none">
+                          …
+                        </span>
+                      );
+                    }
+                    const isCurrent = item === activityPage;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => void loadActivityPage(item)}
+                        disabled={activityPageLoading}
+                        className={`min-w-[32px] h-8 rounded-lg px-2 text-xs font-medium transition-colors ${
+                          isCurrent
+                            ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                            : "border border-slate-700 text-slate-300 hover:bg-gray-800 hover:text-white"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+                <button
+                  type="button"
+                  onClick={() => void loadActivityPage(activityPage + 1)}
+                  disabled={activityPage >= (user.activityPageCount || 1) || activityPageLoading}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                >
+                  {activityPageLoading ? "Loading…" : "Next"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
@@ -1763,56 +2650,128 @@ export default function AdminUserDetailPage() {
       </section>
 
       <section aria-label="User payments" hidden={activeTab !== "payments"} className="space-y-4">
+        {/* Payment Summary Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-gray-900 border border-slate-700 rounded-2xl p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Successful payments</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-50">{(user.paymentTotals || []).reduce((count, total) => count + total.count, 0).toLocaleString()}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Records</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-50">{paymentCounts.all.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">All recorded billing attempts</p>
+          </div>
+          <div className="bg-gray-900 border border-slate-700 rounded-2xl p-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-400">Successful Payments</p>
+            <p className="mt-2 text-2xl font-semibold text-emerald-300">{paymentCounts.success.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">Completed transactions</p>
           </div>
           {(user.paymentTotals || []).map((total) => (
             <div key={total.currency} className="bg-gray-900 border border-slate-700 rounded-2xl p-5">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Collected · {total.currency}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-50">{formatCurrency(total.amount, total.currency)}</p>
+              <p className="mt-1 text-xs text-slate-500">{total.count} success records</p>
             </div>
           ))}
+          <div className="bg-gray-900 border border-slate-700 rounded-2xl p-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-red-400">Failed / Cancelled</p>
+            <p className="mt-2 text-2xl font-semibold text-red-300">{(paymentCounts.failed + paymentCounts.cancelled).toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">{paymentCounts.failed} failed · {paymentCounts.cancelled} cancelled</p>
+          </div>
         </div>
 
+        {/* Payment History Card with Filter Pills */}
         <div className="bg-gray-900 border border-slate-700 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-3 border-b border-slate-800 px-6 py-5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 flex items-center justify-center"><Receipt className="w-4 h-4 text-indigo-400" /></div>
-            <div>
-              <h2 className="text-sm font-semibold text-slate-50">Payment history</h2>
-              <p className="text-xs text-slate-500">Latest 50 billing records · totals include successful payments only</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 px-6 py-5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+                <Receipt className="w-4 h-4 text-indigo-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-50">Payment history & transactions</h2>
+                <p className="text-xs text-slate-500">All billing records including successes, failures, and cancellations</p>
+              </div>
+            </div>
+
+            {/* Payment Status Filter Buttons */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {([
+                { id: "all", label: "All", count: paymentCounts.all },
+                { id: "success", label: "Successful", count: paymentCounts.success },
+                { id: "failed", label: "Failed", count: paymentCounts.failed },
+                { id: "cancelled", label: "Cancelled", count: paymentCounts.cancelled },
+                { id: "pending", label: "Pending", count: paymentCounts.pending },
+              ] as const).map((tab) => {
+                if (tab.count === 0 && tab.id !== "all" && tab.id !== "success") return null;
+                const isActive = paymentStatusFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setPaymentStatusFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isActive
+                        ? "bg-indigo-600 text-white shadow"
+                        : "bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800 hover:bg-slate-800"
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] ${isActive ? "bg-white/20 text-white" : "bg-slate-800 text-slate-400"}`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-          {user.payments?.length ? (
+
+          {filteredPayments.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-gray-950/40 text-left text-[11px] uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-6 py-3 font-medium">Plan / payment</th>
+                    <th className="px-6 py-3 font-medium">Plan / item</th>
                     <th className="px-6 py-3 font-medium">Date</th>
                     <th className="px-6 py-3 font-medium">Provider</th>
                     <th className="px-6 py-3 font-medium">Reference</th>
                     <th className="px-6 py-3 font-medium">Status</th>
                     <th className="px-6 py-3 text-right font-medium">Amount</th>
+                    <th className="px-6 py-3 text-right font-medium">Receipt</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {user.payments.map((payment, index) => (
-                    <tr key={`${payment.reference}-${index}`}>
+                  {filteredPayments.map((payment, index) => (
+                    <tr key={`${payment.reference}-${index}`} className="hover:bg-slate-800/30 transition-colors">
                       <td className="px-6 py-4 font-medium text-slate-200">{payment.plan}</td>
-                      <td className="px-6 py-4 text-slate-400">{formatDateTime(payment.paidAt)}</td>
+                      <td className="px-6 py-4">
+                        <p className="text-slate-200 text-xs font-medium">{formatRelativeTime(payment.paidAt)}</p>
+                        <p className="text-slate-500 text-[11px]">{formatDateTime(payment.paidAt)}</p>
+                      </td>
                       <td className="px-6 py-4 capitalize text-slate-400">{payment.provider.replaceAll("_", " ")}</td>
-                      <td className="max-w-[200px] truncate px-6 py-4 font-mono text-xs text-slate-500">{payment.reference || "—"}</td>
-                      <td className="px-6 py-4"><span className={`rounded-full px-2 py-1 text-[11px] font-medium ${payment.status === "success" ? "bg-emerald-900/40 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>{payment.status}</span></td>
-                      <td className="px-6 py-4 text-right font-medium text-slate-200">{formatCurrency(payment.amount, payment.currency)}</td>
+                      <td className="max-w-[200px] truncate px-6 py-4 font-mono text-xs text-slate-400">{payment.reference || "—"}</td>
+                      <td className="px-6 py-4">
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase border ${paymentStatusBadge(payment.status)}`}>
+                          {paymentStatusLabel(payment.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-100">{formatCurrency(payment.amount, payment.currency)}</td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPaymentReceipt(payment)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-indigo-400" />
+                          Receipt
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="px-6 py-12 text-center text-sm text-slate-500">No payment records found for this user.</p>
+            <p className="px-6 py-12 text-center text-sm text-slate-500">
+              {paymentStatusFilter === "all"
+                ? "No payment records found for this user."
+                : `No ${paymentStatusFilter} payment records found for this user.`}
+            </p>
           )}
           {paymentPageError && <p role="alert" className="border-t border-slate-800 px-6 py-3 text-sm text-red-300">{paymentPageError}</p>}
           {!!user.paymentCount && (
@@ -2152,6 +3111,725 @@ export default function AdminUserDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Give / Extend Trial Modal */}
+      {showTrialModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setShowTrialModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-gray-900 p-6 shadow-2xl text-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">
+                    {isTrialActive ? "Extend Trial Access" : "Give Free Trial Access"}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {user.name || user.email} · {user.plan.toUpperCase()} plan
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTrialModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-gray-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              {isTrialActive && (
+                <div className="p-3 bg-indigo-950/40 border border-indigo-800/60 rounded-xl text-indigo-300">
+                  <p className="font-semibold">Current Active Trial</p>
+                  <p className="text-slate-300 mt-0.5">
+                    Expires on {trialExpiry ? trialExpiry.toLocaleDateString() : "—"} ({formatRelativeTime(trialExpiry?.toISOString())})
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-slate-400 font-medium mb-1.5">
+                  {isTrialActive ? "Additional Days to Add" : "Trial Duration (Days)"}
+                </label>
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  {[7, 14, 30, 60].map((presetDays) => (
+                    <button
+                      key={presetDays}
+                      type="button"
+                      onClick={() => setTrialDays(presetDays)}
+                      className={`py-2 px-2.5 rounded-lg font-semibold border transition text-center cursor-pointer ${
+                        trialDays === presetDays
+                          ? "bg-indigo-600 text-white border-indigo-500 shadow"
+                          : "bg-gray-800 text-slate-300 border-slate-700 hover:bg-gray-700"
+                      }`}
+                    >
+                      {presetDays} Days
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={trialDays}
+                    onChange={(e) => setTrialDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500 text-sm"
+                    placeholder="Custom number of days"
+                  />
+                  <span className="text-slate-400 text-xs shrink-0">days</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-medium mb-1.5">Reason / Admin Note (Optional)</label>
+                <input
+                  type="text"
+                  value={trialReason}
+                  onChange={(e) => setTrialReason(e.target.value)}
+                  placeholder="e.g. Requested via support, church onboarding promotion..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500 text-xs"
+                />
+              </div>
+
+              {trialMsg && (
+                <div
+                  className={`p-3 rounded-xl border text-xs ${
+                    trialMsg.type === "success"
+                      ? "bg-emerald-950/60 text-emerald-300 border-emerald-700/60"
+                      : "bg-red-950/60 text-red-300 border-red-700/60"
+                  }`}
+                >
+                  {trialMsg.text}
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTrialModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!!trialAction || trialDays < 1}
+                  onClick={async () => {
+                    const ok = await performTrialAction(isTrialActive ? "extend" : "start", trialDays, trialReason);
+                    if (ok) {
+                      setShowTrialModal(false);
+                    }
+                  }}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {trialAction && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {isTrialActive ? "Extend Trial" : "Give Trial"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Receipt Modal */}
+      {selectedPaymentReceipt && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:p-0 print:bg-white"
+          onClick={() => setSelectedPaymentReceipt(null)}
+        >
+          <div
+            className="relative max-w-lg w-full bg-gray-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl print:border-none print:shadow-none print:bg-white print:text-black"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-gray-950/60 print:bg-transparent print:border-b-2 print:border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center print:hidden ${
+                  selectedPaymentReceipt.status === "success" || selectedPaymentReceipt.status === "paid"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : selectedPaymentReceipt.status === "failed" || selectedPaymentReceipt.status === "failure"
+                      ? "bg-red-500/15 text-red-400"
+                      : "bg-amber-500/15 text-amber-400"
+                }`}>
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 print:text-gray-900">MakeChurchEasy Official Receipt</h3>
+                  <p className="text-xs text-slate-400 print:text-gray-500 font-mono">Ref: {selectedPaymentReceipt.reference || "N/A"}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPaymentReceipt(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-gray-800 transition print:hidden cursor-pointer"
+                aria-label="Close receipt"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body / Printable Receipt Content */}
+            <div className="p-6 space-y-6 text-slate-200 print:text-gray-800" id="printable-receipt">
+              {/* Receipt Top Status & Amount */}
+              <div className="flex items-center justify-between bg-slate-950/50 p-4 rounded-xl border border-slate-800 print:bg-gray-50 print:border-gray-200">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 print:text-gray-500">Amount</span>
+                  <p className="text-2xl font-bold text-slate-50 print:text-gray-900 mt-0.5">
+                    {formatCurrency(selectedPaymentReceipt.amount, selectedPaymentReceipt.currency)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase border ${paymentStatusBadge(selectedPaymentReceipt.status)}`}>
+                    {selectedPaymentReceipt.status === "success" || selectedPaymentReceipt.status === "paid" ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : selectedPaymentReceipt.status === "failed" || selectedPaymentReceipt.status === "failure" ? (
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                    ) : null}
+                    {paymentStatusLabel(selectedPaymentReceipt.status)}
+                  </span>
+                  <p className="text-[11px] text-slate-400 print:text-gray-500 mt-1">
+                    {formatRelativeTime(selectedPaymentReceipt.paidAt)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Notice for failed/cancelled */}
+              {selectedPaymentReceipt.status !== "success" && selectedPaymentReceipt.status !== "paid" && (
+                <div className={`p-3 rounded-xl border text-xs ${
+                  selectedPaymentReceipt.status === "failed" || selectedPaymentReceipt.status === "failure"
+                    ? "bg-red-950/40 text-red-300 border-red-800/60"
+                    : "bg-amber-950/40 text-amber-300 border-amber-800/60"
+                }`}>
+                  <p className="font-semibold">
+                    {selectedPaymentReceipt.status === "failed" || selectedPaymentReceipt.status === "failure"
+                      ? "Payment Failed"
+                      : "Payment Not Completed"}
+                  </p>
+                  <p className="text-slate-300 mt-0.5">
+                    {selectedPaymentReceipt.status === "failed" || selectedPaymentReceipt.status === "failure"
+                      ? "This billing transaction was declined or failed by the payment provider."
+                      : "This transaction was cancelled or abandoned before payment completion."}
+                  </p>
+                </div>
+              )}
+
+              {/* Customer & Subscription Details */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 print:text-gray-500">Transaction Details</h4>
+                <div className="rounded-xl border border-slate-800 divide-y divide-slate-800 bg-slate-950/30 text-xs print:bg-white print:border-gray-200 print:divide-gray-200">
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Customer / Church</span>
+                    <span className="font-medium text-slate-200 print:text-gray-900 text-right">{user.name || user.email}{user.churchName ? ` (${user.churchName})` : ""}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Email Address</span>
+                    <span className="font-mono text-slate-200 print:text-gray-900 text-right">{user.email}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">App ID</span>
+                    <span className="font-mono text-slate-200 print:text-gray-900">{user.appId || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Plan / Item</span>
+                    <span className="font-medium text-slate-200 print:text-gray-900 capitalize">{selectedPaymentReceipt.plan} Plan</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Payment Gateway</span>
+                    <span className="font-medium text-slate-200 print:text-gray-900 capitalize">{selectedPaymentReceipt.provider.replaceAll("_", " ")}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Payment Date & Time</span>
+                    <span className="font-medium text-slate-200 print:text-gray-900">{formatDateTime(selectedPaymentReceipt.paidAt)}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5 px-3.5">
+                    <span className="text-slate-400 print:text-gray-500">Transaction Reference</span>
+                    <span className="font-mono text-[11px] text-slate-300 print:text-gray-700 truncate max-w-[220px]">{selectedPaymentReceipt.reference}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 border-t border-slate-800 bg-gray-950/60 flex items-center justify-between gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedPaymentReceipt.reference) {
+                    navigator.clipboard.writeText(selectedPaymentReceipt.reference);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-gray-800 hover:bg-gray-700 border border-slate-700 rounded-xl transition cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copy Reference
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition cursor-pointer"
+                >
+                  <Receipt className="w-3.5 h-3.5" /> Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPaymentReceipt(null)}
+                  className="px-3 py-2 text-xs font-medium text-slate-400 hover:text-white rounded-xl hover:bg-gray-800 transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grant Credits Modal */}
+      {showGrantCredits && (
+        <Modal onClose={() => setShowGrantCredits(false)} title={t('admin.users.grantCredits.title')}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.grantCredits.amountLabel')}</label>
+              <input
+                type="number"
+                min="1"
+                value={creditsAmount}
+                onChange={(e) => setCreditsAmount(e.target.value)}
+                placeholder={t('admin.users.grantCredits.amountPlaceholder')}
+                className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowGrantCredits(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleGrantCredits}
+                disabled={!creditsAmount || parseFloat(creditsAmount) <= 0 || grantingCredits}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {grantingCredits ? t('admin.users.grantCredits.granting') : t('admin.users.grantCredits.button')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Change Plan Modal */}
+      {showChangePlan && (
+        <Modal onClose={() => setShowChangePlan(false)} title={t('admin.users.changePlan.title')}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-400">
+              {t('admin.users.changePlan.description')}
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.newPlan')}</label>
+              <select
+                value={newPlan}
+                onChange={(e) => setNewPlan(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+              >
+                <option value="free">Free</option>
+                <option value="basic">Basic</option>
+                <option value="growth">Growth</option>
+              </select>
+            </div>
+            {newPlan !== "free" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.billingCycle')}</label>
+                    <select
+                      value={subscriptionBillingCycle}
+                      onChange={(e) => setSubscriptionBillingCycle(e.target.value)}
+                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="monthly">{t('admin.users.changePlan.monthly')}</option>
+                      <option value="yearly">{t('admin.users.changePlan.yearly')}</option>
+                      <optgroup label="Gift">
+                        <option value="gift_3m">Gift — 3 months</option>
+                        <option value="gift_6m">Gift — 6 months</option>
+                        <option value="gift_12m">Gift — 12 months</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.currency')}</label>
+                    <input
+                      value={subscriptionCurrency}
+                      onChange={(e) => setSubscriptionCurrency(e.target.value.toUpperCase())}
+                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.amount')}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={subscriptionAmount}
+                      onChange={(e) => setSubscriptionAmount(e.target.value)}
+                      placeholder={t('admin.users.changePlan.amountPlaceholder')}
+                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('common.credits')}</label>
+                    <input
+                      value={formatPlanCredits(selectedSubscriptionCredits)}
+                      readOnly
+                      className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800/60 text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.reference')}</label>
+                  <input
+                    value={subscriptionReference}
+                    onChange={(e) => setSubscriptionReference(e.target.value)}
+                    placeholder={t('admin.users.changePlan.referencePlaceholder')}
+                    className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.changePlan.note')}</label>
+                  <input
+                    value={subscriptionNote}
+                    onChange={(e) => setSubscriptionNote(e.target.value)}
+                    placeholder={t('admin.users.changePlan.notePlaceholder')}
+                    className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              </>
+            )}
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={notifySubscriptionUser}
+                onChange={(e) => setNotifySubscriptionUser(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-gray-800 text-indigo-600 focus:ring-indigo-500"
+              />
+              {t('admin.users.changePlan.notifyUser')}
+            </label>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowChangePlan(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleChangePlan}
+                disabled={changingPlan}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {changingPlan ? t('admin.users.changePlan.changing') : t('admin.users.changePlan.button')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Temporary Plan Modal */}
+      {showTemporaryPlan && (
+        <Modal onClose={() => setShowTemporaryPlan(false)} title={t('admin.users.temporaryPlan.title')}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-400">
+              {t('admin.users.temporaryPlan.description')}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.temporaryPlan.plan')}</label>
+                <select
+                  value={temporaryPlan}
+                  onChange={(e) => setTemporaryPlan(e.target.value)}
+                  className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                >
+                  <option value="free">Free</option>
+                  <option value="basic">Basic</option>
+                  <option value="growth">Growth</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.temporaryPlan.duration')}</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="3650"
+                  value={temporaryDurationDays}
+                  onChange={(e) => setTemporaryDurationDays(e.target.value)}
+                  className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.temporaryPlan.reason')}</label>
+              <textarea
+                value={temporaryReason}
+                onChange={(e) => setTemporaryReason(e.target.value)}
+                placeholder={t('admin.users.temporaryPlan.reasonPlaceholder')}
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 resize-y transition-colors"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              {t('admin.users.temporaryPlan.returnNotice')}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowTemporaryPlan(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleSaveTemporaryPlan}
+                disabled={savingTemporaryPlan || !temporaryDurationDays || parseInt(temporaryDurationDays) <= 0}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {savingTemporaryPlan ? t('admin.users.temporaryPlan.saving') : t('admin.users.temporaryPlan.button')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* End Temporary Plan Modal */}
+      {showEndTemporaryPlan && (
+        <Modal onClose={() => setShowEndTemporaryPlan(false)} title={t('admin.users.temporaryPlan.endTitle')}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              {t('admin.users.temporaryPlan.endDescription')}
+            </p>
+            <p className="text-xs text-slate-500">
+              {t('admin.users.temporaryPlan.endWarning')}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowEndTemporaryPlan(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleEndTemporaryPlan}
+                disabled={endingTemporaryPlan}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {endingTemporaryPlan ? t('admin.users.temporaryPlan.ending') : t('admin.users.temporaryPlan.endButton')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Grant Ambassador Modal */}
+      {showAmbassador && (
+        <Modal onClose={() => setShowAmbassador(false)} title={t('admin.users.ambassador.title')}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-400">
+              {t('admin.users.ambassador.description')}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.ambassador.duration')}</label>
+                <select
+                  value={ambassadorDuration}
+                  onChange={(e) => setAmbassadorDuration(e.target.value)}
+                  className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                >
+                  <option value="1">{t('admin.users.ambassador.oneMonth')}</option>
+                  <option value="3">{t('admin.users.ambassador.threeMonths')}</option>
+                  <option value="6">{t('admin.users.ambassador.sixMonths')}</option>
+                  <option value="12">{t('admin.users.ambassador.twelveMonths')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.ambassador.credits')}</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={ambassadorCredits}
+                  onChange={(e) => setAmbassadorCredits(e.target.value)}
+                  placeholder={defaultAmbassadorCredits ? String(defaultAmbassadorCredits) : ""}
+                  className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.ambassador.notes')}</label>
+              <textarea
+                value={ambassadorNotes}
+                onChange={(e) => setAmbassadorNotes(e.target.value)}
+                placeholder={t('admin.users.ambassador.notesPlaceholder')}
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 resize-y transition-colors"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAmbassador(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleGrantAmbassador}
+                disabled={grantingAmbassador || (ambassadorCredits !== "" && parseInt(ambassadorCredits) <= 0)}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {grantingAmbassador ? t('admin.users.ambassador.granting') : t('admin.users.ambassador.button')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Revoke Ambassador Modal */}
+      {showRevokeAmbassador && (
+        <Modal onClose={() => !revokingAmbassador && setShowRevokeAmbassador(false)} title={t('admin.users.actions.revokeAmbassador')}>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-700 bg-gray-800/60 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">User</p>
+              <p className="mt-1 text-sm font-medium text-slate-100">{user.name || t('common.unnamed')}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
+            </div>
+            <p className="text-sm text-slate-300">
+              Are you sure you want to revoke ambassador access for this user?
+            </p>
+            <p className="text-xs text-slate-500">
+              This will remove the ambassador badge, return the account to the server-selected previous plan, and update their credits from the revoke result.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowRevokeAmbassador(false)}
+                disabled={revokingAmbassador}
+                className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleRevokeAmbassadorModal}
+                disabled={revokingAmbassador}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {revokingAmbassador ? "Revoking..." : t('admin.users.actions.revokeAmbassador')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Cancel Trial Modal */}
+      {showCancelTrial && (
+        <Modal onClose={() => setShowCancelTrial(false)} title={t('admin.users.cancelTrial.title')}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              {t('admin.users.cancelTrial.description')}
+            </p>
+            <p className="text-xs text-slate-500">
+              {t('admin.users.cancelTrial.warning')}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowCancelTrial(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleCancelTrial}
+                disabled={cancellingTrial}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {cancellingTrial ? t('admin.users.cancelTrial.cancelling') : t('admin.users.cancelTrial.button')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Grant Trial Modal */}
+      {showGrantTrial && (
+        <Modal onClose={() => setShowGrantTrial(false)} title="Grant Trial">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Duration (days)</label>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                step={1}
+                value={grantTrialDays}
+                onChange={(e) => setGrantTrialDays(e.target.value)}
+                autoFocus
+                className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+              />
+              <div className="flex flex-wrap gap-2 mt-2">
+                {[7, 14, 20, 30].map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setGrantTrialDays(String(days))}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${grantTrialDays === String(days)
+                      ? "border-indigo-500 bg-indigo-500/15 text-indigo-300"
+                      : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                      }`}
+                  >
+                    {days} days
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                This is an explicit admin grant. Signing in again will not restart the trial automatically.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowGrantTrial(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleGrantTrial}
+                disabled={grantingTrial}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {grantingTrial ? "Granting..." : "Grant Trial"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Extend Trial Modal */}
+      {showExtendTrial && (
+        <Modal onClose={() => setShowExtendTrial(false)} title="Extend Trial">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Extend by (days)</label>
+              <input
+                type="number"
+                min={1}
+                value={extendTrialDays}
+                onChange={(e) => setExtendTrialDays(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+                autoFocus
+              />
+              <p className="text-xs text-slate-500 mt-1.5">Enter any positive number of days to add to the current trial.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowExtendTrial(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleExtendTrial}
+                disabled={extendingTrial || !extendTrialDays || parseInt(extendTrialDays) <= 0}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {extendingTrial ? "Extending..." : "Extend Trial"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2162,8 +3840,303 @@ function formatDateTime(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
-function formatEventName(value: string) {
+function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const now = Date.now();
+  const diffInSeconds = Math.floor((now - date.getTime()) / 1000);
+
+  if (diffInSeconds < 0) {
+    const futureSec = Math.abs(diffInSeconds);
+    if (futureSec < 60) return "in a few seconds";
+    const minutes = Math.floor(futureSec / 60);
+    if (minutes < 60) return `in ${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `in ${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `in ${days}d`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `in ${months}mo`;
+    const years = Math.floor(days / 365);
+    return `in ${years}y`;
+  }
+
+  if (diffInSeconds < 45) return "just now";
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes === 1 ? "" : "s"} ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    if (diffInHours === 1) return "1 hour ago";
+    return `${diffInHours} hours ago`;
+  }
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays === 1) return "yesterday";
+  if (diffInDays < 7) return `${diffInDays} days ago`;
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks < 5) return `${diffInWeeks} week${diffInWeeks === 1 ? "" : "s"} ago`;
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths < 12) return `${diffInMonths} month${diffInMonths === 1 ? "" : "s"} ago`;
+  const diffInYears = Math.floor(diffInDays / 365);
+  return `${diffInYears} year${diffInYears === 1 ? "" : "s"} ago`;
+}
+
+interface ActivityScoreBreakdown {
+  score: number;
+  grade: "Champion" | "High Active" | "Moderate" | "Getting Started" | "Dormant";
+  color: string;
+  badgeBg: string;
+  badgeBorder: string;
+  barColor: string;
+  breakdown: Array<{
+    category: string;
+    score: number;
+    maxScore: number;
+    detail: string;
+  }>;
+}
+
+function calculateUserActivityScore(user: UserDetail): ActivityScoreBreakdown {
+  let score = 0;
+  const breakdown: ActivityScoreBreakdown["breakdown"] = [];
+
+  // 1. Login Recency (max 25 pts)
+  let loginPoints = 0;
+  let loginDetail = "Never logged in";
+  if (user.lastLogin) {
+    const diffDays = Math.floor((Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 1) {
+      loginPoints = 25;
+      loginDetail = "Active in last 24h";
+    } else if (diffDays <= 3) {
+      loginPoints = 20;
+      loginDetail = "Active within 3 days";
+    } else if (diffDays <= 7) {
+      loginPoints = 15;
+      loginDetail = "Active this week";
+    } else if (diffDays <= 14) {
+      loginPoints = 10;
+      loginDetail = "Active in last 2 weeks";
+    } else if (diffDays <= 30) {
+      loginPoints = 5;
+      loginDetail = "Active this month";
+    } else {
+      loginPoints = 0;
+      loginDetail = "Inactive > 30 days";
+    }
+  }
+  score += loginPoints;
+  breakdown.push({
+    category: "Sign-in Recency",
+    score: loginPoints,
+    maxScore: 25,
+    detail: loginDetail,
+  });
+
+  // 2. Hardware / Device Pairing (max 20 pts)
+  let devicePoints = 0;
+  const deviceCount = user.devices?.length || 0;
+  const isPaired = user.activationMilestones?.devicePaired;
+  if (deviceCount >= 1 || isPaired) {
+    devicePoints = 20;
+  }
+  score += devicePoints;
+  breakdown.push({
+    category: "Connected Hardware",
+    score: devicePoints,
+    maxScore: 20,
+    detail: deviceCount > 0 ? `${deviceCount} device${deviceCount > 1 ? "s" : ""} connected` : (isPaired ? "Previously paired" : "No devices connected"),
+  });
+
+  // 3. Presentation / OBS Milestone (max 25 pts)
+  let presPoints = 0;
+  let presDetail = "No presentation yet";
+  if (user.activationMilestones?.firstPresentation) {
+    presPoints += 15;
+    presDetail = "First presentation completed";
+  }
+  if (user.activationMilestones?.firstPresentationScreenshotUrl) {
+    presPoints += 5;
+    presDetail += " + OBS screenshot";
+  }
+  if (user.activationMilestones?.obsConnected) {
+    presPoints += 5;
+  }
+  score += presPoints;
+  breakdown.push({
+    category: "Live Presentation",
+    score: presPoints,
+    maxScore: 25,
+    detail: presDetail,
+  });
+
+  // 4. Content Library Usage (max 15 pts)
+  const usageCount = (user.usage?.bibleSearches || 0) + (user.usage?.songsCreated || 0) + (user.usage?.mediaUploaded || 0) + (user.usage?.transcriptCount || 0);
+  let contentPoints = 0;
+  if (usageCount >= 15) {
+    contentPoints = 15;
+  } else if (usageCount >= 5) {
+    contentPoints = 10;
+  } else if (usageCount >= 1) {
+    contentPoints = 5;
+  }
+  score += contentPoints;
+  breakdown.push({
+    category: "Content Usage",
+    score: contentPoints,
+    maxScore: 15,
+    detail: `${usageCount} total actions recorded`,
+  });
+
+  // 5. Subscription & Plan Health (max 15 pts)
+  let planPoints = 0;
+  let planDetail = "Free Tier";
+  const plan = (user.plan || "").toLowerCase();
+  const isPaid = plan === "growth" || plan === "pro" || plan === "basic" || plan === "managed" || user.subscription?.status === "active";
+  if (isPaid) {
+    planPoints = 15;
+    planDetail = `${user.plan.toUpperCase()} (Active)`;
+  } else if (user.trial?.active) {
+    planPoints = 10;
+    planDetail = "Active Trial";
+  } else if (user.ambassador?.active) {
+    planPoints = 12;
+    planDetail = "Active Ambassador";
+  } else {
+    planPoints = 5;
+    planDetail = "Free Tier";
+  }
+  score += planPoints;
+  breakdown.push({
+    category: "Plan Status",
+    score: planPoints,
+    maxScore: 15,
+    detail: planDetail,
+  });
+
+  const finalScore = Math.min(100, Math.max(0, score));
+  let grade: ActivityScoreBreakdown["grade"] = "Dormant";
+  let color = "text-rose-400";
+  let badgeBg = "bg-rose-950/50 text-rose-300 border-rose-800/60";
+  let badgeBorder = "border-rose-500/30";
+  let barColor = "bg-rose-500";
+
+  if (finalScore >= 80) {
+    grade = "Champion";
+    color = "text-emerald-400";
+    badgeBg = "bg-emerald-950/60 text-emerald-300 border-emerald-700/60";
+    badgeBorder = "border-emerald-500/40";
+    barColor = "bg-emerald-500";
+  } else if (finalScore >= 60) {
+    grade = "High Active";
+    color = "text-indigo-400";
+    badgeBg = "bg-indigo-950/60 text-indigo-300 border-indigo-700/60";
+    badgeBorder = "border-indigo-500/40";
+    barColor = "bg-indigo-500";
+  } else if (finalScore >= 40) {
+    grade = "Moderate";
+    color = "text-amber-400";
+    badgeBg = "bg-amber-950/60 text-amber-300 border-amber-700/60";
+    badgeBorder = "border-amber-500/40";
+    barColor = "bg-amber-500";
+  } else if (finalScore >= 20) {
+    grade = "Getting Started";
+    color = "text-blue-400";
+    badgeBg = "bg-blue-950/60 text-blue-300 border-blue-700/60";
+    badgeBorder = "border-blue-500/40";
+    barColor = "bg-blue-500";
+  }
+
+  return {
+    score: finalScore,
+    grade,
+    color,
+    badgeBg,
+    badgeBorder,
+    barColor,
+    breakdown,
+  };
+}
+
+function formatEventName(value: string): string {
+  const eventDisplayMap: Record<string, string> = {
+    trial_extended: "Trial Extended",
+    trial_started: "Trial Started",
+    trial_granted: "Trial Granted",
+    trial_restarted: "Trial Restarted",
+    trial_stopped: "Trial Stopped",
+    trial_cancelled: "Trial Cancelled",
+    trial_expired: "Trial Expired",
+    upgraded_to_ambassador: "Upgraded to Ambassador",
+    ambassador_granted: "Ambassador Status Granted",
+    ambassador_revoked: "Ambassador Status Revoked",
+    upgraded_from_passcode: "Upgraded from Passcode",
+    passcode_redeemed: "Passcode Redeemed",
+    payment_made: "Payment Made",
+    payment_success: "Payment Successful",
+    billing_success: "Subscription Payment Succeeded",
+    payment_cancelled: "Payment Cancelled",
+    subscription_cancelled: "Subscription Cancelled",
+    payment_failure: "Payment Failed",
+    payment_failed: "Payment Failed",
+    billing_failed: "Payment Failed",
+    admin_generated_account: "Admin Generated Account",
+    admin_created: "Account Created by Admin",
+    account_downgraded: "Account Downgraded",
+    plan_downgraded: "Plan Downgraded to Free",
+    temporary_plan_granted: "Temporary Plan Granted",
+    temporary_plan_ended: "Temporary Plan Ended",
+    first_presentation: "First Presentation Live",
+    first_presentation_milestone: "First Presentation Milestone",
+    overlay_mode_switched: "Overlay Mode Changed",
+    bible_present: "Bible Verse Presented",
+    bible_search: "Bible Search",
+    worship_song_presented: "Worship Song Presented",
+    worship_song_created: "Worship Song Created",
+    media_presented: "Media Presented",
+    media_uploaded: "Media Uploaded",
+    device_paired: "Device Paired",
+    obs_connected: "OBS Connected",
+    credits_granted: "Credits Granted",
+    credits_reset: "Credits Reset",
+    account_suspended: "Account Suspended",
+    account_unsuspended: "Account Restored",
+    user_logged_in: "User Signed In",
+    user_signup: "User Signed Up",
+  };
+  if (eventDisplayMap[value]) return eventDisplayMap[value];
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function paymentStatusBadge(status: string): string {
+  const s = (status || "").toLowerCase();
+  if (s === "success" || s === "paid" || s === "completed") {
+    return "bg-emerald-950/60 text-emerald-300 border border-emerald-700/60";
+  }
+  if (s === "failed" || s === "failure" || s === "error" || s === "declined") {
+    return "bg-red-950/60 text-red-300 border border-red-700/60";
+  }
+  if (s === "cancelled" || s === "canceled" || s === "abandoned" || s === "void") {
+    return "bg-amber-950/60 text-amber-300 border border-amber-700/60";
+  }
+  if (s === "pending" || s === "processing") {
+    return "bg-sky-950/60 text-sky-300 border border-sky-700/60";
+  }
+  if (s === "refunded") {
+    return "bg-purple-950/60 text-purple-300 border border-purple-700/60";
+  }
+  return "bg-slate-800 text-slate-400 border border-slate-700/60";
+}
+
+function paymentStatusLabel(status: string): string {
+  const s = (status || "").toLowerCase();
+  if (s === "success" || s === "paid") return "Successful";
+  if (s === "failed" || s === "failure") return "Failed";
+  if (s === "cancelled" || s === "canceled") return "Cancelled";
+  if (s === "pending") return "Pending";
+  if (s === "refunded") return "Refunded";
+  return status.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 function formatCurrency(amount: number, currency: string) {
@@ -2174,11 +4147,30 @@ function formatCurrency(amount: number, currency: string) {
   }
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  subValue,
+  children,
+}: {
+  label: string;
+  value?: string;
+  subValue?: string | null;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span className="text-sm text-slate-300 font-medium">{value}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-slate-800/40 last:border-0 gap-3">
+      <span className="text-xs text-slate-500 shrink-0">{label}</span>
+      <div className="text-right min-w-0">
+        {children ? (
+          children
+        ) : (
+          <>
+            <span className="text-sm text-slate-300 font-medium block truncate">{value || "—"}</span>
+            {subValue && <span className="text-[11px] text-slate-500 block font-normal truncate">{subValue}</span>}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2204,3 +4196,23 @@ function UsageStat({
     </div>
   );
 }
+
+function Modal({ onClose, title, children }: { onClose: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
+          <h3 className="text-sm font-semibold text-slate-50">{title}</h3>
+          <button onClick={onClose} className="p-1 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-gray-800 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-6 py-4 max-h-[80vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+

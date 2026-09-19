@@ -43,12 +43,15 @@ export function savePresentationScreenZoom(value: number): number {
   return next;
 }
 
-function buildState(item: PresentationRemoteItem | null): PresentationRemoteState {
+function buildState(
+  item: PresentationRemoteItem | null,
+  layer: "fullscreen" | "lowerThird" = "fullscreen",
+): PresentationRemoteState {
   const { sessionId } = getPresentationSettings();
   return {
     sessionId,
-    fullscreen: item,
-    lowerThird: null,
+    fullscreen: layer === "fullscreen" ? item : null,
+    lowerThird: layer === "lowerThird" ? item : null,
     updatedAt: Date.now(),
   };
 }
@@ -64,8 +67,11 @@ function withScreenPreferences(item: PresentationRemoteItem): PresentationRemote
   };
 }
 
-async function publishItem(item: PresentationRemoteItem): Promise<void> {
-  await publishPresentationState(buildState(withScreenPreferences(item)));
+async function publishItem(
+  item: PresentationRemoteItem,
+  layer: "fullscreen" | "lowerThird" = "fullscreen",
+): Promise<void> {
+  await publishPresentationState(buildState(withScreenPreferences(item), layer));
 }
 
 function getRemoteViewerAssetUrl(media: MediaItem): string | undefined {
@@ -98,6 +104,7 @@ export async function publishBibleToPresentation(payload: {
   text: string;
   style?: PresentationStyleSnapshot;
   compare?: PresentationBibleComparePayload;
+  layer?: "fullscreen" | "lowerThird";
 }): Promise<void> {
   const reference = `${payload.book} ${payload.chapter}:${payload.verse}`;
   await publishItem({
@@ -108,7 +115,7 @@ export async function publishBibleToPresentation(payload: {
     body: payload.text,
     style: payload.style,
     bibleCompare: payload.compare,
-  });
+  }, payload.layer ?? "fullscreen");
 }
 
 export async function publishWorshipToPresentation(payload: {
@@ -120,6 +127,7 @@ export async function publishWorshipToPresentation(payload: {
   slideCount: number;
   style?: PresentationStyleSnapshot;
   showMeta?: boolean;
+  layer?: "fullscreen" | "lowerThird";
 }): Promise<void> {
   const showMeta = payload.showMeta === true;
   await publishItem({
@@ -135,7 +143,7 @@ export async function publishWorshipToPresentation(payload: {
       showTitle: showMeta,
       showSubtitle: showMeta,
     },
-  });
+  }, payload.layer ?? "fullscreen");
 }
 
 export interface PublishMediaPresentationOptions {

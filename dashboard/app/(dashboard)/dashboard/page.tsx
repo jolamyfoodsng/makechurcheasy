@@ -66,6 +66,7 @@ export default function Overview() {
     maxCredits,
     isUnlimited,
     isOnTrial,
+    isFreePlan,
     trialDaysLeft,
     trialEndsAt,
     loading: subLoading,
@@ -134,6 +135,35 @@ export default function Overview() {
           <p className="text-sm text-slate-500">{churchName}</p>
         )}
       </div>
+
+      {/* Free Plan Overview Banner */}
+      {isFreePlan && !isOnTrial && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 p-5 sm:p-6 text-white shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                Free Plan Active
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                You are currently on the Free Plan
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Enjoy your basic church presentation features (3 offline Bible versions and manual OBS link). Subscribe now to unlock automated OBS scene control, unlimited offline Bibles, full transcript downloads, unlimited themes, and cloud backup.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href="/subscription/plans"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm transition-all shadow-md shadow-indigo-600/30 whitespace-nowrap"
+              >
+                <span>Subscribe Now</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

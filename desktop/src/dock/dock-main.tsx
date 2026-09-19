@@ -61,16 +61,7 @@ function bootstrapDock() {
       </DockAuthGate>
     </React.StrictMode>
   );
-
-  // The HTML loader covers the gap before React has its first commit. Remove
-  // it after that commit so an auth/settings wait still shows the Dock's own
-  // intentional loading state instead of an empty page.
-  window.requestAnimationFrame(() => {
-    const loader = document.getElementById("dock-boot-loader");
-    if (!loader) return;
-    loader.classList.add("is-hidden");
-    window.setTimeout(() => loader.remove(), 220);
-  });
 }
 
 bootstrapDock();
+
