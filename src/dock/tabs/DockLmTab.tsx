@@ -372,6 +372,38 @@ export default function DockLmTab({
   const liveVerseRef = useRef<VoiceBibleCandidate | null>(liveVerse);
   const lastRepublishedOverlayModeRef = useRef<LmOverlayMode>(settings.overlayMode);
   const liveBibleThemeSnapshotRef = useRef<LiveBibleThemeSnapshot | null>(loadLiveBibleThemeSnapshot());
+  const resolvedProjectionCacheRef = useRef<Map<string, VoiceBibleCandidate>>(new Map());
+  const resolvedBibleThemeCacheRef = useRef<Map<LmOverlayMode, { theme: Awaited<ReturnType<typeof resolveLmBibleTheme>>; ts: number }>>(new Map());
+
+  const getProjectionCacheKey = useCallback((c: VoiceBibleCandidate, tr: string) => {
+    return `${c.book}:${c.chapter}:${c.verse}:${c.endVerse ?? c.verse}:${tr.trim().toUpperCase()}`;
+  }, []);
+
+  const prefetchProjections = useCallback((items: VoiceBibleCandidate[], translation: string) => {
+    for (const item of items) {
+      if (!item.book || !item.chapter || !item.verse) continue;
+      const key = `${item.book}:${item.chapter}:${item.verse}:${item.endVerse ?? item.verse}:${translation.trim().toUpperCase()}`;
+      if (resolvedProjectionCacheRef.current.has(key)) continue;
+      resolveScriptureProjection(item, translation)
+        .then((resolved) => {
+          resolvedProjectionCacheRef.current.set(key, resolved);
+        })
+        .catch(() => { });
+    }
+  }, []);
+
+  const getCachedLmBibleTheme = useCallback(async (
+    overlayMode: LmOverlayMode,
+    liveSnapshot: LiveBibleThemeSnapshot | null,
+  ) => {
+    const cached = resolvedBibleThemeCacheRef.current.get(overlayMode);
+    if (cached && Date.now() - cached.ts < 10000) {
+      return cached.theme;
+    }
+    const resolved = await resolveLmBibleTheme(overlayMode, liveSnapshot);
+    resolvedBibleThemeCacheRef.current.set(overlayMode, { theme: resolved, ts: Date.now() });
+    return resolved;
+  }, []);
 
   const setLiveVerse = useCallback((candidate: VoiceBibleCandidate | null) => {
     liveVerseRef.current = candidate;
@@ -388,7 +420,8 @@ export default function DockLmTab({
     for (const candidate of incoming) {
       detectedAtRef.current.set(getLmCandidateKey(candidate), candidate.detectedAt ?? detectedAtRef.current.get(getLmCandidateKey(candidate)) ?? nowMs);
     }
-  }, []);
+    prefetchProjections(incoming, settings.translation);
+  }, [prefetchProjections, settings.translation]);
 
   const syncSuggestionSnapshot = useCallback((
     incoming: VoiceBibleCandidate[],
@@ -399,6 +432,7 @@ export default function DockLmTab({
       for (const candidate of incoming) {
         detectedAtRef.current.set(getLmCandidateKey(candidate), candidate.detectedAt ?? detectedAtRef.current.get(getLmCandidateKey(candidate)) ?? nowMs);
       }
+      prefetchProjections(incoming, settings.translation);
     }
     // A relay poll can briefly return the previous empty state while a new
     // search result is being posted. Do not erase a clickable suggestion
@@ -406,7 +440,7 @@ export default function DockLmTab({
     if (incoming.length > 0 || clearEmpty) {
       setSuggestions(incoming);
     }
-  }, []);
+  }, [prefetchProjections, settings.translation]);
 
   // ── Pinned verses ──
   const PINNED_STORAGE_KEY = "ocs-lm-dock-pinned";
@@ -592,12 +626,14 @@ export default function DockLmTab({
           suggestions?: VoiceBibleCandidate[];
         };
         setCandidates(payload.candidates);
+        prefetchProjections(payload.candidates, settings.translation);
         if (payload.queue) syncQueueSnapshot(payload.queue);
         if (payload.suggestions) syncSuggestionSnapshot(payload.suggestions);
       } else if (msg.type === "state:bible-theme-updated") {
         const payload = msg.payload as LiveBibleThemeSnapshot | null;
         if (payload && typeof payload === "object") {
           liveBibleThemeSnapshotRef.current = payload;
+          resolvedBibleThemeCacheRef.current.clear();
         }
       }
     });
@@ -619,7 +655,10 @@ export default function DockLmTab({
           if (state.entries) setEntries(state.entries);
           setMatching(state.matching ?? false);
           setError(state.error ?? null);
-          if (state.candidates) setCandidates(state.candidates);
+          if (state.candidates) {
+            setCandidates(state.candidates);
+            prefetchProjections(state.candidates, settings.translation);
+          }
           if (state.queue) syncQueueSnapshot(state.queue);
           if (state.suggestions) {
             syncSuggestionSnapshot(
@@ -726,8 +765,15 @@ export default function DockLmTab({
     candidate: VoiceBibleCandidate,
     overlayMode: LmOverlayMode,
   ) => {
-    candidate = await resolveScriptureProjection(candidate, settings.translation);
-    const bibleTheme = await resolveLmBibleTheme(overlayMode, liveBibleThemeSnapshotRef.current);
+    const cacheKey = getProjectionCacheKey(candidate, settings.translation);
+    let resolvedCandidate = resolvedProjectionCacheRef.current.get(cacheKey);
+    if (!resolvedCandidate) {
+      resolvedCandidate = await resolveScriptureProjection(candidate, settings.translation);
+      resolvedProjectionCacheRef.current.set(cacheKey, resolvedCandidate);
+    }
+    candidate = resolvedCandidate;
+
+    const bibleTheme = await getCachedLmBibleTheme(overlayMode, liveBibleThemeSnapshotRef.current);
     const verseRange = candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse);
     const referenceLabels = resolveDockBibleReferenceLabels(
       candidate.book,
@@ -782,17 +828,16 @@ export default function DockLmTab({
       liveOverrides: bibleTheme.liveOverrides,
       targetScene,
     };
-    const lowerThirdPayload = {
+    const overlayPayload = {
       verseText: candidate.snippet,
       referenceText: referenceLabels.displayReferenceLabel,
       verseRange,
       bibleThemeSettings: bibleTheme.themeSettings,
       liveOverrides: null,
       themeId: bibleTheme.themeId,
+      overlayMode,
     };
-    const pushLive = () => overlayMode === "lower-third"
-      ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload)
-      : dockObsClient.pushBible(stageData);
+    const pushLive = () => dockObsClient.pushBibleOverlayFast(overlayPayload);
 
     const bibleSceneRoute = loadDockSceneRoute("bible");
     if (bibleSceneRoute.enabled && bibleSceneRoute.targets.length > 0) {
@@ -806,7 +851,7 @@ export default function DockLmTab({
 
     await pushLive();
     return candidate;
-  }, [presentationLinkMode, settings.pushScene, settings.translation]);
+  }, [getCachedLmBibleTheme, getProjectionCacheKey, presentationLinkMode, settings.pushScene, settings.translation]);
 
   useEffect(() => {
     if (lastRepublishedOverlayModeRef.current === settings.overlayMode) return;
@@ -865,8 +910,11 @@ export default function DockLmTab({
 
     // Showing an AI match should also move the Bible dock to the exact
     // reference, so the operator can continue from the neighboring verses.
-    onNavigateToBible?.();
-    navigateBibleDock(candidate);
+    // Defer non-critical navigation so it doesn't block or race with the live OBS push!
+    setTimeout(() => {
+      onNavigateToBible?.();
+      navigateBibleDock(candidate);
+    }, 0);
 
     setPushing(true);
     setPushError(null);
@@ -950,11 +998,7 @@ export default function DockLmTab({
           target.sceneName,
         )));
         if (notesSceneRoute.syncPresentation) {
-          if (notesSettings.overlayMode === "lower-third") {
-            await dockObsClient.pushNotesOverlayFast(obsData);
-          } else {
-            await dockObsClient.pushNotesLyrics(obsData);
-          }
+          await dockObsClient.pushNotesOverlayFast(obsData);
         }
         showToast("Pushed to OBS");
         return;
@@ -968,11 +1012,7 @@ export default function DockLmTab({
         .then(() => dockObsClient.primeNotesOverlay(obsData))
         .catch(() => { });
 
-      await bringNotesForward.then(() => (
-        notesSettings.overlayMode === "lower-third"
-          ? dockObsClient.pushNotesOverlayFast(obsData)
-          : dockObsClient.pushNotesLyrics(obsData)
-      ));
+      await bringNotesForward.then(() => dockObsClient.pushNotesOverlayFast(obsData));
 
       showToast("Pushed to OBS");
     } catch (err) {

@@ -1055,7 +1055,7 @@ export default function DockMinistryTab({
             aria-label={t("ministry.lowerThirds")}
             title={t("ministry.lowerThirds")}>
             <Icon name="subtitles" size={12} />
-            <span>{t("ministry.lowerThirdsShort", "Low")}</span>
+            <span>{t("ministry.lowerThirdsShort", "Lower-Third")}</span>
           </button>
         )}
         {showTimeTab && (
@@ -1261,38 +1261,6 @@ export default function DockMinistryTab({
                     style={{ flex: 1 }}
                   />
                   <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 32, textAlign: "right" }}>{settings.messageSpacing}px</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50, paddingTop: 7 }}>Divider</span>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }} role="group" aria-label="Ticker divider">
-                    {TICKER_DIVIDER_OPTIONS.map((option) => {
-                      const isActive = settings.divider === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setSettings((s) => ({ ...s, divider: option.value }))}
-                          aria-label={option.label}
-                          title={option.label}
-                          style={{
-                            width: 28,
-                            height: 28,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 0,
-                            borderRadius: 4,
-                            border: `1px solid ${isActive ? "var(--dock-accent)" : "var(--dock-border)"}`,
-                            background: isActive ? "var(--dock-accent)" : "var(--dock-surface)",
-                            color: isActive ? "#fff" : "var(--dock-text-dim)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Icon name={option.icon} size={13} />
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
                   <div style={{ display: "block", alignItems: "center", gap: 6 }}>

@@ -12,7 +12,10 @@ import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
 import {
   deleteSlot,
   loadSlots,
-  renameSlot, resolveSlotState,
+  loadActiveSlotIndex,
+  saveActiveSlotIndex,
+  renameSlot,
+  resolveSlotState,
   saveSlot,
 } from "../../lowerthirds/contentSlots";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
@@ -54,11 +57,12 @@ interface DockLTEditorProps {
   size?: LTSize;
 }
 
-type LTAppearanceColorKey = "bgColor" | "textColor" | "accentColor";
+type LTAppearanceColorKey = "bgColor" | "textColor" | "infoColor" | "accentColor";
 
 const LT_APPEARANCE_COLOR_CONTROLS: Array<{ key: LTAppearanceColorKey; label: string; fallback: string }> = [
   { key: "bgColor", label: "Background", fallback: "#111827" },
-  { key: "textColor", label: "Text", fallback: "#ffffff" },
+  { key: "textColor", label: "Primary Text", fallback: "#ffffff" },
+  { key: "infoColor", label: "Supporting Text", fallback: "#94a3b8" },
   { key: "accentColor", label: "Accent", fallback: "#1d4ed8" },
 ];
 
@@ -82,7 +86,8 @@ function ltColorInputValue(value: unknown, fallback: string): string {
 
 function getLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey): string {
   if (key === "bgColor") return styles.bgColor || styles.bgColor1 || styles.bgColor2 || "";
-  if (key === "textColor") return styles.textColor || styles.nameColor || styles.infoColor || "";
+  if (key === "textColor") return styles.textColor || styles.nameColor || "";
+  if (key === "infoColor") return styles.infoColor || "";
   return styles.accentColor || styles.borderColor1 || styles.borderColor2 || "";
 }
 
@@ -101,6 +106,11 @@ function withLtAppearanceColor(styles: LTCustomStyle, key: LTAppearanceColorKey,
       ...styles,
       textColor: color,
       nameColor: color,
+    };
+  }
+  if (key === "infoColor") {
+    return {
+      ...styles,
       infoColor: color,
     };
   }
@@ -136,6 +146,25 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function loadInitialSlotState(themeId: string, slotIndex: number, theme: LowerThirdTheme): SlotState {
+  try {
+    const slots = loadSlots(themeId, "default");
+    const saved = slots[slotIndex];
+    if (saved) return resolveSlotState(saved);
+  } catch { /* ignore */ }
+  const defaults: Record<string, string> = {};
+  for (const v of theme.variables) {
+    defaults[v.key] = v.defaultValue ?? "";
+  }
+  return {
+    variableValues: defaults,
+    customStyles: { ...LT_DEFAULT_CUSTOM_STYLE },
+    position: "bottom-left",
+    animationIn: (theme.animation?.name as LTAnimationIn) || "slide-left",
+    exitStyle: "fade",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -152,50 +181,28 @@ export default function DockLowerThirdEditor({
 }: DockLTEditorProps) {
   const { t } = useTranslation();
 
-  function loadSlot1(): SlotState | null {
-    try {
-      const saved = loadSlots(theme.id, "default")[0];
-      if (saved) return resolveSlotState(saved);
-    } catch { /* ignore */ }
-    return null;
-  }
+  const [activeSlotIndex, setActiveSlotIndex] = useState<number>(() => {
+    return loadActiveSlotIndex(theme.id, "default");
+  });
+  const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
+
+  const initialSlotState = useMemo(() => {
+    const activeIdx = loadActiveSlotIndex(theme.id, "default");
+    return loadInitialSlotState(theme.id, activeIdx, theme);
+  }, [theme]);
 
   // ── Variable values ──
-  const [variableValues, setVariableValues] = useState<Record<string, string>>(() => {
-    const s1 = loadSlot1();
-    if (s1) return { ...s1.variableValues };
-    const init: Record<string, string> = {};
-    for (const v of theme.variables) {
-      init[v.key] = v.defaultValue ?? "";
-    }
-    return init;
-  });
+  const [variableValues, setVariableValues] = useState<Record<string, string>>(() => initialSlotState.variableValues);
 
   // ── Custom style overrides ──
-  const [customStyles, setCustomStyles] = useState<LTCustomStyle>(() => {
-    const s1 = loadSlot1();
-    if (s1) return { ...s1.customStyles };
-    return { ...LT_DEFAULT_CUSTOM_STYLE };
-  });
+  const [customStyles, setCustomStyles] = useState<LTCustomStyle>(() => initialSlotState.customStyles);
 
   // ── Position ──
-  const [position, setPosition] = useState<LTPosition>(() => {
-    const s1 = loadSlot1();
-    if (s1) return s1.position;
-    return "bottom-left";
-  });
+  const [position, setPosition] = useState<LTPosition>(() => initialSlotState.position);
 
   // ── Animation ──
-  const [animationIn, setAnimationIn] = useState<LTAnimationIn>(() => {
-    const s1 = loadSlot1();
-    if (s1) return s1.animationIn;
-    return "slide-left";
-  });
-  const [exitStyle, setExitStyle] = useState<LTExitStyle>(() => {
-    const s1 = loadSlot1();
-    if (s1) return s1.exitStyle;
-    return "fade";
-  });
+  const [animationIn, setAnimationIn] = useState<LTAnimationIn>(() => initialSlotState.animationIn);
+  const [exitStyle, setExitStyle] = useState<LTExitStyle>(() => initialSlotState.exitStyle);
 
   // ── Preview zoom (persisted) ──
   // Currently unused — will be wired to UI controls in a follow-up
@@ -463,47 +470,36 @@ export default function DockLowerThirdEditor({
         autoSaveTimerRef.current = null;
         if (!isSavingRef.current && activeSlotIndex !== null) {
           const fullState: SlotState = {
-            variableValues: { ...variableValues },
-            customStyles: { ...customStyles },
-            position,
-            animationIn,
-            exitStyle,
+            variableValues: { ...latestRef.current.variableValues },
+            customStyles: { ...latestRef.current.customStyles },
+            position: latestRef.current.position,
+            animationIn: latestRef.current.animationIn,
+            exitStyle: latestRef.current.exitStyle,
           };
-          saveSlot(prevThemeId.current, "default", activeSlotIndex, variableValues, theme, fullState);
+          saveSlot(prevThemeId.current, "default", activeSlotIndex, latestRef.current.variableValues, theme, fullState);
         }
       }
       prevThemeId.current = theme.id;
-      const init: Record<string, string> = {};
-      for (const v of theme.variables) {
-        init[v.key] = v.defaultValue ?? "";
-      }
-      setVariableValues(init);
-      setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
-      setPosition("bottom-left");
-      setAnimationIn(theme.animation?.name as LTAnimationIn || "slide-left");
-      setExitStyle("fade");
+      const targetSlotIdx = loadActiveSlotIndex(theme.id, "default");
       const newSlots = loadSlots(theme.id, "default");
       setSlots(newSlots);
-      if (newSlots[0]) {
-        const resolved = resolveSlotState(newSlots[0]);
-        setVariableValues({ ...resolved.variableValues });
-        setCustomStyles({ ...resolved.customStyles });
-        setPosition(resolved.position);
-        setAnimationIn(resolved.animationIn);
-        setExitStyle(resolved.exitStyle);
-      }
-      setActiveSlotIndex(0);
+      setActiveSlotIndex(targetSlotIdx);
+      const slotState = loadInitialSlotState(theme.id, targetSlotIdx, theme);
+      setVariableValues({ ...slotState.variableValues });
+      setCustomStyles({ ...slotState.customStyles });
+      setPosition(slotState.position);
+      setAnimationIn(slotState.animationIn);
+      setExitStyle(slotState.exitStyle);
+      skipAutoSaveRef.current = true;
       setCardsOpen(true);
     }
-  }, [theme]);
+  }, [theme, activeSlotIndex]);
 
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
 
-  const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(0);
-  const skipFirstSaveRef = useRef(true);
+  const skipAutoSaveRef = useRef(true);
   const isSavingRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -518,6 +514,10 @@ export default function DockLowerThirdEditor({
     setSlots(loadSlots(theme.id, "default"));
   }, [theme.id]);
 
+  // Keep a ref with the latest state so saves always write fresh data
+  const latestRef = useRef({ variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex, theme });
+  latestRef.current = { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex, theme };
+
   // ── Slot handlers ──
   const handleRecallSlot = useCallback((slot: ContentSlot) => {
     const resolved = resolveSlotState(slot);
@@ -527,13 +527,21 @@ export default function DockLowerThirdEditor({
     setAnimationIn(resolved.animationIn);
     setExitStyle(resolved.exitStyle);
     setActiveSlotIndex(slot.index);
-  }, []);
+    saveActiveSlotIndex(theme.id, "default", slot.index);
+
+    // Auto-match speaker from resolved slot values
+    const speakerName = Object.entries(resolved.variableValues).find(([k]) => {
+      const lk = k.toLowerCase();
+      return lk === "name" || lk === "fullname" || lk === "speaker" || lk === "pastor";
+    })?.[1]?.trim()?.toLowerCase();
+    const matchIdx = speakerName ? speakers.findIndex((s) => s.name.trim().toLowerCase() === speakerName) : -1;
+    setSelectedSpeakerIdx(matchIdx !== -1 ? matchIdx : null);
+  }, [theme.id, speakers]);
 
   const handleDeleteSlot = useCallback((index: number) => {
     deleteSlot(theme.id, "default", index);
     reloadSlots();
-    if (activeSlotIndex === index) setActiveSlotIndex(0);
-  }, [theme.id, reloadSlots, activeSlotIndex]);
+  }, [theme.id, reloadSlots]);
 
   const handleRenameSlot = useCallback((index: number) => {
     renameSlot(theme.id, "default", index, renamingSlotName);
@@ -542,34 +550,65 @@ export default function DockLowerThirdEditor({
     setRenamingSlotName("");
   }, [theme.id, renamingSlotName, reloadSlots]);
 
-  // Keep a ref with the latest state so saves always write fresh data
-  const latestRef = useRef({ variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex });
-  latestRef.current = { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex };
-
-  const doSave = useCallback(() => {
-    const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex } = latestRef.current;
-    if (activeSlotIndex === null) return;
-    if (isSavingRef.current) return;
-    try {
-      const fullState: SlotState = {
-        variableValues: { ...variableValues },
-        customStyles: { ...customStyles },
-        position,
-        animationIn,
-        exitStyle,
-      };
-      saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
-    } catch (err) {
-      console.warn("[AutoSave] saveSlot failed:", err);
-    }
-    reloadSlots();
-  }, [theme.id]);
-
-  // Auto-save whenever editor state changes (skip first render to avoid overwriting loaded slot data)
+  // Debounced auto-save whenever editor state changes
   useEffect(() => {
-    if (skipFirstSaveRef.current) { skipFirstSaveRef.current = false; return; }
-    doSave();
-  }, [doSave, variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex]);
+    if (skipAutoSaveRef.current) {
+      skipAutoSaveRef.current = false;
+      return;
+    }
+    if (activeSlotIndex === null) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (isSavingRef.current) return;
+      const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex: currentSlotIdx, theme: currentTheme } = latestRef.current;
+      if (currentSlotIdx === null) return;
+      try {
+        const fullState: SlotState = {
+          variableValues: { ...variableValues },
+          customStyles: { ...customStyles },
+          position,
+          animationIn,
+          exitStyle,
+        };
+        saveSlot(currentTheme.id, "default", currentSlotIdx, variableValues, currentTheme, fullState);
+        setSlots(loadSlots(currentTheme.id, "default"));
+      } catch (err) {
+        console.warn("[AutoSave] saveSlot failed:", err);
+      }
+    }, 350);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex, theme]);
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex: currentSlotIdx, theme: currentTheme } = latestRef.current;
+        if (currentSlotIdx !== null) {
+          try {
+            const fullState: SlotState = {
+              variableValues: { ...variableValues },
+              customStyles: { ...customStyles },
+              position,
+              animationIn,
+              exitStyle,
+            };
+            saveSlot(currentTheme.id, "default", currentSlotIdx, variableValues, currentTheme, fullState);
+          } catch { /* ignore */ }
+        }
+      }
+    };
+  }, []);
 
   // ── Context menu open (right-click or left-click empty slot) ──
   const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
@@ -592,27 +631,37 @@ export default function DockLowerThirdEditor({
     // No-op: clicking the already-active slot does nothing
     if (activeSlotIndex === index) return;
 
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     // Flush: synchronously save current slot before switching
     if (activeSlotIndex !== null) {
       isSavingRef.current = true;
       const fullState: SlotState = {
-        variableValues: { ...variableValues },
-        customStyles: { ...customStyles },
-        position,
-        animationIn,
-        exitStyle,
+        variableValues: { ...latestRef.current.variableValues },
+        customStyles: { ...latestRef.current.customStyles },
+        position: latestRef.current.position,
+        animationIn: latestRef.current.animationIn,
+        exitStyle: latestRef.current.exitStyle,
       };
-      saveSlot(theme.id, "default", activeSlotIndex, variableValues, theme, fullState);
-      reloadSlots();
+      saveSlot(theme.id, "default", activeSlotIndex, latestRef.current.variableValues, theme, fullState);
       isSavingRef.current = false;
     }
 
-    if (slot) {
+    saveActiveSlotIndex(theme.id, "default", index);
+    setActiveSlotIndex(index);
+    const freshSlots = loadSlots(theme.id, "default");
+    setSlots(freshSlots);
+    skipAutoSaveRef.current = true;
+
+    const targetSlot = freshSlots[index] || slot;
+    if (targetSlot) {
       // Filled slot: load its saved data into the editor
-      handleRecallSlot(slot);
+      handleRecallSlot(targetSlot);
     } else {
       // Empty slot: select it with default values
-      setActiveSlotIndex(index);
       const init: Record<string, string> = {};
       for (const v of theme.variables) {
         init[v.key] = v.defaultValue ?? "";
@@ -620,10 +669,11 @@ export default function DockLowerThirdEditor({
       setVariableValues(init);
       setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
       setPosition("bottom-left");
-      setAnimationIn("slide-left");
+      setAnimationIn((theme.animation?.name as LTAnimationIn) || "slide-left");
       setExitStyle("fade");
+      setSelectedSpeakerIdx(null);
     }
-  }, [activeSlotIndex, variableValues, customStyles, position, animationIn, exitStyle, theme, reloadSlots, handleRecallSlot]);
+  }, [activeSlotIndex, theme, handleRecallSlot]);
 
   // ── Slot right-click: always open menu ──
   const handleSlotContextMenu = useCallback((e: React.MouseEvent, index: number) => {
@@ -982,7 +1032,7 @@ export default function DockLowerThirdEditor({
                   id={LT_APPEARANCE_PANEL_ID}
                   role="region"
                   aria-label={t("lowerThird.appearance", "Appearance")}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}
                 >
                   {LT_APPEARANCE_COLOR_CONTROLS.map((control) => {
                     const explicitColor = getLtAppearanceColor(customStyles, control.key);
@@ -1029,13 +1079,22 @@ export default function DockLowerThirdEditor({
               <button
                 type="button"
                 onClick={() => {
+                  if (autoSaveTimerRef.current) {
+                    clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                  }
                   const defaults: Record<string, string> = {};
                   for (const v of theme.variables) { defaults[v.key] = v.defaultValue ?? ""; }
                   setVariableValues(defaults);
                   setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
                   setPosition("bottom-left");
-                  setAnimationIn("slide-left");
+                  setAnimationIn((theme.animation?.name as LTAnimationIn) || "slide-left");
                   setExitStyle("fade");
+                  setSelectedSpeakerIdx(null);
+                  if (activeSlotIndex !== null) {
+                    deleteSlot(theme.id, "default", activeSlotIndex);
+                    reloadSlots();
+                  }
                 }}
                 style={{
                   background: "var(--dock-input-bg)",

@@ -53,7 +53,7 @@ describe("Dock lower-third animate out wiring", () => {
 
   it("uses compact visible Ministry labels while keeping full accessible labels", () => {
     expect(ministrySource).toContain('t("ministry.tickerShort", "Ticker")');
-    expect(ministrySource).toContain('t("ministry.lowerThirdsShort", "Low")');
+    expect(ministrySource).toContain('t("ministry.lowerThirdsShort", "Lower-Third")');
     expect(ministrySource).toContain('t("ministry.timeShort", "Time")');
     expect(ministrySource).toContain('aria-label={t("ministry.lowerThirds")}');
     expect(ministrySource).toContain('aria-label={t("ministry.time", "Time")}');

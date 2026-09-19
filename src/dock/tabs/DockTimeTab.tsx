@@ -266,25 +266,31 @@ function ThemePickerControl({
   value: DockClockTheme;
   onChange: (theme: DockClockTheme) => void;
 }) {
+  const activeTheme = CLOCK_THEMES.find((theme) => theme.id === value);
+
   return (
     <div className="dock-time-field">
-      <span className="dock-time-field__label">Clock Theme</span>
-      <div className="dock-time-theme-grid" role="group" aria-label="Clock visual theme">
-        {CLOCK_THEMES.map((theme) => (
-          <button
-            key={theme.id}
-            type="button"
-            className={`dock-time-theme-card${value === theme.id ? " dock-time-theme-card--active" : ""}`}
-            onClick={() => onChange(theme.id)}
-            title={theme.desc}
-          >
-            <div className="dock-time-theme-card__icon">
-              <Icon name={theme.icon} size={15} />
-            </div>
-            <span className="dock-time-theme-card__name">{theme.name}</span>
-          </button>
-        ))}
+      <div className="dock-time-field__header">
+        <label htmlFor="dock-clock-theme-select" className="dock-time-field__label">
+          Clock Theme
+        </label>
+        {activeTheme?.desc ? (
+          <span className="dock-time-field__hint">{activeTheme.desc}</span>
+        ) : null}
       </div>
+      <select
+        id="dock-clock-theme-select"
+        className="dock-time-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value as DockClockTheme)}
+        aria-label="Clock visual theme"
+      >
+        {CLOCK_THEMES.map((theme) => (
+          <option key={theme.id} value={theme.id}>
+            {theme.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
