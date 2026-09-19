@@ -19,7 +19,7 @@ export type PresentationConnectionStatus =
 
 export type PresentationTextAlign = "left" | "center" | "right";
 
-export type PresentationMediaFit = "fit" | "fill" | "contain" | "stretch";
+export type PresentationMediaFit = "fit" | "fill" | "contain" | "stretch" | "cover";
 
 export type PresentationTickerPosition = "top" | "bottom";
 

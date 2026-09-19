@@ -38,6 +38,9 @@ interface Props {
   onClose?: () => void;
   compact?: boolean;
   compactLabel?: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }
 
 export default function DockTranslationControls({
@@ -47,6 +50,9 @@ export default function DockTranslationControls({
   onClose,
   compact = false,
   compactLabel = false,
+  isOpen: isOpenProp,
+  onOpenChange,
+  showTrigger = true,
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -58,7 +64,20 @@ export default function DockTranslationControls({
     () => getDockTranslationSourceSignature(sections),
     [sections],
   );
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isOpenProp !== undefined ? isOpenProp : internalOpen;
+  const setOpen = useCallback(
+    (action: boolean | ((prev: boolean) => boolean)) => {
+      const next = typeof action === "function" ? action(open) : action;
+      if (onOpenChange) {
+        onOpenChange(next);
+      }
+      if (isOpenProp === undefined) {
+        setInternalOpen(next);
+      }
+    },
+    [open, isOpenProp, onOpenChange],
+  );
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [languageQuery, setLanguageQuery] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("en");
@@ -105,8 +124,14 @@ export default function DockTranslationControls({
 
     const updatePanelPosition = () => {
       const trigger = triggerRef.current;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
+      const rect = trigger
+        ? trigger.getBoundingClientRect()
+        : {
+            top: 64,
+            left: Math.max(8, window.innerWidth - 308),
+            right: window.innerWidth - 8,
+            bottom: 96,
+          };
       const viewportPadding = 8;
       const width = Math.min(300, Math.max(220, window.innerWidth - (viewportPadding * 2)));
       const left = Math.max(
@@ -290,24 +315,26 @@ export default function DockTranslationControls({
 
   return (
     <div className={`dock-translation${compact ? " dock-translation--compact" : ""}${compactLabel ? " dock-translation--compact-label" : ""}`} ref={panelRef}>
-      <div className="dock-translation__trigger-row">
-        <button
-          type="button"
-          className={`dock-translation__trigger${open ? " dock-translation__trigger--active" : ""}`}
-          ref={triggerRef}
-          onClick={() => setOpen((current) => !current)}
-          aria-expanded={open}
-          aria-label={t("dock.translation.open", { defaultValue: "Translate this song" })}
-          title={t("dock.translation.open", { defaultValue: "Translate this song" })}
-        >
-          <Icon name="translate" size={14} />
-          <span className="dock-translation__trigger-label">{t("common.translate", { defaultValue: "Translate" })}</span>
-          {value && <span className="dock-translation__status-dot" aria-label={value.targetLanguageLabel} />}
-        </button>
-        {value && (
-          <span className="dock-translation__active-language">{value.targetLanguageLabel}</span>
-        )}
-      </div>
+      {showTrigger && (
+        <div className="dock-translation__trigger-row">
+          <button
+            type="button"
+            className={`dock-translation__trigger${open ? " dock-translation__trigger--active" : ""}`}
+            ref={triggerRef}
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            aria-label={t("dock.translation.open", { defaultValue: "Translate this song" })}
+            title={t("dock.translation.open", { defaultValue: "Translate this song" })}
+          >
+            <Icon name="translate" size={14} />
+            <span className="dock-translation__trigger-label">{t("common.translate", { defaultValue: "Translate" })}</span>
+            {value && <span className="dock-translation__status-dot" aria-label={value.targetLanguageLabel} />}
+          </button>
+          {value && (
+            <span className="dock-translation__active-language">{value.targetLanguageLabel}</span>
+          )}
+        </div>
+      )}
 
       {open && (
         <div

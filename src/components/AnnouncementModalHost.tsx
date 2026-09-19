@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Crown, Sparkles, X } from "lucide-react";
+import { Check, Clock, Crown, Sparkles, X } from "lucide-react";
 import {
   clearCachedDesktopAnnouncement,
   getCachedDesktopAnnouncement,
@@ -11,14 +11,6 @@ import {
   type DesktopAnnouncement,
 } from "../services/announcementService";
 
-const PREMIUM_FEATURES = [
-  "Premium OBS overlays",
-  "Worship and Bible presentation tools",
-  "Cloud media storage",
-  "More AI credits",
-  "Priority app updates",
-];
-
 function toneLabel(tone: DesktopAnnouncement["tone"]) {
   if (tone === "upgrade") return "Upgrade";
   if (tone === "offer") return "Offer";
@@ -27,20 +19,37 @@ function toneLabel(tone: DesktopAnnouncement["tone"]) {
   return "Announcement";
 }
 
-function withOfferCode(url: string, offerCode?: string | null): string {
-  if (!offerCode || !url.includes("/subscription/plans")) return url;
+export function withOfferCode(url: string, offerCode?: string | null): string {
+  if (!url) return url;
+  if (!offerCode) return url;
   try {
-    const parsed = url.startsWith("http")
+    const isAbsolute = url.startsWith("http://") || url.startsWith("https://");
+    const parsed = isAbsolute
       ? new URL(url)
-      : new URL(url, "https://makechurcheazy.com");
+      : new URL(url, "https://makechurcheasy.com");
     if (!parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
       parsed.searchParams.set("promo", offerCode);
     }
-    return url.startsWith("http") ? parsed.toString() : `${parsed.pathname}${parsed.search}`;
+    return isAbsolute ? parsed.toString() : `${parsed.pathname}${parsed.search}`;
   } catch {
     const separator = url.includes("?") ? "&" : "?";
     return `${url}${separator}promo=${encodeURIComponent(offerCode)}`;
   }
+}
+
+export function resolveActionUrl(announcement: DesktopAnnouncement | null): string {
+  if (!announcement) return "";
+  if (announcement.ctaUrl) {
+    return withOfferCode(announcement.ctaUrl, announcement.offerCode);
+  }
+  const code = announcement.offerCode || "";
+  const plan = announcement.offerApplicablePlans?.[0] || "growth";
+  const cycle = announcement.offerApplicableBillingCycles?.[0] || "monthly";
+  const params = new URLSearchParams();
+  if (code) params.set("promo", code);
+  params.set("plan", plan);
+  params.set("billing", cycle);
+  return `https://makechurcheasy.com/subscription/plans?${params.toString()}`;
 }
 
 function clampDiscount(value?: number | null): number | null {
@@ -128,17 +137,19 @@ export function AnnouncementModalHost() {
   }
 
   async function openAction() {
-    if (!announcement?.ctaUrl) return;
-    const url = withOfferCode(announcement.ctaUrl, announcement.offerCode);
+    const url = resolveActionUrl(announcement);
+    if (!url) return;
     await dismiss(true);
     if (url.startsWith("http")) {
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    window.open(`https://makechurcheazy.com${url}`, "_blank", "noopener,noreferrer");
+    window.open(`https://makechurcheasy.com${url}`, "_blank", "noopener,noreferrer");
   }
 
   if (!announcement) return null;
+
+  const actionUrl = resolveActionUrl(announcement);
 
   const isImageOnly = Boolean(
     announcement.imageUrl &&
@@ -173,7 +184,7 @@ export function AnnouncementModalHost() {
                 void openAction();
               }
             }}
-            title={announcement.ctaUrl ? `Open ${announcement.ctaUrl}` : "Announcement"}
+            title={actionUrl ? `Open ${actionUrl}` : "Announcement"}
           >
             <img
               src={announcement.imageUrl}
@@ -187,11 +198,18 @@ export function AnnouncementModalHost() {
   }
 
   const discountPercent = clampDiscount(announcement.offerDiscountPercent);
-  const showOfferLayout = Boolean(announcement.offerCode && discountPercent && ["offer", "upgrade"].includes(announcement.tone));
+  const hasDiscountSignal = Boolean(
+    discountPercent ||
+    announcement.offerCode ||
+    announcement.tags?.some((t) => t.toLowerCase().includes("discount") || t.toLowerCase().includes("offer")) ||
+    ["offer", "upgrade"].includes(announcement.tone)
+  );
+  const showOfferLayout = hasDiscountSignal && !isImageOnly;
 
-  if (showOfferLayout && discountPercent) {
-    const offerCards = getOfferCards(announcement, discountPercent);
-    const actionLabel = announcement.ctaLabel || `Upgrade with ${announcement.offerCode}`;
+  if (showOfferLayout) {
+    const effectivePercent = discountPercent || 50;
+    const offerCards = getOfferCards(announcement, effectivePercent);
+    const actionLabel = announcement.ctaLabel || (announcement.offerCode ? `Upgrade with ${announcement.offerCode}` : (discountPercent ? `Claim ${discountPercent}% Discount` : "Upgrade Now"));
 
     return (
       <div className="desktop-announcement-overlay desktop-announcement-overlay--promo">
@@ -219,38 +237,43 @@ export function AnnouncementModalHost() {
                   <Crown size={16} />
                   Premium Offer
                 </span>
-                <span className="desktop-announcement-promo__discount">{discountPercent}% OFF</span>
+                {discountPercent ? (
+                  <span className="desktop-announcement-promo__discount">{discountPercent}% OFF</span>
+                ) : (
+                  <span className="desktop-announcement-promo__discount">SPECIAL OFFER</span>
+                )}
               </div>
               <div>
-                <p>MakeChurchEasy Premium</p>
-                <h2>Special price for your church</h2>
-                <div className="desktop-announcement-promo__code">
-                  <span>Offer code</span>
-                  <strong>{announcement.offerCode}</strong>
-                </div>
+                <p className="desktop-announcement-promo__kicker">Limited time discount</p>
+                <h2 className="desktop-announcement-promo__title">{announcement.title}</h2>
+              </div>
+
+              <div className="desktop-announcement-promo__meta">
+                <span className="desktop-announcement-promo__meta-item">
+                  <Check size={14} />
+                  Instant unlock
+                </span>
+                <span className="desktop-announcement-promo__meta-item">
+                  <Clock size={14} />
+                  {countdown ? `Ends in ${countdown}` : "Available now"}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="desktop-announcement-promo__content">
-            <div>
-              {countdown ? (
-                <div className="desktop-announcement-countdown">
-                  <Clock3 size={16} />
-                  <span>{countdown}</span>
-                </div>
-              ) : null}
+            <div className="desktop-announcement-promo__copy">
+              <p>{announcement.message}</p>
+            </div>
 
-              <h2>{announcement.title}</h2>
-              <p className="desktop-announcement-promo__message">{announcement.message}</p>
-
-              <div className="desktop-announcement-feature-list">
-                {PREMIUM_FEATURES.map((feature) => (
-                  <div key={feature} className="desktop-announcement-feature">
-                    <CheckCircle2 size={16} />
-                    <span>{feature}</span>
-                  </div>
-                ))}
+            <div className="desktop-announcement-promo__box">
+              <div className="desktop-announcement-promo__box-head">
+                <span>Select a plan to apply discount</span>
+                {announcement.offerCode ? (
+                  <code>PROMO: {announcement.offerCode}</code>
+                ) : (
+                  <code>SPECIAL DISCOUNT</code>
+                )}
               </div>
 
               <div className="desktop-announcement-offer-grid">
@@ -273,7 +296,7 @@ export function AnnouncementModalHost() {
             </div>
 
             <div className="desktop-announcement-promo__actions">
-              {announcement.ctaUrl ? (
+              {actionUrl ? (
                 <button type="button" className="desktop-announcement-promo__cta" onClick={() => void openAction()}>
                   <Sparkles size={16} />
                   {actionLabel}
@@ -283,7 +306,9 @@ export function AnnouncementModalHost() {
                   OK
                 </button>
               )}
-              <p>The discount code will be applied at checkout.</p>
+              {announcement.offerCode ? (
+                <p>The discount code will be applied at checkout.</p>
+              ) : null}
             </div>
           </div>
         </section>
@@ -319,9 +344,9 @@ export function AnnouncementModalHost() {
           <button type="button" className="desktop-announcement-button" onClick={() => void dismiss(false)}>
             Later
           </button>
-          {announcement.ctaUrl ? (
+          {actionUrl ? (
             <button type="button" className="desktop-announcement-button desktop-announcement-button--primary" onClick={() => void openAction()}>
-              {announcement.ctaLabel || "Open"}
+              {announcement.ctaLabel || (announcement.offerCode ? "Claim Offer" : "Open")}
             </button>
           ) : (
             <button type="button" className="desktop-announcement-button desktop-announcement-button--primary" onClick={() => void dismiss(false)}>

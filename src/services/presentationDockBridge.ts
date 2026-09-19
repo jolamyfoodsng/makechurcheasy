@@ -131,6 +131,8 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
   }
 
   const data = asRecord(item.data);
+  const overlayMode = data.overlayMode === "lower-third" ? "lower-third" : "fullscreen";
+  const layer: "fullscreen" | "lowerThird" = overlayMode === "lower-third" ? "lowerThird" : "fullscreen";
 
   if (item.type === "bible") {
     const compare = asRecord(data.compare);
@@ -168,6 +170,7 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
           columns: presentationCompareColumns,
         }
         : undefined,
+      layer,
     });
     return;
   }
@@ -183,6 +186,7 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
       slideCount: asNumber(data.slideCount, 1),
       style: buildPresentationStyle(data),
       showMeta: data.presentationShowMeta === true,
+      layer,
     });
   }
 
@@ -196,6 +200,7 @@ export async function publishDockStagedItemToPresentation(item: DockStagedItem |
       slideCount: 1,
       style: buildPresentationStyle(data),
       showMeta: false,
+      layer,
     });
   }
 }

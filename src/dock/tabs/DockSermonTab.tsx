@@ -18,6 +18,7 @@ import { requireEntitlement } from "../dockEntitlement";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { useTranslation } from "react-i18next";
+import { trackOverlayModeSwitched } from "../../services/tracking";
 
 const STORAGE_KEY = "ocs-dock-sermon-items-v1";
 const OLD_STORAGE_KEY = "ocs-dock-sermon";
@@ -1656,14 +1657,24 @@ export default function DockSermonTab({ staged, onStage }: Props) {
               <button
                 type="button"
                 className={`dock-console-segmented__item${overlayMode === "fullscreen" ? " dock-console-segmented__item--active" : ""}`}
-                onClick={() => setOverlayMode("fullscreen")}
+                onClick={() => {
+                  if (overlayMode !== "fullscreen") {
+                    setOverlayMode("fullscreen");
+                    trackOverlayModeSwitched("sermon", "fullscreen");
+                  }
+                }}
                 title={t('sermon.full')}>
                 {t('sermon.full')}
               </button>
               <button
                 type="button"
                 className={`dock-console-segmented__item${overlayMode === "lower-third" ? " dock-console-segmented__item--active" : ""}`}
-                onClick={() => setOverlayMode("lower-third")}
+                onClick={() => {
+                  if (overlayMode !== "lower-third") {
+                    setOverlayMode("lower-third");
+                    trackOverlayModeSwitched("sermon", "lower-third");
+                  }
+                }}
                 title={t('sermon.lt')}>
                 {t('sermon.lt')}
               </button>

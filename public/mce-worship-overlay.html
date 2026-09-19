@@ -92,15 +92,15 @@
       --font-size: 48px;
       --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
-      --font-weight: 400;
+      --font-weight: 900;
       --font-style: normal;
       --line-height: 1.6;
       --letter-spacing: 0px;
       --word-spacing: 0px;
       --text-align: center;
-      --text-shadow: none;
-      --outline-width: 0px;
-      --outline-color: transparent;
+      --text-shadow: 4px 5px 2px rgba(0, 0, 0, 0.95);
+      --outline-width: 4px;
+      --outline-color: #000000;
       --ref-font-size: 24px;
       --ref-font-family: var(--font-family);
       --ref-font-weight: 400;
@@ -1802,7 +1802,7 @@
           if (isContentOutsideFrame(cols, overlay)) return true;
           return cols.some((column) => {
             const columnRect = getLayoutRect(column);
-            return isOverflowing(column, columnRect.width || targetWidth, columnRect.height || targetHeight);
+            return isOverflowing(column, columnRect.width || targetWidth, targetHeight);
           });
         };
 
@@ -1845,7 +1845,8 @@
         const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
         const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
         const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
-        let textSize = Math.max(textFloor, Math.round(baseFontSize));
+        const minFitSize = 18;
+        let textSize = Math.max(minFitSize, Math.round(baseFontSize));
         let referenceSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize));
         let translationSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(textSize * translationRatio));
         const { width: viewportWidth, height: viewportHeight } = getViewportSize();
@@ -1889,10 +1890,10 @@
           node.style.lineHeight = '';
         });
         apply();
-        if (overflowing() && textSize > textFloor) {
-          let low = textFloor;
+        if (overflowing() && textSize > minFitSize) {
+          let low = minFitSize;
           let high = textSize - 1;
-          let best = textFloor;
+          let best = minFitSize;
           applyTextSize(low);
           if (!overflowing()) {
             while (low <= high) {
@@ -2027,15 +2028,18 @@
         root.style.setProperty('--font-size', baseFontSize + 'px');
         root.style.setProperty('--font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--font-color', s.fontColor || '#ffffff');
-        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight));
+        root.style.setProperty('--font-weight', mapFontWeight(s.fontWeight || 'black'));
         root.style.setProperty('--font-style', s.fontStyle === 'italic' ? 'italic' : 'normal');
         root.style.setProperty('--line-height', String(s.lineHeight || 1.6));
         root.style.setProperty('--letter-spacing', (s.letterSpacing || 0) + 'px');
         root.style.setProperty('--word-spacing', (s.wordSpacing || 0) + 'px');
         root.style.setProperty('--text-align', s.textAlign || 'center');
-        root.style.setProperty('--text-shadow', s.textShadow || 'none');
-        root.style.setProperty('--outline-width', s.textOutline ? (s.textOutlineWidth || 2) + 'px' : '0px');
-        root.style.setProperty('--outline-color', s.textOutline ? (s.textOutlineColor || '#000') : 'transparent');
+        root.style.setProperty('--text-shadow', s.textShadow || '4px 5px 2px rgba(0, 0, 0, 0.95)');
+        const outlineEnabled = s.textOutline !== false;
+        const outlineWidth = outlineEnabled ? (s.textOutlineWidth != null ? Number(s.textOutlineWidth) : 4) : 0;
+        const outlineColor = outlineEnabled ? (s.textOutlineColor || '#000000') : 'transparent';
+        root.style.setProperty('--outline-width', outlineWidth + 'px');
+        root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
         root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
         root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
@@ -2164,7 +2168,12 @@
         applyThemeBase(s);
         baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        if (!s.fontSize) {
+          baseFontSize = preset.fontSize;
+          baseRefFontSize = preset.refFontSize;
+          root.style.setProperty('--font-size', baseFontSize + 'px');
+          root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
         if (targetMode === 'lower-third') {

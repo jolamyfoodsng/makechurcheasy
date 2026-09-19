@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import LoginPage from "@/pages/LoginPage";
+import LoadingScreen from "./LoadingScreen";
 
 /**
  * Wraps children and only renders them if the user is authenticated.
@@ -11,28 +12,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   console.log("[AuthGate] render — authenticated:", authenticated, "loading:", loading);
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          minHeight: "100vh",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#0a0a0f",
-        }}
-      >
-        <div
-          style={{
-            width: "20px",
-            height: "20px",
-            borderRadius: "50%",
-            border: "2px solid #1D4ED8",
-            borderTopColor: "transparent",
-            animation: "spin 0.6s linear infinite",
-          }}
-        />
-      </div>
-    );
+    return <LoadingScreen variant="fullscreen" label="Authenticating…" />;
   }
 
   if (!authenticated) {

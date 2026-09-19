@@ -86,3 +86,18 @@ describe("multimedia landscape half layout", () => {
     });
   });
 });
+
+describe("removed templates exclusion", () => {
+  it("ensures Social Media CTA, Offering / Giving, and Main Content + Translation are absent", () => {
+    const layoutNames = GALLERY_LAYOUTS.map((l) => l.name.toLowerCase());
+    const layoutIds = GALLERY_LAYOUTS.map((l) => l.id);
+
+    expect(layoutNames.some((n) => n.includes("social media cta"))).toBe(false);
+    expect(layoutNames.some((n) => n.includes("offering"))).toBe(false);
+    expect(layoutNames.some((n) => n === "main content + translation")).toBe(false);
+    expect(layoutIds).not.toContain("translation-layout");
+    expect(layoutIds).not.toContain("offering");
+    expect(layoutIds).not.toContain("social-cta");
+  });
+});
+

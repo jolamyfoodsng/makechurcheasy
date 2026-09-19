@@ -361,6 +361,8 @@ export default function DockLmTab({
   const [history, setHistory] = useState<string[]>(() => loadHistory());
   const [liveVerse, setLiveVerseState] = useState<VoiceBibleCandidate | null>(() => loadLiveVerse());
   const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const [inactivityPrompt, setInactivityPrompt] = useState<{ active: boolean; remainingSeconds: number; intervalMinutes: number } | null>(null);
+  const [inactivityNotice, setInactivityNotice] = useState<string | null>(null);
 
   const detectedAtRef = useRef<Map<string, number>>(new Map());
   const suggestionCooldownRef = useRef<Map<string, number>>(new Map());
@@ -556,6 +558,8 @@ export default function DockLmTab({
           suggestions?: VoiceBibleCandidate[];
           matching: boolean;
           error?: string;
+          inactivityPrompt?: { active: boolean; remainingSeconds: number; intervalMinutes: number } | null;
+          inactivityNotice?: string | null;
         };
         setLmStatus(payload.status);
         setLmSessionStartedAt((current) => (
@@ -572,6 +576,12 @@ export default function DockLmTab({
         }
         setMatching(payload.matching);
         setError(payload.error ?? null);
+        if (payload.inactivityPrompt !== undefined) {
+          setInactivityPrompt(payload.inactivityPrompt);
+        }
+        if (payload.inactivityNotice !== undefined) {
+          setInactivityNotice(payload.inactivityNotice);
+        }
       } else if (msg.type === "state:lm-transcript") {
         const payload = msg.payload as { entries: TranscriptEntry[] };
         setEntries(payload.entries);
@@ -616,6 +626,12 @@ export default function DockLmTab({
               state.suggestions,
               state.status === "idle" || state.status === "requesting-mic" || state.status === "connecting",
             );
+          }
+          if (state.inactivityPrompt !== undefined) {
+            setInactivityPrompt(state.inactivityPrompt);
+          }
+          if (state.inactivityNotice !== undefined) {
+            setInactivityNotice(state.inactivityNotice);
           }
         }
       } catch (err) {
@@ -1107,6 +1123,33 @@ export default function DockLmTab({
     }
     setShowStopConfirm(false);
   }, [allowLocalMicControls, sendLmCommand]);
+
+  const handleConfirmStillUsing = useCallback(async () => {
+    setInactivityPrompt(null);
+    if (allowLocalMicControls) {
+      const service = await loadLmDockService();
+      service.confirmStillUsing();
+    }
+  }, [allowLocalMicControls]);
+
+  const handleInactivityStop = useCallback(async () => {
+    setInactivityPrompt(null);
+    if (allowLocalMicControls) {
+      const service = await loadLmDockService();
+      service.stopDueToInactivity();
+    } else {
+      sendLmCommand("lm:stop");
+    }
+  }, [allowLocalMicControls, sendLmCommand]);
+
+  useEffect(() => {
+    if (!inactivityNotice) return;
+    const timer = setTimeout(() => {
+      setInactivityNotice(null);
+      void loadLmDockService().then((s) => s.clearInactivityNotice());
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [inactivityNotice]);
 
   const processedQueue = useMemo(() => {
     const seen = new Set<string>();
@@ -2134,6 +2177,68 @@ export default function DockLmTab({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {inactivityPrompt?.active && (
+        <div style={S.modalOverlay}>
+          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <h3 style={S.modalTitle}>Are you still using Voice AI?</h3>
+            </div>
+            <div style={S.modalBody}>
+              <p style={S.modalText}>
+                No speech detected for {inactivityPrompt.intervalMinutes} minutes. Listening will automatically stop in {inactivityPrompt.remainingSeconds}s to conserve credits.
+              </p>
+            </div>
+            <div style={S.modalFooter}>
+              <button style={S.modalBtnGhost} onClick={handleInactivityStop}>
+                Stop
+              </button>
+              <button style={S.modalBtnPrimary} onClick={handleConfirmStillUsing}>
+                I'm still using it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inactivityNotice && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 16,
+            right: 16,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 14px",
+            background: "#1e2029",
+            color: "#f9fafb",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            borderRadius: 6,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.4)",
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          <span>{inactivityNotice}</span>
+          <button
+            onClick={() => {
+              setInactivityNotice(null);
+              void loadLmDockService().then((s) => s.clearInactivityNotice());
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#9ca3af",
+              cursor: "pointer",
+              marginLeft: 4,
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
 

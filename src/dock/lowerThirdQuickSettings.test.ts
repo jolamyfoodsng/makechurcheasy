@@ -153,8 +153,8 @@ describe("lowerThirdQuickSettings", () => {
       fullscreenSettings,
     );
 
-    expect(linked.fontSize).toBe(fullscreenSettings.fontSize);
-    expect(linked.refFontSize).toBe(fullscreenSettings.refFontSize);
+    expect(linked.fontSize).toBe(lowerThirdDefaults.fontSize);
+    expect(linked.refFontSize).toBe(lowerThirdDefaults.refFontSize);
     expect(linked.lineHeight).toBe(fullscreenSettings.lineHeight);
     expect(linked.fontColor).toBe(fullscreenSettings.fontColor);
     expect(linked.backgroundColor).toBe(fullscreenSettings.backgroundColor);

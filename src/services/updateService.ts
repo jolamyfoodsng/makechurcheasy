@@ -356,7 +356,16 @@ export interface PublishedRelease {
  * to choose the installer fallback.
  */
 export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
-  const response = await tauriFetch(RELEASES_API);
+  let response: Response;
+  if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
+    response = await fetch(RELEASES_API);
+  } else {
+    try {
+      response = await tauriFetch(RELEASES_API);
+    } catch {
+      response = await fetch(RELEASES_API);
+    }
+  }
   if (!response.ok) throw new Error(`Failed to fetch release info (${response.status})`);
 
   const release = await response.json() as {

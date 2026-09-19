@@ -104,8 +104,6 @@ export function applyMeasuredFontFitSettings(
 
 const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [
   "fontFamily",
-  "fontSize",
-  "refFontSize",
   "fontColor",
   "refFontColor",
   "refPosition",
@@ -227,17 +225,17 @@ export function buildLinkedLowerThirdQuickThemeSettings(
   if (typeof assignableNext.fontSize === "number") {
     assignableNext.fontSize = clampNumber(
       assignableNext.fontSize,
-      LOWER_THIRD_FIT_MIN_FONT_SIZE,
+      14,
       LOWER_THIRD_FONT_SIZE_MAX,
     );
   }
   if (typeof assignableNext.refFontSize === "number") {
     assignableNext.refFontSize = clampNumber(
       assignableNext.refFontSize,
-      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+      10,
       LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
     );
   }
 
-  return normalizeLowerThirdFitSettings(next);
+  return next;
 }

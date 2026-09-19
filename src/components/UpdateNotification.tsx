@@ -8,12 +8,15 @@
  * - Shows download progress inline when updating
  */
 
-import { useState, useCallback, useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import {
-  downloadAndInstallVerifiedUpdate,
   type UpdateCheckResult,
-  type DownloadProgress,
 } from "../services/updateService";
+import {
+  updateDownloadManager,
+  useUpdateDownload,
+} from "../services/updateDownloadManager";
+import { getReleaseHighlights } from "../services/releaseNotesService";
 import type { Update } from "@tauri-apps/plugin-updater";
 import Icon from "./Icon";
 
@@ -94,20 +97,35 @@ export default function UpdateNotification({
   releaseNotesUrl,
   message,
 }: UpdateNotificationProps) {
-  const [status, setStatus] = useState<UpdateStatus>("prompt");
-  const [progress, setProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
-  const [errorMsg, setErrorMsg] = useState("");
-  const [visible, setVisible] = useState(() => shouldShowNotification(result));
+  const downloadState = useUpdateDownload();
 
-  // Re-check visibility when update result changes (e.g., from polling)
+  // Register available update with central manager
   useEffect(() => {
-    setVisible(shouldShowNotification(result));
-  }, [result.version, result.available]);
+    if (result.available) {
+      updateDownloadManager.registerAvailableUpdate(
+        (result.update as Update) ?? null,
+        result.version ?? "",
+        result.currentVersion ?? "",
+        manualDownloadUrl,
+        shouldShowNotification(result),
+      );
+    }
+  }, [result, manualDownloadUrl]);
 
-  const percentComplete =
-    progress.contentLength > 0
-      ? Math.round((progress.downloaded / progress.contentLength) * 100)
-      : 0;
+  const rawStatus = downloadState.status;
+  const status: UpdateStatus =
+    rawStatus === "downloading" ||
+    rawStatus === "installing" ||
+    rawStatus === "relaunching" ||
+    rawStatus === "error"
+      ? rawStatus
+      : "prompt";
+
+  const progress = downloadState.progress;
+  const errorMsg = downloadState.errorMsg;
+  const percentComplete = progress.percent;
+
+  const isBusy = status === "downloading" || status === "installing" || status === "relaunching";
 
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return "0 B";
@@ -116,40 +134,31 @@ export default function UpdateNotification({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const highlights = useMemo(() => {
+    return getReleaseHighlights(result.version, result.notes);
+  }, [result.version, result.notes]);
+
   const handleUpdate = useCallback(async () => {
     if (!result.update) {
       if (manualDownloadUrl) {
         window.open(manualDownloadUrl, "_blank", "noopener,noreferrer");
         return;
       }
-      setErrorMsg("No update package is available for this device yet.");
-      setStatus("error");
-      return;
     }
-    try {
-      setStatus("downloading");
-      await downloadAndInstallVerifiedUpdate(
-        result.update as Update,
-        (p) => setProgress(p),
-        (s) => setStatus(s)
-      );
-    } catch (err: any) {
-      console.error("[UpdateNotification] Update failed:", err);
-      setErrorMsg(err?.message || "Update failed. Please try again.");
-      setStatus("error");
-    }
-  }, [manualDownloadUrl, result.update]);
+    await updateDownloadManager.startDownload((result.update as Update) ?? null, result.version);
+  }, [manualDownloadUrl, result.update, result.version]);
 
   const handleRetry = useCallback(() => {
-    setStatus("prompt");
-    setProgress({ contentLength: 0, downloaded: 0 });
-    setErrorMsg("");
+    updateDownloadManager.retry();
   }, []);
 
   const handleRemindLater = useCallback(() => {
-    setVisible(false);
-    // Remind again after four hours, matching the explicit "Remind me later"
-    // action and the close button.
+    if (updateDownloadManager.isBusy()) {
+      updateDownloadManager.dismissModal();
+      return;
+    }
+
+    updateDownloadManager.dismissModal();
     savePrefs({
       ...loadPrefs(),
       remindLaterAt: Date.now() + 4 * 60 * 60 * 1000,
@@ -166,9 +175,8 @@ export default function UpdateNotification({
   };
 
   const icon = statusConfig[status];
-  const isBusy = status === "downloading" || status === "installing" || status === "relaunching";
 
-  if (!visible) return null;
+  if (!downloadState.isModalVisible) return null;
 
   return (
     <div
@@ -212,32 +220,65 @@ export default function UpdateNotification({
                 <span className="update-notification__version-new">v{result.version}</span>
               </div>
 
-              {(result.notes || releaseNotesUrl) && (
-                <section className="update-notification__release-notes" aria-label="Release notes">
-                  <div className="update-notification__release-notes-scroll">
-                    {result.notes ? renderReleaseNotes(result.notes) : (
-                      <p>No release notes are available for this update.</p>
-                    )}
-                  </div>
-                  {releaseNotesUrl && (
-                    <button
-                      type="button"
-                      className="update-notification__changelog-btn"
-                      onClick={() => window.open(releaseNotesUrl, "_blank", "noopener,noreferrer")}
-                      title="Open full release notes"
-                    >
-                      <Icon name="open_in_new" size={12} />
-                      Open full release notes
-                    </button>
-                  )}
-                </section>
-              )}
-
-              {!result.notes && !releaseNotesUrl && (
-                <div className="update-notification__release-notes update-notification__release-notes--empty">
-                  <p>No release notes are available for this update.</p>
+              <section className="update-notification__release-notes" aria-label="Release notes">
+                <div className="update-notification__obs-header">
+                  <Icon name="auto_awesome" size={13} className="update-notification__obs-header-icon" />
+                  <span>What's New in this Update</span>
                 </div>
-              )}
+
+                <div className="update-notification__release-notes-scroll">
+                  {highlights.length > 0 ? (
+                    <div className="update-obs-list">
+                      {highlights.map((highlight) => (
+                        <div key={highlight.id} className="update-obs-card">
+                          <div className="update-obs-card__header">
+                            <div className="update-obs-card__title-row">
+                              <span className="update-obs-card__number">{highlight.number}.</span>
+                              <span className="update-obs-card__title">{highlight.title}</span>
+                              <span className={`update-obs-badge update-obs-badge--${highlight.badge}`}>
+                                {highlight.badgeLabel}
+                              </span>
+                            </div>
+                            {highlight.summary && (
+                              <p className="update-obs-card__summary">{highlight.summary}</p>
+                            )}
+                          </div>
+
+                          {highlight.points.length > 0 && (
+                            <ul className="update-obs-card__list">
+                              {highlight.points.map((pt, pIdx) => (
+                                <li key={pIdx} className="update-obs-card__item">
+                                  <span className="update-obs-card__bullet" aria-hidden="true">•</span>
+                                  <div className="update-obs-card__item-text">
+                                    {pt.lead && <strong className="update-obs-card__lead">{pt.lead}: </strong>}
+                                    <span>{pt.text}</span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : result.notes ? (
+                    renderReleaseNotes(result.notes)
+                  ) : (
+                    <p className="update-notification__release-notes--empty">No release notes are available for this update.</p>
+                  )}
+                </div>
+
+                {releaseNotesUrl && (
+                  <button
+                    type="button"
+                    className="update-notification__changelog-btn"
+                    onClick={() => window.open(releaseNotesUrl, "_blank", "noopener,noreferrer")}
+                    title="Open full release notes"
+                  >
+                    <Icon name="open_in_new" size={12} />
+                    Open full release notes
+                  </button>
+                )}
+              </section>
             </>
           )}
 
@@ -291,6 +332,19 @@ export default function UpdateNotification({
               title="Remind me later"
             >
               Remind me later
+            </button>
+          </div>
+        )}
+
+        {(status === "downloading" || status === "installing") && (
+          <div className="update-notification__actions">
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--later"
+              onClick={handleRemindLater}
+              title="Continue in background"
+            >
+              Continue in Background
             </button>
           </div>
         )}

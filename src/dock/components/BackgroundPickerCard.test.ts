@@ -1044,7 +1044,7 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("const rects = node.getClientRects()");
     expect(overlayHtml).toContain("compareTextLeft?.querySelector('.compare-line-list')");
     expect(overlayHtml).toContain("isContentOutsideFrame(fitNodes, compareLayout) || isContentOutsideFrame(fitNodes, overlay)");
-    expect(overlayHtml).toContain("Math.min(columnRect.height || frameHeight, frameHeight)");
+    expect(overlayHtml).toContain("isOverflowing(column, width, frameHeight)");
     expect(overlayHtml).toContain("#compare-layout.is-line-by-line .compare-column");
     expect(overlayHtml).toContain("max-height: 100%");
   });

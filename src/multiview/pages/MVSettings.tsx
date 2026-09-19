@@ -56,11 +56,13 @@ import {
 } from "../mvStore";
 import {
   checkForUpdate,
-  downloadAndInstallFromGitHub,
-  downloadAndInstallUpdate,
   type DownloadProgress,
   type Update,
 } from "../../services/updateService";
+import {
+  updateDownloadManager,
+  useUpdateDownload,
+} from "../../services/updateDownloadManager";
 
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -344,15 +346,31 @@ export function MVSettings() {
   const [interfaceLanguage, setInterfaceLanguage] = useState<string>(() => getResolvedInterfaceLanguage());
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [pendingLanguage, setPendingLanguage] = useState<string | null>(null);
+  const downloadState = useUpdateDownload();
+
+  const isGlobalDownloading =
+    downloadState.status === "downloading" ||
+    downloadState.status === "installing" ||
+    downloadState.status === "relaunching";
+
+  const effectiveUpdateStatus: ManualUpdateStatus = isGlobalDownloading
+    ? downloadState.status
+    : manualUpdateStatus;
+
+  const effectiveUpdateProgress = isGlobalDownloading
+    ? downloadState.progress
+    : manualUpdateProgress;
+
   const manualUpdateBusy =
-    manualUpdateStatus === "checking" ||
-    manualUpdateStatus === "downloading" ||
-    manualUpdateStatus === "installing" ||
-    manualUpdateStatus === "relaunching";
+    effectiveUpdateStatus === "checking" ||
+    effectiveUpdateStatus === "downloading" ||
+    effectiveUpdateStatus === "installing" ||
+    effectiveUpdateStatus === "relaunching";
+
   const manualUpdatePercent =
-    manualUpdateProgress.contentLength > 0
-      ? Math.round((manualUpdateProgress.downloaded / manualUpdateProgress.contentLength) * 100)
-      : 0;
+    effectiveUpdateProgress.contentLength > 0
+      ? Math.round((effectiveUpdateProgress.downloaded / effectiveUpdateProgress.contentLength) * 100)
+      : (isGlobalDownloading ? downloadState.progress.percent : 0);
 
   // ── Toast system ──
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
@@ -598,13 +616,20 @@ export function MVSettings() {
     triggerToast(t("mvSettings.toast.checkingForUpdates"), "accent");
 
     const result = await checkForUpdate();
-    if (result.available && result.update) {
-      setManualUpdate(result.update);
+    if (result.available) {
+      setManualUpdate(result.update ?? null);
       setManualUpdateStatus("available");
       setManualUpdateMessage(
         t("mvSettings.general.updateAvailableMessage", {
           version: result.version ?? "latest",
         }),
+      );
+      updateDownloadManager.registerAvailableUpdate(
+        result.update ?? null,
+        result.version ?? "",
+        result.currentVersion ?? "",
+        undefined,
+        false,
       );
       triggerToast(t("mvSettings.toast.updateAvailable"), "success");
       return;
@@ -624,31 +649,15 @@ export function MVSettings() {
 
   const handleInstallUpdate = useCallback(async () => {
     if (manualUpdateBusy) return;
-    setManualUpdateStatus("downloading");
-    setManualUpdateMessage("");
-    setManualUpdateProgress({ contentLength: 0, downloaded: 0 });
-
     try {
-      if (manualUpdate) {
-        await downloadAndInstallUpdate(
-          manualUpdate,
-          (progress) => setManualUpdateProgress(progress),
-          (status) => setManualUpdateStatus(status),
-        );
-        return;
-      }
-
-      await downloadAndInstallFromGitHub(
-        (progress) => setManualUpdateProgress(progress),
-        (status) => setManualUpdateStatus(status),
-      );
+      await updateDownloadManager.startDownload(manualUpdate || downloadState.update);
     } catch (err) {
       console.error("[MVSettings] Manual update failed:", err);
       setManualUpdateStatus("error");
       setManualUpdateMessage(err instanceof Error ? err.message : t("mvSettings.general.updateFailedMessage"));
       triggerToast(t("mvSettings.toast.updateInstallFailed"), "accent");
     }
-  }, [manualUpdate, manualUpdateBusy, t, triggerToast]);
+  }, [manualUpdate, downloadState.update, manualUpdateBusy, t, triggerToast]);
 
   const handleResetChurchOnboarding = useCallback(() => {
     update({ churchProfileOnboardingCompleted: false });
@@ -1090,14 +1099,14 @@ export function MVSettings() {
                           disabled={manualUpdateBusy}
                           title={t("mvSettings.general.checkForUpdates")}
                         >
-                          <RefreshCw size={14} className={manualUpdateStatus === "checking" ? "animate-spin" : ""} />
+                          <RefreshCw size={14} className={effectiveUpdateStatus === "checking" ? "animate-spin" : ""} />
                           <span>
-                            {manualUpdateStatus === "checking"
+                            {effectiveUpdateStatus === "checking"
                               ? t("mvSettings.general.checkingForUpdates")
                               : t("mvSettings.general.checkForUpdates")}
                           </span>
                         </button>
-                        {manualUpdateStatus === "available" && (
+                        {effectiveUpdateStatus === "available" && (
                           <button
                             className="action-btn btn-primary"
                             onClick={handleInstallUpdate}
@@ -1108,35 +1117,35 @@ export function MVSettings() {
                           </button>
                         )}
                       </div>
-                      {manualUpdateMessage && (
+                      {(downloadState.errorMsg || manualUpdateMessage) && (
                         <p style={{
-                          color: manualUpdateStatus === "error" ? "var(--danger-color)" : "var(--text-muted)",
+                          color: effectiveUpdateStatus === "error" ? "var(--danger-color)" : "var(--text-muted)",
                           fontSize: 12,
                           margin: "10px 0 0",
                         }}>
-                          {manualUpdateMessage}
+                          {downloadState.errorMsg || manualUpdateMessage}
                         </p>
                       )}
-                      {(manualUpdateStatus === "downloading" || manualUpdateStatus === "installing" || manualUpdateStatus === "relaunching") && (
+                      {(effectiveUpdateStatus === "downloading" || effectiveUpdateStatus === "installing" || effectiveUpdateStatus === "relaunching") && (
                         <div className="progress-container">
                           <div className="progress-info">
                             <span>
-                              {manualUpdateStatus === "downloading"
+                              {effectiveUpdateStatus === "downloading"
                                 ? t("mvSettings.general.downloadingUpdate")
-                                : manualUpdateStatus === "installing"
+                                : effectiveUpdateStatus === "installing"
                                   ? t("mvSettings.general.installingUpdate")
                                   : t("mvSettings.general.relaunchingUpdate")}
                             </span>
                             <span>
-                              {manualUpdateStatus === "downloading"
-                                ? `${manualUpdatePercent}% · ${formatUpdateBytes(manualUpdateProgress.downloaded)} / ${formatUpdateBytes(manualUpdateProgress.contentLength)}`
+                              {effectiveUpdateStatus === "downloading"
+                                ? `${manualUpdatePercent}% · ${formatUpdateBytes(effectiveUpdateProgress.downloaded)} / ${formatUpdateBytes(effectiveUpdateProgress.contentLength)}`
                                 : ""}
                             </span>
                           </div>
                           <div className="progress-track-bg">
                             <div
                               className="progress-track-fill"
-                              style={{ width: manualUpdateStatus === "downloading" ? `${manualUpdatePercent}%` : "100%" }}
+                              style={{ width: effectiveUpdateStatus === "downloading" ? `${manualUpdatePercent}%` : "100%" }}
                             />
                           </div>
                         </div>

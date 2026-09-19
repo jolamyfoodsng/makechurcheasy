@@ -52,6 +52,12 @@ function getAssemblyAiKey(): string {
 
 export type LmServiceStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
 
+export interface LmDockInactivityPrompt {
+  active: boolean;
+  remainingSeconds: number;
+  intervalMinutes: number;
+}
+
 export interface LmDockSnapshot {
   status: LmServiceStatus;
   entries: TranscriptEntry[];
@@ -63,6 +69,9 @@ export interface LmDockSnapshot {
   error?: string;
   inputLevel: number;
   startedAt?: number;
+  lastSpeechAt?: number;
+  inactivityPrompt?: LmDockInactivityPrompt | null;
+  inactivityNotice?: string | null;
   detectionSpeed: DetectionSpeed;
   telemetry?: LmDockTelemetry;
 }
@@ -142,6 +151,8 @@ export class LmDockService {
     suggestions: [],
     matching: false,
     inputLevel: 0,
+    inactivityPrompt: null,
+    inactivityNotice: null,
     detectionSpeed: "sharp",
   };
 
@@ -159,6 +170,11 @@ export class LmDockService {
   private lastSpeechTime = 0;
   private pauseCheckTimer: ReturnType<typeof setInterval> | null = null;
   private commandPollTimer: ReturnType<typeof setInterval> | null = null;
+  /** Inactivity detection timer and thresholds */
+  private inactivityTimer: ReturnType<typeof setInterval> | null = null;
+  private currentInactivityThresholdMs = 5 * 60 * 1000; // 5 min initially, 10 min on confirmation
+  private inactivityPromptActive = false;
+  private inactivityPromptExpiresAt = 0;
   /** Serialized final chunks plus one latest-wins interim chunk. */
   private matchingQueueRunning = false;
   private pendingFinalChunks: Array<{ text: string; isFinal: true }> = [];
@@ -494,6 +510,9 @@ export class LmDockService {
     this.relayPendingPayload = {
       status: this.snapshot.status,
       startedAt: this.snapshot.startedAt,
+      lastSpeechAt: this.snapshot.lastSpeechAt,
+      inactivityPrompt: this.snapshot.inactivityPrompt,
+      inactivityNotice: this.snapshot.inactivityNotice,
       entries: this.snapshot.entries.slice(-LmDockService.MAX_RELAY_TRANSCRIPT_ENTRIES),
       candidates: this.snapshot.candidates,
       queue: this.snapshot.queue,
@@ -884,6 +903,14 @@ export class LmDockService {
     };
     this.latencySum = 0;
 
+    const sessionStartAt = options.reconnect
+      ? this.snapshot.startedAt ?? Date.now()
+      : Date.now();
+    this.currentInactivityThresholdMs = 5 * 60 * 1000;
+    this.inactivityPromptActive = false;
+    this.inactivityPromptExpiresAt = 0;
+    this.lastSpeechReceivedAt = sessionStartAt;
+
     this.snapshot = {
       status: "requesting-mic",
       candidates: [],
@@ -892,9 +919,10 @@ export class LmDockService {
       latestMatch: null,
       matching: false,
       inputLevel: 0,
-      startedAt: options.reconnect
-        ? this.snapshot.startedAt ?? Date.now()
-        : Date.now(),
+      startedAt: sessionStartAt,
+      lastSpeechAt: sessionStartAt,
+      inactivityPrompt: null,
+      inactivityNotice: null,
       entries: this.snapshot.entries,
       detectionSpeed: this.detectionSpeed,
     };
@@ -947,7 +975,12 @@ export class LmDockService {
         }>("assemblyai-transcript", (event) => {
         if (token !== this.sessionToken) return;
         const { text, end_of_turn, audio_start, audio_end } = event.payload;
-        this.lastSpeechReceivedAt = Date.now();
+        const now = Date.now();
+        this.lastSpeechReceivedAt = now;
+        this.snapshot = { ...this.snapshot, lastSpeechAt: now };
+        if (this.inactivityPromptActive) {
+          this.confirmStillUsing();
+        }
 
         // Filter hallucinated transcripts (non-Latin script garbage)
         if (isHallucinated(text)) {
@@ -1020,11 +1053,14 @@ export class LmDockService {
             this.reconnectAttempts = 0;
             this.snapshot = { ...this.snapshot, status: "listening" };
             this.pushStatus();
+            this.startInactivityMonitor();
           } else if (status.startsWith("error")) {
+            this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
             this.recoverFromUnexpectedStreamEnd(status);
           } else if (status === "stopped") {
+            this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
             this.recoverFromUnexpectedStreamEnd("The speech connection closed unexpectedly.");
@@ -1191,6 +1227,11 @@ export class LmDockService {
     this.lastLevelNotifyAt = 0;
     this.lastLevelValue = 0;
 
+    this.stopInactivityMonitor();
+    this.inactivityPromptActive = false;
+    this.inactivityPromptExpiresAt = 0;
+    this.currentInactivityThresholdMs = 5 * 60 * 1000;
+
     void this.cleanup();
 
     this.snapshot = {
@@ -1198,6 +1239,8 @@ export class LmDockService {
       status: "idle",
       inputLevel: 0,
       startedAt: undefined,
+      lastSpeechAt: undefined,
+      inactivityPrompt: null,
       entries: [],
       candidates: [],
       queue: [],
@@ -1207,6 +1250,107 @@ export class LmDockService {
     };
     this.pushStatus();
     this.pushCandidates();
+  }
+
+  // ── Inactivity Detection ──────────────────────────────────────────────────
+
+  private startInactivityMonitor(): void {
+    if (this.inactivityTimer) {
+      clearInterval(this.inactivityTimer);
+    }
+    this.inactivityTimer = setInterval(() => {
+      this.checkInactivity();
+    }, 1000);
+  }
+
+  private stopInactivityMonitor(): void {
+    if (this.inactivityTimer) {
+      clearInterval(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+  }
+
+  private checkInactivity(): void {
+    if (this.snapshot.status !== "listening") return;
+
+    const now = Date.now();
+    const lastSpeech = this.snapshot.lastSpeechAt ?? this.snapshot.startedAt ?? now;
+
+    if (!this.inactivityPromptActive) {
+      if (now - lastSpeech >= this.currentInactivityThresholdMs) {
+        this.inactivityPromptActive = true;
+        this.inactivityPromptExpiresAt = now + 60_000;
+        this.snapshot = {
+          ...this.snapshot,
+          inactivityPrompt: {
+            active: true,
+            remainingSeconds: 60,
+            intervalMinutes: Math.round(this.currentInactivityThresholdMs / 60_000),
+          },
+        };
+        this.pushStatus();
+      }
+    } else {
+      const remainingSeconds = Math.max(0, Math.ceil((this.inactivityPromptExpiresAt - now) / 1000));
+      if (remainingSeconds <= 0) {
+        this.stopDueToInactivity();
+      } else if (this.snapshot.inactivityPrompt?.remainingSeconds !== remainingSeconds) {
+        this.snapshot = {
+          ...this.snapshot,
+          inactivityPrompt: {
+            active: true,
+            remainingSeconds,
+            intervalMinutes: Math.round(this.currentInactivityThresholdMs / 60_000),
+          },
+        };
+        this.pushStatus();
+      }
+    }
+  }
+
+  confirmStillUsing(): void {
+    const now = Date.now();
+    this.inactivityPromptActive = false;
+    this.inactivityPromptExpiresAt = 0;
+    this.currentInactivityThresholdMs = 10 * 60 * 1000; // 10 minutes for subsequent check
+    this.lastSpeechReceivedAt = now;
+    this.snapshot = {
+      ...this.snapshot,
+      lastSpeechAt: now,
+      inactivityPrompt: null,
+    };
+    this.pushStatus();
+  }
+
+  stopDueToInactivity(): void {
+    this.inactivityPromptActive = false;
+    this.inactivityPromptExpiresAt = 0;
+    this.stopInactivityMonitor();
+    this.stopListening();
+    this.snapshot = {
+      ...this.snapshot,
+      inactivityPrompt: null,
+      inactivityNotice: "Stopped due to inactivity",
+    };
+    this.pushStatus();
+  }
+
+  setInactivityNotice(notice: string): void {
+    this.snapshot = {
+      ...this.snapshot,
+      inactivityNotice: notice,
+    };
+    this.pushStatus();
+  }
+
+  clearInactivityNotice(): void {
+    if (this.snapshot.inactivityNotice) {
+      this.snapshot = {
+        ...this.snapshot,
+        inactivityNotice: null,
+      };
+      this.pushStatus();
+    }
   }
 
   /**
@@ -1228,6 +1372,8 @@ export class LmDockService {
     this.levelUnlisten = null;
 
     // Cancel pending timers
+    this.stopInactivityMonitor();
+    this.inactivityPromptActive = false;
     if (this.liveQuoteSearchTimer) {
       clearTimeout(this.liveQuoteSearchTimer);
       this.liveQuoteSearchTimer = null;
@@ -1260,7 +1406,7 @@ export class LmDockService {
     // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task).
     // Keep one shared promise so a reconnect never races a previous shutdown.
     if (!this.nativeStopPromise) {
-      this.nativeStopPromise = safeTauriInvoke("stop_assemblyai_stream")
+      this.nativeStopPromise = Promise.resolve(safeTauriInvoke("stop_assemblyai_stream"))
         .then(() => undefined)
         .catch((err) => {
           console.warn("[LmDockService] Failed to stop voice stream:", err);

@@ -9,6 +9,7 @@ import {
 } from "./presentationState";
 import type {
   PresentationBibleComparePayload,
+  PresentationMediaFit,
   PresentationRemoteItem,
   PresentationStyleSnapshot,
 } from "../presentation/types";
@@ -42,12 +43,15 @@ export function savePresentationScreenZoom(value: number): number {
   return next;
 }
 
-function buildState(item: PresentationRemoteItem | null): PresentationRemoteState {
+function buildState(
+  item: PresentationRemoteItem | null,
+  layer: "fullscreen" | "lowerThird" = "fullscreen",
+): PresentationRemoteState {
   const { sessionId } = getPresentationSettings();
   return {
     sessionId,
-    fullscreen: item,
-    lowerThird: null,
+    fullscreen: layer === "fullscreen" ? item : null,
+    lowerThird: layer === "lowerThird" ? item : null,
     updatedAt: Date.now(),
   };
 }
@@ -63,8 +67,11 @@ function withScreenPreferences(item: PresentationRemoteItem): PresentationRemote
   };
 }
 
-async function publishItem(item: PresentationRemoteItem): Promise<void> {
-  await publishPresentationState(buildState(withScreenPreferences(item)));
+async function publishItem(
+  item: PresentationRemoteItem,
+  layer: "fullscreen" | "lowerThird" = "fullscreen",
+): Promise<void> {
+  await publishPresentationState(buildState(withScreenPreferences(item), layer));
 }
 
 function getRemoteViewerAssetUrl(media: MediaItem): string | undefined {
@@ -97,6 +104,7 @@ export async function publishBibleToPresentation(payload: {
   text: string;
   style?: PresentationStyleSnapshot;
   compare?: PresentationBibleComparePayload;
+  layer?: "fullscreen" | "lowerThird";
 }): Promise<void> {
   const reference = `${payload.book} ${payload.chapter}:${payload.verse}`;
   await publishItem({
@@ -107,7 +115,7 @@ export async function publishBibleToPresentation(payload: {
     body: payload.text,
     style: payload.style,
     bibleCompare: payload.compare,
-  });
+  }, payload.layer ?? "fullscreen");
 }
 
 export async function publishWorshipToPresentation(payload: {
@@ -119,6 +127,7 @@ export async function publishWorshipToPresentation(payload: {
   slideCount: number;
   style?: PresentationStyleSnapshot;
   showMeta?: boolean;
+  layer?: "fullscreen" | "lowerThird";
 }): Promise<void> {
   const showMeta = payload.showMeta === true;
   await publishItem({
@@ -134,14 +143,24 @@ export async function publishWorshipToPresentation(payload: {
       showTitle: showMeta,
       showSubtitle: showMeta,
     },
-  });
+  }, payload.layer ?? "fullscreen");
 }
 
-export async function publishMediaToPresentation(media: MediaItem): Promise<void> {
+export interface PublishMediaPresentationOptions {
+  fit?: PresentationMediaFit;
+  backgroundColor?: string;
+}
+
+export async function publishMediaToPresentation(
+  media: MediaItem,
+  options?: PublishMediaPresentationOptions
+): Promise<void> {
   if (media.type === "audio") {
     throw new Error("Audio playback requires a direct OBS connection.");
   }
   const url = getRemoteViewerAssetUrl(media);
+  const fit: PresentationMediaFit = options?.fit ?? "cover";
+  const backgroundColor = options?.backgroundColor ?? "transparent";
   await publishItem({
     id: `media-${media.id}`,
     source: "media",
@@ -152,10 +171,8 @@ export async function publishMediaToPresentation(media: MediaItem): Promise<void
       ? {
         kind: media.type,
         url,
-        // Keep the complete asset visible in the shared 16:9 presentation
-        // link. Covering the frame crops portrait and non-16:9 media.
-        fit: "contain",
-        backgroundColor: "#000000",
+        fit,
+        backgroundColor,
         playback: media.type === "video"
           ? {
             playing: true,

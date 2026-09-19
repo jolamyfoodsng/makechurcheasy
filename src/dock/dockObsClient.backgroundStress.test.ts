@@ -323,6 +323,8 @@ describe("dockObsClient background reflection stress", () => {
           if (target) sceneItems.get(sceneName)!.delete(target[0]);
           return {};
         }
+        case "PressInputPropertiesButton":
+          return {};
         default:
           throw new Error(`Unhandled OBS call: ${method}`);
       }
@@ -455,6 +457,8 @@ describe("dockObsClient background reflection stress", () => {
             sceneItems.get(sceneName)!.set(sourceName, item);
             return { sceneItemId: item.sceneItemId };
           }
+          case "PressInputPropertiesButton":
+            return {};
           default:
             throw new Error(`Unhandled OBS call: ${method}`);
         }
@@ -1318,4 +1322,35 @@ describe("dockObsClient background reflection stress", () => {
     expect((packet!.theme as Record<string, unknown>).textTransform).toBe("uppercase");
     expect((packet!.slide as Record<string, unknown>).text).toBe("saved by grace");
   });
+
+  it("programmatically triggers OBS refreshnocache on browser source", async () => {
+    const success = await client.refreshBrowserSourceCache("MCE Browser - Notes");
+    expect(success).toBe(true);
+
+    const refreshCalls = callLog.filter(
+      (c) =>
+        c.method === "PressInputPropertiesButton" &&
+        c.payload.inputName === "MCE Browser - Notes" &&
+        c.payload.propertyName === "refreshnocache",
+    );
+    expect(refreshCalls.length).toBe(1);
+  });
+
+  it("refreshes all overlay caches via refreshAllOverlayCaches", async () => {
+    await client.refreshAllOverlayCaches();
+
+    const refreshCalls = callLog.filter(
+      (c) =>
+        c.method === "PressInputPropertiesButton" &&
+        c.payload.propertyName === "refreshnocache",
+    );
+    // There are 4 fullscreen scene defs (bible, worship, notes, countdown)
+    expect(refreshCalls.length).toBeGreaterThanOrEqual(4);
+    const inputNames = refreshCalls.map((c) => c.payload.inputName);
+    expect(inputNames).toContain("MCE Browser - Bible");
+    expect(inputNames).toContain("MCE Browser - Worship");
+    expect(inputNames).toContain("MCE Browser - Notes");
+    expect(inputNames).toContain("MCE Browser - Countdown");
+  });
 });
+

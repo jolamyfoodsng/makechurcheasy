@@ -192,6 +192,7 @@ function CountdownCard({
   onEdit,
   onReset,
   onUpdateObs,
+  isCompact = false,
 }: {
   cd: CountdownConfig;
   isLive: boolean;
@@ -209,6 +210,7 @@ function CountdownCard({
   onEdit: () => void;
   onReset: () => void;
   onUpdateObs: (patch: Partial<OBSSettings>) => void;
+  isCompact?: boolean;
 }) {
   const { t } = useTranslation();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -287,15 +289,15 @@ function CountdownCard({
     <div
       onClick={onSelect}
       style={{
-        borderRadius: 10,
+        borderRadius: isCompact ? 7 : 10,
         border: `1px solid ${isLive ? "rgba(34,197,94,0.5)" : "var(--dock-border, rgba(255,255,255,0.08))"}`,
         background: isLive ? "rgba(34,197,94,0.06)" : "var(--dock-surface, rgba(255,255,255,0.04))",
         cursor: "pointer",
         transition: "all 0.15s",
-        padding: 12,
+        padding: isCompact ? "6px 8px" : 12,
         display: "flex",
         flexDirection: "column",
-        gap: 4,
+        gap: isCompact ? 3 : 4,
       }}
     >
       {/* Title + edit cue + Live badge + three-dot menu */}
@@ -422,7 +424,7 @@ function CountdownCard({
       </div>
 
       {/* Timer (click to edit inline) */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 42, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: isCompact ? 28 : 42, minWidth: 0 }}>
         {editingTime ? (
           <>
             <input
@@ -443,31 +445,31 @@ function CountdownCard({
               }}
               onClick={(e) => e.stopPropagation()}
               aria-label={t("countdowns.editTime", "Edit countdown time")}
-              style={{ flex: "0 1 auto", width: cd.timer.showHours ? 142 : 112, maxWidth: "100%", height: 30, boxSizing: "border-box", fontSize: 20, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "var(--dock-input-bg, rgba(0,0,0,0.3))", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 5, padding: "3px 7px", letterSpacing: 1, lineHeight: 1, outline: "none" }}
+              style={{ flex: "0 1 auto", width: cd.timer.showHours ? 142 : 112, maxWidth: "100%", height: isCompact ? 24 : 30, boxSizing: "border-box", fontSize: isCompact ? 16 : 20, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, background: "var(--dock-input-bg, rgba(0,0,0,0.3))", border: "1px solid var(--dock-accent, #3b82f6)", borderRadius: 5, padding: "2px 6px", letterSpacing: 1, lineHeight: 1, outline: "none" }}
             />
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); commitTimeEdit(); }}
               title={t("common.save", "Save")}
               aria-label={t("common.save", "Save")}
-              style={{ width: 26, height: 26, background: "rgba(34,197,94,0.16)", border: "1px solid rgba(34,197,94,0.45)", borderRadius: 5, padding: 0, cursor: "pointer", color: "#86efac", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              style={{ width: isCompact ? 22 : 26, height: isCompact ? 22 : 26, background: "rgba(34,197,94,0.16)", border: "1px solid rgba(34,197,94,0.45)", borderRadius: 5, padding: 0, cursor: "pointer", color: "#86efac", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
-              <Icon name="check" size={15} />
+              <Icon name="check" size={isCompact ? 12 : 15} />
             </button>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); cancelTimeEdit(); }}
               title={t("common.cancel", "Cancel")}
               aria-label={t("common.cancel", "Cancel")}
-              style={{ width: 26, height: 26, background: "rgba(255,255,255,0.06)", border: "1px solid var(--dock-border, rgba(255,255,255,0.12))", borderRadius: 5, padding: 0, cursor: "pointer", color: "var(--dock-text-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              style={{ width: isCompact ? 22 : 26, height: isCompact ? 22 : 26, background: "rgba(255,255,255,0.06)", border: "1px solid var(--dock-border, rgba(255,255,255,0.12))", borderRadius: 5, padding: 0, cursor: "pointer", color: "var(--dock-text-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
-              <Icon name="close" size={15} />
+              <Icon name="close" size={isCompact ? 12 : 15} />
             </button>
           </>
         ) : (
           <>
             <div
-              style={{ fontSize: 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: "8px 0", cursor: "pointer", flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}
+              style={{ fontSize: isCompact ? 18 : 28, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, letterSpacing: 1, lineHeight: 1, padding: isCompact ? "2px 0" : "8px 0", cursor: "pointer", flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (isLive) return;
@@ -483,39 +485,35 @@ function CountdownCard({
               disabled={isLive}
               title={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTime", "Edit countdown time")}
               aria-label={isLive ? t("countdowns.stopBeforeEditing", "Stop the countdown before editing") : t("countdowns.editTime", "Edit countdown time")}
-              style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: "5px 6px", cursor: isLive ? "not-allowed" : "pointer", color: "var(--dock-text-dim)", opacity: isLive ? 0.4 : 1, display: "flex", alignItems: "center", flexShrink: 0 }}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 4, padding: isCompact ? "3px 4px" : "5px 6px", cursor: isLive ? "not-allowed" : "pointer", color: "var(--dock-text-dim)", opacity: isLive ? 0.4 : 1, display: "flex", alignItems: "center", flexShrink: 0 }}
             >
-              <Icon name="edit" size={14} />
+              <Icon name="edit" size={isCompact ? 12 : 14} />
             </button>
           </>
         )}
       </div>
 
       {/* Timer adjust controls */}
-      <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: 4 }}>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title={t("countdowns.minusOneMinute", "-1 minute")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>-1m</button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title={t("countdowns.minusTenSeconds", "-10 seconds")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title={t("countdowns.plusTenSeconds", "+10 seconds")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={10} /></button>
-        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title={t("countdowns.plusOneMinute", "+1 minute")} style={{ fontSize: 10, fontWeight: 700, padding: "4px 5px", minWidth: 0 }}>+1m</button>
+      <div style={{ display: "flex", gap: 3, alignItems: "center", marginTop: isCompact ? 1 : 4 }}>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-60); }} title={t("countdowns.minusOneMinute", "-1 minute")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}>-1m</button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(-10); }} title={t("countdowns.minusTenSeconds", "-10 seconds")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}><Icon name="fast_rewind" size={isCompact ? 9 : 10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(10); }} title={t("countdowns.plusTenSeconds", "+10 seconds")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}><Icon name="fast_forward" size={isCompact ? 9 : 10} /></button>
+        <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); onAdjustTime(60); }} title={t("countdowns.plusOneMinute", "+1 minute")} style={{ fontSize: isCompact ? 9 : 10, fontWeight: 700, padding: isCompact ? "2px 4px" : "4px 5px", minWidth: 0 }}>+1m</button>
       </div>
 
-      {/* Push to separate scene toggle */}
-
-
-
       {/* Push & Start / Pause / Stop */}
-      <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: isCompact ? 1 : 2 }}>
         {isLive ? (
           <>
-            <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onStop(); }} style={{ fontSize: 10, padding: "4px 6px", display: "flex", alignItems: "center", gap: 3 }}>
+            <button type="button" className="dock-btn dock-btn--small dock-btn--danger" onClick={(e) => { e.stopPropagation(); onStop(); }} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px", display: "flex", alignItems: "center", gap: 3 }}>
               <Icon name="stop" size={10} /> {t("countdowns.stopAndRemove", "Stop & Remove")}
             </button>
-            <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); isPaused ? onResume() : onPause(); }} title={isPaused ? t("countdowns.resume", "Resume") : t("countdowns.pause", "Pause")} style={{ fontSize: 10, padding: "4px 6px" }}>
+            <button type="button" className="dock-btn dock-btn--small" onClick={(e) => { e.stopPropagation(); isPaused ? onResume() : onPause(); }} title={isPaused ? t("countdowns.resume", "Resume") : t("countdowns.pause", "Pause")} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px" }}>
               <Icon name={isPaused ? "play_arrow" : "pause"} size={10} />
             </button>
           </>
         ) : (
-          <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={(e) => { e.stopPropagation(); onShowObs(); }} style={{ fontSize: 10, padding: "4px 6px" }}>
+          <button type="button" className="dock-btn dock-btn--small dock-btn--success" onClick={(e) => { e.stopPropagation(); onShowObs(); }} style={{ fontSize: isCompact ? 9 : 10, padding: isCompact ? "3px 5px" : "4px 6px" }}>
             {t("countdowns.pushAndStart", "Push & Start")}
           </button>
         )}
@@ -631,6 +629,16 @@ export default function DockCountdownsTab({
   const [playbackState, setPlaybackState] = useState<"running" | "paused">("running");
   const activeCd = countdowns.find((c) => c.id === activeId) ?? null;
   const timer = useCountdownTimer(activeCd);
+  const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      setIsUltraCompactHeight(window.innerHeight <= 400);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // Restore activeId when liveCountdownId is set but activeId is not
   useEffect(() => {
@@ -1066,10 +1074,10 @@ export default function DockCountdownsTab({
   return (
     <div className="dock-tab-content" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.08))", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isUltraCompactHeight ? "4px 8px" : "8px 12px", borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.08))", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Icon name="timer" size={14} style={{ color: "var(--dock-accent, #3b82f6)" }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.myCountdowns")}</span>
+          <Icon name="hourglass" size={14} style={{ color: "var(--dock-accent, #3b82f6)" }} />
+          <span style={{ fontSize: isUltraCompactHeight ? 11 : 12, fontWeight: 600, color: "var(--dock-text)" }}>{t("countdowns.myCountdowns")}</span>
           <span style={{ fontSize: 10, color: "var(--dock-text-dim)" }}>({countdowns.length})</span>
         </div>
         <DockSceneRoutingControl
@@ -1082,8 +1090,8 @@ export default function DockCountdownsTab({
       </div>
 
       {/* Countdown list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isUltraCompactHeight ? "6px 8px" : 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: isUltraCompactHeight ? 4 : 6 }}>
           {countdowns.map((cd) => {
             const isThisLive = liveCountdownId === cd.id;
             const isThisActive = activeId === cd.id;
@@ -1105,6 +1113,7 @@ export default function DockCountdownsTab({
                 onPause={() => handlePause(cd)}
                 onResume={() => handleResume(cd)}
                 onStop={() => handleStopAndRemove(cd)}
+                isCompact={isUltraCompactHeight}
                 onEdit={async () => {
                   if (isThisLive) return;
                   setEditingCd(cd);

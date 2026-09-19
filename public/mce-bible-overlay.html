@@ -1932,10 +1932,13 @@
         const nodes = [
           compareTextLeft,
           compareTextRight,
+          compareTextThird,
           compareReferenceLeft,
           compareReferenceRight,
+          compareReferenceThird,
           compareTranslationLeft,
           compareTranslationRight,
+          compareTranslationThird,
           compareTextLeft?.querySelector('.compare-line-list'),
         ];
         return nodes.filter((node) => isFitVisible(node));
@@ -2227,12 +2230,12 @@
             column.style.paddingRight = '0px';
           }
         });
-        [compareTextLeft, compareTextRight].forEach((node) => {
+        [compareTextLeft, compareTextRight, compareTextThird].forEach((node) => {
           if (!node) return;
           node.style.fontSize = '';
           node.style.lineHeight = '';
         });
-        [compareReferenceLeft, compareReferenceRight, compareTranslationLeft, compareTranslationRight].forEach((node) => {
+        [compareReferenceLeft, compareReferenceRight, compareReferenceThird, compareTranslationLeft, compareTranslationRight, compareTranslationThird].forEach((node) => {
           if (!node) return;
           node.style.fontSize = '';
         });
@@ -2305,8 +2308,7 @@
           return visibleColumns.some((column) => {
             const columnRect = column.getBoundingClientRect();
             const width = Math.max(1, Math.min(columnRect.width || frameWidth, frameWidth));
-            const height = Math.max(1, Math.min(columnRect.height || frameHeight, frameHeight));
-            return isOverflowing(column, width, height);
+            return isOverflowing(column, width, frameHeight);
           });
         };
 
@@ -2371,10 +2373,11 @@
         // clip overflowing content, so the floor must be explicit rather than
         // inferred from the clipped scroll height.
         const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
-        const baseTextSize = Math.max(textFloor, Math.round(baseFontSize));
+        const minFitSize = 18;
+        const baseTextSize = Math.max(minFitSize, Math.round(baseFontSize));
         let textSize = stableLowerThirdTextSize === null
           ? baseTextSize
-          : Math.max(textFloor, Math.min(baseTextSize, stableLowerThirdTextSize));
+          : Math.max(minFitSize, Math.min(baseTextSize, stableLowerThirdTextSize));
         const ltRefRatio = baseFontSize > 0
           ? Math.max(0.45, Math.min(0.85, baseRefFontSize / baseFontSize))
           : 0.68;
@@ -2388,6 +2391,14 @@
           ltVerseText.style.fontSize = `${textSize}px`;
           ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
           ltRefText.style.fontSize = `${referenceSize}px`;
+          const compareCols = ltVerseText.querySelectorAll('.lt-compare-col, .lt-compare-unit');
+          compareCols.forEach((col) => {
+            col.style.fontSize = `${textSize}px`;
+          });
+          const compareRefs = ltVerseText.querySelectorAll('.lt-compare-ref');
+          compareRefs.forEach((ref) => {
+            ref.style.fontSize = `${referenceSize}px`;
+          });
         };
         const overflowing = () => {
           const fitNodes = [ltVerseText, ltRefText].filter((node) => isFitVisible(node));
@@ -2397,17 +2408,19 @@
           // overflow:hidden and a max-height, scrollHeight can equal the
           // clipped frame even when the verse extends above or below it.
           if (isContentOutsideFrame(fitNodes, ltBar)) return true;
+          const compareNodes = Array.from(ltVerseText.querySelectorAll('.lt-compare-col, .lt-compare-unit, .lt-compare-ref')).filter((node) => isFitVisible(node));
+          if (isContentOutsideFrame(compareNodes, ltBar)) return true;
 
           const frame = getFrameContentRect(ltBar);
           const frameWidth = Math.max(1, frame.width || targetWidth);
           const frameHeight = Math.max(1, frame.height || targetHeight);
-          return fitNodes.some((node) => isOverflowing(node, frameWidth, frameHeight));
+          return [...fitNodes, ...compareNodes].some((node) => isOverflowing(node, frameWidth, frameHeight));
         };
 
         resetLowerThirdAutoFitStyles();
         apply();
         let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 180) {
+        while (overflowing() && textSize > minFitSize && guard < 180) {
           textSize -= 1;
           referenceSize = Math.max(
             LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
@@ -2699,6 +2712,7 @@
 
       /* ═══ THEME: Fullscreen ═══ */
       function applyThemeFullscreen(s) {
+        if (activeMode && activeMode !== 'fullscreen') return;
         applyThemeBase(s);
         basePadding = Number(s.padding || 60);
         root.style.setProperty('--padding', basePadding + 'px');
@@ -2806,24 +2820,30 @@
       /* ═══ THEME: Lower-third ═══ */
       function applyThemeLowerThird(s, targetMode) {
         if (targetMode === undefined) targetMode = activeMode;
+        if (activeMode && activeMode !== 'lower-third') return;
         resetFullscreenInlineLayoutStyles();
         applyThemeBase(s);
         baseBarPadding = Number(s.padding || 18); root.style.setProperty('--safe-area', (s.safeArea || 40) + 'px');
         const sp = s.lowerThirdSize || 'medium', preset = SIZE_PRESETS[sp] || SIZE_PRESETS['medium'];
-        if (!s.fontSize) { baseFontSize = preset.fontSize; baseRefFontSize = preset.refFontSize; root.style.setProperty('--font-size', baseFontSize + 'px'); root.style.setProperty('--ref-font-size', baseRefFontSize + 'px'); }
+        if (!s.fontSize) {
+          baseFontSize = preset.fontSize;
+          baseRefFontSize = preset.refFontSize;
+          root.style.setProperty('--font-size', baseFontSize + 'px');
+          root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
+        }
         root.style.setProperty('--line-height', String(s.lineHeight || preset.lineHeight));
         root.style.setProperty('--ref-spacing', (s.refSpacing ?? 16) + 'px');
         const prevCompareFontSize = baseCompareFontSize;
         const prevCompareRefFontSize = baseCompareRefFontSize;
         const rawCompareSize = Number(s.compareVerseFontSizeLeft || 0);
-        baseCompareFontSize = (rawCompareSize > 40)
+        baseCompareFontSize = (rawCompareSize > 0 && rawCompareSize <= 48)
           ? rawCompareSize
-          : Math.max(36, Math.round((Number(s.fontSize) || baseFontSize || 80) * 0.72));
+          : Math.min(36, Math.max(22, Math.round((Number(baseFontSize) || 36) * 0.72)));
         root.style.setProperty('--compare-font-size', baseCompareFontSize + 'px');
         const rawCompareRefSize = Number(s.compareReferenceFontSizeLeft || 0);
-        baseCompareRefFontSize = (rawCompareRefSize > 25)
+        baseCompareRefFontSize = (rawCompareRefSize > 0 && rawCompareRefSize <= 32)
           ? rawCompareRefSize
-          : Math.max(18, Math.round((Number(s.refFontSize) || baseRefFontSize || 42) * 0.8));
+          : Math.min(26, Math.max(16, Math.round((Number(baseRefFontSize) || 26) * 0.8)));
         root.style.setProperty('--compare-ref-font-size', baseCompareRefFontSize + 'px');
         root.style.setProperty('--compare-ref-meta-size', Math.max(13, Math.round(baseCompareRefFontSize * 0.62)) + 'px');
         if (baseCompareFontSize !== prevCompareFontSize || baseCompareRefFontSize !== prevCompareRefFontSize) {
@@ -2936,6 +2956,7 @@
 
       function applyThemeIfChanged(theme, force, modeContext) {
         var targetMode = modeContext || activeMode;
+        if (activeMode && targetMode !== activeMode) return;
         const safeTheme = theme || {};
         let themeKey = '';
         try {
@@ -3067,9 +3088,17 @@
 
       function renderBothBibleLayers(state) {
         if (!state) return;
-        processSlideFullscreen(state);
-        processSlideLowerThird(state);
-        console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision });
+        const targetMode = (state.mode === 'fullscreen' || state.mode === 'lower-third')
+          ? state.mode
+          : (activeMode || 'fullscreen');
+        if (targetMode === 'lower-third') {
+          processSlideFullscreen(state);
+          processSlideLowerThird(state);
+        } else {
+          processSlideLowerThird(state);
+          processSlideFullscreen(state);
+        }
+        console.log('[BibleOverlay] both layers rendered', { revision: currentBibleRevision, mode: targetMode });
       }
 
       function commitOverlayPacket(packet, animateIn) {

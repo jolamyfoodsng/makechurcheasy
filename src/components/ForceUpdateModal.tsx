@@ -8,13 +8,14 @@
  * The modal downloads and installs the update inline.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   checkForUpdate,
   downloadAndInstallVerifiedUpdate,
   type UpdateCheckResult,
   type DownloadProgress,
 } from "../services/updateService";
+import { getReleaseHighlights } from "../services/releaseNotesService";
 import type { Update } from "@tauri-apps/plugin-updater";
 import Icon from "./Icon";
 
@@ -49,6 +50,10 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
     progress.contentLength > 0
       ? Math.round((progress.downloaded / progress.contentLength) * 100)
       : 0;
+
+  const highlights = useMemo(() => {
+    return getReleaseHighlights(result.version, result.notes);
+  }, [result.version, result.notes]);
 
   const handleUpdate = useCallback(async () => {
     // If no Update object (fake/test result), check for a real update first
@@ -157,12 +162,24 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
                 </div>
               )}
 
-              {result.notes && (
+              {highlights.length > 0 ? (
+                <div className="force-update-changelog">
+                  <p className="force-update-changelog-label">What's New</p>
+                  <ul className="force-update-changelog-list" style={{ margin: "6px 0 0", paddingLeft: 16, fontSize: 12, lineHeight: 1.45, color: "#cbd5e1" }}>
+                    {highlights.slice(0, 3).map((h) => (
+                      <li key={h.id} style={{ marginBottom: 4 }}>
+                        <strong style={{ color: "#fff" }}>{h.title}: </strong>
+                        <span>{h.points[0]?.text ?? h.summary ?? ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : result.notes ? (
                 <div className="force-update-changelog">
                   <p className="force-update-changelog-label">What's New</p>
                   <p className="force-update-changelog-text">{result.notes.slice(0, 300)}</p>
                 </div>
-              )}
+              ) : null}
             </>
           )}
 

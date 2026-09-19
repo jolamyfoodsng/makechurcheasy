@@ -20,8 +20,8 @@ export type DockOutputQuickSizePreset = {
 export const DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP = 96;
 
 const QUICK_ACTIONS_MIN_TOP = 8;
-const QUICK_ACTIONS_HANDLE_WIDTH = 30;
-const QUICK_ACTIONS_HANDLE_HEIGHT = 74;
+const QUICK_ACTIONS_HANDLE_WIDTH = 26;
+const QUICK_ACTIONS_HANDLE_HEIGHT = 60;
 const QUICK_ACTIONS_BOTTOM_GAP = 12;
 
 interface DockOutputQuickActionsProps {
@@ -385,7 +385,7 @@ export default function DockOutputQuickActions({
                   title="Background & Theme Settings"
                   aria-label="Background & Theme Settings"
                 >
-                  <Icon name="tune" size={14} />
+                  <Icon name="tune" size={12} />
                 </button>
               )}
             </div>

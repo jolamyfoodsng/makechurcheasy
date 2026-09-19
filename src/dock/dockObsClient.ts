@@ -4623,6 +4623,9 @@ export class DockObsClient {
             inputSettings,
           });
           this._lastBrowserSourceUrlBySource[inputName] = url;
+          if (forceReload) {
+            void this.refreshBrowserSourceCache(inputName);
+          }
         } catch { /* ignore */ }
         return;
       }
@@ -10780,9 +10783,36 @@ export class DockObsClient {
         inputName: sourceName,
         inputMuted: options.muted ?? false,
       });
+    } catch {
+      // Ignore mute failures for arbitrary user scenes.
+    }
+
+    try {
+      await this.call("SetInputVolume", {
+        inputName: sourceName,
+        inputVolumeMul: 1.0,
+      });
+    } catch {
+      // Ignore volume failures
+    }
+
+    try {
+      await this.call("SetInputAudioMonitorType", {
+        inputName: sourceName,
+        monitorType: "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT",
+      });
+    } catch {
+      // Ignore monitor type failures
+    }
+
+    try {
       await this.call("TriggerMediaInputAction", {
         inputName: sourceName,
         mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+      });
+      await this.call("TriggerMediaInputAction", {
+        inputName: sourceName,
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
       });
     } catch {
       // Ignore playback-control failures for arbitrary user scenes.
@@ -11252,6 +11282,7 @@ export class DockObsClient {
             inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, bgcolor: "#00000000", shutdown: false, restart_when_active: false },
           });
           this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
+          void this.refreshBrowserSourceCache(def.browserSourceName);
         }
       }
     } catch { /* empty scene */ }
@@ -11777,6 +11808,69 @@ export class DockObsClient {
     await this._ensureFullscreenScene(key);
     const def = this._fullscreenSceneDefs[key];
     await this.call("SetInputSettings", { inputName: def.browserSourceName, inputSettings: { css } });
+  }
+
+  /**
+   * Programmatically triggers OBS Browser Source "Refresh cache of current page".
+   * Calls OBS WebSocket v5 `PressInputPropertiesButton` with propertyName: "refreshnocache".
+   */
+  async refreshBrowserSourceCache(inputName: string): Promise<boolean> {
+    if (isFreeDockPlan()) return false;
+    try {
+      await this.call("PressInputPropertiesButton", {
+        inputName,
+        propertyName: "refreshnocache",
+      });
+      return true;
+    } catch (err) {
+      console.warn(`[DockObsClient] Failed to refresh cache for input "${inputName}":`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Refreshes the cache of all MCE browser sources (Bible, Worship, Notes, Countdown).
+   */
+  async refreshAllOverlayCaches(): Promise<void> {
+    if (isFreeDockPlan()) return;
+    const sources = Object.values(this._fullscreenSceneDefs).map((d) => d.browserSourceName);
+    await Promise.allSettled(sources.map((name) => this.refreshBrowserSourceCache(name)));
+  }
+
+  /**
+   * Capture a lightweight JPEG screenshot of the current presentation or program output.
+   * Silently returns null if OBS is disconnected or capture fails.
+   */
+  async captureScreenshot(sourceName?: string, imageWidth = 1280): Promise<string | null> {
+    try {
+      if (!this.isConnected) return null;
+
+      let targetSource = (sourceName || "").trim();
+      if (!targetSource) {
+        // Try to capture MCE Presentation scene first, or fall back to Program scene
+        const scenes = await this.getObsSceneNames().catch(() => [] as string[]);
+        if (scenes.includes(DOCK_PRESENTATION_SCENE)) {
+          targetSource = DOCK_PRESENTATION_SCENE;
+        } else {
+          targetSource = await this.getCurrentProgramSceneName().catch(() => "");
+        }
+      }
+
+      if (!targetSource) return null;
+
+      const resp = await this.call("GetSourceScreenshot", {
+        sourceName: targetSource,
+        imageFormat: "jpeg",
+        imageWidth,
+        imageCompressionQuality: 80,
+      });
+
+      const imageData = (resp as { imageData?: string })?.imageData;
+      return typeof imageData === "string" && imageData.length > 0 ? imageData : null;
+    } catch (err) {
+      console.warn("[DockObsClient] captureScreenshot failed:", err);
+      return null;
+    }
   }
 }
 

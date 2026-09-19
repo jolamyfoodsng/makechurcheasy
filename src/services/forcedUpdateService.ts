@@ -357,27 +357,11 @@ async function reconcileWithPublishedRelease(
 ): Promise<AppVersionSettings> {
   try {
     const release = await fetchLatestPublishedRelease();
-    const configuredMinimum = settings.minimumSupportedVersion.trim();
-    const normalizedMinimum = normalizeVersion(configuredMinimum);
-    const minimumIsInvalid = Boolean(
-      configuredMinimum &&
-      (!normalizedMinimum || gt(normalizedMinimum, release.version)),
-    );
-
     return {
       ...settings,
-      latestVersion: release.version,
-      ...(minimumIsInvalid
-        ? {
-            forceUpdatesEnabled: false,
-            minimumSupportedVersion: "",
-          }
-        : {}),
+      latestVersion: release.version || settings.latestVersion,
     };
   } catch {
-    // Do not replace a previously cached policy when the release service is
-    // unavailable. The download path independently refuses unverified
-    // updater metadata before installing anything.
     return settings;
   }
 }

@@ -839,13 +839,7 @@ function DockMediaTab({
   );
   const animationsLocked = !animationEntitlement.allowed;
 
-  useEffect(() => {
-    if (!presentationLinkMode || textOverlay.background.mode !== "lower-third") return;
-    setTextOverlay((current) => ({
-      ...current,
-      background: { ...current.background, mode: "fullscreen" },
-    }));
-  }, [presentationLinkMode, textOverlay.background.mode]);
+
 
   // ── Video Loop / Playlist state ──
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1434,6 +1428,18 @@ function DockMediaTab({
       return item.filePath;
     }
 
+    let dir = uploadsDir;
+    if (!dir) {
+      try {
+        const res = await fetch("/api/uploads-dir");
+        if (res.ok) {
+          const data = await res.json();
+          dir = data.path || null;
+          if (dir) setUploadsDir(dir);
+        }
+      } catch { /* ignore */ }
+    }
+
     if (item.url.startsWith("data:")) {
       const res = await fetch("/api/save-media", {
         method: "POST",
@@ -1446,14 +1452,14 @@ function DockMediaTab({
       return data.path;
     }
 
-    if (uploadsDir && !item.url.startsWith("http") && !item.url.startsWith("blob:")) {
+    if (dir && !item.url.startsWith("http") && !item.url.startsWith("blob:") && !item.url.startsWith("data:")) {
       return item.url;
     }
 
-    if (uploadsDir) {
-      const fileName = item.url.split("/").pop() || item.name;
-      const sep = uploadsDir.includes("\\") ? "\\" : "/";
-      return `${uploadsDir}${sep}${decodeURIComponent(fileName)}`;
+    if (dir) {
+      const fileName = item.diskFileName || item.url.split("/").pop() || item.name;
+      const sep = dir.includes("\\") ? "\\" : "/";
+      return `${dir}${sep}${decodeURIComponent(fileName)}`;
     }
 
     throw new Error("Cannot resolve media to a local file path");
@@ -1647,6 +1653,8 @@ function DockMediaTab({
             url: `/uploads/${encodeURIComponent(fileName)}`,
             diskFileName: fileName,
             createdAt: new Date().toISOString(),
+          }, {
+            fit: options?.fitMode ?? "cover",
           });
           setSendError(null);
           track("media_presented");
@@ -1716,7 +1724,9 @@ function DockMediaTab({
         }
         setSendingFile(`library:${item.id}`);
         try {
-          await publishMediaToPresentation(item);
+          await publishMediaToPresentation(item, {
+            fit: options?.fitMode ?? "cover",
+          });
           setSendError(null);
           track("media_presented");
           trackMediaPresented("library");
@@ -1904,7 +1914,8 @@ function DockMediaTab({
           sceneName: sceneSendSelection,
           sourceName: buildSceneMediaSourceName(entry),
           filePath,
-          looping: false,
+          looping: entryPrefs.loop ?? false,
+          muted: false,
         });
       }
 
@@ -3111,6 +3122,8 @@ function DockMediaTab({
           type: "image",
           url: entry.previewUrl,
           createdAt: new Date().toISOString(),
+        }, {
+          fit: "cover",
         });
         setActiveTargetKeys({ active: entry.key });
         setPausedTargets({ active: false });
@@ -3548,7 +3561,13 @@ function DockMediaTab({
         aria-label={`${entry.name}. Click to show in OBS.`}
       >
         <div className="dock-media-gallery-card__image-wrap">
-          <img src={entry.previewUrl || entry.thumbnailUrl || ""} alt={entry.name} loading="lazy" className="dock-media-gallery-card__image" />
+          {entry.previewUrl || entry.thumbnailUrl ? (
+            <img src={entry.previewUrl || entry.thumbnailUrl} alt={entry.name} loading="lazy" className="dock-media-gallery-card__image" />
+          ) : (
+            <div className="dock-media-gallery-card__placeholder">
+              <Icon name="collections" size={24} />
+            </div>
+          )}
           <div className="dock-media-gallery-card__overlay">
             <div className="dock-media-gallery-card__overlay-top">
               <button
@@ -4682,7 +4701,7 @@ function DockMediaTab({
                           className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
                           onClick={() => setViewMode("recent")}
                           title={t('media.recentlyUsed')}>
-                          {t('media.recentlyUsed')}
+                          {isUltraCompactHeight ? t('media.recentShort', 'Recent') : t('media.recentlyUsed')}
                         </button>
                         <button
                           type="button"
@@ -4691,7 +4710,7 @@ function DockMediaTab({
                           className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
                           onClick={() => setViewMode("uploaded")}
                           title={t('media.newlyUploaded')}>
-                          {t('media.newlyUploaded')}
+                          {isUltraCompactHeight ? t('media.uploadedShort', 'Uploaded') : t('media.newlyUploaded')}
                         </button>
                       </div>
                     )}
@@ -4759,7 +4778,9 @@ function DockMediaTab({
             <div className="dock-media-section__header">
               <div>
                 <div className="dock-media-section__title">Templates</div>
-                <div className="dock-media-section__meta">Saved designs are sent here as images. Preview or click one to show it in OBS.</div>
+                {!isUltraCompactHeight && (
+                  <div className="dock-media-section__meta">Saved designs are sent here as images. Preview or click one to show it in OBS.</div>
+                )}
               </div>
               <div className="dock-media-section__actions">
                 <span className="dock-media-section__count">{filteredSavedTemplateEntries.length}</span>
@@ -4882,11 +4903,13 @@ function DockMediaTab({
                       <div className="dock-media-section__title">
                         {animationCatalogTab === "videos" ? t('media.templateVideos', 'Template videos') : t('media.templatePictures', 'Template pictures')}
                       </div>
-                      <div className="dock-media-section__meta">
-                        {animationCatalogTab === "videos"
-                          ? t('media.templateVideosMeta', 'Download a video and project it in OBS.')
-                          : t('media.templatePicturesMeta', 'Get started by downloading these pictures and projecting them.')}
-                      </div>
+                      {!isUltraCompactHeight && (
+                        <div className="dock-media-section__meta">
+                          {animationCatalogTab === "videos"
+                            ? t('media.templateVideosMeta', 'Download a video and project it in OBS.')
+                            : t('media.templatePicturesMeta', 'Get started by downloading these pictures and projecting them.')}
+                        </div>
+                      )}
                     </div>
                     <div className="dock-media-section__actions">
                       <span className="dock-media-section__count">
@@ -4941,7 +4964,9 @@ function DockMediaTab({
                     <div className="dock-media-section__header">
                       <div>
                         <div className="dock-media-section__title">{animationCatalogTab === "videos" ? t('media.downloadedAnimations') : t('media.downloadedPictures', 'Downloaded pictures')}</div>
-                        <div className="dock-media-section__meta">{t('media.clickToProject', 'Click a downloaded item to project it.')}</div>
+                        {!isUltraCompactHeight && (
+                          <div className="dock-media-section__meta">{t('media.clickToProject', 'Click a downloaded item to project it.')}</div>
+                        )}
                       </div>
                       <span className="dock-media-section__count">{filteredAnimationEntries.length}</span>
                     </div>
@@ -5248,7 +5273,7 @@ function DockMediaTab({
                           { key: "box" as OverlayDisplayMode, label: t('media.displayBox'), icon: "square" },
                           { key: "lower-third" as OverlayDisplayMode, label: t('media.displayLowerThird'), icon: "move_down" },
                           { key: "fullscreen" as OverlayDisplayMode, label: t('media.displayFullscreen'), icon: "fullscreen" },
-                        ]).filter((opt) => !presentationLinkMode || opt.key !== "lower-third").map((opt) => (
+                        ]).map((opt) => (
                           <button
                             key={opt.key}
                             type="button"
@@ -5663,7 +5688,9 @@ function DockMediaTab({
                   <div className="dock-media-section__header">
                     <div>
                       <div className="dock-media-section__title">{t('media.templateVideos')}</div>
-                      <div className="dock-media-section__meta">{t('media.templateVideosMeta')}</div>
+                      {!isUltraCompactHeight && (
+                        <div className="dock-media-section__meta">{t('media.templateVideosMeta')}</div>
+                      )}
                     </div>
                     <div className="dock-media-section__actions">
                       <span className="dock-media-section__count">{templateVideosLoading ? "…" : filteredTemplateVideos.length}</span>
@@ -6487,7 +6514,11 @@ function DockMediaTab({
             >
               <Icon name="delete" size={13} />
               <span className="dock-media-context-menu__label">
-                {contextEntry.kind === "video" ? t('media.deleteVideo') : t('media.deleteImage')}
+                {contextEntry.kind === "video"
+                  ? t('media.deleteVideo')
+                  : contextEntry.kind === "audio"
+                  ? t('media.deleteAudio', 'Delete Audio')
+                  : t('media.deleteImage')}
               </span>
             </button>
           </div>

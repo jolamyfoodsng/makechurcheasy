@@ -4,7 +4,7 @@
 export const OVERLAY_HTML_VERSION =
   `${typeof __MCE_OVERLAY_HTML_VERSION__ !== "undefined"
     ? __MCE_OVERLAY_HTML_VERSION__
-    : `dev-${typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "overlay"}`}-verse-markers-v5-pinned-to-text`;
+    : `dev-${typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "overlay"}`}-v6-font-sizing-overlay-refresh`;
 
 export function buildVersionedOverlayUrl(
   baseUrl: string,

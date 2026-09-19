@@ -23,16 +23,21 @@ import { initLicenseGuard, reverifyOnAuth, useLicenseGuardState } from "./servic
 import { AppShell } from "./AppShell";
 import { LowerThirdProvider } from "./lowerthirds/lowerThirdStore";
 import SplashScreen from "./components/SplashScreen";
+import LoadingScreen from "./components/LoadingScreen";
 import UpdateNotification from "./components/UpdateNotification";
+import UpdateDownloadingBanner from "./components/UpdateDownloadingBanner";
+import UpdateBackgroundNoticeModal from "./components/UpdateBackgroundNoticeModal";
+import UpdateCloseAppWarningModal from "./components/UpdateCloseAppWarningModal";
+import { updateDownloadManager } from "./services/updateDownloadManager";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ForceUpdateModal from "./components/ForceUpdateModal";
 import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
-import VersionFloorWarningBanner from "./components/VersionFloorWarningBanner";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
 import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
-import { checkForUpdate, downloadAndInstallVerifiedUpdate, getVersionAge, fetchVersionFloor, type UpdateCheckResult, type DownloadProgress } from "./services/updateService";
+import { checkForUpdate, getVersionAge, type UpdateCheckResult } from "./services/updateService";
 import {
   fetchAppSettings,
   getForcedUpdateState,
@@ -146,9 +151,11 @@ function loadLmDockService(): Promise<LmDockService> {
 
 function AppRouteFallback() {
   return (
-    <div className="app-route-loading" role="status" aria-live="polite">
-      Loading…
-    </div>
+    <LoadingScreen
+      variant="page"
+      label="Loading MakeChurchEasy…"
+      className="app-route-loading"
+    />
   );
 }
 
@@ -411,6 +418,41 @@ function App() {
   useEffect(() => {
     automationRunner.start();
     return () => automationRunner.stop();
+  }, []);
+
+  // Intercept window close while update download is in progress
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    try {
+      const currentWindow = getCurrentWindow();
+      currentWindow
+        .onCloseRequested(async (event) => {
+          if (updateDownloadManager.isBusy()) {
+            event.preventDefault();
+            updateDownloadManager.showAppCloseWarning();
+          }
+        })
+        .then((fn) => {
+          unlisten = fn;
+        })
+        .catch(() => undefined);
+    } catch {
+      // Non-Tauri environment
+    }
+
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      if (updateDownloadManager.isBusy()) {
+        e.preventDefault();
+        e.returnValue = "";
+        updateDownloadManager.showAppCloseWarning();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+
+    return () => {
+      unlisten?.();
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+    };
   }, []);
 
   const sendSongLimitToDock = useCallback(() => {
@@ -853,65 +895,13 @@ function App() {
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [versionAge, setVersionAge] = useState<{ daysOld: number; forceUpdate: boolean; persistent: boolean }>({ daysOld: 0, forceUpdate: false, persistent: false });
 
-  // ── Version floor check (fetched from server — admin-controlled) ──
-  const [versionFloorBlocked, setVersionFloorBlocked] = useState<{
-    blocked: boolean;
-    currentVersion: string;
-    minimumVersion: string;
-    gracePeriodHours: number;
-  } | null>(null);
-
-  // ── Version floor grace period countdown ──
-  const [versionFloorGraceStartedAt, setVersionFloorGraceStartedAt] = useState<string | null>(null);
-  const [versionFloorGraceDismissed, setVersionFloorGraceDismissed] = useState(false);
-
-  // ── In-app update state for version floor screen ──
-  const [floorUpdateStatus, setFloorUpdateStatus] = useState<
-    "idle" | "checking" | "downloading" | "installing" | "relaunching" | "error"
-  >("idle");
-  const [floorUpdateProgress, setFloorUpdateProgress] = useState<DownloadProgress>({ contentLength: 0, downloaded: 0 });
-  const [floorUpdateError, setFloorUpdateError] = useState<string | null>(null);
-
   // ── Server-driven forced update (admin-controlled) ──
-  const [forcedUpdateState, setForcedUpdateState] = useState<ForcedUpdateState>({
-    blocked: false,
-    active: false,
-    lockType: null,
-    requiredVersion: "",
-    hoursRemaining: null,
-    gracePeriodHours: null,
-    startedAt: null,
-    lockAt: null,
-    updateMessage: "",
-    currentVersion: "",
-    downloadUrl: "",
-    releaseNotesUrl: "",
-    loading: true,
-  });
+  const [forcedUpdateState, setForcedUpdateState] = useState<ForcedUpdateState>(() =>
+    getForcedUpdateState(null)
+  );
 
   const startupDone = useRef(false);
   const updatePollBusyRef = useRef(false);
-
-  // ── Version floor grace period countdown → hard lock transition ──
-  useEffect(() => {
-    if (!versionFloorGraceStartedAt || !versionFloorBlocked || versionFloorBlocked.blocked) return;
-
-    const graceHours = versionFloorBlocked.gracePeriodHours;
-    if (!graceHours || graceHours <= 0) return;
-
-    const check = () => {
-      const endMs = new Date(versionFloorGraceStartedAt).getTime() + graceHours * 60 * 60 * 1000;
-      if (Date.now() >= endMs) {
-        setVersionFloorBlocked((prev) => prev ? { ...prev, blocked: true } : prev);
-        setVersionFloorGraceStartedAt(null);
-      }
-    };
-
-    // Check immediately, then every 30 seconds
-    check();
-    const id = window.setInterval(check, 30_000);
-    return () => window.clearInterval(id);
-  }, [versionFloorGraceStartedAt, versionFloorBlocked?.blocked, versionFloorBlocked?.gracePeriodHours]);
 
   // ── Startup: load resources + check for updates in parallel ──
   useEffect(() => {
@@ -920,7 +910,10 @@ function App() {
 
     // Track app started (also tracks app_installed on first launch)
     trackAppStarted();
-    trackAppStartedBackend();
+    trackAppStartedBackend({
+      platform: typeof navigator !== "undefined" ? navigator.platform || navigator.userAgent : "desktop",
+      appVersion: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown",
+    });
 
     // Initialize the license guard (central subscription enforcement)
     initLicenseGuard().catch(() => {
@@ -951,58 +944,6 @@ function App() {
         // If fetch fails, proceed without server-driven forced update
       });
 
-    // Fetch version floor from server (admin-configured minimum)
-    const FLOOR_GRACE_KEY = "ocs-version-floor-grace-v1";
-    fetchVersionFloor()
-      .then((result) => {
-        if (!result) return;
-
-        if (result.gracePeriodHours > 0) {
-          // Grace period configured — track it in localStorage
-          let startedAt: string;
-          try {
-            const existing = localStorage.getItem(FLOOR_GRACE_KEY);
-            if (existing) {
-              const rec = JSON.parse(existing) as { startedAt: string; minimumVersion: string };
-              // If the minimum version changed, reset the grace period
-              if (rec.minimumVersion === result.minimumVersion) {
-                startedAt = rec.startedAt;
-              } else {
-                startedAt = new Date().toISOString();
-              }
-            } else {
-              startedAt = new Date().toISOString();
-            }
-          } catch {
-            startedAt = new Date().toISOString();
-          }
-
-          // Persist the grace record
-          try {
-            localStorage.setItem(
-              FLOOR_GRACE_KEY,
-              JSON.stringify({ startedAt, minimumVersion: result.minimumVersion })
-            );
-          } catch { /* non-critical */ }
-
-          // Check if grace period has already expired
-          const endMs = new Date(startedAt).getTime() + result.gracePeriodHours * 60 * 60 * 1000;
-          if (Date.now() >= endMs) {
-            // Grace period expired — show hard lock
-            setVersionFloorBlocked(result);
-          } else {
-            // Still in grace — show warning banner
-            setVersionFloorBlocked({ ...result, blocked: false });
-            setVersionFloorGraceStartedAt(startedAt);
-          }
-        } else {
-          // No grace period — immediate hard lock (original behavior)
-          setVersionFloorBlocked(result);
-        }
-      })
-      .catch(() => {
-        // If fetch fails, don't block — proceed normally
-      });
 
     // Initialize the overlay URL (queries Tauri for the local server port)
     const overlayInit = initOverlayUrl().catch(() => {
@@ -1316,27 +1257,6 @@ function App() {
     };
   }, [handleGlobalMediaUpload, splashVisible, updateResult]);
 
-  // ── In-app update handler for version floor screen ──
-  const handleFloorUpdate = useCallback(async () => {
-    setFloorUpdateStatus("checking");
-    setFloorUpdateError(null);
-    try {
-      // Try Tauri auto-updater first (works when signed binary exists)
-      const result = await checkForUpdate();
-      // Use only a signed manifest that matches the real published release,
-      // or the verified published installer fallback.
-      await downloadAndInstallVerifiedUpdate(
-        result.update,
-        (progress) => setFloorUpdateProgress(progress),
-        (status) => setFloorUpdateStatus(status),
-      );
-    } catch (err: any) {
-      console.error("[App] Floor update failed:", err);
-      setFloorUpdateError(err?.message || "Update failed. Please try again.");
-      setFloorUpdateStatus("error");
-    }
-  }, []);
-
   return (
     <div className="app">
       <input
@@ -1357,118 +1277,7 @@ function App() {
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
 
-      {/* 2a. Version floor block — server-configured minimum with in-app update */}
-      {!splashVisible &&
-        versionFloorBlocked?.blocked &&
-        !forcedUpdateState.active &&
-        licenseLockReason !== "forced_upgrade" && (
-        <div className="force-update-overlay">
-          <div className="force-update-modal">
-            <div className="force-update-banner force-update-banner--locked">
-              <Icon name="lock" size={16} />
-              <span>{t("update.versionNotSupported")}</span>
-            </div>
-            <div className="force-update-header">
-              <Icon name="system_update" size={24} />
-              <div>
-                <h2 className="force-update-title">{t("update.updateRequired")}</h2>
-                <p className="force-update-subtitle">
-                  v{versionFloorBlocked.currentVersion} · {t("update.versionNoLongerSupported")}
-                </p>
-              </div>
-            </div>
-            <div className="force-update-body">
-              <p className="force-update-message">
-                {t("update.versionBlockedMessage")}
-              </p>
-
-              {floorUpdateStatus === "idle" && (
-                <button
-                  onClick={handleFloorUpdate}
-                  className="force-update-button"
-                  title={t("update.updateNow")}>
-                  <Icon name="system_update" size={18} />
-                  {t("update.updateNow")}
-                </button>
-              )}
-
-              {floorUpdateStatus === "checking" && (
-                <div className="force-update-progress-row">
-                  <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>{t("update.checkingForUpdates")}…</span>
-                </div>
-              )}
-
-              {floorUpdateStatus === "downloading" && (
-                <div className="force-update-progress-row">
-                  <div className="force-update-progress-bar">
-                    <div
-                      className="force-update-progress-fill"
-                      style={{
-                        width: floorUpdateProgress.contentLength
-                          ? `${(floorUpdateProgress.downloaded / floorUpdateProgress.contentLength) * 100}%`
-                          : "60%",
-                      }}
-                    />
-                  </div>
-                  <span className="force-update-progress-text">
-                    {floorUpdateProgress.contentLength
-                      ? `${Math.round((floorUpdateProgress.downloaded / floorUpdateProgress.contentLength) * 100)}%`
-                      : `${t("update.downloading")}…`}
-                  </span>
-                </div>
-              )}
-
-              {floorUpdateStatus === "installing" && (
-                <div className="force-update-progress-row">
-                  <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>{t("update.installingUpdate")}…</span>
-                </div>
-              )}
-
-              {floorUpdateStatus === "relaunching" && (
-                <div className="force-update-progress-row">
-                  <Icon name="sync" size={16} className="force-update-icon--spin" />
-                  <span>{t("update.relaunching")}…</span>
-                </div>
-              )}
-
-              {floorUpdateStatus === "error" && (
-                <div className="force-update-error-row">
-                  <p className="force-update-error-text">{floorUpdateError}</p>
-                  <button
-                    onClick={handleFloorUpdate}
-                    className="force-update-button"
-                    title={t("updateNotification.tryAgain")}>
-                    {t("updateNotification.tryAgain")}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Version floor grace period countdown — shown while grace window is active */}
-      {!splashVisible &&
-        versionFloorBlocked &&
-        !versionFloorBlocked.blocked &&
-        versionFloorGraceStartedAt &&
-        !versionFloorGraceDismissed &&
-        !forcedUpdateState.active &&
-        licenseLockReason !== "forced_upgrade" && (
-          <VersionFloorWarningBanner
-            currentVersion={versionFloorBlocked.currentVersion}
-            minimumVersion={versionFloorBlocked.minimumVersion}
-            startedAt={versionFloorGraceStartedAt}
-            gracePeriodHours={versionFloorBlocked.gracePeriodHours}
-            onUpdate={handleFloorUpdate}
-            onDismiss={() => setVersionFloorGraceDismissed(true)}
-            updateStatus={floorUpdateStatus}
-          />
-        )}
-
-      {/* 2a-b. Server-driven forced update overlay (admin-controlled) — countdown or locked */}
+      {/* 2. Server-driven forced update overlay (admin-controlled) — countdown or locked */}
       {!splashVisible &&
         licenseLockReason !== "forced_upgrade" &&
         forcedUpdateState.active &&
@@ -1487,7 +1296,7 @@ function App() {
         )}
 
       {/* 2b. Force update modal — blocks app when version is too old (age-based) */}
-      {!splashVisible && !versionFloorBlocked && updateResult?.available && versionAge.forceUpdate && (
+      {!splashVisible && !forcedUpdateState.active && updateResult?.available && versionAge.forceUpdate && (
         <ForceUpdateModal
           result={updateResult}
           daysOld={versionAge.daysOld}
@@ -1496,7 +1305,7 @@ function App() {
       )}
 
       {/* 3. Optional update dialog (only when the update is not forced) */}
-      {!splashVisible && !versionFloorBlocked && updateResult?.available && !versionAge.forceUpdate && (
+      {!splashVisible && !forcedUpdateState.active && updateResult?.available && !versionAge.forceUpdate && (
         <UpdateNotification
           result={updateResult}
           onRemindLater={handleRemindLaterUpdate}
@@ -1640,6 +1449,9 @@ function App() {
       )}
 
       <AnnouncementModalHost />
+      {!splashVisible && <UpdateDownloadingBanner />}
+      <UpdateBackgroundNoticeModal />
+      <UpdateCloseAppWarningModal />
     </div>
   );
 }

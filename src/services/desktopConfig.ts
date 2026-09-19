@@ -12,10 +12,10 @@
 
 import { DEFAULT_DESKTOP_CONFIG, type DesktopConfig } from "./desktopConfigTypes";
 import { APP_VERSION, getDeviceApiBaseCandidates, getDeviceId, getDeviceSecret } from "./authService";
-import type { DesktopAnnouncement } from "./announcementService";
+import type { DesktopAnnouncement, ActiveDiscountInfo } from "./announcementService";
 
 // Re-export for backward compatibility
-export type { DesktopConfig };
+export type { DesktopConfig, ActiveDiscountInfo };
 export { DEFAULT_DESKTOP_CONFIG };
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
@@ -108,6 +108,29 @@ export function readDesktopBootstrap(
 export function getCachedDesktopAnnouncement(): DesktopAnnouncement | null {
   if (!bootstrapCache || bootstrapCache.deviceId !== (getDeviceId() || "")) return null;
   return bootstrapCache.response.announcement || null;
+}
+
+export function getActiveDiscount(): ActiveDiscountInfo | null {
+  const announcement = getCachedDesktopAnnouncement();
+  if (!announcement) return null;
+  const isDiscount = Boolean(
+    announcement.offerDiscountPercent ||
+    announcement.offerCode ||
+    announcement.tags?.some((t) => t.toLowerCase().includes("discount") || t.toLowerCase().includes("offer")) ||
+    ["offer", "upgrade"].includes(announcement.tone)
+  );
+  if (!isDiscount) return null;
+
+  return {
+    id: announcement.id,
+    title: announcement.title,
+    code: announcement.offerCode ?? null,
+    discountPercent: announcement.offerDiscountPercent ?? null,
+    durationMonths: announcement.offerDurationMonths ?? null,
+    applicableBillingCycles: announcement.offerApplicableBillingCycles ?? [],
+    claimUrl: announcement.ctaUrl ?? null,
+    expiresAt: announcement.expiresAt ?? null,
+  };
 }
 
 export function subscribeToDesktopAnnouncement(

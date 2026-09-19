@@ -39,7 +39,6 @@ import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEffectivePlan } from "../../services/licenseService";
 import { checkEntitlementSync } from "../../services/entitlementClient";
-import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 
 /** Auto-download bible abbreviations that cannot be deleted */
 const PROTECTED_ABBRS = new Set(AUTO_DOWNLOAD_BIBLES.map(b => b.abbr));
@@ -558,9 +557,10 @@ export default function BibleLibrary({
           Browse &amp; Download
         </button>
         <button
+          type="button"
           className={`bible-library-tab${tab === "installed" ? " active" : ""}`}
           onClick={() => setTab("installed")}
-          title="Install">
+          title="Installed Bibles">
           <Icon name="download_done" size={20} />
           Installed ({installed.length})
         </button>
@@ -572,6 +572,57 @@ export default function BibleLibrary({
           Import
         </button> */}
       </div>
+
+      {/* ── Free Plan Banner ── */}
+      {effectivePlan === "free" && (
+        <div className={`bible-free-mode-banner${hasReachedBibleLimit ? " bible-free-mode-banner--limit" : ""}`}>
+          <div className="bible-free-mode-banner__left">
+            <div className="bible-free-mode-banner__icon">
+              <Icon name={hasReachedBibleLimit ? "warning" : "library_books"} size={18} />
+            </div>
+            <div className="bible-free-mode-banner__body">
+              <div className="bible-free-mode-banner__header">
+                <span className="bible-free-mode-banner__tag">Free Plan</span>
+                <span className="bible-free-mode-banner__limit-count">
+                  {installed.length} / {bibleVersionLimit} versions
+                </span>
+              </div>
+              <p className="bible-free-mode-banner__text">
+                {hasReachedBibleLimit ? (
+                  <>
+                    You have reached your Free plan limit ({installed.length}/{bibleVersionLimit} versions).
+                    To add new translations, delete versions you don't need in the <strong>Installed</strong> tab, or upgrade to unlock unlimited translations.
+                  </>
+                ) : (
+                  <>
+                    Your Free plan gives you access to up to {bibleVersionLimit} offline Bible versions.
+                    You can delete any installed translation at any time to try others, or upgrade for unlimited versions.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="bible-free-mode-banner__actions">
+            {tab !== "installed" && installed.length > 0 && (
+              <button
+                type="button"
+                className="bible-free-mode-banner__btn bible-free-mode-banner__btn--secondary"
+                onClick={() => setTab("installed")}
+              >
+                Manage Installed ({installed.length})
+              </button>
+            )}
+            <a
+              href="https://makechurcheasy.com/subscription/plans"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bible-free-mode-banner__btn bible-free-mode-banner__btn--primary"
+            >
+              Upgrade Plan
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* ── Auto-download banner ── */}
       {autoDownloadRunning && (
@@ -806,6 +857,14 @@ export default function BibleLibrary({
       {/* ── Installed Tab ── */}
       {tab === "installed" && (
         <div className="bible-library-body">
+          {effectivePlan === "free" && (
+            <div className="bible-library-installed-note" style={{ marginBottom: 12, borderColor: "rgba(37, 99, 235, 0.3)", background: "rgba(37, 99, 235, 0.08)" }}>
+              <Icon name="info" size={18} />
+              <span>
+                Free Plan ({installed.length}/{bibleVersionLimit} versions): You can delete any custom or non-default translation to make room for new downloads, or upgrade for unlimited versions.
+              </span>
+            </div>
+          )}
           <div className="bible-library-installed-note">
             <Icon name="info" size={18} />
             <span>Installed Bible versions will appear in the Bible selector when using the Dock UI in OBS.</span>
@@ -838,11 +897,13 @@ export default function BibleLibrary({
                     <div className="bible-library-installed-actions">
                       {!isProtected && (
                         <button
+                          type="button"
                           className="bible-library-delete-btn"
                           onClick={() => handleDeleteRequest(b.abbr, b.name)}
-                          title={`Delete ${b.abbr}`}
+                          title={`Delete ${b.name} (${b.abbr})`}
+                          aria-label={`Delete ${b.name} (${b.abbr})`}
                         >
-                          <Icon name="delete_outline" size={20} />
+                          <Icon name="delete" size={18} />
                         </button>
                       )}
                     </div>
@@ -938,16 +999,18 @@ export default function BibleLibrary({
             </p>
             <div className="bible-library-confirm-actions">
               <button
+                type="button"
                 className="bible-library-confirm-cancel"
                 onClick={() => setConfirmDelete(null)}
                 title="Cancel">
                 Cancel
               </button>
               <button
+                type="button"
                 className="bible-library-confirm-delete"
                 onClick={handleDeleteConfirm}
                 title="Delete">
-                <Icon name="delete" size={20} />
+                <Icon name="delete" size={16} />
                 Delete
               </button>
             </div>
@@ -961,13 +1024,24 @@ export default function BibleLibrary({
           <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Bible Version Limit Reached</h3>
             <p>
-              Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions.
-              You currently have {installed.length} installed.
+              Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions ({installed.length} currently installed).
             </p>
-            <p>Upgrade your plan to install more translations. {UPGRADE_PROMO_FALLBACK}</p>
+            <p>
+              To add another translation, delete an existing version from your Installed Bibles tab, or upgrade your plan for unlimited translations.
+            </p>
             <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowBibleLimitModal(false)} title="Close">Close</button>
-              <a href="https://makechurcheazy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
+              <button
+                type="button"
+                className="lib-confirm-cancel"
+                onClick={() => {
+                  setShowBibleLimitModal(false);
+                  setTab("installed");
+                }}
+                title="Manage Installed"
+              >
+                Manage Installed
+              </button>
+              <a href="https://makechurcheasy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
                 Upgrade Plan
               </a>
             </div>

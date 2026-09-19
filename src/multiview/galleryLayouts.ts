@@ -267,23 +267,10 @@ const GALLERY_FROM_TEMPLATES: GalleryLayout[] = TEMPLATE_LIBRARY.map(templateToG
 
 const GALLERY_EXTRA: GalleryLayout[] = [
   {
-    id: "translation-layout",
-    name: "Main Content + Translation",
-    description: "A full-width content area with two translation bands. Assign the languages you need.",
-    category: "translation",
-    scenePrefix: "MultiView - Translation",
-    useCases: ["Multilingual services", "International broadcasts", "Mission events"],
-    slots: [
-      { id: "camera", label: "Main content", contentType: "camera", x: 0, y: 0, width: 1920, height: 702, zIndex: 1 },
-      { id: "lang-primary", label: "Primary translation", contentType: "translation", x: 0, y: 702, width: 1920, height: 189, zIndex: 2 },
-      { id: "lang-secondary", label: "Secondary translation", contentType: "translation", x: 0, y: 891, width: 1920, height: 189, zIndex: 3 },
-    ],
-  },
-  {
     id: "speaker-scripture-translation",
     name: "Main Content + Scripture + Translation",
     description: "A main content area with Scripture and translation areas. Assign your own scenes to each area.",
-    category: "hybrid",
+    category: "translation",
     scenePrefix: "MultiView - Speaker Scripture Translation",
     useCases: ["Premium church broadcasts", "Full-service production", "Simultaneous translation services"],
     slots: [

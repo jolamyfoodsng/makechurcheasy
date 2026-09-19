@@ -13,6 +13,9 @@ import {
 import { getEnvConfig } from "../services/envConfig";
 import { setAuthSession } from "../services/authService";
 import { TRIAL_ACTIVE_KEY } from "./dockEntitlement";
+import ForcedUpdateOverlay from "../components/ForcedUpdateOverlay";
+import { useForcedUpdate } from "../hooks/useForcedUpdate";
+import LoadingScreen from "../components/LoadingScreen";
 
 /**
  * Auth gate for the OBS Dock.
@@ -136,6 +139,7 @@ async function getDeviceIdFromSession(): Promise<string | null> {
 export default function DockAuthGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const isTestEnv = ENV_CONFIG.isTest;
+  const forcedUpdate = useForcedUpdate();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
   const authCheckInFlightRef = useRef<Promise<void> | null>(null);
@@ -240,38 +244,65 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [authed, ready, checkAuth]);
 
+  const forcedUpdateOverlay = forcedUpdate.isVisible ? (
+    <ForcedUpdateOverlay
+      state={forcedUpdate.state}
+      isDock={true}
+      onRefresh={async () => {
+        await forcedUpdate.refetch();
+        void checkAuth();
+      }}
+    />
+  ) : null;
+
+  // When a forced update is blocked (or emergency lock is active),
+  // the dock interface is strictly compulsory-locked.
+  // This blocks everything else, even if the desktop app is closed or unauthenticated.
+  if (forcedUpdate.isVisible && forcedUpdate.state.blocked) {
+    return forcedUpdateOverlay;
+  }
+
   if (!ready) {
     return (
-      <div className="dock-auth-loading">
-        <div className="dock-auth-spinner" />
-      </div>
+      <>
+        <LoadingScreen variant="dock" label="Connecting to MakeChurchEasy…" />
+        {forcedUpdateOverlay}
+      </>
     );
   }
 
   if (!authed) {
     return (
-      <div className="dock-auth-blocked">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        <h2>{t('auth.title')}</h2>
-        <p>
-          {isTestEnv
-            ? "Please open MakeChurchEasy Test on this computer and sign in there first."
-            : t('auth.description')}
-        </p>
-        <button className="dock-auth-refresh" onClick={() => window.location.reload()} title={t('auth.refresh')}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+      <>
+        <div className="dock-auth-blocked">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          {t('auth.refresh')}
-        </button>
-        <p className="dock-auth-hint">{t('auth.autoDetect')}</p>
-      </div>
+          <h2>{t('auth.title')}</h2>
+          <p>
+            {isTestEnv
+              ? "Please open MakeChurchEasy Test on this computer and sign in there first."
+              : t('auth.description')}
+          </p>
+          <button className="dock-auth-refresh" onClick={() => window.location.reload()} title={t('auth.refresh')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            {t('auth.refresh')}
+          </button>
+          <p className="dock-auth-hint">{t('auth.autoDetect')}</p>
+        </div>
+        {forcedUpdateOverlay}
+      </>
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {forcedUpdateOverlay}
+    </>
+  );
 }

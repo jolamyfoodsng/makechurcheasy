@@ -8,7 +8,21 @@
 
 export type DockTimeTool = "timer" | "clock";
 export type DockTimeDisplayMode = "fullscreen" | "lower-third";
-export type DockTimePlacement = "left" | "right";
+export type DockTimePlacement =
+  | "left"
+  | "right"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right"
+  | "center";
+
+export type DockClockTheme =
+  | "digital-modern"
+  | "analog-wall"
+  | "broadcast-pill"
+  | "neon"
+  | "elegant";
 
 export interface DockTimerOverlayState {
   /** Seconds already elapsed before the current running period. */
@@ -19,6 +33,8 @@ export interface DockTimerOverlayState {
 }
 
 export interface DockClockOverlayState {
+  theme?: DockClockTheme;
+  transparentBg?: boolean;
   hour12: boolean;
   showSeconds: boolean;
   showDate: boolean;

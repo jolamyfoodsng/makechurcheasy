@@ -7262,8 +7262,8 @@ body.dock-modal-open {
 }
 
 .dock-media-pill--small {
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 3px 6px;
+  font-size: 9.5px;
 }
 
 .dock-media-pill--small .dock-media-pill__count {
@@ -8089,13 +8089,13 @@ body.dock-modal-open {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  min-width: 30px;
-  height: 74px;
-  padding: 8px 0;
+  width: 26px;
+  min-width: 26px;
+  height: 60px;
+  padding: 6px 0;
   border: 1px solid var(--dock-border);
   border-right: 0;
-  border-radius: 10px 0 0 10px;
+  border-radius: 7px 0 0 7px;
   background: var(--dock-surface-alt);
   color: var(--dock-text-dim);
   font: inherit;
@@ -8112,14 +8112,16 @@ body.dock-modal-open {
 .dock-bible-reader__quick-actions--menu-right .dock-bible-reader__quick-actions-trigger {
   border-right: 1px solid var(--dock-border);
   border-left: 0;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 7px 7px 0;
 }
 
 .dock-bible-reader__quick-actions-label {
   display: inline-block;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -8145,8 +8147,8 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 3px;
@@ -8167,11 +8169,11 @@ body.dock-modal-open {
 }
 
 .dock-bible-reader__font-size-value {
-  min-width: 42px;
+  min-width: 36px;
   color: var(--dock-accent-hover);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 18px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -8179,17 +8181,17 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-input {
   flex: 1;
   min-width: 0;
-  width: 42px;
-  height: 22px;
+  width: 36px;
+  height: 18px;
   padding: 0 2px;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--dock-accent-hover);
   font: inherit;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -8218,17 +8220,17 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-menu {
   position: absolute;
   top: 50%;
-  right: calc(100% + 8px);
+  right: calc(100% + 6px);
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 204px;
-  max-height: min(360px, calc(100vh - 24px));
+  gap: 5px;
+  width: 168px;
+  max-height: min(320px, calc(100vh - 24px));
   overflow-y: auto;
-  padding: 10px;
+  padding: 6px 8px;
   border: 1px solid var(--dock-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background-color: #0b0f19 !important;
   background: #0b0f19 !important;
   opacity: 1 !important;
@@ -8238,19 +8240,16 @@ body.dock-modal-open {
 
 .dock-bible-reader__quick-actions--menu-right .dock-bible-reader__font-size-menu {
   right: auto;
-  left: calc(100% + 8px);
+  left: calc(100% + 6px);
 }
 
 .dock-bible-reader__font-size-menu-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-}
-
-.dock-bible-reader__font-size-menu-header {
+  gap: 6px;
   color: var(--dock-text);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
@@ -8267,12 +8266,12 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 4px;
   background: transparent;
   color: var(--dock-text-dim, #94A3B8);
   cursor: pointer;
@@ -8289,7 +8288,7 @@ body.dock-modal-open {
 
 .dock-output-quick-actions__live {
   color: var(--dock-success, #22c55e);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -8302,7 +8301,7 @@ body.dock-modal-open {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -8313,7 +8312,7 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-field-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 6px;
+  gap: 4px;
   align-items: end;
 }
 
@@ -8325,17 +8324,14 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-field-label {
   min-width: 0;
   color: var(--dock-text-secondary);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
 }
 
 .dock-bible-reader__font-size-field small {
-  color: var(--dock-text-dim);
-  font-size: 9px;
-  font-weight: 400;
-  line-height: 1.25;
+  display: none;
 }
 
 .dock-bible-reader__font-size-controls {
@@ -8344,29 +8340,29 @@ body.dock-modal-open {
   justify-content: space-between;
   gap: 1px;
   width: 100%;
-  min-height: 26px;
+  min-height: 22px;
   padding: 1px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 6px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--dock-surface-alt) 82%, transparent);
 }
 
 .dock-bible-reader__size-presets {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
 }
 
 .dock-bible-reader__size-preset {
   flex: 1 1 0;
-  min-height: 38px;
-  padding: 6px 10px;
+  min-height: 22px;
+  padding: 2px 4px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--dock-surface-alt, #1e293b);
   color: var(--dock-text-secondary, #94a3b8);
   font: inherit;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -8390,14 +8386,14 @@ body.dock-modal-open {
 
 .dock-bible-reader__font-size-select {
   width: 100%;
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 22px;
+  padding: 0 6px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--dock-surface-alt);
   color: var(--dock-text);
   font: inherit;
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .dock-bible-reader__font-size-select:focus {
@@ -8405,12 +8401,72 @@ body.dock-modal-open {
   outline-offset: 1px;
 }
 
+.dock-bible-reader__compare-toggle-row {
+  grid-column: 1 / -1;
+  display: flex;
+  width: 100%;
+}
+
+.dock-bible-reader__compare-mode-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #1e293b);
+  color: var(--dock-text-secondary, #94a3b8);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.dock-bible-reader__compare-mode-toggle-btn:hover {
+  border-color: var(--dock-accent);
+  color: var(--dock-text);
+  background: color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface-alt, #1e293b));
+}
+
+.dock-bible-reader__compare-mode-toggle-btn--active {
+  border-color: var(--dock-accent);
+  background: color-mix(in srgb, var(--dock-accent) 22%, var(--dock-surface-alt, #1e293b));
+  color: var(--dock-text);
+  box-shadow: 0 0 0 1px var(--dock-accent);
+}
+
+.dock-bible-reader__compare-mode-toggle-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-bible-reader__compare-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--dock-accent);
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .dock-bible-reader__font-size-menu-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding-top: 2px;
+  gap: 4px;
+  padding-top: 3px;
   border-top: 1px solid color-mix(in srgb, var(--dock-border) 72%, transparent);
 }
 
@@ -8418,16 +8474,16 @@ body.dock-modal-open {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 
 .dock-bible-reader__font-size-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: var(--dock-text-dim);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -8438,8 +8494,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-reader__font-size-checkbox input {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   margin: 0;
   accent-color: var(--dock-accent);
 }
@@ -8464,14 +8520,14 @@ body.dock-modal-open {
 }
 
 .dock-bible-reader__font-size-save {
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 22px;
+  padding: 0 8px;
   border: 1px solid var(--dock-accent);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--dock-accent);
   color: #fff;
   font: inherit;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -10972,23 +11028,20 @@ body.dock-modal-open {
 .dock-bible-verse-row {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px 12px 10px;
-  box-sizing: border-box;
+  align-items: stretch;
   min-width: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 50%, transparent);
+  padding: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   background: transparent;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
   outline: none;
-  transform-origin: center center;
-  will-change: transform;
+  border-radius: 4px;
 }
 
 .dock-bible-verse-row:active {
-  transform: scale(0.98);
+  transform: scale(0.99);
   transition: transform 0.08s ease;
 }
 
@@ -10996,51 +11049,432 @@ body.dock-modal-open {
   border-bottom: none;
 }
 
-.dock-bible-verse-row--selected .dock-bible-verse-row__num,
-.dock-bible-verse-row--highlighted .dock-bible-verse-row__num {
-  color: color-mix(in srgb, #fff 92%, var(--dock-accent) 8%);
-}
-
-.dock-bible-verse-row--selected .dock-bible-verse-row__text,
-.dock-bible-verse-row--highlighted .dock-bible-verse-row__text {
-  color: #fff;
+.dock-bible-verse-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .dock-bible-verse-row--selected,
 .dock-bible-verse-row--highlighted {
-  background: color-mix(in srgb, var(--dock-accent) 14%, var(--dock-surface));
-  border-bottom-color: color-mix(in srgb, var(--dock-accent) 28%, var(--dock-border));
-  transition: background 0.15s ease, border-color 0.15s ease;
+  border: 1.5px solid #f97316 !important;
+  border-radius: 8px !important;
+  background: rgba(249, 115, 22, 0.08) !important;
+  margin: 3px 0;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.12);
 }
 
 .dock-bible-verse-row__num {
-  padding-top: 4px;
-  color: var(--dock-text-dim);
-  font-size: 12px;
+  width: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  color: #94a3b8;
+  font-size: 13px;
   font-weight: 700;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  min-width: 18px;
+  padding: 0;
+  flex-shrink: 0;
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+}
+
+.dock-bible-verse-row--selected .dock-bible-verse-row__num,
+.dock-bible-verse-row--highlighted .dock-bible-verse-row__num {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.15);
 }
 
 .dock-bible-verse-row__main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-items: flex-start;
+  align-items: center;
   min-width: 0;
   flex: 1 1 auto;
   max-width: 100%;
+  padding: 8px 12px;
 }
 
 .dock-bible-verse-row__text {
   min-width: 0;
-  color: var(--dock-text);
-  font-size: 12px;
-  line-height: 1.55;
+  color: #cbd5e1;
+  font-size: 11.5px;
+  line-height: 1.45;
   overflow-wrap: break-word;
   word-break: normal;
   text-wrap: pretty;
   letter-spacing: 0.01em;
+}
+
+.dock-bible-verse-star-badge {
+  display: inline-block;
+  color: #eab308;
+  font-size: 9px;
+  margin-left: 2px;
+  vertical-align: super;
+}
+
+.dock-bible-verse-row--selected .dock-bible-verse-row__text,
+.dock-bible-verse-row--highlighted .dock-bible-verse-row__text {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* ── Context Menu for Verse Actions ── */
+.dock-bible-context-menu {
+  position: fixed;
+  min-width: 150px;
+  background: #181b24;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-bible-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dock-bible-context-menu__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* ── Compact Bible Chapter Navigation Bar ── */
+.dock-bible-chapter-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--dock-surface);
+  position: relative;
+  z-index: 25;
+  flex-shrink: 0;
+}
+
+.dock-bible-chapter-bar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-bible-chapter-bar__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.dock-bible-chapter-bar__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dock-bible-chapter-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  gap: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid #f97316;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-bible-chapter-trigger:hover {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.dock-bible-chapter-trigger__text {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ── Floating Book & Chapter Dropdown ── */
+.dock-bible-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  right: 8px;
+  max-width: 340px;
+  margin: 0 auto;
+  background: #141720;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+  padding: 12px;
+  z-index: 1001;
+  backdrop-filter: blur(12px);
+}
+
+.dock-bible-picker-popover::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid #141720;
+}
+
+.dock-bible-picker-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.dock-bible-picker-tab-btn {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-bible-picker-tab-btn:hover {
+  color: #fff;
+}
+
+.dock-bible-picker-tab-btn--active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 700;
+}
+
+.dock-bible-picker-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.dock-bible-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+}
+
+.dock-bible-picker-search input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 12px;
+  width: 100%;
+}
+
+.dock-bible-picker-search input::placeholder {
+  color: #64748b;
+}
+
+.dock-bible-picker-books-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+  padding-right: 2px;
+}
+
+.dock-bible-picker-book-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 4px;
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.12s ease;
+}
+
+.dock-bible-picker-book-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.dock-bible-picker-book-btn--active {
+  background: #ea580c !important;
+  border-color: #f97316 !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.dock-bible-picker-chapters-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.dock-bible-picker-chapter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.dock-bible-picker-chapter-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.dock-bible-picker-chapter-btn--active {
+  background: #ea580c !important;
+  border-color: #f97316 !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+/* Hide redundant reading header inside reader to maximize vertical scripture space */
+.dock-module--bible .dock-bible-reader__ref-header {
+  display: none !important;
+}
+
+/* ── Bible Bottom Toolbar Styling ── */
+.dock-module--bible .dock-btm-toolbar {
+  padding: 6px 8px;
+  min-height: 42px;
+  background: #101217;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dock-module--bible .dock-btm-toolbar__row {
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-module--bible .dock-btm-segmented {
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dock-module--bible .dock-btm-segmented__item {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.dock-module--bible .dock-btm-segmented__item--active {
+  background: #ea580c !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.dock-bible-reader__verse-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dock-bible-reader__verse-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-bible-reader__verse-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dock-bible-reader__verse-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dock-module--bible .dock-btm-toolbar__clear--inline,
+.dock-module--bible .dock-btm-toolbar__icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-module--bible .dock-btm-toolbar__clear--inline:hover,
+.dock-module--bible .dock-btm-toolbar__icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .translation-badge {
@@ -11626,14 +12060,14 @@ body.dock-modal-open {
 .dock-vertical-nav {
   display: flex;
   flex-direction: column;
-  width: 56px;
+  width: 54px;
   flex-shrink: 0;
   background: var(--dock-surface);
   border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 7px 5px;
-  gap: 6px;
+  padding: 8px 5px;
+  gap: 8px;
   transition: width 0.2s ease, opacity 0.2s ease;
 }
 
@@ -11641,16 +12075,16 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1 1 0;
-  width: 46px;
-  height: auto;
-  min-height: 48px;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
   margin: 0 auto;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--dock-surface-alt) 78%, var(--dock-surface));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--dock-text-dim);
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
@@ -11658,32 +12092,31 @@ body.dock-modal-open {
 }
 
 .dock-vertical-nav__item:hover {
-  color: var(--dock-text);
-  border-color: color-mix(in srgb, var(--dock-accent) 52%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-accent-soft) 62%, var(--dock-surface-hover));
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.24);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
   transform: translateY(-1px);
 }
 
 .dock-vertical-nav__item:focus-visible {
-  outline: 2px solid var(--dock-accent-hover);
+  outline: 2px solid #f97316;
   outline-offset: 2px;
 }
 
 .dock-vertical-nav__item--active {
-  color: #fff;
-  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
-  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
+  color: #f97316;
+  border: 1.5px solid #f97316;
+  background: rgba(249, 115, 22, 0.12);
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.2);
 }
 
 /* Keep the Worship/Notes secondary rail visibly selected as a filled item,
    matching the primary vertical navigation. */
 .dock-root--vertical-tabs .dock-module--worship .dock-worship-subtab.dock-vertical-nav__item--active {
-  color: #fff;
-  border-color: color-mix(in srgb, var(--dock-accent-hover) 72%, var(--dock-border));
-  background: color-mix(in srgb, var(--dock-accent) 30%, var(--dock-surface));
-  box-shadow: inset 3px 0 0 var(--dock-accent-hover), 0 4px 12px rgba(15, 23, 42, 0.24);
+  color: #f97316;
+  border: 1.5px solid #f97316;
+  background: rgba(249, 115, 22, 0.12);
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.2);
 }
 
 /* Tooltip for vertical nav items */
@@ -18596,6 +19029,217 @@ body.dock-modal-open {
   font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.dock-worship-summary__menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  box-sizing: border-box;
+}
+
+.dock-worship-summary__menu-btn:hover,
+.dock-worship-summary__menu-btn:focus-visible {
+  background: color-mix(in srgb, var(--dock-accent) 14%, var(--dock-surface-hover, rgba(255, 255, 255, 0.08)));
+  color: var(--dock-text);
+  outline: none;
+}
+
+.dock-worship-summary__menu-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-worship-summary__menu-btn-content svg {
+  width: 15px;
+  height: 15px;
+  opacity: 0.85;
+}
+
+.dock-worship-summary__menu-btn-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dock-accent) 22%, transparent);
+  color: var(--dock-accent-bright, var(--dock-accent));
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.dock-worship-summary__menu-btn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.65);
+}
+
+.dock-auto-advance-banner {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px 5px 14px;
+  border-radius: 999px;
+  background: rgba(18, 22, 28, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  animation: dock-banner-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+@keyframes dock-banner-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dock-auto-advance-banner__info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.dock-auto-advance-banner__info:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.dock-auto-advance-banner__indicator {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  flex-shrink: 0;
+}
+
+.dock-auto-advance-banner__indicator--paused {
+  background: #f59e0b;
+}
+
+.dock-auto-advance-banner__pulse {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  opacity: 0.7;
+  animation: dock-banner-pulse 1.8s infinite ease-out;
+}
+
+.dock-auto-advance-banner__indicator--paused .dock-auto-advance-banner__pulse {
+  display: none;
+}
+
+@keyframes dock-banner-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+.dock-auto-advance-banner__texts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-auto-advance-banner__status {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #e2e8f0;
+  letter-spacing: -0.01em;
+}
+
+.dock-auto-advance-banner__countdown {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.14);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.dock-auto-advance-banner--paused .dock-auto-advance-banner__countdown {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.dock-auto-advance-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dock-auto-advance-banner__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s ease;
+}
+
+.dock-auto-advance-banner__btn:hover,
+.dock-auto-advance-banner__btn:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  outline: none;
+}
+
+.dock-auto-advance-banner__btn--stop:hover,
+.dock-auto-advance-banner__btn--stop:focus-visible {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+}
+
+.dock-auto-advance-banner__btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .dock-worship-summary__actions .dock-shell-icon-btn {
@@ -29503,6 +30147,32 @@ body.dock-modal-open {
   margin-bottom: 10px;
 }
 
+.dock-time-toolbar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+  padding: 4px;
+}
+
+.dock-time-toolbar-options__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text, #f8fafc);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+}
+
+.dock-time-switches--toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+}
+
 .dock-time-panel__format,
 .dock-time-live {
   display: inline-flex;
@@ -29536,26 +30206,59 @@ body.dock-modal-open {
 
 .dock-time-preview__card {
   position: absolute;
-  display: grid;
-  grid-template-columns: 4px minmax(0, 1fr);
+  display: flex;
+  align-items: center;
   gap: 8px;
-  min-width: min(230px, calc(100% - 20px));
+  min-width: min(210px, calc(100% - 20px));
   max-width: calc(100% - 20px);
-  padding: 9px 11px 10px 9px;
+  padding: 8px 12px 9px 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 5px;
+  border-radius: 6px;
   background: rgba(17, 24, 39, 0.94);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
 }
 
-.dock-time-preview--lower-third.dock-time-preview--left .dock-time-preview__card {
+.dock-time-preview--lower-third.dock-time-preview--left .dock-time-preview__card,
+.dock-time-preview--lower-third.dock-time-preview--bottom-left .dock-time-preview__card {
   left: 10px;
   bottom: 10px;
+  top: auto;
+  right: auto;
 }
 
-.dock-time-preview--lower-third.dock-time-preview--right .dock-time-preview__card {
+.dock-time-preview--lower-third.dock-time-preview--right .dock-time-preview__card,
+.dock-time-preview--lower-third.dock-time-preview--bottom-right .dock-time-preview__card {
   right: 10px;
   bottom: 10px;
+  top: auto;
+  left: auto;
+}
+
+.dock-time-preview--lower-third.dock-time-preview--top-left .dock-time-preview__card {
+  left: 10px;
+  top: 10px;
+  bottom: auto;
+  right: auto;
+}
+
+.dock-time-preview--lower-third.dock-time-preview--top-right .dock-time-preview__card {
+  right: 10px;
+  top: 10px;
+  bottom: auto;
+  left: auto;
+}
+
+.dock-time-preview--transparent .dock-time-preview__card {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.dock-time-preview--transparent .dock-time-preview__value,
+.dock-time-preview--transparent .dock-time-preview__label,
+.dock-time-preview--transparent .dock-time-preview__date {
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 0, 0, 0.7);
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__card {
@@ -29568,15 +30271,19 @@ body.dock-modal-open {
   background: transparent;
   box-shadow: none;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
 }
 
 .dock-time-preview__accent {
-  min-height: 100%;
+  width: 4px;
+  min-height: 28px;
+  align-self: stretch;
   border-radius: 3px;
   background: var(--dock-accent, #f97316);
+  flex-shrink: 0;
 }
 
 .dock-time-preview__content {
@@ -29598,12 +30305,73 @@ body.dock-modal-open {
 }
 
 .dock-time-preview__value {
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--dock-text, #f8fafc);
-  font-size: 28px;
+  font-size: 24px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
   line-height: 1;
+}
+
+/* ── Preview Analog Clock ── */
+.dock-time-analog-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dock-time-analog-dial {
+  width: 36px;
+  height: 36px;
+}
+
+.dock-time-preview--fullscreen .dock-time-analog-dial {
+  width: 64px;
+  height: 64px;
+}
+
+/* ── Preview Theme Styles ── */
+.dock-time-preview--theme-broadcast-pill .dock-time-preview__card {
+  border-radius: 9999px;
+  padding: 6px 14px 6px 10px;
+}
+
+.dock-time-pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.dock-time-preview--theme-broadcast-pill .dock-time-preview__value {
+  font-size: 18px;
+}
+
+.dock-time-preview--theme-neon .dock-time-preview__card {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.25);
+}
+
+.dock-time-preview--theme-neon .dock-time-preview__value {
+  color: #67e8f9;
+  font-family: monospace;
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+}
+
+.dock-time-preview--theme-elegant .dock-time-preview__card {
+  border-color: rgba(234, 179, 8, 0.4);
+  background: linear-gradient(135deg, rgba(28, 24, 18, 0.95), rgba(15, 23, 42, 0.95));
+}
+
+.dock-time-preview--theme-elegant .dock-time-preview__value {
+  color: #fef3c7;
+  font-family: Georgia, serif;
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__accent { display: none; }
@@ -29620,7 +30388,7 @@ body.dock-modal-open {
 }
 
 .dock-time-preview--fullscreen .dock-time-preview__value {
-  font-size: 40px;
+  font-size: 36px;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
 }
 
@@ -29630,7 +30398,7 @@ body.dock-modal-open {
 }
 
 .dock-time-preview__date {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--dock-text-dim, #cbd5e1);
   font-size: 9px;
   font-weight: 600;
@@ -29640,6 +30408,102 @@ body.dock-modal-open {
   display: grid;
   gap: 10px;
   margin-top: 10px;
+}
+
+/* ── Theme Grid & Cards ── */
+.dock-time-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+@media (max-width: 360px) {
+  .dock-time-theme-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dock-time-theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 3px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #172033);
+  color: var(--dock-text-dim, #94a3b8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.dock-time-theme-card:hover {
+  background: var(--dock-hover, #1e293b);
+  color: var(--dock-text, #f8fafc);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dock-time-theme-card--active {
+  border-color: var(--dock-accent, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--dock-accent, #f97316);
+  font-weight: 700;
+}
+
+.dock-time-theme-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-time-theme-card__name {
+  text-align: center;
+  line-height: 1.15;
+  font-size: 9.5px;
+  word-break: break-word;
+}
+
+/* ── Corner Placement Grid ── */
+.dock-time-placement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dock-time-placement-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #172033);
+  color: var(--dock-text-dim, #94a3b8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-time-placement-btn:hover {
+  background: var(--dock-hover, #1e293b);
+  color: var(--dock-text, #f8fafc);
+}
+
+.dock-time-placement-btn--active {
+  border-color: var(--dock-accent, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--dock-accent, #f97316);
+  font-weight: 700;
 }
 
 .dock-time-field {
@@ -29671,57 +30535,6 @@ body.dock-modal-open {
   border-color: var(--dock-accent, #f97316);
 }
 
-.dock-time-segmented {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.dock-time-segmented__button { min-height: 30px; padding: 6px; }
-
-.dock-time-timer-readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 10px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 4px;
-  background: var(--dock-surface-alt, #172033);
-}
-
-.dock-time-timer-readout span {
-  color: var(--dock-text-dim, #94a3b8);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.dock-time-timer-readout strong {
-  color: var(--dock-text, #f8fafc);
-  font-size: 19px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-}
-
-.dock-time-switches {
-  display: grid;
-  gap: 7px;
-  padding: 9px 10px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 4px;
-  background: var(--dock-surface-alt, #172033);
-}
-
-.dock-time-switches label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--dock-text-dim, #cbd5e1);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.dock-time-switches input { accent-color: var(--dock-accent, #f97316); }
-
 .dock-time-message {
   margin-top: 10px;
   border: 1px solid var(--dock-border, #334155);
@@ -29734,13 +30547,6 @@ body.dock-modal-open {
 .dock-time-message--info { color: var(--dock-text-dim, #cbd5e1); }
 .dock-time-message--success { border-color: rgba(34, 197, 94, 0.45); color: #86efac; }
 .dock-time-message--error { border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
-
-.dock-time-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
 
 .dock-mv-tab__header {
   display: flex;
@@ -31023,6 +31829,127 @@ body.dock-modal-open {
   margin-top: 8px;
 }
 
+/* ── Unified Studio Properties Group (Frame, Background, Spacing) ── */
+.dock-mv-properties-group {
+  margin: 8px 0 10px 0;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.dock-mv-properties-group__header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--dock-text-dim, #94a3b8);
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+  border-radius: 5px;
+}
+
+.dock-mv-properties-group__header:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--dock-text, #f1f5f9);
+}
+
+.dock-mv-properties-group__header--open {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.dock-mv-properties-group__header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dock-mv-properties-group__title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--dock-text, #f1f5f9);
+}
+
+.dock-mv-properties-group__summary {
+  font-size: 11px;
+  color: var(--dock-text-dim, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 4px;
+  opacity: 0.85;
+}
+
+.dock-mv-properties-group__chevron {
+  color: var(--dock-text-dim, #94a3b8);
+  flex-shrink: 0;
+}
+
+.dock-mv-properties-group .dock-mv-property {
+  margin: 0;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+}
+
+.dock-mv-properties-group .dock-mv-property:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dock-mv-properties-group .dock-mv-property__label {
+  width: 74px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text-dim, #94a3b8);
+  text-transform: capitalize;
+  letter-spacing: 0.2px;
+}
+
+.dock-mv-properties-group .dock-mv-property__row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: unset;
+}
+
+.dock-mv-properties-group .dock-mv-property__value {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dock-text, #f1f5f9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-properties-group .dock-mv-property__action {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
 .dock-mv-property__label {
   display: block;
   font-size: 11px;
@@ -31100,6 +32027,316 @@ body.dock-modal-open {
 
 .dock-mv-property__select:focus {
   border-color: var(--dock-border-active);
+}
+
+/* ── Multi-View Margin Section & Affect Background ── */
+.dock-mv-margin-section {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--dock-surface, #1E293B);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dock-mv-margin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-margin-label-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text-dim, #94A3B8);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dock-mv-margin-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--dock-accent-bg, rgba(99, 102, 241, 0.15));
+  color: var(--dock-accent, #818CF8);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.dock-mv-margin-reset-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.dock-mv-margin-reset-btn:hover {
+  border-color: var(--dock-border-active, #6366F1);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-margin-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dock-mv-margin-slider {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  accent-color: var(--dock-accent, #6366F1);
+  cursor: pointer;
+}
+
+.dock-mv-margin-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dock-mv-margin-preset-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--dock-border, #334155);
+  background: var(--dock-bg, #0F172A);
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-mv-margin-preset-chip:hover {
+  border-color: var(--dock-accent, #6366F1);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-margin-preset-chip--active {
+  background: var(--dock-accent, #6366F1);
+  border-color: var(--dock-accent, #6366F1);
+  color: #FFFFFF;
+}
+
+/* Affect Background Card — stylish, clean, and intuitive */
+.dock-mv-affect-bg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--dock-border, #334155);
+  background: var(--dock-bg, #0F172A);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.dock-mv-affect-bg-card:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.dock-mv-affect-bg-card--active {
+  border-color: var(--dock-accent, #6366F1);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.dock-mv-affect-bg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-affect-bg-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dock-mv-affect-bg-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dock-text-dim, #94A3B8);
+  transition: all 0.2s ease;
+}
+
+.dock-mv-affect-bg-card--active .dock-mv-affect-bg-icon {
+  background: var(--dock-accent, #6366F1);
+  color: #FFFFFF;
+}
+
+.dock-mv-affect-bg-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text, #F8FAFC);
+}
+
+/* Stylish Toggle Switch */
+.dock-mv-switch {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  border-radius: 9px;
+  background: var(--dock-border, #334155);
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dock-mv-switch--active {
+  background: var(--dock-accent, #6366F1);
+}
+
+.dock-mv-switch-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dock-mv-switch--active .dock-mv-switch-knob {
+  transform: translateX(14px);
+}
+
+.dock-mv-affect-bg-desc {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--dock-text-dim, #94A3B8);
+  margin: 0;
+}
+
+.dock-mv-affect-bg-card--active .dock-mv-affect-bg-desc {
+  color: rgba(248, 250, 252, 0.85);
+}
+
+/* ── Multi-View Spacing & Margin Modal ── */
+.dock-mv-spacing-modal {
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(88vh, 600px);
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-mv-spacing-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.dock-mv-spacing-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+}
+
+.dock-mv-spacing-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-mv-spacing-group-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-mv-spacing-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-mv-spacing-group-desc {
+  font-size: 10px;
+  color: var(--dock-text-dim, #94A3B8);
+}
+
+/* Stepper Increaser / Decreaser */
+.dock-mv-stepper {
+  display: flex;
+  align-items: center;
+}
+
+.dock-mv-stepper__control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 6px;
+  background: var(--dock-bg, #0F172A);
+  overflow: hidden;
+}
+
+.dock-mv-stepper__btn {
+  width: 28px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--dock-text, #F8FAFC);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.dock-mv-stepper__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dock-accent, #6366F1);
+}
+
+.dock-mv-stepper__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dock-mv-stepper__val {
+  min-width: 44px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+  padding: 0 4px;
+  user-select: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dock-mv-spacing-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dock-border, #334155);
+  background: rgba(15, 23, 42, 0.4);
 }
 
 /* Background editor modal */
@@ -35346,11 +36583,11 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-module--bible--compact .dock-bible-reader__quick-actions-trigger {
-  width: 28px;
-  min-width: 28px;
-  height: 68px;
-  padding: 7px 0;
-  font-size: 9px;
+  width: 22px;
+  min-width: 22px;
+  height: 52px;
+  padding: 4px 0;
+  font-size: 8.5px;
 }
 
 .dock-module--bible--compact .dock-bible-reader__quick-actions {
@@ -36780,15 +38017,15 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-media-console--ultra-compact {
-  max-height: 310px;
+  max-height: none;
 }
 
 .dock-media-console--micro {
-  max-height: 360px;
+  max-height: none;
 }
 
 .dock-media-console--micro .dock-media-gallery-card__name,
-.dock-media-console--micro .dock-media-gall.dock-media-console--compactery-card__meta,
+.dock-media-console--micro .dock-media-gallery-card__meta,
 .dock-media-console--micro .dock-media-gallery-card__type-badge,
 .dock-media-console--micro .dock-media-gallery-card__duration {
   font-size: 7px;
@@ -36812,6 +38049,158 @@ button.dock-btm-toolbar__clear--inline,
 .dock-media-console--micro .dock-media-list {
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
+}
+
+/* ── Ultra-compact (height <= 400px) media console rules ── */
+.dock-media-console--ultra-compact .dock-media-pills {
+  padding: 2px 0;
+  gap: 3px;
+  border-bottom: none;
+}
+
+.dock-media-console--ultra-compact .dock-media-pills--secondary {
+  padding: 1px 0 2px;
+  gap: 3px;
+}
+
+.dock-media-console--ultra-compact .dock-media-pill,
+.dock-media-console--ultra-compact .dock-media-pill--small {
+  padding: 1px 5px;
+  font-size: 8px;
+  line-height: 14px;
+}
+
+.dock-media-console--ultra-compact .dock-media-pill__count {
+  font-size: 7.5px;
+}
+
+.dock-media-console--ultra-compact .dock-media-search {
+  min-height: 22px;
+  height: 22px;
+  padding: 0 4px;
+}
+
+.dock-media-console--ultra-compact .dock-media-search__input {
+  min-height: 18px;
+  font-size: 9px;
+  padding: 0 2px;
+}
+
+.dock-media-console--ultra-compact .dock-media-search-row {
+  gap: 4px;
+}
+
+.dock-media-console--ultra-compact .dock-media-search-row .dock-btn {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+}
+
+.dock-media-console--ultra-compact .dock-media-list {
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+  gap: 6px;
+}
+
+.dock-media-console--ultra-compact .dock-media-gallery-card__meta {
+  padding: 3px 5px;
+  gap: 2px;
+}
+
+.dock-media-console--ultra-compact .dock-media-gallery-card__name {
+  font-size: 8px;
+  line-height: 1.1;
+}
+
+.dock-media-console--ultra-compact .dock-media-gallery-card__duration {
+  font-size: 7.5px;
+}
+
+.dock-media-console--ultra-compact .dock-media-gallery-card__type-badge {
+  font-size: 6.5px;
+  padding: 1px 3px;
+}
+
+.dock-media-console--ultra-compact .dock-media-section__meta {
+  display: none;
+}
+
+.dock-media-console--ultra-compact .dock-media-tabs-column {
+  flex: 0 0 36px;
+  min-width: 36px;
+}
+
+.dock-media-console--ultra-compact .dock-media-tabs--compact .dock-media-tab {
+  min-height: 28px;
+}
+
+.dock-media-console--ultra-compact .dock-media-tabs-row__actions .dock-btn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+}
+
+@media (max-height: 400px) {
+  .dock-media-pills {
+    padding: 2px 0;
+    gap: 3px;
+    border-bottom: none;
+  }
+  .dock-media-pills--secondary {
+    padding: 1px 0 2px;
+    gap: 3px;
+  }
+  .dock-media-pill,
+  .dock-media-pill--small {
+    padding: 1px 5px;
+    font-size: 8px;
+    line-height: 14px;
+  }
+  .dock-media-pill__count {
+    font-size: 7.5px;
+  }
+  .dock-media-search {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 4px;
+  }
+  .dock-media-search__input {
+    min-height: 18px;
+    font-size: 9px;
+    padding: 0 2px;
+  }
+  .dock-media-search-row {
+    gap: 4px;
+  }
+  .dock-media-search-row .dock-btn {
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    min-height: 22px;
+    padding: 0;
+  }
+  .dock-media-list {
+    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+    gap: 6px;
+  }
+  .dock-media-section__meta {
+    display: none;
+  }
+  .dock-time-shell__header {
+    padding: 4px 8px;
+  }
+  .dock-time-shell__header p {
+    display: none;
+  }
+  .dock-time-tabs {
+    padding: 4px 8px;
+  }
+  .dock-time-tabs__button {
+    padding: 4px 6px;
+    font-size: 9px;
+  }
 }
 
 /* ── Media tabs row ── */
@@ -37118,15 +38507,40 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-tab-loading {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 220px;
-  padding: 24px;
-  color: var(--dock-text-dim, #94A3B8);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  min-height: 180px;
+  height: 100%;
+  width: 100%;
+  padding: 24px 16px;
+  gap: 10px;
+  color: var(--dock-text-dim, #94a3b8);
+  font-family: var(--dock-font-body, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.dock-tab-loading:not(.mce-loading-screen)::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--dock-accent, #c56f4d);
+  border-right-color: rgba(220, 137, 101, 0.6);
+  box-sizing: border-box;
+  animation: dock-tab-loading-spin 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes dock-tab-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Section description ── */
@@ -37527,11 +38941,12 @@ button.dock-btm-toolbar__clear--inline,
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
-.dock-bible-actions__menu-item {
+.dock-bible-actions__menu-item,
+.dock-bible-actions__menu-item-entry {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 30px;
+  min-height: 26px;
   padding: 0 8px;
   gap: 8px;
   border: 0;
@@ -37539,14 +38954,16 @@ button.dock-btm-toolbar__clear--inline,
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
 .dock-bible-actions__menu-item:hover,
-.dock-bible-actions__menu-item:focus-visible {
+.dock-bible-actions__menu-item:focus-visible,
+.dock-bible-actions__menu-item-entry:hover,
+.dock-bible-actions__menu-item-entry:focus-visible {
   background: color-mix(in srgb, var(--dock-accent-soft) 48%, var(--dock-surface));
   color: var(--dock-text, #F8FAFC);
   outline: none;
@@ -37570,30 +38987,31 @@ button.dock-btm-toolbar__clear--inline,
 
 
 .dock-module--bible--narrow .bible-version-library__trigger {
-  width: 58px;
-  min-width: 48px;
-  max-width: 48px;
+  width: auto;
+  min-width: 52px;
+  max-width: none;
   height: 24px;
   min-height: 24px;
-  padding: 0 3px;
-  gap: 1px;
-  font-size: 8px;
+  padding: 0 6px;
+  gap: 2px;
+  font-size: 11px;
   line-height: 1;
 }
 
 .dock-module--bible--narrow .bible-version-library__trigger-abbr {
-  max-width: 40px;
-  overflow: hidden;
-  font-size: 8px;
-  letter-spacing: 0.15px;
+  max-width: none;
+  overflow: visible;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dock-module--bible--narrow .bible-version-library__trigger svg {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
 }
 
 .dock-module--bible--narrow .dock-bible-compact-actions {
@@ -37631,6 +39049,70 @@ button.dock-btm-toolbar__clear--inline,
   border-radius: 8px;
 }
 
+/* ── Top-right three dots & KJV trigger in search row: borderless, compact overflow, spacious KJV ── */
+.dock-bible-search-row .dock-bible-actions__overflow,
+.dock-bible-search-row__translation .dock-bible-actions__overflow,
+.dock-module--bible--narrow .dock-bible-search-row .dock-bible-actions__overflow,
+.dock-module--bible--narrow .dock-bible-search-row .dock-bible-compact-actions .dock-bible-actions__overflow {
+  width: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 22px;
+  padding: 0;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  color: var(--dock-text-dim, #94a3b8);
+  box-shadow: none !important;
+}
+
+.dock-bible-search-row .dock-bible-actions__overflow:hover,
+.dock-bible-search-row .dock-bible-actions__overflow:focus-visible,
+.dock-bible-search-row .dock-bible-actions__overflow[aria-expanded="true"],
+.dock-bible-search-row__translation .dock-bible-actions__overflow:hover,
+.dock-bible-search-row__translation .dock-bible-actions__overflow:focus-visible,
+.dock-bible-search-row__translation .dock-bible-actions__overflow[aria-expanded="true"],
+.dock-module--bible--narrow .dock-bible-search-row .dock-bible-actions__overflow:hover,
+.dock-module--bible--narrow .dock-bible-search-row .dock-bible-actions__overflow[aria-expanded="true"] {
+  border: none !important;
+  background: var(--dock-accent-soft, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--dock-text, #F8FAFC);
+  outline: none;
+  box-shadow: none !important;
+}
+
+.dock-bible-search-row .dock-bible-actions__overflow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dock-bible-search-row__translation .bible-version-library__trigger {
+  width: auto;
+  min-width: 52px;
+  max-width: none;
+  padding: 0 6px;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dock-bible-search-row__translation .bible-version-library__trigger-abbr {
+  max-width: none;
+  overflow: visible;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.dock-bible-search-row__translation .bible-version-library__trigger svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+}
+
 .dock-module--bible--narrow .dock-bible-header-actions {
   gap: 2px;
 }
@@ -37644,17 +39126,18 @@ button.dock-btm-toolbar__clear--inline,
   display: none;
 }
 
-.dock-module--bible--compact .dock-bible-compact-actions .dock-bible-actions__menu-item {
+.dock-module--bible--compact .dock-bible-compact-actions .dock-bible-actions__menu-item,
+.dock-module--bible--compact .dock-bible-compact-actions .dock-bible-actions__menu-item-entry {
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 30px;
+  min-height: 26px;
   padding: 0 8px;
   flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: var(--dock-text, #F8FAFC);
-  font-size: 11px;
+  font-size: 10px;
   justify-content: flex-start;
 }
 
@@ -37775,21 +39258,51 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-module--bible .dock-bible-search-row__input .dock-bible-search-bar {
-  min-height: 24px;
+  min-height: 32px;
   padding-block: 0;
+  gap: 4px;
+}
+
+.dock-bible-search-bar__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim, #9CA3AF);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.dock-bible-search-bar__menu-btn:hover {
+  border-color: var(--dock-accent-soft-border, rgba(255, 255, 255, 0.1));
+  background: var(--dock-accent-soft, rgba(255, 255, 255, 0.08));
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-bible-search-bar__menu-btn:focus-visible {
+  outline: 2px solid var(--dock-accent, #3B82F6);
+  outline-offset: 1px;
 }
 
 .dock-module--bible .dock-bible-search-row__input .dock_search__input {
-  height: 24px;
-  min-height: 24px;
-  padding-block: 2px;
-  line-height: 18px;
+  height: 32px;
+  min-height: 32px;
+  padding-block: 4px;
+  line-height: 20px;
 }
 
 .dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,
 .dock-module--bible .dock-bible-search-row__translation .dock-bible-controls__translation-select {
-  height: 24px;
-  min-height: 24px;
+  height: 30px;
+  min-height: 30px;
 }
 
 @media (max-width: 520px) {
@@ -38335,3 +39848,96 @@ button.dock-btm-toolbar__clear--inline,
   outline: 1px solid var(--dock-accent, #1D4ED8);
   outline-offset: 1px;
 }
+
+/* ===================================================================
+   Forced Update Compulsory Modal (OBS Dock Interface)
+   =================================================================== */
+
+.force-update-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.force-update-modal {
+  width: 440px;
+  max-width: min(440px, calc(100vw - 24px));
+  box-sizing: border-box;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  animation: dock-force-update-slide-in 0.3s ease;
+}
+
+@keyframes dock-force-update-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.force-update-icon--spin {
+  animation: dock-force-update-spin 1s linear infinite;
+}
+
+@keyframes dock-force-update-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.force-update-progress-fill--pulse {
+  animation: dock-force-update-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dock-force-update-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.force-update-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.force-update-btn:active {
+  transform: scale(0.97);
+}
+
+.force-update-btn--primary {
+  background: var(--dock-accent, #1d4ed8);
+  color: #fff;
+}
+
+.force-update-btn--primary:hover {
+  background: #2563eb;
+}
+
+.force-update-btn--secondary {
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.15));
+  background: transparent;
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.force-update-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+

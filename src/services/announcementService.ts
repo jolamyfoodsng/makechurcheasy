@@ -20,6 +20,18 @@ export interface DesktopAnnouncement {
   offerDiscountPercent?: number | null;
   offerDurationMonths?: number | null;
   offerApplicableBillingCycles?: DiscountBillingCycle[];
+  offerApplicablePlans?: string[];
+  expiresAt?: string | null;
+}
+
+export interface ActiveDiscountInfo {
+  id: string;
+  title: string;
+  code?: string | null;
+  discountPercent?: number | null;
+  durationMonths?: number | null;
+  applicableBillingCycles?: DiscountBillingCycle[];
+  claimUrl?: string | null;
   expiresAt?: string | null;
 }
 

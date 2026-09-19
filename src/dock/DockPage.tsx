@@ -43,6 +43,7 @@ import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
 import { DockUpgradeModal } from "./components/DockUpgradeModal";
+import LoadingScreen from "../components/LoadingScreen";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
 import DockPresentationLinkModal from "./components/DockPresentationLinkModal";
@@ -1120,19 +1121,11 @@ function DockPageContent({
           <div className="dock-force-update-banner">
             <Icon name="warning" size={14} />
             <span>
-              {t('page.forceUpdate')} — {t('page.updateReady', { days: versionAge.daysOld })}
+              This has been blocked because you need to update the app.
               {versionAge.currentVersion && versionAge.latestVersion && (
-                <> v{versionAge.currentVersion} → v{versionAge.latestVersion}</>
+                <> (v{versionAge.currentVersion} → v{versionAge.latestVersion})</>
               )}
             </span>
-            <a
-              href="https://makechurcheazy.com/download"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="dock-force-update-banner__link"
-            >
-              {t('page.downloadUpdate')}
-            </a>
           </div>
         )}
 
@@ -1145,7 +1138,7 @@ function DockPageContent({
         )}
 
         {/* ── Page Header (hamburger L, refresh and theme R) ── */}
-        {!hideShellHeader && (
+        {!hideShellHeader && activeTab !== "bible" && (
           <div
             className="dock-inline-header"
             style={{
@@ -1903,7 +1896,7 @@ function DockPageContent({
             <DockPresentationLinkCard onOpenHelp={() => setShowPresentationLinkModal(true)} />
           )}
           <div className="dock-content-main">
-            <Suspense fallback={<div className="dock-tab-loading">{t('common.loading')}</div>}>
+            <Suspense fallback={<LoadingScreen variant="dock" label={t('common.loading', 'Loading…')} className="dock-tab-loading" />}>
               {mountedDockTabs.has("planner") && (
                 <div className="dock-tab-panel" hidden={renderedTab !== "planner"}>
                   <DockPlannerTab
@@ -1929,6 +1922,7 @@ function DockPageContent({
                           onSaveFeedback={showDockSaveFeedback}
                           showHistory={showHistory}
                           onHistoryClose={handleHistoryClose}
+                          onToggleMenu={() => setShowSettingsMenu((prev) => !prev)}
                         />
                       </section>
                       <section className="dock-presentation-bible-lm-pane" aria-label="Scripture assistant dock">
@@ -1952,6 +1946,7 @@ function DockPageContent({
                       fullscreenOnly={hideLowerThirdControls}
                       showHistory={showHistory}
                       onHistoryClose={handleHistoryClose}
+                      onToggleMenu={() => setShowSettingsMenu((prev) => !prev)}
                     />
                   )}
                 </div>
@@ -2253,9 +2248,11 @@ export default function DockPage(props: DockPageProps = {}) {
 
   if (!settingsReady || !initialProductionSettings) {
     return (
-      <div className="dock-tab-loading" role="status" aria-live="polite">
-        Loading saved Dock settings…
-      </div>
+      <LoadingScreen
+        variant="dock"
+        label="Loading saved Dock settings…"
+        className="dock-tab-loading"
+      />
     );
   }
 

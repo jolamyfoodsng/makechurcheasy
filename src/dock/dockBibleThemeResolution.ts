@@ -366,11 +366,17 @@ export function buildDefaultLowerThirdQuickThemeSettings(
   const sizePreset =
     LOWER_THIRD_SIZE_PRESETS[settings.lowerThirdSize || DEFAULT_THEME_SETTINGS.lowerThirdSize] ||
     LOWER_THIRD_SIZE_PRESETS.medium;
+  const lowerThirdFontSize = typeof settings.fontSize === "number" && settings.fontSize > 0 && settings.fontSize <= 64
+    ? settings.fontSize
+    : (sizePreset.fontSize || 36);
+  const lowerThirdRefFontSize = typeof settings.refFontSize === "number" && settings.refFontSize > 0 && settings.refFontSize <= 42
+    ? settings.refFontSize
+    : (sizePreset.refFontSize || 26);
 
   return {
     ...base,
-    fontSize: 64,
-    refFontSize: 42,
+    fontSize: lowerThirdFontSize,
+    refFontSize: lowerThirdRefFontSize,
     textAlign: "left",
     lineHeight: sizePreset.lineHeight,
     refSpacing: 14,
@@ -378,6 +384,10 @@ export function buildDefaultLowerThirdQuickThemeSettings(
     referenceBackgroundEnabled: false,
     lowerThirdWidthPreset:
       base.lowerThirdWidthPreset === "full" ? "md" : base.lowerThirdWidthPreset,
+    compareVerseFontSizeLeft: Math.min(36, base.compareVerseFontSizeLeft || 34),
+    compareVerseFontSizeRight: Math.min(36, base.compareVerseFontSizeRight || 34),
+    compareReferenceFontSizeLeft: Math.min(24, base.compareReferenceFontSizeLeft || 22),
+    compareReferenceFontSizeRight: Math.min(24, base.compareReferenceFontSizeRight || 22),
   };
 }
 

@@ -8241,7 +8241,11 @@ pub fn run() {
                 &[&show_item, &settings_item, &separator, &quit_item],
             )?;
 
-            let tray_icon = Image::from_bytes(include_bytes!("../icons/icon.png"))
+            #[cfg(target_os = "windows")]
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/16x16.png"))
+                .expect("bundled MakeChurchEasy tray icon must be valid PNG");
+            #[cfg(not(target_os = "windows"))]
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("bundled MakeChurchEasy tray icon must be valid PNG");
             let _tray = tauri::tray::TrayIconBuilder::with_id("makechurcheasy-tray")
                 .icon(tray_icon)

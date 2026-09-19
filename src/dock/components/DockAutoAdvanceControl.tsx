@@ -46,6 +46,9 @@ interface DockAutoAdvanceControlProps {
   itemKind: AutoAdvanceItemKind;
   storageScope: AutoAdvanceStorageScope;
   compactLabel?: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }
 
 export interface DockAutoAdvanceViewport {
@@ -191,6 +194,9 @@ export default function DockAutoAdvanceControl({
   itemKind,
   storageScope,
   compactLabel = false,
+  isOpen: isOpenProp,
+  onOpenChange,
+  showTrigger = true,
 }: DockAutoAdvanceControlProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -203,7 +209,20 @@ export default function DockAutoAdvanceControl({
   const deadlinesRef = useRef({ runAt: 0, itemAt: 0 });
   const [settings, setSettings] = useState<DockAutoAdvanceSettings>(() => loadSettings(storageScope));
   const [status, setStatus] = useState<AutoAdvanceStatus>("idle");
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = isOpenProp !== undefined ? isOpenProp : internalIsOpen;
+  const setIsOpen = useCallback(
+    (action: boolean | ((prev: boolean) => boolean)) => {
+      const next = typeof action === "function" ? action(isOpen) : action;
+      if (onOpenChange) {
+        onOpenChange(next);
+      }
+      if (isOpenProp === undefined) {
+        setInternalIsOpen(next);
+      }
+    },
+    [isOpen, isOpenProp, onOpenChange],
+  );
   const [pauseReason, setPauseReason] = useState<"manual" | "user" | null>(null);
   const [remainingRunMs, setRemainingRunMs] = useState(0);
   const [remainingItemMs, setRemainingItemMs] = useState(0);
@@ -364,7 +383,14 @@ export default function DockAutoAdvanceControl({
     if (!isOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setIsOpen(false);
+      if (
+        !rootRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target) &&
+        !(target instanceof Element && target.closest("[data-dock-keep-overflow-open='true']"))
+      ) {
+        setIsOpen(false);
+        onClose?.();
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -388,8 +414,6 @@ export default function DockAutoAdvanceControl({
 
     const updatePopoverPosition = () => {
       const trigger = triggerRef.current;
-      if (!trigger) return;
-
       const dockRoot = rootRef.current?.closest<HTMLElement>(".dock-root");
       const dockRect = dockRoot?.getBoundingClientRect();
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 320;
@@ -403,8 +427,15 @@ export default function DockAutoAdvanceControl({
         }
         : { left: 0, top: 0, width: viewportWidth, height: viewportHeight };
       const popoverRect = popoverRef.current?.getBoundingClientRect();
+      const triggerRect = trigger
+        ? trigger.getBoundingClientRect()
+        : {
+            top: viewport.top + 64,
+            right: viewport.left + Math.min(320, viewport.width - 16),
+            bottom: viewport.top + 98,
+          };
       const nextPosition = getAutoAdvancePopoverPosition(
-        trigger.getBoundingClientRect(),
+        triggerRect,
         viewport,
         popoverRect?.height ?? 420,
         popoverRect?.width,
@@ -452,20 +483,22 @@ export default function DockAutoAdvanceControl({
 
   return (
     <div ref={rootRef} className={`dock-auto-advance${compactLabel ? " dock-auto-advance--labeled" : ""}`}>
-      <button
-        type="button"
-        ref={triggerRef}
-        className={`dock-shell-icon-btn dock-auto-advance__trigger${compactLabel ? " dock-auto-advance__trigger--labeled" : ""}${isActive ? " dock-shell-icon-btn--active dock-auto-advance__trigger--active" : ""}`}
-        onClick={() => setIsOpen((open) => !open)}
-        disabled={items.length === 0}
-        title={t("autoAdvance.open")}
-        aria-label={t("autoAdvance.open")}
-        aria-expanded={isOpen}
-      >
-        <Icon name={isActive ? "timer" : "playlist_play"} size={16} />
-        {compactLabel && <span className="dock-auto-advance__trigger-label">{t("autoAdvance.title")}</span>}
-        {isActive && <span className="dock-auto-advance__dot" aria-hidden="true" />}
-      </button>
+      {showTrigger && (
+        <button
+          type="button"
+          ref={triggerRef}
+          className={`dock-shell-icon-btn dock-auto-advance__trigger${compactLabel ? " dock-auto-advance__trigger--labeled" : ""}${isActive ? " dock-shell-icon-btn--active dock-auto-advance__trigger--active" : ""}`}
+          onClick={() => setIsOpen((open) => !open)}
+          disabled={items.length === 0}
+          title={t("autoAdvance.open")}
+          aria-label={t("autoAdvance.open")}
+          aria-expanded={isOpen}
+        >
+          <Icon name={isActive ? "timer" : "playlist_play"} size={16} />
+          {compactLabel && <span className="dock-auto-advance__trigger-label">{t("autoAdvance.title")}</span>}
+          {isActive && <span className="dock-auto-advance__dot" aria-hidden="true" />}
+        </button>
+      )}
 
       {isOpen && typeof document !== "undefined" && createPortal(
         <div
@@ -643,6 +676,94 @@ export default function DockAutoAdvanceControl({
           </div>
 
           {!canStart && <div className="dock-auto-advance__empty">{t("autoAdvance.selectItem")}</div>}
+        </div>,
+        rootRef.current?.closest<HTMLElement>(".dock-root") ?? document.body,
+      )}
+
+      {!isOpen && isActive && typeof document !== "undefined" && createPortal(
+        <div
+          className={`dock-auto-advance-banner dock-auto-advance-banner--${status}`}
+          role="status"
+          aria-live="polite"
+          data-dock-keep-overflow-open="true"
+        >
+          <div
+            className="dock-auto-advance-banner__info"
+            onClick={() => setIsOpen(true)}
+            role="button"
+            tabIndex={0}
+            title={t("autoAdvance.clickToOpenSettings", "Click to open auto-advance settings")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsOpen(true);
+              }
+            }}
+          >
+            <span className={`dock-auto-advance-banner__indicator dock-auto-advance-banner__indicator--${status}`}>
+              <span className="dock-auto-advance-banner__pulse" />
+            </span>
+            <div className="dock-auto-advance-banner__texts">
+              <span className="dock-auto-advance-banner__status">
+                {status === "running"
+                  ? t("autoAdvance.runningBanner", "Auto-advancing")
+                  : t("autoAdvance.pausedBanner", "Auto-advance paused")}
+              </span>
+              <span className="dock-auto-advance-banner__countdown">
+                {status === "running"
+                  ? t("autoAdvance.nextSlideIn", "Next in {{seconds}}s", {
+                      seconds: Math.max(1, Math.ceil(remainingItemMs / 1000)),
+                    })
+                  : t("autoAdvance.secondsRemaining", "{{seconds}}s left", {
+                      seconds: Math.max(1, Math.ceil(remainingItemMs / 1000)),
+                    })}
+              </span>
+            </div>
+          </div>
+
+          <div className="dock-auto-advance-banner__actions">
+            {status === "running" ? (
+              <button
+                type="button"
+                className="dock-auto-advance-banner__btn dock-auto-advance-banner__btn--pause"
+                onClick={() => pauseAutomation("manual")}
+                title={t("autoAdvance.pause", "Pause auto-advance")}
+                aria-label={t("autoAdvance.pause", "Pause auto-advance")}
+              >
+                <Icon name="pause" size={14} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="dock-auto-advance-banner__btn dock-auto-advance-banner__btn--resume"
+                onClick={handleResume}
+                title={t("autoAdvance.resume", "Resume auto-advance")}
+                aria-label={t("autoAdvance.resume", "Resume auto-advance")}
+              >
+                <Icon name="play_arrow" size={14} />
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="dock-auto-advance-banner__btn dock-auto-advance-banner__btn--stop"
+              onClick={stopAutomation}
+              title={t("autoAdvance.stop", "Stop auto-advance")}
+              aria-label={t("autoAdvance.stop", "Stop auto-advance")}
+            >
+              <Icon name="stop" size={14} />
+            </button>
+
+            <button
+              type="button"
+              className="dock-auto-advance-banner__btn dock-auto-advance-banner__btn--settings"
+              onClick={() => setIsOpen(true)}
+              title={t("autoAdvance.settings", "Auto-advance settings")}
+              aria-label={t("autoAdvance.settings", "Auto-advance settings")}
+            >
+              <Icon name="tune" size={14} />
+            </button>
+          </div>
         </div>,
         rootRef.current?.closest<HTMLElement>(".dock-root") ?? document.body,
       )}

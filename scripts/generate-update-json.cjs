@@ -43,6 +43,27 @@ const outIdx = args.indexOf("--out");
 const outFile = outIdx !== -1 ? path.resolve(args[outIdx + 1]) : null;
 const minVersionIdx = args.indexOf("--min-version");
 const minVersion = minVersionIdx !== -1 ? args[minVersionIdx + 1] || "" : "";
+const notesIdx = args.indexOf("--notes");
+let customNotes = notesIdx !== -1 ? args[notesIdx + 1] || "" : "";
+const notesFileIdx = args.indexOf("--notes-file");
+if (notesFileIdx !== -1 && args[notesFileIdx + 1]) {
+  const nPath = path.resolve(args[notesFileIdx + 1]);
+  if (fs.existsSync(nPath)) {
+    customNotes = fs.readFileSync(nPath, "utf8").trim();
+  }
+} else if (!customNotes) {
+  const candidateNotesPaths = [
+    path.resolve(assetsDir, "RELEASE_NOTES.md"),
+    path.resolve(__dirname, "../RELEASE_NOTES.md"),
+    path.resolve(process.cwd(), "RELEASE_NOTES.md"),
+  ];
+  for (const p of candidateNotesPaths) {
+    if (fs.existsSync(p)) {
+      customNotes = fs.readFileSync(p, "utf8").trim();
+      break;
+    }
+  }
+}
 
 if (!fs.existsSync(assetsDir)) {
   console.error(`Assets directory not found: ${assetsDir}`);
@@ -142,7 +163,7 @@ if (found === 0) {
 
 const manifest = {
   version,
-  notes: `MakeChurchEasy v${version}`,
+  notes: customNotes || `MakeChurchEasy v${version}`,
   pub_date: new Date().toISOString(),
   ...(minVersion ? { minVersion } : {}),
   platforms,

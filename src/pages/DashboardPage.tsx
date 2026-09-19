@@ -5,6 +5,9 @@ import { obsService } from "../services/obsService";
 import { getDockBaseUrl } from "../services/overlayUrl";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
+import { useAuth } from "../contexts/AuthContext";
+import { getEffectivePlan, isInTrial } from "../services/licenseService";
+import UpgradeModal from "../components/UpgradeModal";
 
 /** Recently opened item */
 interface RecentItem {
@@ -37,6 +40,11 @@ export function trackRecentOpen(path: string, label: string, icon: string) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const effectivePlan = getEffectivePlan(user);
+  const onTrial = isInTrial(user);
+  const isFreePlan = effectivePlan === "free" && !onTrial;
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [dockCopied, setDockCopied] = useState(false);
   const [obsConnected, setObsConnected] = useState(() => obsService.isConnected);
 
@@ -88,6 +96,35 @@ export default function DashboardPage() {
       <main className="dash-main">
         <div className="dash-glow" />
         <div className="dash-content">
+          {isFreePlan && (
+            <div className="dash-free-plan-banner" role="status">
+              <div className="dash-free-plan-banner__main">
+                <div className="dash-free-plan-banner__tag">
+                  <Icon name="bolt" size={13} />
+                  <span>Free Plan</span>
+                </div>
+                <div className="dash-free-plan-banner__text">
+                  <span className="dash-free-plan-banner__title">
+                    You are currently on the Free plan.
+                  </span>
+                  <span className="dash-free-plan-banner__desc">
+                    Subscribe now to unlock direct OBS automation, unlimited offline Bible versions, full transcript exports, and multi-device sync.
+                  </span>
+                </div>
+              </div>
+              <div className="dash-free-plan-banner__actions">
+                <button
+                  type="button"
+                  className="dash-free-plan-banner__cta"
+                  onClick={() => setShowUpgradeModal(true)}
+                  title="Subscribe Now"
+                >
+                  <Icon name="star" size={14} />
+                  <span>Subscribe Now</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <section className="dash-hero-row">
             <div className="dash-hero-copy">
@@ -242,6 +279,16 @@ export default function DashboardPage() {
           </section>
         </div>
       </main>
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          open={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          requiredPlan="basic"
+          currentPlan="free"
+          message="Subscribe to unlock all premium MakeChurchEasy features."
+        />
+      )}
     </div>
   );
 }

@@ -115,10 +115,14 @@ export interface LicenseGuardState {
   lastVerifiedAt: number | null;
   daysOffline: number;
   offlineDaysRemaining: number;
+  offlineWarning: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+export const OFFLINE_WARNING_DAYS = 14; // 2 weeks: warning asking user to connect
+export const OFFLINE_LOCK_DAYS = 21;    // 3 weeks: blocking modal requiring connection
+const LAST_ONLINE_KEY = "mce-last-online-at";
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
 const VISIBILITY_REVERIFY_MIN_INTERVAL_MS = 15 * 60 * 1000;
@@ -372,23 +376,47 @@ function evaluateLicense(payload: LicensePayload): LockReason {
   return null;
 }
 
-function getLastVerifiedMs(cached: LicenseCache): number {
-  const fromPayload = new Date(cached.payload.lastVerifiedAt).getTime();
-  if (Number.isFinite(fromPayload)) return fromPayload;
-  return Number.isFinite(cached.cachedAt) ? cached.cachedAt : 0;
+export function getStoredLastOnlineMs(): number {
+  try {
+    const raw = localStorage.getItem(getUserScopedKey(LAST_ONLINE_KEY)) || localStorage.getItem(LAST_ONLINE_KEY);
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  } catch { /* ignore */ }
+  return 0;
 }
 
-function getOfflineWindowDays(cached: LicenseCache): number {
-  const configured = Number(cached.payload.internetVerificationDays || 14);
-  return Number.isFinite(configured) && configured > 0 ? configured : 14;
+export function recordOnlineSuccess(): void {
+  try {
+    const now = Date.now();
+    localStorage.setItem(getUserScopedKey(LAST_ONLINE_KEY), String(now));
+    localStorage.setItem(LAST_ONLINE_KEY, String(now));
+  } catch { /* ignore */ }
 }
 
-function evaluateOfflineValidity(cached: LicenseCache): LockReason {
+function getLastVerifiedMs(cached: LicenseCache | null): number {
+  if (cached) {
+    const fromPayload = new Date(cached.payload.lastVerifiedAt).getTime();
+    if (Number.isFinite(fromPayload) && fromPayload > 0) return fromPayload;
+    if (Number.isFinite(cached.cachedAt) && cached.cachedAt > 0) return cached.cachedAt;
+  }
+  return getStoredLastOnlineMs();
+}
+
+function getOfflineWindowDays(_cached: LicenseCache | null): number {
+  return OFFLINE_LOCK_DAYS;
+}
+
+function evaluateOfflineValidity(cached: LicenseCache | null): LockReason {
   const lastVerifiedMs = getLastVerifiedMs(cached);
-  if (!lastVerifiedMs) return "internet_required";
+  if (!lastVerifiedMs) {
+    recordOnlineSuccess();
+    return null;
+  }
 
-  const offlineWindowMs = getOfflineWindowDays(cached) * DAY_MS;
-  if (Date.now() - lastVerifiedMs > offlineWindowMs) return "internet_required";
+  const daysOffline = Math.floor((Date.now() - lastVerifiedMs) / DAY_MS);
+  if (daysOffline >= OFFLINE_LOCK_DAYS) {
+    return "internet_required";
+  }
   return null;
 }
 
@@ -415,16 +443,16 @@ function refreshSubscriptionCacheInBackground(): void {
 
 function computeState(): void {
   const cached = _cache;
-  if (!cached) {
-    // No cache — not verified yet, allow during initialization
-    _lockReason = null;
-    return;
-  }
-
   // First check offline validity
   const offlineReason = evaluateOfflineValidity(cached);
   if (offlineReason) {
     _lockReason = offlineReason;
+    return;
+  }
+
+  if (!cached) {
+    // No cache — allow during initialization
+    _lockReason = null;
     return;
   }
 
@@ -434,13 +462,14 @@ function computeState(): void {
 
 export function getState(): LicenseGuardState {
   const cached = _cache;
-  const lastVerified = cached ? getLastVerifiedMs(cached) : null;
+  const lastVerified = getLastVerifiedMs(cached) || null;
   const daysOffline = lastVerified
-    ? Math.floor((Date.now() - lastVerified) / DAY_MS)
+    ? Math.max(0, Math.floor((Date.now() - lastVerified) / DAY_MS))
     : 0;
-  const offlineDaysRemaining = cached && lastVerified
-    ? Math.max(0, Math.ceil((lastVerified + getOfflineWindowDays(cached) * DAY_MS - Date.now()) / DAY_MS))
-    : 0;
+  const offlineDaysRemaining = lastVerified
+    ? Math.max(0, Math.ceil((lastVerified + OFFLINE_LOCK_DAYS * DAY_MS - Date.now()) / DAY_MS))
+    : OFFLINE_LOCK_DAYS;
+  const offlineWarning = daysOffline >= OFFLINE_WARNING_DAYS && daysOffline < OFFLINE_LOCK_DAYS;
 
   return {
     unlocked: _lockReason === null,
@@ -450,6 +479,7 @@ export function getState(): LicenseGuardState {
     lastVerifiedAt: lastVerified,
     daysOffline,
     offlineDaysRemaining,
+    offlineWarning,
   };
 }
 
@@ -581,6 +611,9 @@ export async function verify(): Promise<boolean> {
   // one leaves a stale lock state that can immediately log a newly paired
   // Windows session back out of the app.
   if (!getSession()?.user?.id || !getDeviceId()) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      recordOnlineSuccess();
+    }
     _lockReason = null;
     emit();
     return true;
@@ -620,6 +653,7 @@ export async function verify(): Promise<boolean> {
       cachedAt: Date.now(),
     };
     writeCache(_cache);
+    recordOnlineSuccess();
     refreshSubscriptionCacheInBackground();
 
     _lockReason = evaluateLicense(normalizedPayload);
@@ -786,11 +820,11 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
     case "internet_required":
       return {
         icon: "wifi_off",
-        title: "Verification Required",
+        title: "Internet Connection Required",
         description:
-          "Your license could not be verified recently. Please ensure you have an internet connection and try again.",
+          "You have not connected to the internet for 3 weeks. Please connect to the internet for a few minutes so MakeChurchEasy can verify your license and synchronize.",
         primaryAction: "retry",
-        primaryLabel: "Retry Verification",
+        primaryLabel: "Check Connection",
       };
 
     case "account_suspended":
@@ -884,3 +918,39 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
       };
   }
 }
+
+/**
+ * Test helper for simulating offline durations
+ */
+export function __testSetLastVerifiedMs(ms: number): void {
+  if (!_cache) {
+    _cache = {
+      payload: {
+        accountStatus: "active",
+        subscriptionStatus: "active",
+        plan: "basic",
+        trialActive: false,
+        trialEndsAt: null,
+        subscriptionEndsAt: null,
+        renewalDate: null,
+        paymentStatus: "paid",
+        internetVerificationDays: 21,
+        verificationIntervalHours: 6,
+        lastVerifiedAt: new Date(ms).toISOString(),
+        serverTime: new Date(ms).toISOString(),
+        lockReason: null,
+      },
+      cachedAt: ms,
+    };
+  } else {
+    _cache.cachedAt = ms;
+    _cache.payload.lastVerifiedAt = new Date(ms).toISOString();
+  }
+  try {
+    localStorage.setItem(getUserScopedKey(LAST_ONLINE_KEY), String(ms));
+    localStorage.setItem(LAST_ONLINE_KEY, String(ms));
+  } catch { /* ignore */ }
+  computeState();
+  emit();
+}
+

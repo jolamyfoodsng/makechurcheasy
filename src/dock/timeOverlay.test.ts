@@ -24,19 +24,27 @@ describe("Dock Time overlay helpers", () => {
     expect(formatTimeDuration(3_661)).toBe("01:01:01");
   });
 
-  it("keeps the OBS overlay live for both display modes and targeted packets", () => {
-    expect(timeOverlaySource).toContain("mode-fullscreen");
-    expect(timeOverlaySource).toContain("mode-lower-third");
-    expect(timeOverlaySource).toContain("placement-left");
-    expect(timeOverlaySource).toContain("placement-right");
-    expect(timeOverlaySource).toContain('data.tab !== "time"');
-    expect(timeOverlaySource).toContain('window.setInterval(render, 250)');
+  it("supports multiple clock themes in the overlay HTML", () => {
+    expect(timeOverlaySource).toContain("theme-digital-modern");
+    expect(timeOverlaySource).toContain("theme-analog-wall");
+    expect(timeOverlaySource).toContain("theme-broadcast-pill");
+    expect(timeOverlaySource).toContain("theme-neon");
+    expect(timeOverlaySource).toContain("theme-elegant");
   });
 
-  it("uses Countdown-style transparent, centered text for full-screen output", () => {
-    expect(timeOverlaySource).toContain("#time-card.mode-fullscreen {\n      inset: 0;");
-    expect(timeOverlaySource).toContain("#time-card.mode-fullscreen .accent { display: none; }");
-    expect(timeOverlaySource).toContain("background: transparent;");
-    expect(timeOverlaySource).toContain("font-size: clamp(80px, 16vw, 360px);");
+  it("supports transparent mode and 4-way corner placements", () => {
+    expect(timeOverlaySource).toContain("is-transparent");
+    expect(timeOverlaySource).toContain("placement-top-left");
+    expect(timeOverlaySource).toContain("placement-top-right");
+    expect(timeOverlaySource).toContain("placement-bottom-left");
+    expect(timeOverlaySource).toContain("placement-bottom-right");
+  });
+
+  it("includes SVG analog clock elements and rotation updates", () => {
+    expect(timeOverlaySource).toContain("analog-dial");
+    expect(timeOverlaySource).toContain("analog-hour-hand");
+    expect(timeOverlaySource).toContain("analog-min-hand");
+    expect(timeOverlaySource).toContain("analog-sec-hand");
+    expect(timeOverlaySource).toContain("updateAnalogHands");
   });
 });

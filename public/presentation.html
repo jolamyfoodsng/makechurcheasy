@@ -78,6 +78,22 @@
       overflow: hidden;
     }
 
+    .remote-stage.remote-stage--media {
+      position: fixed;
+      inset: 0;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+      transform: none;
+      aspect-ratio: auto;
+      border: none;
+      margin: 0;
+      padding: 0;
+    }
+
     .stage-bg,
     .stage-bg img,
     .stage-bg video {
@@ -111,6 +127,22 @@
       justify-content: center;
       padding: clamp(28px, 4vw, 72px);
       transform-origin: center center;
+    }
+
+    .stage-content--lower-third {
+      align-items: flex-end;
+      padding-bottom: clamp(32px, 6vh, 80px);
+    }
+
+    .stage-content--lower-third .stage-box {
+      max-width: min(1320px, 94%);
+      background: rgba(0, 0, 0, 0.78);
+      border-radius: 14px;
+      padding: clamp(16px, 2.5vw, 28px) clamp(24px, 3.5vw, 44px) !important;
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
 
     .stage-box {
@@ -207,12 +239,15 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      background: #000;
+      border: none;
+      margin: 0;
+      padding: 0;
     }
 
     .media-layer img,
     .media-layer video {
       object-position: center center;
+      background: transparent;
     }
 
     .countdown-shell {
@@ -528,33 +563,42 @@
       }
 
       function showInvalid() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
         invalidState.classList.remove("hidden");
         waitingState.classList.add("hidden");
-        stage.innerHTML = "";
       }
 
       function showWaiting() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
         invalidState.classList.add("hidden");
         waitingState.classList.remove("hidden");
-        stage.innerHTML = "";
       }
 
       function showBlank() {
+        if (stage) {
+          stage.classList.remove("remote-stage--media");
+          stage.style.background = "transparent";
+          stage.innerHTML = "";
+        }
         invalidState.classList.add("hidden");
         waitingState.classList.add("hidden");
-        stage.innerHTML = "";
         if (body) {
           body.style.background = "#000";
         }
-        stage.style.background = "transparent";
       }
 
       function getContentUrl(value) {
@@ -700,7 +744,7 @@
         `;
       }
 
-      function renderTextLayer(item) {
+      function renderTextLayer(item, isLowerThird) {
         const style = getStyle(item);
         const viewportScale = getOutputViewportScale();
         const zoom = getPresentationZoom(item) * viewportScale;
@@ -754,16 +798,19 @@
         const bgVideo = getContentUrl(style.backgroundVideo);
         const bgPattern = getContentUrl(style.backgroundPattern);
         const hasText = hasBibleCompare || item.body || (showTitle && item.title) || (showReference && item.reference) || (showSubtitle && item.subtitle);
+        const contentClass = isLowerThird ? "stage-content stage-content--lower-third" : "stage-content";
 
         return `
+          ${isLowerThird ? "" : `
           <div class="stage-bg" style="background:${escapeHtml(getStageBackground(style))};">
             ${bgPattern ? `<img class="stage-pattern" src="${escapeHtml(bgPattern)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
             ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
             ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
           </div>
           <div class="stage-overlay" style="background:${escapeHtml(overlayColor)};opacity:${overlayOpacity};"></div>
+          `}
           ${hasText ? `
-            <div class="stage-content" style="padding:${contentPadding}px;">
+            <div class="${contentClass}" style="padding:${contentPadding}px;">
               <div class="stage-box ${boxAlignClass}" style="
                 color:${escapeHtml(bodyColor)};
                 font-family:${escapeHtml(style.fontFamily || '"Inter", "Segoe UI", sans-serif')};
@@ -795,6 +842,7 @@
           case "fit":
           case "contain":
             return "contain";
+          case "cover":
           case "fill":
           default:
             return "cover";
@@ -949,7 +997,7 @@
         `;
       }
 
-      function renderItem(item) {
+      function renderItem(item, isLowerThird = false) {
         clearCountdownTimer();
         waitingState.classList.add("hidden");
         invalidState.classList.add("hidden");
@@ -962,17 +1010,23 @@
         const isCountdown = Boolean(item.countdown);
         const isMedia = Boolean(item.media) || Boolean(item.imageUrl) || Boolean(item.videoUrl);
 
+        if (isMedia) {
+          stage.classList.add("remote-stage--media");
+        } else {
+          stage.classList.remove("remote-stage--media");
+        }
+
         const tickerMarkup = item.ticker ? renderTickerLayer(item) : "";
         const stageMarkup = isCountdown
           ? renderCountdownLayer(item)
             : isMedia
               ? renderMediaLayer(item)
-              : renderTextLayer(item);
+              : renderTextLayer(item, isLowerThird);
 
         if (body) {
-          body.style.background = getStageBackground(getStyle(item));
+          body.style.background = isMedia || isLowerThird ? "transparent" : getStageBackground(getStyle(item));
         }
-        stage.style.background = getStageBackground(getStyle(item));
+        stage.style.background = isMedia || isLowerThird ? "transparent" : getStageBackground(getStyle(item));
         stage.innerHTML = `${stageMarkup}${tickerMarkup}`;
 
         if (isCountdown) {
@@ -1020,12 +1074,13 @@
           return;
         }
 
+        const isLowerThird = Boolean(nextState && !nextState.fullscreen && nextState.lowerThird);
         const item = nextState.fullscreen || nextState.lowerThird || null;
         if (!item) {
           showBlank();
           return;
         }
-        renderItem(item);
+        renderItem(item, isLowerThird);
       }
 
       async function fetchMeta() {
@@ -1190,6 +1245,22 @@
 
         viewerId = getViewerId();
         showWaiting();
+
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const channel = new BroadcastChannel("mce-presentation:" + sessionId);
+            channel.onmessage = function (event) {
+              if (event.data) applyRemoteState(event.data);
+            };
+          } catch (err) {}
+        }
+        window.addEventListener("storage", function (event) {
+          if (event.key === "mce-presentation-state:" + sessionId && event.newValue) {
+            try {
+              applyRemoteState(JSON.parse(event.newValue));
+            } catch (err) {}
+          }
+        });
 
         try {
           const params = new URLSearchParams(window.location.search);
