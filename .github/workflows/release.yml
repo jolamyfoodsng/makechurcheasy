@@ -58,6 +58,9 @@ jobs:
   publish-windows:
     name: Build + Release (Windows-x64 first)
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -72,6 +75,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       # ── Rust ──
       - name: Setup Rust
@@ -95,7 +99,7 @@ jobs:
       # ── Clean stale CMake cache for llama-cpp-sys-2 ──
       - name: Clean llama.cpp CMake cache
         shell: pwsh
-        working-directory: src-tauri
+        working-directory: desktop/src-tauri
         run: |
           cargo clean
           Remove-Item -Recurse -Force target -ErrorAction SilentlyContinue
@@ -216,6 +220,7 @@ jobs:
           LIBCLANG_PATH: ${{ steps.resolve-llvm.outputs.RESOLVED_LLVM_PATH }}/bin
           CMAKE_GENERATOR: Ninja
         with:
+          projectPath: desktop
           tauriScript: npx tauri
           args: --target x86_64-pc-windows-msvc
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
@@ -278,6 +283,9 @@ jobs:
             label: macOS-x64
 
     runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        working-directory: desktop
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -291,6 +299,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       # ── Rust ──
       - name: Setup Rust
@@ -317,13 +326,13 @@ jobs:
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: desktop/src-tauri
           cache-on-failure: true
 
       # ── Clean stale CMake cache for llama-cpp-sys-2 ──
       - name: Clean llama.cpp CMake cache
         shell: bash
-        working-directory: src-tauri
+        working-directory: desktop/src-tauri
         run: |
           cargo clean -p llama-cpp-sys-2 || true
           rm -rf target/${{ matrix.target }}/release/build/llama-cpp-sys-2-* target/release/build/llama-cpp-sys-2-* || true
@@ -420,6 +429,7 @@ jobs:
           CMAKE_GENERATOR: Ninja
           BUILD_DEBUG: 1
         with:
+          projectPath: desktop
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
@@ -488,6 +498,7 @@ jobs:
             --clobber
 
       - name: Normalize latest.json shape
+        working-directory: desktop
         run: |
           node scripts/normalize-update-json.cjs /tmp/mce-release/latest.json \
             --out /tmp/mce-release/latest.json \
