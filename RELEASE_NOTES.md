@@ -15,6 +15,13 @@
 - **Instant Layout Switching:** Reduced slot repositioning latency when switching between grid, stacked, and picture-in-picture layouts.
 - **Accurate Sub-Pixel Alignment:** Slots and frame borders now align pixel-perfect across standard and ultrawide resolutions.
 
-## 4. Stability & Polish Fixes
+## 4. Dock Bible Tab Toolbar & Picker Refinements
+- **Promoted Quick Edit:** Quick Edit is now immediately accessible directly from the bottom toolbar.
+- **Unified Action Menu:** Compare Translations, Bible History, Reload Dock, and Theme toggles are unified in the 3-dots menu—always available even in bottom-only search mode.
+- **Compact Book & Chapter Pickers:** Redesigned 5-column book picker with standard initials and 6-column chapter grid for faster navigation.
+- **Improved Popover Stacking:** Ensured reference and translation compare popovers always render comfortably above the search bar.
+
+## 5. Stability & Polish Fixes
 - **OBS Live Leak Fix:** Resolved an issue where changing background colors in card settings updated OBS prematurely.
 - **Localization Cleanup:** Fixed missing translations for frame properties and spacing controls.
+

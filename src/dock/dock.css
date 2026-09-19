@@ -8781,7 +8781,7 @@ body.dock-modal-open {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 200;
+  z-index: 20000;
   min-width: 240px;
   max-width: min(320px, calc(100vw - 24px));
   max-height: min(640px, calc(100vh - 24px));
@@ -11167,6 +11167,11 @@ body.dock-modal-open {
   flex-shrink: 0;
 }
 
+.dock-bible-chapter-bar:has(.dock-bible-picker-popover),
+.dock-bible-chapter-bar--picker-open {
+  z-index: 10005;
+}
+
 .dock-bible-chapter-bar__btn {
   display: flex;
   align-items: center;
@@ -11232,8 +11237,8 @@ body.dock-modal-open {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
-  padding: 12px;
-  z-index: 1001;
+  padding: 10px;
+  z-index: 10010;
   backdrop-filter: blur(12px);
 }
 
@@ -11316,12 +11321,18 @@ body.dock-modal-open {
 
 .dock-bible-picker-books-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  max-height: 180px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  max-height: 190px;
   overflow-y: auto;
   margin-bottom: 4px;
   padding-right: 2px;
+}
+
+@media (max-width: 280px) {
+  .dock-bible-picker-books-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .dock-bible-picker-book-btn {
@@ -11330,9 +11341,12 @@ body.dock-modal-open {
   border-radius: 6px;
   color: #cbd5e1;
   font-size: 11px;
-  font-weight: 500;
-  padding: 6px 4px;
-  text-align: center;
+  font-weight: 600;
+  padding: 4px 2px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -11354,11 +11368,17 @@ body.dock-modal-open {
 
 .dock-bible-picker-chapters-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 5px;
-  max-height: 180px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-height: 190px;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+@media (max-width: 280px) {
+  .dock-bible-picker-chapters-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
 
 .dock-bible-picker-chapter-btn {
@@ -11366,8 +11386,9 @@ body.dock-modal-open {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   color: #e2e8f0;
-  font-size: 12px;
-  height: 28px;
+  font-size: 11px;
+  font-weight: 500;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11454,6 +11475,40 @@ body.dock-modal-open {
 .dock-bible-reader__verse-nav-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.dock-bible-reader__quick-edit-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dock-bible-reader__quick-edit-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 320px) {
+  .dock-bible-reader__quick-edit-label {
+    display: none;
+  }
+  .dock-bible-reader__quick-edit-toolbar-btn {
+    padding: 0;
+    width: 34px;
+  }
 }
 
 .dock-module--bible .dock-btm-toolbar__clear--inline,
@@ -16952,8 +17007,8 @@ body.dock-modal-open {
 
 .dock-bible-search-row__input .dock_search__input {
   min-height: 16px;
-  font-size: 12px;
-  padding: 8px;
+  font-size: clamp(10.5px, calc(11.5px * var(--dock-font-scale, 1)), 13px);
+  padding: 6px 8px;
 }
 
 .dock-bible-search-row__translation {
@@ -39297,6 +39352,7 @@ button.dock-btm-toolbar__clear--inline,
   min-height: 32px;
   padding-block: 4px;
   line-height: 20px;
+  font-size: clamp(10.5px, calc(11.5px * var(--dock-font-scale, 1)), 13px);
 }
 
 .dock-module--bible .dock-bible-search-row__translation .bible-version-library__trigger,

@@ -97,8 +97,34 @@ export const CURATED_RELEASE_NOTES: Record<string, ReleaseHighlight[]> = {
       ],
     },
     {
-      id: "fixes",
+      id: "dock-bible-refinements",
       number: 4,
+      badge: "improvement",
+      badgeLabel: "IMPROVEMENT",
+      title: "Dock Bible Tab Toolbar & Picker Refinements",
+      summary: "Streamlined navigation, unified overflow actions, and compact book pickers.",
+      points: [
+        {
+          lead: "Promoted Quick Edit",
+          text: "Quick Edit is now immediately accessible directly from the bottom toolbar.",
+        },
+        {
+          lead: "Unified Action Menu",
+          text: "Compare Translations, Bible History, Reload, and Theme toggles are now unified in the 3-dots menu—always accessible in any search mode.",
+        },
+        {
+          lead: "Compact Book & Chapter Pickers",
+          text: "5-column book picker with standard initials and 6-column chapter grid for faster navigation.",
+        },
+        {
+          lead: "Improved Popover Stacking",
+          text: "Reference and translation compare popovers always render comfortably above the search bar.",
+        },
+      ],
+    },
+    {
+      id: "fixes",
+      number: 5,
       badge: "fix",
       badgeLabel: "BUG FIX",
       title: "Stability & Polish Fixes",
