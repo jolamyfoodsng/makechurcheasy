@@ -717,6 +717,7 @@ function DockPageContent({
 
   // ── Force update: only warn when a genuinely newer release is available ──
   useEffect(() => {
+    const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/latest/download/latest.json";
     const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
     const CACHE_KEY = "ocs-dock-update-cache-v1";
 
@@ -749,29 +750,44 @@ function DockPageContent({
       }
     };
 
-    fetch(RELEASES_API)
-      .then((r) => r.json())
-      .then((release: { published_at?: string; tag_name?: string }) => {
-        if (!release.published_at) return;
-
-        // Cache for offline fallback
+    // First try public latest.json (no GitHub API rate limiting)
+    fetch(LATEST_MANIFEST_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error("Manifest fetch failed");
+        return r.json();
+      })
+      .then((manifest: { pub_date?: string; version?: string }) => {
+        if (!manifest.pub_date || !manifest.version) throw new Error("Incomplete manifest");
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: manifest.pub_date, version: manifest.version }));
         } catch { /* non-critical */ }
-
-        evaluateRelease(release.published_at, release.tag_name);
+        evaluateRelease(manifest.pub_date, manifest.version);
       })
       .catch(() => {
-        // Offline fallback: use the last release, but keep the same version guard.
-        try {
-          const raw = localStorage.getItem(CACHE_KEY);
-          if (raw) {
-            const cached = JSON.parse(raw) as { date?: string; version?: string };
-            if (cached.date) evaluateRelease(cached.date, cached.version);
-          }
-        } catch { /* non-critical */ }
+        // Fallback to GitHub REST API
+        fetch(RELEASES_API)
+          .then((r) => r.json())
+          .then((release: { published_at?: string; tag_name?: string }) => {
+            if (!release.published_at) return;
+
+            try {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
+            } catch { /* non-critical */ }
+
+            evaluateRelease(release.published_at, release.tag_name);
+          })
+          .catch(() => {
+            // Offline fallback: use the last release, but keep the same version guard.
+            try {
+              const raw = localStorage.getItem(CACHE_KEY);
+              if (raw) {
+                const cached = JSON.parse(raw) as { date?: string; version?: string };
+                if (cached.date) evaluateRelease(cached.date, cached.version);
+              }
+            } catch { /* non-critical */ }
+          });
       });
-  }, []);
+  }, [cfg.appUpdates.forceUpdatesEnabled, cfg.appUpdates.gracePeriodHours]);
 
   useEffect(() => {
     dockClient.init();

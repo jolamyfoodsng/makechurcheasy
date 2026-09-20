@@ -538,9 +538,11 @@
       font-size: 0.65em;
       color: rgba(255, 255, 255, 0.55);
       margin-bottom: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      text-overflow: clip;
     }
 
     .lt-compare-col {
@@ -561,6 +563,7 @@
       transform: translateX(-50%);
       z-index: 3;
       width: calc(100% - var(--lt-h-margin, 120px));
+      min-height: var(--lt-min-height, 0px);
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
       padding: var(--lt-card-padding, 28px 48px);
@@ -580,6 +583,7 @@
       left: 50%;
       transform: translateX(-50%);
       width: calc(100% - var(--lt-h-margin, 120px));
+      min-height: var(--lt-min-height, 0px);
       height: auto;
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
@@ -592,6 +596,7 @@
       left: 50%;
       transform: translateX(-50%);
       width: calc(100% - var(--lt-h-margin, 120px));
+      min-height: var(--lt-min-height, 0px);
       height: auto;
       max-width: var(--lt-max-width, 1680px);
       max-height: var(--lt-max-height, 600px);
@@ -744,6 +749,8 @@
     #lt-bar>* {
       position: relative;
       z-index: 1;
+      flex-shrink: 0;
+      min-height: 0;
     }
 
     #lt-bar>#lt-verse-text,
@@ -1832,78 +1839,62 @@
       function autoScaleLowerThirdContent() {
         if (!ltBar || !ltVerseText || !ltRefText) return;
         if (ltBar.classList.contains('hidden') || ltBar.classList.contains('blank')) return;
-        if (!autoFontScaleEnabled) {
-          ltVerseText.style.fontSize = '';
-          ltVerseText.style.lineHeight = '';
-          ltRefText.style.fontSize = '';
-          ltTranslationText.style.fontSize = '';
-          ltTranslationText.style.lineHeight = '';
-          ltBar.style.padding = '';
-          return;
-        }
-
-        const ratio = baseFontSize > 0 ? Math.max(0.35, baseRefFontSize / baseFontSize) : 0.5;
-        const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
-        const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE;
-        const minFitSize = 18;
-        let textSize = Math.max(minFitSize, Math.round(baseFontSize));
-        let referenceSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize));
-        let translationSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(textSize * translationRatio));
-        const { width: viewportWidth, height: viewportHeight } = getViewportSize();
-        const targetWidth = Math.max(280, viewportWidth);
-        const targetHeight = Math.max(100, Math.min(barMaxHeight, viewportHeight));
-        const apply = () => {
-          ltVerseText.style.fontSize = `${textSize}px`;
-          ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
-          ltRefText.style.fontSize = `${referenceSize}px`;
-          ltTranslationText.style.fontSize = `${translationSize}px`;
-          ltTranslationText.style.lineHeight = '1.3';
-        };
-        const applyTextSize = (nextSize) => {
-          textSize = nextSize;
-          referenceSize = Math.max(
-            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
-            Math.round(textSize * ratio),
-          );
-          translationSize = Math.max(
-            LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
-            Math.round(textSize * translationRatio),
-          );
-          apply();
-        };
-        const overflowing = () => {
-          const fitNodes = [ltVerseText, ltRefText, ltTranslationText].filter((node) => isFitVisible(node));
-          if (!fitNodes.length) return false;
-          // The bar clips its contents by design, so scrollHeight is not a
-          // reliable fit signal. Measure the visible text against the bar's
-          // actual content frame instead.
-          if (isContentOutsideFrame(fitNodes, ltBar)) return true;
-          const frame = getFrameContentRect(ltBar);
-          const frameWidth = Math.max(1, frame.width || targetWidth);
-          const frameHeight = Math.max(1, frame.height || targetHeight);
-          return fitNodes.some((node) => isOverflowing(node, frameWidth, frameHeight));
-        };
 
         [ltVerseText, ltRefText, ltTranslationText].forEach((node) => {
           if (!node) return;
           node.style.fontSize = '';
           node.style.lineHeight = '';
         });
-        apply();
-        if (overflowing() && textSize > minFitSize) {
-          let low = minFitSize;
-          let high = textSize - 1;
-          let best = minFitSize;
-          applyTextSize(low);
-          if (!overflowing()) {
-            while (low <= high) {
-              const mid = Math.floor((low + high) / 2);
-              applyTextSize(mid);
-              if (overflowing()) high = mid - 1;
-              else { best = mid; low = mid + 1; }
-            }
+        ltBar.style.minHeight = '';
+        ltBar.style.height = '';
+
+        const translationRatio = baseFontSize > 0 ? Math.max(0.46, Math.min(0.82, (baseRefFontSize * 1.25) / baseFontSize)) : 0.72;
+        const baseTextSize = Math.max(18, Math.round(baseFontSize));
+        const referenceSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseRefFontSize || (baseTextSize * 0.5)));
+        const translationSize = Math.max(LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, Math.round(baseTextSize * translationRatio));
+
+        ltVerseText.style.fontSize = `${baseTextSize}px`;
+        ltVerseText.style.lineHeight = getComputedStyle(root).getPropertyValue('--line-height').trim() || '1.3';
+        ltRefText.style.fontSize = `${referenceSize}px`;
+        if (ltTranslationText) {
+          ltTranslationText.style.fontSize = `${translationSize}px`;
+          ltTranslationText.style.lineHeight = '1.3';
+        }
+
+        const isHorizontalEdge = !ltBar.classList.contains('lt-edge-left') && !ltBar.classList.contains('lt-edge-right');
+        if (isHorizontalEdge) {
+          const cardStyle = getComputedStyle(root);
+          ltBar.style.height = 'auto';
+          ltBar.style.minHeight = '0px';
+          ltBar.style.maxHeight = 'none';
+
+          const minBarH = Math.max(0, parseFloat(cardStyle.getPropertyValue('--lt-min-height')) || 0);
+          const maxBarH = Math.max(minBarH || 120, barMaxHeight || 720);
+          const edgeSafety = Math.max(8, Math.round(baseTextSize * 0.08));
+          const fitNodes = [ltVerseText, ltRefText, ltTranslationText].filter((node) => node && !node.classList.contains('hidden'));
+          const applyScale = (scale) => {
+            ltVerseText.style.fontSize = `${Math.max(10, Math.round(baseTextSize * scale))}px`;
+            ltRefText.style.fontSize = `${Math.max(10, Math.round(referenceSize * scale))}px`;
+            if (ltTranslationText) ltTranslationText.style.fontSize = `${Math.max(10, Math.round(translationSize * scale))}px`;
+          };
+          const overflows = () => ltBar.scrollHeight + edgeSafety > maxBarH + 1 ||
+            ltBar.scrollWidth > ltBar.clientWidth + 1 ||
+            fitNodes.some((node) => node.scrollWidth > node.clientWidth + 1);
+          applyScale(1);
+          const scaleStep = Math.min(0.2, 10 / Math.max(1, baseTextSize));
+          let scale = 1;
+          let guard = 0;
+          while (overflows() && scale > 0.1 && guard < 24) {
+            scale = Math.max(0.1, scale - scaleStep);
+            applyScale(scale);
+            guard += 1;
           }
-          applyTextSize(best);
+
+          const naturalH = ltBar.scrollHeight || ltBar.offsetHeight || 0;
+          const targetH = Math.max(minBarH || 48, Math.min(maxBarH, Math.ceil(naturalH)));
+          ltBar.style.minHeight = `${targetH}px`;
+          ltBar.style.height = 'auto';
+          ltBar.style.maxHeight = `${maxBarH}px`;
         }
       }
 
@@ -2189,7 +2180,7 @@
         }
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
-        root.style.setProperty('--lt-min-height', (s.lowerThirdBarMinHeight || 0) + 'px');
+        root.style.setProperty('--lt-min-height', (Math.max(0, Number(s.lowerThirdBarMinHeight) || 0)) + 'px');
         root.style.setProperty('--lt-card-padding', s.lowerThirdCardPadding || `${baseBarPadding}px`);
         const cardRadius = Math.max(0, Math.min(64, Number(s.lowerThirdCardRadius ?? 18)));
         root.style.setProperty('--lt-card-radius', cardRadius + 'px');

@@ -546,7 +546,10 @@ export default function SpeechToScripturePage() {
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
-  const canStopListening = isListening || isConnecting;
+  // Only show the destructive Stop action after the native mic and AssemblyAI
+  // session have both reported ready. During startup the button stays in its
+  // neutral Connecting state so a half-open stream cannot look active.
+  const canStopListening = isListening;
   const isTranscribing = canStopListening;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
 
@@ -904,12 +907,14 @@ export default function SpeechToScripturePage() {
             <button
               className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
               onClick={canStopListening ? handleStop : handleStart}
-              disabled={(!canStopListening && checkingAccess) || (!canStopListening && !hasCredits)}
-              title={!canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+              disabled={checkingAccess || isConnecting || (!canStopListening && !hasCredits)}
+              title={isConnecting ? t("verseAi.connecting") : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
               {canStopListening ? (
                 <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
               ) : checkingAccess ? (
                 <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
+              ) : isConnecting ? (
+                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : !hasCredits ? (
                 <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (

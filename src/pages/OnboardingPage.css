@@ -1,10 +1,48 @@
 /* ── Onboarding Wizard ── */
 
 .ob-root {
+  position: relative;
   min-height: 100dvh;
   background: var(--bg);
   display: flex;
   flex-direction: column;
+}
+
+.ob-account-actions {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  z-index: 20;
+}
+
+.ob-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.ob-logout-btn:hover,
+.ob-logout-btn:focus-visible {
+  color: var(--text);
+  background: var(--primary-soft);
+  border-color: var(--primary-soft-border);
+}
+
+.ob-logout-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ── Top Bar ── */

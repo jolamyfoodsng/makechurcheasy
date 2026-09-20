@@ -56,6 +56,7 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("{isFitTextMode && (");
     expect(dockBibleTabSource).toContain("Update Immediately");
     expect(dockBibleTabSource).toContain("hasPendingBrowserQuickChanges");
+    expect(dockBibleTabSource).toContain('<Icon name="compare_arrows" size={12} />');
     expect(dockBibleTabSource).toContain("compareVerseFontSizeLeft: nextVerseSize");
     expect(dockBibleTabSource).toContain("compareVerseFontSizeRight: nextVerseSize");
     expect(dockBibleTabSource).toContain("compareReferenceFontSizeLeft: nextReferenceSize");
@@ -114,5 +115,12 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("persistQuickActionsPosition(nextTop, nextLeft)");
     expect(dockBibleTabSource).toContain("saveDockBibleUiPreferencePatch({ browserQuickUpdateImmediately: checked })");
     expect(dockBibleTabSource).toContain("quickActionsLeft !== null ? { left: `${quickActionsLeft}px`, right: \"auto\" } : {}");
+  });
+
+  it("persists separate Full and LT line counts across later preference saves", () => {
+    expect(dockBibleTabSource).toContain("fullscreenVerseLineCount,");
+    expect(dockBibleTabSource).toContain("lowerThirdVerseLineCount,");
+    expect(dockBibleTabSource).toContain("fullscreenVerseLineCount: nextLineCount");
+    expect(dockBibleTabSource).toContain("lowerThirdVerseLineCount: nextLineCount");
   });
 });

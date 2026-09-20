@@ -103,6 +103,8 @@ export function applyMeasuredFontFitSettings(
 }
 
 const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSettings> = [
+  "fontSize",
+  "refFontSize",
   "fontFamily",
   "fontColor",
   "refFontColor",
@@ -114,6 +116,8 @@ const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSet
   "refTextAlign",
   "refSpacing",
   "lineHeight",
+  "letterSpacing",
+  "wordSpacing",
   "referenceBackgroundEnabled",
   "referenceBackgroundColor",
   "referenceBackgroundStyle",
@@ -126,6 +130,9 @@ const LINKED_LOWER_THIRD_INHERITED_KEYS: Array<keyof DockFullscreenQuickThemeSet
   "fontStyle",
   "textTransform",
   "textShadow",
+  "textOutline",
+  "textOutlineColor",
+  "textOutlineWidth",
   "animation",
   "animationDuration",
   "backgroundImage",

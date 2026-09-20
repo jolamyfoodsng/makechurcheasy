@@ -18,7 +18,16 @@ body,
   position: fixed;
   right: 20px;
   bottom: 20px;
+  width: 60px;
+  height: 60px;
   z-index: 9999;
+}
+
+.makechatgpt-floating-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 button,
@@ -27,7 +36,9 @@ input {
 }
 
 .makechatgpt-pet {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: 0;
   display: grid;
   width: 60px;
   height: 60px;
@@ -70,6 +81,38 @@ input {
   object-fit: cover;
   user-select: none;
   pointer-events: none;
+}
+
+.makechatgpt-context-menu {
+  position: absolute;
+  right: 0;
+  bottom: 68px;
+  display: grid;
+  min-width: 190px;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.45);
+  pointer-events: auto;
+}
+
+.makechatgpt-context-menu button {
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 7px;
+  color: #e2e8f0;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.makechatgpt-context-menu button:hover,
+.makechatgpt-context-menu button:focus-visible {
+  color: #fff;
+  background: rgba(59, 130, 246, 0.26);
 }
 
 .makechatgpt-panel {

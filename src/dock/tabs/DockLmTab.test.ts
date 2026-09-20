@@ -216,8 +216,8 @@ describe("DockLmTab settings helpers", () => {
     expect(dockLmTabSource).toContain('"Cancel start"');
     expect(dockLmTabSource).not.toContain('disabled={lmStatus === "connecting" || lmStatus === "requesting-mic"}');
 
-    expect(speechToScripturePageSource).toContain("const canStopListening = isListening || isConnecting;");
+    expect(speechToScripturePageSource).toContain("const canStopListening = isListening;");
     expect(speechToScripturePageSource).toContain("onClick={canStopListening ? handleStop : handleStart}");
-    expect(speechToScripturePageSource).not.toContain("disabled={isConnecting || checkingAccess");
+    expect(speechToScripturePageSource).toContain("disabled={checkingAccess || isConnecting || (!canStopListening && !hasCredits)}");
   });
 });

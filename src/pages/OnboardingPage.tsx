@@ -30,10 +30,12 @@ import {
   Library,
   ListMusic,
   Users,
+  LogOut,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
 import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
+import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
 import {
   trackEvent as trackProductEvent,
@@ -325,6 +327,7 @@ export function OnboardingResumeBanner() {
 
 /* ── Main Component ── */
 export default function OnboardingPage() {
+  const { logout } = useAuth();
   const [step, setStep] = useState(() => getSavedStep());
   const [showSkipModal, setShowSkipModal] = useState(false);
   const showTutorial = step === 2 || step === 3;
@@ -374,6 +377,19 @@ export default function OnboardingPage() {
 
   return (
     <div className="ob-root">
+      <div className="ob-account-actions">
+        <button
+          type="button"
+          className="ob-logout-btn"
+          onClick={logout}
+          title="Log out"
+          aria-label="Log out"
+        >
+          <LogOut size={15} aria-hidden="true" />
+          <span>Log out</span>
+        </button>
+      </div>
+
       {/* Progress dots */}
       {/* <div className="ob-progress">
         {STEP_NAMES.map((_, i) => {

@@ -366,24 +366,21 @@ export function buildDefaultLowerThirdQuickThemeSettings(
   const sizePreset =
     LOWER_THIRD_SIZE_PRESETS[settings.lowerThirdSize || DEFAULT_THEME_SETTINGS.lowerThirdSize] ||
     LOWER_THIRD_SIZE_PRESETS.medium;
-  const lowerThirdFontSize = typeof settings.fontSize === "number" && settings.fontSize > 0 && settings.fontSize <= 64
+  const lowerThirdFontSize = typeof settings.fontSize === "number" && settings.fontSize > 0
     ? settings.fontSize
-    : (sizePreset.fontSize || 36);
-  const lowerThirdRefFontSize = typeof settings.refFontSize === "number" && settings.refFontSize > 0 && settings.refFontSize <= 42
+    : (sizePreset.fontSize || 48);
+  const lowerThirdRefFontSize = typeof settings.refFontSize === "number" && settings.refFontSize > 0
     ? settings.refFontSize
-    : (sizePreset.refFontSize || 26);
+    : (sizePreset.refFontSize || Math.round(lowerThirdFontSize * 0.7));
 
   return {
     ...base,
     fontSize: lowerThirdFontSize,
     refFontSize: lowerThirdRefFontSize,
-    textAlign: "left",
-    lineHeight: sizePreset.lineHeight,
-    refSpacing: 14,
-    lowerThirdBarMaxHeight: sizePreset.maxHeight,
-    referenceBackgroundEnabled: false,
-    lowerThirdWidthPreset:
-      base.lowerThirdWidthPreset === "full" ? "md" : base.lowerThirdWidthPreset,
+    textAlign: settings.textAlign || base.textAlign || "center",
+    lineHeight: settings.lineHeight ?? sizePreset.lineHeight,
+    refSpacing: settings.refSpacing ?? 14,
+    lowerThirdBarMaxHeight: settings.lowerThirdBarMaxHeight ?? sizePreset.maxHeight,
     compareVerseFontSizeLeft: Math.min(36, base.compareVerseFontSizeLeft || 34),
     compareVerseFontSizeRight: Math.min(36, base.compareVerseFontSizeRight || 34),
     compareReferenceFontSizeLeft: Math.min(24, base.compareReferenceFontSizeLeft || 22),

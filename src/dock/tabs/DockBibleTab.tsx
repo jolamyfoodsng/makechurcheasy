@@ -531,7 +531,7 @@ function BibleOutputControlsMenu({
             onClick={onToggleCompare}
             aria-pressed={Boolean(compareEnabled)}
           >
-            <Icon name={compareEnabled ? "compare_arrows" : "compare"} size={12} />
+            <Icon name="compare_arrows" size={12} />
             <span className="dock-bible-reader__compare-mode-toggle-label">
               {t("dock.bottomToolbar.compareTranslations", "Compare Translations")}
             </span>
@@ -2217,6 +2217,8 @@ function DockBibleTab({
         referenceVersionVisible,
         keywordMatchPushDirectlyToObs,
         verseLineCount,
+        fullscreenVerseLineCount,
+        lowerThirdVerseLineCount,
         fullscreenThemeId: selectedBibleTheme.id,
         lowerThirdThemeId: selectedLowerThirdTheme.id,
         backgroundPreset,
@@ -2249,6 +2251,8 @@ function DockBibleTab({
     overlayMode,
     savedFullscreenQuickThemeSettings,
     verseLineCount,
+    fullscreenVerseLineCount,
+    lowerThirdVerseLineCount,
     selectedBibleTheme.id,
     selectedBook,
     selectedChapter,
@@ -2541,6 +2545,8 @@ function DockBibleTab({
       referenceVersionVisible,
       keywordMatchPushDirectlyToObs,
       verseLineCount,
+      fullscreenVerseLineCount,
+      lowerThirdVerseLineCount,
       fullscreenThemeId: selectedBibleThemeRef.current.id,
       lowerThirdThemeId: selectedLowerThirdThemeRef.current.id,
       backgroundPreset: backgroundPresetRef.current,
@@ -2573,6 +2579,8 @@ function DockBibleTab({
     translationA,
     translationB,
     verseLineCount,
+    fullscreenVerseLineCount,
+    lowerThirdVerseLineCount,
   ]);
 
   const handleBackgroundPresetChange = useCallback((preset: DockBackgroundPreset) => {
@@ -3016,21 +3024,21 @@ function DockBibleTab({
           const rawCompPassageVerseSize = Number(basePassageSettings.compareVerseFontSizeLeft || 0);
           const rawCompPassageRefSize = Number(basePassageSettings.compareReferenceFontSizeLeft || 0);
           const activePassageBaseFontSize = Number(
-            basePassageSettings.fontSize || (liveOverlayMode === "lower-third" ? 36 : 145),
+            basePassageSettings.fontSize || (liveOverlayMode === "lower-third" ? 64 : 145),
           );
           const activePassageBaseRefFontSize = Number(
-            basePassageSettings.refFontSize || (liveOverlayMode === "lower-third" ? 26 : 42),
+            basePassageSettings.refFontSize || (liveOverlayMode === "lower-third" ? 42 : 42),
           );
           const effectiveCompPassageVerseSize = liveOverlayMode === "lower-third"
-            ? Math.min(36, rawCompPassageVerseSize > 0 ? rawCompPassageVerseSize : activePassageBaseFontSize)
+            ? (rawCompPassageVerseSize > 0 ? rawCompPassageVerseSize : activePassageBaseFontSize)
             : ((rawCompPassageVerseSize > 40) ? rawCompPassageVerseSize : activePassageBaseFontSize);
           const effectiveCompPassageRefSize = liveOverlayMode === "lower-third"
-            ? Math.min(26, rawCompPassageRefSize > 0 ? rawCompPassageRefSize : activePassageBaseRefFontSize)
+            ? (rawCompPassageRefSize > 0 ? rawCompPassageRefSize : activePassageBaseRefFontSize)
             : ((rawCompPassageRefSize > 25) ? rawCompPassageRefSize : activePassageBaseRefFontSize);
           return {
             ...basePassageSettings,
-            fontSize: liveOverlayMode === "lower-third" ? Math.min(36, activePassageBaseFontSize) : activePassageBaseFontSize,
-            refFontSize: liveOverlayMode === "lower-third" ? Math.min(26, activePassageBaseRefFontSize) : activePassageBaseRefFontSize,
+            fontSize: activePassageBaseFontSize,
+            refFontSize: activePassageBaseRefFontSize,
             compareVerseFontSizeLeft: effectiveCompPassageVerseSize,
             compareVerseFontSizeRight: effectiveCompPassageVerseSize,
             compareReferenceFontSizeLeft: effectiveCompPassageRefSize,
@@ -3598,21 +3606,21 @@ function DockBibleTab({
             const rawLiveCompVerseSize = Number(liveSettingsRecord.compareVerseFontSizeLeft || 0);
             const rawLiveCompRefSize = Number(liveSettingsRecord.compareReferenceFontSizeLeft || 0);
             const activeLiveBaseFontSize = Number(
-              liveSettingsRecord.fontSize || (liveOverlayMode === "lower-third" ? 36 : 145),
+              liveSettingsRecord.fontSize || (liveOverlayMode === "lower-third" ? 64 : 145),
             );
             const activeLiveBaseRefFontSize = Number(
-              liveSettingsRecord.refFontSize || (liveOverlayMode === "lower-third" ? 26 : 42),
+              liveSettingsRecord.refFontSize || (liveOverlayMode === "lower-third" ? 42 : 42),
             );
             const effectiveLiveCompVerseSize = liveOverlayMode === "lower-third"
-              ? Math.min(36, rawLiveCompVerseSize > 0 ? rawLiveCompVerseSize : activeLiveBaseFontSize)
+              ? (rawLiveCompVerseSize > 0 ? rawLiveCompVerseSize : activeLiveBaseFontSize)
               : ((rawLiveCompVerseSize > 40) ? rawLiveCompVerseSize : activeLiveBaseFontSize);
             const effectiveLiveCompRefSize = liveOverlayMode === "lower-third"
-              ? Math.min(26, rawLiveCompRefSize > 0 ? rawLiveCompRefSize : activeLiveBaseRefFontSize)
+              ? (rawLiveCompRefSize > 0 ? rawLiveCompRefSize : activeLiveBaseRefFontSize)
               : ((rawLiveCompRefSize > 25) ? rawLiveCompRefSize : activeLiveBaseRefFontSize);
             return {
               ...liveSettingsRecord,
-              fontSize: liveOverlayMode === "lower-third" ? Math.min(36, activeLiveBaseFontSize) : activeLiveBaseFontSize,
-              refFontSize: liveOverlayMode === "lower-third" ? Math.min(26, activeLiveBaseRefFontSize) : activeLiveBaseRefFontSize,
+              fontSize: activeLiveBaseFontSize,
+              refFontSize: activeLiveBaseRefFontSize,
               compareVerseFontSizeLeft: effectiveLiveCompVerseSize,
               compareVerseFontSizeRight: effectiveLiveCompVerseSize,
               compareReferenceFontSizeLeft: effectiveLiveCompRefSize,
@@ -3669,12 +3677,12 @@ function DockBibleTab({
           bibleThemeSettings: (() => {
             const baseRecord = (liveThemeSettings as unknown as Record<string, unknown>) || {};
             if (liveOverlayMode === "lower-third") {
-              const baseFont = Number(baseRecord.fontSize || 36);
-              const baseRefFont = Number(baseRecord.refFontSize || 26);
+              const baseFont = Number(baseRecord.fontSize || 64);
+              const baseRefFont = Number(baseRecord.refFontSize || 42);
               return {
                 ...baseRecord,
-                fontSize: Math.min(64, baseFont > 0 ? baseFont : 36),
-                refFontSize: Math.min(42, baseRefFont > 0 ? baseRefFont : 26),
+                fontSize: baseFont > 0 ? baseFont : 64,
+                refFontSize: baseRefFont > 0 ? baseRefFont : 42,
               };
             }
             return baseRecord;
@@ -4330,7 +4338,8 @@ function DockBibleTab({
     option: DockQuickSizeOption,
   ) => {
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const horizontalPadding = Math.round(preset.padding * 1.55);
+    const cardPadding = option.cardPadding ?? preset.padding;
+    const horizontalPadding = Math.round(cardPadding * 1.55);
     const nextVerseSize = clampNumber(
       option.fontSize,
       browserFontSizeMin,
@@ -4347,11 +4356,11 @@ function DockBibleTab({
       fontWeight: option.fontWeight ?? "bold",
       refFontWeight: option.refFontWeight ?? "bold",
       lineHeight: preset.lineHeight,
-      refSpacing: option.refSpacing ?? preset.refSpacing, /* refSpacing: preset.refSpacing */
+      refSpacing: option.refSpacing ?? preset.refSpacing,
       lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
-      lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
-      lowerThirdBarMaxHeight: preset.maxHeight,
+      lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
+      lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
       compareVerseFontSizeLeft: nextVerseSize,
       compareVerseFontSizeRight: nextVerseSize,
       compareReferenceFontSizeLeft: nextReferenceSize,

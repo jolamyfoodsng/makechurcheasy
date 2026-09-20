@@ -267,6 +267,7 @@ const ICONS: Record<string, IconDef> = {
   code: { component: Code },
   collections: { component: LayoutTemplate },
   collections_bookmark: { component: Library },
+  compare_arrows: { component: ArrowLeftRight },
   content_copy: { component: Copy },
   countdown: { component: Hourglass },
   count_down: { component: Hourglass },

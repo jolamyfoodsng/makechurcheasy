@@ -1106,7 +1106,8 @@ export default function DockNotesTab({
     const maxRefFontSize = overlayMode === "fullscreen"
       ? 150
       : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
-    const horizontalPadding = Math.round(preset.padding * 1.55);
+    const cardPadding = option.cardPadding ?? preset.padding;
+    const horizontalPadding = Math.round(cardPadding * 1.55);
     const fontSize = Math.max(minFontSize, option.fontSize);
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const refFontSize = clamp(option.refFontSize, minRefFontSize, maxRefFontSize);
@@ -1117,8 +1118,8 @@ export default function DockNotesTab({
       refSpacing: preset.refSpacing,
       lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
-      lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
-      lowerThirdBarMaxHeight: preset.maxHeight,
+      lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
+      lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
     };
   }, [overlayMode]);
 
