@@ -465,9 +465,7 @@ describe("Bible picker reference tabs", () => {
 describe("Bible stable auto-fit", () => {
   it("keeps the fitted Bible size stable when the verse changes", () => {
     expect(overlayHtml).toContain("stableFullscreenTextSize");
-    expect(overlayHtml).toContain("stableLowerThirdTextSize");
     expect(overlayHtml).toContain("Math.min(baseTextSize, stableFullscreenTextSize)");
-    expect(overlayHtml).toContain("Math.min(baseTextSize, stableLowerThirdTextSize)");
     expect(overlayHtml).toContain("function resolveAutoFontFloor(baseSize, fallback)");
     expect(overlayHtml).toContain("const absoluteFloor = Math.max(fallback, 16)");
     expect(overlayHtml).toContain("if (themeChanged) resetStableAutoFitSizes();");
@@ -1049,11 +1047,10 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(overlayHtml).toContain("max-height: 100%");
   });
 
-  it("auto-scales lower-third Bible content against the visible card bounds", () => {
-    expect(overlayHtml).toContain("const textFloor = LOWER_THIRD_FIT_MIN_FONT_SIZE");
-    expect(overlayHtml).toContain("const fitNodes = [ltVerseText, ltRefText].filter((node) => isFitVisible(node))");
-    expect(overlayHtml).toContain("if (isContentOutsideFrame(fitNodes, ltBar)) return true");
-    expect(overlayHtml).toContain("Because the card has");
+  it("renders lower-third Bible content at the configured font size without unstable shrink loops", () => {
+    expect(overlayHtml).toContain("function autoScaleLowerThirdContent()");
+    expect(overlayHtml).toContain("const baseTextSize = Math.max(16, Math.round(baseFontSize));");
+    expect(overlayHtml).toContain("ltVerseText.style.fontSize = `${baseTextSize}px`;");
     expect(overlayHtml).toContain("const wp2 = s.lowerThirdWidthPreset || 'md'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-max-width', isLowerThird ? 'none'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px')");

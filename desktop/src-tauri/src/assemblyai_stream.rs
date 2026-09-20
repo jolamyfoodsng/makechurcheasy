@@ -517,16 +517,11 @@ async fn run_realtime_transcriber(
         .map_err(|e| format!("Realtime WebSocket connection failed: {e}"))?;
     let (mut write, mut read) = ws_stream.split();
 
-    let _ = app.emit(
-        "assemblyai-status",
-        StatusPayload {
-            status: "connected".to_string(),
-        },
-    );
-    // cpal starts before this task so device startup stays responsive, but no
-    // samples are accepted until AssemblyAI has completed the WS handshake.
-    audio_ready.store(true, Ordering::Release);
-    println!("[AssemblyAI Realtime] WebSocket connected");
+    // The TCP/WebSocket handshake only proves that the socket opened. Keep
+    // the UI in Connecting… and hold audio until AssemblyAI sends its Begin
+    // message, which confirms that the realtime session is ready to receive
+    // audio. This prevents a false Listening/Connected state during startup.
+    println!("[AssemblyAI Realtime] WebSocket opened; waiting for Begin");
 
     let mut last_server_activity = Instant::now();
     let mut heartbeat = interval(WS_HEARTBEAT_INTERVAL);
@@ -597,11 +592,15 @@ async fn run_realtime_transcriber(
                 last_server_activity = Instant::now();
                 match message {
                     Ok(Message::Text(text)) => {
-                        handle_realtime_message(&app, text.as_ref())?;
+                        if handle_realtime_message(&app, text.as_ref())? {
+                            audio_ready.store(true, Ordering::Release);
+                        }
                     }
                     Ok(Message::Binary(bytes)) => {
                         if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
-                            handle_realtime_message(&app, text)?;
+                            if handle_realtime_message(&app, text)? {
+                                audio_ready.store(true, Ordering::Release);
+                            }
                         }
                     }
                     Ok(Message::Ping(payload)) => {
@@ -700,7 +699,8 @@ fn realtime_transcript_payload(message: &RealtimeTranscriptMessage) -> Option<Tr
     })
 }
 
-fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<(), String> {
+/// Handle a provider message and return whether it confirmed session readiness.
+fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
     let message: RealtimeTranscriptMessage = serde_json::from_str(raw)
         .map_err(|e| format!("Failed to parse realtime message: {e}: {raw}"))?;
 
@@ -717,6 +717,7 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<(), String> {
                     status: "connected".to_string(),
                 },
             );
+            return Ok(true);
         }
         "Termination" => {
             let _ = app.emit(
@@ -741,7 +742,7 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<(), String> {
         _ => {}
     }
 
-    Ok(())
+    Ok(false)
 }
 
 fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) {

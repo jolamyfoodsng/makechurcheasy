@@ -18,9 +18,9 @@ describe("dock quick text-size presets", () => {
       "2XL",
     ]);
     expect(DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD.map((option) => option.fontSize)).toEqual([
+      48,
+      56,
       64,
-      80,
-      96,
     ]);
     expect(getDockQuickSizeOptions("lower-third")).toEqual(DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD);
     expect(getDockQuickSizeOptions("lowerThird")).toEqual(DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD);

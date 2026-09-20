@@ -49,7 +49,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{image::Image, Emitter, Manager};
 
 /// The port the overlay server is running on (set at startup).
-static OVERLAY_PORT: AtomicU16 = AtomicU16::new(0);
+/// Always canonical port 45678 so OBS custom browser docks and overlays never change.
+static OVERLAY_PORT: AtomicU16 = AtomicU16::new(45678);
 
 /// In-memory auth session for the OBS dock.
 /// Written by POST /api/auth/session, read by GET /api/auth/status.
@@ -5060,11 +5061,48 @@ fn extract_text_elements_from_pdf(file_data: Vec<u8>) -> Result<Vec<PdfTextEleme
     Ok(all_elements)
 }
 
+fn bind_overlay_tcp_listener(port: u16) -> std::io::Result<std::net::TcpListener> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    let _ = socket.set_reuse_address(true);
+    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+    {
+        let _ = socket.set_reuse_port(true);
+    }
+    let addr: std::net::SocketAddr = format!("0.0.0.0:{}", port)
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    socket.bind(&addr.into())?;
+    socket.listen(128)?;
+    Ok(socket.into())
+}
+
+fn is_overlay_server_already_running(port: u16) -> bool {
+    let addr_str = format!("127.0.0.1:{}", port);
+    let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() else {
+        return false;
+    };
+    if let Ok(mut stream) = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(400)) {
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(400)));
+        let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(400)));
+        let req = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", addr_str);
+        if std::io::Write::write_all(&mut stream, req.as_bytes()).is_ok() {
+            let mut response = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut stream, &mut response);
+            let resp = String::from_utf8_lossy(&response);
+            return resp.contains("MakeChurchEasy") || resp.contains("200 OK");
+        }
+    }
+    false
+}
+
 /// Start a tiny HTTP server that serves files from the frontend dist folder.
-/// Prefer the stable production port, but fall back to an available LAN port
-/// so a local/staging instance can run beside another desktop instance.
-/// Returns the actual bound port, or 0 if all bind attempts failed.
+/// Port 45678 is strictly canonical so OBS custom browser docks, browser sources,
+/// and mobile apps never have their connection URLs change.
+/// Returns 45678.
 fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
+    const CANONICAL_OVERLAY_PORT: u16 = 45678;
+
     // Resolve the uploads directory for serving user-uploaded files
     let uploads_dir = app_dir().ok().map(|d| d.join("uploads"));
 
@@ -5078,40 +5116,60 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         parent.filter(|p| p.join("dock.html").is_file())
     };
 
-    // Keep the stable port for production. A dynamic fallback prevents a
-    // second local/staging instance from publishing apiPort: 0 when 45678 is
-    // already occupied by another desktop instance.
-    let server = match tiny_http::Server::http("0.0.0.0:45678") {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!(
-                "[Overlay Server] Port 45678 unavailable: {}. Trying an available LAN port.",
-                e
-            );
-            match tiny_http::Server::http("0.0.0.0:0") {
-                Ok(s) => s,
-                Err(fallback_error) => {
+    // Attempt to bind port 45678 with SO_REUSEADDR and SO_REUSEPORT.
+    // Retry briefly to allow any socket from a recent restart to clear TIME_WAIT.
+    let mut bound_listener = None;
+    for attempt in 0..5 {
+        match bind_overlay_tcp_listener(CANONICAL_OVERLAY_PORT) {
+            Ok(listener) => {
+                bound_listener = Some(listener);
+                break;
+            }
+            Err(e) => {
+                if attempt < 4 {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                } else {
                     eprintln!(
-                        "[Overlay Server] Could not bind the fallback LAN port: {}",
-                        fallback_error
+                        "[Overlay Server] Port {} bind failed after {} retries: {}",
+                        CANONICAL_OVERLAY_PORT, attempt + 1, e
                     );
-                    return 0;
                 }
             }
         }
-    };
+    }
 
-    let port = match server.server_addr().to_ip() {
-        Some(addr) => addr.port(),
+    let server = match bound_listener {
+        Some(listener) => match tiny_http::Server::from_listener(listener, None) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[Overlay Server] Failed to initialize tiny_http from listener: {}", e);
+                OVERLAY_PORT.store(CANONICAL_OVERLAY_PORT, Ordering::Relaxed);
+                return CANONICAL_OVERLAY_PORT;
+            }
+        },
         None => {
-            eprintln!("[Overlay Server] Could not determine server port.");
-            return 0;
+            // Port 45678 could not be bound directly.
+            // Check if another MakeChurchEasy instance is already running and serving port 45678.
+            if is_overlay_server_already_running(CANONICAL_OVERLAY_PORT) {
+                println!(
+                    "[Overlay Server] Port {} is already active and serving MakeChurchEasy. Keeping canonical URLs http://127.0.0.1:{}",
+                    CANONICAL_OVERLAY_PORT, CANONICAL_OVERLAY_PORT
+                );
+            } else {
+                eprintln!(
+                    "[Overlay Server] Port {} unavailable, keeping canonical port {} so OBS connection URLs remain fixed.",
+                    CANONICAL_OVERLAY_PORT, CANONICAL_OVERLAY_PORT
+                );
+            }
+            OVERLAY_PORT.store(CANONICAL_OVERLAY_PORT, Ordering::Relaxed);
+            return CANONICAL_OVERLAY_PORT;
         }
     };
-    OVERLAY_PORT.store(port, Ordering::Relaxed);
+
+    OVERLAY_PORT.store(CANONICAL_OVERLAY_PORT, Ordering::Relaxed);
     println!(
         "[Overlay Server] Serving files from {:?} on http://127.0.0.1:{}",
-        resource_dir, port
+        resource_dir, CANONICAL_OVERLAY_PORT
     );
 
     let local_send_sessions: Arc<Mutex<HashMap<String, LocalSendUploadSession>>> =
@@ -5142,7 +5200,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 <p>Health check:</p>
 <code>http://&lt;this-ip&gt;:{}/health</code>
 </main></body></html>"#,
-                        port, port
+                        CANONICAL_OVERLAY_PORT, CANONICAL_OVERLAY_PORT
                     )
                 };
                 let content_type = if clean == "health" {
@@ -7698,7 +7756,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         }
     });
 
-    port
+    CANONICAL_OVERLAY_PORT
 }
 
 // ── Dynamic App Icon ─────────────────────────────────────────────────────────

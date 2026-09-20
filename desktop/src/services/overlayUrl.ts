@@ -202,17 +202,9 @@ export function getOverlayBaseUrlSync(): string {
 }
 
 export function getDockBaseUrl(): string {
-  if (import.meta.env.DEV && _devDockBaseUrl) return _devDockBaseUrl;
-  if (typeof window !== "undefined" && window.location?.origin) {
-    const { protocol, hostname } = window.location;
-    const isHttpLocalOrigin =
-      (protocol === "http:" || protocol === "https:") &&
-      (hostname === "localhost" || hostname === "127.0.0.1");
-    if (isHttpLocalOrigin) {
-      return "http://localhost:1420";
-    }
-  }
-  return getOverlayBaseUrlSync();
+  if (_overrideBaseUrl) return _overrideBaseUrl;
+  if (_devDockBaseUrl) return _devDockBaseUrl;
+  return DEFAULT_TAURI_OVERLAY_BASE_URL;
 }
 
 /**

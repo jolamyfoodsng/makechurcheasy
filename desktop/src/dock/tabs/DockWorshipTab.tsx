@@ -2102,6 +2102,13 @@ function DockWorshipTab({
     () => applyQuickThemeSettings(baseFullscreenTheme, fullscreenQuickThemeSettings),
     [baseFullscreenTheme, fullscreenQuickThemeSettings],
   );
+  const defaultFullscreenQuickThemeSettings = useMemo(
+    () => ({
+      ...extractQuickThemeSettings(baseFullscreenTheme.settings),
+      backgroundType: "theme" as const,
+    }),
+    [baseFullscreenTheme.settings],
+  );
   const defaultLowerThirdQuickThemeSettings = useMemo(
     () => buildDefaultLowerThirdQuickThemeSettings(baseLowerThirdTheme.settings, "theme"),
     [baseLowerThirdTheme.settings],
@@ -2129,13 +2136,6 @@ function DockWorshipTab({
       backgroundType: fullscreenQuickThemeSettings?.backgroundType ?? "theme",
     }),
     [effectiveSelectedFSTheme.settings, fullscreenQuickThemeSettings],
-  );
-  const defaultFullscreenQuickThemeSettings = useMemo(
-    () => ({
-      ...extractQuickThemeSettings(baseFullscreenTheme.settings),
-      backgroundType: "theme" as const,
-    }),
-    [baseFullscreenTheme.settings],
   );
   const activeLowerThirdQuickThemeSettings = useMemo(
     () => ({
@@ -2172,17 +2172,18 @@ function DockWorshipTab({
     const minRefFontSize = isFullscreen ? 14 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
     const maxRefFontSize = isFullscreen ? 150 : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-    const horizontalPadding = Math.round(preset.padding * 1.55);
+    const cardPadding = option.cardPadding ?? preset.padding;
+    const horizontalPadding = Math.round(cardPadding * 1.55);
     return {
       fontSize: clamp(option.fontSize, minFontSize, maxFontSize),
       refFontSize: clamp(option.refFontSize, minRefFontSize, maxRefFontSize),
       ...(option.refFontWeight ? { refFontWeight: option.refFontWeight } : {}),
       lineHeight: preset.lineHeight,
-      refSpacing: preset.refSpacing,
+      refSpacing: option.refSpacing ?? preset.refSpacing,
       lowerThirdSize: option.preset,
       lowerThirdWidthPreset: option.width,
-      lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`,
-      lowerThirdBarMaxHeight: preset.maxHeight,
+      lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
+      lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
     };
   }, [fullscreenOnlyMode, overlayMode]);
   const handleWorshipQuickCommit = useCallback((

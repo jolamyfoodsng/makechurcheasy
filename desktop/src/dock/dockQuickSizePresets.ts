@@ -12,16 +12,18 @@ export interface DockQuickSizeOption {
   preset: LowerThirdSize;
   value: string;
   width: LowerThirdWidthPreset;
+  cardPadding?: number;
+  cardMaxHeight?: number;
 }
 
 /**
- * Quick size presets for Lower Third (LT): LG (64px), XL (80px), and 2XL (96px).
- * Calibrated against EasyWorship / broadcast lower-third safe zones.
+ * Compact lower-third presets. The renderer can reduce these further for
+ * unusually long passages while keeping every glyph inside the card.
  */
 export const DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD: readonly DockQuickSizeOption[] = [
-  { id: "lg", labelKey: "bible.sizeLg", label: "LG", fontSize: 64, refFontSize: 42, fontWeight: "black", refFontWeight: "black", refSpacing: 14, preset: "small", value: "small", width: "xxl" },
-  { id: "xl", labelKey: "bible.sizeXl", label: "XL", fontSize: 80, refFontSize: 54, fontWeight: "black", refFontWeight: "black", refSpacing: 18, preset: "medium", value: "medium", width: "xl" },
-  { id: "2xl", labelKey: "bible.size2xl", label: "2XL", fontSize: 96, refFontSize: 64, fontWeight: "black", refFontWeight: "black", refSpacing: 24, preset: "big", value: "big", width: "lg" },
+  { id: "lg", labelKey: "bible.sizeLg", label: "LG", fontSize: 48, refFontSize: 28, fontWeight: "black", refFontWeight: "black", refSpacing: 12, preset: "small", value: "small", width: "xxl", cardPadding: 20, cardMaxHeight: 280 },
+  { id: "xl", labelKey: "bible.sizeXl", label: "XL", fontSize: 56, refFontSize: 32, fontWeight: "black", refFontWeight: "black", refSpacing: 14, preset: "medium", value: "medium", width: "xl", cardPadding: 24, cardMaxHeight: 340 },
+  { id: "2xl", labelKey: "bible.size2xl", label: "2XL", fontSize: 64, refFontSize: 40, fontWeight: "black", refFontWeight: "black", refSpacing: 16, preset: "big", value: "big", width: "lg", cardPadding: 28, cardMaxHeight: 420 },
 ];
 
 /**

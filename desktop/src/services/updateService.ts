@@ -334,10 +334,8 @@ export async function downloadAndInstallUpdate(
 
 // ── Published release source ──
 
-// The source repository is authoritative for which versions actually exist.
-// The public mirror can lag behind or contain a stale latest.json, so it must
-// not be allowed to invent an installer version on its own.
-export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy/releases/latest";
+export const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/latest/download/latest.json";
+export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
 
 export interface PublishedReleaseAsset {
   name: string;
@@ -354,21 +352,62 @@ export interface PublishedRelease {
  * Read the latest real, published release from the source repository.
  * This is the version authority used to validate signed updater metadata and
  * to choose the installer fallback.
+ *
+ * First checks latest.json (CDN hosted, no rate limits), then falls back to GitHub REST API.
  */
 export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
+  // 1. Try public latest.json manifest directly (not subject to GitHub REST API 60 req/hr rate limit)
+  try {
+    let manifestRes: Response;
+    if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
+      manifestRes = await fetch(LATEST_MANIFEST_URL);
+    } else {
+      try {
+        manifestRes = await tauriFetch(LATEST_MANIFEST_URL);
+      } catch {
+        manifestRes = await fetch(LATEST_MANIFEST_URL);
+      }
+    }
+    if (manifestRes.ok) {
+      const manifest = (await manifestRes.json()) as {
+        version?: string;
+        notes?: string;
+        pub_date?: string;
+        platforms?: Record<string, { url?: string; signature?: string }>;
+      };
+      const version = normalizeVersion(manifest.version || "");
+      if (version) {
+        const assets: PublishedReleaseAsset[] = Object.values(manifest.platforms || {}).map((p) => {
+          const url = p.url || "";
+          const name = url.split("/").pop() || "";
+          return { name, browser_download_url: url };
+        });
+        return {
+          tag_name: `v${version}`,
+          version,
+          assets,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[updater] Could not fetch latest.json manifest, falling back to GitHub API:", err);
+  }
+
+  // 2. Fallback to GitHub REST API
   let response: Response;
+  const headers = getUpdaterHeaders();
   if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
-    response = await fetch(RELEASES_API);
+    response = await fetch(RELEASES_API, headers ? { headers } : undefined);
   } else {
     try {
-      response = await tauriFetch(RELEASES_API);
+      response = await tauriFetch(RELEASES_API, headers ? { headers } : undefined);
     } catch {
-      response = await fetch(RELEASES_API);
+      response = await fetch(RELEASES_API, headers ? { headers } : undefined);
     }
   }
   if (!response.ok) throw new Error(`Failed to fetch release info (${response.status})`);
 
-  const release = await response.json() as {
+  const release = (await response.json()) as {
     tag_name?: string;
     draft?: boolean;
     prerelease?: boolean;

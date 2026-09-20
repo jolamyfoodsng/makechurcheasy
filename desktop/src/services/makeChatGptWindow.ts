@@ -6,6 +6,8 @@ export const MAKE_CHATGPT_WINDOW_LABEL = "makechurcheasy-pet";
 const MAIN_WINDOW_LABEL = "main";
 
 const BUBBLE_SIZE = 60;
+const CONTEXT_MENU_WIDTH = 220;
+const CONTEXT_MENU_HEIGHT = 126;
 const PANEL_WIDTH = 380;
 const PANEL_HEIGHT = 600;
 const WINDOW_MARGIN = 20;
@@ -116,6 +118,18 @@ export async function hideMakeChatGptWindow(): Promise<void> {
   if (!hasTauriInvoke()) return;
   const windowRef = await WebviewWindow.getByLabel(MAKE_CHATGPT_WINDOW_LABEL);
   await windowRef?.hide();
+}
+
+/** Resize the native pet window so its HTML context menu is not clipped. */
+export async function resizeMakeChatGptContextMenuWindow(expanded: boolean): Promise<void> {
+  if (!hasTauriInvoke()) return;
+  const windowRef = await WebviewWindow.getByLabel(MAKE_CHATGPT_WINDOW_LABEL);
+  if (!windowRef) return;
+  await placeWindow(
+    windowRef,
+    expanded ? CONTEXT_MENU_WIDTH : BUBBLE_SIZE,
+    expanded ? CONTEXT_MENU_HEIGHT : BUBBLE_SIZE,
+  );
 }
 
 export async function toggleMakeChatGptWindow(): Promise<void> {
