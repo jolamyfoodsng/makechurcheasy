@@ -58,6 +58,7 @@ import {
   publishMediaToPresentation,
   publishTextOverlayToPresentation,
 } from "../../services/presentationPublish";
+import { fuzzyMatch } from "../../services/fuzzySearch";
 import { isDockTabVisible } from "../dockTabVisibility";
 import {
   EDITABLE_TEMPLATE_BROADCAST_CHANNEL,
@@ -201,7 +202,7 @@ const MEDIA_PREFS_STORAGE_KEY = "ocs-dock-media-preferences-v1";
 const MEDIA_FOLDERS_STORAGE_KEY = "ocs-dock-media-folders-v1";
 const MEDIA_LOCAL_LIBRARY_STORAGE_KEY = "ocs-dock-media-library-v1";
 const MEDIA_SESSION_STORAGE_KEY = "ocs-dock-media-session-v1";
-const MEDIA_CONTEXT_MENU_WIDTH = 236;
+const MEDIA_CONTEXT_MENU_WIDTH = 260;
 const MEDIA_CONTEXT_MENU_GAP = 8;
 const MEDIA_CONTEXT_MENU_GUTTER = 8;
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_", "mce-template-"];
@@ -325,7 +326,13 @@ function isTemplateCatalogUploadFile(value: string): boolean {
   // Preserve compatibility with the existing catalog files, including the
   // historical `vidoes` spelling used by the template download endpoint.
   return name.startsWith("template_")
-    || name.startsWith("mce-template-");
+    || name.startsWith("template-")
+    || name.startsWith("template.")
+    || name.startsWith("mce-template-")
+    || name.startsWith("dock_theme_")
+    || name.startsWith("mv-frame-")
+    || name.startsWith("mv-pattern-")
+    || name.startsWith("starter_");
 }
 
 function loadMediaPreferences(): DockMediaPreferences {
@@ -493,12 +500,75 @@ function dedupeMediaItems(items: MediaItem[]): MediaItem[] {
     });
 }
 
-function isAnimationMediaItem(item: MediaItem): boolean {
-  return (item.type === "video" || item.type === "image") && (
-    item.source === "template-cloudflare" ||
-    Boolean(item.sourceAssetId) ||
-    Boolean(item.cloudflareKey)
-  );
+function isTemplateMediaItem(
+  item: Pick<MediaItem, "id" | "name" | "source" | "sourceAssetId" | "cloudflareKey" | "filePath" | "diskFileName" | "url">,
+  templateVideos?: TemplateVideoAsset[],
+  templatePictures?: TemplatePictureAsset[],
+): boolean {
+  if (!item) return false;
+  const source = (item.source || "").toLowerCase();
+  if (
+    source === "template" ||
+    source === "template-cloudflare" ||
+    source === "template-local" ||
+    source === "template-video" ||
+    source === "template-picture" ||
+    source.includes("template") ||
+    source === "starter"
+  ) {
+    return true;
+  }
+  if (Boolean(item.sourceAssetId) || Boolean(item.cloudflareKey)) {
+    return true;
+  }
+  const id = (item.id || "").toLowerCase();
+  if (
+    id.startsWith("saved-template:") ||
+    id.startsWith("template:") ||
+    id.startsWith("template-") ||
+    id.startsWith("starter:")
+  ) {
+    return true;
+  }
+  const filePath = item.filePath || "";
+  if (filePath.includes("backgrounds/videos") || filePath.includes("backgrounds\\videos")) {
+    return true;
+  }
+  const url = item.url || "";
+  if (url.includes("/uploads/backgrounds/videos/")) {
+    return true;
+  }
+  const name = item.name || "";
+  const diskFileName = item.diskFileName || "";
+  if (isTemplateCatalogUploadFile(name) || isTemplateCatalogUploadFile(diskFileName) || isTemplateCatalogUploadFile(filePath)) {
+    return true;
+  }
+  if (isInternalDockMediaItem(item as MediaItem)) {
+    return true;
+  }
+  const normName = normalizeUploadFileName(name);
+  const normDisk = normalizeUploadFileName(diskFileName);
+  if (templateVideos && templateVideos.length > 0) {
+    if (templateVideos.some((v) => {
+      const vName = normalizeUploadFileName(v.fileName);
+      return vName === normName || vName === normDisk || (v.cloudflareKey && normalizeUploadFileName(v.cloudflareKey) === normName);
+    })) {
+      return true;
+    }
+  }
+  if (templatePictures && templatePictures.length > 0) {
+    if (templatePictures.some((p) => {
+      const pName = normalizeUploadFileName(p.fileName);
+      return pName === normName || pName === normDisk || (p.cloudflareKey && normalizeUploadFileName(p.cloudflareKey) === normName);
+    })) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isAnimationMediaItem(item: MediaItem, templateVideos?: TemplateVideoAsset[], templatePictures?: TemplatePictureAsset[]): boolean {
+  return (item.type === "video" || item.type === "image") && isTemplateMediaItem(item, templateVideos, templatePictures);
 }
 
 function getMediaPreviewUrl(item: MediaItem, overlayBaseUrl: string): string {
@@ -636,7 +706,7 @@ function matchesMediaEntrySearch(
   if (!query) return true;
   return [entry.name, preference?.label]
     .filter((value): value is string => Boolean(value?.trim()))
-    .some((value) => value.toLocaleLowerCase().includes(query));
+    .some((value) => fuzzyMatch(query, value));
 }
 
 function getDocumentImportDate(createdAt: string | undefined): string {
@@ -978,7 +1048,7 @@ function DockMediaTab({
       MEDIA_CONTEXT_MENU_WIDTH,
       Math.max(0, window.innerWidth - MEDIA_CONTEXT_MENU_GUTTER * 2),
     );
-    const menuHeight = 356;
+    const menuHeight = 420;
     const leftPlacement = event.clientX - menuWidth - MEDIA_CONTEXT_MENU_GAP;
     const rightmostX = Math.max(
       MEDIA_CONTEXT_MENU_GUTTER,
@@ -1002,7 +1072,11 @@ function DockMediaTab({
   }, []);
 
   const persistLocalLibrary = useCallback((updater: (current: MediaItem[]) => MediaItem[]) => {
-    setLocalLibrary((current) => dedupeMediaItems(updater(current)));
+    setLocalLibrary((current) => {
+      const next = dedupeMediaItems(updater(current));
+      import("../dockUploadService").then((m) => m.saveLocalLibrary(next)).catch(() => {});
+      return next;
+    });
   }, []);
 
   // Fetch uploads directory path on mount (with retries for startup timing)
@@ -1266,21 +1340,20 @@ function DockMediaTab({
             && !isInternalUploadFile(file)
             && !isTemplateCatalogUploadFile(file)
           ));
-          const fetchedAt = Date.now();
           const mediaFileSet = new Set(mediaFiles);
           for (const file of uploadedFileTimestampsRef.current.keys()) {
             if (!mediaFileSet.has(file)) uploadedFileTimestampsRef.current.delete(file);
           }
-          mediaFiles.forEach((file, index) => {
+          mediaFiles.forEach((file) => {
             const parsedTimestamp = extractUploadTimestamp(file);
             if (parsedTimestamp) {
               uploadedFileTimestampsRef.current.set(file, parsedTimestamp);
             } else if (!uploadedFileTimestampsRef.current.has(file)) {
-              // The local uploads endpoint returns newest files first. The
-              // index fallback also keeps older filename formats sortable.
+              // Un-timestamped files should not receive Date.now() which would push
+              // them ahead of genuine user uploads. Use a low fallback timestamp.
               uploadedFileTimestampsRef.current.set(
                 file,
-                new Date(fetchedAt - index).toISOString(),
+                "1970-01-01T00:00:00.000Z",
               );
             }
           });
@@ -1966,15 +2039,17 @@ function DockMediaTab({
   const uploadedEntries = useMemo(
     () => uploadedFiles.reduce<DockMediaEntry[]>((entries, file) => {
       const kind = getUploadMediaKind(file);
-      // Template downloads share the uploads directory, but they belong to
-      // the template catalog—not to Newly Uploaded. Keep them out even when
-      // the library snapshot has not arrived yet.
+      if (!kind) return entries;
       const normalizedFile = normalizeUploadFileName(file);
-      const isDownloadedTemplateVideo = isTemplateCatalogUploadFile(file)
+      const isDownloadedTemplate = isTemplateCatalogUploadFile(file)
+        || isInternalUploadFile(file)
         || templateVideos.some((asset) => (
-          normalizeUploadFileName(asset.fileName) === normalizedFile
+          normalizeUploadFileName(asset.fileName) === normalizedFile || normalizeUploadFileName(asset.cloudflareKey) === normalizedFile
+        ))
+        || templatePictures.some((asset) => (
+          normalizeUploadFileName(asset.fileName) === normalizedFile || normalizeUploadFileName(asset.cloudflareKey) === normalizedFile
         ));
-      if (!kind || isDownloadedTemplateVideo || representedUploadNames.has(file)) return entries;
+      if (isDownloadedTemplate || representedUploadNames.has(file)) return entries;
       const prefKey = `media:${file}`;
       if (mediaPrefs[prefKey]?.hidden) return entries;
       const uploadedAt = extractUploadTimestamp(file) || uploadedFileTimestampsRef.current.get(file) || "";
@@ -1993,17 +2068,14 @@ function DockMediaTab({
       });
       return entries;
     }, []),
-    [mediaPrefs, overlayBaseUrl, representedUploadNames, templateVideos, uploadedFiles],
+    [mediaPrefs, overlayBaseUrl, representedUploadNames, t, templatePictures, templateVideos, uploadedFiles],
   );
 
   const libraryEntries = useMemo(
     () => mergedLibraryItems
       .filter((item) => {
         if (item.type !== "video" && item.type !== "image" && item.type !== "audio") return false;
-        if (isAnimationMediaItem(item)) return false;
-        // Older template records may have lost their source metadata, but
-        // retain the catalog filename. Never expose those records as user
-        // uploads; animationEntries still owns the recognized catalog items.
+        if (isAnimationMediaItem(item, templateVideos, templatePictures)) return false;
         if (isTemplateCatalogUploadFile(item.name)) return false;
         if (isTemplateCatalogUploadFile(item.diskFileName || item.filePath || "")) return false;
         return true;
@@ -2014,12 +2086,12 @@ function DockMediaTab({
         libraryMedia.some((candidate) => candidate.id === item.id) ? t('media.library') : t('media.dock'),
       ))
       .filter((entry) => !mediaPrefs[entry.prefKey]?.hidden),
-    [libraryMedia, mediaPrefs, mergedLibraryItems, overlayBaseUrl],
+    [libraryMedia, mediaPrefs, mergedLibraryItems, overlayBaseUrl, t, templatePictures, templateVideos],
   );
 
   const animationEntries = useMemo(
     () => mergedLibraryItems
-      .filter((item) => isAnimationMediaItem(item))
+      .filter((item) => isAnimationMediaItem(item, templateVideos, templatePictures))
       .map((item) => createLibraryEntry(item, overlayBaseUrl, t('media.animation')))
       .filter((entry) => !mediaPrefs[entry.prefKey]?.hidden)
       .sort((a, b) => {
@@ -2031,7 +2103,7 @@ function DockMediaTab({
           getDockMediaOrderMetadata(b),
         );
       }),
-    [mediaPrefs, mergedLibraryItems, overlayBaseUrl],
+    [mediaPrefs, mergedLibraryItems, overlayBaseUrl, t, templatePictures, templateVideos],
   );
 
   const mediaEntries = useMemo(
@@ -2223,6 +2295,16 @@ function DockMediaTab({
     }
   }, [isAudioLocked, activeKind]);
 
+  const animationIdentitySet = useMemo(() => new Set(
+    animationEntries.flatMap((entry) => [
+      normalizeUploadFileName(entry.name),
+      normalizeUploadFileName(entry.uploadFile || ""),
+      normalizeUploadFileName(entry.libraryItem?.name || ""),
+      normalizeUploadFileName(entry.libraryItem?.diskFileName || ""),
+      normalizeUploadFileName(entry.libraryItem?.filePath || ""),
+    ].filter(Boolean)),
+  ), [animationEntries]);
+
   const filteredUploadEntries = useMemo(() => {
     const pool = activeKind === "all"
       ? nonDocumentMediaEntries
@@ -2240,16 +2322,10 @@ function DockMediaTab({
     // A downloaded template can arrive through both the library snapshot and
     // the uploads directory. Exclude the duplicate from Newly Uploaded when
     // it is already represented in the animation/template collection.
-    const animationIdentity = new Set(
-      animationEntries.flatMap((entry) => [
-        normalizeUploadFileName(entry.name),
-        normalizeUploadFileName(entry.uploadFile || ""),
-        normalizeUploadFileName(entry.libraryItem?.name || ""),
-        normalizeUploadFileName(entry.libraryItem?.diskFileName || ""),
-        normalizeUploadFileName(entry.libraryItem?.filePath || ""),
-      ].filter(Boolean)),
-    );
-    const withoutTemplateDuplicates = folderPool.filter((entry) => {
+    const searchMatched = !query
+      ? folderPool
+      : folderPool.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
+    const withoutTemplateDuplicates = searchMatched.filter((entry) => {
       const identities = [
         normalizeUploadFileName(entry.name),
         normalizeUploadFileName(entry.uploadFile || ""),
@@ -2257,13 +2333,10 @@ function DockMediaTab({
         normalizeUploadFileName(entry.libraryItem?.diskFileName || ""),
         normalizeUploadFileName(entry.libraryItem?.filePath || ""),
       ].filter(Boolean);
-      return !identities.some((identity) => animationIdentity.has(identity));
+      return !identities.some((identity) => animationIdentitySet.has(identity));
     });
-    const result = !query
-      ? withoutTemplateDuplicates
-      : withoutTemplateDuplicates.filter((entry) => matchesMediaEntrySearch(entry, mediaPrefs[entry.prefKey], query));
-    return result;
-  }, [activeFolder, activeKind, animationEntries, assetSearch, audioEntries, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
+    return withoutTemplateDuplicates;
+  }, [activeFolder, activeKind, animationIdentitySet, assetSearch, audioEntries, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -2900,6 +2973,14 @@ function DockMediaTab({
         await refreshMedia();
         console.log("[UPLOAD] refreshMedia complete. Library size:", libraryMedia.length);
         setShowAddMediaModal(false);
+        setBrowserTab("uploads");
+        setActiveKind("all");
+        setAssetSearch("");
+        setActiveFolder("all");
+        dockClient.sendState({ type: "state:library-updated", payload: null, timestamp: Date.now() });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("mce-media-library-updated"));
+        }
         for (const item of nextItems) {
           track("media_uploaded", { mediaType: item.type });
           trackMediaUploaded(item.type || "unknown");
@@ -2946,8 +3027,14 @@ function DockMediaTab({
       setUploadedFiles((current) => (fileName ? current.filter((file) => file !== fileName) : current));
       setLibraryMedia((current) => current.filter((item) => !matchesDeletedItem(item)));
       persistLocalLibrary((current) => current.filter((item) => !matchesDeletedItem(item)));
+      const { deleteDockMediaItem } = await import("../dockUploadService");
+      await deleteDockMediaItem(itemId, fileName);
       await refreshMedia();
       dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
+      dockClient.sendState({ type: "state:library-updated", payload: null, timestamp: Date.now() });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mce-media-library-updated"));
+      }
       if (activeTargets.active?.key === entry.key) {
         setOpenOptionsKey(null);
       }
@@ -6376,7 +6463,7 @@ function DockMediaTab({
             onContextMenu={(event) => event.preventDefault()}
           >
             <div className="dock-media-context-menu__header">
-              <Icon name={getFileIcon(contextEntry.kind)} size={13} />
+              <Icon name={getFileIcon(contextEntry.kind)} size={16} />
               <span title={contextDisplayName}>{contextDisplayName}</span>
             </div>
             <button
@@ -6389,7 +6476,7 @@ function DockMediaTab({
                 setMediaContextMenu(null);
               }}
             >
-              <Icon name="edit" size={13} />
+              <Icon name="edit" size={16} />
               <span className="dock-media-context-menu__label">{t('common.rename')}</span>
             </button>
             <button
@@ -6398,7 +6485,7 @@ function DockMediaTab({
               className="dock-media-context-menu__item"
               onClick={() => toggleMediaPinned(contextEntry)}
             >
-              <Icon name="push_pin" size={13} />
+              <Icon name="push_pin" size={16} />
               <span className="dock-media-context-menu__label">
                 {contextPinned ? t('media.unpin', 'Unpin') : t('media.pin', 'Pin')}
               </span>
@@ -6412,7 +6499,7 @@ function DockMediaTab({
                 setMediaContextMenu(null);
               }}
             >
-              <Icon name="open_in_full" size={13} />
+              <Icon name="open_in_full" size={16} />
               <span className="dock-media-context-menu__label">{t('common.preview')}</span>
             </button>
             <button
@@ -6423,7 +6510,7 @@ function DockMediaTab({
               disabled={downloadingMediaKey === contextEntry.key}
               title={t('media.downloadAsset')}
             >
-              <Icon name={downloadingMediaKey === contextEntry.key ? "downloading" : "download"} size={13} />
+              <Icon name={downloadingMediaKey === contextEntry.key ? "downloading" : "download"} size={16} />
               <span className="dock-media-context-menu__label">
                 {downloadingMediaKey === contextEntry.key ? t('media.downloadProgress') : t('media.downloadAsset')}
               </span>
@@ -6438,7 +6525,7 @@ function DockMediaTab({
                   setMediaContextMenu(null);
                 }}
               >
-                <Icon name="send" size={13} />
+                <Icon name="send" size={16} />
                 <span className="dock-media-context-menu__label">{t('media.sendToScene')}</span>
               </button>
             )}
@@ -6449,9 +6536,9 @@ function DockMediaTab({
               className="dock-media-context-menu__item"
               onClick={() => setMediaContextFolderOpen((current) => !current)}
             >
-              <Icon name="folder" size={13} />
+              <Icon name="folder" size={16} />
               <span className="dock-media-context-menu__label">{t('media.addToFolder', 'Add to folder')}</span>
-              <Icon name={mediaContextFolderOpen ? "expand_less" : "expand_more"} size={13} />
+              <Icon name={mediaContextFolderOpen ? "expand_less" : "expand_more"} size={16} />
             </button>
             {mediaContextFolderOpen && (
               <div className="dock-media-context-menu__folders">
@@ -6461,7 +6548,7 @@ function DockMediaTab({
                   className={`dock-media-context-menu__folder${!contextFolder ? " dock-media-context-menu__folder--active" : ""}`}
                   onClick={() => assignMediaFolder(contextEntry, null)}
                 >
-                  <Icon name="folder_off" size={12} />
+                  <Icon name="folder_off" size={14} />
                   <span className="dock-media-context-menu__label">{t('media.noFolder', 'No folder')}</span>
                 </button>
                 {mediaFolders.map((folder) => (
@@ -6472,9 +6559,9 @@ function DockMediaTab({
                     key={folder}
                     onClick={() => assignMediaFolder(contextEntry, folder)}
                   >
-                    <Icon name="folder" size={12} />
+                    <Icon name="folder" size={14} />
                     <span title={folder}>{folder}</span>
-                    {contextFolder === folder && <Icon name="check" size={12} />}
+                    {contextFolder === folder && <Icon name="check" size={14} />}
                   </button>
                 ))}
                 <div className="dock-media-context-menu__new-folder">
@@ -6498,7 +6585,7 @@ function DockMediaTab({
                     disabled={!newFolderDraft.trim()}
                     onClick={() => createMediaFolder(contextEntry)}
                   >
-                    <Icon name="add" size={13} />
+                    <Icon name="add" size={16} />
                   </button>
                 </div>
               </div>
@@ -6512,7 +6599,7 @@ function DockMediaTab({
                 setMediaContextMenu(null);
               }}
             >
-              <Icon name="delete" size={13} />
+              <Icon name="delete" size={16} />
               <span className="dock-media-context-menu__label">
                 {contextEntry.kind === "video"
                   ? t('media.deleteVideo')

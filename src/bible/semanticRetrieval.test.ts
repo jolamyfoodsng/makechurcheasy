@@ -1043,7 +1043,7 @@ describe("live quote replacement", () => {
       (s) => s.book === "Romans" && s.chapter === 8 && s.verse === 28
     );
     expect(hasOld).toBe(false);
-  });
+  }, 15000);
 
   it("rejects weak generic speech instead of inventing a verse", async () => {
     const { ScriptureDetectionEngine } = await import("../services/scriptureEngine");

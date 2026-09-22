@@ -2112,9 +2112,7 @@ fn get_dev_dock_base_url() -> Result<String, String> {
         return Err("The development Dock URL is only available in debug builds".to_string());
     }
 
-    let ip = get_local_ip()
-        .ok_or_else(|| "Could not determine this computer's LAN IP".to_string())?;
-    Ok(format!("http://{}:1420", ip))
+    Ok("http://localhost:1420".to_string())
 }
 
 /// Prepare a local media file for remote OBS by ensuring it is served from the
@@ -5077,6 +5075,36 @@ fn bind_overlay_tcp_listener(port: u16) -> std::io::Result<std::net::TcpListener
     Ok(socket.into())
 }
 
+fn kill_process_on_port(port: u16) {
+    let current_pid = std::process::id();
+    #[cfg(unix)]
+    {
+        if let Ok(output) = std::process::Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+        {
+            let pids_str = String::from_utf8_lossy(&output.stdout);
+            for line in pids_str.lines() {
+                if let Ok(pid) = line.trim().parse::<u32>() {
+                    if pid != current_pid && pid > 0 {
+                        eprintln!("[Overlay Server] Killing stale process {} holding port {}", pid, port);
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", &pid.to_string()])
+                            .output();
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let cmd = format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}", port);
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &cmd])
+            .output();
+    }
+}
+
 fn is_overlay_server_already_running(port: u16) -> bool {
     let addr_str = format!("127.0.0.1:{}", port);
     let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() else {
@@ -5126,6 +5154,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 break;
             }
             Err(e) => {
+                if attempt == 1 && !is_overlay_server_already_running(CANONICAL_OVERLAY_PORT) {
+                    // Reclaim port from any stale/zombie process
+                    kill_process_on_port(CANONICAL_OVERLAY_PORT);
+                }
                 if attempt < 4 {
                     std::thread::sleep(std::time::Duration::from_millis(150));
                 } else {
@@ -8333,6 +8365,16 @@ pub fn run() {
                 .build(app)?;
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    // When the user clicks the close button on the main window,
+                    // quit the entire app (including tray). Without this handler
+                    // Tauri 2 just hides the window when a system tray is present.
+                    window.app_handle().exit(0);
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             save_bg_image,

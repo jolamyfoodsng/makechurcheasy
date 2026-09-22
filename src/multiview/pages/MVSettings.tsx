@@ -1072,6 +1072,25 @@ export function MVSettings() {
                         <span className="select-arrow"><ChevronDown size={14} /></span>
                       </div>
                     </div>
+                    <div className="switch-row" style={{ padding: "10px 0" }}>
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.general.showFloatingIcon")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.general.showFloatingIconDesc")}</span>
+                      </div>
+                      <label className="switch-toggle-label">
+                        <input type="checkbox" checked={!settings.hideFloatingIcon} onChange={() => {
+                          update({ hideFloatingIcon: !settings.hideFloatingIcon });
+                          if (settings.hideFloatingIcon) {
+                            // Re-show the icon when re-enabled
+                            import("../../services/makeChatGptWindow").then(m => m.showMakeChatGptWindow()).catch(() => {});
+                          } else {
+                            // Hide the icon when disabled
+                            import("../../services/makeChatGptWindow").then(m => m.hideMakeChatGptWindow()).catch(() => {});
+                          }
+                        }} />
+                        <span className="switch-slider"></span>
+                      </label>
+                    </div>
                   </div>
 
                   {/* ── Global Module Defaults ── */}

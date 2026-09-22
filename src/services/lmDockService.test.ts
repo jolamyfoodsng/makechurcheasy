@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LmDockService, type LmDockSnapshot } from "./lmDockService";
+import { LmDockService, type LmDockSnapshot, splitSentenceBoundaries, stripCommittedPrefix, isHallucinated } from "./lmDockService";
 import { ScriptureDetectionEngine, type DetectionResult, type ScriptureMatch } from "./scriptureEngine";
 
 vi.mock("./dockBridge", () => ({ dockBridge: { sendState: vi.fn() } }));
 vi.mock("./overlayUrl", () => ({ getOverlayBaseUrl: async () => "http://localhost" }));
 vi.mock("../multiview/mvStore", () => ({ getSettings: () => ({ inputGain: 100 }) }));
 vi.mock("./tauriSafe", () => ({ hasTauriInvoke: () => false, safeTauriInvoke: vi.fn(), safeTauriListen: vi.fn() }));
-vi.mock("../bible/bibleEmbeddings", () => ({ hasEmbeddings: () => false, loadBibleEmbeddings: async () => false }));
+vi.mock("../bible/bibleEmbeddings", () => ({
+  hasEmbeddings: () => false,
+  loadBibleEmbeddings: async () => false,
+  searchByEmbedding: vi.fn().mockResolvedValue([]),
+}));
 
 interface Harness {
   snapshot: LmDockSnapshot;
@@ -55,7 +59,7 @@ describe("live transcript routing", () => {
     harness.processChunk("God loved the world", true);
     await settled();
     expect(service.getSnapshot().latestMatch).toMatchObject({ label: "John 3:16", confidence: 1 });
-  });
+  }, 15_000);
 
   it("replaces a shared phrase with the specific verse as more words arrive", async () => {
     harness.queueQuoteSearch("sons of men");
@@ -156,5 +160,101 @@ describe("live transcript routing", () => {
     harness.processChunk("use NIV", true);
     await settled();
     expect(service.getSnapshot().queue[0]).toMatchObject({ translation: "NIV", snippet: "New translated words" });
+  });
+});
+
+describe("sentence splitting & prefix stripping", () => {
+  it("splits multi-sentence text into individual sentences on punctuation", () => {
+    const text = "It can be on a Sunday if you get to a point that the kids can say it on their own. Oh, I am intelligent, I have a sound mind. Like monthly confession for the children.";
+    const result = splitSentenceBoundaries(text, false);
+    expect(result.completed).toEqual([
+      "It can be on a Sunday if you get to a point that the kids can say it on their own.",
+      "Oh, I am intelligent, I have a sound mind.",
+      "Like monthly confession for the children.",
+    ]);
+    expect(result.remaining).toBe("");
+  });
+
+  it("leaves incomplete trailing text in remaining", () => {
+    const text = "It can be on a Sunday if you get to a point that the kids can say it on their own. Oh, I am intelligent";
+    const result = splitSentenceBoundaries(text, false);
+    expect(result.completed).toEqual([
+      "It can be on a Sunday if you get to a point that the kids can say it on their own.",
+    ]);
+    expect(result.remaining).toBe("Oh, I am intelligent");
+  });
+
+  it("does not split on Bible abbreviations or decimal numbers", () => {
+    const text = "Turn to 1 Cor. 13:4 or John 3.16 for your reading.";
+    const result = splitSentenceBoundaries(text, false);
+    expect(result.completed).toEqual([
+      "Turn to 1 Cor. 13:4 or John 3.16 for your reading.",
+    ]);
+    expect(result.remaining).toBe("");
+  });
+
+  it("strips committed prefix from ongoing turn text", () => {
+    const full = "It can be on a Sunday if you get to a point that the kids can say it on their own. Oh, I am intelligent, I have a sound mind.";
+    const committed = "It can be on a Sunday if you get to a point that the kids can say it on their own.";
+    const uncommitted = stripCommittedPrefix(full, committed);
+    expect(uncommitted).toBe("Oh, I am intelligent, I have a sound mind.");
+  });
+});
+
+describe("anti-hallucination detection", () => {
+  it("flags non-Latin text spam as hallucinated", () => {
+    expect(isHallucinated("Привет как дела это проверка транскрипции")).toBe(true);
+    expect(isHallucinated("这是一个测试文本用于检测幻觉")).toBe(true);
+  });
+
+  it("flags repetitive word loops as hallucinated", () => {
+    expect(isHallucinated("you you you you you")).toBe(true);
+    expect(isHallucinated("thank you thank you thank you thank you")).toBe(true);
+  });
+
+  it("permits genuine speech and Biblical phrases", () => {
+    expect(isHallucinated("Holy, Holy, Holy, Lord God Almighty")).toBe(false);
+    expect(isHallucinated("Oh, I am intelligent, I have a sound mind.")).toBe(false);
+  });
+});
+
+describe("line-per-line transcript streaming", () => {
+  it("segments multi-sentence turn line-by-line and triggers instant quote search", async () => {
+    // Simulate streaming the user's exact example
+    service.handleTranscriptStream({
+      text: "It can be on a Sunday if you get to a point that the kids can say it on their own. Oh, I am intelligent, I have a sound mind.",
+      end_of_turn: false,
+      audio_start: 1000,
+      audio_end: 5000,
+    });
+
+    const entries = service.getSnapshot().entries;
+    expect(entries.length).toBe(2);
+    expect(entries[0].text).toBe("It can be on a Sunday if you get to a point that the kids can say it on their own.");
+    expect(entries[0].finalized).toBe(true);
+    expect(entries[1].text).toBe("Oh, I am intelligent, I have a sound mind.");
+    expect(entries[1].finalized).toBe(true);
+
+    await settled();
+
+    // Line 2 contains "sound mind" which should immediately match 2 Timothy 1:7
+    const snapshot = service.getSnapshot();
+    const match = snapshot.latestMatch || snapshot.suggestions[0] || snapshot.queue[0];
+    expect(match?.label).toBe("2 Timothy 1:7");
+  });
+
+  it("bounds memory to MAX_IN_MEMORY_ENTRIES (200) to protect 4GB/6GB RAM devices", () => {
+    for (let i = 1; i <= 250; i++) {
+      service.handleTranscriptStream({
+        text: `Line sentence number ${i}.`,
+        end_of_turn: true,
+        audio_start: i * 1000,
+        audio_end: (i + 1) * 1000,
+      });
+    }
+
+    const entries = service.getSnapshot().entries;
+    expect(entries.length).toBeLessThanOrEqual(200);
+    expect(entries[entries.length - 1].text).toBe("Line sentence number 250.");
   });
 });

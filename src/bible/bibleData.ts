@@ -24,6 +24,7 @@ import type {
 import { BIBLE_BOOKS, BOOK_ABBREVS } from "./types";
 import { getTranslationData } from "./bibleDb";
 import { getConceptVerses, matchVerseAlias } from "./scriptureReranker";
+import { damerauLevenshteinDistance } from "../services/fuzzySearch";
 
 // ---------------------------------------------------------------------------
 // Cache
@@ -460,25 +461,52 @@ const COMMON_SEARCH_TOKEN_ALIASES = new Map<string, string>([
 const SEARCH_SPELLING_VARIANTS = new Map<string, string>([
   ["favour", "favor"],
   ["favours", "favors"],
+  ["favoured", "favored"],
+  ["favouring", "favoring"],
   ["favourite", "favorite"],
   ["favourites", "favorites"],
   ["colour", "color"],
   ["colours", "colors"],
+  ["coloured", "colored"],
   ["honour", "honor"],
   ["honours", "honors"],
   ["honoured", "honored"],
   ["honouring", "honoring"],
   ["labour", "labor"],
   ["labours", "labors"],
+  ["laboured", "labored"],
+  ["labouring", "laboring"],
   ["neighbour", "neighbor"],
   ["neighbours", "neighbors"],
+  ["neighbourhood", "neighborhood"],
+  ["neighbourhoods", "neighborhoods"],
   ["behaviour", "behavior"],
   ["behaviours", "behaviors"],
   ["saviour", "savior"],
   ["saviours", "saviors"],
   ["valour", "valor"],
+  ["splendour", "splendor"],
+  ["splendours", "splendors"],
+  ["glamour", "glamor"],
+  ["clamour", "clamor"],
+  ["odour", "odor"],
+  ["odours", "odors"],
+  ["armour", "armor"],
+  ["armours", "armors"],
+  ["rumour", "rumor"],
+  ["rumours", "rumors"],
+  ["tumour", "tumor"],
+  ["tumours", "tumors"],
+  ["succour", "succor"],
+  ["ardour", "ardor"],
+  ["fervour", "fervor"],
+  ["harbour", "harbor"],
+  ["harbours", "harbors"],
+  ["rigour", "rigor"],
+  ["vigour", "vigor"],
   ["centre", "center"],
   ["centres", "centers"],
+  ["centred", "centered"],
   ["theatre", "theater"],
   ["theatres", "theaters"],
   ["metre", "meter"],
@@ -487,6 +515,9 @@ const SEARCH_SPELLING_VARIANTS = new Map<string, string>([
   ["litres", "liters"],
   ["fibre", "fiber"],
   ["fibres", "fibers"],
+  ["sepulchre", "sepulcher"],
+  ["sepulchres", "sepulchers"],
+  ["sombre", "somber"],
   ["organise", "organize"],
   ["organised", "organized"],
   ["organising", "organizing"],
@@ -500,15 +531,33 @@ const SEARCH_SPELLING_VARIANTS = new Map<string, string>([
   ["authorise", "authorize"],
   ["emphasise", "emphasize"],
   ["baptise", "baptize"],
+  ["baptised", "baptized"],
+  ["baptising", "baptizing"],
   ["evangelise", "evangelize"],
   ["programme", "program"],
   ["programmes", "programs"],
   ["judgement", "judgment"],
+  ["judgements", "judgments"],
   ["fulfil", "fulfill"],
+  ["fulfils", "fulfills"],
   ["fulfilment", "fulfillment"],
+  ["defence", "defense"],
+  ["defences", "defenses"],
+  ["offence", "offense"],
+  ["offences", "offenses"],
+  ["pretence", "pretense"],
+  ["practise", "practice"],
+  ["counsellor", "counselor"],
+  ["counsellors", "counselors"],
   ["travelling", "traveling"],
+  ["travelled", "traveled"],
+  ["traveller", "traveler"],
+  ["travellers", "travelers"],
   ["labelled", "labeled"],
   ["cancelled", "canceled"],
+  ["cancelling", "canceling"],
+  ["worshipped", "worshiped"],
+  ["worshipping", "worshiping"],
 ]);
 
 const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
@@ -557,6 +606,40 @@ const SEARCH_TOKEN_NORMALIZATIONS = new Map<string, string>([
   ["men", "man"],
   ["women", "woman"],
   ["children", "child"],
+  ["brethren", "brother"],
+  ["oxen", "ox"],
+  // Modern synonyms mapped to canonical biblical / KJV terminology
+  ["scared", "fear"],
+  ["terrified", "fear"],
+  ["frightened", "fear"],
+  ["fearful", "fear"],
+  ["afraid", "fear"],
+  ["anxious", "careful"],
+  ["anxiety", "careful"],
+  ["worried", "careful"],
+  ["worry", "careful"],
+  ["wealthy", "rich"],
+  ["prosperity", "blessing"],
+  ["disease", "sickness"],
+  ["illness", "sickness"],
+  ["ailment", "infirmity"],
+  ["battle", "war"],
+  ["warfare", "war"],
+  ["warrior", "man of war"],
+  ["demons", "devil"],
+  ["demon", "devil"],
+  ["savior", "saviour"],
+  ["helper", "comforter"],
+  // Preserve words ending in -ed that are not past-tense verbs
+  ["hundred", "hundred"],
+  ["hundr", "hundred"],
+  ["kindred", "kindred"],
+  ["kindr", "kindred"],
+  ["hatred", "hatred"],
+  ["hatr", "hatred"],
+  ["sacred", "sacred"],
+  ["wicked", "wicked"],
+  ["naked", "naked"],
 ]);
 
 const SEARCH_NUMBER_UNDER_TWENTY = [
@@ -591,9 +674,27 @@ const SEARCH_NUMBER_TENS = new Map<number, string>([
   [70, "seventy"],
   [80, "eighty"],
   [90, "ninety"],
+  [100, "hundred"],
+  [1000, "thousand"],
+]);
+
+const SEARCH_ORDINAL_MAP = new Map<string, string>([
+  ["1st", "first"],
+  ["2nd", "second"],
+  ["3rd", "third"],
+  ["4th", "fourth"],
+  ["5th", "fifth"],
+  ["6th", "sixth"],
+  ["7th", "seventh"],
+  ["8th", "eighth"],
+  ["9th", "ninth"],
+  ["10th", "tenth"],
 ]);
 
 function numberSearchWord(token: string): string | null {
+  const ordinal = SEARCH_ORDINAL_MAP.get(token);
+  if (ordinal) return ordinal;
+
   if (!/^\d+$/.test(token)) return null;
 
   const value = Number(token);
@@ -636,7 +737,7 @@ function tokenizeSearch(value: string): string[] {
 
 function normalizeSearchToken(token: string): string {
   const numericWord = numberSearchWord(token);
-  if (numericWord) return numericWord;
+  if (numericWord) return normalizeSearchToken(numericWord);
 
   const spellingNormalized = canonicalizeSearchSpelling(token);
   const direct = SEARCH_TOKEN_NORMALIZATIONS.get(spellingNormalized);
@@ -731,48 +832,7 @@ function buildSearchVocabulary(
   return vocabulary;
 }
 
-function boundedEditDistance(a: string, b: string, maxDistance: number): number {
-  const aLength = a.length;
-  const bLength = b.length;
-
-  if (Math.abs(aLength - bLength) > maxDistance) {
-    return maxDistance + 1;
-  }
-
-  const previous = new Array<number>(bLength + 1);
-  const current = new Array<number>(bLength + 1);
-
-  for (let column = 0; column <= bLength; column += 1) {
-    previous[column] = column;
-  }
-
-  for (let row = 1; row <= aLength; row += 1) {
-    current[0] = row;
-    let rowMin = current[0];
-
-    for (let column = 1; column <= bLength; column += 1) {
-      const substitutionCost = a[row - 1] === b[column - 1] ? 0 : 1;
-      current[column] = Math.min(
-        previous[column] + 1,
-        current[column - 1] + 1,
-        previous[column - 1] + substitutionCost,
-      );
-      rowMin = Math.min(rowMin, current[column]);
-    }
-
-    if (rowMin > maxDistance) {
-      return maxDistance + 1;
-    }
-
-    for (let column = 0; column <= bLength; column += 1) {
-      previous[column] = current[column];
-    }
-  }
-
-  return previous[bLength];
-}
-
-function repairSearchQuery(
+export function repairSearchQuery(
   query: string,
   translation: BibleTranslation,
   data: RawBibleData,
@@ -786,7 +846,7 @@ function repairSearchQuery(
     if (alias) return alias;
 
     if (
-      token.length < 4 ||
+      token.length < 3 ||
       SEARCH_STOP_WORDS.has(token) ||
       /^\d+$/.test(token) ||
       vocabulary.has(token)
@@ -797,18 +857,29 @@ function repairSearchQuery(
     let bestCandidate: string | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
     let bestFrequency = -1;
+    const maxDist = token.length <= 4 ? 1 : 2;
 
     for (const [candidate, frequency] of vocabulary) {
       if (
-        candidate.length < 4 ||
-        Math.abs(candidate.length - token.length) > 2 ||
-        candidate[0] !== token[0]
+        candidate.length < 3 ||
+        Math.abs(candidate.length - token.length) > maxDist
       ) {
         continue;
       }
 
-      const distance = boundedEditDistance(token, candidate, 2);
-      if (distance > 2) continue;
+      const firstLetterMatch = candidate[0] === token[0];
+      const transposedFirstTwo =
+        token.length >= 4 &&
+        candidate.length >= 4 &&
+        token[0] === candidate[1] &&
+        token[1] === candidate[0];
+
+      if (!firstLetterMatch && !transposedFirstTwo) {
+        continue;
+      }
+
+      const distance = damerauLevenshteinDistance(token, candidate, maxDist);
+      if (distance > maxDist) continue;
 
       if (
         distance < bestDistance ||
@@ -820,7 +891,7 @@ function repairSearchQuery(
       }
     }
 
-    return bestCandidate && bestDistance <= 2 ? bestCandidate : token;
+    return bestCandidate && bestDistance <= maxDist ? bestCandidate : token;
   });
 
   return corrected.join(" ")
@@ -1055,7 +1126,11 @@ function scoreVerseMatch(
   // A number is also useful as a chapter/verse search. This keeps inputs such
   // as "30" or "30%" searchable even when the translation spells the number
   // out in the verse text instead of storing it as digits.
-  return Math.min(1, Math.max(textMatchScore, numericReferenceMatch * 0.78));
+  const hasNonNumericTokens = queryTokens.some(
+    (token) => !/^\d+$/.test(token) && !SEARCH_ORDINAL_MAP.has(token),
+  );
+  const numericCap = hasNonNumericTokens ? 0.38 : 0.78;
+  return Math.min(1, Math.max(textMatchScore, numericReferenceMatch * numericCap));
 }
 
 function scoreVerseUpperBound(
@@ -1099,9 +1174,15 @@ async function searchBibleInTranslation(
   const results: RankedSearchResult[] = [];
   const repairedQuery = repairSearchQuery(query, translation, data);
   const normalizedVocabulary = buildNormalizedSearchVocabulary(translation, data);
+  const spelledQuery = normalizeSearchText(query)
+    .split(" ")
+    .map((w) => numberSearchWord(w) ?? canonicalizeSearchSpelling(w))
+    .join(" ");
+
   const queryVariants = Array.from(
     new Set([
       normalizeSearchText(query),
+      spelledQuery,
       normalizeSearchText(repairedQuery),
       // Modal wording varies between spoken quotations and translations.
       normalizeSearchText(query).replace(/\bshall\b/g, "should"),
@@ -1129,7 +1210,8 @@ async function searchBibleInTranslation(
     const weights = new Map<number, number>();
     const totalWeight = variant.queryTokenWeights.reduce((sum, weight) => sum + weight, 0);
     variant.normalizedQueryTokens.forEach((token, tokenIndex) => {
-      for (const id of index.tokens.get(token) ?? []) {
+      const ids = index.tokens.get(token) ?? [];
+      for (const id of ids) {
         weights.set(id, (weights.get(id) ?? 0) + variant.queryTokenWeights[tokenIndex]);
       }
     });
@@ -1161,12 +1243,18 @@ async function searchBibleInTranslation(
       continue;
     }
 
-    if (coverage < 1 && queryVariants.every((variant) =>
-      Math.max(
-        scoreVerseUpperBound(entry, variant.normalizedQueryTokens, variant.queryTokenWeights, variant.queryContent),
-        numericReferenceCoverage(variant.queryTokens, entry) * 0.78,
-      ) + 1e-9 < cutoff,
-    )) continue;
+    if (coverage < 1 && queryVariants.every((variant) => {
+      const hasNonNumeric = variant.queryTokens.some(
+        (token) => !/^\d+$/.test(token) && !SEARCH_ORDINAL_MAP.has(token),
+      );
+      const cap = hasNonNumeric ? 0.38 : 0.78;
+      return (
+        Math.max(
+          scoreVerseUpperBound(entry, variant.normalizedQueryTokens, variant.queryTokenWeights, variant.queryContent),
+          numericReferenceCoverage(variant.queryTokens, entry) * cap,
+        ) + 1e-9 < cutoff
+      );
+    })) continue;
 
     let bestScore = 0;
     let bestTokens: string[] = [];

@@ -140,4 +140,53 @@ describe("dock Bible theme resolution", () => {
       displayReferenceLabel: "ICOR 3:10",
     });
   });
+
+  it("switches lower-third background from theme with image to color without retaining theme image", async () => {
+    const theme = firstThemeFor("lower-third");
+    // Simulate base theme having an image or pattern asset
+    const baseThemeWithImage = {
+      ...theme,
+      settings: {
+        ...theme.settings,
+        backgroundImage: "/uploads/theme-bg.jpg",
+        backgroundImageFilePath: "/uploads/theme-bg.jpg",
+        backgroundVideo: "/uploads/theme-bg.mp4",
+        backgroundPattern: "diagonal-lines",
+      },
+    };
+
+    localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
+      lowerThirdThemeId: baseThemeWithImage.id,
+      lowerThirdQuickThemeSettings: {
+        backgroundType: "color",
+        backgroundColor: "#112233",
+        backgroundColorEnd: "#445566",
+      },
+    }));
+
+    const resolved = await resolveDockBibleThemeForOverlayMode("lower-third");
+    expect(resolved.themeSettings.backgroundType).toBe("color");
+    expect(resolved.themeSettings.backgroundColor).toBe("#112233");
+    expect(resolved.themeSettings.backgroundColorEnd).toBe("#445566");
+    expect(resolved.themeSettings.backgroundImage).toBe("");
+    expect(resolved.themeSettings.backgroundImageFilePath).toBe("");
+    expect(resolved.themeSettings.backgroundVideo).toBe("");
+    expect(resolved.themeSettings.backgroundVideoFilePath).toBe("");
+    expect(resolved.themeSettings.backgroundPattern).toBe("");
+  });
+
+  it("switches lower-third background from theme to pattern without retaining image/video", async () => {
+    localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
+      lowerThirdQuickThemeSettings: {
+        backgroundType: "pattern",
+        backgroundPattern: "dots",
+      },
+    }));
+
+    const resolved = await resolveDockBibleThemeForOverlayMode("lower-third");
+    expect(resolved.themeSettings.backgroundType).toBe("pattern");
+    expect(resolved.themeSettings.backgroundPattern).toBe("dots");
+    expect(resolved.themeSettings.backgroundImage).toBe("");
+    expect(resolved.themeSettings.backgroundVideo).toBe("");
+  });
 });

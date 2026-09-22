@@ -50,7 +50,7 @@ import {
   searchOnlineSongLyrics,
   type OnlineLyricsSearchResult,
 } from "../../worship/onlineLyricsService";
-import { unicodeStripDiacritics } from "../../worship/unicodeUtils";
+import { fuzzyMatch, fuzzyScore } from "../../services/fuzzySearch";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
 import Icon from "../DockIcon";
@@ -88,7 +88,6 @@ import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { isDockTabVisible } from "../dockTabVisibility";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import DockNotesTab from "./DockNotesTab";
 import {
   getDockTranslationSourceSignature,
@@ -1181,6 +1180,9 @@ function applyQuickThemeSettings(
   const useThemeBg = bgType === "theme";
   const useNoBg = bgType === "off";
   const useColorBg = bgType === "color";
+  const usePatternBg = bgType === "pattern";
+  const useImageBg = bgType === "image";
+  const useVideoBg = bgType === "video";
   const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
   return {
     ...theme,
@@ -1223,18 +1225,32 @@ function applyQuickThemeSettings(
       // Keep the last pattern in quick settings so the picker can restore it
       // after a temporary color/video switch, but only send it to the overlay
       // while Pattern is the active background mode.
-      backgroundPattern: useNoBg
+      backgroundPattern: useNoBg || useColorBg || useImageBg || useVideoBg
         ? ""
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
-          : bgType === "pattern"
-            ? quickSettings.backgroundPattern
-            : "",
+          : quickSettings.backgroundPattern,
       boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
-      backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
-      backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
-      backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
-      backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
+      backgroundImage: useNoBg || useColorBg || usePatternBg || useVideoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundImage ?? "")
+          : quickSettings.backgroundImage,
+      backgroundImageFilePath: useNoBg || useColorBg || usePatternBg || useVideoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundImageFilePath ?? "")
+          : quickSettings.backgroundImageFilePath,
+      backgroundVideo: useNoBg || useColorBg || usePatternBg || useImageBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundVideo ?? "")
+          : quickSettings.backgroundVideo,
+      backgroundVideoFilePath: useNoBg || useColorBg || usePatternBg || useImageBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundVideoFilePath ?? "")
+          : quickSettings.backgroundVideoFilePath,
       backgroundOpacity: useNoBg ? 0 : quickSettings.backgroundOpacity,
       backgroundColor: useNoBg
         ? "transparent"
@@ -1286,17 +1302,6 @@ function getWorshipSectionTranslation(
   translation: DockTranslationValue | null,
 ): string {
   return normalizeDockMultilineText(translation?.translatedSections[sectionId] ?? "").trim();
-}
-
-function fuzzyMatch(query: string, target: string): boolean {
-  const q = unicodeStripDiacritics(query);
-  const t = unicodeStripDiacritics(target);
-  if (t.includes(q)) return true;
-  let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
-  }
-  return qi === q.length;
 }
 
 function DockWorshipTab({
@@ -1386,8 +1391,6 @@ function DockWorshipTab({
   useEffect(() => { isInitialMount.current = false; }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [lyricsSearchQuery, setLyricsSearchQuery] = useState("");
-  const debouncedSearchQuery = useDebouncedValue(searchQuery, 220);
-  const debouncedLyricsSearchQuery = useDebouncedValue(lyricsSearchQuery, 180);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(
     () => loadDockWorshipUiPreferences().toolbarCollapsed === true,
@@ -1649,15 +1652,15 @@ function DockWorshipTab({
   );
 
   const lyricsFilteredSectionIndexes = useMemo(() => {
-    if (!debouncedLyricsSearchQuery.trim()) return visibleSectionIndexes;
-    const query = debouncedLyricsSearchQuery.trim();
+    if (!lyricsSearchQuery.trim()) return visibleSectionIndexes;
+    const query = lyricsSearchQuery.trim();
     return visibleSectionIndexes.filter((idx) => {
       const section = selectedSongSections[idx];
       if (!section) return false;
       const label = section.label.trim();
       return fuzzyMatch(query, section.text) || (label && fuzzyMatch(query, label));
     });
-  }, [debouncedLyricsSearchQuery, visibleSectionIndexes, selectedSongSections]);
+  }, [lyricsSearchQuery, visibleSectionIndexes, selectedSongSections]);
 
   const showToast = useCallback((message: string, tone: DockToastTone = "info") => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -2001,22 +2004,11 @@ function DockWorshipTab({
     });
   }, []);
 
-  useEffect(() => {
-    if (!showDeletedSectionsPopover) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowDeletedSectionsPopover(false);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [showDeletedSectionsPopover]);
-
   const filteredSongs = useMemo(() => {
-    if (!debouncedSearchQuery.trim()) {
+    if (!searchQuery.trim()) {
       return accessibleSongs;
     }
-    const q = debouncedSearchQuery.trim();
+    const q = searchQuery.trim();
     const qLower = q.toLowerCase();
     const numMatch = qLower.match(/(\d+)/);
     const searchNumber = numMatch ? numMatch[1] : null;
@@ -2041,7 +2033,17 @@ function DockWorshipTab({
         if (score === 0 && title.startsWith(qLower)) score += 3000;
         if (score === 0 && title.includes(qLower)) score += 1000;
         if (score === 0 && entry.searchText.includes(qLower)) score += 500;
-        if (score === 0 && fuzzyMatch(q, entry.searchText)) score += 100;
+        if (score === 0) {
+          const tScore = fuzzyScore(q, title);
+          if (tScore >= 200) {
+            score += 300 + Math.round(tScore / 10);
+          } else {
+            const lScore = fuzzyScore(q, entry.searchText);
+            if (lScore >= 200) {
+              score += 100 + Math.round(lScore / 20);
+            }
+          }
+        }
 
         return { entry, score };
       })
@@ -2055,7 +2057,7 @@ function DockWorshipTab({
     }
 
     return scored.map((item) => item.entry.song);
-  }, [debouncedSearchQuery, searchableSongs, accessibleSongs]);
+  }, [searchQuery, searchableSongs, accessibleSongs]);
 
   // ── Plan-locked songs: songs beyond the plan limit get a blur + padlock ──
   const lockedSongIds = useMemo(() => {
@@ -3813,7 +3815,7 @@ function DockWorshipTab({
                             }}
                           >
                             <div className="dock-worship-summary__menu-btn-content">
-                              <Icon name="translate" size={15} />
+                              <Icon name="translate" size={16} />
                               <span>{t('common.translate', 'Translate')}</span>
                             </div>
                             {effectiveWorshipTranslation && (
@@ -3832,7 +3834,7 @@ function DockWorshipTab({
                             }}
                           >
                             <div className="dock-worship-summary__menu-btn-content">
-                              <Icon name="fast_forward" size={15} />
+                              <Icon name="fast_forward" size={16} />
                               <span>{t('autoAdvance.title', 'Set Auto Advance')}</span>
                             </div>
                             {autoAdvanceActive && (

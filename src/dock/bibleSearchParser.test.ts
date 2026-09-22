@@ -48,4 +48,23 @@ describe("Bible reference search parser", () => {
   ])("suggests both numbered books for %s", (query, expectedBooks) => {
     expect(parseBibleSearch(query).map((result) => result.label)).toEqual(expectedBooks);
   });
+
+  describe("typo-tolerant book and reference parsing", () => {
+    it.each([
+      ["mathew 5:3", "Matthew 5:3"],
+      ["genisis 1:1", "Genesis 1:1"],
+      ["revelatn 21", "Revelation 21"],
+      ["hebrws 11", "Hebrews 11"],
+      ["jhon 3:16", "John 3:16"],
+      ["psams 23", "Psalms 23"],
+      ["1corintians 13", "1 Corinthians 13"],
+      ["eclesiastes 3", "Ecclesiastes 3"],
+      ["mathew", "Matthew"],
+      ["revelatn", "Revelation"],
+    ])("correctly parses reference with typo: %s -> %s", (query, expectedLabel) => {
+      const results = parseBibleSearch(query);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toBe(expectedLabel);
+    });
+  });
 });

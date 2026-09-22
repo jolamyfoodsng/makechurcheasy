@@ -17,7 +17,7 @@ let _overrideBaseUrl: string | null = null;
 let _devDockBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
-const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
+const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://localhost:45678";
 const DEV_VITE_PORT = "1420";
 export const DEV_DOCK_BASE_URL_READY_EVENT = "mce-dev-dock-base-url-ready";
 
@@ -204,6 +204,7 @@ export function getOverlayBaseUrlSync(): string {
 export function getDockBaseUrl(): string {
   if (_overrideBaseUrl) return _overrideBaseUrl;
   if (_devDockBaseUrl) return _devDockBaseUrl;
+  if (import.meta.env.DEV) return "http://localhost:1420";
   return DEFAULT_TAURI_OVERLAY_BASE_URL;
 }
 

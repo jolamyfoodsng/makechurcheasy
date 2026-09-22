@@ -39,6 +39,7 @@ import {
   onPerformanceTierChange,
 } from "../services/performanceManager";
 import { getDefaultOBSUrl, readDesktopConfigCache, DEFAULT_DESKTOP_CONFIG } from "../services/desktopConfig";
+import { fetchLatestPublishedRelease } from "../services/updateService";
 import { normalizeOBSWebSocketUrl } from "../services/obsWebSocketUrl";
 import DockDropOverlay from "./DockDropOverlay";
 import DockUploadToasts from "./DockUploadToasts";
@@ -142,8 +143,11 @@ function preloadDockTab(tab: DockTab): void {
   void DOCK_TAB_PRELOADERS[tab]?.();
 }
 
-function isSubEightGbDevice(totalRAMMB: number): boolean {
-  return totalRAMMB > 0 && totalRAMMB < 8 * 1024;
+function isSubEightGbDevice(totalRAMMB?: number): boolean {
+  // If RAM is unknown (e.g. inside OBS CEF browser dock where Tauri IPC isn't available)
+  // or less than 8GB, default to true to protect the system from RAM exhaustion.
+  if (!totalRAMMB || totalRAMMB <= 0) return true;
+  return totalRAMMB < 8 * 1024;
 }
 
 function normalizeDockVersion(version?: string): string | null {
@@ -717,8 +721,11 @@ function DockPageContent({
 
   // ── Force update: only warn when a genuinely newer release is available ──
   useEffect(() => {
-    const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/latest/download/latest.json";
-    const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
+    // In non-Tauri environments (OBS browser dock, web client), update enforcement
+    // is handled by DockAuthGate and desktop binary updates cannot be installed here.
+    const isNativeTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isNativeTauri) return;
+
     const CACHE_KEY = "ocs-dock-update-cache-v1";
 
     // Use config for force-update settings (fallback: 21 days).
@@ -733,10 +740,9 @@ function DockPageContent({
       typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : undefined,
     );
 
-    if (!forceEnabled) return;
+    if (!forceEnabled || !currentVersion) return;
 
     const evaluateRelease = (publishedAt: string, tagName?: string) => {
-      if (!currentVersion) return;
       const latestVersion = normalizeDockVersion(tagName);
       if (!latestVersion || !gt(latestVersion, currentVersion)) return;
 
@@ -750,42 +756,22 @@ function DockPageContent({
       }
     };
 
-    // First try public latest.json (no GitHub API rate limiting)
-    fetch(LATEST_MANIFEST_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error("Manifest fetch failed");
-        return r.json();
-      })
-      .then((manifest: { pub_date?: string; version?: string }) => {
-        if (!manifest.pub_date || !manifest.version) throw new Error("Incomplete manifest");
+    fetchLatestPublishedRelease()
+      .then((release) => {
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: manifest.pub_date, version: manifest.version }));
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ date: new Date().toISOString(), version: release.version }));
         } catch { /* non-critical */ }
-        evaluateRelease(manifest.pub_date, manifest.version);
+        evaluateRelease(new Date().toISOString(), release.version);
       })
       .catch(() => {
-        // Fallback to GitHub REST API
-        fetch(RELEASES_API)
-          .then((r) => r.json())
-          .then((release: { published_at?: string; tag_name?: string }) => {
-            if (!release.published_at) return;
-
-            try {
-              localStorage.setItem(CACHE_KEY, JSON.stringify({ date: release.published_at, version: release.tag_name }));
-            } catch { /* non-critical */ }
-
-            evaluateRelease(release.published_at, release.tag_name);
-          })
-          .catch(() => {
-            // Offline fallback: use the last release, but keep the same version guard.
-            try {
-              const raw = localStorage.getItem(CACHE_KEY);
-              if (raw) {
-                const cached = JSON.parse(raw) as { date?: string; version?: string };
-                if (cached.date) evaluateRelease(cached.date, cached.version);
-              }
-            } catch { /* non-critical */ }
-          });
+        // Offline fallback: use the last release, but keep the same version guard.
+        try {
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) {
+            const cached = JSON.parse(raw) as { date?: string; version?: string };
+            if (cached.date) evaluateRelease(cached.date, cached.version);
+          }
+        } catch { /* non-critical */ }
       });
   }, [cfg.appUpdates.forceUpdatesEnabled, cfg.appUpdates.gracePeriodHours]);
 
@@ -1162,7 +1148,7 @@ function DockPageContent({
               alignItems: "center",
               justifyContent: "space-between",
               padding: headerCollapsed ? "0 4px" : "6px 8px",
-              borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+              borderBottom: "1px solid var(--dock-border)",
               flexShrink: 0,
               userSelect: "none",
             }}
@@ -1170,23 +1156,16 @@ function DockPageContent({
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
               <button
                 type="button"
+                className="dock-inline-header__icon-btn"
                 aria-expanded={!headerCollapsed}
                 aria-controls="dock-shell-header-actions"
                 aria-label={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
                 title={headerCollapsed ? t("page.expandHeader", "Expand header") : t("page.collapseHeader", "Collapse header")}
                 onClick={() => setHeaderCollapsed((prev) => !prev)}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                   width: headerCollapsed ? 24 : 28,
                   height: headerCollapsed ? 24 : 28,
-                  padding: 0,
-                  border: "none",
-                  borderRadius: 3,
-                  background: "transparent",
-                  color: "#9CA3AF",
-                  cursor: "pointer",
+                  color: "var(--dock-text)",
                 }}
               >
                 <Icon name={headerCollapsed ? "chevron_right" : "expand_more"} size={headerCollapsed ? 12 : 14} />
@@ -1194,17 +1173,12 @@ function DockPageContent({
               {!headerCollapsed && (
                 <button
                   type="button"
+                  className="dock-inline-header__icon-btn"
                   onClick={(e) => { e.stopPropagation(); setShowSettingsMenu((prev) => !prev); }}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 28, height: 28,
-                    border: "none",
-                    borderRadius: 3,
-                    background: "transparent",
-                    color: "#9CA3AF",
-                    cursor: "pointer",
+                    width: 28,
+                    height: 28,
+                    color: "var(--dock-text)",
                   }}
                   aria-label={t("page.menu", "Menu")}
                   title={t("page.menu", "Menu")}
@@ -1650,9 +1624,12 @@ function DockPageContent({
                           <select
                             className="dock-sidebar__select"
                             value={projectionSettings.presentationSourceVisibility}
-                            onChange={(event) => updateProjectionSettings({
-                              presentationSourceVisibility: event.target.value as ProjectionSettings["presentationSourceVisibility"],
-                            })}
+                            onChange={(event) => {
+                              updateProjectionSettings({
+                                presentationSourceVisibility: event.target.value as ProjectionSettings["presentationSourceVisibility"],
+                              });
+                              void dockObsClient.reconcileMcePresentationVisibility().catch(() => {});
+                            }}
                             aria-label={t('page.presentationSourceVisibility', 'MCE Presentation content')}
                           >
                             <option value="active-only">{t('page.showActiveOnly', 'Show only active MCE content')}</option>
@@ -1671,9 +1648,12 @@ function DockPageContent({
                           <select
                             className="dock-sidebar__select"
                             value={projectionSettings.lowerThirdSourceVisibility}
-                            onChange={(event) => updateProjectionSettings({
-                              lowerThirdSourceVisibility: event.target.value as ProjectionSettings["lowerThirdSourceVisibility"],
-                            })}
+                            onChange={(event) => {
+                              updateProjectionSettings({
+                                lowerThirdSourceVisibility: event.target.value as ProjectionSettings["lowerThirdSourceVisibility"],
+                              });
+                              void dockObsClient.reconcileMcePresentationVisibility().catch(() => {});
+                            }}
                             aria-label={t('page.lowerThirdSourceVisibility', 'Lower third behavior')}
                           >
                             <option value="keep-first">{t('page.lowerThirdKeepFirst', 'Keep the first MCE layer visible')}</option>

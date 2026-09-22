@@ -85,32 +85,69 @@ export function getAudioDuration(src: string): Promise<number> {
 export function generateVideoThumbnail(src: string): Promise<string> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
-    video.preload = "metadata";
+    video.preload = "auto";
     video.muted = true;
     video.playsInline = true;
     video.crossOrigin = "anonymous";
 
+    let resolved = false;
     const finalize = () => {
+      if (resolved) return;
+      resolved = true;
       resolve("");
-      video.src = "";
+      try {
+        video.src = "";
+      } catch { /* ignore */ }
     };
 
-    video.onloadeddata = () => {
+    const timeout = setTimeout(finalize, 3000);
+
+    const captureFrame = () => {
+      if (resolved) return;
       try {
-        const canvas = document.createElement("canvas");
         const width = video.videoWidth || 480;
         const height = video.videoHeight || 270;
+        const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { finalize(); return; }
+        if (!ctx) {
+          clearTimeout(timeout);
+          finalize();
+          return;
+        }
         ctx.drawImage(video, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.78));
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        clearTimeout(timeout);
+        resolved = true;
+        resolve(dataUrl);
       } catch {
-        resolve("");
+        clearTimeout(timeout);
+        finalize();
       } finally {
-        video.src = "";
+        try {
+          video.src = "";
+        } catch { /* ignore */ }
       }
+    };
+
+    video.onloadedmetadata = () => {
+      try {
+        const targetTime = video.duration && video.duration > 1 ? Math.min(1.0, video.duration * 0.1) : 0.2;
+        video.currentTime = targetTime;
+      } catch {
+        captureFrame();
+      }
+    };
+
+    video.onseeked = () => {
+      captureFrame();
+    };
+
+    video.onloadeddata = () => {
+      setTimeout(() => {
+        if (!resolved) captureFrame();
+      }, 400);
     };
 
     video.onerror = finalize;
@@ -252,6 +289,34 @@ export async function registerDockMediaItem(item: MediaItem): Promise<void> {
 
   const current = loadLocalLibrary();
   saveLocalLibrary(dedupeMediaItems([item, ...current]));
+  try {
+    dockClient.sendState({ type: "state:library-updated", payload: null, timestamp: Date.now() });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("mce-media-library-updated"));
+    }
+  } catch { /* ignore */ }
+}
+
+export async function deleteDockMediaItem(id?: string, fileName?: string | null): Promise<void> {
+  if (id) {
+    try {
+      const { deleteMedia } = await import("../library/libraryDb");
+      await deleteMedia(id);
+    } catch { /* ignore */ }
+  }
+  const current = loadLocalLibrary();
+  const next = current.filter((item) => {
+    if (id && item.id === id) return false;
+    if (fileName && (item.diskFileName === fileName || item.filePath?.endsWith(fileName))) return false;
+    return true;
+  });
+  saveLocalLibrary(next);
+  try {
+    dockClient.sendState({ type: "state:library-updated", payload: null, timestamp: Date.now() });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("mce-media-library-updated"));
+    }
+  } catch { /* ignore */ }
 }
 
 /* ── Full upload pipeline ────────────────────────────────────────────────── */

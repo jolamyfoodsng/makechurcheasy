@@ -95,9 +95,25 @@ html.mv-theme-light #dock-root,
   box-shadow: none;
 }
 
-:root.light .dock-shell-header {
-  background: #ffffff;
-  border-bottom-color: rgba(100, 116, 139, 0.12);
+:root.light .dock-shell-header,
+:root.light .dock-inline-header {
+  background: var(--dock-surface);
+  border-bottom: 1px solid var(--dock-border) !important;
+}
+
+:root.light .dock-inline-header__icon-btn,
+:root.light .dock-bible-search-bar__menu-btn,
+:root.light .dock-bible-actions__overflow {
+  color: var(--dock-text) !important;
+  opacity: 1 !important;
+}
+
+:root.light .dock-inline-header__icon-btn:hover,
+:root.light .dock-bible-search-bar__menu-btn:hover,
+:root.light .dock-bible-actions__overflow:hover {
+  background: var(--dock-surface-hover) !important;
+  border-color: var(--dock-border) !important;
+  color: var(--dock-text) !important;
 }
 
 :root.light .dock-shell-status__connection,
@@ -107,8 +123,9 @@ html.mv-theme-light #dock-root,
 :root.light .dock-console-segmented,
 :root.light .dock-background-preset,
 :root.light .dock-staged--console {
-  border-color: rgba(100, 116, 139, 0.14);
-  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--dock-border);
+  background: var(--dock-surface);
+  color: var(--dock-text);
 }
 
 :root.light .dock-shell-chip {
@@ -421,10 +438,482 @@ html.mv-theme-light #dock-root,
   background: rgba(100, 116, 139, 0.16);
 }
 
+/* ── Bible verse rows: fix faint text in light mode ── */
+:root.light .dock-bible-verse-row {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+
+:root.light .dock-bible-verse-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:root.light .dock-bible-verse-row__num {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-verse-row__text {
+  color: var(--dock-text);
+}
+
 :root.light .dock-bible-verse-row--selected,
 :root.light .dock-bible-verse-row--highlighted {
   background: var(--dock-accent-soft);
+  border-color: var(--dock-accent-soft-border) !important;
   border-bottom-color: var(--dock-accent-soft-border);
+}
+
+/* ── Bible compare modal: fix hardcoded dark-mode colors ── */
+:root.light .dock-bible-compare-modal__verse-nav-btn {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-compare-modal__verse-nav-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-compare-modal__verse-select {
+  background: var(--dock-input-bg);
+  color: var(--dock-text);
+  border-color: var(--dock-input-border);
+}
+
+:root.light .dock-bible-compare-modal__close-btn {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-compare-modal__close-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-compare-modal__footer-status {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-compare-modal__footer-status strong {
+  color: var(--dock-accent);
+}
+
+:root.light .dock-bible-compare-modal__cancel-btn {
+  border-color: var(--dock-border);
+  color: var(--dock-text-secondary);
+}
+
+:root.light .dock-bible-compare-modal__cancel-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--dock-text);
+}
+
+/* ── Bible book/chapter picker: fix invisible buttons in light mode ── */
+:root.light .dock-bible-picker-book-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text-secondary);
+}
+
+:root.light .dock-bible-picker-book-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-picker-chapter-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text-secondary);
+}
+
+:root.light .dock-bible-picker-chapter-btn:hover {
+  background: rgba(0, 0, 0, 0.07);
+  color: var(--dock-text);
+}
+
+/* ── Bible bottom toolbar: fix hardcoded dark backgrounds ── */
+:root.light .dock-module--bible .dock-btm-toolbar {
+  background: var(--dock-surface);
+  border-top-color: var(--dock-border);
+}
+
+:root.light .dock-module--bible .dock-btm-segmented {
+  border-color: var(--dock-border);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:root.light .dock-module--bible .dock-btm-segmented__item {
+  color: var(--dock-text-dim);
+}
+
+/* ── Auto-advance banner ── */
+:root.light .dock-auto-advance-banner__btn {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-auto-advance-banner__btn:hover,
+:root.light .dock-auto-advance-banner__btn:focus-visible {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--dock-text);
+}
+
+/* ── Typography/effects stepper ── */
+:root.light .dtb-effect-stepper button {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dtb-effect-stepper button:hover {
+  color: var(--dock-text);
+}
+
+/* ── Bible Chapter Bar & Trigger: fix dark-mode colors in light mode ── */
+:root.light .dock-bible-chapter-bar__btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-chapter-bar__btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+:root.light .dock-bible-chapter-trigger {
+  background: rgba(169, 83, 53, 0.08);
+  border-color: var(--dock-accent);
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-chapter-trigger:hover {
+  background: rgba(169, 83, 53, 0.14);
+}
+
+/* ── Bible Floating Picker Popover ── */
+:root.light .dock-bible-picker-popover {
+  background: var(--dock-surface);
+  border-color: var(--dock-border);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.15);
+}
+
+:root.light .dock-bible-picker-popover::before {
+  border-bottom-color: var(--dock-surface);
+}
+
+:root.light .dock-bible-picker-tabs {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:root.light .dock-bible-picker-tab-btn {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-picker-tab-btn:hover {
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-picker-tab-btn--active {
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+:root.light .dock-bible-picker-header {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-bible-picker-search {
+  background: var(--dock-input-bg);
+  border-color: var(--dock-input-border);
+}
+
+:root.light .dock-bible-picker-search input {
+  color: var(--dock-text);
+}
+
+:root.light .dock-bible-picker-search input::placeholder {
+  color: var(--input-placeholder);
+}
+
+/* ── Bible Compare Card Controls ── */
+:root.light .dock-compare-card__compare-toggle {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-compare-card__compare-toggle:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--dock-text);
+}
+
+:root.light .dock-compare-card__compare-toggle--active {
+  background: var(--dock-accent-soft);
+  border-color: var(--dock-accent-soft-border);
+  color: var(--dock-accent);
+}
+
+:root.light .dock-compare-card__body {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--dock-text);
+}
+
+:root.light .dock-compare-card__text {
+  color: var(--dock-text);
+}
+
+:root.light .dock-compare-card__loading {
+  color: var(--dock-text-dim);
+}
+
+:root.light .dock-compare-card__project-btn {
+  background: var(--dock-surface-alt);
+  border-color: var(--dock-border);
+  color: var(--dock-text);
+}
+
+:root.light .dock-compare-card__project-btn:hover {
+  background: var(--dock-surface-hover);
+  color: var(--dock-text);
+  border-color: var(--dock-border-active);
+}
+
+/* ── Quick Controls (Bible output controls popover) ── */
+:root.light .dock-bible-reader__font-size-menu {
+  background: var(--dock-surface) !important;
+  background-color: var(--dock-surface) !important;
+  border: 1px solid var(--dock-border) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--dock-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__font-size-menu-header {
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__font-size-field-label {
+  color: var(--dock-text-secondary) !important;
+}
+
+:root.light .dock-bible-reader__size-preset {
+  background: var(--dock-surface-alt) !important;
+  border-color: var(--dock-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__size-preset:hover {
+  background: var(--dock-accent-soft) !important;
+  border-color: var(--dock-accent) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__size-preset--active {
+  background: var(--dock-accent) !important;
+  border-color: var(--dock-accent) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px var(--dock-accent) !important;
+}
+
+:root.light .dock-bible-reader__font-size-select {
+  background: var(--dock-input-bg) !important;
+  border-color: var(--dock-input-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__compare-mode-toggle-btn {
+  background: var(--dock-surface-alt) !important;
+  border-color: var(--dock-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-reader__compare-mode-toggle-btn:hover {
+  background: var(--dock-accent-soft) !important;
+  border-color: var(--dock-accent) !important;
+}
+
+:root.light .dock-bible-reader__compare-mode-toggle-btn--active {
+  background: var(--dock-accent-soft) !important;
+  border-color: var(--dock-accent) !important;
+  color: var(--dock-accent) !important;
+}
+
+:root.light .dock-bible-reader__font-size-checkbox {
+  color: var(--dock-text-secondary) !important;
+}
+
+:root.light .dock-bible-reader__font-size-checkbox-copy small {
+  color: var(--dock-text-dim) !important;
+}
+
+:root.light .dock-bible-reader__font-size-menu-footer {
+  border-top-color: var(--dock-border) !important;
+}
+
+:root.light .dock-bible-reader__quick-actions-trigger {
+  background: var(--dock-surface-alt) !important;
+  border-color: var(--dock-border) !important;
+  color: var(--dock-text-dim) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+:root.light .dock-bible-reader__quick-actions-trigger:hover,
+:root.light .dock-bible-reader__quick-actions-trigger--active {
+  background: var(--dock-accent) !important;
+  border-color: var(--dock-accent) !important;
+  color: #ffffff !important;
+}
+
+/* ── All Modals, Dialogs, and Overlays in Light Mode ── */
+:root.light :is(
+  .dock-dialog,
+  .dock-modal,
+  .dtb-modal,
+  .dtb-studio__modal,
+  .dtb-studio-card,
+  .dock-theme-quick__modal,
+  .dock-shortcuts-overlay__content,
+  .dock-presentation-modal,
+  .ssm-modal,
+  .dock-media-document-modal,
+  .dock-mv-content-picker,
+  .dock-mv-framing-editor,
+  .dock-bible-compare-modal
+) {
+  background: var(--dock-surface) !important;
+  border-color: var(--dock-border) !important;
+  color: var(--dock-text) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15) !important;
+}
+
+:root.light :is(
+  .dock-dialog__header,
+  .dock-modal__header,
+  .dtb-header,
+  .dock-shortcuts-overlay__header,
+  .dock-theme-quick__modal-head,
+  .dock-presentation-modal__header,
+  .ssm-header,
+  .dock-media-document-modal__header,
+  .dock-bible-compare-modal__header
+) {
+  background: var(--dock-surface) !important;
+  border-bottom: 1px solid var(--dock-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light :is(
+  .dock-dialog__title,
+  .dock-modal__title,
+  .dtb-title,
+  .dock-shortcuts-overlay__title,
+  .dock-theme-quick__title,
+  .dock-presentation-modal__title,
+  .ssm-title,
+  .dock-media-document-modal__header h3,
+  .dock-bible-compare-modal__title
+) {
+  color: var(--dock-text) !important;
+}
+
+:root.light :is(
+  .dock-dialog__footer,
+  .dock-modal__footer,
+  .dtb-footer,
+  .ssm-footer,
+  .dock-bible-compare-modal__footer
+) {
+  background: var(--dock-surface-alt) !important;
+  border-top: 1px solid var(--dock-border) !important;
+}
+
+/* ── Modal Close Buttons ── */
+:root.light :is(
+  .dock-modal__close,
+  .dtb-close-btn,
+  .dock-shortcuts-overlay__close,
+  .dock-theme-quick__close,
+  .um-close,
+  .ssm-close-btn,
+  .dock-media-document-modal__close
+) {
+  background: transparent !important;
+  color: var(--dock-text-dim) !important;
+  border-color: transparent !important;
+}
+
+:root.light :is(
+  .dock-modal__close:hover,
+  .dtb-close-btn:hover,
+  .dock-shortcuts-overlay__close:hover,
+  .dock-theme-quick__close:hover,
+  .um-close:hover,
+  .ssm-close-btn:hover,
+  .dock-media-document-modal__close:hover
+) {
+  background: var(--dock-surface-hover) !important;
+  color: var(--dock-text) !important;
+  border-color: var(--dock-border) !important;
+}
+
+/* ── Popovers, Dropdowns, and Context Menus ── */
+:root.light :is(
+  .dock-bible-actions__menu,
+  .dock-search-dropdown,
+  .dock-animated-lt-card__popover,
+  .dock-animated-lt-card__color-popover,
+  .dock-btm-overflow__menu,
+  .dock-btm-display-mode-menu,
+  .dock-media-context-menu
+) {
+  background: var(--dock-surface) !important;
+  border-color: var(--dock-border) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-actions__menu-item,
+:root.light .dock-bible-actions__menu-item-entry {
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-bible-actions__menu-item:hover,
+:root.light .dock-bible-actions__menu-item:focus-visible,
+:root.light .dock-bible-actions__menu-item-entry:hover,
+:root.light .dock-bible-actions__menu-item-entry:focus-visible {
+  background: var(--dock-surface-alt) !important;
+  color: var(--dock-text) !important;
+}
+
+/* ── Settings Sidebar in Light Mode ── */
+:root.light .dock-sidebar {
+  background: var(--dock-surface) !important;
+  border-right: 1px solid var(--dock-border) !important;
+  color: var(--dock-text) !important;
+}
+
+:root.light .dock-sidebar__header {
+  border-bottom: 1px solid var(--dock-border) !important;
+}
+
+:root.light .dock-sidebar__title {
+  color: var(--dock-text) !important;
+}
+
+/* ── Backdrops in Light Mode ── */
+:root.light :is(
+  .dock-dialog-backdrop,
+  .dtb-backdrop,
+  .dock-shortcuts-overlay,
+  .ssm-backdrop,
+  .dock-sidebar-backdrop,
+  .dock-media-document-modal-backdrop
+) {
+  background: rgba(15, 23, 42, 0.35) !important;
+}
+
+/* ── Button hover states in light mode ── */
+:root.light .dock-btn--danger:hover {
+  background: var(--dock-red-soft);
+  border-color: var(--dock-red-soft-border);
 }
 
 :root.light .dock-bible-verse-row--selected .dock-bible-verse-row__text,

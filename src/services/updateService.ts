@@ -348,62 +348,72 @@ export interface PublishedRelease {
   assets: PublishedReleaseAsset[];
 }
 
+let publishedReleaseCache: { release: PublishedRelease; expiresAt: number } | null = null;
+const PUBLISHED_RELEASE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function clearPublishedReleaseCache(): void {
+  publishedReleaseCache = null;
+}
+
 /**
  * Read the latest real, published release from the source repository.
  * This is the version authority used to validate signed updater metadata and
  * to choose the installer fallback.
  *
- * First checks latest.json (CDN hosted, no rate limits), then falls back to GitHub REST API.
+ * In native Tauri: First checks latest.json (via tauriFetch, no CORS), then falls back to GitHub REST API.
+ * In browser: Directly checks GitHub REST API (which includes CORS headers; latest.json S3 redirect does not).
+ * Cached in-memory for 5 minutes to avoid rate limiting.
  */
 export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
-  // 1. Try public latest.json manifest directly (not subject to GitHub REST API 60 req/hr rate limit)
-  try {
-    let manifestRes: Response;
-    if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
-      manifestRes = await fetch(LATEST_MANIFEST_URL);
-    } else {
-      try {
-        manifestRes = await tauriFetch(LATEST_MANIFEST_URL);
-      } catch {
-        manifestRes = await fetch(LATEST_MANIFEST_URL);
-      }
-    }
-    if (manifestRes.ok) {
-      const manifest = (await manifestRes.json()) as {
-        version?: string;
-        notes?: string;
-        pub_date?: string;
-        platforms?: Record<string, { url?: string; signature?: string }>;
-      };
-      const version = normalizeVersion(manifest.version || "");
-      if (version) {
-        const assets: PublishedReleaseAsset[] = Object.values(manifest.platforms || {}).map((p) => {
-          const url = p.url || "";
-          const name = url.split("/").pop() || "";
-          return { name, browser_download_url: url };
-        });
-        return {
-          tag_name: `v${version}`,
-          version,
-          assets,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[updater] Could not fetch latest.json manifest, falling back to GitHub API:", err);
+  if (publishedReleaseCache && Date.now() < publishedReleaseCache.expiresAt) {
+    return publishedReleaseCache.release;
   }
 
-  // 2. Fallback to GitHub REST API
+  const isNativeTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+  // 1. Try public latest.json manifest directly (only via tauriFetch to avoid CORS errors in browser)
+  if (isNativeTauri) {
+    try {
+      const manifestRes = await tauriFetch(LATEST_MANIFEST_URL);
+      if (manifestRes.ok) {
+        const manifest = (await manifestRes.json()) as {
+          version?: string;
+          notes?: string;
+          pub_date?: string;
+          platforms?: Record<string, { url?: string; signature?: string }>;
+        };
+        const version = normalizeVersion(manifest.version || "");
+        if (version) {
+          const assets: PublishedReleaseAsset[] = Object.values(manifest.platforms || {}).map((p) => {
+            const url = p.url || "";
+            const name = url.split("/").pop() || "";
+            return { name, browser_download_url: url };
+          });
+          const result: PublishedRelease = {
+            tag_name: `v${version}`,
+            version,
+            assets,
+          };
+          publishedReleaseCache = { release: result, expiresAt: Date.now() + PUBLISHED_RELEASE_CACHE_TTL_MS };
+          return result;
+        }
+      }
+    } catch (err) {
+      console.warn("[updater] Could not fetch latest.json manifest via Tauri, falling back to GitHub API:", err);
+    }
+  }
+
+  // 2. Fallback to GitHub REST API (supports CORS for browser contexts)
   let response: Response;
   const headers = getUpdaterHeaders();
-  if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
-    response = await fetch(RELEASES_API, headers ? { headers } : undefined);
-  } else {
+  if (isNativeTauri) {
     try {
       response = await tauriFetch(RELEASES_API, headers ? { headers } : undefined);
     } catch {
       response = await fetch(RELEASES_API, headers ? { headers } : undefined);
     }
+  } else {
+    response = await fetch(RELEASES_API, headers ? { headers } : undefined);
   }
   if (!response.ok) throw new Error(`Failed to fetch release info (${response.status})`);
 
@@ -420,11 +430,13 @@ export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
     throw new Error("No valid published MakeChurchEasy release is available");
   }
 
-  return {
+  const result: PublishedRelease = {
     tag_name: tagName,
     version,
     assets: release.assets ?? [],
   };
+  publishedReleaseCache = { release: result, expiresAt: Date.now() + PUBLISHED_RELEASE_CACHE_TTL_MS };
+  return result;
 }
 
 /**

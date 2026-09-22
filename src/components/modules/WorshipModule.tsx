@@ -43,6 +43,7 @@ import {
 } from "../../worship/OnlineLyricsImportModal";
 import { BulkImportModal } from "../../worship/BulkImportModal";
 import WorshipSongModal from "../../worship/WorshipSongModal";
+import { fuzzyMatch } from "../../services/fuzzySearch";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
 import { dockObsClient } from "../../dock/dockObsClient";
 import { ensureDockObsClientConnected } from "../../services/dockObsInterop";
@@ -153,17 +154,6 @@ function saveWorshipLayoutPrefs(prefs: WorshipLayoutPrefs) {
   try {
     localStorage.setItem(getUserScopedKey(WORSHIP_LAYOUT_PREFS_KEY), JSON.stringify(prefs));
   } catch { /* ignore */ }
-}
-
-function fuzzyMatch(query: string, target: string): boolean {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  if (t.includes(q)) return true;
-  let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
-  }
-  return qi === q.length;
 }
 
 function normalizeSongLookupPart(value: string): string {

@@ -417,7 +417,7 @@ const KEYWORD_VERSES: KeywordVerse[] = [
  */
 function fastKeywordMatch(speech: string): { book: string; chapter: number; verse: number; confidence: number } | null {
   const words = speech.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/).filter(Boolean);
-  if (words.length < 3) return null;
+  if (words.length < 2) return null;
 
   let bestMatch: { book: string; chapter: number; verse: number; confidence: number } | null = null;
   let bestScore = 0;
@@ -431,7 +431,7 @@ function fastKeywordMatch(speech: string): { book: string; chapter: number; vers
     // Dynamic threshold: for verses with many keywords, require fewer matches
     // For verses with few keywords, require more matches
     const ratio = matched / kv.keywords.length;
-    const minRatio = kv.keywords.length > 6 ? 0.4 : 0.6; // Lower threshold for longer keyword lists
+    const minRatio = kv.keywords.length > 5 ? 0.33 : 0.45;
     if (ratio >= minRatio && matched >= 2 && matched > bestScore) {
       bestScore = matched;
       bestMatch = {
@@ -949,6 +949,22 @@ export class ScriptureDetectionEngine {
       useClosestFallback &&
       quoteProfile.tokens.length >= 3 &&
       quoteProfile.contentTokens.length > 0;
+
+    // ────────────────────────────────────────────────────────────────────────
+    // STAGE 0: Fast O(1) keyword shortcut (<1ms)
+    // Instant resolution for high-confidence core scripture phrases
+    // ────────────────────────────────────────────────────────────────────────
+    const earlyFastMatch = fastKeywordMatch(searchInput);
+    if (earlyFastMatch && earlyFastMatch.confidence >= 0.85) {
+      const candidate = await this.buildCandidate(earlyFastMatch.book, earlyFastMatch.chapter, earlyFastMatch.verse);
+      if (candidate) {
+        return [{
+          candidate: { ...candidate, source: "keyword" },
+          source: "quote",
+          confidence: earlyFastMatch.confidence,
+        }];
+      }
+    }
 
     // ────────────────────────────────────────────────────────────────────────
     // STAGE 1: Lexical Bible corpus search

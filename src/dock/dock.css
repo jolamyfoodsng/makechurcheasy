@@ -170,15 +170,15 @@ body.dock-modal-open {
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  width: min(236px, calc(100vw - 16px));
-  min-width: 0;
+  width: min(260px, calc(100vw - 16px));
+  min-width: 220px;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 4px;
+  padding: 6px;
   border: 1px solid var(--dock-border-active);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--dock-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04);
   color: var(--dock-text);
@@ -187,12 +187,12 @@ body.dock-modal-open {
 .dock-media-context-menu__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 7px 8px 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--dock-border-soft);
   color: var(--dock-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -208,16 +208,16 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  min-height: 30px;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 8px 12px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dock-text);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -268,10 +268,10 @@ body.dock-modal-open {
 }
 
 .dock-media-context-menu__folder {
-  min-height: 27px;
-  padding: 5px 6px;
+  min-height: 34px;
+  padding: 6px 10px;
   color: var(--dock-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .dock-media-context-menu__folder--active {
@@ -281,21 +281,21 @@ body.dock-modal-open {
 .dock-media-context-menu__new-folder {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding-top: 4px;
+  gap: 6px;
+  padding-top: 6px;
 }
 
 .dock-media-context-menu__new-folder input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 27px;
-  padding: 0 7px;
+  height: 34px;
+  padding: 0 10px;
   border: 1px solid var(--dock-border);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--dock-input-bg);
   color: var(--dock-text);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   outline: none;
 }
 
@@ -307,11 +307,11 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 27px;
-  height: 27px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 1px solid var(--dock-border);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--dock-surface-alt);
   color: var(--dock-text);
   cursor: pointer;
@@ -1884,25 +1884,29 @@ body.dock-modal-open {
   z-index: 10;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 4px;
-
-  padding: 4px;
-  min-width: 160px;
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 210px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .dock-animated-lt-card__overflow-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 8px 12px;
   border: none;
   background: none;
   color: var(--dock-text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .dock-animated-lt-card__overflow-item:hover {
@@ -8231,10 +8235,8 @@ body.dock-modal-open {
   padding: 6px 8px;
   border: 1px solid var(--dock-border);
   border-radius: 8px;
-  background-color: #0b0f19 !important;
-  background: #0b0f19 !important;
-  opacity: 1 !important;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--dock-border);
+  background: var(--dock-surface);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--dock-border);
   transform: translateY(-50%);
 }
 
@@ -11055,11 +11057,11 @@ body.dock-modal-open {
 
 .dock-bible-verse-row--selected,
 .dock-bible-verse-row--highlighted {
-  border: 1.5px solid #f97316 !important;
+  border: 1.5px solid var(--dock-accent) !important;
   border-radius: 8px !important;
-  background: rgba(249, 115, 22, 0.08) !important;
+  background: var(--dock-accent-soft) !important;
   margin: 3px 0;
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.12);
+  box-shadow: 0 0 16px var(--dock-accent-soft);
 }
 
 .dock-bible-verse-row__num {
@@ -11080,8 +11082,8 @@ body.dock-modal-open {
 
 .dock-bible-verse-row--selected .dock-bible-verse-row__num,
 .dock-bible-verse-row--highlighted .dock-bible-verse-row__num {
-  color: #f97316;
-  background: rgba(249, 115, 22, 0.15);
+  color: var(--dock-accent);
+  background: var(--dock-accent-soft);
 }
 
 .dock-bible-verse-row__main {
@@ -11122,37 +11124,691 @@ body.dock-modal-open {
 /* ── Context Menu for Verse Actions ── */
 .dock-bible-context-menu {
   position: fixed;
-  min-width: 150px;
+  min-width: 195px;
   background: #181b24;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  padding: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .dock-bible-context-menu__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
   border-radius: 6px;
   background: transparent;
   border: none;
   color: #e2e8f0;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   text-align: left;
   width: 100%;
   transition: background 0.12s ease, color 0.12s ease;
+  user-select: none;
 }
 
 .dock-bible-context-menu__item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.dock-bible-context-menu__item:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Compare Verses Modal ── */
+.dock-bible-compare-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  animation: dockCompareFadeIn 0.15s ease-out;
+  box-sizing: border-box;
+}
+
+@keyframes dockCompareFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dock-bible-compare-modal {
+  background: var(--dock-surface);
+  border: 1px solid var(--dock-border);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 960px;
+  max-height: calc(100vh - 24px);
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  color: var(--dock-text);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.dock-bible-compare-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dock-border);
+  background: var(--dock-surface-alt);
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.dock-bible-compare-modal__title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.dock-bible-compare-modal__icon {
+  color: var(--dock-accent);
+  flex-shrink: 0;
+}
+
+.dock-bible-compare-modal__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dock-text);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-bible-compare-modal__verse-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.dock-bible-compare-modal__verse-nav-btn {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 24px;
+  transition: background 0.12s ease;
+}
+
+.dock-bible-compare-modal__verse-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.dock-bible-compare-modal__verse-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dock-bible-compare-modal__verse-select {
+  background: #1e2230;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 24px;
+  max-width: 120px;
+  outline: none;
+}
+
+.dock-bible-compare-modal__close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  min-width: 26px;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+
+.dock-bible-compare-modal__close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.dock-bible-compare-modal__body {
+  padding: 10px 12px;
+  overflow-y: auto;
+  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.dock-compare-card {
+  background: var(--dock-surface-alt);
+  border: 1px solid var(--dock-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+  position: relative;
+  min-height: 0;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dock-compare-card--selected-compare {
+  border-color: var(--dock-accent);
+  box-shadow: 0 0 0 1px var(--dock-accent), 0 4px 16px var(--dock-accent-soft);
+}
+
+.dock-compare-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dock-compare-card__trans-select {
+  background: var(--dock-input-bg);
+  color: var(--dock-accent);
+  font-weight: 700;
+  font-size: 12px;
+  border: 1px solid var(--dock-input-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  min-height: 30px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 85px);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+}
+
+.dock-compare-card__compare-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  user-select: none;
+  min-height: 30px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.dock-compare-card__compare-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.dock-compare-card__compare-toggle--active {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: #3b82f6;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.dock-compare-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.dock-compare-card__reference-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.dock-compare-card__text {
+  margin: 0;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dock-compare-card__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 11.5px;
+  margin: auto;
+}
+
+.dock-compare-card__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dock-compare-card__project-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #252b3d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dock-compare-card__project-btn:hover {
+  background: #333a52;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.dock-bible-compare-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.dock-bible-compare-modal__footer-status {
+  font-size: 11.5px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-bible-compare-modal__footer-status strong {
+  color: #60a5fa;
+  font-weight: 700;
+}
+
+.dock-bible-compare-modal__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.dock-bible-compare-modal__cancel-btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.dock-bible-compare-modal__cancel-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: #ffffff;
+}
+
+.dock-bible-compare-modal__project-both-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #2563eb;
+  border: 1px solid #3b82f6;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.35);
+  transition: all 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dock-bible-compare-modal__project-both-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5);
+}
+
+.dock-bible-compare-modal__project-both-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── SHORT HEIGHT (<= 420px, 300px) & NARROW DOCKS ── */
+.dock-bible-compare-modal-backdrop--short,
+.dock-bible-compare-modal-backdrop--narrow {
+  padding: 0 !important;
+}
+
+.dock-bible-compare-modal--short,
+.dock-bible-compare-modal--narrow {
+  max-height: 100vh !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.dock-bible-compare-modal--short .dock-bible-compare-modal__header {
+  padding: 3px 8px;
+  min-height: 30px;
+}
+
+.dock-bible-compare-modal--short .dock-bible-compare-modal__footer {
+  padding: 3px 8px;
+  min-height: 30px;
+}
+
+.dock-bible-compare-modal--short .dock-bible-compare-modal__body {
+  padding: 6px 8px;
+  gap: 8px;
+}
+
+.dock-bible-compare-modal--short .dock-compare-card {
+  padding: 6px 8px;
+  gap: 6px;
+}
+
+.dock-bible-compare-modal--short .dock-compare-card__body {
+  min-height: 0;
+  max-height: 100px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  padding: 5px 7px;
+}
+
+.dock-bible-compare-modal--short .dock-compare-card__project-btn {
+  min-height: 26px;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.dock-bible-compare-modal--short .dock-compare-card__trans-select,
+.dock-bible-compare-modal--short .dock-compare-card__compare-toggle {
+  min-height: 26px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.dock-bible-compare-modal--short .dock-bible-compare-modal__project-both-btn,
+.dock-bible-compare-modal--short .dock-bible-compare-modal__cancel-btn {
+  min-height: 26px;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+/* ── ULTRA-SHORT (200px - 260px) ── */
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__header {
+  padding: 2px 6px;
+  min-height: 26px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__title {
+  font-size: 11.5px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__verse-nav {
+  padding: 1px 2px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__verse-nav-btn {
+  min-height: 20px;
+  min-width: 20px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__verse-select {
+  min-height: 20px;
+  font-size: 10.5px;
+  padding: 1px 4px;
+  max-width: 80px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__close-btn {
+  min-height: 22px;
+  min-width: 22px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__body {
+  display: flex !important;
+  flex-direction: row !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  padding: 4px 6px;
+  gap: 6px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-compare-card {
+  min-width: 185px;
+  flex: 1 0 185px;
+  padding: 5px 6px;
+  gap: 4px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-compare-card__body {
+  max-height: 60px;
+  font-size: 10.5px;
+  line-height: 1.25;
+  padding: 4px 6px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-compare-card__reference-tag {
+  font-size: 9px;
+  margin-bottom: 2px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-compare-card__project-btn {
+  min-height: 22px;
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-compare-card__trans-select,
+.dock-bible-compare-modal--ultra-short .dock-compare-card__compare-toggle {
+  min-height: 22px;
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__footer {
+  padding: 2px 6px;
+  min-height: 26px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__footer-status {
+  font-size: 10.5px;
+}
+
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__project-both-btn,
+.dock-bible-compare-modal--ultra-short .dock-bible-compare-modal__cancel-btn {
+  min-height: 22px;
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+/* ── NANO HEIGHT (100px - 145px) ── */
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__header {
+  padding: 1px 4px;
+  min-height: 20px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__title {
+  font-size: 10px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__verse-nav-btn {
+  min-height: 18px;
+  min-width: 18px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__verse-select {
+  min-height: 18px;
+  font-size: 9.5px;
+  padding: 0 2px;
+  max-width: 60px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__close-btn {
+  min-height: 18px;
+  min-width: 18px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__body {
+  display: flex !important;
+  flex-direction: row !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  padding: 2px 4px;
+  gap: 4px;
+}
+
+.dock-bible-compare-modal--nano .dock-compare-card {
+  min-width: 155px;
+  flex: 1 0 155px;
+  padding: 3px 4px;
+  gap: 2px;
+}
+
+.dock-bible-compare-modal--nano .dock-compare-card__body {
+  max-height: 30px;
+  font-size: 9.5px;
+  line-height: 1.15;
+  padding: 2px 4px;
+}
+
+.dock-bible-compare-modal--nano .dock-compare-card__reference-tag {
+  display: none;
+}
+
+.dock-bible-compare-modal--nano .dock-compare-card__project-btn {
+  min-height: 18px;
+  font-size: 9px;
+  padding: 1px 4px;
+}
+
+.dock-bible-compare-modal--nano .dock-compare-card__trans-select,
+.dock-bible-compare-modal--nano .dock-compare-card__compare-toggle {
+  min-height: 18px;
+  font-size: 9px;
+  padding: 0 3px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__footer {
+  padding: 1px 4px;
+  min-height: 22px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__footer-status {
+  font-size: 9.5px;
+}
+
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__project-both-btn,
+.dock-bible-compare-modal--nano .dock-bible-compare-modal__cancel-btn {
+  min-height: 18px;
+  font-size: 9px;
+  padding: 1px 4px;
+}
+
+/* ── NARROW DOCK (<= 420px) ── */
+.dock-bible-compare-modal--narrow:not(.dock-bible-compare-modal--ultra-short):not(.dock-bible-compare-modal--nano) .dock-bible-compare-modal__body {
+  grid-template-columns: 1fr;
+}
+
+.dock-bible-compare-modal--narrow .dock-compare-card__trans-select {
+  max-width: 70px;
 }
 
 /* ── Compact Bible Chapter Navigation Bar ── */
@@ -11207,9 +11863,9 @@ body.dock-modal-open {
   padding: 0 8px;
   gap: 4px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1.5px solid #f97316;
-  color: #fff;
+  background: var(--dock-accent-soft, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--dock-accent);
+  color: var(--dock-text);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -11217,7 +11873,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-chapter-trigger:hover {
-  background: rgba(249, 115, 22, 0.1);
+  background: var(--dock-accent-soft);
+  border-color: var(--dock-accent-hover);
 }
 
 .dock-bible-chapter-trigger__text {
@@ -11360,8 +12017,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-picker-book-btn--active {
-  background: #ea580c !important;
-  border-color: #f97316 !important;
+  background: var(--dock-accent) !important;
+  border-color: var(--dock-accent) !important;
   color: #fff !important;
   font-weight: 700;
 }
@@ -11402,8 +12059,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-picker-chapter-btn--active {
-  background: #ea580c !important;
-  border-color: #f97316 !important;
+  background: var(--dock-accent) !important;
+  border-color: var(--dock-accent) !important;
   color: #fff !important;
   font-weight: 700;
 }
@@ -11441,7 +12098,7 @@ body.dock-modal-open {
 }
 
 .dock-module--bible .dock-btm-segmented__item--active {
-  background: #ea580c !important;
+  background: var(--dock-accent) !important;
   color: #fff !important;
   font-weight: 700;
 }
@@ -19061,14 +19718,14 @@ body.dock-modal-open {
   right: 0;
   z-index: 250;
   display: flex;
-  min-width: 172px;
+  min-width: 210px;
   max-width: calc(100vw - 16px);
-  padding: 5px;
+  padding: 6px;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 6px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
@@ -19077,11 +19734,11 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 30px;
-  gap: 8px;
-  padding: 0 4px 0 7px;
+  min-height: 36px;
+  gap: 10px;
+  padding: 4px 10px;
   color: var(--dock-text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -19091,13 +19748,13 @@ body.dock-modal-open {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: 38px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dock-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 550;
   cursor: pointer;
   text-align: left;
@@ -19115,12 +19772,12 @@ body.dock-modal-open {
 .dock-worship-summary__menu-btn-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .dock-worship-summary__menu-btn-content svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   opacity: 0.85;
 }
 
@@ -20755,27 +21412,29 @@ body.dock-modal-open {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  min-width: 180px;
-  padding: 4px;
-  border-radius: 4px;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: 8px;
   background: var(--dock-surface-overlay);
   border: 1px solid var(--dock-border);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: 100;
   display: flex;
   flex-direction: column;
+  gap: 3px;
 }
 
 .dock-sermon-step-header__overflow-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dock-text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.12s ease;
@@ -23331,15 +23990,20 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(20, 20, 20, 0.7);
   backdrop-filter: blur(8px);
   color: #fff;
   cursor: pointer;
   transition: background 0.12s ease;
+}
+
+.dock-media-gallery-card__menu-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .dock-media-gallery-card__menu-btn:hover {
@@ -27923,15 +28587,26 @@ body.dock-modal-open {
 }
 
 .dtb-bg-picker__thumb {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  object-fit: cover;
+  overflow: hidden;
   display: block;
   background: var(--dock-surface-0);
 }
 
 .dtb-bg-picker__thumb--video {
-  background: #000;
+  background: #0b0f19;
+}
+
+.dtb-bg-picker__thumb-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 .dtb-bg-picker__play-icon {
@@ -39031,15 +39706,15 @@ button.dock-btm-toolbar__clear--inline,
   right: 0;
   z-index: 250;
   display: flex;
-  width: min(220px, calc(100vw - 16px));
-  min-width: min(174px, calc(100vw - 16px));
+  width: min(250px, calc(100vw - 16px));
+  min-width: min(210px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
-  padding: 4px;
+  padding: 6px;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 6px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
@@ -39049,16 +39724,17 @@ button.dock-btm-toolbar__clear--inline,
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 26px;
-  padding: 0 8px;
-  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  gap: 10px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.35;
   text-align: left;
   cursor: pointer;
 }
@@ -39234,13 +39910,15 @@ button.dock-btm-toolbar__clear--inline,
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 26px;
-  padding: 0 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  gap: 10px;
   flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: var(--dock-text, #F8FAFC);
-  font-size: 10px;
+  font-size: 13px;
+  line-height: 1.35;
   justify-content: flex-start;
 }
 
@@ -39565,7 +40243,7 @@ button.dock-btm-toolbar__clear--inline,
   }
 
   .dock-module--worship .dock-worship-summary__overflow-menu {
-    min-width: 164px;
+    min-width: min(210px, calc(100vw - 16px));
   }
 }
 

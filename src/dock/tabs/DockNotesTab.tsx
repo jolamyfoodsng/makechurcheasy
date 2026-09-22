@@ -38,6 +38,7 @@ import {
   DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD,
 } from "../dockQuickSizePresets";
 import DockNotesTextTools from "../components/DockNotesTextTools";
+import { fuzzyFilter, fuzzyMatch } from "../../services/fuzzySearch";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
@@ -84,7 +85,6 @@ import {
 import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -428,7 +428,6 @@ export default function DockNotesTab({
 
   const [notes, setNotes] = useState<DockNote[]>(() => loadDockNotes());
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearchQuery = useDebouncedValue(searchQuery, 220);
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
   const [notesTranslation, setNotesTranslation] = useState<DockTranslationValue | null>(null);
   const [noteSlidesSearchQuery, setNoteSlidesSearchQuery] = useState("");
@@ -516,12 +515,10 @@ export default function DockNotesTab({
   }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
 
   const filteredNotes = useMemo(() => {
-    if (!debouncedSearchQuery.trim()) return notes;
-    const q = debouncedSearchQuery.trim().toLowerCase();
-    return notes.filter((n) =>
-      n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
-    );
-  }, [debouncedSearchQuery, notes]);
+    const q = searchQuery.trim();
+    if (!q) return notes;
+    return fuzzyFilter(notes, q, (n) => [n.title, n.content]);
+  }, [notes, searchQuery]);
 
   const selectedNoteSlides = useMemo(
     () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide, notesAutoSplit) : []),
@@ -536,12 +533,12 @@ export default function DockNotesTab({
     [notesTranslation, notesTranslationSourceSignature],
   );
   const filteredNoteSlides = useMemo(() => {
-    const query = noteSlidesSearchQuery.trim().toLocaleLowerCase();
+    const query = noteSlidesSearchQuery.trim();
     return selectedNoteSlides
       .map((slide, idx) => ({ slide, idx }))
       .filter(({ slide }) => {
         if (!query) return true;
-        return `${slide.label} ${slide.text}`.toLocaleLowerCase().includes(query);
+        return fuzzyMatch(query, `${slide.label} ${slide.text}`);
       });
   }, [noteSlidesSearchQuery, selectedNoteSlides]);
   const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
@@ -1483,7 +1480,7 @@ export default function DockNotesTab({
                           }}
                         >
                           <div className="dock-worship-summary__menu-btn-content">
-                            <Icon name="translate" size={15} />
+                            <Icon name="translate" size={16} />
                             <span>{t('common.translate', 'Translate')}</span>
                           </div>
                           {effectiveNotesTranslation && (
@@ -1502,7 +1499,7 @@ export default function DockNotesTab({
                           }}
                         >
                           <div className="dock-worship-summary__menu-btn-content">
-                            <Icon name="fast_forward" size={15} />
+                            <Icon name="fast_forward" size={16} />
                             <span>{t('autoAdvance.title', 'Set Auto Advance')}</span>
                           </div>
                           {autoAdvanceActive && (

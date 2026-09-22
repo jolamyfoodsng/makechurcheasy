@@ -36,19 +36,19 @@ export const PROGRAM_SCENE_SOURCE_NAME = "MCE Program Scene Reference";
 
 /** Source names for each module */
 export const SOURCE_NAMES = {
-  BIBLE: "MCE Bible",
-  WORSHIP: "MCE Worship",
+  BIBLE: "MCE Browser - Bible",
+  WORSHIP: "MCE Browser - Worship",
   MEDIA: "MCE Media",
-  NOTES: "MCE Notes",
+  NOTES: "MCE Browser - Notes",
   LOWER_THIRD: "MCE Lower Third",
 } as const;
 
 /** Background source names */
 export const BG_SOURCE_NAMES = {
-  BIBLE: "MCE Bible BG",
-  WORSHIP: "MCE Worship BG",
+  BIBLE: "MCE BG - Bible",
+  WORSHIP: "MCE BG - Worship",
   MEDIA: "MCE Media BG",
-  NOTES: "MCE Notes BG",
+  NOTES: "MCE BG - Notes",
   LOWER_THIRD: "MCE Lower Third BG",
 } as const;
 

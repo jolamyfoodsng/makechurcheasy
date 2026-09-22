@@ -17,6 +17,7 @@
 
 import { OT_BOOKS, NT_BOOKS, BOOK_CHAPTERS } from "./dockTypes";
 import { normalizeRomanNumberedBookPrefix } from "../bible/bookAliasGenerator";
+import { damerauLevenshteinDistance } from "../services/fuzzySearch";
 
 const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -270,7 +271,8 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
   if (matchedBooks.length === 0) return [];
 
   // Parse chapter:verse candidates from number part
-  const candidates = parseChapterVerseCandidates(numPart);
+  const hasWhitespace = /\s/.test(raw);
+  const candidates = parseChapterVerseCandidates(numPart, hasWhitespace);
 
   // Build results
   const results: BibleSearchResult[] = [];
@@ -330,7 +332,7 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
               verse: null,
               endVerse: null,
               label: `${book} ${chapter}`,
-              score: bookScore + confidence - 5,
+              score: bookScore + confidence,
             });
           }
         } else if (chapter !== null && verse !== null) {
@@ -421,6 +423,74 @@ function findBooks(bookPart: string): Array<{ book: string; score: number }> {
       if (bookLower.includes(bookPart)) {
         results.push({ book, score: 50 });
       }
+    }
+  }
+
+  // 5. Fuzzy match on book names and extended aliases (typo tolerance)
+  if (results.length === 0 && bookPart.length >= 3) {
+    const numPrefix = bookPart.match(/^([123])/)?.[1];
+    const maxDist = bookPart.length <= 4 ? 1 : 2;
+
+    const fuzzyCandidates: Array<{
+      book: string;
+      dist: number;
+      isFullBookMatch: boolean;
+      score: number;
+    }> = [];
+
+    for (const book of ALL_BOOKS) {
+      const bookLower = book.toLowerCase().replace(/\s+/g, "");
+      const bookNumPrefix = book.match(/^([123])/)?.[1];
+      if (numPrefix && bookNumPrefix !== numPrefix) continue;
+
+      let bestDist = Number.POSITIVE_INFINITY;
+      let isFullMatch = false;
+
+      // Full book name check
+      if (Math.abs(bookPart.length - bookLower.length) <= maxDist) {
+        const bookDist = damerauLevenshteinDistance(bookPart, bookLower, maxDist);
+        if (bookDist <= maxDist) {
+          bestDist = bookDist;
+          isFullMatch = true;
+        }
+      }
+
+      // Alias check (only compare if alias length is close to query)
+      const aliases = BOOK_ALIASES.find((a) => a.book === book);
+      if (aliases) {
+        for (const alias of getExtendedAliases(aliases)) {
+          if (alias.length >= 3 && Math.abs(bookPart.length - alias.length) <= maxDist) {
+            const aliasDist = damerauLevenshteinDistance(bookPart, alias, maxDist);
+            if (aliasDist <= maxDist && aliasDist < bestDist) {
+              bestDist = aliasDist;
+              isFullMatch = false;
+            }
+          }
+        }
+      }
+
+      if (Number.isFinite(bestDist) && bestDist <= maxDist) {
+        let score = Math.max(35, 65 - bestDist * 15);
+        if (isFullMatch) score += 6;
+        if (Math.abs(bookPart.length - bookLower.length) === 0) score += 4;
+
+        fuzzyCandidates.push({
+          book,
+          dist: bestDist,
+          isFullBookMatch: isFullMatch,
+          score,
+        });
+      }
+    }
+
+    fuzzyCandidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.dist !== b.dist) return a.dist - b.dist;
+      return 0;
+    });
+
+    for (const cand of fuzzyCandidates) {
+      results.push({ book: cand.book, score: cand.score });
     }
   }
 
@@ -535,7 +605,7 @@ function parseSingleChapterVerseCandidates(numPart: string): ChapterVerseCandida
  *   "316" → 3:16 (conf 25), 31:6 (conf 20)
  *   "11"  → 1:1 (conf 15), chapter 11 (conf 10)
  */
-function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
+function parseChapterVerseCandidates(numPart: string, hasWhitespace = false): ChapterVerseCandidate[] {
   if (!numPart) return [];
 
   // Clean separators: "vs", "v", ".", ":"  all become ":"
@@ -598,7 +668,7 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
       // "316" → 3:16 (conf 25), 31:6 (conf 18)
       conf = 25 - (i - 1) * 7;
     } else {
-      // "23" → 2:3 (conf 12)  — lower than chapter-only (15)
+      // "23" → 2:3 (conf 12)  — lower than chapter-only (16 or 20)
       conf = 12 - (i - 1) * 3;
     }
     candidates.push({ chapter: ch, verse: vs, endVerse: null, confidence: Math.max(conf, 8) });
@@ -606,9 +676,8 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
 
   // Also add the whole number as chapter-only (if reasonable)
   if (num >= 1 && num <= 150) {
-    // For 2-digit numbers, chapter-only gets higher confidence.
-    // For 3+ digits, it's unlikely to be a chapter number, so lower confidence.
-    const chapterConf = digits.length <= 2 ? 15 : 5;
+    // For 2-digit numbers, chapter-only gets higher confidence, especially with whitespace
+    const chapterConf = digits.length <= 2 ? (hasWhitespace ? 20 : 16) : 5;
     candidates.push({ chapter: num, verse: null, endVerse: null, confidence: chapterConf });
   }
 
@@ -646,6 +715,7 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
 function matchBooksByName(query: string): BibleSearchResult[] {
   const results: BibleSearchResult[] = [];
   const q = query.toLowerCase().replace(/\s+/g, "");
+  if (!q) return [];
 
   for (const book of ALL_BOOKS) {
     const bookLower = book.toLowerCase().replace(/\s+/g, "");
@@ -658,6 +728,55 @@ function matchBooksByName(query: string): BibleSearchResult[] {
         label: book,
         score: bookLower.startsWith(q) ? 90 : 60,
       });
+    }
+  }
+
+  // If no direct matches, check fuzzy distance
+  if (results.length === 0 && q.length >= 3) {
+    const numPrefix = q.match(/^([123])/)?.[1];
+    const maxDist = q.length <= 4 ? 1 : 2;
+
+    for (const book of ALL_BOOKS) {
+      const bookLower = book.toLowerCase().replace(/\s+/g, "");
+      const bookNumPrefix = book.match(/^([123])/)?.[1];
+      if (numPrefix && bookNumPrefix !== numPrefix) continue;
+
+      let bestDist = Number.POSITIVE_INFINITY;
+      let isFullMatch = false;
+
+      if (Math.abs(q.length - bookLower.length) <= maxDist) {
+        const bookDist = damerauLevenshteinDistance(q, bookLower, maxDist);
+        if (bookDist <= maxDist) {
+          bestDist = bookDist;
+          isFullMatch = true;
+        }
+      }
+
+      const aliases = BOOK_ALIASES.find((a) => a.book === book);
+      if (aliases) {
+        for (const alias of getExtendedAliases(aliases)) {
+          if (alias.length >= 3 && Math.abs(q.length - alias.length) <= maxDist) {
+            const aliasDist = damerauLevenshteinDistance(q, alias, maxDist);
+            if (aliasDist <= maxDist && aliasDist < bestDist) {
+              bestDist = aliasDist;
+              isFullMatch = false;
+            }
+          }
+        }
+      }
+
+      if (Number.isFinite(bestDist) && bestDist <= maxDist) {
+        let score = Math.max(30, 55 - bestDist * 15);
+        if (isFullMatch) score += 5;
+        results.push({
+          book,
+          chapter: null,
+          verse: null,
+          endVerse: null,
+          label: book,
+          score,
+        });
+      }
     }
   }
 

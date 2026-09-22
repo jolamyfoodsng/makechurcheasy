@@ -6,6 +6,8 @@ import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
 import type { BibleTheme } from "../../bible/types";
 import { BACKGROUND_PATTERNS } from "../../library/backgroundAssets";
 import type { MediaItem } from "../../library/libraryTypes";
+import { compareMediaItemsNewest, getMediaStableKey } from "../../library/mediaOrdering";
+import { isInternalDockMediaItem } from "../internalMediaAssets";
 import { getDockEntitlementLimit, isDockFreePlan, showUpgradeModal } from "../dockEntitlement";
 import {
   readNativeDockSetting,
@@ -1548,6 +1550,19 @@ export default function BackgroundPickerCard({
   );
 }
 
+function dedupeBackgroundMediaItems(items: MediaItem[]): MediaItem[] {
+  const seen = new Set<string>();
+  return items
+    .slice()
+    .sort(compareMediaItemsNewest)
+    .filter((item) => {
+      const key = getMediaStableKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 /* ── Image Tab ── */
 function ImageTab({
   quickSettings,
@@ -1571,57 +1586,62 @@ function ImageTab({
     const loadMedia = async () => {
       setLoading(true);
       try {
+        let indexedDbItems: MediaItem[] = [];
         try {
           const { getAllMedia } = await import("../../library/libraryDb");
           const all = await getAllMedia();
-          if (!cancelled && all.length > 0) {
-            setMedia(all.filter((m) => m.type === "image"));
-            return;
-          }
+          if (Array.isArray(all)) indexedDbItems = all;
         } catch { /* ignore */ }
 
+        let localItems: MediaItem[] = [];
         try {
           const { loadLocalLibrary } = await import("../dockUploadService");
-          const all = loadLocalLibrary();
-          if (!cancelled && all.length > 0) {
-            setMedia(all.filter((m) => m.type === "image"));
-            return;
-          }
+          localItems = loadLocalLibrary();
         } catch { /* ignore */ }
 
-        try {
-          const res = await fetch("/uploads/dock-media-library.json");
-          if (!res.ok) {
-            if (res.status === 404) {
-              try {
-                await fetch("/api/save-dock-data", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: "dock-media-library", data: "[]" }),
-                });
-              } catch { /* best effort */ }
+        let jsonItems: MediaItem[] = [];
+        if (indexedDbItems.length === 0 && localItems.length === 0) {
+          try {
+            const res = await fetch("/uploads/dock-media-library.json");
+            if (res.ok) {
+              const all = await res.json();
+              if (Array.isArray(all)) jsonItems = all;
             }
-            throw new Error(`HTTP ${res.status}`);
-          }
-          const all = await res.json();
-          if (!cancelled && Array.isArray(all)) {
-            setMedia(all.filter((m: MediaItem) => m.type === "image"));
-            return;
-          }
-        } catch { /* ignore */ }
+          } catch { /* ignore */ }
+        }
+
+        if (!cancelled) {
+          const combined = dedupeBackgroundMediaItems([
+            ...indexedDbItems,
+            ...localItems,
+            ...jsonItems,
+          ].filter((item) => !isInternalDockMediaItem(item)));
+          setMedia(combined.filter((m) => m.type === "image"));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     void loadMedia();
+
+    const handleUpdate = () => {
+      void loadMedia();
+    };
+
     const unsubscribe = dockClient.onState((message) => {
       if (message.type === "state:media-data" || message.type === "state:library-updated") {
         void loadMedia();
       }
     });
+
+    window.addEventListener("mce-media-library-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
     return () => {
       cancelled = true;
       unsubscribe();
+      window.removeEventListener("mce-media-library-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
     };
   }, []);
 
@@ -1751,10 +1771,14 @@ function ImageTab({
                 onClick={() => handleSelect(item)}
                 title={item.name}
               >
-                <div
-                  className="dtb-bg-picker__thumb"
-                  style={{ backgroundImage: `url(${item.thumbnailUrl || relUrl})` }}
-                />
+                <div className="dtb-bg-picker__thumb">
+                  <img
+                    src={item.thumbnailUrl || relUrl}
+                    alt=""
+                    className="dtb-bg-picker__thumb-media"
+                    loading="lazy"
+                  />
+                </div>
                 <div className="dtb-bg-picker__card-info">
                   <span className="dtb-bg-picker__card-name">{item.name}</span>
                 </div>
@@ -1795,57 +1819,62 @@ function VideoTab({
     const loadMedia = async () => {
       setLoading(true);
       try {
+        let indexedDbItems: MediaItem[] = [];
         try {
           const { getAllMedia } = await import("../../library/libraryDb");
           const all = await getAllMedia();
-          if (!cancelled && all.length > 0) {
-            setMedia(all.filter((m) => m.type === "video"));
-            return;
-          }
+          if (Array.isArray(all)) indexedDbItems = all;
         } catch { /* ignore */ }
 
+        let localItems: MediaItem[] = [];
         try {
           const { loadLocalLibrary } = await import("../dockUploadService");
-          const all = loadLocalLibrary();
-          if (!cancelled && all.length > 0) {
-            setMedia(all.filter((m) => m.type === "video"));
-            return;
-          }
+          localItems = loadLocalLibrary();
         } catch { /* ignore */ }
 
-        try {
-          const res = await fetch("/uploads/dock-media-library.json");
-          if (!res.ok) {
-            if (res.status === 404) {
-              try {
-                await fetch("/api/save-dock-data", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: "dock-media-library", data: "[]" }),
-                });
-              } catch { /* best effort */ }
+        let jsonItems: MediaItem[] = [];
+        if (indexedDbItems.length === 0 && localItems.length === 0) {
+          try {
+            const res = await fetch("/uploads/dock-media-library.json");
+            if (res.ok) {
+              const all = await res.json();
+              if (Array.isArray(all)) jsonItems = all;
             }
-            throw new Error(`HTTP ${res.status}`);
-          }
-          const all = await res.json();
-          if (!cancelled && Array.isArray(all)) {
-            setMedia(all.filter((m: MediaItem) => m.type === "video"));
-            return;
-          }
-        } catch { /* ignore */ }
+          } catch { /* ignore */ }
+        }
+
+        if (!cancelled) {
+          const combined = dedupeBackgroundMediaItems([
+            ...indexedDbItems,
+            ...localItems,
+            ...jsonItems,
+          ].filter((item) => !isInternalDockMediaItem(item)));
+          setMedia(combined.filter((m) => m.type === "video"));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     void loadMedia();
+
+    const handleUpdate = () => {
+      void loadMedia();
+    };
+
     const unsubscribe = dockClient.onState((message) => {
       if (message.type === "state:media-data" || message.type === "state:library-updated") {
         void loadMedia();
       }
     });
+
+    window.addEventListener("mce-media-library-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
     return () => {
       cancelled = true;
       unsubscribe();
+      window.removeEventListener("mce-media-library-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
     };
   }, []);
 
@@ -1967,6 +1996,10 @@ function VideoTab({
           {filtered.map((item) => {
             const relUrl = toBackgroundAssetUrl(item);
             const isSelected = selectedUrl === relUrl;
+            const hasValidThumb = Boolean(
+              item.thumbnailUrl &&
+              (item.thumbnailUrl.startsWith("data:") || item.thumbnailUrl.startsWith("http") || item.thumbnailUrl.startsWith("/uploads/"))
+            );
             return (
               <button
                 key={item.id}
@@ -1975,10 +2008,29 @@ function VideoTab({
                 onClick={() => handleSelect(item)}
                 title={item.name}
               >
-                <div
-                  className="dtb-bg-picker__thumb dtb-bg-picker__thumb--video"
-                  style={{ backgroundImage: item.thumbnailUrl ? `url(${item.thumbnailUrl})` : `url(${relUrl})` }}
-                >
+                <div className="dtb-bg-picker__thumb dtb-bg-picker__thumb--video">
+                  {hasValidThumb ? (
+                    <img
+                      src={item.thumbnailUrl}
+                      alt=""
+                      className="dtb-bg-picker__thumb-media"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <video
+                      src={`${relUrl}#t=0.5`}
+                      className="dtb-bg-picker__thumb-media"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      onLoadedMetadata={(e) => {
+                        try {
+                          const v = e.target as HTMLVideoElement;
+                          if (v.duration && v.duration > 0.5) v.currentTime = 0.5;
+                        } catch { /* ignore */ }
+                      }}
+                    />
+                  )}
                   <div className="dtb-bg-picker__play-icon">
                     <Icon name="play_arrow" size={18} />
                   </div>
