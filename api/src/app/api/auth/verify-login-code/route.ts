@@ -7,7 +7,6 @@ import { isInTrialRaw, resolveEffectivePlan } from "@/lib/trial";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
 import {
   claimTrialForUserIfEligible,
-  TRIAL_ALREADY_CLAIMED_MESSAGE,
 } from "@/lib/trialAbuse";
 import { findMatchingDesktopDevice } from "@/lib/desktopDeviceRegistration";
 
@@ -162,15 +161,13 @@ export async function POST(req: NextRequest) {
             reason: trialClaim.reason,
             matchedSignalTypes: trialClaim.matchedSignalTypes,
           });
+          // A trial conflict is an entitlement outcome, not an auth failure.
+          // Finish the login and let the account use the Free plan.
           if (trialClaim.reason === "trial_already_claimed") {
-            await db.collection("loginCodes").deleteOne({ _id: loginCode._id });
-            return NextResponse.json(
-              {
-                error: "trial_already_claimed",
-                message: TRIAL_ALREADY_CLAIMED_MESSAGE,
-              },
-              { status: 403, headers: CORS_HEADERS },
-            );
+            console.warn("[verify-login-code] Trial already claimed; continuing on Free plan", {
+              userId: user._id.toString(),
+              matchedSignalTypes: trialClaim.matchedSignalTypes,
+            });
           }
         }
       } catch (err) {

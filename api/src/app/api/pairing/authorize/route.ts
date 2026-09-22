@@ -6,7 +6,6 @@ import { checkDeviceLimit } from "@/lib/deviceLimits";
 import { resolveEffectivePlan, isInTrialRaw } from "@/lib/trial";
 import {
   claimTrialForUserIfEligible,
-  TRIAL_ALREADY_CLAIMED_MESSAGE,
 } from "@/lib/trialAbuse";
 import { normalizePairingCode } from "@/lib/pairingUtils";
 import { findMatchingDesktopDevice } from "@/lib/desktopDeviceRegistration";
@@ -103,18 +102,14 @@ export async function POST(req: NextRequest) {
             reason: trialClaim.reason,
             matchedSignalTypes: trialClaim.matchedSignalTypes,
           });
+          // Pairing authenticates the account; it must not be rejected just
+          // because this machine has already consumed another account's
+          // trial. Continue with the account's normal Free-plan entitlements.
           if (trialClaim.reason === "trial_already_claimed") {
-            await db.collection("pairingCodes").updateOne(
-              { _id: pairing._id },
-              { $set: { rejected: true, rejectReason: "trial_already_claimed" } },
-            );
-            return NextResponse.json(
-              {
-                error: "trial_already_claimed",
-                message: TRIAL_ALREADY_CLAIMED_MESSAGE,
-              },
-              { status: 403 },
-            );
+            console.warn("[pairing/authorize] Trial already claimed; continuing on Free plan", {
+              userId,
+              matchedSignalTypes: trialClaim.matchedSignalTypes,
+            });
           }
         }
       } catch (trialErr) {

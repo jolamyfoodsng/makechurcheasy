@@ -14,7 +14,6 @@ import {
 } from "@/lib/desktopDeviceRegistration";
 import {
   claimTrialForUserIfEligible,
-  TRIAL_ALREADY_CLAIMED_MESSAGE,
 } from "@/lib/trialAbuse";
 
 /**
@@ -161,14 +160,14 @@ export async function POST(req: NextRequest) {
             reason: trialClaim.reason,
             matchedSignalTypes: trialClaim.matchedSignalTypes,
           });
+          // Trial eligibility is separate from authentication. If another
+          // account already used this device's trial, pair this account on
+          // the Free plan instead of blocking its login.
           if (trialClaim.reason === "trial_already_claimed") {
-            return NextResponse.json(
-              {
-                error: "trial_already_claimed",
-                message: TRIAL_ALREADY_CLAIMED_MESSAGE,
-              },
-              { status: 403, headers: CORS_HEADERS },
-            );
+            console.warn("[pairing/redeem] Trial already claimed; continuing on Free plan", {
+              userId: user._id.toString(),
+              matchedSignalTypes: trialClaim.matchedSignalTypes,
+            });
           }
         }
       } catch (trialErr) {

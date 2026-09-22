@@ -7,7 +7,6 @@ import { rateLimit } from "@/lib/rateLimit";
 import { checkVersionGate } from "@/lib/versionGate";
 import {
   claimTrialForUserIfEligible,
-  TRIAL_ALREADY_CLAIMED_MESSAGE,
 } from "@/lib/trialAbuse";
 
 const loginLimiter = rateLimit({ windowMs: 60_000, max: 10 });
@@ -119,14 +118,14 @@ export async function POST(req: NextRequest) {
             deviceFingerprintHash: existingDevice.fingerprintHash,
             installationId: existingDevice.installationId,
           });
+          // A trial conflict must not block authentication. The account is
+          // still valid; it simply remains on the Free plan without a new
+          // trial on this device.
           if (trialClaim.reason === "trial_already_claimed") {
-            return NextResponse.json(
-              {
-                error: "trial_already_claimed",
-                message: TRIAL_ALREADY_CLAIMED_MESSAGE,
-              },
-              { status: 403, headers: CORS_HEADERS },
-            );
+            console.warn("[email-login] Trial already claimed; continuing on Free plan", {
+              userId: user._id.toString(),
+              matchedSignalTypes: trialClaim.matchedSignalTypes,
+            });
           }
           if (trialClaim.trialRecord) {
             trustedUser = await db.collection("users").findOne({ _id: user._id }) || user;
