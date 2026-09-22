@@ -44,7 +44,7 @@ const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
 const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
@@ -648,6 +648,7 @@ fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
             "keyterms_prompt",
             serde_json::json!(REALTIME_KEYTERMS).to_string(),
         ),
+        ("session_heartbeat", "true".to_string()),
     ];
 
     let query = params
@@ -718,6 +719,9 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
                 },
             );
             return Ok(true);
+        }
+        "Heartbeat" => {
+            // Server liveness heartbeat confirmed; keep session alive.
         }
         "Termination" => {
             let _ = app.emit(

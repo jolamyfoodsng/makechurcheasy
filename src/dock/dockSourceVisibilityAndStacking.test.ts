@@ -70,7 +70,7 @@ describe("dockObsClient source visibility and layer stacking", () => {
 
     const calls: Array<{ method: string; params: any }> = [];
     const sceneItems = [
-      { sourceName: "MCE Browser - Bible", sceneItemId: 10, sceneItemIndex: 1, sceneItemEnabled: false },
+      { sourceName: "Bible - MCE Presentation", sceneItemId: 10, sceneItemIndex: 1, sceneItemEnabled: false },
       { sourceName: "MCE Ticker", sceneItemId: 11, sceneItemIndex: 2, sceneItemEnabled: true },
     ];
 

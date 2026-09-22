@@ -8,7 +8,7 @@
  * Added layouts appear under the "Added" category filter.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   GALLERY_LAYOUTS,
@@ -30,23 +30,6 @@ import Icon from "../components/Icon";
 import UpgradeModal from "../components/UpgradeModal";
 import "./MultiViewGalleryPage.css";
 
-// ── Color conversion helper (CSS hex → OBS 32-bit integer for color_source_v3) ──
-
-function cssColorToObsInt(cssColor: string): number {
-  const hex = cssColor.replace("#", "");
-  let r = 0, g = 0, b = 0;
-  if (hex.length === 3) {
-    r = parseInt(hex[0] + hex[0], 16);
-    g = parseInt(hex[1] + hex[1], 16);
-    b = parseInt(hex[2] + hex[2], 16);
-  } else if (hex.length >= 6) {
-    r = parseInt(hex.slice(0, 2), 16);
-    g = parseInt(hex.slice(2, 4), 16);
-    b = parseInt(hex.slice(4, 6), 16);
-  }
-  return (0xFF << 24 | b << 16 | g << 8 | r) >>> 0;
-}
-
 // ── Dock layout storage helpers ────────────────────────────────────────────
 
 const DOCK_MV_KEY = "dock-mv-layouts";
@@ -62,7 +45,7 @@ interface DockMVLayout {
   tags: string[];
 }
 
-type ToastType = "success" | "info";
+type ToastType = "success" | "info" | "error";
 
 function loadDockLayouts(): DockMVLayout[] {
   try {
@@ -343,7 +326,6 @@ export default function MultiViewGalleryPage() {
   } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => loadLocalAddedLayoutIds());
   const [, setRenderTick] = useState(0);
-  const autoConnectingRef = useRef(false);
 
   // ── Seed server file with any existing added IDs on mount ──
   useEffect(() => {
@@ -405,68 +387,6 @@ export default function MultiViewGalleryPage() {
     setRenderTick(t => t + 1);
   }, []);
 
-  // ── Try auto-connecting to OBS if not already connected ──
-  const tryAutoConnect = useCallback(async (): Promise<boolean> => {
-    if (obsService.isConnected) return true;
-    if (autoConnectingRef.current) return false;
-    autoConnectingRef.current = true;
-    try {
-      await obsService.connect();
-    } catch {
-      return false;
-    } finally {
-      autoConnectingRef.current = false;
-    }
-    return obsService.isConnected;
-  }, []);
-
-  const ensureLayoutSlotSource = useCallback(async (
-    sceneName: string,
-    slot: GalleryLayout["slots"][number],
-  ): Promise<boolean> => {
-    const inputName = `${sceneName} - ${slot.label}`;
-    const info = CONTENT_TYPE_INFO[slot.contentType] || CONTENT_TYPE_INFO.camera;
-    const inputSettings = {
-      color: cssColorToObsInt(info.color),
-      width: slot.width,
-      height: slot.height,
-    };
-
-    let itemId = 0;
-    try {
-      itemId = await obsService.createInput(
-        sceneName,
-        inputName,
-        "color_source_v3",
-        inputSettings,
-      );
-    } catch (err) {
-      console.warn(`[MultiViewGallery] Reusing existing slot source "${inputName}":`, err);
-      itemId = await obsService.createSceneItem(sceneName, inputName);
-      await obsService.setInputSettings(inputName, inputSettings).catch(() => {});
-    }
-
-    if (!itemId) {
-      const items = await obsService.getSceneItemList(sceneName).catch(() => []);
-      itemId = items.find((item) => item.sourceName === inputName)?.sceneItemId ?? 0;
-    }
-
-    if (!itemId) return false;
-
-    await obsService.setSceneItemTransform(sceneName, itemId, {
-      positionX: slot.x,
-      positionY: slot.y,
-      boundsType: "OBS_BOUNDS_STRETCH",
-      boundsWidth: slot.width,
-      boundsHeight: slot.height,
-      boundsAlignment: 0,
-    }).catch((err) => {
-      console.warn(`[MultiViewGallery] Could not position slot "${inputName}":`, err);
-    });
-
-    return true;
-  }, []);
-
   // ── Install layout to OBS ──
   const handleAddToOBS = useCallback(
     async (layout: GalleryLayout) => {
@@ -485,60 +405,36 @@ export default function MultiViewGalleryPage() {
         }
       }
 
-      if (!obsConnected) {
-        const connected = await tryAutoConnect();
-        if (!connected) {
-          setShowDisconnected(true);
+      if (addedIds.has(layout.id)) {
+        if (!confirm(t("gallery.confirmReplace", { defaultValue: "This layout is already in your dock. Replace it?" }))) {
           return;
         }
       }
 
       setInstalling(true);
-      const sceneName = `MV: ${layout.name}`;
       try {
-        // Use MV: prefix to match dock tab convention
-        try {
-          await obsService.createScene(sceneName);
-        } catch (err) {
-          // Scene might already exist — continue
-          console.warn(`[MultiViewGallery] Reusing existing scene "${sceneName}":`, err);
-        }
-
-        // Create or reuse color sources for each slot and position them.
-        // OBS throws when a named source already exists; that should still
-        // count as installed, not as a user-facing failure.
-        let installedSlotCount = 0;
-        for (const slot of layout.slots) {
-          if (await ensureLayoutSlotSource(sceneName, slot)) installedSlotCount += 1;
-        }
-
-        // Save to dock storage for the dock multiview tab
+        // Save to dock storage for the dock multiview tab cards (e.g. MV: Multiview 1)
         saveGalleryLayoutToDock(layout);
 
         // Mark as added
         markAdded(layout.id);
 
         showToast(
-          installedSlotCount > 0
-            ? t("gallery.toastAdded", { name: sceneName })
-            : t("gallery.toastQueued", {
-              name: sceneName,
-              defaultValue: `"${sceneName}" saved for OBS`,
-            }),
+          t("gallery.toastAdded", {
+            name: layout.name,
+            defaultValue: `"${layout.name}" added to MultiView templates`,
+          }),
           "success",
         );
         setPreviewLayout(null);
       } catch (err) {
-        console.warn("[MultiViewGallery] OBS layout install had a recoverable issue:", err);
-        saveGalleryLayoutToDock(layout);
-        markAdded(layout.id);
-        showToast(t("gallery.toastAdded", { name: sceneName }), "success");
-        setPreviewLayout(null);
+        console.warn("[MultiViewGallery] Error saving layout to dock templates:", err);
+        showToast(t("gallery.toastError", { defaultValue: "Failed to add layout template" }), "error");
       } finally {
         setInstalling(false);
       }
     },
-    [addedIds, obsConnected, tryAutoConnect, ensureLayoutSlotSource, showToast, markAdded, t]
+    [addedIds, showToast, markAdded, t]
   );
 
   // ── Handle preview → install ──

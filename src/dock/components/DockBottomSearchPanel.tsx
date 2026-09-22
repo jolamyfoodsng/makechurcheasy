@@ -3,7 +3,7 @@ import "./DockBottomSearchPanel.css";
 
 interface Props {
   expanded: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
   children: ReactNode;
   /** Render the expand/collapse control in DockBottomToolbar instead of here. */
   toggleInToolbar?: boolean;

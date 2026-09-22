@@ -5,7 +5,9 @@
  * toolbar.
  */
 
-import { forwardRef, useState } from "react";
+import { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
+import Icon from "../DockIcon";
 import BibleVersionLibrary from "./BibleVersionLibrary";
 import DockBottomSearchPanel from "./DockBottomSearchPanel";
 import type { DockSearchPlacement } from "../dockSearchPlacement";
@@ -24,6 +26,8 @@ interface BibleSearchRowProps {
   headerActions?: BibleContextualActions;
   /** Show compare actions in the row; bottom-only keeps them in the toolbar. */
   showActions?: boolean;
+  toolbarCollapsed?: boolean;
+  onToolbarCollapseToggle?: () => void;
 }
 
 export function BibleSearchRow({
@@ -37,7 +41,10 @@ export function BibleSearchRow({
   compactActions,
   headerActions,
   showActions = false,
+  toolbarCollapsed = false,
+  onToolbarCollapseToggle,
 }: BibleSearchRowProps) {
+  const { t } = useTranslation();
   const renderedCompactActions = typeof compactActions === "function"
     ? compactActions()
     : compactActions;
@@ -73,6 +80,17 @@ export function BibleSearchRow({
             {renderedHeaderActions}
           </div>
         ) : null}
+        {toolbarCollapsed && onToolbarCollapseToggle && (
+          <button
+            type="button"
+            className="dock-bible-actions__overflow dock-bible-actions__uncollapse-btn"
+            onClick={onToolbarCollapseToggle}
+            aria-label={t("dock.bottomToolbar.expandTooltip", "Expand toolbar")}
+            title={t("dock.bottomToolbar.expandTooltip", "Expand toolbar")}
+          >
+            <Icon name="expand_less" size={15} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -90,6 +108,8 @@ interface BibleDockContainerProps {
   children: React.ReactNode | ((bottomPanel: React.ReactNode, bottomToolbarActions: React.ReactNode, bottomPanelToggle?: { expanded: boolean; onToggle: () => void }) => React.ReactNode);
   isCompact?: boolean;
   isNarrowWidth?: boolean;
+  toolbarCollapsed?: boolean;
+  onToolbarCollapseToggle?: () => void;
 }
 
 export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerProps>(function BibleDockContainer({
@@ -104,8 +124,9 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   isCompact = false,
   isNarrowWidth = false,
   searchPlacement = "top",
+  toolbarCollapsed = false,
+  onToolbarCollapseToggle,
 }, ref) {
-  const [isBottomSearchExpanded, setIsBottomSearchExpanded] = useState(true);
   const rootClass = [
     "dock-module",
     "dock-module--bible",
@@ -113,7 +134,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
     isNarrowWidth ? "dock-module--bible--narrow" : "",
   ].filter(Boolean).join(" ");
 
-  const renderSearchRow = (showActions = false) => (
+  const renderSearchRow = (showActions = false, isBottomPanel = false) => (
     <BibleSearchRow
       searchSection={searchSection}
       activeTranslation={activeTranslation}
@@ -125,6 +146,8 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       compactActions={compactActions}
       headerActions={headerActions}
       showActions={showActions}
+      toolbarCollapsed={isBottomPanel ? toolbarCollapsed : false}
+      onToolbarCollapseToggle={isBottomPanel ? onToolbarCollapseToggle : undefined}
     />
   );
 
@@ -132,19 +155,13 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   const showBottomSearch = searchPlacement !== "top";
   const bottomSearchPanel = showBottomSearch ? (
     <DockBottomSearchPanel
-      expanded={isBottomSearchExpanded}
-      onToggle={() => setIsBottomSearchExpanded((current) => !current)}
+      expanded={true}
       toggleInToolbar
     >
-      {renderSearchRow(false)}
+      {renderSearchRow(toolbarCollapsed, true)}
     </DockBottomSearchPanel>
   ) : null;
-  const bottomPanelToggle = showBottomSearch
-    ? {
-      expanded: isBottomSearchExpanded,
-      onToggle: () => setIsBottomSearchExpanded((current) => !current),
-    }
-    : undefined;
+  const bottomPanelToggle = undefined;
   // Keep Compare available in the bottom overflow even when the search row is
   // positioned at the top. The toolbar is the compact action home, so hiding
   // this branch when the search panel moves leaves Compare unexpectedly absent
@@ -159,7 +176,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
 
   return (
     <div ref={ref} className={rootClass}>
-      {showTopSearch && renderSearchRow(true)}
+      {showTopSearch && renderSearchRow(true, false)}
 
       {renderedChildren}
 

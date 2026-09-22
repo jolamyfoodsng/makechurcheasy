@@ -434,6 +434,10 @@ export default function DockNotesTab({
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
+  const [visibilityActionPending, setVisibilityActionPending] = useState(false);
+  /** Invalidates in-flight note pushes when Hide Notes is pressed. */
+  const visibilityEpochRef = useRef(0);
+  const visibilityActionInFlightRef = useRef(false);
   const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
   const [overlayMode, setOverlayMode] = useState<OverlayMode>(initialOverlayMode);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
@@ -909,6 +913,7 @@ export default function DockNotesTab({
     ) => {
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
+      const visibilityEpoch = visibilityEpochRef.current;
       setActionError("");
       setSelectedSlideIdx(idx);
       setVisibleSlideIdx(idx);
@@ -927,6 +932,7 @@ export default function DockNotesTab({
       if (fitOptions?.waitForFit) {
         return pushLive()
           .then((measurement) => {
+            if (visibilityEpoch !== visibilityEpochRef.current) return measurement;
             setOverlayVisible(true);
             return measurement;
           })
@@ -937,6 +943,7 @@ export default function DockNotesTab({
       }
       pushLive()
         .then(() => {
+          if (visibilityEpoch !== visibilityEpochRef.current) return;
           setOverlayVisible(true);
         })
         .catch((err) => {
@@ -1145,6 +1152,10 @@ export default function DockNotesTab({
   }, [activeSlideIndex, effectiveNotesTranslation, overlayVisible, pushNoteSlide, visibleSlideIdx]);
 
   const handleClear = useCallback(async () => {
+    if (visibilityActionInFlightRef.current) return;
+    visibilityActionInFlightRef.current = true;
+    setVisibilityActionPending(true);
+    const visibilityEpoch = ++visibilityEpochRef.current;
     setActionError("");
     try {
       if (presentationLinkMode) {
@@ -1153,20 +1164,25 @@ export default function DockNotesTab({
           setOverlayVisible(false);
         } else if (activeSlideIndex !== null) {
           pushNoteSlide(activeSlideIndex);
-          setOverlayVisible(true);
+          if (visibilityEpoch === visibilityEpochRef.current) setOverlayVisible(true);
         }
         return;
       }
       await ensureObsConnected();
       if (overlayVisible) {
-        await clearNotesFromConfiguredOutput();
+        // Hide locally first so an older push completion cannot repaint Notes.
         setOverlayVisible(false);
+        await clearNotesFromConfiguredOutput();
       } else if (activeSlideIndex !== null) {
         await pushNoteSlide(activeSlideIndex);
+        if (visibilityEpoch === visibilityEpochRef.current) setOverlayVisible(true);
       }
     } catch (err) {
       console.warn("[DockNotesTab] Toggle failed:", err);
       setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      visibilityActionInFlightRef.current = false;
+      setVisibilityActionPending(false);
     }
   }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, presentationLinkMode, pushNoteSlide]);
 
@@ -1650,6 +1666,7 @@ export default function DockNotesTab({
                 overlayModeToggleDisabled={autoAdvanceActive}
                 clearLabel={overlayVisible ? t("notes.hide") : t("notes.show")}
                 onClear={handleClear}
+                clearDisabled={visibilityActionPending}
                 sourceVisible={overlayVisible}
                 collapsed={toolbarCollapsed}
                 onCollapseChange={setToolbarCollapsed}

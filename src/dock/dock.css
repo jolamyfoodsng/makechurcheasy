@@ -17670,10 +17670,10 @@ body.dock-modal-open {
 
 .dock-bible-search-row__translation {
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: repeat(2, min-content);
+  display: flex;
+  align-items: center;
   gap: 4px;
-  margin-right: 12px;
+  margin-right: 0;
   position: relative;
   z-index: 2;
   /* width: 80px; */
@@ -40036,22 +40036,23 @@ button.dock-btm-toolbar__clear--inline,
 .dock-module--bible .dock-bible-search-row {
   min-height: 0;
   padding-block: 4px;
+  padding-inline: 2px 6px;
 }
 
 .dock-module--bible .dock-bible-search-row__input .dock-bible-search-bar {
   min-height: 32px;
   padding-block: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 .dock-bible-search-bar__menu-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
+  width: 26px;
+  height: 28px;
+  min-width: 26px;
+  min-height: 28px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -40059,6 +40060,7 @@ button.dock-btm-toolbar__clear--inline,
   color: var(--dock-text-dim, #9CA3AF);
   cursor: pointer;
   flex-shrink: 0;
+  margin: 0;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
@@ -40071,6 +40073,30 @@ button.dock-btm-toolbar__clear--inline,
 .dock-bible-search-bar__menu-btn:focus-visible {
   outline: 2px solid var(--dock-accent, #3B82F6);
   outline-offset: 1px;
+}
+
+.dock-bible-actions__uncollapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text-dim, #94A3B8);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dock-bible-actions__uncollapse-btn:hover {
+  background: var(--dock-surface-hover, #334155);
+  color: var(--dock-text, #F8FAFC);
+  border-color: var(--dock-border-active, #2563EB);
 }
 
 .dock-module--bible .dock-bible-search-row__input .dock_search__input {

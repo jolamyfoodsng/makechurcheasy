@@ -39,7 +39,7 @@ import { getWorshipLTFavorites } from "../services/favoriteThemes";
 import { getOverlayBaseUrlSync, resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { OVERLAY_HTML_VERSION, buildVersionedOverlayUrl } from "../services/overlayVersion";
 import { getMinistryData, buildSpeakerRoleMap } from "../services/ministryStore";
-import { PRESENTATION_SCENE_NAME, PROGRAM_SCENE_SOURCE_NAME, SOURCE_NAMES, BG_SOURCE_NAMES, FULLSCREEN_SOURCE_NAMES, FULLSCREEN_BG_SOURCE_NAMES } from "../services/PresentationSceneManager";
+import { PRESENTATION_SCENE_NAME, PROGRAM_SCENE_SOURCE_NAME, SOURCE_NAMES, BG_SOURCE_NAMES, FULLSCREEN_SOURCE_NAMES, FULLSCREEN_BG_SOURCE_NAMES, getLegacySourceAliases } from "../services/PresentationSceneManager";
 import type { DockLiveThemeOverrides } from "./dockConsoleTheme";
 import {
   DOCK_PREVIEW_STAGE_SUFFIX,
@@ -198,26 +198,26 @@ const TAB_PREVIEW_SCENE_NAMES: Record<DockPreviewTab, string> = {
   "lower-third": "MCE Presentation",
 };
 
-/** Source names the dock creates as overlays in the user's scenes */
-const DOCK_LT_SOURCE = "MCE Lower Third";
-const DOCK_ANIMATED_LT_SOURCE = "MCE Animated Lower Thirds";
+/** Source names the dock creates as overlays in the user's scenes (descriptor first for narrowed docks) */
+const DOCK_LT_SOURCE = "Lower Third - MCE Lower Third";
+const DOCK_ANIMATED_LT_SOURCE = "Animated Lower Thirds - MCE";
 const DOCK_WORSHIP_SOURCE = FULLSCREEN_SOURCE_NAMES.WORSHIP;
 const DOCK_NOTES_SOURCE = FULLSCREEN_SOURCE_NAMES.NOTES;
-const DOCK_TICKER_SOURCE = "MCE Ticker";
+const DOCK_TICKER_SOURCE = "Ticker - MCE Ticker";
 /** Media player source for playing uploaded/library media */
-const DOCK_MEDIA_VIDEO_SOURCE = "MCE Media - Video";
-const DOCK_MEDIA_IMAGE_SOURCE = "MCE Media - Image";
-const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "MCE Media Image Audio";
-const DOCK_MEDIA_PATTERN_SOURCE = "MCE Media Pattern";
-const DOCK_MEDIA_TEXT_SOURCE = "MCE Media Text";
-const DOCK_MEDIA_TEMPLATE_SOURCE = "MCE Media Template";
-const DOCK_LIVE_TOOL_SOURCE = "MCE Live Tools";
-const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "MCE Live Tools Media Video";
-const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "MCE Live Tools Media Image";
+const DOCK_MEDIA_VIDEO_SOURCE = "Video - MCE Media";
+const DOCK_MEDIA_IMAGE_SOURCE = "Image - MCE Media";
+const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "Audio - MCE Media Image";
+const DOCK_MEDIA_PATTERN_SOURCE = "Pattern - MCE Media";
+const DOCK_MEDIA_TEXT_SOURCE = "Text - MCE Media";
+const DOCK_MEDIA_TEMPLATE_SOURCE = "Template - MCE Media";
+const DOCK_LIVE_TOOL_SOURCE = "Live Tools - MCE";
+const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "Video - MCE Live Tools";
+const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "Image - MCE Live Tools";
 /** Background source placed BEHIND fullscreen overlays to prevent flash/twitch between slides */
-const DOCK_FS_BG_SOURCE = "MCE Fullscreen BG";
+const DOCK_FS_BG_SOURCE = "Fullscreen BG - MCE";
 /** Scene-local fullscreen background source prefix used in target scenes */
-const DOCK_FS_TARGET_BG_PREFIX = "MCE Fullscreen Scene BG";
+const DOCK_FS_TARGET_BG_PREFIX = "Scene BG - MCE Fullscreen";
 /** Single presentation scene holding all module sources */
 const DOCK_PRESENTATION_SCENE = "MCE Presentation";
 const DOCK_BIBLE_SCENE = DOCK_PRESENTATION_SCENE;
@@ -249,6 +249,22 @@ const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
  * happens to contain "MCE". User-owned OBS sources are never included here.
  */
 const MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES = [
+  "Bible - MCE",
+  "Worship - MCE",
+  "Notes - MCE",
+  "Media - MCE",
+  "Lower Third - MCE",
+  "Ticker - MCE",
+  "Countdown - MCE",
+  "Time - MCE",
+  "Video - MCE",
+  "Image - MCE",
+  "Bible BG - MCE",
+  "Worship BG - MCE",
+  "Notes BG - MCE",
+  "Media BG - MCE",
+  "Countdown BG - MCE",
+  "Fullscreen BG - MCE",
   "MCE Browser -",
   "MCE BG -",
   "MCE Bible",
@@ -730,6 +746,8 @@ export class DockObsClient {
   private _legacyFullscreenBgCleanupDone: Record<string, boolean> = {};
   /** Track which MCE overlay source is live per scene so module switches do one cleanup pass */
   private _activeMceOverlayStateByScene: Record<string, string> = {};
+  /** Memoize verified stacked and visible state per scene and source for 15s to minimize CPU and OBS calls */
+  private _lastVerifiedStackedBySceneSource: Record<string, number> = {};
   /** Track the active presentation primary source for instant visibility reconciliation */
   private _lastActivePresentationSource: string | null = null;
   /** MCE-owned presentation sources hidden by the active-only preference. */
@@ -795,6 +813,7 @@ export class DockObsClient {
     this._activeFullscreenBgSignature = {};
     this._legacyFullscreenBgCleanupDone = {};
     this._activeMceOverlayStateByScene = {};
+    this._lastVerifiedStackedBySceneSource = {};
     this._presentationProgramUnderlayCache = null;
     this._activeLtBgSignature = {};
     this._activeLtBgInputKind = {};
@@ -1188,6 +1207,7 @@ export class DockObsClient {
           if (this._obsGeneration !== gen) return;
           const d = data as { sceneName?: string; sceneItemId?: number; sceneItemEnabled?: boolean } | undefined;
           const sceneName = String(d?.sceneName || "").trim();
+          this._lastFastOverlayPrepAtBySource = {};
           if (sceneName) {
             this.invalidateSceneItemListCache(sceneName);
             this.invalidateActiveMceOverlayState(sceneName);
@@ -1357,6 +1377,10 @@ export class DockObsClient {
 
       await this.ensurePresentationSceneReady().catch(() => { });
       await this.ensureProgramSceneAsSourceInPresentation(true).catch(() => { });
+
+      // Clean off legacy MCE Browser - Bible and MCE BG - Bible so they do not linger or trigger
+      await this.removeSceneItemBySource(DOCK_PRESENTATION_SCENE, "MCE Browser - Bible").catch(() => { });
+      await this.removeSceneItemBySource(DOCK_PRESENTATION_SCENE, "MCE BG - Bible").catch(() => { });
 
       const bibleSourceName = this._fullscreenSceneDefs["bible"].browserSourceName;
       const bibleBaseUrl = this.buildCssOverlayHtmlUrlForTab("bible", bibleSourceName, bibleMode);
@@ -1728,6 +1752,16 @@ export class DockObsClient {
     if (!sceneName || !this._sceneItemListCache || this._sceneItemListCache.sceneName === sceneName) {
       this._sceneItemListCache = null;
     }
+    if (!sceneName) {
+      this._lastVerifiedStackedBySceneSource = {};
+    } else {
+      const prefix = `${sceneName}::`;
+      for (const k of Object.keys(this._lastVerifiedStackedBySceneSource)) {
+        if (k.startsWith(prefix)) {
+          delete this._lastVerifiedStackedBySceneSource[k];
+        }
+      }
+    }
   }
 
   /**
@@ -1983,50 +2017,157 @@ export class DockObsClient {
   }
 
   /**
-   * Ensure the ticker source stays above the given source in the scene.
-   * If a ticker exists, move it to the top and place the other source just below it.
-   * If no ticker exists, move the source to the top as normal.
+   * Helper to resolve aliases for legacy MCE sources to ensure backward compatibility.
    */
-  async ensureTickerAboveSource(sceneName: string, sourceName: string): Promise<void> {
+  getSourceAliases(sourceName: string): string[] {
+    const trimmed = (sourceName || "").trim();
+    if (!trimmed) return [];
+    const aliases = new Set<string>();
+
+    for (const a of getLegacySourceAliases(trimmed)) {
+      aliases.add(a);
+    }
+
+    const descMatch = trimmed.match(/^([A-Za-z0-9 ]+?) - MCE (.+)$/);
+    if (descMatch) {
+      aliases.add(`MCE ${descMatch[1]} - ${descMatch[2]}`);
+      aliases.add(`MCE ${descMatch[1]}`);
+    }
+
+    if (trimmed === DOCK_LT_SOURCE) {
+      aliases.add("MCE Lower Third");
+      aliases.add("MCE Lower Thirds");
+    } else if (trimmed === DOCK_TICKER_SOURCE) {
+      aliases.add("MCE Ticker");
+    } else if (trimmed === DOCK_MEDIA_VIDEO_SOURCE) {
+      aliases.add("MCE Media - Video");
+      aliases.add("MCE Media");
+    } else if (trimmed === DOCK_MEDIA_IMAGE_SOURCE) {
+      aliases.add("MCE Media - Image");
+    }
+
+    return Array.from(aliases);
+  }
+
+  /**
+   * Ensure the source is enabled and properly stacked in the scene.
+   * Stacking order from top to bottom:
+   * 1. Ticker (if present, highest z-index)
+   * 2. Lower-Third (if present and not the current primary source)
+   * 3. Current source (Bible, Worship, Notes, Media, etc.)
+   * 4. Backgrounds / cameras / other scene items
+   */
+  async ensureSceneItemVisibleAndStacked(sceneName: string, sourceName: string): Promise<void> {
     try {
-      // Invalidate cache so we get fresh indices after prior mutations
-      this.invalidateSceneItemListCache(sceneName);
+      const cacheKey = `${sceneName}::${sourceName}`;
+      const lastCheck = this._lastVerifiedStackedBySceneSource[cacheKey];
+      if (lastCheck && Date.now() - lastCheck < 15000) {
+        return;
+      }
+
       const items = await this.getSceneItemListCached(sceneName);
-      const item = items.find((i) => i.sourceName === sourceName);
-      const tickerItem = items.find((i) => i.sourceName === DOCK_TICKER_SOURCE)
-        ?? items.find((i) => i.sourceName.startsWith("MCE Ticker - "));
+      if (!items.length) return;
+
+      const aliases = this.getSourceAliases(sourceName);
+      const item = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
+      if (!item) return;
+
+      // 1. If item is currently hidden/disabled, unhide it!
+      if (item.sceneItemEnabled === false) {
+        await this.call("SetSceneItemEnabled", {
+          sceneName,
+          sceneItemId: item.sceneItemId,
+          sceneItemEnabled: true,
+        }).catch(() => { });
+        item.sceneItemEnabled = true;
+      }
+
+      // 2. Stacking logic
+      const isTicker = (name: string) => /ticker/i.test(name);
+      const isLowerThird = (name: string) => /lower\s*third|mce\s*lt:/i.test(name);
+
+      const tickerItem = items.find((i) => isTicker(i.sourceName));
+      const ltItem = items.find((i) => isLowerThird(i.sourceName) && i.sceneItemId !== item.sceneItemId);
+
       const topIndex = Math.max(0, items.length - 1);
 
-      if (!tickerItem) {
-        if (item && item.sceneItemIndex !== topIndex) {
+      // If sourceName is itself Ticker:
+      if (isTicker(item.sourceName)) {
+        if (item.sceneItemIndex !== topIndex) {
           await this.call("SetSceneItemIndex", {
             sceneName,
             sceneItemId: item.sceneItemId,
             sceneItemIndex: topIndex,
           }).catch(() => { });
         }
+        this._lastVerifiedStackedBySceneSource[cacheKey] = Date.now();
         return;
       }
 
-      if (tickerItem.sceneItemIndex !== topIndex) {
+      // Keep Ticker at the very top if it exists
+      if (tickerItem && tickerItem.sceneItemIndex !== topIndex) {
         await this.call("SetSceneItemIndex", {
           sceneName,
           sceneItemId: tickerItem.sceneItemId,
           sceneItemIndex: topIndex,
         }).catch(() => { });
+        tickerItem.sceneItemIndex = topIndex;
       }
 
-      if (!item || item.sceneItemId === tickerItem.sceneItemId) return;
+      // If sourceName is Lower-Third:
+      if (isLowerThird(item.sourceName)) {
+        const targetIndex = tickerItem ? Math.max(0, topIndex - 1) : topIndex;
+        if (item.sceneItemIndex !== targetIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: item.sceneItemId,
+            sceneItemIndex: targetIndex,
+          }).catch(() => { });
+        }
+        this._lastVerifiedStackedBySceneSource[cacheKey] = Date.now();
+        return;
+      }
 
-      const targetIndex = Math.max(0, topIndex - 1);
-      if (item.sceneItemIndex !== targetIndex) {
+      // For Content (Bible, Worship, etc.):
+      // Keep Lower-Third above Content if Lower-Third exists
+      if (ltItem) {
+        const ltTargetIndex = tickerItem ? Math.max(0, topIndex - 1) : topIndex;
+        if (ltItem.sceneItemIndex !== ltTargetIndex) {
+          await this.call("SetSceneItemIndex", {
+            sceneName,
+            sceneItemId: ltItem.sceneItemId,
+            sceneItemIndex: ltTargetIndex,
+          }).catch(() => { });
+          ltItem.sceneItemIndex = ltTargetIndex;
+        }
+      }
+
+      // Content source sits right below Ticker & Lower-Third
+      let contentTargetIndex = topIndex;
+      if (tickerItem && ltItem) {
+        contentTargetIndex = Math.max(0, topIndex - 2);
+      } else if (tickerItem || ltItem) {
+        contentTargetIndex = Math.max(0, topIndex - 1);
+      }
+
+      if (item.sceneItemIndex !== contentTargetIndex) {
         await this.call("SetSceneItemIndex", {
           sceneName,
           sceneItemId: item.sceneItemId,
-          sceneItemIndex: targetIndex,
+          sceneItemIndex: contentTargetIndex,
         }).catch(() => { });
       }
+
+      this._lastVerifiedStackedBySceneSource[cacheKey] = Date.now();
     } catch { /* ignore ordering failures */ }
+  }
+
+  /**
+   * Ensure the ticker source stays above the given source in the scene.
+   * Delegates to ensureSceneItemVisibleAndStacked.
+   */
+  async ensureTickerAboveSource(sceneName: string, sourceName: string): Promise<void> {
+    return this.ensureSceneItemVisibleAndStacked(sceneName, sourceName);
   }
 
   private async getLikelyOverlayScenes(): Promise<string[]> {
@@ -2269,6 +2410,10 @@ export class DockObsClient {
       lowerThirdSourceVisibility: projectionSettings.lowerThirdSourceVisibility,
     });
 
+    // Fast path: if this overlay configuration was already applied and no OBS event invalidated it,
+    // skip all OBS queries and mutation calls for ultra-low latency (<2ms) and 0% CPU overhead.
+    if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
+
     this.invalidateSceneItemListCache(targetScene);
     if (targetScene !== PRESENTATION_SCENE_NAME) {
       this.invalidateSceneItemListCache(PRESENTATION_SCENE_NAME);
@@ -2289,13 +2434,19 @@ export class DockObsClient {
         await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Notes").catch(() => { });
         await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Notes BG").catch(() => { });
       }
-    } else if (primary === FULLSCREEN_SOURCE_NAMES.BIBLE) {
+    } else if (primary === FULLSCREEN_SOURCE_NAMES.BIBLE || primary === SOURCE_NAMES.BIBLE) {
+      await this.removeSceneItemBySource(targetScene, "MCE Browser - Bible").catch(() => { });
+      await this.removeSceneItemBySource(targetScene, "MCE BG - Bible").catch(() => { });
       await this.removeSceneItemBySource(targetScene, "MCE Bible").catch(() => { });
       await this.removeSceneItemBySource(targetScene, "MCE Bible BG").catch(() => { });
       if (targetScene !== PRESENTATION_SCENE_NAME) {
+        await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Browser - Bible").catch(() => { });
+        await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE BG - Bible").catch(() => { });
         await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Bible").catch(() => { });
         await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Bible BG").catch(() => { });
       }
+      await this.removeInputIfExists("MCE Browser - Bible").catch(() => { });
+      await this.removeInputIfExists("MCE BG - Bible").catch(() => { });
     }
 
     const targetItems = await this.getSceneItemListCached(targetScene);
@@ -2303,11 +2454,13 @@ export class DockObsClient {
       ? targetItems
       : await this.getSceneItemListCached(PRESENTATION_SCENE_NAME);
 
+    const isLegacyBibleName = (name: string) =>
+      name === "MCE Browser - Bible" || name === "MCE BG - Bible" || name === "MCE Bible" || name === "MCE Bible BG";
     const primaryFamily = getMcePresentationSourceFamily(primary);
     const primaryTargetItem = targetItems.find((i) => i.sourceName === primary)
-      ?? (primaryFamily ? targetItems.find((i) => getMcePresentationSourceFamily(i.sourceName) === primaryFamily) : undefined);
+      ?? (primaryFamily ? targetItems.find((i) => getMcePresentationSourceFamily(i.sourceName) === primaryFamily && !isLegacyBibleName(i.sourceName)) : undefined);
     const primaryPresItem = presentationItems.find((i) => i.sourceName === primary)
-      ?? (primaryFamily ? presentationItems.find((i) => getMcePresentationSourceFamily(i.sourceName) === primaryFamily) : undefined);
+      ?? (primaryFamily ? presentationItems.find((i) => getMcePresentationSourceFamily(i.sourceName) === primaryFamily && !isLegacyBibleName(i.sourceName)) : undefined);
 
     // If the primary source is missing from OBS, create it and ensure it is ready at the top
     if (!primaryTargetItem && isMcePresentationManagedSource(primary)) {
@@ -3838,14 +3991,15 @@ export class DockObsClient {
     }
 
     let sceneItemId: number | null = null;
-    const existing = items.find((i) => i.sourceName === sourceName);
+    const aliases = this.getSourceAliases(sourceName);
+    const existing = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
     let createdSceneItem = false;
     const modeManagedSourceNames = new Set([
       this._fullscreenSceneDefs["bible"]?.browserSourceName,
       getDockResources().worshipSource,
       getDockResources().notesSource,
     ]);
-    const preserveExistingTransform = Boolean(existing && modeManagedSourceNames.has(sourceName));
+    const preserveExistingTransform = Boolean(existing && modeManagedSourceNames.has(existing.sourceName));
 
     if (existing) {
       sceneItemId = existing.sceneItemId;
@@ -4453,7 +4607,9 @@ export class DockObsClient {
       lower === "mce presentation" ||
       lower === "mce lower thirds" ||
       lower === "mce ticker" ||
-      lower === "mce stage display"
+      lower === "mce stage display" ||
+      /\s-\s(mce|mca|ocs)(\s|$)/i.test(lower) ||
+      lower.endsWith(" - mce")
     ) {
       return true;
     }
@@ -6903,7 +7059,7 @@ export class DockObsClient {
       .trim()
       .slice(0, 56) || "Scene";
     const suffix = variant === "content" ? "" : ` ${variant}`;
-    return `MCE ${labelByModule[module]}${suffix} - ${safeScene}`;
+    return `${labelByModule[module]}${suffix} - MCE ${safeScene}`;
   }
 
   private async pushSceneRouteBrowserSource(options: {
@@ -6981,10 +7137,9 @@ export class DockObsClient {
         );
       }
     }
-    // Source creation can affect stacking; a text-only update cannot. Avoid
-    // re-reading and reordering the scene for every Bible verse.
+    // Always ensure the source is visible and correctly stacked in the target scene
+    await this.ensureSceneItemVisibleAndStacked(sceneName, sourceName).catch(() => { });
     if (needsRouteReconciliation) {
-      await this.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
       this._lastFastOverlayPrepAtBySource[routePrepKey] = Date.now();
     }
     return sourceName;
@@ -7636,6 +7791,13 @@ export class DockObsClient {
         // Remove any legacy native BG slots left by older builds so OBS keeps
         // one Bible source instead of showing MCE BG - Bible / Bible 2.
         await this._removeFullscreenBgSources("bible").catch(() => { });
+        // Clean off legacy MCE Browser - Bible and MCE BG - Bible so they do not remain triggered
+        await this.removeSceneItemBySource(sceneName, "MCE Browser - Bible").catch(() => { });
+        await this.removeSceneItemBySource(sceneName, "MCE BG - Bible").catch(() => { });
+        if (sceneName !== PRESENTATION_SCENE_NAME) {
+          await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE Browser - Bible").catch(() => { });
+          await this.removeSceneItemBySource(PRESENTATION_SCENE_NAME, "MCE BG - Bible").catch(() => { });
+        }
         const fullscreenSetupSignature = this.buildBibleFullscreenSetupSignature(
           sceneName,
           currentProgramSceneBeforeTarget,
@@ -11598,26 +11760,26 @@ export class DockObsClient {
   private _fullscreenSceneDefs: Record<string, { sceneName: string; browserSourceName: string; bgSourceName: string; overlayFile: string }> = {
     bible: {
       sceneName: DOCK_PRESENTATION_SCENE,
-      browserSourceName: "MCE Browser - Bible",
-      bgSourceName: "MCE BG - Bible",
+      browserSourceName: FULLSCREEN_SOURCE_NAMES.BIBLE,
+      bgSourceName: FULLSCREEN_BG_SOURCE_NAMES.BIBLE,
       overlayFile: "mce-bible-overlay.html",
     },
     worship: {
       sceneName: DOCK_PRESENTATION_SCENE,
-      browserSourceName: "MCE Browser - Worship",
-      bgSourceName: "MCE BG - Worship",
+      browserSourceName: FULLSCREEN_SOURCE_NAMES.WORSHIP,
+      bgSourceName: FULLSCREEN_BG_SOURCE_NAMES.WORSHIP,
       overlayFile: "mce-worship-overlay.html",
     },
     notes: {
       sceneName: DOCK_PRESENTATION_SCENE,
-      browserSourceName: "MCE Browser - Notes",
-      bgSourceName: "MCE BG - Notes",
+      browserSourceName: FULLSCREEN_SOURCE_NAMES.NOTES,
+      bgSourceName: FULLSCREEN_BG_SOURCE_NAMES.NOTES,
       overlayFile: "mce-note.html",
     },
     countdown: {
       sceneName: DOCK_PRESENTATION_SCENE,
-      browserSourceName: "MCE Browser - Countdown",
-      bgSourceName: "MCE BG - Countdown",
+      browserSourceName: FULLSCREEN_SOURCE_NAMES.COUNTDOWN,
+      bgSourceName: FULLSCREEN_BG_SOURCE_NAMES.COUNTDOWN,
       overlayFile: "pre-service-countdown.html",
     },
   };
@@ -11662,12 +11824,14 @@ export class DockObsClient {
     let createdSceneItem = false;
     try {
       let items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
-      const existing = items.find((i) => i.sourceName === def.browserSourceName);
+      const aliases = this.getSourceAliases(def.browserSourceName);
+      const existing = items.find((i) => i.sourceName === def.browserSourceName || aliases.includes(i.sourceName));
       if (existing) {
         browserItemId = existing.sceneItemId;
-        if (this._lastFullscreenSourceSignature[def.browserSourceName] !== sourceSignature) {
+        const actualInputName = existing.sourceName;
+        if (this._lastFullscreenSourceSignature[actualInputName] !== sourceSignature) {
           await this.call("SetInputSettings", {
-            inputName: def.browserSourceName,
+            inputName: actualInputName,
             inputSettings: {
               url: overlayUrl,
               width: canvas.width,
@@ -11678,8 +11842,8 @@ export class DockObsClient {
               restart_when_active: false,
             },
           });
-          this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
-          void this.refreshBrowserSourceCache(def.browserSourceName);
+          this._lastFullscreenSourceSignature[actualInputName] = sourceSignature;
+          void this.refreshBrowserSourceCache(actualInputName);
         }
       }
     } catch { /* empty scene */ }
@@ -11714,6 +11878,7 @@ export class DockObsClient {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("already exists") || msg.includes("600")) {
+          const aliases = this.getSourceAliases(def.browserSourceName);
           try {
             const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: enable }) as { sceneItemId: number };
             browserItemId = added.sceneItemId;
@@ -11722,7 +11887,7 @@ export class DockObsClient {
             this.invalidateSceneItemListCache(DOCK_PRESENTATION_SCENE);
           } catch {
             const items = await this.getSceneItemListCached(DOCK_PRESENTATION_SCENE);
-            const found = items.find((i) => i.sourceName === def.browserSourceName);
+            const found = items.find((i) => i.sourceName === def.browserSourceName || aliases.includes(i.sourceName));
             browserItemId = found?.sceneItemId ?? null;
             if (browserItemId !== null) {
               this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
@@ -12017,6 +12182,10 @@ export class DockObsClient {
     const names = this._bgSourceNames(key);
     await this._destroyBgInput(key, names.a);
     await this._destroyBgInput(key, names.b);
+    if (key === "bible") {
+      await this._destroyBgInput(key, "MCE BG - Bible");
+      await this._destroyBgInput(key, "MCE BG - Bible 2");
+    }
     this._activeFullscreenBgSignature[key] = "__hidden__";
     this._bgActiveSlot[key] = "A";
     this._legacyFullscreenBgCleanupDone[key] = true;

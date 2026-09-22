@@ -8,10 +8,43 @@ describe("Bible reference search parser", () => {
     expect(labels).toEqual(["John 16:33"]);
   });
 
+  it("resolves ps331 to Psalms 33:1 and never impossible Psalms 3:31", () => {
+    const results = parseBibleSearch("ps331");
+    const labels = results.map((result) => result.label);
+
+    expect(labels[0]).toBe("Psalms 33:1");
+    expect(labels).not.toContain("Psalms 3:31");
+  });
+
+  it("resolves ps1191 to Psalms 119:1 instead of impossible Psalms 11:91", () => {
+    const results = parseBibleSearch("ps1191");
+    const labels = results.map((result) => result.label);
+
+    expect(labels[0]).toBe("Psalms 119:1");
+    expect(labels).not.toContain("Psalms 11:91");
+  });
+
   it("drops impossible explicit verse candidates", () => {
     const labels = parseBibleSearch("John 1:633").map((result) => result.label);
 
     expect(labels).not.toContain("John 1:633");
+  });
+
+  it("creatively recovers similar valid references for non-existent ps 3:31", () => {
+    const results = parseBibleSearch("ps 3:31");
+    const labels = results.map((result) => result.label);
+
+    expect(labels).not.toContain("Psalms 3:31");
+    expect(labels).toContain("Psalms 33:1");
+    expect(labels).toContain("Psalms 3:8");
+  });
+
+  it("creatively recovers similar valid references for ps3:31", () => {
+    const results = parseBibleSearch("ps3:31");
+    const labels = results.map((result) => result.label);
+
+    expect(labels).not.toContain("Psalms 3:31");
+    expect(labels[0]).toBe("Psalms 33:1");
   });
 
   it("keeps valid compact references", () => {

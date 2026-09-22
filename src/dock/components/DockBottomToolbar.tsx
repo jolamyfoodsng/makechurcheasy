@@ -174,6 +174,13 @@ export default function DockBottomToolbar({
   );
 
   if (collapsed) {
+    if (bottomPanel) {
+      return (
+        <div className="dock-btm-toolbar dock-btm-toolbar--bottom-panel-only" ref={toolbarRef}>
+          {bottomPanel}
+        </div>
+      );
+    }
     return (
       <div className="dock-btm-toolbar dock-btm-toolbar--collapsed" ref={toolbarRef}>
         {onClear && !clearInOverflow && (
@@ -181,7 +188,7 @@ export default function DockBottomToolbar({
             type="button"
             className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
             onClick={onClear}
-            disabled={!clearDisabled}
+            disabled={clearDisabled}
             title={resolvedClearLabel}
           >
             <span>{t("dock.bottomToolbar.hideBible")}</span>
@@ -321,7 +328,29 @@ export default function DockBottomToolbar({
                   <Icon name={bottomPanelToggle.expanded ? "expand_more" : "expand_less"} size={15} />
                 </button>
               )}
+              {onCollapseChange && !bottomPanelToggle && (
+                <button
+                  type="button"
+                  className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
+                  onClick={() => onCollapseChange(true)}
+                  aria-label={t("dock.bottomToolbar.collapseTooltip")}
+                  title={t("dock.bottomToolbar.collapseTooltip")}
+                >
+                  <Icon name="expand_more" size={15} />
+                </button>
+              )}
             </div>
+          )}
+          {onCollapseChange && !bottomPanelToggle && !(children || (onClear && clearInOverflow)) && (
+            <button
+              type="button"
+              className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
+              onClick={() => onCollapseChange(true)}
+              aria-label={t("dock.bottomToolbar.collapseTooltip")}
+              title={t("dock.bottomToolbar.collapseTooltip")}
+            >
+              <Icon name="expand_more" size={15} />
+            </button>
           )}
         </div>
       </div>

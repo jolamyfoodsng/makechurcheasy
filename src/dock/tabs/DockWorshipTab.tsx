@@ -1416,6 +1416,7 @@ function DockWorshipTab({
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [worshipOverlayVisible, setWorshipOverlayVisible] = useState(true);
+  const [visibilityActionPending, setVisibilityActionPending] = useState(false);
   const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
   const [selectedFSTheme, setSelectedFSTheme] = useState<BibleTheme>(
     productionDefaults.fullscreenTheme ?? BUILTIN_THEMES[0],
@@ -1535,6 +1536,9 @@ function DockWorshipTab({
   const prefsLoadIdRef = useRef(0);
   const songsPollBusyRef = useRef(false);
   const liveSectionRequestIdRef = useRef(0);
+  /** Invalidates in-flight lyric pushes when Hide Lyrics is pressed. */
+  const visibilityEpochRef = useRef(0);
+  const visibilityActionInFlightRef = useRef(false);
   const liveSectionPushTailRef = useRef<Promise<unknown>>(Promise.resolve());
   const pendingQuickSettingsRefreshRef = useRef(false);
   const pendingQuickSettingsOverrideRef = useRef<DockFullscreenQuickThemeSettings | null>(null);
@@ -2451,6 +2455,7 @@ function DockWorshipTab({
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
       const requestId = ++liveSectionRequestIdRef.current;
+      const visibilityEpoch = visibilityEpochRef.current;
 
       setActionError("");
       setSelectedIdx(idx);
@@ -2484,7 +2489,7 @@ function DockWorshipTab({
       if (options?.awaitFontFit) {
         return queuedPush
           .then((measurement) => {
-            if (requestId !== liveSectionRequestIdRef.current) return measurement;
+            if (requestId !== liveSectionRequestIdRef.current || visibilityEpoch !== visibilityEpochRef.current) return measurement;
             setWorshipOverlayVisible(true);
             return measurement;
           })
@@ -2497,7 +2502,7 @@ function DockWorshipTab({
       }
       queuedPush
         .then(() => {
-          if (requestId !== liveSectionRequestIdRef.current) return;
+          if (requestId !== liveSectionRequestIdRef.current || visibilityEpoch !== visibilityEpochRef.current) return;
           setWorshipOverlayVisible(true);
           track("song_presented");
           trackWorshipSongPresented();
@@ -3314,6 +3319,7 @@ function DockWorshipTab({
   }, [activeSectionIndex, pushSection]);
 
   const handleClearLyrics = useCallback(async () => {
+    visibilityEpochRef.current += 1;
     setActionError("");
     setVisibleIdx(null);
     setSelectedIdx(null);
@@ -3332,24 +3338,28 @@ function DockWorshipTab({
   }, [clearWorshipFromConfiguredOutput, onStage, presentationLinkMode, showToast, t]);
 
   const handleToggleWorshipVisibility = useCallback(async () => {
+    if (visibilityActionInFlightRef.current) return;
+    visibilityActionInFlightRef.current = true;
+    setVisibilityActionPending(true);
+    const visibilityEpoch = ++visibilityEpochRef.current;
     setActionError("");
-
-    if (presentationLinkMode) {
-      if (worshipOverlayVisible) {
-        onStage(null);
-        setWorshipOverlayVisible(false);
-      } else if (activeSectionIndex !== null) {
-        await goLiveSection(activeSectionIndex);
-      }
-      return;
-    }
-
     try {
+      if (presentationLinkMode) {
+        if (worshipOverlayVisible) {
+          onStage(null);
+          setWorshipOverlayVisible(false);
+        } else if (activeSectionIndex !== null) {
+          await goLiveSection(activeSectionIndex);
+        }
+        return;
+      }
+
       await ensureObsConnected();
 
       if (worshipOverlayVisible) {
-        await clearWorshipFromConfiguredOutput();
+        // Invalidate an older lyric push before the hide batch starts.
         setWorshipOverlayVisible(false);
+        await clearWorshipFromConfiguredOutput();
         return;
       }
 
@@ -3359,7 +3369,7 @@ function DockWorshipTab({
         if (!hasSceneRoute) {
           await dockObsClient.bringWorshipOverlayForward(fullscreenOnlyMode ? "fullscreen" : overlayMode);
         }
-        setWorshipOverlayVisible(true);
+        if (visibilityEpoch === visibilityEpochRef.current) setWorshipOverlayVisible(true);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -3368,6 +3378,9 @@ function DockWorshipTab({
         console.warn("[DockWorshipTab] toggle worship visibility failed:", err);
         setActionError(message);
       }
+    } finally {
+      visibilityActionInFlightRef.current = false;
+      setVisibilityActionPending(false);
     }
   }, [activeSectionIndex, clearWorshipFromConfiguredOutput, fullscreenOnlyMode, goLiveSection, hasSceneRoute, onStage, overlayMode, presentationLinkMode, worshipOverlayVisible]);
 
@@ -4030,6 +4043,7 @@ function DockWorshipTab({
                       overlayModeToggleDisabled={autoAdvanceActive}
                       clearLabel={worshipOverlayVisible ? t("worship.hideLyrics") : t("worship.showLyrics")}
                       onClear={handleToggleWorshipVisibility}
+                      clearDisabled={visibilityActionPending}
                       sourceVisible={worshipOverlayVisible}
                       collapsed={toolbarCollapsed}
                       onCollapseChange={setToolbarCollapsed}

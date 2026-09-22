@@ -195,3 +195,10 @@ export const BOOK_CHAPTERS: Record<string, number> = {
   Hebrews: 13, James: 5, "1 Peter": 5, "2 Peter": 3,
   "1 John": 5, "2 John": 1, "3 John": 1, Jude: 1, Revelation: 22,
 };
+
+export {
+  BOOK_CHAPTER_VERSES,
+  getCanonicalVerseCount,
+  isCanonicalReferenceValid,
+} from "./bibleCanon";
+

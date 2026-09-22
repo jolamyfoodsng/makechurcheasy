@@ -391,7 +391,7 @@ class BibleObsService {
     if (regInput) {
       const inputs = await obsService.getInputList();
       const found = inputs.find((i) => i.inputUuid === regInput.inputUuid);
-      if (found) {
+      if (found && found.inputName === BIBLE_SOURCE_NAME) {
         currentSourceName = found.inputName;
       }
     }
@@ -419,6 +419,20 @@ class BibleObsService {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName: overlaySceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+
+      // Remove any legacy MCE Browser - Bible / MCE BG - Bible items from the scene
+      const legacyItems = items.filter((item) =>
+        item.sourceName === "MCE Browser - Bible" ||
+        item.sourceName === "MCE Bible" ||
+        item.sourceName === "MCE BG - Bible" ||
+        item.sourceName === "MCE Bible BG"
+      );
+      for (const leg of legacyItems) {
+        try {
+          await obsService.call("RemoveSceneItem", { sceneName: overlaySceneName, sceneItemId: leg.sceneItemId });
+        } catch { /* ok */ }
+      }
+
       const existing = items.find(
         (item) => item.sourceName === currentSourceName || item.sourceName === BIBLE_SOURCE_NAME
       );

@@ -360,6 +360,13 @@ export class LmDockService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private nativeStopPromise: Promise<void> | null = null;
+  /** Detect a stream that connected successfully but never receives mic audio. */
+  private audioWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private audioConnectedAt = 0;
+  private lastAudioSignalAt = 0;
+  private audioRecoveryAttempts = 0;
+  private static readonly AUDIO_SIGNAL_GRACE_MS = 6_000;
+  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 2;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -384,6 +391,8 @@ export class LmDockService {
   private static readonly MAX_RECONNECT_ATTEMPTS = 5;
   private static readonly RECONNECT_DELAYS_MS = [750, 1_500, 3_000, 5_000, 8_000];
   private static readonly MIC_START_TIMEOUT_MS = 12_000;
+  private static readonly CONNECTION_WATCHDOG_TIMEOUT_MS = 20_000;
+  private connectionWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private lastQueuedQuoteSearchKey = "";
   private lastQueuedQuoteSearchAt = 0;
 
@@ -1089,6 +1098,74 @@ export class LmDockService {
     });
   }
 
+  private startConnectionWatchdog(token: number): void {
+    this.stopConnectionWatchdog();
+    this.connectionWatchdogTimer = setTimeout(() => {
+      this.connectionWatchdogTimer = null;
+      if (token !== this.sessionToken) return;
+      if (this.snapshot.status === "connecting" || this.snapshot.status === "requesting-mic") {
+        console.warn("[LmDockService] Connection watchdog timed out while waiting for speech service.");
+        this.shouldKeepListening = false;
+        this.snapshot = {
+          ...this.snapshot,
+          status: "error",
+          error: "Connection to speech service timed out. Start listening again to retry.",
+        };
+        this.pushStatus();
+        void this.cleanup();
+      }
+    }, LmDockService.CONNECTION_WATCHDOG_TIMEOUT_MS);
+  }
+
+  private stopConnectionWatchdog(): void {
+    if (this.connectionWatchdogTimer) {
+      clearTimeout(this.connectionWatchdogTimer);
+      this.connectionWatchdogTimer = null;
+    }
+  }
+
+  private stopAudioSignalMonitor(): void {
+    if (this.audioWatchdogTimer) {
+      clearInterval(this.audioWatchdogTimer);
+      this.audioWatchdogTimer = null;
+    }
+    this.audioConnectedAt = 0;
+    this.lastAudioSignalAt = 0;
+  }
+
+  private startAudioSignalMonitor(): void {
+    this.stopAudioSignalMonitor();
+    this.audioConnectedAt = Date.now();
+    this.audioWatchdogTimer = setInterval(() => {
+      if (
+        !this.shouldKeepListening
+        || (this.snapshot.status !== "connecting" && this.snapshot.status !== "listening")
+      ) return;
+
+      const connectedFor = Date.now() - this.audioConnectedAt;
+      if (connectedFor < LmDockService.AUDIO_SIGNAL_GRACE_MS) return;
+      // The local capture callback has been observed. Long periods of silence
+      // are valid and must not restart a pastor's session.
+      if (this.lastAudioSignalAt >= this.audioConnectedAt) return;
+      if (this.audioRecoveryAttempts >= LmDockService.MAX_AUDIO_RECOVERY_ATTEMPTS) {
+        this.shouldKeepListening = false;
+        this.snapshot = {
+          ...this.snapshot,
+          status: "error",
+          error: "No microphone audio was received. Check the selected input and microphone permission, then start listening again.",
+        };
+        this.pushStatus();
+        void this.cleanup();
+        return;
+      }
+
+      this.audioRecoveryAttempts += 1;
+      console.warn("[LmDockService] Listening is connected but no microphone audio was received; restarting capture.");
+      this.stopAudioSignalMonitor();
+      this.recoverFromUnexpectedStreamEnd("Microphone input is not receiving audio.");
+    }, 1_000);
+  }
+
   /**
    * Process realtime transcript events from AssemblyAI.
    * Splits multi-sentence turns line-by-line upon punctuation (. ! ?),
@@ -1226,24 +1303,37 @@ export class LmDockService {
     if (!options.reconnect) {
       this.shouldKeepListening = true;
       this.reconnectAttempts = 0;
+      this.audioRecoveryAttempts = 0;
     }
     this.activeMicId = micId;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status);
+    console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status, "reconnect:", !!options.reconnect);
+    if (this.startInFlight) {
+      return;
+    }
     if (
-      this.startInFlight ||
-      this.snapshot.status === "listening" ||
-      this.snapshot.status === "connecting" ||
-      this.snapshot.status === "requesting-mic"
+      !options.reconnect &&
+      (this.snapshot.status === "listening" ||
+        this.snapshot.status === "connecting" ||
+        this.snapshot.status === "requesting-mic")
     ) {
       return;
     }
 
     this.startInFlight = true;
     const token = ++this.sessionToken;
+
+    // A manual stop is asynchronous in Tauri. Wait for that native task to
+    // finish before starting the next stream, otherwise the new start can be
+    // accepted while the old stream still owns the microphone.
+    await this.cleanup();
+    if (token !== this.sessionToken || !this.shouldKeepListening) {
+      this.startInFlight = false;
+      return;
+    }
 
     this.detectionSpeed = "sharp";
 
@@ -1299,6 +1389,7 @@ export class LmDockService {
     this.pendingInterimChunk = null;
     this.pendingQuoteSearch = null;
     this.pushStatus();
+    this.startConnectionWatchdog(token);
 
     let nativeStartCompleted = false;
 
@@ -1356,15 +1447,22 @@ export class LmDockService {
           const { status } = event.payload;
           if (status === "connected") {
             this.reconnectAttempts = 0;
-            this.snapshot = { ...this.snapshot, status: "listening" };
+            this.startAudioSignalMonitor();
+            // AssemblyAI's Begin message confirms the WebSocket, but not that
+            // the local cpal callback is delivering microphone frames yet.
+            // Keep the UI in Connecting… until the first audio-level event.
+            this.snapshot = { ...this.snapshot, status: "connecting", error: undefined };
             this.pushStatus();
-            this.startInactivityMonitor();
           } else if (status.startsWith("error")) {
+            this.stopConnectionWatchdog();
+            this.stopAudioSignalMonitor();
             this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
             this.recoverFromUnexpectedStreamEnd(status);
           } else if (status === "stopped") {
+            this.stopConnectionWatchdog();
+            this.stopAudioSignalMonitor();
             this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
@@ -1387,11 +1485,21 @@ export class LmDockService {
           (event) => {
           if (token !== this.sessionToken) return;
           const level = event.payload.level;
+          const now = Date.now();
+          this.lastAudioSignalAt = now;
+          if (level > 0.01) {
+            this.audioRecoveryAttempts = 0;
+          }
+          if (this.snapshot.status === "connecting") {
+            this.stopConnectionWatchdog();
+            this.snapshot = { ...this.snapshot, status: "listening", error: undefined };
+            this.pushStatus();
+            this.startInactivityMonitor();
+          }
           this.snapshot = { ...this.snapshot, inputLevel: level };
 
           // The meter updates frequently; throttle notifications so the page
           // does not re-render the transcript list on every chunk.
-          const now = Date.now();
           const shouldNotify =
             now - this.lastLevelNotifyAt >= 250 ||
             Math.abs(level - this.lastLevelValue) >= 0.08 ||
@@ -1446,28 +1554,18 @@ export class LmDockService {
           }
         }
 
-        // 3. Long-session anti-hallucination:
-        // AssemblyAI sessions can drift after 8-10 minutes. Transparently recycle during natural silence (> 1.5s).
+        // 3. Long-session anti-hallucination / refresh:
+        // Transparently recycle during natural silence (> 1.5s) if session has run for a long time (> 15 mins).
         if (
           this.sessionStartTime > 0 &&
-          now - this.sessionStartTime > 8 * 60 * 1000 &&
+          now - this.sessionStartTime > 15 * 60 * 1000 &&
           silenceMs > 1500 &&
           now - this.lastSessionRecycleAt > 60_000
         ) {
           this.lastSessionRecycleAt = now;
           this.sessionStartTime = now;
-          console.log("[LmDockService] Transparently recycling AssemblyAI stream after 8+ minutes during natural pause...");
-          void safeTauriInvoke("stop_assemblyai_stream").then(() => {
-            if (this.snapshot.status === "listening") {
-              return safeTauriInvoke("start_assemblyai_stream", {
-                apiKey: getAssemblyAiKey(),
-                deviceId: this.activeMicId || null,
-                detectionSpeed: this.detectionSpeed,
-              });
-            }
-          }).catch((err) => {
-            console.warn("[LmDockService] Session recycle failed:", err);
-          });
+          console.log("[LmDockService] Transparently recycling AssemblyAI stream after 15+ minutes during natural pause...");
+          void this.startListening(this.activeMicId, { reconnect: true });
         }
       }, 100);
 
@@ -1507,6 +1605,7 @@ export class LmDockService {
       // Apply current gain (separate call so it's live-updatable)
       await safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
     } catch (err) {
+      this.stopConnectionWatchdog();
       if (token !== this.sessionToken) {
         return;
       }
@@ -1547,6 +1646,7 @@ export class LmDockService {
     }
     this.sessionToken++;
     this.startInFlight = false;
+    this.stopConnectionWatchdog();
     if (this.pauseCheckTimer) {
       clearInterval(this.pauseCheckTimer);
       this.pauseCheckTimer = null;
@@ -1584,6 +1684,7 @@ export class LmDockService {
     this.lastLevelNotifyAt = 0;
     this.lastLevelValue = 0;
 
+    this.stopAudioSignalMonitor();
     this.stopInactivityMonitor();
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
@@ -1729,6 +1830,12 @@ export class LmDockService {
     this.levelUnlisten = null;
 
     // Cancel pending timers
+    this.stopConnectionWatchdog();
+    if (this.pauseCheckTimer) {
+      clearInterval(this.pauseCheckTimer);
+      this.pauseCheckTimer = null;
+    }
+    this.stopAudioSignalMonitor();
     this.stopInactivityMonitor();
     this.inactivityPromptActive = false;
     if (this.liveQuoteSearchTimer) {
