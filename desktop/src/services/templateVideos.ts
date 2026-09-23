@@ -164,17 +164,28 @@ function bytesToDataUrl(bytes: Uint8Array, mimeType: string): Promise<string> {
   });
 }
 
-function getVideoDuration(src: string): Promise<number> {
+function getVideoDuration(src: string, timeoutMs = 1500): Promise<number> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     video.preload = "metadata";
-    video.onloadedmetadata = () => resolve(video.duration);
-    video.onerror = () => resolve(0);
+    let settled = false;
+    const finalize = (dur: number) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.src = "";
+      resolve(dur || 0);
+    };
+    const timer = setTimeout(() => finalize(0), timeoutMs);
+    video.onloadedmetadata = () => finalize(video.duration);
+    video.onerror = () => finalize(0);
     video.src = src;
   });
 }
 
-function generateVideoThumbnail(src: string): Promise<string> {
+function generateVideoThumbnail(src: string, timeoutMs = 1500): Promise<string> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     video.preload = "auto";
@@ -185,13 +196,21 @@ function generateVideoThumbnail(src: string): Promise<string> {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
+      video.onloadeddata = null;
+      video.onseeked = null;
+      video.onerror = null;
+      video.src = "";
       resolve(result);
     };
-    timeout = setTimeout(() => finalize(""), 10000);
+    timeout = setTimeout(() => finalize(""), timeoutMs);
     video.onerror = () => finalize("");
     video.onloadeddata = () => {
-      const seekTime = Math.min(1, video.duration / 4 || 0);
-      video.currentTime = seekTime;
+      const seekTime = Math.min(1, (video.duration || 0) / 4 || 0);
+      try {
+        video.currentTime = seekTime;
+      } catch {
+        finalize("");
+      }
     };
     video.onseeked = () => {
       if (video.readyState < 2) {
@@ -249,13 +268,28 @@ async function readResponseBytes(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
+  let lastReportedFraction = -1;
+  let lastReportedTime = 0;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
     received += value.byteLength;
-    onProgress?.(total > 0 ? Math.min(received / total, 1) : null);
+
+    if (total > 0 && onProgress) {
+      const currentFraction = Math.min(received / total, 1);
+      const now = performance.now();
+      // Throttle: fire if fraction advances by at least 1% or 80ms has elapsed
+      if (currentFraction - lastReportedFraction >= 0.01 || now - lastReportedTime >= 80) {
+        lastReportedFraction = currentFraction;
+        lastReportedTime = now;
+        onProgress(currentFraction);
+      }
+    } else if (onProgress && lastReportedFraction === -1) {
+      lastReportedFraction = 0;
+      onProgress(null);
+    }
   }
 
   const bytes = new Uint8Array(received);
@@ -461,8 +495,8 @@ export async function downloadTemplateVideoToLibrary(
     const overlayBaseUrl = await getOverlayBaseUrl();
     const overlayUrl = `${overlayBaseUrl}${saved.relativeUrl}`;
     const [durationSec, thumbnailUrl] = await Promise.all([
-      getVideoDuration(overlayUrl),
-      generateVideoThumbnail(overlayUrl),
+      getVideoDuration(overlayUrl, 1500),
+      generateVideoThumbnail(overlayUrl, 1500),
     ]);
 
     const item: MediaItem = {
@@ -484,6 +518,17 @@ export async function downloadTemplateVideoToLibrary(
     };
 
     await saveMedia(item);
+
+    if (!thumbnailUrl) {
+      // Generate thumbnail in the background with a longer timeout if not ready immediately
+      void generateVideoThumbnail(overlayUrl, 6000).then(async (bgThumb) => {
+        if (bgThumb) {
+          const updatedItem: MediaItem = { ...item, thumbnailUrl: bgThumb };
+          await saveMedia(updatedItem).catch(() => {});
+        }
+      });
+    }
+
     return item;
   };
 

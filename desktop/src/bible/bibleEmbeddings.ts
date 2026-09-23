@@ -51,12 +51,31 @@ function getQueryExtractor(): Promise<FeatureExtractionPipeline> {
   return extractorPromise;
 }
 
+function isLowMemoryDevice(): boolean {
+  try {
+    if (typeof navigator !== "undefined" && (navigator as any).deviceMemory && (navigator as any).deviceMemory < 8) {
+      return true;
+    }
+    const cached = localStorage.getItem("ocs-perf-profile-v1");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const ram = parsed?.hardware?.totalRAMMB;
+      if (typeof ram === "number" && ram > 0 && ram < 8192) return true;
+    }
+  } catch {}
+  return false;
+}
+
 /**
  * Load pre-computed embeddings and build HNSW index.
  * Call once on app init — subsequent searches use the in-memory index.
  */
 export function loadBibleEmbeddings(): Promise<void> {
   if (hnswIndex) return Promise.resolve();
+  if (isLowMemoryDevice()) {
+    console.info("[BibleEmbeddings] Skipping heavy 257MB embeddings loading on <8GB RAM device. Using enhanced fast keyword & fuzzy search.");
+    return Promise.resolve();
+  }
   // A transcript can produce several quote searches at the same time. Share
   // one load/build operation so concurrent searches never parse the 245 MB
   // JSON asset more than once.

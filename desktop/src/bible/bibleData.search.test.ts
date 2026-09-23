@@ -135,29 +135,48 @@ describe("Bible keyword search", () => {
   });
 
   it.each([
-    "favor in the sight of men",
-    "favour in the sight of men",
-  ])("matches British and American spelling variants: %s", async (query) => {
+    ["favor in the sight of men", "Proverbs", 3, 4],
+    ["favour in the sight of men", "Proverbs", 3, 4],
+    ["honour thy father", "Exodus", 20, 12],
+    ["honor thy father", "Exodus", 20, 12],
+  ])("matches British and American spelling variants: %s", async (query, book, chapter, verse) => {
     const results = await searchBibleRanked(query, "KJV", 5);
 
     expect(results.some((result) =>
-      result.book === "Proverbs" &&
-      result.chapter === 3 &&
-      result.verse === 4,
+      result.book === book &&
+      result.chapter === chapter &&
+      result.verse === verse,
     )).toBe(true);
   });
 
-  it.each(["30", "30%", "3"])("keeps numeric searches searchable: %s", async (query) => {
+  it.each(["30", "30%", "3", "100"])("keeps numeric searches searchable: %s", async (query) => {
     const results = await searchBibleRanked(query, "KJV", 5);
 
     expect(results.length).toBeGreaterThan(0);
     expect(
       results.some(
         (result) =>
-          /thirty/i.test(result.text) ||
+          /thirty|hundred/i.test(result.text) ||
           result.chapter === Number(query.replace(/%/g, "")) ||
           result.verse === Number(query.replace(/%/g, "")),
       ),
     ).toBe(true);
+  });
+
+  it("finds verses with hundred or 100 interchangeably", async () => {
+    const wordResults = await searchBibleRanked("hundred sheep", "KJV", 5);
+    const digitResults = await searchBibleRanked("100 sheep", "KJV", 5);
+
+    expect(wordResults.length).toBeGreaterThan(0);
+    expect(digitResults.length).toBeGreaterThan(0);
+    expect(digitResults[0].book).toBe(wordResults[0].book);
+    expect(digitResults[0].chapter).toBe(wordResults[0].chapter);
+    expect(digitResults[0].verse).toBe(wordResults[0].verse);
+  });
+
+  it("finds verses with keyword typos like 'folow me'", async () => {
+    const results = await searchBibleRanked("folow me", "KJV", 5);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((r) => r.text.toLowerCase().includes("follow me"))).toBe(true);
   });
 });

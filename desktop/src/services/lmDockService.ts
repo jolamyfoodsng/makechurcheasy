@@ -20,19 +20,176 @@ import { DETECTION_SPEED_CONFIG } from "./voiceBibleTypes";
 import { hasTauriInvoke, safeTauriInvoke, safeTauriListen, type TauriUnlisten } from "./tauriSafe";
 
 /**
- * Detect hallucinated transcripts from AssemblyAI.
- * When the model lacks a language hint, it can produce random text in
- * multiple languages (German, Italian, French, etc.) instead of actual speech.
- * This filters out entries that contain non-Latin script characters.
+ * Bible abbreviations and common honorifics/contractions that should not trigger sentence splits.
  */
-function isHallucinated(text: string): boolean {
-  if (!text.trim()) return false;
-  // Count non-ASCII letters (Cyrillic, CJK, Arabic, etc.)
-  const nonLatin = text.match(/[\u0400-\u04FF\u0370-\u03FF\u0600-\u06FF\u0980-\u09FF\u0E00-\u0E7F\u1100-\u11FF\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/g);
-  const letterCount = text.replace(/[^a-zA-Z]/g, "").length;
-  if (letterCount === 0) return false;
-  // If non-Latin letters make up more than 10% of the text, it's likely hallucinated
-  return (nonLatin?.length ?? 0) / letterCount > 0.1;
+const BIBLE_ABBREVIATIONS = new Set([
+  "gen", "ex", "exod", "lev", "num", "deut", "josh", "judg", "ruth",
+  "1sam", "2sam", "1kgs", "2kgs", "1chron", "2chron", "ezra", "neh", "esth",
+  "job", "ps", "psa", "psalm", "psalms", "prov", "eccl", "song", "isa",
+  "jer", "lam", "ezek", "dan", "hos", "joel", "amos", "obad", "jon",
+  "mic", "nah", "hab", "zeph", "hag", "zech", "mal", "matt", "mk",
+  "lk", "jn", "act", "acts", "rom", "1cor", "2cor", "gal", "eph",
+  "phil", "col", "1thess", "2thess", "1tim", "2tim", "tit", "phlm",
+  "heb", "jas", "1pet", "2pet", "1jn", "2jn", "3jn", "jude", "rev",
+  "ch", "chap", "v", "vs", "dr", "mr", "mrs", "ms", "st", "etc", "eg", "ie",
+  // Standalone forms (appear after number prefix: "1 Cor." → lastWord is "cor")
+  "cor", "sam", "kgs", "kings", "chron", "thess", "tim", "pet",
+]);
+
+/**
+ * Splits text into completed sentences based on punctuation (. ? ! \n).
+ * Distinguishes sentence-ending punctuation from Bible abbreviations ("1 Cor.", "v. 5")
+ * and decimal numbers ("3.16").
+ *
+ * When forceAll is false, trailing text without ending punctuation remains in `remaining`.
+ * When forceAll is true (e.g. at end_of_turn), any non-empty trailing text is completed.
+ */
+export function splitSentenceBoundaries(
+  text: string,
+  forceAll = false,
+): { completed: string[]; remaining: string } {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { completed: [], remaining: "" };
+  }
+
+  const completed: string[] = [];
+  const boundaryRegex = /([.?!]+|\n+)(?:\s+|$)/g;
+  let currentStart = 0;
+  let lastEnd = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = boundaryRegex.exec(trimmed)) !== null) {
+    const punct = match[1];
+    const matchIndex = match.index;
+    const punctEndIndex = matchIndex + punct.length;
+
+    // Guard: decimal numbers like 3.16 or 1.5
+    if (punct === "." && matchIndex > 0 && punctEndIndex < trimmed.length) {
+      const prevChar = trimmed[matchIndex - 1];
+      const nextChar = trimmed[punctEndIndex];
+      if (/\d/.test(prevChar) && /\d/.test(nextChar)) {
+        continue;
+      }
+    }
+
+    // Guard: abbreviations like "1 Cor." or "Gen." or "Dr."
+    const precedingText = trimmed.slice(currentStart, matchIndex).trim();
+    const precedingWords = precedingText.split(/\s+/);
+    const lastWord = precedingWords[precedingWords.length - 1]?.toLowerCase().replace(/[^\w]/g, "");
+    if (lastWord && BIBLE_ABBREVIATIONS.has(lastWord)) {
+      continue;
+    }
+
+    const sentence = trimmed.slice(currentStart, punctEndIndex).trim();
+    if (sentence) {
+      completed.push(sentence);
+      currentStart = match.index + match[0].length;
+      lastEnd = currentStart;
+    }
+  }
+
+  let remaining = trimmed.slice(lastEnd).trim();
+  if (forceAll && remaining) {
+    completed.push(remaining);
+    remaining = "";
+  }
+
+  return { completed, remaining };
+}
+
+/**
+ * Strips prefix text that has already been finalized into earlier lines in the active turn.
+ * Uses exact match first, falling back to word-level alignment to tolerate minor ASR casing/punctuation shifts.
+ */
+export function stripCommittedPrefix(fullText: string, committedText: string): string {
+  const normCommitted = committedText.trim();
+  if (!normCommitted) return fullText.trim();
+
+  if (fullText.startsWith(normCommitted)) {
+    return fullText.slice(normCommitted.length).trimStart();
+  }
+
+  const committedWords = normCommitted.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+  if (committedWords.length === 0) return fullText.trim();
+
+  const fullWords = fullText.trim().split(/\s+/).filter(Boolean);
+  let matchCount = 0;
+  for (let i = 0; i < Math.min(committedWords.length, fullWords.length); i++) {
+    const normFullWord = fullWords[i].toLowerCase().replace(/[^\w\s]/g, "");
+    if (normFullWord === committedWords[i]) {
+      matchCount++;
+    } else {
+      break;
+    }
+  }
+
+  if (matchCount >= committedWords.length) {
+    return fullWords.slice(matchCount).join(" ").trimStart();
+  }
+
+  return fullText.trim();
+}
+
+/**
+ * Detect hallucinated transcripts from AssemblyAI or ASR engine.
+ * 1. Non-Latin script characters (Cyrillic, CJK, Arabic, etc.) > 10%
+ * 2. Repetitive word loops / stutter (e.g. 4+ in a row or >70% frequency in >= 8 words)
+ * 3. Repetitive multi-word loops (e.g. "thank you thank you thank you thank you")
+ */
+export function isHallucinated(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  // 1. Count non-ASCII letters (Cyrillic, CJK, Arabic, etc.)
+  const nonLatin = trimmed.match(/[\u0400-\u04FF\u0370-\u03FF\u0600-\u06FF\u0980-\u09FF\u0E00-\u0E7F\u1100-\u11FF\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/g);
+  const letterCount = trimmed.replace(/[^a-zA-Z]/g, "").length;
+  const nonLatinCount = nonLatin?.length ?? 0;
+  // Entirely non-Latin text (pure Cyrillic, CJK, etc.) — flag as hallucinated
+  if (letterCount === 0 && nonLatinCount > 0) {
+    return true;
+  }
+  if (letterCount > 0 && nonLatinCount / letterCount > 0.1) {
+    return true;
+  }
+
+  // 2. Repetitive word loops / ASR decoder stutter
+  const words = trimmed.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+  if (words.length >= 4) {
+    // 4+ identical consecutive words (e.g. "you you you you")
+    for (let i = 0; i <= words.length - 4; i++) {
+      if (words[i] === words[i + 1] && words[i + 1] === words[i + 2] && words[i + 2] === words[i + 3]) {
+        return true;
+      }
+    }
+
+    // 2-word phrase repeated 3+ times back-to-back (e.g. "thank you thank you thank you")
+    if (words.length >= 6) {
+      for (let i = 0; i <= words.length - 6; i++) {
+        if (
+          words[i] === words[i + 2] && words[i + 2] === words[i + 4] &&
+          words[i + 1] === words[i + 3] && words[i + 3] === words[i + 5]
+        ) {
+          return true;
+        }
+      }
+    }
+
+    // Dominant single word > 70% of sentence when length >= 8
+    if (words.length >= 8) {
+      const counts = new Map<string, number>();
+      for (const w of words) {
+        counts.set(w, (counts.get(w) ?? 0) + 1);
+      }
+      for (const c of counts.values()) {
+        if (c / words.length >= 0.7) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 const ASSEMBLYAI_API_KEYS = (
@@ -203,6 +360,13 @@ export class LmDockService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private nativeStopPromise: Promise<void> | null = null;
+  /** Detect a stream that connected successfully but never receives mic audio. */
+  private audioWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private audioConnectedAt = 0;
+  private lastAudioSignalAt = 0;
+  private audioRecoveryAttempts = 0;
+  private static readonly AUDIO_SIGNAL_GRACE_MS = 6_000;
+  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 2;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -212,9 +376,23 @@ export class LmDockService {
   private static readonly LIVE_QUOTE_SEARCH_WINDOW_WORDS = 18;
   /** The dock only renders recent lines; never serialize an entire service into each live relay packet. */
   private static readonly MAX_RELAY_TRANSCRIPT_ENTRIES = 60;
+  /** Bounded in-memory transcript lines to keep RAM/CPU minimal on 4GB-6GB machines */
+  private static readonly MAX_IN_MEMORY_ENTRIES = 200;
+  /** Accumulated text already finalized into previous lines in the active turn */
+  private turnCommittedText = "";
+  /** Dedup guard to avoid duplicating finalized lines */
+  private lastFinalizedLineText = "";
+  private lastFinalizedAt = 0;
+  /** Timestamp when current listening session started (for transparent recycling) */
+  private sessionStartTime = 0;
+  private lastSessionRecycleAt = 0;
+  /** Throttled interim push timer to prevent React render storms / background hanging */
+  private pendingInterimPushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly MAX_RECONNECT_ATTEMPTS = 5;
   private static readonly RECONNECT_DELAYS_MS = [750, 1_500, 3_000, 5_000, 8_000];
   private static readonly MIC_START_TIMEOUT_MS = 12_000;
+  private static readonly CONNECTION_WATCHDOG_TIMEOUT_MS = 20_000;
+  private connectionWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private lastQueuedQuoteSearchKey = "";
   private lastQueuedQuoteSearchAt = 0;
 
@@ -505,6 +683,24 @@ export class LmDockService {
     this.postToRelay();
   }
 
+  /** Coalesces interim transcript UI updates to 120ms to prevent React re-render lag and background freeze */
+  private scheduleThrottledTranscriptPush(): void {
+    if (this.pendingInterimPushTimer) return;
+    this.pendingInterimPushTimer = setTimeout(() => {
+      this.pendingInterimPushTimer = null;
+      this.pushTranscript();
+    }, 120);
+  }
+
+  /** Flushes any pending throttled push immediately (used on sentence completion, pause, or focus) */
+  private flushTranscriptPush(): void {
+    if (this.pendingInterimPushTimer) {
+      clearTimeout(this.pendingInterimPushTimer);
+      this.pendingInterimPushTimer = null;
+    }
+    this.pushTranscript();
+  }
+
   /** POST snapshot to overlay server relay for cross-process LM Dock communication */
   private postToRelay(): void {
     this.relayPendingPayload = {
@@ -562,49 +758,86 @@ export class LmDockService {
 
   // ── Transcript entry management ──────────────────────────────────────────
 
-  /** Update or create the active (interim) entry */
+  /** Update or create the active (interim) entry, bounded to MAX_IN_MEMORY_ENTRIES */
   private upsertInterim(text: string, audioStartMs?: number, audioEndMs?: number): void {
+    const trimmed = text.trim();
     const activeIndex = this.snapshot.entries.findIndex((e) => !e.finalized);
+
+    if (!trimmed) {
+      if (activeIndex >= 0) {
+        const nextEntries = this.snapshot.entries.filter((_, index) => index !== activeIndex);
+        this.snapshot = { ...this.snapshot, entries: nextEntries };
+      }
+      return;
+    }
+
     const active = activeIndex >= 0 ? this.snapshot.entries[activeIndex] : null;
     const nextEntry = {
       id: active?.id ?? nextEntryId(),
-      text,
+      text: trimmed,
       finalized: false,
-      startTime: audioStartMs != null ? audioStartMs / 1000 : active?.startTime,
-      endTime: audioEndMs != null ? audioEndMs / 1000 : active?.endTime,
+      startTime: audioStartMs != null && audioStartMs > 0 ? audioStartMs / 1000 : active?.startTime,
+      endTime: audioEndMs != null && audioEndMs > 0 ? audioEndMs / 1000 : active?.endTime,
     };
 
+    let nextEntries: TranscriptEntry[];
     if (activeIndex >= 0) {
-      const nextEntries = this.snapshot.entries.map((entry, index) =>
+      nextEntries = this.snapshot.entries.map((entry, index) =>
         index === activeIndex ? nextEntry : entry,
       );
-      this.snapshot = { ...this.snapshot, entries: nextEntries };
     } else {
-      this.snapshot = { ...this.snapshot, entries: [...this.snapshot.entries, nextEntry] };
+      nextEntries = [...this.snapshot.entries, nextEntry];
     }
+
+    if (nextEntries.length > LmDockService.MAX_IN_MEMORY_ENTRIES) {
+      nextEntries = nextEntries.slice(-LmDockService.MAX_IN_MEMORY_ENTRIES);
+    }
+
+    this.snapshot = { ...this.snapshot, entries: nextEntries };
   }
 
-  /** Finalize the active entry and replace its text with the final version */
-  private finalizeCurrent(finalText: string, audioStartMs?: number, audioEndMs?: number): void {
+  /** Finalize a single line entry with bounding and dedup protection */
+  private finalizeLine(finalText: string, audioStartMs?: number, audioEndMs?: number): void {
+    const trimmed = finalText.trim();
+    if (!trimmed) return;
+
+    const now = Date.now();
     const activeIndex = this.snapshot.entries.findIndex((e) => !e.finalized);
     const active = activeIndex >= 0 ? this.snapshot.entries[activeIndex] : null;
-    const finalizedEntry = {
+
+    // Dedup guard: avoid duplicate identical finalized lines when fired in quick succession
+    if (activeIndex < 0 && trimmed === this.lastFinalizedLineText && now - this.lastFinalizedAt < 600) {
+      return;
+    }
+
+    this.lastFinalizedLineText = trimmed;
+    this.lastFinalizedAt = now;
+
+    const finalizedEntry: TranscriptEntry = {
       id: active?.id ?? nextEntryId(),
-      text: finalText,
+      text: trimmed,
       finalized: true,
-      startTime: audioStartMs != null ? audioStartMs / 1000 : active?.startTime,
-      endTime: audioEndMs != null ? audioEndMs / 1000 : active?.endTime,
+      startTime: audioStartMs != null && audioStartMs > 0 ? audioStartMs / 1000 : active?.startTime,
+      endTime: audioEndMs != null && audioEndMs > 0 ? audioEndMs / 1000 : active?.endTime,
     };
 
+    let nextEntries: TranscriptEntry[];
     if (activeIndex >= 0) {
-      const nextEntries = this.snapshot.entries.map((entry, index) =>
+      nextEntries = this.snapshot.entries.map((entry, index) =>
         index === activeIndex ? finalizedEntry : entry,
       );
-      this.snapshot = { ...this.snapshot, entries: nextEntries };
     } else {
-      this.snapshot = { ...this.snapshot, entries: [...this.snapshot.entries, finalizedEntry] };
+      nextEntries = [...this.snapshot.entries, finalizedEntry];
     }
+
+    if (nextEntries.length > LmDockService.MAX_IN_MEMORY_ENTRIES) {
+      nextEntries = nextEntries.slice(-LmDockService.MAX_IN_MEMORY_ENTRIES);
+    }
+
+    this.snapshot = { ...this.snapshot, entries: nextEntries };
   }
+
+
 
   // ── Bible matching (incremental) ────────────────────────────────────────
 
@@ -865,28 +1098,242 @@ export class LmDockService {
     });
   }
 
+  private startConnectionWatchdog(token: number): void {
+    this.stopConnectionWatchdog();
+    this.connectionWatchdogTimer = setTimeout(() => {
+      this.connectionWatchdogTimer = null;
+      if (token !== this.sessionToken) return;
+      if (this.snapshot.status === "connecting" || this.snapshot.status === "requesting-mic") {
+        console.warn("[LmDockService] Connection watchdog timed out while waiting for speech service.");
+        this.shouldKeepListening = false;
+        this.snapshot = {
+          ...this.snapshot,
+          status: "error",
+          error: "Connection to speech service timed out. Start listening again to retry.",
+        };
+        this.pushStatus();
+        void this.cleanup();
+      }
+    }, LmDockService.CONNECTION_WATCHDOG_TIMEOUT_MS);
+  }
+
+  private stopConnectionWatchdog(): void {
+    if (this.connectionWatchdogTimer) {
+      clearTimeout(this.connectionWatchdogTimer);
+      this.connectionWatchdogTimer = null;
+    }
+  }
+
+  private stopAudioSignalMonitor(): void {
+    if (this.audioWatchdogTimer) {
+      clearInterval(this.audioWatchdogTimer);
+      this.audioWatchdogTimer = null;
+    }
+    this.audioConnectedAt = 0;
+    this.lastAudioSignalAt = 0;
+  }
+
+  private startAudioSignalMonitor(): void {
+    this.stopAudioSignalMonitor();
+    this.audioConnectedAt = Date.now();
+    this.audioWatchdogTimer = setInterval(() => {
+      if (
+        !this.shouldKeepListening
+        || (this.snapshot.status !== "connecting" && this.snapshot.status !== "listening")
+      ) return;
+
+      const connectedFor = Date.now() - this.audioConnectedAt;
+      if (connectedFor < LmDockService.AUDIO_SIGNAL_GRACE_MS) return;
+      // The local capture callback has been observed. Long periods of silence
+      // are valid and must not restart a pastor's session.
+      if (this.lastAudioSignalAt >= this.audioConnectedAt) return;
+      if (this.audioRecoveryAttempts >= LmDockService.MAX_AUDIO_RECOVERY_ATTEMPTS) {
+        this.shouldKeepListening = false;
+        this.snapshot = {
+          ...this.snapshot,
+          status: "error",
+          error: "No microphone audio was received. Check the selected input and microphone permission, then start listening again.",
+        };
+        this.pushStatus();
+        void this.cleanup();
+        return;
+      }
+
+      this.audioRecoveryAttempts += 1;
+      console.warn("[LmDockService] Listening is connected but no microphone audio was received; restarting capture.");
+      this.stopAudioSignalMonitor();
+      this.recoverFromUnexpectedStreamEnd("Microphone input is not receiving audio.");
+    }, 1_000);
+  }
+
+  /**
+   * Process realtime transcript events from AssemblyAI.
+   * Splits multi-sentence turns line-by-line upon punctuation (. ! ?),
+   * instantly triggers verse search per completed line, bounds memory,
+   * and coalesces interim UI updates to prevent UI stutter/hang.
+   */
+  handleTranscriptStream(payload: {
+    text: string;
+    end_of_turn: boolean;
+    audio_start: number;
+    audio_end: number;
+  }): void {
+    const { text, end_of_turn, audio_start, audio_end } = payload;
+    const now = Date.now();
+    this.lastSpeechReceivedAt = now;
+    this.lastSpeechTime = now;
+    this.snapshot = { ...this.snapshot, lastSpeechAt: now };
+    if (this.inactivityPromptActive) {
+      this.confirmStillUsing();
+    }
+
+    // Filter hallucinated transcripts (non-Latin script garbage or repetitive loops)
+    if (isHallucinated(text)) {
+      console.warn("[Transcript] Hallucinated entry discarded:", text.substring(0, 60));
+      return;
+    }
+
+    // Strip out text that was already committed into completed lines earlier in this turn
+    const uncommitted = stripCommittedPrefix(text, this.turnCommittedText);
+
+    if (end_of_turn) {
+      if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
+
+      // Finalize all remaining sentences or trailing fragments
+      const { completed, remaining } = splitSentenceBoundaries(uncommitted, true);
+      const allToFinalize = [...completed];
+      if (remaining.trim()) {
+        allToFinalize.push(remaining.trim());
+      }
+
+      for (const lineText of allToFinalize) {
+        this.finalizeLine(lineText, audio_start, audio_end);
+        this.processLineQuoteSearch(lineText);
+      }
+
+      this.turnCommittedText = "";
+      this.speechBuffer = "";
+      this.flushTranscriptPush();
+
+    } else {
+      // Interim stream within turn:
+      // Check if any sentences reached completion via sentence-ending punctuation (. ? !)
+      const { completed, remaining } = splitSentenceBoundaries(uncommitted, false);
+
+      if (completed.length > 0) {
+        for (const lineText of completed) {
+          this.finalizeLine(lineText, audio_start, audio_end);
+          this.turnCommittedText = this.turnCommittedText
+            ? `${this.turnCommittedText} ${lineText}`
+            : lineText;
+          this.processLineQuoteSearch(lineText);
+        }
+      }
+
+      // Handle active interim speech
+      if (remaining.trim()) {
+        this.upsertInterim(remaining, audio_start, audio_end);
+        this.speechBuffer = remaining;
+
+        const interimRef = this.scriptureEngine.isReferenceSpeech(remaining);
+        if (interimRef || (!this.speedConfig.requireSentenceBoundary && remaining.length >= 8)) {
+          void this.processChunk(remaining, false);
+        }
+
+        const interimWordCount = remaining.split(/\s+/).filter(Boolean).length;
+        if (
+          !this.speedConfig.requireSentenceBoundary &&
+          !interimRef &&
+          interimWordCount >= this.speedConfig.minWords &&
+          remaining !== this.lastInterimSearched
+        ) {
+          this.scheduleLiveQuoteSearch(remaining);
+        }
+      } else {
+        this.upsertInterim("", audio_start, audio_end);
+        this.speechBuffer = "";
+      }
+
+      if (completed.length > 0) {
+        this.flushTranscriptPush();
+      } else {
+        this.scheduleThrottledTranscriptPush();
+      }
+    }
+  }
+
+  private processLineQuoteSearch(lineText: string): void {
+    const trimmed = lineText.trim();
+    if (!trimmed) return;
+
+    const isRef = this.scriptureEngine.isReferenceSpeech(trimmed);
+    if (isRef) {
+      void this.processChunk(trimmed, true);
+      return;
+    }
+
+    this.onTranscriptFinal(trimmed);
+  }
+
+  private setupVisibilityListeners(): void {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    if (!this.visibilityHandler) {
+      this.visibilityHandler = () => {
+        if (document.visibilityState === "visible") {
+          this.flushTranscriptPush();
+          this.pushCandidates();
+          this.pushStatus();
+        }
+      };
+      document.addEventListener("visibilitychange", this.visibilityHandler);
+    }
+
+    if (!this.focusHandler) {
+      this.focusHandler = () => {
+        this.flushTranscriptPush();
+        this.pushCandidates();
+        this.pushStatus();
+      };
+      window.addEventListener("focus", this.focusHandler);
+    }
+  }
+
   async startListening(micId?: string, options: { reconnect?: boolean } = {}): Promise<void> {
     if (!options.reconnect) {
       this.shouldKeepListening = true;
       this.reconnectAttempts = 0;
+      this.audioRecoveryAttempts = 0;
     }
     this.activeMicId = micId;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status);
+    console.log("[lmDockService] 🎤 startListening() called, micId:", micId, "currentStatus:", this.snapshot.status, "reconnect:", !!options.reconnect);
+    if (this.startInFlight) {
+      return;
+    }
     if (
-      this.startInFlight ||
-      this.snapshot.status === "listening" ||
-      this.snapshot.status === "connecting" ||
-      this.snapshot.status === "requesting-mic"
+      !options.reconnect &&
+      (this.snapshot.status === "listening" ||
+        this.snapshot.status === "connecting" ||
+        this.snapshot.status === "requesting-mic")
     ) {
       return;
     }
 
     this.startInFlight = true;
     const token = ++this.sessionToken;
+
+    // A manual stop is asynchronous in Tauri. Wait for that native task to
+    // finish before starting the next stream, otherwise the new start can be
+    // accepted while the old stream still owns the microphone.
+    await this.cleanup();
+    if (token !== this.sessionToken || !this.shouldKeepListening) {
+      this.startInFlight = false;
+      return;
+    }
 
     this.detectionSpeed = "sharp";
 
@@ -910,6 +1357,12 @@ export class LmDockService {
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
     this.lastSpeechReceivedAt = sessionStartAt;
+    this.sessionStartTime = sessionStartAt;
+    this.lastSessionRecycleAt = sessionStartAt;
+    this.turnCommittedText = "";
+    this.lastFinalizedLineText = "";
+    this.lastFinalizedAt = 0;
+    this.setupVisibilityListeners();
 
     this.snapshot = {
       status: "requesting-mic",
@@ -936,6 +1389,7 @@ export class LmDockService {
     this.pendingInterimChunk = null;
     this.pendingQuoteSearch = null;
     this.pushStatus();
+    this.startConnectionWatchdog(token);
 
     let nativeStartCompleted = false;
 
@@ -973,66 +1427,8 @@ export class LmDockService {
           audio_start: number;
           audio_end: number;
         }>("assemblyai-transcript", (event) => {
-        if (token !== this.sessionToken) return;
-        const { text, end_of_turn, audio_start, audio_end } = event.payload;
-        const now = Date.now();
-        this.lastSpeechReceivedAt = now;
-        this.snapshot = { ...this.snapshot, lastSpeechAt: now };
-        if (this.inactivityPromptActive) {
-          this.confirmStillUsing();
-        }
-
-        // Filter hallucinated transcripts (non-Latin script garbage)
-        if (isHallucinated(text)) {
-          console.warn("[Transcript] Hallucinated entry discarded:", text.substring(0, 60));
-          return;
-        }
-
-        if (end_of_turn) {
-          if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
-          this.finalizeCurrent(text, audio_start, audio_end);
-          this.pushTranscript();
-          this.lastSpeechTime = Date.now();
-
-          // Process final text through scripture engine (reference parsing)
-          // Only process the final text — the speechBuffer may overlap with
-          // the final and cause intents like "next verse" to fire multiple times
-          this.speechBuffer = "";
-          void this.processChunk(text, true);
-
-        } else {
-          // Interim — update buffer, track timestamp, and run live matching
-          this.upsertInterim(text, audio_start, audio_end);
-          this.pushTranscript();
-          this.speechBuffer = text;
-          this.lastSpeechTime = Date.now();
-
-          const interimRef = this.scriptureEngine.isReferenceSpeech(text);
-
-          // Run scripture engine on interim text for live reference commands
-          // such as "John three sixteen" while quote search continues below.
-          if (interimRef || (!this.speedConfig.requireSentenceBoundary && text.length >= 8)) {
-            void this.processChunk(text, false);
-          }
-
-          // Provisional quote search on interim text — surfaces Bible
-          // matches before the sentence is finalized by AssemblyAI.
-          // Uses a throttle so updates can happen during speech instead of
-          // waiting for a full pause.
-          //
-          // The fixed best profile searches after enough words are present
-          // and throttles updates so live speech stays responsive.
-          const interimWordCount = text.split(/\s+/).filter(Boolean).length;
-          const minWords = this.speedConfig.minWords;
-          if (
-            !this.speedConfig.requireSentenceBoundary &&
-            !interimRef &&
-            interimWordCount >= minWords &&
-            text !== this.lastInterimSearched
-          ) {
-            this.scheduleLiveQuoteSearch(text);
-          }
-        }
+          if (token !== this.sessionToken) return;
+          this.handleTranscriptStream(event.payload);
         }),
         LmDockService.MIC_START_TIMEOUT_MS,
         "Microphone startup timed out while preparing audio events.",
@@ -1051,15 +1447,22 @@ export class LmDockService {
           const { status } = event.payload;
           if (status === "connected") {
             this.reconnectAttempts = 0;
-            this.snapshot = { ...this.snapshot, status: "listening" };
+            this.startAudioSignalMonitor();
+            // AssemblyAI's Begin message confirms the WebSocket, but not that
+            // the local cpal callback is delivering microphone frames yet.
+            // Keep the UI in Connecting… until the first audio-level event.
+            this.snapshot = { ...this.snapshot, status: "connecting", error: undefined };
             this.pushStatus();
-            this.startInactivityMonitor();
           } else if (status.startsWith("error")) {
+            this.stopConnectionWatchdog();
+            this.stopAudioSignalMonitor();
             this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "error", error: status };
             this.pushStatus();
             this.recoverFromUnexpectedStreamEnd(status);
           } else if (status === "stopped") {
+            this.stopConnectionWatchdog();
+            this.stopAudioSignalMonitor();
             this.stopInactivityMonitor();
             this.snapshot = { ...this.snapshot, status: "idle" };
             this.pushStatus();
@@ -1082,11 +1485,21 @@ export class LmDockService {
           (event) => {
           if (token !== this.sessionToken) return;
           const level = event.payload.level;
+          const now = Date.now();
+          this.lastAudioSignalAt = now;
+          if (level > 0.01) {
+            this.audioRecoveryAttempts = 0;
+          }
+          if (this.snapshot.status === "connecting") {
+            this.stopConnectionWatchdog();
+            this.snapshot = { ...this.snapshot, status: "listening", error: undefined };
+            this.pushStatus();
+            this.startInactivityMonitor();
+          }
           this.snapshot = { ...this.snapshot, inputLevel: level };
 
           // The meter updates frequently; throttle notifications so the page
           // does not re-render the transcript list on every chunk.
-          const now = Date.now();
           const shouldNotify =
             now - this.lastLevelNotifyAt >= 250 ||
             Math.abs(level - this.lastLevelValue) >= 0.08 ||
@@ -1109,18 +1522,51 @@ export class LmDockService {
 
       // Start pause detection timer — checks every 100ms for silence
       this.pauseCheckTimer = setInterval(() => {
+        if (this.snapshot.status !== "listening") return;
+        const now = Date.now();
+        const silenceMs = this.lastSpeechTime > 0 ? now - this.lastSpeechTime : 0;
+
         if (this.speechBuffer.length > 0 && this.lastSpeechTime > 0) {
-          const silenceMs = Date.now() - this.lastSpeechTime;
           const wordCount = this.speechBuffer.split(/\s+/).filter(Boolean).length;
 
-          // Trigger search quickly after a short pause with enough content.
+          // 1. Trigger provisional search quickly after a short pause with enough content
           if (silenceMs > 180 && (this.speechBuffer.length > 8 || wordCount >= this.speedConfig.minWords)) {
             const phrase = this.speechBuffer.trim();
+            if (phrase !== this.lastInterimSearched) {
+              this.lastInterimSearched = phrase;
+              void this.processChunk(phrase, false);
+            }
+          }
+
+          // 2. Finalize active interim line on natural pause
+          // If speaker pauses > 450ms (or > 220ms if ending in punctuation), finalize the line!
+          const endsWithPunct = /[.!?,;:]\s*$/.test(this.speechBuffer);
+          const pauseThreshold = endsWithPunct ? 220 : 450;
+          if (silenceMs >= pauseThreshold && wordCount >= 2) {
+            const lineText = this.speechBuffer.trim();
             this.speechBuffer = "";
-            void this.processChunk(phrase, false);
+            this.finalizeLine(lineText);
+            this.turnCommittedText = this.turnCommittedText
+              ? `${this.turnCommittedText} ${lineText}`
+              : lineText;
+            this.processLineQuoteSearch(lineText);
+            this.flushTranscriptPush();
           }
         }
 
+        // 3. Long-session anti-hallucination / refresh:
+        // Transparently recycle during natural silence (> 1.5s) if session has run for a long time (> 15 mins).
+        if (
+          this.sessionStartTime > 0 &&
+          now - this.sessionStartTime > 15 * 60 * 1000 &&
+          silenceMs > 1500 &&
+          now - this.lastSessionRecycleAt > 60_000
+        ) {
+          this.lastSessionRecycleAt = now;
+          this.sessionStartTime = now;
+          console.log("[LmDockService] Transparently recycling AssemblyAI stream after 15+ minutes during natural pause...");
+          void this.startListening(this.activeMicId, { reconnect: true });
+        }
       }, 100);
 
       // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
@@ -1159,6 +1605,7 @@ export class LmDockService {
       // Apply current gain (separate call so it's live-updatable)
       await safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => { });
     } catch (err) {
+      this.stopConnectionWatchdog();
       if (token !== this.sessionToken) {
         return;
       }
@@ -1199,6 +1646,7 @@ export class LmDockService {
     }
     this.sessionToken++;
     this.startInFlight = false;
+    this.stopConnectionWatchdog();
     if (this.pauseCheckTimer) {
       clearInterval(this.pauseCheckTimer);
       this.pauseCheckTimer = null;
@@ -1211,6 +1659,15 @@ export class LmDockService {
       clearTimeout(this.interimSearchTimer);
       this.interimSearchTimer = null;
     }
+    if (this.pendingInterimPushTimer) {
+      clearTimeout(this.pendingInterimPushTimer);
+      this.pendingInterimPushTimer = null;
+    }
+    this.turnCommittedText = "";
+    this.lastFinalizedLineText = "";
+    this.lastFinalizedAt = 0;
+    this.sessionStartTime = 0;
+    this.lastSessionRecycleAt = 0;
     this.speechBuffer = "";
     this.lastSpeechTime = 0;
     this.lastSpeechReceivedAt = 0;
@@ -1227,6 +1684,7 @@ export class LmDockService {
     this.lastLevelNotifyAt = 0;
     this.lastLevelValue = 0;
 
+    this.stopAudioSignalMonitor();
     this.stopInactivityMonitor();
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
@@ -1372,6 +1830,12 @@ export class LmDockService {
     this.levelUnlisten = null;
 
     // Cancel pending timers
+    this.stopConnectionWatchdog();
+    if (this.pauseCheckTimer) {
+      clearInterval(this.pauseCheckTimer);
+      this.pauseCheckTimer = null;
+    }
+    this.stopAudioSignalMonitor();
     this.stopInactivityMonitor();
     this.inactivityPromptActive = false;
     if (this.liveQuoteSearchTimer) {
@@ -1383,6 +1847,10 @@ export class LmDockService {
     if (this.interimSearchTimer) {
       clearTimeout(this.interimSearchTimer);
       this.interimSearchTimer = null;
+    }
+    if (this.pendingInterimPushTimer) {
+      clearTimeout(this.pendingInterimPushTimer);
+      this.pendingInterimPushTimer = null;
     }
     this.pendingFinalChunks = [];
     this.pendingInterimChunk = null;

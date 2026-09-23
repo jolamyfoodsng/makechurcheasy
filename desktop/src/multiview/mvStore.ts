@@ -498,6 +498,9 @@ export interface MVSettings {
   // ── Audio ──
   inputGain: number;  // 0–300 (percent), default 100
 
+  // ── Floating Icon ──
+  hideFloatingIcon: boolean;
+
   // ── Mobile Remote ──
   mobileRemoteEnabled: boolean;
   mobileRequireApproval: boolean;
@@ -539,6 +542,9 @@ export const DEFAULT_SETTINGS: MVSettings = {
   sermonPoints: [],
 
   inputGain: 100,
+
+  // ── Floating Icon ──
+  hideFloatingIcon: false,
 
   // ── Mobile Remote ──
   mobileRemoteEnabled: false,

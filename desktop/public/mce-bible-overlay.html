@@ -2196,12 +2196,25 @@
 
         resetSingleAutoFitStyles();
         apply();
-        let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 240) {
-          textSize -= 1;
+        if (overflowing()) {
+          let low = textFloor;
+          let high = textSize - 1;
+          let bestFit = textFloor;
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            textSize = mid;
+            referenceSize = Math.max(14, Math.round(textSize * refRatio));
+            apply();
+            if (overflowing()) {
+              high = mid - 1;
+            } else {
+              bestFit = mid;
+              low = mid + 1;
+            }
+          }
+          textSize = bestFit;
           referenceSize = Math.max(14, Math.round(textSize * refRatio));
           apply();
-          guard += 1;
         }
         stableFullscreenTextSize = textSize;
         stableFullscreenReferenceSize = referenceSize;
@@ -2325,13 +2338,27 @@
 
         resetCompareAutoFitStyles();
         apply();
-        let guard = 0;
-        while (overflowing() && textSize > textFloor && guard < 260) {
-          textSize -= 1;
+        if (overflowing()) {
+          let low = textFloor;
+          let high = textSize - 1;
+          let bestFit = textFloor;
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            textSize = mid;
+            referenceSize = Math.max(10, Math.round(textSize * referenceRatio));
+            translationSize = Math.max(10, Math.round(textSize * translationRatio));
+            apply();
+            if (overflowing()) {
+              high = mid - 1;
+            } else {
+              bestFit = mid;
+              low = mid + 1;
+            }
+          }
+          textSize = bestFit;
           referenceSize = Math.max(10, Math.round(textSize * referenceRatio));
           translationSize = Math.max(10, Math.round(textSize * translationRatio));
           apply();
-          guard += 1;
         }
         stableCompareTextSize = textSize;
         stableCompareReferenceSize = referenceSize;
@@ -2906,11 +2933,24 @@
         root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
         if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
+        const bgType = String(s.backgroundType || '').trim().toLowerCase();
+        const isThemeBackground = !bgType || bgType === 'theme';
+        const isBackgroundOff = bgType === 'off';
+        const isBackgroundColor = bgType === 'color' || bgType === 'gradient';
+        const isBackgroundPattern = bgType === 'pattern';
+        const isBackgroundImage = bgType === 'image';
+        const isBackgroundVideo = bgType === 'video';
+
+        if (isBackgroundOff) {
+          root.style.setProperty('--box-background', 'transparent');
+        }
+
         const barBgV = resolveOverlayMediaUrl(s.backgroundVideo);
         const barBgFilePathV = resolveOverlayMediaUrl(s.backgroundVideoFilePath);
         const resolvedBarBgV = barBgV || barBgFilePathV;
+        const shouldUseVideo = Boolean(resolvedBarBgV) && (isBackgroundVideo || isThemeBackground);
         const currentBarBgV = barBackgroundVideoEl.getAttribute('src') || '';
-        if (resolvedBarBgV && targetMode === 'lower-third') {
+        if (shouldUseVideo && targetMode === 'lower-third') {
           barBackgroundVideoEl.classList.add('visible');
           barBackgroundVideoEl.style.opacity = String(s.backgroundOpacity ?? 1);
           if (currentBarBgV !== resolvedBarBgV) {
@@ -2927,30 +2967,37 @@
             barBackgroundVideoEl.load();
           }
         }
-        if (!resolvedBarBgV && targetMode === 'lower-third') {
-          const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
-          const resolvedBgImageCss = bgImageCss || resolveBackgroundImageCss(s.backgroundImageFilePath);
-          const bgPattern = String(s.backgroundPattern || '').trim();
-          if (resolvedBgImageCss) {
-            ltBarBg.style.background = resolvedBgImageCss;
-            ltBarBg.style.backgroundSize = 'cover';
-            ltBarBg.style.backgroundPosition = 'center';
-            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
-            ltBarBg.style.display = 'block';
-          } else if (bgPattern) {
-            const pc = resolvePatternCss(bgPattern);
-            ltBarBg.style.background = pc || 'transparent';
-            ltBarBg.style.backgroundSize = 'cover';
-            ltBarBg.style.backgroundPosition = 'center';
-            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
-            ltBarBg.style.display = 'block';
+        if (!shouldUseVideo && targetMode === 'lower-third') {
+          if (isBackgroundOff) {
+            ltBarBg.style.display = 'none';
           } else {
-            const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent';
-            ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
-            ltBarBg.style.backgroundSize = 'cover';
-            ltBarBg.style.backgroundPosition = 'center';
-            ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
-            ltBarBg.style.display = 'block';
+            const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+            const resolvedBgImageCss = bgImageCss || resolveBackgroundImageCss(s.backgroundImageFilePath);
+            const bgPattern = String(s.backgroundPattern || '').trim();
+            const shouldUseImage = Boolean(resolvedBgImageCss) && (isBackgroundImage || isThemeBackground);
+            const shouldUsePattern = Boolean(bgPattern) && (isBackgroundPattern || isThemeBackground);
+
+            if (shouldUseImage) {
+              ltBarBg.style.background = resolvedBgImageCss;
+              ltBarBg.style.backgroundSize = 'cover';
+              ltBarBg.style.backgroundPosition = 'center';
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = 'block';
+            } else if (shouldUsePattern) {
+              const pc = resolvePatternCss(bgPattern);
+              ltBarBg.style.background = pc || 'transparent';
+              ltBarBg.style.backgroundSize = 'cover';
+              ltBarBg.style.backgroundPosition = 'center';
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = pc ? 'block' : 'none';
+            } else {
+              const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || (isBackgroundColor ? '#0F172A' : 'transparent');
+              ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
+              ltBarBg.style.backgroundSize = 'cover';
+              ltBarBg.style.backgroundPosition = 'center';
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = (bs2 && bs2 !== 'transparent') || hasG ? 'block' : 'none';
+            }
           }
         } else ltBarBg.style.display = 'none';
         applyReferenceAnchor(s.refAnchor);

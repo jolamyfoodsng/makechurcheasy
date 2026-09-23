@@ -38,6 +38,7 @@ import {
 } from "../services/receiverService";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { MediaShareTab } from "./MediaShareTab";
+import { fuzzyMatch } from "../services/fuzzySearch";
 import {
   downloadTemplatePictureToLibrary,
   fetchTemplatePictures,
@@ -51,17 +52,6 @@ type MediaView = "library" | "share";
 export interface LibraryMediaImportItem {
   file: File;
   documentPage?: DocumentPageFile;
-}
-
-function fuzzyMatch(query: string, target: string): boolean {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  if (t.includes(q)) return true;
-  let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
-  }
-  return qi === q.length;
 }
 
 export const MEDIA_FILE_ACCEPT = DOCK_MEDIA_ACCEPT;

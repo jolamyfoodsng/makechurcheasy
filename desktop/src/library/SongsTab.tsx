@@ -52,6 +52,7 @@ import {
 } from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import { fuzzyMatch } from "../services/fuzzySearch";
 
 /* ---------- helpers ---------- */
 
@@ -65,17 +66,6 @@ function firstNLines(text: string, n: number): string[] {
 
 const MIN_ONLINE_LYRICS_QUERY_LENGTH = 3;
 const ONLINE_LYRICS_SEARCH_DELAY_MS = 80;
-
-function fuzzyMatch(query: string, target: string): boolean {
-  const q = unicodeStripDiacritics(query).replace(/\s+/g, "");
-  const t = unicodeStripDiacritics(target).replace(/\s+/g, "");
-  if (t.includes(q)) return true;
-  let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
-  }
-  return qi === q.length;
-}
 
 function normalizeSongLookupPart(value: string): string {
   return unicodeSearchNormalize(value);

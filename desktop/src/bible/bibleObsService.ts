@@ -24,8 +24,8 @@ import type { BibleThemeSettings, BibleSlide, BibleTemplateType } from "./types"
 import { fullscreenSceneManager, FULLSCREEN_SCENES } from "../services/FullscreenSceneManager";
 import { presentationSceneManager, SOURCE_NAMES, BG_SOURCE_NAMES, PRESENTATION_SCENE_NAME } from "../services/PresentationSceneManager";
 
-const BIBLE_SOURCE_NAME = SOURCE_NAMES.BIBLE; // "MCE Bible"
-const BIBLE_BG_SOURCE_NAME = BG_SOURCE_NAMES.BIBLE; // "MCE Bible BG"
+const BIBLE_SOURCE_NAME = SOURCE_NAMES.BIBLE; // "MCE Browser - Bible"
+const BIBLE_BG_SOURCE_NAME = BG_SOURCE_NAMES.BIBLE; // "MCE BG - Bible"
 const BIBLE_DUP_BG_SOURCE_NAME = "MCE Bible BG Safety";
 const BIBLE_SCENE_NAME = PRESENTATION_SCENE_NAME; // "MCE Presentation"
 
@@ -391,9 +391,27 @@ class BibleObsService {
     if (regInput) {
       const inputs = await obsService.getInputList();
       const found = inputs.find((i) => i.inputUuid === regInput.inputUuid);
-      if (found) {
+      if (found && found.inputName === BIBLE_SOURCE_NAME) {
         currentSourceName = found.inputName;
       }
+    }
+
+    // Build overlay CSS if live
+    let overlayCss = "";
+    if (this._isLive && this._liveSlide) {
+      const { themeForHash, customCss } = this.buildThemePayload(this._liveTheme);
+      const packet = {
+        slide: this._liveSlide,
+        theme: themeForHash,
+        live: true,
+        blanked: this._isBlanked,
+        timestamp: Date.now(),
+      };
+      overlayCss = this.buildOverlayDataCss(
+        packet as unknown as Record<string, unknown>,
+        customCss,
+        this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
+      );
     }
 
     // Check if browser source already exists in the presentation scene
@@ -401,27 +419,25 @@ class BibleObsService {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName: overlaySceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+
+      // Remove any legacy MCE Browser - Bible / MCE BG - Bible items from the scene
+      const legacyItems = items.filter((item) =>
+        item.sourceName === "MCE Browser - Bible" ||
+        item.sourceName === "MCE Bible" ||
+        item.sourceName === "MCE BG - Bible" ||
+        item.sourceName === "MCE Bible BG"
+      );
+      for (const leg of legacyItems) {
+        try {
+          await obsService.call("RemoveSceneItem", { sceneName: overlaySceneName, sceneItemId: leg.sceneItemId });
+        } catch { /* ok */ }
+      }
+
       const existing = items.find(
         (item) => item.sourceName === currentSourceName || item.sourceName === BIBLE_SOURCE_NAME
       );
       if (existing) {
         browserItemId = existing.sceneItemId;
-        let overlayCss = "";
-        if (this._isLive && this._liveSlide) {
-          const { themeForHash, customCss } = this.buildThemePayload(this._liveTheme);
-          const packet = {
-            slide: this._liveSlide,
-            theme: themeForHash,
-            live: true,
-            blanked: this._isBlanked,
-            timestamp: Date.now(),
-          };
-          overlayCss = this.buildOverlayDataCss(
-            packet as unknown as Record<string, unknown>,
-            customCss,
-            this.currentTemplateType as "fullscreen" | "lower-third" | undefined,
-          );
-        }
         // Only include the URL when it has actually changed — setting the URL
         // on an OBS browser source triggers a full page reload (flicker).
         const urlChanged = this._lastBrowserSourceUrl !== overlayUrl;
@@ -449,7 +465,7 @@ class BibleObsService {
             url: overlayUrl,
             width: canvas.width,
             height: canvas.height,
-            css: "",
+            css: overlayCss || "",
             shutdown: false,
             restart_when_active: false,
           }
@@ -465,7 +481,12 @@ class BibleObsService {
           // Source exists globally — update URL and add to presentation scene
           await obsService.call("SetInputSettings", {
             inputName: currentSourceName,
-            inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height },
+            inputSettings: {
+              url: overlayUrl,
+              width: canvas.width,
+              height: canvas.height,
+              ...(overlayCss ? { css: overlayCss } : {}),
+            },
           });
           if (!regInput) {
             const inputs = await obsService.getInputList();

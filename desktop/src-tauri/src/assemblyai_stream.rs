@@ -44,7 +44,7 @@ const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
 const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
@@ -648,6 +648,7 @@ fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
             "keyterms_prompt",
             serde_json::json!(REALTIME_KEYTERMS).to_string(),
         ),
+        ("session_heartbeat", "true".to_string()),
     ];
 
     let query = params
@@ -718,6 +719,9 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
                 },
             );
             return Ok(true);
+        }
+        "Heartbeat" => {
+            // Server liveness heartbeat confirmed; keep session alive.
         }
         "Termination" => {
             let _ = app.emit(
@@ -907,14 +911,15 @@ fn process_and_send_f32(
         }
 
         // 2) Running RMS for auto-gain (EMA, slow attack ~50 ms)
-        let rms_alpha = 0.005; // slow跟踪
-        let target_rms = 0.1; // target RMS level
+        let rms_alpha = 0.005;
+        let target_rms = 0.08; // target RMS level
         let chunk_rms: f32 = {
             let sum: f32 = filtered.iter().map(|s| s * s).sum();
-            (sum / filtered.len() as f32).sqrt().max(1e-10)
+            (sum / filtered.len() as f32).sqrt().max(1e-6)
         };
-        st.rms_ema = rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema;
-        let agc_gain = (target_rms / st.rms_ema).min(10.0).max(0.1);
+        // Keep RMS floor at 0.02 so AGC gain does not blow up on background silence
+        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.02);
+        let agc_gain = (target_rms / st.rms_ema).min(3.5).max(0.2);
 
         // Read user gain from the atomic (lock-free, thread-safe).
         // Positioned AFTER AGC so it doesn't fight the dynamic range compression.

@@ -1039,7 +1039,7 @@ describe("dockObsClient background reflection stress", () => {
     {
       label: "Worship",
       tab: "worship",
-      sourceName: "MCE Worship",
+      sourceName: "Worship - MCE Presentation",
       baseUrl: "http://overlay.test/mce-worship-overlay.html",
       initializedKey: "_worshipInitialized",
       fastMethod: "pushWorshipOverlayFast",
@@ -1048,7 +1048,7 @@ describe("dockObsClient background reflection stress", () => {
     {
       label: "Notes",
       tab: "notes",
-      sourceName: "MCE Notes",
+      sourceName: "Notes - MCE Presentation",
       baseUrl: "http://overlay.test/mce-note.html",
       initializedKey: "_notesInitialized",
       fastMethod: "pushNotesOverlayFast",
@@ -1098,7 +1098,7 @@ describe("dockObsClient background reflection stress", () => {
   it.each([
     {
       label: "Bible",
-      sourceName: "MCE Browser - Bible",
+      sourceName: "Bible - MCE Presentation",
       initializedKey: "_bibleLtInitialized",
       lastModeKey: "_lastBibleMode",
       fastMethod: "pushBibleOverlayFast",
@@ -1111,7 +1111,7 @@ describe("dockObsClient background reflection stress", () => {
     },
     {
       label: "Worship",
-      sourceName: "MCE Worship",
+      sourceName: "Worship - MCE Presentation",
       initializedKey: "_worshipInitialized",
       lastModeKey: "_lastOverlayMode",
       fastMethod: "pushWorshipOverlayFast",
@@ -1124,7 +1124,7 @@ describe("dockObsClient background reflection stress", () => {
     },
     {
       label: "Notes",
-      sourceName: "MCE Notes",
+      sourceName: "Notes - MCE Presentation",
       initializedKey: "_notesInitialized",
       lastModeKey: "_lastOverlayMode",
       fastMethod: "pushNotesOverlayFast",
@@ -1182,14 +1182,14 @@ describe("dockObsClient background reflection stress", () => {
   it.each([
     {
       label: "Worship",
-      sourceName: "MCE Worship",
+      sourceName: "Worship - MCE Presentation",
       baseUrl: "http://overlay.test/mce-worship-overlay.html",
       initializedKey: "_worshipInitialized",
       primeMethod: "primeWorshipOverlay",
     },
     {
       label: "Notes",
-      sourceName: "MCE Notes",
+      sourceName: "Notes - MCE Presentation",
       baseUrl: "http://overlay.test/mce-note.html",
       initializedKey: "_notesInitialized",
       primeMethod: "primeNotesOverlay",
@@ -1232,7 +1232,7 @@ describe("dockObsClient background reflection stress", () => {
     expect(client._lastCssOverlayBaseUrlBySource[sourceName]).toBe(baseUrl);
   });
 
-	  it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {
+  it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {
     client._bibleLtInitialized = true;
     client._lastBibleMode = "lower-third";
     client._lastBrowserSourceUrlBySource[client._fullscreenSceneDefs.bible.browserSourceName] = "http://overlay.test/existing";
@@ -1264,7 +1264,7 @@ describe("dockObsClient background reflection stress", () => {
   });
 
   it("reflects 50 sequential Worship lower-third background changes through the fast overlay path", async () => {
-    const sourceName = "MCE Worship";
+    const sourceName = "MCE Browser - Worship";
     client._worshipInitialized = true;
     client._lastOverlayMode[sourceName] = "lower-third";
     client._lastBrowserSourceUrlBySource[sourceName] = "http://overlay.test/existing";
@@ -1295,7 +1295,7 @@ describe("dockObsClient background reflection stress", () => {
   });
 
   it("preserves Worship lower-third text case through the fast overlay path", async () => {
-    const sourceName = "MCE Worship";
+    const sourceName = "MCE Browser - Worship";
     client._worshipInitialized = true;
     client._lastOverlayMode[sourceName] = "lower-third";
     client._lastBrowserSourceUrlBySource[sourceName] = "http://overlay.test/existing";
@@ -1347,10 +1347,9 @@ describe("dockObsClient background reflection stress", () => {
     // There are 4 fullscreen scene defs (bible, worship, notes, countdown)
     expect(refreshCalls.length).toBeGreaterThanOrEqual(4);
     const inputNames = refreshCalls.map((c) => c.payload.inputName);
-    expect(inputNames).toContain("MCE Browser - Bible");
-    expect(inputNames).toContain("MCE Browser - Worship");
-    expect(inputNames).toContain("MCE Browser - Notes");
-    expect(inputNames).toContain("MCE Browser - Countdown");
+    expect(inputNames).toContain("Bible - MCE Presentation");
+    expect(inputNames).toContain("Worship - MCE Presentation");
+    expect(inputNames).toContain("Notes - MCE Presentation");
+    expect(inputNames).toContain("Countdown - MCE Presentation");
   });
 });
-

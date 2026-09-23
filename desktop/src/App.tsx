@@ -60,6 +60,7 @@ import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBri
 import { automationRunner } from "./services/automationRunner";
 import { hasTauriInvoke, safeTauriInvoke } from "./services/tauriSafe";
 import { showMakeChatGptWindow } from "./services/makeChatGptWindow";
+import { getSettings as getMVSettings } from "./multiview/mvStore";
 import MakeChatGPTFloating from "./makechatgpt/MakeChatGPTFloating";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { obsService } from "./services/obsService";
@@ -170,6 +171,9 @@ function MakeChurchEasyPetLauncher() {
   useEffect(() => {
     if (!nativeWindowAvailable) return;
 
+    // Respect user's preference to permanently hide the floating icon
+    if (getMVSettings().hideFloatingIcon) return;
+
     void showMakeChatGptWindow().catch((error) => {
       console.warn("[MakeChurchEasy] Could not show floating pet:", error);
     });
@@ -178,6 +182,9 @@ function MakeChurchEasyPetLauncher() {
   }, [nativeWindowAvailable]);
 
   if (!nativeWindowAvailable) {
+    // In dev mode, also respect the setting
+    if (getMVSettings().hideFloatingIcon) return null;
+
     return (
       <div className="makechatgpt-inline-dev">
         <MakeChatGPTFloating />

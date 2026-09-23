@@ -38,6 +38,7 @@ import {
   DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD,
 } from "../dockQuickSizePresets";
 import DockNotesTextTools from "../components/DockNotesTextTools";
+import { fuzzyFilter, fuzzyMatch } from "../../services/fuzzySearch";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
@@ -84,7 +85,6 @@ import {
 import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -428,13 +428,16 @@ export default function DockNotesTab({
 
   const [notes, setNotes] = useState<DockNote[]>(() => loadDockNotes());
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearchQuery = useDebouncedValue(searchQuery, 220);
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
   const [notesTranslation, setNotesTranslation] = useState<DockTranslationValue | null>(null);
   const [noteSlidesSearchQuery, setNoteSlidesSearchQuery] = useState("");
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
+  const [visibilityActionPending, setVisibilityActionPending] = useState(false);
+  /** Invalidates in-flight note pushes when Hide Notes is pressed. */
+  const visibilityEpochRef = useRef(0);
+  const visibilityActionInFlightRef = useRef(false);
   const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
   const [overlayMode, setOverlayMode] = useState<OverlayMode>(initialOverlayMode);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
@@ -516,12 +519,10 @@ export default function DockNotesTab({
   }, [fullscreenQuickSettings, lowerThirdQuickSettings, selectedFSTheme, selectedLTTheme]);
 
   const filteredNotes = useMemo(() => {
-    if (!debouncedSearchQuery.trim()) return notes;
-    const q = debouncedSearchQuery.trim().toLowerCase();
-    return notes.filter((n) =>
-      n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
-    );
-  }, [debouncedSearchQuery, notes]);
+    const q = searchQuery.trim();
+    if (!q) return notes;
+    return fuzzyFilter(notes, q, (n) => [n.title, n.content]);
+  }, [notes, searchQuery]);
 
   const selectedNoteSlides = useMemo(
     () => (selectedNote ? generateNoteSlides(selectedNote, notesLinesPerSlide, notesAutoSplit) : []),
@@ -536,12 +537,12 @@ export default function DockNotesTab({
     [notesTranslation, notesTranslationSourceSignature],
   );
   const filteredNoteSlides = useMemo(() => {
-    const query = noteSlidesSearchQuery.trim().toLocaleLowerCase();
+    const query = noteSlidesSearchQuery.trim();
     return selectedNoteSlides
       .map((slide, idx) => ({ slide, idx }))
       .filter(({ slide }) => {
         if (!query) return true;
-        return `${slide.label} ${slide.text}`.toLocaleLowerCase().includes(query);
+        return fuzzyMatch(query, `${slide.label} ${slide.text}`);
       });
   }, [noteSlidesSearchQuery, selectedNoteSlides]);
   const selectedNoteDisplayTitle = selectedNote ? getNoteDisplayTitle(selectedNote) : "";
@@ -912,6 +913,7 @@ export default function DockNotesTab({
     ) => {
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
+      const visibilityEpoch = visibilityEpochRef.current;
       setActionError("");
       setSelectedSlideIdx(idx);
       setVisibleSlideIdx(idx);
@@ -930,6 +932,7 @@ export default function DockNotesTab({
       if (fitOptions?.waitForFit) {
         return pushLive()
           .then((measurement) => {
+            if (visibilityEpoch !== visibilityEpochRef.current) return measurement;
             setOverlayVisible(true);
             return measurement;
           })
@@ -940,6 +943,7 @@ export default function DockNotesTab({
       }
       pushLive()
         .then(() => {
+          if (visibilityEpoch !== visibilityEpochRef.current) return;
           setOverlayVisible(true);
         })
         .catch((err) => {
@@ -1148,6 +1152,10 @@ export default function DockNotesTab({
   }, [activeSlideIndex, effectiveNotesTranslation, overlayVisible, pushNoteSlide, visibleSlideIdx]);
 
   const handleClear = useCallback(async () => {
+    if (visibilityActionInFlightRef.current) return;
+    visibilityActionInFlightRef.current = true;
+    setVisibilityActionPending(true);
+    const visibilityEpoch = ++visibilityEpochRef.current;
     setActionError("");
     try {
       if (presentationLinkMode) {
@@ -1156,20 +1164,25 @@ export default function DockNotesTab({
           setOverlayVisible(false);
         } else if (activeSlideIndex !== null) {
           pushNoteSlide(activeSlideIndex);
-          setOverlayVisible(true);
+          if (visibilityEpoch === visibilityEpochRef.current) setOverlayVisible(true);
         }
         return;
       }
       await ensureObsConnected();
       if (overlayVisible) {
-        await clearNotesFromConfiguredOutput();
+        // Hide locally first so an older push completion cannot repaint Notes.
         setOverlayVisible(false);
+        await clearNotesFromConfiguredOutput();
       } else if (activeSlideIndex !== null) {
         await pushNoteSlide(activeSlideIndex);
+        if (visibilityEpoch === visibilityEpochRef.current) setOverlayVisible(true);
       }
     } catch (err) {
       console.warn("[DockNotesTab] Toggle failed:", err);
       setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      visibilityActionInFlightRef.current = false;
+      setVisibilityActionPending(false);
     }
   }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, presentationLinkMode, pushNoteSlide]);
 
@@ -1483,7 +1496,7 @@ export default function DockNotesTab({
                           }}
                         >
                           <div className="dock-worship-summary__menu-btn-content">
-                            <Icon name="translate" size={15} />
+                            <Icon name="translate" size={16} />
                             <span>{t('common.translate', 'Translate')}</span>
                           </div>
                           {effectiveNotesTranslation && (
@@ -1502,7 +1515,7 @@ export default function DockNotesTab({
                           }}
                         >
                           <div className="dock-worship-summary__menu-btn-content">
-                            <Icon name="fast_forward" size={15} />
+                            <Icon name="fast_forward" size={16} />
                             <span>{t('autoAdvance.title', 'Set Auto Advance')}</span>
                           </div>
                           {autoAdvanceActive && (
@@ -1653,6 +1666,7 @@ export default function DockNotesTab({
                 overlayModeToggleDisabled={autoAdvanceActive}
                 clearLabel={overlayVisible ? t("notes.hide") : t("notes.show")}
                 onClear={handleClear}
+                clearDisabled={visibilityActionPending}
                 sourceVisible={overlayVisible}
                 collapsed={toolbarCollapsed}
                 onCollapseChange={setToolbarCollapsed}

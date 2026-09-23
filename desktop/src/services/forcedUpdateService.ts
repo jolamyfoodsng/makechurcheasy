@@ -355,6 +355,11 @@ export async function refreshAppSettings(): Promise<AppVersionSettings | null> {
 async function reconcileWithPublishedRelease(
   settings: AppVersionSettings,
 ): Promise<AppVersionSettings> {
+  // If running in a web browser context (e.g. OBS dock, remote web client),
+  // native desktop binary updates cannot be applied and releases shouldn't be fetched.
+  if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
+    return settings;
+  }
   try {
     const release = await fetchLatestPublishedRelease();
     return {

@@ -20,9 +20,25 @@ import {
   saveDockPreferenceList,
 } from "./dockPreferenceStorage";
 
+const storageMap = new Map<string, string>();
+const localStorageMock = {
+  getItem: (key: string) => storageMap.get(key) ?? null,
+  setItem: (key: string, value: string) => storageMap.set(key, String(value)),
+  removeItem: (key: string) => storageMap.delete(key),
+  clear: () => storageMap.clear(),
+  get length() { return storageMap.size; },
+  key: (index: number) => Array.from(storageMap.keys())[index] ?? null,
+};
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+});
+
 describe("dockPreferenceStorage", () => {
   beforeEach(() => {
     native.values.clear();
+    storageMap.clear();
   });
 
   it("writes and reads preferences from the native settings source", async () => {
@@ -83,4 +99,38 @@ describe("dockPreferenceStorage", () => {
     expect(readDockPreferenceList(baseKey)).toEqual([]);
     await expect(loadDockPreferenceList(baseKey)).resolves.toEqual([]);
   });
+
+  it("reads instantly from localStorage fast cache when native setting is not yet in-memory", () => {
+    const baseKey = "ocs-dock-bible-preferences";
+    localStorage.setItem(
+      `__mce_dock_fast_pref:${baseKey}`,
+      JSON.stringify({ selectedBook: "John", selectedChapter: 3, overlayMode: "lower-third" }),
+    );
+
+    // Native settings has not been populated
+    expect(native.values.has(baseKey)).toBe(false);
+
+    // Instant read on render 0 returns the fast cache
+    expect(readDockPreference(baseKey)).toMatchObject({
+      selectedBook: "John",
+      selectedChapter: 3,
+      overlayMode: "lower-third",
+    });
+  });
+
+  it("mirrors saveDockPreference writes into localStorage fast cache", async () => {
+    const baseKey = "ocs-dock-worship-preferences";
+    await saveDockPreference(baseKey, {
+      selectedThemeId: "theme-royal-blue",
+      fontSize: 56,
+    });
+
+    const fastCached = localStorage.getItem(`__mce_dock_fast_pref:${baseKey}`);
+    expect(fastCached).toBeTruthy();
+    expect(JSON.parse(fastCached!)).toMatchObject({
+      selectedThemeId: "theme-royal-blue",
+      fontSize: 56,
+    });
+  });
 });
+

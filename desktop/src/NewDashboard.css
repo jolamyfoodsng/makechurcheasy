@@ -2397,6 +2397,147 @@
     border-color: rgba(194, 65, 12, 0.25);
 }
 
+/* ── Dashboard "Watch Tutorials" button (light mode) ── */
+:root.light .header-tutorial-btn {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.10) 0%, rgba(168, 85, 247, 0.10) 100%);
+    border-color: rgba(124, 58, 237, 0.35);
+    color: #5b21b6;
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.10);
+}
+
+:root.light .header-tutorial-btn:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.18) 0%, rgba(168, 85, 247, 0.18) 100%);
+    border-color: rgba(124, 58, 237, 0.55);
+    color: #4c1d95;
+    box-shadow: 0 4px 16px -2px rgba(124, 58, 237, 0.22);
+}
+
+:root.light .header-tutorial-btn__icon-box {
+    background: rgba(124, 58, 237, 0.12);
+    color: #6d28d9;
+}
+
+:root.light .header-tutorial-btn__badge {
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.30);
+    color: #6d28d9;
+}
+
+/* ── Dash-card icon boxes (light mode) ── */
+:root.light .dash-card__icon-box--purple {
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.25);
+    color: #7c3aed;
+}
+
+:root.light .dash-card__icon-box--blue {
+    background: rgba(29, 78, 216, 0.10);
+    border-color: rgba(29, 78, 216, 0.25);
+    color: #1d4ed8;
+}
+
+:root.light .dash-card__icon-box--green {
+    background: rgba(21, 128, 61, 0.10);
+    border-color: rgba(21, 128, 61, 0.25);
+    color: #15803d;
+}
+
+:root.light .dash-card__icon-box--orange {
+    background: rgba(194, 65, 12, 0.10);
+    border-color: rgba(194, 65, 12, 0.25);
+    color: #c2410c;
+}
+
+/* ── Dash-card badges (light mode) ── */
+:root.light .dash-card__badge--purple {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.25);
+    color: #6d28d9;
+}
+
+:root.light .dash-card__badge--blue {
+    background: rgba(29, 78, 216, 0.08);
+    border-color: rgba(29, 78, 216, 0.25);
+    color: #1e40af;
+}
+
+:root.light .dash-card__badge--green {
+    background: rgba(21, 128, 61, 0.08);
+    border-color: rgba(21, 128, 61, 0.25);
+    color: #15803d;
+}
+
+:root.light .dash-card__badge--orange {
+    background: rgba(194, 65, 12, 0.08);
+    border-color: rgba(194, 65, 12, 0.25);
+    color: #c2410c;
+}
+
+:root.light .dash-card__badge--muted {
+    background: rgba(100, 116, 139, 0.08);
+    border-color: rgba(100, 116, 139, 0.20);
+    color: #475569;
+}
+
+:root.light .dash-card__badge--live {
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.30);
+    color: #dc2626;
+}
+
+/* ── Dash-card action buttons (light mode) ── */
+:root.light .dash-card__action-btn--purple {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.28);
+    color: #6d28d9;
+}
+
+:root.light .dash-card__action-btn--purple:hover {
+    background: rgba(124, 58, 237, 0.16);
+    border-color: rgba(124, 58, 237, 0.50);
+    color: #5b21b6;
+}
+
+:root.light .dash-card__action-btn--listening {
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.35);
+    color: #dc2626;
+}
+
+/* ── Dash-card action links (light mode) ── */
+:root.light .dash-card__action-link--blue {
+    color: #1d4ed8;
+}
+
+:root.light .dash-card__action-link--green {
+    color: #15803d;
+}
+
+:root.light .dash-card__action-link--orange {
+    color: #c2410c;
+}
+
+/* ── Connection URL copy buttons (light mode) ── */
+:root.light .btn-indigo {
+    background-color: rgba(29, 78, 216, 0.08);
+    color: #1d4ed8;
+    border-color: rgba(29, 78, 216, 0.28);
+}
+
+:root.light .btn-indigo:hover {
+    background-color: rgba(29, 78, 216, 0.16);
+}
+
+:root.light .btn-green {
+    background-color: rgba(21, 128, 61, 0.08);
+    color: #15803d;
+    border-color: rgba(21, 128, 61, 0.28);
+}
+
+:root.light .btn-green:hover {
+    background-color: rgba(21, 128, 61, 0.16);
+}
+
 /* ── Header Action Buttons ────────────────────────────────────────────── */
 
 .header-actions {

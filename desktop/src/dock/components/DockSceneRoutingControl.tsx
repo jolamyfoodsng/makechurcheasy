@@ -167,10 +167,18 @@ export default function DockSceneRoutingControl({
     };
   }, [open, placement]);
 
+  const [draftRoute, setDraftRoute] = useState<DockSceneRoute>(route);
+
+  useEffect(() => {
+    if (open) {
+      setDraftRoute(route);
+    }
+  }, [open, route]);
+
   if (disabled) return null;
 
   const label = title ?? t("sceneRouting.title", "Scene output");
-  const selectedTargets = route.targets;
+  const selectedTargets = draftRoute.targets;
   const selectedTargetByScene = new Map(selectedTargets.map((target) => [target.sceneName, target]));
   const supportsFormatOverrides = module === "bible" || module === "worship" || module === "notes";
   const formatOptions: Array<{ value: DockSceneOutputMode; label: string }> = [
@@ -178,39 +186,57 @@ export default function DockSceneRoutingControl({
     { value: "fullscreen", label: t("sceneRouting.fullscreenOutput", "Full screen") },
     { value: "lower-third", label: t("sceneRouting.lowerThirdOutput", "Lower third") },
   ];
-  const updateTargets = (targets: DockSceneRouteTarget[]) => {
-    onRouteChange({
+  const updateDraftTargets = (targets: DockSceneRouteTarget[], enabledOverride?: boolean) => {
+    const isEnabled = enabledOverride !== undefined ? enabledOverride : (targets.length > 0 ? true : false);
+    setDraftRoute((current) => ({
+      ...current,
       targets,
       sceneName: targets[0]?.sceneName ?? "",
-      enabled: targets.length > 0 ? route.enabled : false,
-    });
+      enabled: isEnabled,
+    }));
   };
   const handleTargetToggle = (sceneName: string, checked: boolean) => {
     const nextTargets = checked
       ? [...selectedTargets, { sceneName, mode: "inherit" as const }]
       : selectedTargets.filter((target) => target.sceneName !== sceneName);
-    updateTargets(nextTargets);
+    updateDraftTargets(nextTargets, checked ? true : undefined);
   };
   const handleTargetModeChange = (sceneName: string, mode: DockSceneOutputMode) => {
-    updateTargets(selectedTargets.map((target) => (
-      target.sceneName === sceneName ? { ...target, mode } : target
-    )));
+    setDraftRoute((current) => ({
+      ...current,
+      targets: current.targets.map((target) => (
+        target.sceneName === sceneName ? { ...target, mode } : target
+      )),
+    }));
   };
   const handleRouteEnabledChange = (enabled: boolean) => {
     if (enabled && selectedTargets.length === 0) {
-      const fallbackScene = route.sceneName || scenes[0] || "";
+      const fallbackScene = draftRoute.sceneName || scenes[0] || "";
       const targets = fallbackScene
         ? [{ sceneName: fallbackScene, mode: "inherit" as const }]
         : [];
-      onRouteChange({ enabled: targets.length > 0, sceneName: fallbackScene, targets });
+      setDraftRoute((current) => ({
+        ...current,
+        enabled: targets.length > 0,
+        sceneName: fallbackScene,
+        targets,
+      }));
       return;
     }
-    onRouteChange({ enabled });
+    setDraftRoute((current) => ({ ...current, enabled }));
   };
-  const summary = route.enabled && selectedTargets.length > 0
-    ? selectedTargets.length === 1
-      ? `${t("sceneRouting.to", "To")} ${selectedTargets[0].sceneName}`
-      : `${t("sceneRouting.to", "To")} ${selectedTargets.length} ${t("sceneRouting.scenes", "scenes")}`
+  const handleSave = () => {
+    onRouteChange(draftRoute);
+    setOpen(false);
+  };
+  const handleCancel = () => {
+    setDraftRoute(route);
+    setOpen(false);
+  };
+  const summary = route.enabled && route.targets.length > 0
+    ? route.targets.length === 1
+      ? `${t("sceneRouting.to", "To")} ${route.targets[0].sceneName}`
+      : `${t("sceneRouting.to", "To")} ${route.targets.length} ${t("sceneRouting.scenes", "scenes")}`
     : t("sceneRouting.presentation", "MCE Presentation");
 
   return (
@@ -274,7 +300,7 @@ export default function DockSceneRoutingControl({
           <label className="dock-scene-routing-control__toggle">
             <input
               type="checkbox"
-              checked={route.enabled}
+              checked={draftRoute.enabled}
               onChange={(event) => handleRouteEnabledChange(event.target.checked)}
             />
             <span className="dock-scene-routing-control__toggle-copy">
@@ -303,7 +329,7 @@ export default function DockSceneRoutingControl({
                       <input
                         type="checkbox"
                         checked={Boolean(target)}
-                        disabled={!route.enabled || loading}
+                        disabled={loading}
                         onChange={(event) => handleTargetToggle(sceneName, event.target.checked)}
                       />
                       <span title={sceneName}>{sceneName}</span>
@@ -312,7 +338,6 @@ export default function DockSceneRoutingControl({
                       <select
                         className="dock-scene-routing-control__mode-select"
                         value={target.mode}
-                        disabled={!route.enabled}
                         aria-label={`${sceneName} ${t("sceneRouting.outputFormat", "output format")}`}
                         onChange={(event) => handleTargetModeChange(sceneName, event.target.value as DockSceneOutputMode)}
                       >
@@ -332,12 +357,11 @@ export default function DockSceneRoutingControl({
             </small>
           </div>
 
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 9, cursor: route.enabled ? "pointer" : "not-allowed", opacity: route.enabled ? 1 : 0.55, fontSize: 11, lineHeight: 1.35 }}>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 9, cursor: "pointer", fontSize: 11, lineHeight: 1.35 }}>
             <input
               type="checkbox"
-              checked={route.syncPresentation}
-              disabled={!route.enabled}
-              onChange={(event) => onRouteChange({ syncPresentation: event.target.checked })}
+              checked={draftRoute.syncPresentation}
+              onChange={(event) => setDraftRoute((current) => ({ ...current, syncPresentation: event.target.checked }))}
             />
             <span>
               <span style={{ display: "block", fontWeight: 600 }}>{t("sceneRouting.syncMce", "Also update MCE Presentation")}</span>
@@ -348,6 +372,36 @@ export default function DockSceneRoutingControl({
           </label>
 
           {error && <div style={{ marginTop: 8, color: "var(--dock-red)", fontSize: 10, lineHeight: 1.35 }}>{error}</div>}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, paddingTop: 8, borderTop: "1px solid var(--dock-border)" }}>
+            <button
+              type="button"
+              className="dock-btm-toolbar__icon-btn"
+              style={{ padding: "5px 12px", width: "auto", fontSize: 11, borderRadius: 4, height: 28 }}
+              onClick={handleCancel}
+            >
+              {t("common.cancel", "Cancel")}
+            </button>
+            <button
+              type="button"
+              className="dock-btm-toolbar__icon-btn dock-btm-toolbar__icon-btn--active"
+              style={{
+                padding: "5px 14px",
+                width: "auto",
+                fontSize: 11,
+                fontWeight: 600,
+                borderRadius: 4,
+                height: 28,
+                background: "var(--dock-primary, #0078d4)",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+              }}
+              onClick={handleSave}
+            >
+              {t("common.save", "Save")}
+            </button>
+          </div>
         </div>,
         document.body,
       )}

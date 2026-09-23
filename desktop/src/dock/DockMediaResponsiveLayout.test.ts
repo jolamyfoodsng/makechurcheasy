@@ -22,4 +22,16 @@ describe("Dock Media responsive layout", () => {
     expect(dockCssSource).toContain(".dock-media-console--ultra-compact .dock-media-pill");
     expect(dockCssSource).toContain("@media (max-height: 400px)");
   });
+
+  it("maintains tab text labels instead of reducing to icons on width reduction", () => {
+    expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"upload\"");
+    expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"collections\"");
+    expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"grid_view\"");
+    expect(dockMediaTabSource).toContain("{t('media.uploads')}");
+    expect(dockMediaTabSource).toContain("Templates");
+    expect(dockMediaTabSource).toContain("{t('media.tabAnimations')}");
+    expect(dockMediaTabSource).toContain("{t('media.patterns')}");
+    expect(dockMediaTabSource).toContain("{t('media.tabText')}");
+    expect(dockCssSource).toContain(".dock-media-tabs {\n  display: flex;\n  gap: 0;\n  border-bottom: 1px solid var(--dock-border-soft);\n  overflow-x: auto;");
+  });
 });

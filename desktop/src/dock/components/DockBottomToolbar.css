@@ -391,6 +391,13 @@
    "above the row" placement covers the search input. */
 .dock-btm-toolbar:has(> .dock-bottom-search-panel) {
   position: relative;
+  padding-inline: 0;
+  padding-top: 0;
+}
+
+.dock-btm-toolbar:has(> .dock-bottom-search-panel) > .dock-btm-toolbar__row {
+  padding-inline: 10px;
+  padding-top: 6px;
 }
 
 .dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow {
@@ -399,6 +406,12 @@
 
 .dock-btm-toolbar:has(> .dock-bottom-search-panel) .dock-btm-overflow__menu {
   right: 10px;
+}
+
+.dock-btm-toolbar--bottom-panel-only {
+  padding: 0 !important;
+  border-top: none !important;
+  background: transparent !important;
 }
 
 /* ── Overflow dropdown ── */
@@ -534,16 +547,17 @@
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
-  min-height: 32px;
-  gap: 8px;
-  padding: 0 8px;
+  min-height: 38px;
+  gap: 10px;
+  padding: 8px 12px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;

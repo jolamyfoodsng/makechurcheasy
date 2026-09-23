@@ -22,13 +22,13 @@ import { getDockSceneRouteTargets, normalizeDockSceneRoute } from "./dockSceneRo
 describe("dock scene routing", () => {
   it("gives every selected-scene overlay its own stable source name", () => {
     expect(dockObsClient.getSceneRouteSourceName("bible", "Livestream Scene"))
-      .toBe("MCE Bible - Livestream Scene");
+      .toBe("Bible - MCE Livestream Scene");
     expect(dockObsClient.getSceneRouteSourceName("lower-third", "Livestream Scene"))
-      .toBe("MCE Lower Third - Livestream Scene");
+      .toBe("Lower Third - MCE Livestream Scene");
     expect(dockObsClient.getSceneRouteSourceName("countdown", "Livestream Scene", "Background"))
-      .toBe("MCE Countdown Background - Livestream Scene");
+      .toBe("Countdown Background - MCE Livestream Scene");
     expect(dockObsClient.getSceneRouteSourceName("time", "Livestream Scene"))
-      .toBe("MCE Time - Livestream Scene");
+      .toBe("Time - MCE Livestream Scene");
   });
 
   it("persists an independent target and an explicit MCE Presentation sync choice per module", () => {

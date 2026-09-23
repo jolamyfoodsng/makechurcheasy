@@ -11,6 +11,7 @@ import { parseBibleSearch } from "../dock/bibleSearchParser";
 import { LT_ALL_THEMES } from "../lowerthirds/themes";
 import type { LowerThirdTheme } from "../lowerthirds/types";
 import Icon from "./Icon";
+import { fuzzyScore } from "../services/fuzzySearch";
 import "./bible-command-palette.css";
 
 type PaletteSource = "bible" | "media" | "notes" | "template";
@@ -122,6 +123,14 @@ function scoreTextMatch(query: string, ...candidates: Array<string | undefined |
     const tokenHits = tokens.filter((token) => candidate.includes(token)).length;
     if (tokenHits > 0) {
       best = Math.max(best, 420 + tokenHits * 60);
+      continue;
+    }
+
+    if (best === 0) {
+      const fScore = fuzzyScore(query, candidate);
+      if (fScore >= 200) {
+        best = Math.max(best, 300 + Math.round(fScore / 5));
+      }
     }
   }
 

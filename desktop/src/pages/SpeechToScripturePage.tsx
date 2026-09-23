@@ -446,10 +446,6 @@ export default function SpeechToScripturePage() {
     }
   }, [selectedMic]);
 
-  const handleStop = useCallback(() => {
-    setShowStopConfirm(true);
-  }, []);
-
   const confirmStop = useCallback(() => {
     track("sts_listening_stopped", { durationSec: elapsedRef.current });
     trackVoiceSessionCompleted(Math.round(elapsedRef.current));
@@ -546,12 +542,17 @@ export default function SpeechToScripturePage() {
 
   const isListening = snapshot.status === "listening";
   const isConnecting = snapshot.status === "requesting-mic" || snapshot.status === "connecting";
-  // Only show the destructive Stop action after the native mic and AssemblyAI
-  // session have both reported ready. During startup the button stays in its
-  // neutral Connecting state so a half-open stream cannot look active.
-  const canStopListening = isListening;
-  const isTranscribing = canStopListening;
+  const canStopListening = isListening || isConnecting;
+  const isTranscribing = isListening;
   const levelPercent = Math.round(snapshot.inputLevel * 100);
+
+  const handleStop = useCallback(() => {
+    if (isConnecting) {
+      confirmStop();
+      return;
+    }
+    setShowStopConfirm(true);
+  }, [confirmStop, isConnecting]);
 
   // ── Guard: warn before closing app while transcribing ──
   useEffect(() => {
@@ -907,14 +908,16 @@ export default function SpeechToScripturePage() {
             <button
               className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
               onClick={canStopListening ? handleStop : handleStart}
-              disabled={checkingAccess || isConnecting || (!canStopListening && !hasCredits)}
-              title={isConnecting ? t("verseAi.connecting") : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+              disabled={checkingAccess || (!canStopListening && !hasCredits)}
+              title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
               {canStopListening ? (
-                <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
+                isConnecting ? (
+                  <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
+                ) : (
+                  <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
+                )
               ) : checkingAccess ? (
                 <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
-              ) : isConnecting ? (
-                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : !hasCredits ? (
                 <><Lock size={16} /> {t("verseAi.noCredits")}</>
               ) : (

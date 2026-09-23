@@ -23,8 +23,8 @@ import type { BibleThemeSettings, BibleSlide } from "../bible/types";
 import { fullscreenSceneManager, FULLSCREEN_SCENES } from "../services/FullscreenSceneManager";
 import { presentationSceneManager, SOURCE_NAMES, BG_SOURCE_NAMES, PRESENTATION_SCENE_NAME } from "../services/PresentationSceneManager";
 
-const WORSHIP_SOURCE_NAME = SOURCE_NAMES.WORSHIP; // "MCE Worship"
-const WORSHIP_BG_SOURCE_NAME = BG_SOURCE_NAMES.WORSHIP; // "MCE Worship BG"
+const WORSHIP_SOURCE_NAME = SOURCE_NAMES.WORSHIP; // "MCE Browser - Worship"
+const WORSHIP_BG_SOURCE_NAME = BG_SOURCE_NAMES.WORSHIP; // "MCE BG - Worship"
 const WORSHIP_DUP_BG_SOURCE_NAME = "MCE Worship BG Safety";
 const WORSHIP_SCENE_NAME = PRESENTATION_SCENE_NAME; // "MCE Presentation"
 
@@ -316,6 +316,26 @@ class WorshipObsService {
       }
     }
 
+    // Build overlay CSS if live
+    let overlayCss = "";
+    if (this._isLive && this._liveText) {
+      const slide: BibleSlide = {
+        id: "worship-live",
+        text: this._liveText,
+        reference: this._liveRef || "",
+        verseRange: "",
+        index: 0,
+        total: 1,
+      };
+      const { themeForHash, customCss } = this.buildThemePayload(this._liveTheme);
+      const packet = { slide, theme: themeForHash, live: true, blanked: this._isBlanked, timestamp: Date.now() };
+      overlayCss = this.buildOverlayDataCss(
+        packet as unknown as Record<string, unknown>,
+        customCss || "",
+        "fullscreen",
+      );
+    }
+
     let browserItemId: number | null = null;
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName: overlaySceneName });
@@ -325,24 +345,6 @@ class WorshipObsService {
       );
       if (existing) {
         browserItemId = existing.sceneItemId;
-        let overlayCss = "";
-        if (this._isLive && this._liveText) {
-          const slide: BibleSlide = {
-            id: "worship-live",
-            text: this._liveText,
-            reference: this._liveRef || "",
-            verseRange: "",
-            index: 0,
-            total: 1,
-          };
-          const { themeForHash, customCss } = this.buildThemePayload(this._liveTheme);
-          const packet = { slide, theme: themeForHash, live: true, blanked: this._isBlanked, timestamp: Date.now() };
-          overlayCss = this.buildOverlayDataCss(
-            packet as unknown as Record<string, unknown>,
-            customCss || "",
-            "fullscreen",
-          );
-        }
         await obsService.call("SetInputSettings", {
           inputName: existing.sourceName,
           inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height, css: overlayCss },
@@ -356,7 +358,7 @@ class WorshipObsService {
           overlaySceneName,
           WORSHIP_SOURCE_NAME,
           "browser_source",
-          { url: overlayUrl, width: canvas.width, height: canvas.height, css: "", shutdown: false, restart_when_active: false }
+          { url: overlayUrl, width: canvas.width, height: canvas.height, css: overlayCss || "", shutdown: false, restart_when_active: false }
         );
         const inputs = await obsService.getInputList();
         const createdInput = inputs.find((i) => i.inputName === WORSHIP_SOURCE_NAME);
@@ -368,7 +370,12 @@ class WorshipObsService {
         if (msg.includes("already exists") || msg.includes("600")) {
           await obsService.call("SetInputSettings", {
             inputName: currentSourceName,
-            inputSettings: { url: overlayUrl, width: canvas.width, height: canvas.height },
+            inputSettings: {
+              url: overlayUrl,
+              width: canvas.width,
+              height: canvas.height,
+              ...(overlayCss ? { css: overlayCss } : {}),
+            },
           });
           if (!regInput) {
             const inputs = await obsService.getInputList();

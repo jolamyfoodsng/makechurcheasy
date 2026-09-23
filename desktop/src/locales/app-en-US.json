@@ -1727,6 +1727,8 @@
   "mvSettings.general.studioPreferencesDesc": "Manage standard operations, language choices, and background behaviors.",
   "mvSettings.general.globalInterfaceLanguage": "Global Interface Language",
   "mvSettings.general.globalInterfaceLanguageDesc": "Choose the translation table for buttons and guides.",
+  "mvSettings.general.showFloatingIcon": "Show Floating Desktop Icon",
+  "mvSettings.general.showFloatingIconDesc": "Display the MakeChurchEasy icon on the bottom-right of your screen. Right-click the icon to hide it.",
   "mvSettings.general.globalModuleDefaults": "Global Module Defaults",
   "mvSettings.general.globalModuleDefaultsDesc": "Set default behaviors for Bible, Speaker, and Ticker modules across the app.",
   "mvSettings.general.defaultBibleOverlayMode": "Default Bible Overlay Mode",

@@ -410,6 +410,46 @@ function normalizeQuickThemeSettings(
   const fontWeight = rawFontWeight || "bold";
   const refFontWeight = resolveEffectiveRefFontWeight(rawRefFontWeight, fontWeight);
 
+  const rawBgType = sanitizeBackgroundType(source.backgroundType);
+  const bgType = rawBgType ?? base.backgroundType;
+  const isColor = bgType === "color";
+  const isPattern = bgType === "pattern";
+  const isImage = bgType === "image";
+  const isVideo = bgType === "video";
+  const isOff = bgType === "off";
+
+  const backgroundImage = isOff || isColor || isPattern || isVideo
+    ? ""
+    : stringValue(source, "backgroundImage", base.backgroundImage);
+  const backgroundImageFilePath = isOff || isColor || isPattern || isVideo
+    ? ""
+    : stringValue(source, "backgroundImageFilePath", base.backgroundImageFilePath ?? "");
+  const backgroundPattern = isOff || isColor || isImage || isVideo
+    ? ""
+    : stringValue(source, "backgroundPattern", base.backgroundPattern);
+  const backgroundVideo = isOff || isColor || isPattern || isImage
+    ? ""
+    : stringValue(source, "backgroundVideo", base.backgroundVideo);
+  const backgroundVideoFilePath = isOff || isColor || isPattern || isImage
+    ? ""
+    : stringValue(source, "backgroundVideoFilePath", base.backgroundVideoFilePath ?? "");
+  const backgroundOpacity = isOff
+    ? 0
+    : numberValue(source, "backgroundOpacity", base.backgroundOpacity, 0, 1);
+  const fullscreenShadeOpacity = isOff
+    ? 0
+    : numberValue(source, "fullscreenShadeOpacity", base.fullscreenShadeOpacity, 0, 1);
+  const backgroundColor = isOff
+    ? ""
+    : isColor
+      ? colorValue(source, "backgroundColor", base.backgroundColor || "#0F172A")
+      : colorValue(source, "backgroundColor", base.backgroundColor);
+  const backgroundColorEnd = isOff
+    ? ""
+    : isColor
+      ? colorValue(source, "backgroundColorEnd", base.backgroundColorEnd || "")
+      : colorValue(source, "backgroundColorEnd", base.backgroundColorEnd || "#162040");
+
   return {
     fontSize: numberValue(source, "fontSize", base.fontSize, fontSizeMin, fontSizeMax),
     autoFontScale: true,
@@ -426,7 +466,7 @@ function normalizeQuickThemeSettings(
     refTextAlign: oneOf(source, "refTextAlign", base.refTextAlign, ["left", "center", "right", "match"] as const),
     refSpacing: numberValue(source, "refSpacing", base.refSpacing, 0, 150),
     fullscreenShadeColor: colorValue(source, "fullscreenShadeColor", base.fullscreenShadeColor),
-    fullscreenShadeOpacity: numberValue(source, "fullscreenShadeOpacity", base.fullscreenShadeOpacity, 0, 1),
+    fullscreenShadeOpacity,
     textAlign: oneOf(source, "textAlign", base.textAlign, ["left", "center", "right"] as const),
     lineHeight: numberValue(source, "lineHeight", base.lineHeight, 1.05, 1.8),
     letterSpacing: numberValue(source, "letterSpacing", base.letterSpacing ?? 0, -2, 20),
@@ -440,14 +480,14 @@ function normalizeQuickThemeSettings(
     textOutlineWidth: numberValue(source, "textOutlineWidth", base.textOutlineWidth ?? 2, 0, 10),
     animation: oneOf(source, "animation", base.animation, ["none", "fade", "slide-up", "slide-left", "scale-in", "reveal-bg-then-text"] as const),
     animationDuration: numberValue(source, "animationDuration", base.animationDuration, 100, 2000),
-    backgroundImage: stringValue(source, "backgroundImage", base.backgroundImage),
-    backgroundImageFilePath: stringValue(source, "backgroundImageFilePath", base.backgroundImageFilePath ?? ""),
-    backgroundPattern: stringValue(source, "backgroundPattern", base.backgroundPattern),
-    backgroundVideo: stringValue(source, "backgroundVideo", base.backgroundVideo),
-    backgroundVideoFilePath: stringValue(source, "backgroundVideoFilePath", base.backgroundVideoFilePath ?? ""),
-    backgroundOpacity: numberValue(source, "backgroundOpacity", base.backgroundOpacity, 0, 1),
-    backgroundColor: colorValue(source, "backgroundColor", base.backgroundColor),
-    backgroundColorEnd: colorValue(source, "backgroundColorEnd", base.backgroundColorEnd || "#162040"),
+    backgroundImage,
+    backgroundImageFilePath,
+    backgroundPattern,
+    backgroundVideo,
+    backgroundVideoFilePath,
+    backgroundOpacity,
+    backgroundColor,
+    backgroundColorEnd,
     bgGradientAngle: numberValue(source, "bgGradientAngle", base.bgGradientAngle ?? 180, 0, 360),
     referenceBackgroundEnabled: boolValue(source, "referenceBackgroundEnabled", base.referenceBackgroundEnabled === true),
     referenceBackgroundColor: colorValue(source, "referenceBackgroundColor", base.referenceBackgroundColor),
@@ -471,7 +511,7 @@ function normalizeQuickThemeSettings(
     lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius ?? base.lowerThirdCardRadius),
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(source.lowerThirdTextDirection ?? base.lowerThirdTextDirection),
     compareTranslationWidth: numberValue(source, "compareTranslationWidth", base.compareTranslationWidth, 30, 50),
-    backgroundType: sanitizeBackgroundType(source.backgroundType) ?? base.backgroundType,
+    backgroundType: bgType,
     ...compareSettings,
   };
 }
@@ -494,12 +534,16 @@ export function applyFullscreenQuickThemeSettings(
   const useThemeBg = bgType === "theme";
   const useNoBg = bgType === "off";
   const useColorBg = bgType === "color";
+  const usePatternBg = bgType === "pattern";
+  const useImageBg = bgType === "image";
+  const useVideoBg = bgType === "video";
   const compareSettings = normalizeCompareThemeSettings(quickSettings as Record<string, unknown>);
 
   return {
     ...theme,
     settings: {
       ...theme.settings,
+      backgroundType: bgType,
       fontSize: quickSettings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily,
@@ -529,10 +573,26 @@ export function applyFullscreenQuickThemeSettings(
       textOutlineWidth: quickSettings.textOutlineWidth,
       animation: quickSettings.animation,
       animationDuration: quickSettings.animationDuration,
-      backgroundImage: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImage ?? "") : quickSettings.backgroundImage,
-      backgroundImageFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundImageFilePath ?? "") : quickSettings.backgroundImageFilePath,
-      backgroundVideo: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideo ?? "") : quickSettings.backgroundVideo,
-      backgroundVideoFilePath: useNoBg ? "" : useThemeBg ? (theme.settings.backgroundVideoFilePath ?? "") : quickSettings.backgroundVideoFilePath,
+      backgroundImage: useNoBg || useColorBg || usePatternBg || useVideoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundImage ?? "")
+          : quickSettings.backgroundImage,
+      backgroundImageFilePath: useNoBg || useColorBg || usePatternBg || useVideoBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundImageFilePath ?? "")
+          : quickSettings.backgroundImageFilePath,
+      backgroundVideo: useNoBg || useColorBg || usePatternBg || useImageBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundVideo ?? "")
+          : quickSettings.backgroundVideo,
+      backgroundVideoFilePath: useNoBg || useColorBg || usePatternBg || useImageBg
+        ? ""
+        : useThemeBg
+          ? (theme.settings.backgroundVideoFilePath ?? "")
+          : quickSettings.backgroundVideoFilePath,
       backgroundOpacity: useNoBg ? 0 : quickSettings.backgroundOpacity,
       backgroundColor: useNoBg
         ? "transparent"
@@ -552,13 +612,11 @@ export function applyFullscreenQuickThemeSettings(
       // Keep the last pattern in quick settings so the picker can restore it
       // after a temporary color/video switch, but only send it to the overlay
       // while Pattern is the active background mode.
-      backgroundPattern: useNoBg
+      backgroundPattern: useNoBg || useColorBg || useImageBg || useVideoBg
         ? ""
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
-          : bgType === "pattern"
-            ? quickSettings.backgroundPattern
-            : "",
+          : quickSettings.backgroundPattern,
       boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,

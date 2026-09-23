@@ -1871,10 +1871,49 @@
         root.style.setProperty('--box-background', fbb);
         root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
         if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
-        if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
+        const bgType = String(s.backgroundType || '').trim().toLowerCase();
+        const isThemeBackground = !bgType || bgType === 'theme';
+        const isBackgroundOff = bgType === 'off';
+        const isBackgroundColor = bgType === 'color' || bgType === 'gradient';
+        const isBackgroundPattern = bgType === 'pattern';
+        const isBackgroundImage = bgType === 'image';
+        const isBackgroundVideo = bgType === 'video';
+
+        if (isBackgroundOff) {
+          root.style.setProperty('--box-background', 'transparent');
+        }
+
         const barBgV = String(s.backgroundVideo || '').trim();
-        if (barBgV && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
-        if (!barBgV && targetMode === 'lower-third') { const bgPattern = String(s.backgroundPattern || '').trim(); if (bgPattern) { const pc = resolvePatternCss(bgPattern); ltBarBg.style.background = pc || 'transparent'; ltBarBg.style.backgroundSize = 'cover'; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } else { const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || 'transparent'; ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2; ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1); ltBarBg.style.display = 'block'; } } else ltBarBg.style.display = 'none';
+        const shouldUseVideo = Boolean(barBgV) && (isBackgroundVideo || isThemeBackground);
+        if (shouldUseVideo && targetMode === 'lower-third') { barBackgroundVideoEl.src = barBgV; barBackgroundVideoEl.classList.add('visible'); barBackgroundVideoEl.load(); barBackgroundVideoEl.play().catch(() => { }); } else { barBackgroundVideoEl.classList.remove('visible'); if (barBackgroundVideoEl.getAttribute('src')) { barBackgroundVideoEl.pause(); barBackgroundVideoEl.removeAttribute('src'); } }
+        if (!shouldUseVideo && targetMode === 'lower-third') {
+          if (isBackgroundOff) {
+            ltBarBg.style.display = 'none';
+          } else {
+            const bgImageCss = resolveBackgroundImageCss(s.backgroundImage);
+            const bgPattern = String(s.backgroundPattern || '').trim();
+            const shouldUseImage = Boolean(bgImageCss) && (isBackgroundImage || isThemeBackground);
+            const shouldUsePattern = Boolean(bgPattern) && (isBackgroundPattern || isThemeBackground);
+
+            if (shouldUseImage) {
+              ltBarBg.style.background = bgImageCss;
+              ltBarBg.style.backgroundSize = 'cover';
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = 'block';
+            } else if (shouldUsePattern) {
+              const pc = resolvePatternCss(bgPattern);
+              ltBarBg.style.background = pc || 'transparent';
+              ltBarBg.style.backgroundSize = 'cover';
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = pc ? 'block' : 'none';
+            } else {
+              const ga = s.bgGradientAngle ?? 135, ge = s.backgroundColorEnd || '', hasG = ge && ge !== s.backgroundColor, bs2 = s.backgroundColor || (isBackgroundColor ? '#0F172A' : 'transparent');
+              ltBarBg.style.background = hasG ? `linear-gradient(${ga}deg,${bs2},${ge})` : bs2;
+              ltBarBg.style.opacity = String(s.backgroundOpacity ?? 1);
+              ltBarBg.style.display = (bs2 && bs2 !== 'transparent') || hasG ? 'block' : 'none';
+            }
+          }
+        } else ltBarBg.style.display = 'none';
         if (s.refPosition === 'top') { reference.classList.add('top'); ltRefText.classList.add('top'); } else { reference.classList.remove('top'); ltRefText.classList.remove('top'); }
       }
 

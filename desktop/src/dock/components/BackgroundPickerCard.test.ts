@@ -1219,8 +1219,8 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(dockBibleTabSource).not.toContain('Shrinks the verse and reference when they would overflow.');
     expect(dockBibleTabSource).toContain('const isFitTextMode = true;');
     expect(dockBibleTabSource).toContain('LOWER_THIRD_QUICK_SIZE_OPTIONS');
-    expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${preset.padding}px ${horizontalPadding}px`');
-    expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: preset.maxHeight');
+    expect(dockBibleTabSource).toContain('lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`');
+    expect(dockBibleTabSource).toContain('lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight');
     expect(dockBibleTabSource).not.toContain('areManualFontSizesDisabled');
     expect(dockBibleTabSource).not.toContain('QuickFontSizeInput');
   });

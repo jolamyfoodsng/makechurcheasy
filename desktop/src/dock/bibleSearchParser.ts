@@ -15,8 +15,14 @@
  * Returns a list of match candidates ranked by confidence.
  */
 
-import { OT_BOOKS, NT_BOOKS, BOOK_CHAPTERS } from "./dockTypes";
+import {
+  OT_BOOKS,
+  NT_BOOKS,
+  BOOK_CHAPTERS,
+  getCanonicalVerseCount,
+} from "./dockTypes";
 import { normalizeRomanNumberedBookPrefix } from "../bible/bookAliasGenerator";
+import { damerauLevenshteinDistance } from "../services/fuzzySearch";
 
 const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -270,7 +276,8 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
   if (matchedBooks.length === 0) return [];
 
   // Parse chapter:verse candidates from number part
-  const candidates = parseChapterVerseCandidates(numPart);
+  const hasWhitespace = /\s/.test(raw);
+  const candidates = parseChapterVerseCandidates(numPart, hasWhitespace);
 
   // Build results
   const results: BibleSearchResult[] = [];
@@ -281,18 +288,43 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
     if (maxCh === 1 && numPart) {
       const singleChapterCandidates = parseSingleChapterVerseCandidates(numPart);
       if (singleChapterCandidates.length > 0) {
+        const maxV = getCanonicalVerseCount(book, 1);
         for (const candidate of singleChapterCandidates) {
-            results.push({
+          const isVsValid = maxV === null || (candidate.verse !== null && candidate.verse <= maxV);
+          results.push({
+            book,
+            chapter: 1,
+            verse: candidate.verse,
+            endVerse: candidate.endVerse,
+            label:
+              candidate.endVerse && candidate.endVerse !== candidate.verse
+                ? `${book} 1:${candidate.verse}-${candidate.endVerse}`
+                : `${book} 1:${candidate.verse}`,
+            score: bookScore + candidate.confidence,
+          });
+
+          if (!isVsValid && candidate.verse !== null) {
+            const repairedList = recoverInvalidReference(
               book,
-              chapter: 1,
-              verse: candidate.verse,
-              endVerse: candidate.endVerse,
-              label:
-                candidate.endVerse && candidate.endVerse !== candidate.verse
-                  ? `${book} 1:${candidate.verse}-${candidate.endVerse}`
-                  : `${book} 1:${candidate.verse}`,
-              score: bookScore + candidate.confidence,
-            });
+              1,
+              candidate.verse,
+              candidate.endVerse,
+              candidate.confidence - 5,
+            );
+            for (const rep of repairedList) {
+              results.push({
+                book,
+                chapter: rep.chapter,
+                verse: rep.verse,
+                endVerse: rep.endVerse,
+                label:
+                  rep.verse !== null
+                    ? `${book} ${rep.chapter}:${rep.verse}`
+                    : `${book} ${rep.chapter}`,
+                score: bookScore + rep.confidence,
+              });
+            }
+          }
         }
         continue;
       }
@@ -309,40 +341,79 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
         score: bookScore,
       });
     } else {
-      for (const { chapter, verse, endVerse, confidence } of candidates) {
+      const canonicalMatches: BibleSearchResult[] = [];
+      const invalidCandidates: ChapterVerseCandidate[] = [];
+
+      for (const candidate of candidates) {
+        const { chapter, verse, endVerse, confidence } = candidate;
         if (chapter !== null && chapter >= 1 && chapter <= maxCh) {
-          if (verse !== null) {
-            results.push({
-              book,
-              chapter,
-              verse,
-              endVerse,
-              label:
-                endVerse && endVerse !== verse
-                  ? `${book} ${chapter}:${verse}-${endVerse}`
-                  : `${book} ${chapter}:${verse}`,
-              score: bookScore + confidence,
-            });
+          const maxVerse = getCanonicalVerseCount(book, chapter);
+          const isVerseValid =
+            verse === null || (maxVerse !== null && verse >= 1 && verse <= maxVerse);
+          const isEndVerseValid =
+            endVerse === null ||
+            endVerse === undefined ||
+            (maxVerse !== null &&
+              verse !== null &&
+              endVerse >= verse &&
+              endVerse <= maxVerse);
+
+          if (isVerseValid && isEndVerseValid) {
+            if (verse !== null) {
+              canonicalMatches.push({
+                book,
+                chapter,
+                verse,
+                endVerse,
+                label:
+                  endVerse && endVerse !== verse
+                    ? `${book} ${chapter}:${verse}-${endVerse}`
+                    : `${book} ${chapter}:${verse}`,
+                score: bookScore + confidence,
+              });
+            } else {
+              canonicalMatches.push({
+                book,
+                chapter,
+                verse: null,
+                endVerse: null,
+                label: `${book} ${chapter}`,
+                score: bookScore + confidence,
+              });
+            }
           } else {
-            results.push({
-              book,
-              chapter,
-              verse: null,
-              endVerse: null,
-              label: `${book} ${chapter}`,
-              score: bookScore + confidence - 5,
-            });
+            invalidCandidates.push(candidate);
           }
-        } else if (chapter !== null && verse !== null) {
-          for (const repaired of recoverInvalidExplicitCandidates(chapter, verse, maxCh, confidence)) {
-            results.push({
+        } else if (chapter !== null) {
+          invalidCandidates.push(candidate);
+        }
+      }
+
+      if (canonicalMatches.length > 0) {
+        results.push(...canonicalMatches);
+      } else if (invalidCandidates.length > 0) {
+        for (const inv of invalidCandidates) {
+          if (inv.chapter !== null) {
+            const repairedList = recoverInvalidReference(
               book,
-              chapter: repaired.chapter,
-              verse: repaired.verse,
-              endVerse: repaired.endVerse,
-              label: `${book} ${repaired.chapter}:${repaired.verse}`,
-              score: bookScore + repaired.confidence,
-            });
+              inv.chapter,
+              inv.verse,
+              inv.endVerse,
+              inv.confidence,
+            );
+            for (const rep of repairedList) {
+              results.push({
+                book,
+                chapter: rep.chapter,
+                verse: rep.verse,
+                endVerse: rep.endVerse,
+                label:
+                  rep.verse !== null
+                    ? `${book} ${rep.chapter}:${rep.verse}`
+                    : `${book} ${rep.chapter}`,
+                score: bookScore + rep.confidence,
+              });
+            }
           }
         }
       }
@@ -424,6 +495,74 @@ function findBooks(bookPart: string): Array<{ book: string; score: number }> {
     }
   }
 
+  // 5. Fuzzy match on book names and extended aliases (typo tolerance)
+  if (results.length === 0 && bookPart.length >= 3) {
+    const numPrefix = bookPart.match(/^([123])/)?.[1];
+    const maxDist = bookPart.length <= 4 ? 1 : 2;
+
+    const fuzzyCandidates: Array<{
+      book: string;
+      dist: number;
+      isFullBookMatch: boolean;
+      score: number;
+    }> = [];
+
+    for (const book of ALL_BOOKS) {
+      const bookLower = book.toLowerCase().replace(/\s+/g, "");
+      const bookNumPrefix = book.match(/^([123])/)?.[1];
+      if (numPrefix && bookNumPrefix !== numPrefix) continue;
+
+      let bestDist = Number.POSITIVE_INFINITY;
+      let isFullMatch = false;
+
+      // Full book name check
+      if (Math.abs(bookPart.length - bookLower.length) <= maxDist) {
+        const bookDist = damerauLevenshteinDistance(bookPart, bookLower, maxDist);
+        if (bookDist <= maxDist) {
+          bestDist = bookDist;
+          isFullMatch = true;
+        }
+      }
+
+      // Alias check (only compare if alias length is close to query)
+      const aliases = BOOK_ALIASES.find((a) => a.book === book);
+      if (aliases) {
+        for (const alias of getExtendedAliases(aliases)) {
+          if (alias.length >= 3 && Math.abs(bookPart.length - alias.length) <= maxDist) {
+            const aliasDist = damerauLevenshteinDistance(bookPart, alias, maxDist);
+            if (aliasDist <= maxDist && aliasDist < bestDist) {
+              bestDist = aliasDist;
+              isFullMatch = false;
+            }
+          }
+        }
+      }
+
+      if (Number.isFinite(bestDist) && bestDist <= maxDist) {
+        let score = Math.max(35, 65 - bestDist * 15);
+        if (isFullMatch) score += 6;
+        if (Math.abs(bookPart.length - bookLower.length) === 0) score += 4;
+
+        fuzzyCandidates.push({
+          book,
+          dist: bestDist,
+          isFullBookMatch: isFullMatch,
+          score,
+        });
+      }
+    }
+
+    fuzzyCandidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.dist !== b.dist) return a.dist - b.dist;
+      return 0;
+    });
+
+    for (const cand of fuzzyCandidates) {
+      results.push({ book: cand.book, score: cand.score });
+    }
+  }
+
   // Deduplicate
   const seen = new Set<string>();
   return results.filter((r) => {
@@ -441,47 +580,150 @@ interface ChapterVerseCandidate {
   confidence: number;
 }
 
-function recoverInvalidExplicitCandidates(
+function recoverInvalidReference(
+  book: string,
   chapter: number,
   verse: number | null,
-  maxChapter: number,
-  confidence: number,
+  endVerse: number | null = null,
+  baseConfidence: number = 20,
 ): ChapterVerseCandidate[] {
-  if (verse === null || chapter <= maxChapter || maxChapter >= 10) {
-    return [];
-  }
-
+  const maxCh = BOOK_CHAPTERS[book] ?? 1;
   const recovered: ChapterVerseCandidate[] = [];
   const seen = new Set<string>();
-  const chapterDigits = String(chapter);
 
-  const pushRecovered = (nextChapter: number, nextVerse: number | null, penalty: number) => {
-    if (!Number.isFinite(nextChapter) || nextChapter < 1 || nextChapter > maxChapter) return;
-    if (
-      nextVerse !== null &&
-      (!Number.isFinite(nextVerse) || nextVerse < 1 || nextVerse > MAX_BIBLE_VERSE_NUMBER)
-    ) return;
-    const key = `${nextChapter}:${nextVerse ?? ""}`;
+  const pushCandidate = (c: number, v: number | null, eV: number | null, conf: number) => {
+    if (!Number.isFinite(c) || c < 1 || c > maxCh) return;
+    const maxV = getCanonicalVerseCount(book, c);
+    if (v !== null) {
+      if (!Number.isFinite(v) || v < 1 || (maxV !== null && v > maxV)) return;
+      if (eV !== null && (!Number.isFinite(eV) || eV < v || (maxV !== null && eV > maxV))) return;
+    }
+    const key = `${c}:${v ?? ""}-${eV ?? ""}`;
     if (seen.has(key)) return;
     seen.add(key);
     recovered.push({
-      chapter: nextChapter,
-      verse: nextVerse,
-      endVerse: null,
-      confidence: Math.max(10, confidence - penalty),
+      chapter: c,
+      verse: v,
+      endVerse: eV,
+      confidence: Math.max(8, conf),
     });
   };
 
-  if (chapterDigits.endsWith("0")) {
-    const strippedChapter = Number.parseInt(chapterDigits.slice(0, -1), 10);
-    pushRecovered(strippedChapter, verse, 4);
+  const chDigits = String(chapter);
+  const vsDigits = verse !== null ? String(verse) : "";
+  const combinedDigits = `${chDigits}${vsDigits}`;
+
+  // 1. Repartition raw combined digits (e.g. 3:31 -> digits 331 -> 33:1)
+  if (combinedDigits.length >= 2) {
+    for (let i = 1; i < combinedDigits.length; i++) {
+      const cPart = combinedDigits.slice(0, i);
+      const vPart = combinedDigits.slice(i);
+      if (vPart.length > 1 && vPart[0] === "0") continue;
+      const c = parseInt(cPart, 10);
+      const v = parseInt(vPart, 10);
+      if (c === chapter && v === verse) continue;
+      if (c >= 1 && c <= maxCh) {
+        const maxV = getCanonicalVerseCount(book, c);
+        if (maxV !== null && v >= 1 && v <= maxV) {
+          pushCandidate(c, v, null, baseConfidence + 6);
+        }
+      }
+    }
   }
 
-  if (chapterDigits.length >= 2) {
-    const mergedChapter = Number.parseInt(chapterDigits[0], 10);
-    const mergedVerseDigits = `${chapterDigits.slice(1)}${verse}`;
-    const mergedVerse = Number.parseInt(mergedVerseDigits.replace(/^0+/, "") || "0", 10);
-    pushRecovered(mergedChapter, mergedVerse, 6);
+  // 2. Transpose adjacent digits (e.g. 331 -> 313 -> 31:3)
+  if (combinedDigits.length >= 3) {
+    for (let i = 0; i < combinedDigits.length - 1; i++) {
+      const arr = combinedDigits.split("");
+      const tmp = arr[i];
+      arr[i] = arr[i + 1];
+      arr[i + 1] = tmp;
+      const swapped = arr.join("");
+      if (swapped === combinedDigits) continue;
+      for (let j = 1; j < swapped.length; j++) {
+        const cPart = swapped.slice(0, j);
+        const vPart = swapped.slice(j);
+        if (vPart.length > 1 && vPart[0] === "0") continue;
+        const c = parseInt(cPart, 10);
+        const v = parseInt(vPart, 10);
+        if (c >= 1 && c <= maxCh) {
+          const maxV = getCanonicalVerseCount(book, c);
+          if (maxV !== null && v >= 1 && v <= maxV) {
+            pushCandidate(c, v, null, baseConfidence + 2);
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Swap chapter and verse if verse is a valid chapter (e.g. 3:31 -> 31:3)
+  if (verse !== null && verse >= 1 && verse <= maxCh && chapter >= 1) {
+    const maxV = getCanonicalVerseCount(book, verse);
+    if (maxV !== null && chapter <= maxV) {
+      pushCandidate(verse, chapter, null, baseConfidence + 3);
+    }
+  }
+
+  // 4. If chapter is valid but verse exceeds max verse in that chapter:
+  if (chapter >= 1 && chapter <= maxCh) {
+    const maxV = getCanonicalVerseCount(book, chapter);
+    if (maxV !== null) {
+      if (endVerse !== null && verse !== null && endVerse > maxV) {
+        pushCandidate(chapter, Math.min(verse, maxV), maxV, baseConfidence + 4);
+      }
+      // Suggest last verse of chapter
+      pushCandidate(chapter, maxV, null, baseConfidence);
+      // Suggest whole chapter
+      pushCandidate(chapter, null, null, baseConfidence - 2);
+      // Suggest first verse of chapter
+      pushCandidate(chapter, 1, null, baseConfidence - 4);
+    }
+  }
+
+  // 5. If chapter is invalid (chapter > maxCh):
+  if (chapter > maxCh) {
+    if (chDigits.endsWith("0")) {
+      const stripped = parseInt(chDigits.slice(0, -1), 10);
+      if (stripped >= 1 && stripped <= maxCh) {
+        const maxV = getCanonicalVerseCount(book, stripped);
+        const safeV = verse !== null && maxV !== null ? Math.min(verse, maxV) : verse;
+        pushCandidate(stripped, safeV, null, baseConfidence);
+      }
+    }
+    if (chDigits.length >= 2) {
+      const mergedChapter = Number.parseInt(chDigits[0], 10);
+      const mergedVerseDigits = `${chDigits.slice(1)}${verse ?? ""}`;
+      const mergedVerse = Number.parseInt(mergedVerseDigits.replace(/^0+/, "") || "0", 10);
+      if (mergedChapter >= 1 && mergedChapter <= maxCh) {
+        const maxV = getCanonicalVerseCount(book, mergedChapter);
+        if (maxV !== null && mergedVerse >= 1 && mergedVerse <= maxV) {
+          pushCandidate(mergedChapter, mergedVerse, null, baseConfidence - 2);
+        }
+      }
+    }
+    const maxChMaxV = getCanonicalVerseCount(book, maxCh);
+    pushCandidate(maxCh, verse !== null && maxChMaxV !== null ? Math.min(verse, maxChMaxV) : null, null, baseConfidence - 4);
+    pushCandidate(maxCh, null, null, baseConfidence - 6);
+  }
+
+  // 6. If verse was specified, find closest chapter in the same book that has this verse
+  if (verse !== null && verse >= 1) {
+    let closestChapter: number | null = null;
+    let closestDist = Number.POSITIVE_INFINITY;
+    for (let c = 1; c <= maxCh; c++) {
+      if (c === chapter) continue;
+      const maxV = getCanonicalVerseCount(book, c);
+      if (maxV !== null && maxV >= verse) {
+        const dist = Math.abs(c - chapter);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestChapter = c;
+        }
+      }
+    }
+    if (closestChapter !== null) {
+      pushCandidate(closestChapter, verse, null, baseConfidence - 5);
+    }
   }
 
   return recovered;
@@ -535,7 +777,7 @@ function parseSingleChapterVerseCandidates(numPart: string): ChapterVerseCandida
  *   "316" → 3:16 (conf 25), 31:6 (conf 20)
  *   "11"  → 1:1 (conf 15), chapter 11 (conf 10)
  */
-function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
+function parseChapterVerseCandidates(numPart: string, hasWhitespace = false): ChapterVerseCandidate[] {
   if (!numPart) return [];
 
   // Clean separators: "vs", "v", ".", ":"  all become ":"
@@ -598,7 +840,7 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
       // "316" → 3:16 (conf 25), 31:6 (conf 18)
       conf = 25 - (i - 1) * 7;
     } else {
-      // "23" → 2:3 (conf 12)  — lower than chapter-only (15)
+      // "23" → 2:3 (conf 12)  — lower than chapter-only (16 or 20)
       conf = 12 - (i - 1) * 3;
     }
     candidates.push({ chapter: ch, verse: vs, endVerse: null, confidence: Math.max(conf, 8) });
@@ -606,9 +848,8 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
 
   // Also add the whole number as chapter-only (if reasonable)
   if (num >= 1 && num <= 150) {
-    // For 2-digit numbers, chapter-only gets higher confidence.
-    // For 3+ digits, it's unlikely to be a chapter number, so lower confidence.
-    const chapterConf = digits.length <= 2 ? 15 : 5;
+    // For 2-digit numbers, chapter-only gets higher confidence, especially with whitespace
+    const chapterConf = digits.length <= 2 ? (hasWhitespace ? 20 : 16) : 5;
     candidates.push({ chapter: num, verse: null, endVerse: null, confidence: chapterConf });
   }
 
@@ -646,6 +887,7 @@ function parseChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
 function matchBooksByName(query: string): BibleSearchResult[] {
   const results: BibleSearchResult[] = [];
   const q = query.toLowerCase().replace(/\s+/g, "");
+  if (!q) return [];
 
   for (const book of ALL_BOOKS) {
     const bookLower = book.toLowerCase().replace(/\s+/g, "");
@@ -658,6 +900,55 @@ function matchBooksByName(query: string): BibleSearchResult[] {
         label: book,
         score: bookLower.startsWith(q) ? 90 : 60,
       });
+    }
+  }
+
+  // If no direct matches, check fuzzy distance
+  if (results.length === 0 && q.length >= 3) {
+    const numPrefix = q.match(/^([123])/)?.[1];
+    const maxDist = q.length <= 4 ? 1 : 2;
+
+    for (const book of ALL_BOOKS) {
+      const bookLower = book.toLowerCase().replace(/\s+/g, "");
+      const bookNumPrefix = book.match(/^([123])/)?.[1];
+      if (numPrefix && bookNumPrefix !== numPrefix) continue;
+
+      let bestDist = Number.POSITIVE_INFINITY;
+      let isFullMatch = false;
+
+      if (Math.abs(q.length - bookLower.length) <= maxDist) {
+        const bookDist = damerauLevenshteinDistance(q, bookLower, maxDist);
+        if (bookDist <= maxDist) {
+          bestDist = bookDist;
+          isFullMatch = true;
+        }
+      }
+
+      const aliases = BOOK_ALIASES.find((a) => a.book === book);
+      if (aliases) {
+        for (const alias of getExtendedAliases(aliases)) {
+          if (alias.length >= 3 && Math.abs(q.length - alias.length) <= maxDist) {
+            const aliasDist = damerauLevenshteinDistance(q, alias, maxDist);
+            if (aliasDist <= maxDist && aliasDist < bestDist) {
+              bestDist = aliasDist;
+              isFullMatch = false;
+            }
+          }
+        }
+      }
+
+      if (Number.isFinite(bestDist) && bestDist <= maxDist) {
+        let score = Math.max(30, 55 - bestDist * 15);
+        if (isFullMatch) score += 5;
+        results.push({
+          book,
+          chapter: null,
+          verse: null,
+          endVerse: null,
+          label: book,
+          score,
+        });
+      }
     }
   }
 

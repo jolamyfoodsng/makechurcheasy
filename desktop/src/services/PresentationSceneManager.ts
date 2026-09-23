@@ -34,39 +34,57 @@ export const PRESENTATION_SCENE_NAME = "MCE Presentation";
 /** Source name for the user's program scene reference at the bottom of MCE Presentation */
 export const PROGRAM_SCENE_SOURCE_NAME = "MCE Program Scene Reference";
 
-/** Source names for each module */
+/** Source names for each module (descriptor first for visibility when OBS docks are narrowed) */
 export const SOURCE_NAMES = {
-  BIBLE: "MCE Bible",
-  WORSHIP: "MCE Worship",
-  MEDIA: "MCE Media",
-  NOTES: "MCE Notes",
-  LOWER_THIRD: "MCE Lower Third",
+  BIBLE: "Bible - MCE Presentation",
+  WORSHIP: "Worship - MCE Presentation",
+  MEDIA: "Media - MCE Presentation",
+  NOTES: "Notes - MCE Presentation",
+  LOWER_THIRD: "Lower Third - MCE Presentation",
 } as const;
 
 /** Background source names */
 export const BG_SOURCE_NAMES = {
-  BIBLE: "MCE Bible BG",
-  WORSHIP: "MCE Worship BG",
-  MEDIA: "MCE Media BG",
-  NOTES: "MCE Notes BG",
-  LOWER_THIRD: "MCE Lower Third BG",
+  BIBLE: "Bible BG - MCE Presentation",
+  WORSHIP: "Worship BG - MCE Presentation",
+  MEDIA: "Media BG - MCE Presentation",
+  NOTES: "Notes BG - MCE Presentation",
+  LOWER_THIRD: "Lower Third BG - MCE Presentation",
 } as const;
 
 /** Fullscreen source names */
 export const FULLSCREEN_SOURCE_NAMES = {
-  BIBLE: "MCE Browser - Bible",
-  WORSHIP: "MCE Browser - Worship",
-  COUNTDOWN: "MCE Browser - Countdown",
-  NOTES: "MCE Browser - Notes",
+  BIBLE: "Bible - MCE Presentation",
+  WORSHIP: "Worship - MCE Presentation",
+  COUNTDOWN: "Countdown - MCE Presentation",
+  NOTES: "Notes - MCE Presentation",
 } as const;
 
 /** Fullscreen background source names */
 export const FULLSCREEN_BG_SOURCE_NAMES = {
-  BIBLE: "MCE BG - Bible",
-  WORSHIP: "MCE BG - Worship",
-  COUNTDOWN: "MCE BG - Countdown",
-  NOTES: "MCE BG - Notes",
+  BIBLE: "Bible BG - MCE Presentation",
+  WORSHIP: "Worship BG - MCE Presentation",
+  COUNTDOWN: "Countdown BG - MCE Presentation",
+  NOTES: "Notes BG - MCE Presentation",
 } as const;
+
+/** Map of current source names to their legacy aliases for backward compatibility */
+export function getLegacySourceAliases(name: string): string[] {
+  const map: Record<string, string[]> = {
+    "Bible - MCE Presentation": [],
+    "Worship - MCE Presentation": ["MCE Browser - Worship", "MCE Worship"],
+    "Media - MCE Presentation": ["MCE Media"],
+    "Notes - MCE Presentation": ["MCE Browser - Notes", "MCE Notes"],
+    "Lower Third - MCE Presentation": ["MCE Lower Third"],
+    "Countdown - MCE Presentation": ["MCE Browser - Countdown", "MCE Countdown"],
+    "Bible BG - MCE Presentation": ["MCE BG - Bible", "MCE Bible BG"],
+    "Worship BG - MCE Presentation": ["MCE BG - Worship", "MCE Worship BG"],
+    "Media BG - MCE Presentation": ["MCE Media BG"],
+    "Notes BG - MCE Presentation": ["MCE BG - Notes", "MCE Notes BG"],
+    "Countdown BG - MCE Presentation": ["MCE BG - Countdown", "MCE Countdown BG"],
+  };
+  return map[name] || [];
+}
 
 /** Source types */
 export type SourceType = keyof typeof SOURCE_NAMES;
@@ -265,13 +283,29 @@ class PresentationSceneManager {
     try {
       const resp = await obsService.call("GetSceneItemList", { sceneName });
       const items = (resp as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> }).sceneItems ?? [];
+
+      // Clean off legacy MCE Browser - Bible and BG so they do not remain triggered
+      if (sourceName === SOURCE_NAMES.BIBLE) {
+        const legacyItems = items.filter((item) =>
+          item.sourceName === "MCE Browser - Bible" ||
+          item.sourceName === "MCE Bible" ||
+          item.sourceName === "MCE BG - Bible" ||
+          item.sourceName === "MCE Bible BG"
+        );
+        for (const leg of legacyItems) {
+          try {
+            await obsService.call("RemoveSceneItem", { sceneName, sceneItemId: leg.sceneItemId });
+          } catch { /* ok */ }
+        }
+      }
+
       const existing = items.find((item) => item.sourceName === sourceName);
       if (existing) {
         _state.sources.set(sourceName, {
           sceneItemId: existing.sceneItemId,
           sceneUuid: _state.sceneUuid ?? "",
         });
-        await this.ensureBrowserSourceUrl(sourceName, overlayUrl, canvas);
+        await this.ensureBrowserSourceUrl(existing.sourceName, overlayUrl, canvas);
         return;
       }
     } catch { /* scene might be empty */ }
@@ -350,7 +384,8 @@ class PresentationSceneManager {
         const moduleSource = this.getModuleName(_moduleKey as ModuleType);
         if (moduleSource && items.some((item) => item.sourceName === moduleSource)) return;
       } catch { /* ignore */ }
-      const existing = items.find((item) => item.sourceName === bgSourceName);
+      const bgAliases = getLegacySourceAliases(bgSourceName);
+      const existing = items.find((item) => item.sourceName === bgSourceName || bgAliases.includes(item.sourceName));
       if (existing) {
         _state.bgSources.set(bgSourceName, {
           sceneItemId: existing.sceneItemId,

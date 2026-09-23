@@ -49,6 +49,12 @@ describe("Dock Free Plan Cleanup & Source Filtering", () => {
       expect(DockObsClient.isMCESource("⚡ Quick Merge")).toBe(true);
       expect(DockObsClient.isMCESource("MV: Multiview 1")).toBe(true);
       expect(DockObsClient.isMCESource("mce lower thirds")).toBe(true);
+      expect(DockObsClient.isMCESource("Bible - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Worship - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Video - MCE Media")).toBe(true);
+      expect(DockObsClient.isMCESource("Bible - MCE Livestream Scene")).toBe(true);
+      expect(DockObsClient.isMCESource("Ticker - MCE Ticker")).toBe(true);
+      expect(DockObsClient.isMCESource("Lower Third - MCE Lower Third")).toBe(true);
     });
 
     it("does not match user-owned sources", () => {

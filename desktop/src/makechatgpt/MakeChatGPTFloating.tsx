@@ -17,6 +17,7 @@ import {
 } from "../services/voiceBibleDockInterop";
 import type { VoiceBibleSnapshot } from "../services/voiceBibleTypes";
 import { hasTauriInvoke, safeTauriListen } from "../services/tauriSafe";
+import { updateSettings } from "../multiview/mvStore";
 import "./makeChatGPT.css";
 
 export default function MakeChatGPTFloating() {
@@ -144,6 +145,8 @@ export default function MakeChatGPTFloating() {
 
   const handleHide = () => {
     setContextMenuOpen(false);
+    // Persist the preference so the icon stays hidden across app restarts
+    updateSettings({ hideFloatingIcon: true });
     void hideMakeChatGptWindow();
   };
 
