@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GALLERY_CATEGORIES, GALLERY_LAYOUTS } from "./galleryLayouts";
+import { TEMPLATE_LIBRARY } from "./templates";
 
 describe("gallery language", () => {
   it("describes source-neutral layouts instead of implying bundled cameras or logos", () => {
@@ -99,5 +100,27 @@ describe("removed templates exclusion", () => {
     expect(layoutIds).not.toContain("offering");
     expect(layoutIds).not.toContain("social-cta");
   });
-});
 
+  it("keeps retired templates out of both the app and OBS catalogs", () => {
+    const retiredIds = [
+      "worship",
+      "pre-service",
+      "baptism",
+      "funeral",
+      "worship-lyrics-full",
+      "panel-discussion",
+      "main-two-inserts",
+      "youth-game",
+      "kids-puppet",
+      "youth-service",
+    ];
+
+    const templateIds = TEMPLATE_LIBRARY.map((template) => template.id);
+    const galleryIds = GALLERY_LAYOUTS.map((layout) => layout.id);
+
+    for (const id of retiredIds) {
+      expect(templateIds).not.toContain(`tpl_${id}`);
+      expect(galleryIds).not.toContain(id);
+    }
+  });
+});

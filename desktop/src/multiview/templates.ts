@@ -1935,7 +1935,25 @@ const RAW_TEMPLATE_LIBRARY: TemplateDefinition[] = [
   // - Partner Sunday
 ];
 
+// These presets are no longer offered in either the Multi-View gallery or the
+// OBS Dock. Keep their definitions above for backwards compatibility with
+// layouts users may already have saved, but remove them from every new
+// template/catalog consumer through this shared library.
+const REMOVED_TEMPLATE_IDS = new Set([
+  "tpl_worship",
+  "tpl_pre-service",
+  "tpl_baptism",
+  "tpl_funeral",
+  "tpl_worship-lyrics-full",
+  "tpl_panel-discussion",
+  "tpl_main-two-inserts",
+  "tpl_youth-game",
+  "tpl_kids-puppet",
+  "tpl_youth-service",
+]);
+
 export const TEMPLATE_LIBRARY: TemplateDefinition[] = RAW_TEMPLATE_LIBRARY.filter((template) =>
+  !REMOVED_TEMPLATE_IDS.has(template.id) &&
   !template.tags.some((tag) => tag.toLowerCase() === "lower-third") &&
   !/lower\s+third/i.test(template.name) &&
   !/lower-third/i.test(template.description),
