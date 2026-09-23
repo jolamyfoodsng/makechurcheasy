@@ -7450,7 +7450,26 @@ body.dock-modal-open {
 }
 
 .dock-notes-text-tools--editor {
+  display: flex;
+  width: 100%;
   margin: -2px 0 2px;
+  box-sizing: border-box;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__autosplit {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__autosplit .dock-notes-text-tools__btn {
+  width: 100%;
 }
 
 .dock-notes-text-tools__btn {
@@ -10087,6 +10106,7 @@ body.dock-modal-open {
 /* ── Lyrics toolbar ── */
 .dock-lyrics-toolbar {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: flex-start;
@@ -10097,6 +10117,7 @@ body.dock-modal-open {
   border: 1px solid var(--dock-border-soft, #334155);
   border-radius: 10px;
   background: var(--dock-surface-alt, #1F2937);
+  box-sizing: border-box;
 }
 
 .dock-lyrics-toolbar__actions {
@@ -10263,6 +10284,57 @@ body.dock-modal-open {
 .dock-lyrics-toolbar__btn--case:hover {
   background: var(--dock-surface-hover, #334155);
   color: var(--dock-text, #F8FAFC);
+}
+
+/* ── Lyrics toolbar row layouts ── */
+.dock-lyrics-toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.dock-lyrics-toolbar__row--actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.dock-lyrics-toolbar__row--actions > .dock-lyrics-toolbar__btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.dock-lyrics-toolbar__row--layout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-worship-lines-control {
+  flex: 1 1 140px;
+  min-width: 0;
+  width: auto;
+  justify-content: space-between;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-lyrics-toolbar__group {
+  flex: 1 1 100px;
+  min-width: 90px;
+  width: auto;
+  display: flex;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-lyrics-toolbar__group > .dock-lyrics-toolbar__btn--case {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  text-align: center;
+  padding: 0;
 }
 
 /* ── Autosplit popover ── */
@@ -11815,7 +11887,8 @@ body.dock-modal-open {
 .dock-bible-chapter-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 4px 8px;
   background: var(--dock-surface);
   position: relative;
@@ -11826,6 +11899,21 @@ body.dock-modal-open {
 .dock-bible-chapter-bar:has(.dock-bible-picker-popover),
 .dock-bible-chapter-bar--picker-open {
   z-index: 10005;
+}
+
+.dock-bible-chapter-bar__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  max-width: 320px;
+}
+
+.dock-bible-chapter-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .dock-bible-chapter-bar__btn {
@@ -11854,11 +11942,21 @@ body.dock-modal-open {
   cursor: not-allowed;
 }
 
+.dock-bible-chapter-bar__history-btn {
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dock-bible-chapter-bar__history-btn:hover {
+  color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #C56F4D);
+}
+
 .dock-bible-chapter-trigger {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 1;
+  max-width: 260px;
   height: 28px;
   padding: 0 8px;
   gap: 4px;
@@ -11880,6 +11978,24 @@ body.dock-modal-open {
 .dock-bible-chapter-trigger__text {
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* ── When placed at bottom ── */
+.dock-bible-chapter-bar--bottom {
+  border-top: 1px solid var(--dock-border, #334155);
+}
+
+.dock-bible-chapter-bar--bottom .dock-bible-picker-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
+  box-shadow: 0 -16px 36px rgba(0, 0, 0, 0.75);
+}
+
+.dock-bible-chapter-bar--bottom .dock-bible-picker-popover::before {
+  top: auto;
+  bottom: -6px;
+  border-bottom: none;
+  border-top: 6px solid #141720;
 }
 
 /* ── Floating Book & Chapter Dropdown ── */
@@ -12772,14 +12888,14 @@ body.dock-modal-open {
 .dock-vertical-nav {
   display: flex;
   flex-direction: column;
-  width: 54px;
+  width: 40px;
   flex-shrink: 0;
   background: var(--dock-surface);
   border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 5px;
-  gap: 8px;
+  padding: 6px 3px;
+  gap: 6px;
   transition: width 0.2s ease, opacity 0.2s ease;
 }
 
@@ -12787,15 +12903,15 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
-  min-height: 42px;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
   margin: 0 auto;
   padding: 0;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--dock-text-dim);
   cursor: pointer;
@@ -17930,11 +18046,10 @@ body.dock-modal-open {
 /* Quick Edit / Background Picker opens at 90% of the browser width. Keep the
    small-screen guard so the modal still fits beside the backdrop padding. */
 .dtb-studio__modal--picker {
-  --dtb-studio-width: min(calc(90vw / var(--dock-font-scale, 1)),
-      calc((100vw - 24px) / var(--dock-font-scale, 1)));
-  --dtb-studio-width: min(calc(90dvw / var(--dock-font-scale, 1)),
-      calc((100dvw - 24px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(420px, calc((100vw - 24px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(420px, calc((100dvw - 24px) / var(--dock-font-scale, 1)));
   width: var(--dtb-studio-width);
+  max-width: 440px;
 }
 
 /* Header — fixed at top */
@@ -18519,7 +18634,7 @@ body.dock-modal-open {
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--dock-accent-hover, var(--dock-text));
+  color: var(--dock-text, #f7f4f8);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -23464,12 +23579,20 @@ body.dock-modal-open {
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--dock-border-soft);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dock-media-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dock-media-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 12px;
   border: none;
   border-bottom: 2px solid transparent;
@@ -23480,6 +23603,7 @@ body.dock-modal-open {
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
   margin-bottom: -1px;
 }
 
@@ -23511,14 +23635,20 @@ body.dock-modal-open {
   opacity: 0.55;
 }
 
-/* Compact mode: icon-only tabs, tighter spacing */
+/* Compact mode: maintain readable text with tighter padding */
 .dock-media-tabs--compact {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .dock-media-tabs--compact .dock-media-tab {
-  padding: 8px 8px;
+  padding: 6px 8px;
+  font-size: 11px;
   gap: 4px;
+}
+
+.dock-media-tabs--compact .dock-media-tab__count {
+  font-size: 10px;
+  opacity: 0.55;
 }
 
 /* ── Search Bar ── */
@@ -32807,6 +32937,193 @@ body.dock-modal-open {
   border-color: var(--dock-border-active);
 }
 
+.dock-mv-property__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-property__reload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dock-text-muted, #94A3B8);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.dock-mv-property__reload-btn:hover:not(:disabled) {
+  color: var(--dock-text, #F8FAFC);
+  background: var(--dock-surface, rgba(255, 255, 255, 0.08));
+}
+
+.dock-mv-property__reload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dock-mv-template-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dock-mv-template-trigger--open {
+  border-color: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-trigger__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-template-trigger__label--empty {
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-trigger__chevron {
+  flex-shrink: 0;
+  color: var(--dock-text-muted, #94A3B8);
+  margin-left: 4px;
+}
+
+/* ── Multi-View Template Dropdown Menu (Portal) ── */
+.dock-mv-template-dropdown {
+  position: fixed;
+  z-index: 10000;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--dock-bg, #0F172A);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-mv-template-dropdown__action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px 8px;
+}
+
+.dock-mv-template-dropdown__count {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-dropdown__action-reload {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface, #1E293B);
+  color: var(--dock-text, #F8FAFC);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dock-mv-template-dropdown__action-reload:hover:not(:disabled) {
+  background: var(--dock-surface-alt, #334155);
+  border-color: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-dropdown__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-mv-template-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dock-text, #F8FAFC);
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.dock-mv-template-item:hover {
+  background: var(--dock-primary-muted, rgba(99, 102, 241, 0.25));
+}
+
+.dock-mv-template-item--selected {
+  font-weight: 500;
+  color: var(--dock-primary-hover, #A5B4FC);
+}
+
+.dock-mv-template-item__check {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--dock-primary-hover, #A5B4FC);
+}
+
+.dock-mv-template-item__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-template-item__name--muted {
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-item__delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dock-text-muted, #94A3B8);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-mv-template-item:hover .dock-mv-template-item__delete-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dock-mv-template-item__delete-btn:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.18);
+}
+
 /* ── Multi-View Margin Section & Affect Background ── */
 .dock-mv-margin-section {
   margin-top: 10px;
@@ -38692,7 +39009,8 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-animation-tile:hover .dock-animation-tile__dl-btn,
-.dock-animation-tile--downloaded .dock-animation-tile__dl-btn {
+.dock-animation-tile--downloaded .dock-animation-tile__dl-btn,
+.dock-animation-tile--downloading .dock-animation-tile__dl-btn {
   opacity: 1;
 }
 
@@ -38747,6 +39065,159 @@ button.dock-btm-toolbar__clear--inline,
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+.dock-animation-tile--downloading {
+  border-color: color-mix(in srgb, var(--dock-accent) 70%, var(--dock-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 40%, transparent);
+}
+
+.dock-animation-tile__thumb--clickable {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.dock-animation-tile__thumb--clickable:focus-visible {
+  outline: 2px solid var(--dock-accent);
+  outline-offset: -2px;
+}
+
+.dock-animation-tile__download-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  color: #fff;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dock-animation-tile:hover .dock-animation-tile__download-hint {
+  opacity: 1;
+}
+
+.dock-animation-tile__download-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.dock-animation-tile__download-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(10, 14, 22, 0.82);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  pointer-events: none;
+}
+
+.dock-animation-tile__progress-ring-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-animation-tile__progress-ring {
+  transform: rotate(-90deg);
+  width: 44px;
+  height: 44px;
+}
+
+.dock-animation-tile__progress-ring-bg {
+  stroke: rgba(255, 255, 255, 0.15);
+}
+
+.dock-animation-tile__progress-ring-bar {
+  stroke: var(--dock-accent, #3b82f6);
+  transition: stroke-dasharray 0.15s ease-out;
+  stroke-linecap: round;
+}
+
+.dock-animation-tile__progress-ring-bar--indeterminate {
+  animation: dock-progress-spin 1.2s linear infinite;
+  transform-origin: center;
+}
+
+.dock-animation-tile__progress-ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.dock-animation-tile__download-status {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dock-animation-tile__progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.dock-animation-tile__progress-fill {
+  height: 100%;
+  background: var(--dock-accent, #3b82f6);
+  transition: width 0.15s ease-out;
+}
+
+.dock-animation-tile__progress-fill--indeterminate {
+  width: 35% !important;
+  animation: dock-progress-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes dock-progress-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes dock-progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(180%); }
+  100% { transform: translateX(400%); }
 }
 
 .dock-media-add-modal__pane--template .dock-animation-grid {
@@ -40572,66 +41043,367 @@ button.dock-btm-toolbar__clear--inline,
   opacity: 0.48;
 }
 
-/* The active Bible/Reference text sub-tab needs a clear selected state. */
-.dtb-bg-picker__subtab--active {
-  background: color-mix(in srgb, var(--dock-accent, #1D4ED8) 28%, var(--dock-surface-1, #334155));
-  color: var(--dock-text, #F8FAFC);
-  box-shadow: inset 0 -2px 0 var(--dock-accent, #1D4ED8);
-  font-weight: 700;
+/* ===================================================================
+   Quick Settings Modal & Typography Redesign
+   =================================================================== */
+
+:root {
+  --qs-bg: #18151d;
+  --qs-panel: #211c26;
+  --qs-panel-2: #28222c;
+  --qs-border: rgba(255, 255, 255, 0.08);
+  --qs-text: #f7f4f8;
+  --qs-text-muted: #8e8896;
+  --qs-accent: #f05a16;
+  --qs-accent-soft: rgba(240, 90, 22, 0.12);
+  --qs-accent-border: rgba(240, 90, 22, 0.45);
 }
 
-.dtb-bg-picker__subtab--active:hover {
-  background: color-mix(in srgb, var(--dock-accent, #1D4ED8) 34%, var(--dock-surface-1, #334155));
+.dtb-studio__modal--picker {
+  background: var(--qs-bg, #18151d);
+  border: 1px solid var(--qs-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
-/* Color fields use a label above one large, directly clickable swatch. */
-.dtb-color-picker-card {
+.dtb-studio__modal--picker .dtb-studio__header {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--qs-bg, #18151d);
+  border-bottom: 1px solid var(--qs-border);
+  min-height: 52px;
+  flex-shrink: 0;
 }
 
-.dtb-color-picker-card__label {
-  color: var(--dock-text-secondary, #CBD5E1);
-  font-size: 10px;
-  font-weight: 650;
+.dtb-studio__header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dtb-studio__modal--picker .dtb-studio__header-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.dtb-studio__header-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--qs-text-muted, #8e8896);
   line-height: 1.2;
 }
 
-.dtb-color-inline__trigger--card {
-  min-height: 40px;
+.dtb-studio__modal--picker .dtb-studio__close--strong {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a39ca9;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dtb-studio__modal--picker .dtb-studio__close--strong:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* Primary Tabs (Text, Layout, Background) */
+.dtb-studio__modal--picker .dtb-bg-picker__tabs {
+  display: flex;
+  gap: 4px;
   padding: 4px;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  margin-bottom: 0;
 }
 
-.dtb-color-inline__trigger--card:hover {
-  transform: none;
+.dtb-studio__modal--picker .dtb-bg-picker__tab {
+  flex: 1;
+  min-height: 32px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qs-text-muted, #8e8896);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.dtb-color-inline__card-swatch {
-  display: block;
-  width: 100%;
+.dtb-studio__modal--picker .dtb-bg-picker__tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab--active {
+  background: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+  font-weight: 650;
+  box-shadow: 0 2px 8px rgba(240, 90, 22, 0.35);
+}
+
+/* Secondary Selector: Subtabs (All, Bible, Reference) */
+.dtb-bg-picker__subtabs {
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.dtb-bg-picker__subtab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 30px;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 80%, transparent);
-  border-radius: 2px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--qs-text-muted, #8e8896);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.dtb-colors__ref-bg-header:not(.dtb-colors__ref-bg-header--toggle-only) {
+.dtb-bg-picker__subtab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dtb-bg-picker__subtab--active {
+  background: var(--qs-accent-soft, rgba(240, 90, 22, 0.12)) !important;
+  border: 1px solid var(--qs-accent-border, rgba(240, 90, 22, 0.45)) !important;
+  color: #ffffff !important;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.dtb-bg-picker__subtab--active:hover {
+  background: rgba(240, 90, 22, 0.18) !important;
+  border-color: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+}
+
+/* Control Cards in Picker */
+.dtb-studio__modal--picker .dtb-bg-picker {
+  padding: 14px 16px 8px 16px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__scroll {
+  gap: 10px;
+  padding-right: 2px;
+  padding-bottom: 8px;
+}
+
+.dtb-studio__modal--picker .dtb-control-section,
+.dtb-control-card {
+  background: var(--qs-panel, #211c26);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 9px;
+  gap: 10px;
+  margin-top: 0;
+  border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
 }
 
-.dtb-colors__ref-bg-color-card {
-  width: 100%;
+.dtb-control-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.dtb-control-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2dde6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.dtb-control-section__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qs-text-muted, #8e8896);
+  font-size: 13px;
+}
+
+.dtb-control-section--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* 2-Column Grid Row */
+.dtb-typography-control-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
 }
 
 .dtb-typography-control-row--selects {
   align-items: end;
 }
 
+/* Color Picker Card & Swatch */
+.dtb-color-picker-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dtb-color-picker-card__label {
+  color: var(--qs-text-muted, #8e8896);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.dtb-color-inline__trigger--card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 4px 6px !important;
+  border-radius: 6px !important;
+  background: var(--qs-panel-2, #28222c) !important;
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08)) !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, background 0.15s ease !important;
+}
+
+.dtb-color-inline__trigger--card:hover {
+  transform: none !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.dtb-color-inline__card-inner {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  height: 100% !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.dtb-color-inline__card-swatch {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  border-radius: 4px !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-sizing: border-box !important;
+}
+
+.dtb-color-inline__card-divider {
+  display: block !important;
+  width: 1px !important;
+  height: 18px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  flex-shrink: 0 !important;
+}
+
+.dtb-color-inline__card-wheel {
+  display: block !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  border-radius: 50% !important;
+  background: conic-gradient(from 90deg, #ff0000, #ff8800, #ffff00, #00ff00, #00ffff, #0000ff, #8800ff, #ff00ff, #ff0000) !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  box-sizing: border-box !important;
+}
+
+/* Stepper & Slider Field Styling in Quick Settings */
+.dtb-studio__modal--picker .dtb-slider-field {
+  gap: 4px;
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__head {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--qs-text-muted, #8e8896);
+  line-height: 1.2;
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__stepper {
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  background: var(--qs-panel-2, #28222c);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__stepper:focus-within {
+  border-color: rgba(240, 90, 22, 0.55);
+  box-shadow: 0 0 0 1px rgba(240, 90, 22, 0.25);
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__step-button {
+  width: 32px;
+  min-width: 32px;
+  height: 34px;
+  color: var(--qs-text-muted, #8e8896);
+  font-size: 16px;
+  font-weight: 400;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__step-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.dtb-studio__modal--picker .dtb-slider-field__number {
+  height: 34px;
+  color: var(--qs-text, #f7f4f8) !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Compact Select Dropdowns */
 .dtb-compact-select-field {
   display: flex;
   min-width: 0;
@@ -40639,22 +41411,283 @@ button.dock-btm-toolbar__clear--inline,
   gap: 4px;
 }
 
+.dtb-compact-select-field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
 .dtb-compact-select-field__select {
   width: 100%;
   min-width: 0;
-  min-height: 30px;
-  padding: 4px 24px 4px 8px;
-  border: 1px solid var(--dock-border);
-  border-radius: 4px;
-  background: var(--dock-input-bg, var(--dock-surface-1));
-  color: var(--dock-text, #F8FAFC);
+  height: 34px;
+  min-height: 34px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  background: var(--qs-panel-2, #28222c);
+  color: var(--qs-text, #f7f4f8);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.dtb-compact-select-field__select:hover {
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .dtb-compact-select-field__select:focus-visible {
-  outline: 1px solid var(--dock-accent, #1D4ED8);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--qs-accent-border, rgba(240, 90, 22, 0.6));
+  box-shadow: 0 0 0 1px rgba(240, 90, 22, 0.25);
+}
+
+.dtb-compact-select-field__chevron {
+  position: absolute;
+  right: 8px;
+  pointer-events: none;
+  color: var(--qs-text-muted, #8e8896);
+}
+
+/* Effects Section */
+.dtb-effects-main-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.dtb-effects-thickness-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dtb-effects-thickness-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+}
+
+.dtb-effects-thickness-row .dtb-slider {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.dtb-slider-field__stepper--mini {
+  width: 78px;
+  flex-shrink: 0;
+  height: 30px;
+  min-height: 30px;
+  border-radius: 5px;
+}
+
+.dtb-slider-field__stepper--mini .dtb-slider-field__step-button {
+  width: 24px;
+  min-width: 24px;
+  height: 30px;
+  font-size: 14px;
+}
+
+.dtb-slider-field__stepper--mini .dtb-slider-field__number {
+  height: 30px;
+  font-size: 11px;
+}
+
+/* Reference Display: 3 Selectable Cards */
+.qs-choice-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.qs-choice-card {
+  background: var(--qs-panel-2, #28222c);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 10px 6px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+}
+
+.qs-choice-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.qs-choice-card--active {
+  border: 1px solid var(--qs-accent, #f05a16) !important;
+  background: var(--qs-accent-soft, rgba(240, 90, 22, 0.12)) !important;
+}
+
+.qs-choice-card__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qs-text, #f7f4f8);
+}
+
+.qs-choice-card__subtitle {
+  font-size: 10px;
+  color: var(--qs-text-muted, #8e8896);
+}
+
+.qs-choice-card--active .qs-choice-card__title {
+  color: #ffffff;
+}
+
+.qs-choice-card--active .qs-choice-card__subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Toggle Row (Show Bible Version) */
+.qs-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--qs-panel-2, #28222c);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.06));
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.qs-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qs-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qs-text, #f7f4f8);
+}
+
+.qs-toggle-hint {
+  font-size: 10.5px;
+  color: var(--qs-text-muted, #8e8896);
+  line-height: 1.25;
+}
+
+/* Collapsible Accordion: More Options */
+.dtb-more-options-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 2px;
+}
+
+.dtb-more-options-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--qs-panel, #211c26);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  color: #c2bcc8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dtb-more-options-header:hover {
+  background: var(--qs-panel-2, #28222c);
+  color: #ffffff;
+}
+
+.dtb-more-options-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dtb-more-options-body {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--qs-panel, #211c26);
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Sticky Footer in Quick Settings Modal */
+.dtb-studio__modal--picker .dtb-studio__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  background: var(--qs-bg, #18151d);
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--reset {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--qs-panel-2, #28222c);
+  color: #e2dde6;
+  gap: 6px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--reset:hover {
+  background: #322b37;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--save {
+  border: 1px solid var(--qs-accent, #f05a16);
+  background: var(--qs-accent, #f05a16);
+  color: #ffffff;
+  font-weight: 650;
+  box-shadow: 0 2px 10px rgba(240, 90, 22, 0.35);
+  gap: 6px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--save:hover {
+  background: #e04f0f;
+  border-color: #e04f0f;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--save:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ===================================================================

@@ -43,7 +43,6 @@ import {
   getConceptVerses,
 } from "../../bible/scriptureReranker";
 import { BibleDockContainer } from "../components/BibleDockUI";
-import LoadingScreen from "../../components/LoadingScreen";
 import DockThemeSettingsModal, {
   type DockThemeSceneProfile,
   type DockThemeSettingsSaveContext,
@@ -145,6 +144,32 @@ import {
   type ComparePassagePreview,
   type ParsedBiblePassageReference,
 } from "../bibleMultiPassage";
+
+const DOCK_CACHED_TRANSLATIONS_KEY = "__mce_dock_cached_translations_v1";
+
+function readCachedTranslations(): BibleTranslationOption[] {
+  if (typeof localStorage === "undefined") return [DEFAULT_INSTALLED_TRANSLATION_OPTION];
+  try {
+    const raw = localStorage.getItem(DOCK_CACHED_TRANSLATIONS_KEY);
+    if (!raw) return [DEFAULT_INSTALLED_TRANSLATION_OPTION];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed as BibleTranslationOption[];
+    }
+  } catch {
+    // Ignore cache parse errors.
+  }
+  return [DEFAULT_INSTALLED_TRANSLATION_OPTION];
+}
+
+function writeCachedTranslations(options: BibleTranslationOption[]): void {
+  if (typeof localStorage === "undefined" || options.length === 0) return;
+  try {
+    localStorage.setItem(DOCK_CACHED_TRANSLATIONS_KEY, JSON.stringify(options));
+  } catch {
+    // Ignore storage quota or restricted environment errors.
+  }
+}
 
 const BIBLE_BOOK_ORDER = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -1592,13 +1617,12 @@ function DockBibleTab({
     initialPrefs.comparePassageNavigation === "independent" ? "independent" : "linked",
   );
   const [activeComparePassageIndex, setActiveComparePassageIndex] = useState(0);
-  // Start with the bundled translation only. Saved comparison preferences are
-  // not evidence that a translation is still installed.
-  const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationOption[]>([
-    DEFAULT_INSTALLED_TRANSLATION_OPTION,
-  ]);
-  const [translationsLoaded, setTranslationsLoaded] = useState(false);
-  const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  // Start with cached translations or bundled fallback for instant first paint.
+  const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationOption[]>(() =>
+    readCachedTranslations(),
+  );
+  const [translationsLoaded, setTranslationsLoaded] = useState(true);
+  const [preferencesHydrated, setPreferencesHydrated] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [keywordActionResult, setKeywordActionResult] = useState<Extract<DockBibleSearchOption, { kind: "keyword" | "concept" }> | null>(null);
@@ -1635,7 +1659,16 @@ function DockBibleTab({
   );
   const [, setLiveTranscriptWords] = useState<LiveTranscriptWordChip[]>([]);
   const [modeMorphing] = useState(false);
-  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsedState] = useState(
+    () => readNativeDockSetting<boolean>("ocs-dock-bible-toolbar-collapsed") === true,
+  );
+  const setToolbarCollapsed = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    setToolbarCollapsedState((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      writeNativeDockSetting("ocs-dock-bible-toolbar-collapsed", resolved);
+      return resolved;
+    });
+  }, []);
   const [actionError, setActionError] = useState("");
   const [backgroundPreset, setBackgroundPreset] = useState<DockBackgroundPreset>(
     initialPrefs.backgroundPreset ?? "theme",
@@ -2097,7 +2130,6 @@ function DockBibleTab({
 
   useEffect(() => {
     prefsReadyRef.current = false;
-    setPreferencesHydrated(false);
     let cancelled = false;
     const hydratePreferences = async () => {
       // Read IndexedDB before marking the component ready. This prevents the
@@ -2305,7 +2337,9 @@ function DockBibleTab({
         const { getInstalledTranslations } = await import("../../bible/bibleDb");
         const installed = await getInstalledTranslations();
         if (installed.length === 0) return false;
-        setAvailableTranslations(buildInstalledTranslationOptions(installed));
+        const options = buildInstalledTranslationOptions(installed);
+        setAvailableTranslations(options);
+        writeCachedTranslations(options);
         return true;
       } catch {
         return false;
@@ -2332,7 +2366,9 @@ function DockBibleTab({
       if (remote.ok) {
         const payload = await remote.json() as Array<{ abbr?: string; name?: string; language?: string }>;
         if (Array.isArray(payload)) {
-          setAvailableTranslations(buildInstalledTranslationOptions(payload));
+          const options = buildInstalledTranslationOptions(payload);
+          setAvailableTranslations(options);
+          writeCachedTranslations(options);
           return;
         }
       }
@@ -2341,18 +2377,17 @@ function DockBibleTab({
     }
 
     if (!(await loadLocalTranslations())) {
-      setAvailableTranslations([DEFAULT_INSTALLED_TRANSLATION_OPTION]);
+      setAvailableTranslations((current) => (current.length > 0 ? current : [DEFAULT_INSTALLED_TRANSLATION_OPTION]));
     }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setTranslationsLoaded(false);
     const timer = window.setTimeout(() => {
       void loadTranslations()
         .catch(() => {
           if (!cancelled) {
-            setAvailableTranslations([DEFAULT_INSTALLED_TRANSLATION_OPTION]);
+            setAvailableTranslations((current) => (current.length > 0 ? current : [DEFAULT_INSTALLED_TRANSLATION_OPTION]));
           }
         })
         .finally(() => {
@@ -5054,9 +5089,38 @@ function DockBibleTab({
     void postVoiceBibleDockCommand(command).catch(() => { });
   }, []);
 
-  // Preload search index in memory so search is instantaneous
-  useEffect(() => {
+  const ensureSearchIndexPreloaded = useCallback(() => {
     void preloadBibleSearch(activeBibleSearchTranslation).catch(() => { });
+  }, [activeBibleSearchTranslation]);
+
+  // Preload search index in memory during idle time so mount remains smooth and instantaneous
+  useEffect(() => {
+    let cancelled = false;
+    let handle: number | ReturnType<typeof setTimeout> | null = null;
+
+    const run = () => {
+      if (!cancelled) {
+        void preloadBibleSearch(activeBibleSearchTranslation).catch(() => { });
+      }
+    };
+
+    const win = typeof window !== "undefined" ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === "function") {
+      handle = win.requestIdleCallback(run, { timeout: 2500 });
+    } else {
+      handle = setTimeout(run, 1500);
+    }
+
+    return () => {
+      cancelled = true;
+      if (handle !== null) {
+        if (win && typeof win.cancelIdleCallback === "function" && typeof handle === "number") {
+          win.cancelIdleCallback(handle);
+        } else {
+          clearTimeout(handle);
+        }
+      }
+    };
   }, [activeBibleSearchTranslation]);
 
   // ── Smart search results (Instant: evaluates in < 0.0001s on every keystroke) ──
@@ -5290,12 +5354,13 @@ function DockBibleTab({
 
   // ── Search change handler ──
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    ensureSearchIndexPreloaded();
     const val = e.target.value;
     setSearchQuery(val);
     setShowDropdown(val.trim().length > 0);
     setShowRecentSearches(val.trim().length === 0 && hasSavedSearches);
     setActiveIdx(-1);
-  }, [hasSavedSearches]);
+  }, [ensureSearchIndexPreloaded, hasSavedSearches]);
 
   // ── Pick a search result ──
   const handlePickResult = useCallback(
@@ -6720,15 +6785,161 @@ function DockBibleTab({
     );
   };
 
-  if (!preferencesHydrated || !translationsLoaded) {
-    return (
-      <LoadingScreen
-        variant="dock"
-        label="Loading saved Bible settings…"
-        className="dock-tab-loading"
-      />
-    );
-  }
+  const renderChapterBar = () => (
+    <div
+      className={`dock-bible-chapter-bar${showChapterPicker ? " dock-bible-chapter-bar--picker-open" : ""}${searchPlacement === "bottom" ? " dock-bible-chapter-bar--bottom" : ""}`}
+      ref={chapterPickerRef}
+    >
+      <div className="dock-bible-chapter-bar__nav">
+        <button
+          type="button"
+          className="dock-bible-reader__chapter-nav-btn dock-bible-chapter-bar__btn"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleChapterJump(-1);
+          }}
+          disabled={!canGoPreviousChapter}
+          title={t("bible.previousChapter", "Previous chapter")}
+          aria-label={t("bible.previousChapter", "Previous chapter")}
+        >
+          <Icon name="chevron_left" size={13} />
+        </button>
+
+        <button
+          type="button"
+          className="dock-bible-chapter-trigger"
+          onClick={() => {
+            setShowChapterPicker((prev) => {
+              const next = !prev;
+              if (next) {
+                setChapterPickerSearch("");
+                setPreviewPickerBook(selectedBook || "Genesis");
+                setPickerTab("book");
+              }
+              return next;
+            });
+          }}
+          aria-expanded={showChapterPicker}
+          aria-haspopup="dialog"
+          title={`${selectedBook || "Genesis"} ${selectedChapter || 1}`}
+        >
+          <span className="dock-bible-chapter-trigger__text">
+            {selectedBook || "Genesis"} {selectedChapter || 1}
+          </span>
+          <Icon name={showChapterPicker ? "arrow_drop_up" : "arrow_drop_down"} size={13} />
+        </button>
+
+        <button
+          type="button"
+          className="dock-bible-reader__chapter-nav-btn dock-bible-chapter-bar__btn"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleChapterJump(1);
+          }}
+          disabled={!canGoNextChapter}
+          title={t("bible.nextChapter", "Next chapter")}
+          aria-label={t("bible.nextChapter", "Next chapter")}
+        >
+          <Icon name="chevron_right" size={13} />
+        </button>
+      </div>
+
+      <div className="dock-bible-chapter-bar__actions">
+        <button
+          type="button"
+          className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__history-btn"
+          onClick={() => setShowBibleHistory(true)}
+          title={t("bibleHistory.title", "Bible History")}
+          aria-label={t("bibleHistory.title", "Bible History")}
+        >
+          <Icon name="history" size={15} />
+        </button>
+      </div>
+
+      {/* Floating Dropdown Panel */}
+      {showChapterPicker && (
+        <div className="dock-bible-picker-popover" role="dialog" aria-label={t("bible.selectBookAndChapter", "Select book and chapter")}>
+          <div className="dock-bible-picker-tabs">
+            <button
+              type="button"
+              className={`dock-bible-picker-tab-btn${pickerTab === "book" ? " dock-bible-picker-tab-btn--active" : ""}`}
+              onClick={() => setPickerTab("book")}
+            >
+              {t("bible.booksTab", "Books")} ({previewPickerBook})
+            </button>
+            <button
+              type="button"
+              className={`dock-bible-picker-tab-btn${pickerTab === "chapter" ? " dock-bible-picker-tab-btn--active" : ""}`}
+              onClick={() => setPickerTab("chapter")}
+            >
+              {t("bible.chaptersTab", "Chapters")}
+            </button>
+          </div>
+
+          {pickerTab === "book" ? (
+            <>
+              <div className="dock-bible-picker-search">
+                <Icon name="search" size={13} style={{ opacity: 0.6 }} />
+                <input
+                  type="text"
+                  placeholder={t("bible.searchBook", "Search book...")}
+                  value={chapterPickerSearch}
+                  onChange={(e) => setChapterPickerSearch(e.target.value)}
+                  autoFocus
+                />
+                {chapterPickerSearch && (
+                  <button
+                    type="button"
+                    style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0 }}
+                    onClick={() => setChapterPickerSearch("")}
+                    aria-label={t("common.clear")}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                )}
+              </div>
+
+              <div className="dock-bible-picker-books-grid">
+                {filteredPickerBooks.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    className={`dock-bible-picker-book-btn${previewPickerBook === b ? " dock-bible-picker-book-btn--active" : ""}`}
+                    onClick={() => {
+                      setPreviewPickerBook(b);
+                      setPickerTab("chapter");
+                    }}
+                    title={b}
+                  >
+                    {getBookInitials(b)}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="dock-bible-picker-chapters-grid">
+              {Array.from({ length: previewBookChapterCount }, (_, i) => i + 1).map((ch) => (
+                <button
+                  key={ch}
+                  type="button"
+                  className={`dock-bible-picker-chapter-btn${previewPickerBook === selectedBook && ch === selectedChapter ? " dock-bible-picker-chapter-btn--active" : ""}`}
+                  onClick={() => {
+                    handlePickerSelectChapter(previewPickerBook, ch);
+                    setPickerTab("book");
+                  }}
+                  title={`${previewPickerBook} ${ch}`}
+                >
+                  {ch}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <BibleDockContainer
@@ -6980,6 +7191,7 @@ function DockBibleTab({
                 onKeyDown={handleSearchKeyDown}
                 onKeyUp={handleSearchKeyUp}
                 onFocus={() => {
+                  ensureSearchIndexPreloaded();
                   if (searchQuery.trim()) setShowDropdown(true);
                   else {
                     const nextFavoriteHistorySearches = getFavoriteBibleHistoryItems();
@@ -7110,142 +7322,7 @@ function DockBibleTab({
             data-toolbar-collapsed={toolbarCollapsed || undefined}
           >
             {/* ── Compact Chapter Navigation Row (Row 2) ── */}
-            <div className={`dock-bible-chapter-bar${showChapterPicker ? " dock-bible-chapter-bar--picker-open" : ""}`} ref={chapterPickerRef}>
-              <button
-                type="button"
-                className="dock-bible-reader__chapter-nav-btn dock-bible-chapter-bar__btn"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleChapterJump(-1);
-                }}
-                disabled={!canGoPreviousChapter}
-                title={t("bible.previousChapter", "Previous chapter")}
-                aria-label={t("bible.previousChapter", "Previous chapter")}
-              >
-                <Icon name="chevron_left" size={13} />
-              </button>
-
-              <button
-                type="button"
-                className="dock-bible-chapter-trigger"
-                onClick={() => {
-                  setShowChapterPicker((prev) => {
-                    const next = !prev;
-                    if (next) {
-                      setChapterPickerSearch("");
-                      setPreviewPickerBook(selectedBook || "Genesis");
-                      setPickerTab("book");
-                    }
-                    return next;
-                  });
-                }}
-                aria-expanded={showChapterPicker}
-                aria-haspopup="dialog"
-                title={`${selectedBook || "Genesis"} ${selectedChapter || 1}`}
-              >
-                <span className="dock-bible-chapter-trigger__text">
-                  {selectedBook || "Genesis"} {selectedChapter || 1}
-                </span>
-                <Icon name={showChapterPicker ? "arrow_drop_up" : "arrow_drop_down"} size={13} />
-              </button>
-
-              <button
-                type="button"
-                className="dock-bible-reader__chapter-nav-btn dock-bible-chapter-bar__btn"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleChapterJump(1);
-                }}
-                disabled={!canGoNextChapter}
-                title={t("bible.nextChapter", "Next chapter")}
-                aria-label={t("bible.nextChapter", "Next chapter")}
-              >
-                <Icon name="chevron_right" size={13} />
-              </button>
-
-              {/* Floating Dropdown Panel */}
-              {showChapterPicker && (
-                <div className="dock-bible-picker-popover" role="dialog" aria-label={t("bible.selectBookAndChapter", "Select book and chapter")}>
-                  <div className="dock-bible-picker-tabs">
-                    <button
-                      type="button"
-                      className={`dock-bible-picker-tab-btn${pickerTab === "book" ? " dock-bible-picker-tab-btn--active" : ""}`}
-                      onClick={() => setPickerTab("book")}
-                    >
-                      {t("bible.booksTab", "Books")} ({previewPickerBook})
-                    </button>
-                    <button
-                      type="button"
-                      className={`dock-bible-picker-tab-btn${pickerTab === "chapter" ? " dock-bible-picker-tab-btn--active" : ""}`}
-                      onClick={() => setPickerTab("chapter")}
-                    >
-                      {t("bible.chaptersTab", "Chapters")}
-                    </button>
-                  </div>
-
-                  {pickerTab === "book" ? (
-                    <>
-                      <div className="dock-bible-picker-search">
-                        <Icon name="search" size={13} style={{ opacity: 0.6 }} />
-                        <input
-                          type="text"
-                          placeholder={t("bible.searchBook", "Search book...")}
-                          value={chapterPickerSearch}
-                          onChange={(e) => setChapterPickerSearch(e.target.value)}
-                          autoFocus
-                        />
-                        {chapterPickerSearch && (
-                          <button
-                            type="button"
-                            style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0 }}
-                            onClick={() => setChapterPickerSearch("")}
-                            aria-label={t("common.clear")}
-                          >
-                            <Icon name="close" size={12} />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="dock-bible-picker-books-grid">
-                        {filteredPickerBooks.map((b) => (
-                          <button
-                            key={b}
-                            type="button"
-                            className={`dock-bible-picker-book-btn${previewPickerBook === b ? " dock-bible-picker-book-btn--active" : ""}`}
-                            onClick={() => {
-                              setPreviewPickerBook(b);
-                              setPickerTab("chapter");
-                            }}
-                            title={b}
-                          >
-                            {getBookInitials(b)}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="dock-bible-picker-chapters-grid">
-                      {Array.from({ length: previewBookChapterCount }, (_, i) => i + 1).map((ch) => (
-                        <button
-                          key={ch}
-                          type="button"
-                          className={`dock-bible-picker-chapter-btn${previewPickerBook === selectedBook && ch === selectedChapter ? " dock-bible-picker-chapter-btn--active" : ""}`}
-                          onClick={() => {
-                            handlePickerSelectChapter(previewPickerBook, ch);
-                            setPickerTab("book");
-                          }}
-                          title={`${previewPickerBook} ${ch}`}
-                        >
-                          {ch}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            {searchPlacement !== "bottom" && renderChapterBar()}
 
             <div
               className="dock-bible-reader"
@@ -7656,6 +7733,8 @@ function DockBibleTab({
               />
             </div>
 
+            {searchPlacement === "bottom" && renderChapterBar()}
+
             {actionError && (
               <div className="dock-action-error dock-action-error--console">
                 <Icon name="warning" size={14} />
@@ -7688,6 +7767,8 @@ function DockBibleTab({
                   <span className="dock-bible-reader__quick-edit-label">{t("bible.quickEdits", "Quick Edits")}</span>
                 </button>
               }
+              onQuickEdit={() => openThemeSettings("text")}
+              quickEditLabel={t("bible.quickEdits", "Quick Edits")}
               morphing={modeMorphing}
               hideOverlayModeToggle={fullscreenOnlyMode}
               clearLabel={bibleOverlayVisible
@@ -7698,6 +7779,7 @@ function DockBibleTab({
               sourceVisible={bibleOverlayVisible}
               collapsed={toolbarCollapsed}
               onCollapseChange={setToolbarCollapsed}
+              hideCollapse={searchPlacement !== "bottom"}
               bottomPanel={bottomSearchPanel}
               bottomPanelToggle={undefined}
               children={
@@ -7943,6 +8025,31 @@ function DockBibleTab({
                 refreshFavoriteHistorySearches();
                 setShowBibleHistory(false);
                 onHistoryClose?.();
+              }}
+              onGoToChapter={(book, chapter, verse) => {
+                refreshFavoriteHistorySearches();
+                setSelectedBook(book);
+                setSelectedChapter(chapter);
+                setSelectedVerse(verse);
+                selectedVerseRef.current = verse;
+                setHighlightVerse(verse);
+                setShowBibleHistory(false);
+                onHistoryClose?.();
+              }}
+              onSendToObs={(book, chapter, verse) => {
+                refreshFavoriteHistorySearches();
+                setSelectedBook(book);
+                setSelectedChapter(chapter);
+                setSelectedVerse(verse);
+                selectedVerseRef.current = verse;
+                setHighlightVerse(verse);
+                setShowBibleHistory(false);
+                onHistoryClose?.();
+                void goLiveVerse(book, chapter, verse, {
+                  translation: activeTranslation,
+                  columnIndex: activeColumnIndex,
+                  reveal: true,
+                });
               }}
               onNavigateToVerse={(book, chapter, verse) => {
                 refreshFavoriteHistorySearches();

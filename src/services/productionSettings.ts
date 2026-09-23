@@ -325,6 +325,28 @@ function normalizeDockPayload(raw: unknown): DockProductionSettingsPayload | nul
   };
 }
 
+const DOCK_FAST_PROD_SETTINGS_KEY = "__mce_dock_fast_prod_settings_v1";
+
+export function readFastDockProductionSettings(): DockProductionSettingsPayload | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DOCK_FAST_PROD_SETTINGS_KEY);
+    if (!raw) return null;
+    return normalizeDockPayload(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function writeFastDockProductionSettings(payload: DockProductionSettingsPayload): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(DOCK_FAST_PROD_SETTINGS_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota or restricted environment errors.
+  }
+}
+
 export async function loadDockProductionSettings(): Promise<DockProductionSettingsPayload> {
   // The signed-in user's native Dock database is the source of truth. The
   // JSON file is a bootstrap fallback for an installation that has never
@@ -334,7 +356,9 @@ export async function loadDockProductionSettings(): Promise<DockProductionSettin
     await hydrateNativeDockSettings();
     const local = readLocalSettings();
     if (local) {
-      return await buildDockProductionSettingsPayload();
+      const payload = await buildDockProductionSettingsPayload();
+      writeFastDockProductionSettings(payload);
+      return payload;
     }
   } catch {
     // Fall through to the published bootstrap payload below.
@@ -345,15 +369,23 @@ export async function loadDockProductionSettings(): Promise<DockProductionSettin
     if (response.ok) {
       const raw: unknown = await response.json();
       const normalized = normalizeDockPayload(raw);
-      if (normalized) return normalized;
+      if (normalized) {
+        writeFastDockProductionSettings(normalized);
+        return normalized;
+      }
     }
   } catch {
     // Fall through to app-side resolution.
   }
 
   try {
-    return await buildDockProductionSettingsPayload();
+    const payload = await buildDockProductionSettingsPayload();
+    writeFastDockProductionSettings(payload);
+    return payload;
   } catch {
-    return getDefaultDockProductionSettings();
+    const fallback = getDefaultDockProductionSettings();
+    writeFastDockProductionSettings(fallback);
+    return fallback;
   }
 }
+

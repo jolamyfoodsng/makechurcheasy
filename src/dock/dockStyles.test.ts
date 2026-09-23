@@ -99,4 +99,18 @@ describe("dock shared styles", () => {
     expect(tab).toContain("justify-content: flex-start;");
     expect(tab).not.toContain("flex: 1 1 0");
   });
+
+  it("extends toolbar buttons to the end of the container without awkward gaps", () => {
+    const actionsBtn = cssBlock(".dock-lyrics-toolbar__row--actions > .dock-lyrics-toolbar__btn {");
+    const caseBtn = cssBlock(".dock-lyrics-toolbar__row--layout .dock-lyrics-toolbar__group > .dock-lyrics-toolbar__btn--case {");
+    const notesEditor = cssBlock(".dock-notes-text-tools--editor {");
+    const notesEditorBtn = cssBlock(".dock-notes-text-tools--editor .dock-notes-text-tools__btn {");
+
+    expect(actionsBtn).toContain("flex: 1 1 0;");
+    expect(actionsBtn).toContain("width: auto;");
+    expect(caseBtn).toContain("flex: 1 1 0;");
+    expect(notesEditor).toContain("display: flex;");
+    expect(notesEditor).toContain("width: 100%;");
+    expect(notesEditorBtn).toContain("flex: 1 1 0;");
+  });
 });

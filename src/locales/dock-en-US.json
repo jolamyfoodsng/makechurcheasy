@@ -1292,6 +1292,8 @@
   "multiview.stacked": "Stacked",
   "multiview.template": "Template",
   "multiview.templateDesc": "Choose a layout that defines the slot arrangement",
+  "multiview.reloadTemplates": "Reload templates",
+  "multiview.deleteTemplate": "Delete template",
   "multiview.textSource": "Text Source",
   "multiview.threePanel": "Three Panel",
   "multiview.title": "Multi-View",

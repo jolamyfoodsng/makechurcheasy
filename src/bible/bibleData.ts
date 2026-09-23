@@ -113,16 +113,18 @@ async function loadTranslation(t: BibleTranslation): Promise<RawBibleData> {
     // IndexedDB unavailable — fall through to bundled fallback
   }
 
-  try {
-    const remoteUrl = `${import.meta.env.BASE_URL}uploads/dock-bible-translation-${key.toLowerCase()}.json`;
-    const remoteRes = await fetch(remoteUrl);
-    if (remoteRes.ok) {
-      const remoteData: RawBibleData = await remoteRes.json();
-      translationCache.set(key, remoteData);
-      return remoteData;
+  if (key !== "KJV") {
+    try {
+      const remoteUrl = `${import.meta.env.BASE_URL}uploads/dock-bible-translation-${key.toLowerCase()}.json`;
+      const remoteRes = await fetch(remoteUrl);
+      if (remoteRes.ok) {
+        const remoteData: RawBibleData = await remoteRes.json();
+        translationCache.set(key, remoteData);
+        return remoteData;
+      }
+    } catch {
+      // Ignore remote fallback failure — continue to bundled KJV fallback.
     }
-  } catch {
-    // Ignore remote fallback failure — continue to bundled KJV fallback.
   }
 
   // Fallback: bundled KJV JSON in public/

@@ -14,6 +14,13 @@
 export type DockTab = "planner" | "bible" | "worship" | "notes" | "media" | "multiview" | "ministry";
 export type DockStageType = DockTab | "live" | "speaker" | "sermon" | "event" | "media" | "animated-lt" | "notes";
 
+/** Tabs that are unavailable once a Dock session is on the Free plan. */
+export const FREE_PLAN_HIDDEN_DOCK_TABS: readonly DockTab[] = ["ministry", "multiview"];
+
+export function isDockTabAvailableForPlan(tab: DockTab, isFreePlan: boolean): boolean {
+  return !isFreePlan || !FREE_PLAN_HIDDEN_DOCK_TABS.includes(tab);
+}
+
 export interface DockTabDef {
   id: DockTab;
   label: string;
@@ -201,4 +208,3 @@ export {
   getCanonicalVerseCount,
   isCanonicalReferenceValid,
 } from "./bibleCanon";
-

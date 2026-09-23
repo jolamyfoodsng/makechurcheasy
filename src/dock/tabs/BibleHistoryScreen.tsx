@@ -31,7 +31,9 @@ import "./BibleHistoryScreen.css";
 
 interface Props {
   onBack: () => void;
-  onNavigateToVerse: (book: string, chapter: number, verse: number) => void;
+  onNavigateToVerse?: (book: string, chapter: number, verse: number) => void;
+  onGoToChapter?: (book: string, chapter: number, verse: number) => void;
+  onSendToObs?: (book: string, chapter: number, verse: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +67,12 @@ function truncateText(text: string, max: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props) {
+export default function BibleHistoryScreen({
+  onBack,
+  onNavigateToVerse,
+  onGoToChapter,
+  onSendToObs,
+}: Props) {
   const { t } = useTranslation();
   const [allItems, setAllItems] = useState<BibleHistoryItem[]>(() => loadBibleHistory());
   const [searchQuery, setSearchQuery] = useState("");
@@ -74,6 +81,7 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showSortSheet, setShowSortSheet] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -189,12 +197,28 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
     setAllItems(updated);
   }, []);
 
-  const handleNavigate = useCallback(
+  const handleGoToChapter = useCallback(
     (item: BibleHistoryItem) => {
-      onNavigateToVerse(item.book, item.chapter, item.verse);
+      if (onGoToChapter) {
+        onGoToChapter(item.book, item.chapter, item.verse);
+      } else if (onNavigateToVerse) {
+        onNavigateToVerse(item.book, item.chapter, item.verse);
+      }
     },
-    [onNavigateToVerse],
+    [onGoToChapter, onNavigateToVerse],
   );
+
+  const handleSendToObs = useCallback(
+    (item: BibleHistoryItem) => {
+      if (onSendToObs) {
+        onSendToObs(item.book, item.chapter, item.verse);
+      } else if (onNavigateToVerse) {
+        onNavigateToVerse(item.book, item.chapter, item.verse);
+      }
+    },
+    [onSendToObs, onNavigateToVerse],
+  );
+
 
   const handleFilterSelect = useCallback((value: BibleHistoryFilter) => {
     setFilter(value);
@@ -362,44 +386,81 @@ export default function BibleHistoryScreen({ onBack, onNavigateToVerse }: Props)
           visibleGroups.map((group) => (
             <div key={group.label} className="bible-history-group">
               <div className="bible-history-group__label">{group.label}</div>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="bible-history-card"
-                  onClick={() => handleNavigate(item)}
-                  title={t("common.open", "Open")}>
-                  <div className="bible-history-card__icon" aria-hidden="true">
-                    <Icon name="menu_book" size={isShort ? 14 : 16} />
-                  </div>
-                  <div className="bible-history-card__body">
-                    <div className="bible-history-card__ref">{item.reference}</div>
-                    <div className="bible-history-card__preview">
-                      {truncateText(item.verseText, isNarrow ? 45 : 80)}
-                    </div>
-                    <div className="bible-history-card__meta">
-                      {formatTimeAgo(item.timestamp)}
-                      {item.visitCount > 1 && (
-                        <span className="bible-history-card__count">
-                          · {item.visitCount} {t("common.visits", "visits")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`bible-history-card__fav${item.isFavorite ? " bible-history-card__fav--active" : ""}`}
-                    onClick={(e) => handleToggleFavorite(e, item)}
-                    aria-label={item.isFavorite ? t("bibleHistory.removeFromFavorites", "Remove from favorites") : t("bibleHistory.addToFavorites", "Add to favorites")}
-                    title={item.isFavorite ? t("bibleHistory.removeFromFavorites", "Remove from favorites") : t("bibleHistory.addToFavorites", "Add to favorites")}
+              {group.items.map((item) => {
+                const isHovered = hoveredCardId === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    className={`bible-history-card${isHovered ? " bible-history-card--hovered" : ""}`}
+                    onMouseEnter={() => setHoveredCardId(item.id)}
+                    onMouseLeave={() => setHoveredCardId((curr) => (curr === item.id ? null : curr))}
+                    onClick={() => handleGoToChapter(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleGoToChapter(item);
+                      }
+                    }}
+                    title={t("bible.goToChapter", "Go to chapter")}
                   >
-                    <Icon name={item.isFavorite ? "star" : "star_border"} size={16} />
-                  </button>
-                  <div className="bible-history-card__chevron" aria-hidden="true">
-                    <Icon name="chevron_right" size={16} />
+                    <div className="bible-history-card__icon" aria-hidden="true">
+                      <Icon name="menu_book" size={isShort ? 14 : 16} />
+                    </div>
+                    <div className="bible-history-card__body">
+                      <div className="bible-history-card__header-row">
+                        <span className="bible-history-card__ref">{item.reference}</span>
+                        <div
+                          className="bible-history-card__actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="bible-history-card__action-btn bible-history-card__action-btn--goto"
+                            onClick={() => handleGoToChapter(item)}
+                            title={t("bible.goToChapter", "Go to chapter")}
+                            aria-label={t("bible.goToChapter", "Go to chapter")}
+                          >
+                            <Icon name="visibility" size={12} />
+                            <span>{t("bible.goToChapter", "Go to chapter")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="bible-history-card__action-btn bible-history-card__action-btn--obs"
+                            onClick={() => handleSendToObs(item)}
+                            title={t("dock.sendToObs", "Send to OBS")}
+                            aria-label={t("dock.sendToObs", "Send to OBS")}
+                          >
+                            <Icon name="cast" size={12} />
+                            <span>{t("dock.sendToObs", "Send to OBS")}</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className={`bible-history-card__preview${isHovered ? " bible-history-card__preview--full" : ""}`}>
+                        {isHovered ? item.verseText : truncateText(item.verseText, isNarrow ? 45 : 80)}
+                      </div>
+                      <div className="bible-history-card__meta">
+                        {formatTimeAgo(item.timestamp)}
+                        {item.visitCount > 1 && (
+                          <span className="bible-history-card__count">
+                            · {item.visitCount} {t("common.visits", "visits")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`bible-history-card__fav${item.isFavorite ? " bible-history-card__fav--active" : ""}`}
+                      onClick={(e) => handleToggleFavorite(e, item)}
+                      aria-label={item.isFavorite ? t("bibleHistory.removeFromFavorites", "Remove from favorites") : t("bibleHistory.addToFavorites", "Add to favorites")}
+                      title={item.isFavorite ? t("bibleHistory.removeFromFavorites", "Remove from favorites") : t("bibleHistory.addToFavorites", "Add to favorites")}
+                    >
+                      <Icon name={item.isFavorite ? "star" : "star_border"} size={16} />
+                    </button>
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           ))
         )}

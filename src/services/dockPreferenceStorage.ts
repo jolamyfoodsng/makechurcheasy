@@ -45,27 +45,80 @@ function parsePreferenceList<T>(raw: unknown): { items: T[]; timestamp: number }
   return { items: candidate.items as T[], timestamp: Number.isFinite(timestamp) ? timestamp : 0 };
 }
 
-/** Synchronous in-memory read after native Dock settings hydration. */
-export function readDockPreference<T extends PreferenceObject>(baseKey: string): T | null {
-  return parsePreference<T>(readNativeDockSetting(baseKey));
+const DOCK_FAST_PREF_PREFIX = "__mce_dock_fast_pref:";
+
+function readFastCache<T extends PreferenceObject>(baseKey: string): T | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`${DOCK_FAST_PREF_PREFIX}${baseKey}`);
+    return parsePreference<T>(raw);
+  } catch {
+    return null;
+  }
 }
 
-/** Update the native source of truth and the in-memory first-paint copy. */
+function writeFastCache<T extends PreferenceObject>(baseKey: string, value: T): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(`${DOCK_FAST_PREF_PREFIX}${baseKey}`, JSON.stringify(value));
+  } catch {
+    // Ignore storage quota or restricted environment errors.
+  }
+}
+
+function readFastCacheList<T>(baseKey: string): T[] | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`${DOCK_FAST_PREF_PREFIX}${baseKey}`);
+    return parsePreferenceList<T>(raw)?.items ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeFastCacheList<T>(baseKey: string, items: T[]): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(
+      `${DOCK_FAST_PREF_PREFIX}${baseKey}`,
+      JSON.stringify({ items, updatedAt: new Date().toISOString() }),
+    );
+  } catch {
+    // Ignore storage quota or restricted environment errors.
+  }
+}
+
+/** Synchronous in-memory read after native Dock settings hydration, with localStorage fast cache fallback. */
+export function readDockPreference<T extends PreferenceObject>(baseKey: string): T | null {
+  const fromNative = parsePreference<T>(readNativeDockSetting(baseKey));
+  if (fromNative) return fromNative;
+  return readFastCache<T>(baseKey);
+}
+
+/** Update the native source of truth, in-memory first-paint copy, and localStorage fast cache. */
 export function writeDockPreference<T extends PreferenceObject>(baseKey: string, value: T): void {
+  writeFastCache(baseKey, value);
   writeNativeDockSetting(baseKey, value);
 }
 
 export function readDockPreferenceList<T>(baseKey: string): T[] | null {
-  return parsePreferenceList<T>(readNativeDockSetting(baseKey))?.items ?? null;
+  const fromNative = parsePreferenceList<T>(readNativeDockSetting(baseKey))?.items;
+  if (fromNative) return fromNative;
+  return readFastCacheList<T>(baseKey);
 }
 
 export async function loadDockPreferenceList<T>(baseKey: string): Promise<T[] | null> {
   await hydrateNativeDockSettings().catch(() => undefined);
   const current = parsePreferenceList<T>(readNativeDockSetting(baseKey));
-  return current?.items ?? null;
+  if (current?.items) {
+    writeFastCacheList(baseKey, current.items);
+    return current.items;
+  }
+  return readFastCacheList<T>(baseKey);
 }
 
 export async function saveDockPreferenceList<T>(baseKey: string, items: T[]): Promise<void> {
+  writeFastCacheList(baseKey, items);
   await writeNativeDockSetting(baseKey, {
     items,
     updatedAt: new Date().toISOString(),
@@ -79,7 +132,10 @@ export async function loadDockPreference<T extends PreferenceObject>(
   await hydrateNativeDockSettings().catch(() => undefined);
 
   const current = parsePreference<T>(readNativeDockSetting(baseKey));
-  if (current) return current;
+  if (current) {
+    writeFastCache(baseKey, current);
+    return current;
+  }
 
   for (const legacyKey of legacyKeys) {
     const legacy = parsePreference<T>(readNativeDockSetting(legacyKey));
@@ -88,15 +144,16 @@ export async function loadDockPreference<T extends PreferenceObject>(
       ...legacy,
       updatedAt: legacy.updatedAt ?? new Date().toISOString(),
     } as T;
+    writeFastCache(baseKey, migrated);
     await writeNativeDockSetting(baseKey, migrated);
     await removeNativeDockSetting(legacyKey);
     return migrated;
   }
 
-  return null;
+  return readFastCache<T>(baseKey);
 }
 
-/** Save a preference to the native desktop database. */
+/** Save a preference to the native desktop database and synchronous fast cache. */
 export async function saveDockPreference<T extends PreferenceObject>(
   baseKey: string,
   value: T,
@@ -105,6 +162,8 @@ export async function saveDockPreference<T extends PreferenceObject>(
     ...value,
     updatedAt: value.updatedAt ?? new Date().toISOString(),
   } as T;
+  writeFastCache(baseKey, next);
   await writeNativeDockSetting(baseKey, next);
   return next;
 }
+

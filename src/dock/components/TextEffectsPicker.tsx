@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import Icon from "../DockIcon";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
 export type TextEffectId =
@@ -248,40 +249,46 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
     [applyEffectValues, bgColor, bgRoundness, blur, direction, glowColor, intensity, offset, opacity, outlineColor, shadowColor, thickness]
   );
 
+  const supportsThickness = activeEffect === "outline" || activeEffect === "splice";
+
   return (
-    <div className="dtb-effects-section" data-target={target}>
+    <div className="dtb-control-section dtb-effects-section" data-target={target}>
       <div className="dtb-control-section__head">
+        <span className="dtb-control-section__icon">
+          <Icon name="auto_awesome" size={14} />
+        </span>
         <span className="dtb-control-section__title">{t("bgPicker.effects", "Effects")}</span>
       </div>
 
-      {/* Dropdown Selector for Text Effects */}
-      <div className="dtb-effect-select-wrap">
-        <label className="dtb-compact-select-field">
-          <span className="dtb-position-label">{t("bgPicker.textEffects", "Text Effect")}</span>
-          <select
-            className="dtb-compact-select-field__select"
-            value={activeEffect}
-            onChange={(e) => handleSelectEffect(e.target.value as TextEffectId)}
-            aria-label={t("bgPicker.textEffects", "Text Effects")}
-          >
-            {TEXT_EFFECTS.map((effect) => (
-              <option key={effect.id} value={effect.id}>
-                {effect.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Contextual Sliders beneath Active Effect */}
-      {activeEffect !== "none" && (
-        <div className="dtb-effect-controls-panel">
-          {(activeEffect === "outline" || activeEffect === "splice") && (
-            <div className="dtb-effect-param-row">
-              <div className="dtb-effect-slider-header">
-                <span className="dtb-effect-slider-label">{t("bgPicker.thickness", "Thickness")}</span>
+      <div className="dtb-control-section__body">
+        <div className="dtb-effects-main-grid">
+          {/* Dropdown Selector for Text Effects */}
+          <div className="dtb-effect-select-wrap">
+            <label className="dtb-compact-select-field">
+              <span className="dtb-position-label">{t("bgPicker.textEffects", "Text Effect")}</span>
+              <div className="dtb-compact-select-field__control">
+                <select
+                  className="dtb-compact-select-field__select"
+                  value={activeEffect}
+                  onChange={(e) => handleSelectEffect(e.target.value as TextEffectId)}
+                  aria-label={t("bgPicker.textEffects", "Text Effects")}
+                >
+                  {TEXT_EFFECTS.map((effect) => (
+                    <option key={effect.id} value={effect.id}>
+                      {effect.label}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="expand_more" size={14} className="dtb-compact-select-field__chevron" />
               </div>
-              <div className="dtb-effect-slider-wrap">
+            </label>
+          </div>
+
+          {/* Contextual Thickness slider + stepper beside Text Effect */}
+          {supportsThickness && (
+            <div className="dtb-effect-param-field">
+              <span className="dtb-position-label">{t("bgPicker.thickness", "Thickness")}</span>
+              <div className="dtb-effect-slider-stepper-wrap">
                 <input
                   type="range"
                   min={1}
@@ -306,6 +313,7 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
                       bgCol: bgColor,
                     });
                   }}
+                  aria-label={t("bgPicker.thickness", "Thickness")}
                 />
                 <div className="dtb-effect-stepper">
                   <button
@@ -327,10 +335,11 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
                         bgCol: bgColor,
                       });
                     }}
+                    aria-label="Decrease thickness"
                   >
                     −
                   </button>
-                  <span>{thickness}</span>
+                  <span className="dtb-effect-stepper-value">{thickness}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -350,12 +359,20 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
                         bgCol: bgColor,
                       });
                     }}
+                    aria-label="Increase thickness"
                   >
                     +
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
 
+        {/* Contextual parameters beneath Active Effect */}
+        {activeEffect !== "none" && (
+          <div className="dtb-effect-controls-panel">
+            {supportsThickness && (
               <div className="dtb-effect-color-row">
                 <span className="dtb-effect-slider-label">{t("common.color", "Color")}</span>
                 <input
@@ -381,8 +398,7 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
                   }}
                 />
               </div>
-            </div>
-          )}
+            )}
 
           {(activeEffect === "glow" || activeEffect === "neon") && (
             <div className="dtb-effect-param-row">
@@ -838,6 +854,7 @@ export const TextEffectsPicker: React.FC<TextEffectsPickerProps> = ({
 
         </div>
       )}
+      </div>
     </div>
   );
 };

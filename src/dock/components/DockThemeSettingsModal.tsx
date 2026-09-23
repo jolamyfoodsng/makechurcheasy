@@ -335,7 +335,10 @@ export default function DockThemeSettingsModal({
           >
             {/* ── Header ── */}
             <div className="dtb-studio__header">
-              <span className="dtb-studio__header-label">{title || subtitle}</span>
+              <div className="dtb-studio__header-content">
+                <span className="dtb-studio__header-label">{title || subtitle || t("bible.quickSettings", "Quick Settings")}</span>
+                {subtitle && <span className="dtb-studio__header-subtitle">{subtitle}</span>}
+              </div>
               <button
                 type="button"
                 className="dtb-studio__close dtb-studio__close--strong"
@@ -413,16 +416,18 @@ export default function DockThemeSettingsModal({
                   type="button"
                   className="dtb-studio__footer-btn dtb-studio__footer-btn--reset"
                   onClick={handleReset}
-                  title={t('common.reset')}>
-                  {t('common.reset')}
+                  title={t('common.resetToDefault', t('common.reset', 'Reset to Default'))}>
+                  <Icon name="restart_alt" size={15} />
+                  <span>{t('common.resetToDefault', t('common.reset', 'Reset to Default'))}</span>
                 </button>
                 <button
                   type="button"
                   className="dtb-studio__footer-btn dtb-studio__footer-btn--save"
                   onClick={handleSave}
                   disabled={saving}
-                  title={t('worship.saving')}>
-                  {saving ? t('worship.saving') : t('worship.saveChanges')}
+                  title={saving ? t('worship.saving') : t('worship.saveChanges', 'Save Changes')}>
+                  <Icon name="save" size={15} />
+                  <span>{saving ? t('worship.saving') : t('worship.saveChanges', 'Save Changes')}</span>
                 </button>
               </div>
             )}

@@ -3250,9 +3250,28 @@ function DockMediaTab({
   ), [mergedLibraryItems]);
 
   const handleDownloadTemplateVideo = useCallback(async (asset: TemplateVideoAsset) => {
-    const videoCount = libraryMedia.filter((m) => m.type === "video").length;
-    if (!(await requireEntitlement("videos", videoCount))) return;
+    // Instant UI feedback: transition to downloading state immediately on click
+    setTemplateVideoProgress((current) => ({ ...current, [asset.id]: 0 }));
     setSendingFile(`template:${asset.id}`);
+
+    const videoCount = libraryMedia.filter((m) => m.type === "video").length;
+    let entitled = false;
+    try {
+      entitled = await requireEntitlement("videos", videoCount);
+    } catch {
+      entitled = false;
+    }
+
+    if (!entitled) {
+      setTemplateVideoProgress((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      setSendingFile(null);
+      return;
+    }
+
     try {
       const item = await downloadTemplateVideoToLibrary(asset, (fraction) => {
         setTemplateVideoProgress((current) => ({ ...current, [asset.id]: fraction }));
@@ -3282,9 +3301,28 @@ function DockMediaTab({
   ]);
 
   const handleDownloadTemplatePicture = useCallback(async (asset: TemplatePictureAsset) => {
-    const imageCount = libraryMedia.filter((item) => item.type === "image").length;
-    if (!(await requireEntitlement("images", imageCount))) return;
+    // Instant UI feedback: transition to downloading state immediately on click
+    setTemplatePictureProgress((current) => ({ ...current, [asset.id]: 0 }));
     setSendingFile(`template:${asset.id}`);
+
+    const imageCount = libraryMedia.filter((item) => item.type === "image").length;
+    let entitled = false;
+    try {
+      entitled = await requireEntitlement("images", imageCount);
+    } catch {
+      entitled = false;
+    }
+
+    if (!entitled) {
+      setTemplatePictureProgress((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      setSendingFile(null);
+      return;
+    }
+
     try {
       const item = await downloadTemplatePictureToLibrary(asset, (fraction) => {
         setTemplatePictureProgress((current) => ({ ...current, [asset.id]: fraction }));
@@ -3788,15 +3826,17 @@ function DockMediaTab({
 
   const renderTemplatePictureTile = (asset: TemplatePictureAsset) => {
     const downloadedItem = findDownloadedTemplatePicture(asset);
-    const downloading = templatePictureProgress[asset.id] !== undefined;
-    const progressLabel = templatePictureProgress[asset.id] == null
-      ? t('media.preparing')
-      : `${Math.round((templatePictureProgress[asset.id] || 0) * 100)}%`;
+    const progressFraction = templatePictureProgress[asset.id];
+    const downloading = progressFraction !== undefined;
+    const progressPercent = progressFraction != null ? Math.round(progressFraction * 100) : null;
+    const progressLabel = progressPercent != null
+      ? `${progressPercent}%`
+      : t('media.preparing');
 
     return (
       <div
         key={asset.id}
-        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
+        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}${downloading ? " dock-animation-tile--downloading" : ""}`}
       >
         {downloadedItem ? (
           <div
@@ -3824,11 +3864,34 @@ function DockMediaTab({
             </div>
           </div>
         ) : (
-          <div className="dock-animation-tile__thumb">
+          <div
+            className={`dock-animation-tile__thumb dock-animation-tile__thumb--clickable${downloading ? " dock-animation-tile__thumb--busy" : ""}`}
+            role="button"
+            tabIndex={downloading ? -1 : 0}
+            aria-label={downloading ? t('media.downloadingProgress', { progress: progressLabel }) : `${t('media.downloadAsset', 'Download')}: ${asset.fileName}`}
+            title={downloading ? t('media.downloadingProgress', { progress: progressLabel }) : `${t('media.downloadAsset', 'Download')}: ${asset.fileName}`}
+            onClick={() => {
+              if (!downloading) void handleDownloadTemplatePicture(asset);
+            }}
+            onKeyDown={(event) => {
+              if (!downloading && (event.key === "Enter" || event.key === " ")) {
+                event.preventDefault();
+                void handleDownloadTemplatePicture(asset);
+              }
+            }}
+          >
             {asset.imageUrl ? (
               <img src={asset.imageUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
             ) : (
               <div className="dock-animation-tile__placeholder"><Icon name="image" size={20} /></div>
+            )}
+            {!downloading && (
+              <div className="dock-animation-tile__download-hint">
+                <span className="dock-animation-tile__download-hint-badge">
+                  <Icon name="download" size={13} />
+                  {t('media.downloadTemplate', 'Download')}
+                </span>
+              </div>
             )}
             <div className="dock-animation-tile__gradient" />
             <div className="dock-animation-tile__info">
@@ -3837,6 +3900,56 @@ function DockMediaTab({
             </div>
           </div>
         )}
+
+        {downloading && (
+          <div
+            className="dock-animation-tile__download-overlay"
+            role="progressbar"
+            aria-valuenow={progressPercent ?? undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={t('media.downloadingProgress', { progress: progressLabel })}
+          >
+            <div className="dock-animation-tile__progress-ring-wrap">
+              <svg className="dock-animation-tile__progress-ring" viewBox="0 0 36 36">
+                <path
+                  className="dock-animation-tile__progress-ring-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  strokeWidth="3.2"
+                />
+                <path
+                  className={`dock-animation-tile__progress-ring-bar${progressPercent == null ? " dock-animation-tile__progress-ring-bar--indeterminate" : ""}`}
+                  strokeDasharray={`${progressPercent ?? 28}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  strokeWidth="3.2"
+                />
+              </svg>
+              <div className="dock-animation-tile__progress-ring-text">
+                {progressPercent != null && progressPercent > 0 ? (
+                  `${progressPercent}%`
+                ) : (
+                  <Icon name="cloud_download" size={16} />
+                )}
+              </div>
+            </div>
+            <span className="dock-animation-tile__download-status">
+              {progressPercent == null || progressPercent === 0
+                ? t('media.preparing')
+                : progressPercent >= 100
+                  ? t('media.savingToLibrary', 'Saving…')
+                  : `${t('media.downloadProgress', 'Downloading…')} ${progressPercent}%`}
+            </span>
+            <div className="dock-animation-tile__progress-track">
+              <div
+                className={`dock-animation-tile__progress-fill${progressPercent == null ? " dock-animation-tile__progress-fill--indeterminate" : ""}`}
+                style={{ width: progressPercent != null ? `${progressPercent}%` : undefined }}
+              />
+            </div>
+          </div>
+        )}
+
         {downloadedItem && (
           <span className="dock-animation-tile__downloaded-label" role="status">
             <Icon name="check_circle" size={10} />
@@ -3849,7 +3962,10 @@ function DockMediaTab({
           aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
           title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplatePicture', 'Download picture')}
           disabled={downloading || Boolean(downloadedItem)}
-          onClick={() => void handleDownloadTemplatePicture(asset)}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleDownloadTemplatePicture(asset);
+          }}
         >
           <Icon
             name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
@@ -3863,15 +3979,17 @@ function DockMediaTab({
 
   const renderTemplateVideoTile = (asset: TemplateVideoAsset) => {
     const downloadedItem = findDownloadedTemplateVideo(asset);
-    const downloading = templateVideoProgress[asset.id] !== undefined;
-    const progressLabel = templateVideoProgress[asset.id] == null
-      ? t('media.preparing')
-      : `${Math.round((templateVideoProgress[asset.id] || 0) * 100)}%`;
+    const progressFraction = templateVideoProgress[asset.id];
+    const downloading = progressFraction !== undefined;
+    const progressPercent = progressFraction != null ? Math.round(progressFraction * 100) : null;
+    const progressLabel = progressPercent != null
+      ? `${progressPercent}%`
+      : t('media.preparing');
 
     return (
       <div
         key={asset.id}
-        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
+        className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}${downloading ? " dock-animation-tile--downloading" : ""}`}
       >
         {downloadedItem ? (
           <div
@@ -3901,8 +4019,88 @@ function DockMediaTab({
             </div>
           </div>
         ) : (
-          <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
+          <div
+            className={`dock-animation-tile__thumb dock-animation-tile__thumb--clickable${downloading ? " dock-animation-tile__thumb--busy" : ""}`}
+            role="button"
+            tabIndex={downloading ? -1 : 0}
+            aria-label={downloading ? t('media.downloadingProgress', { progress: progressLabel }) : `${t('media.downloadAsset', 'Download')}: ${asset.fileName}`}
+            title={downloading ? t('media.downloadingProgress', { progress: progressLabel }) : `${t('media.downloadAsset', 'Download')}: ${asset.fileName}`}
+            onClick={() => {
+              if (!downloading) void handleDownloadTemplateVideo(asset);
+            }}
+            onKeyDown={(event) => {
+              if (!downloading && (event.key === "Enter" || event.key === " ")) {
+                event.preventDefault();
+                void handleDownloadTemplateVideo(asset);
+              }
+            }}
+          >
+            <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
+            {!downloading && (
+              <div className="dock-animation-tile__download-hint">
+                <span className="dock-animation-tile__download-hint-badge">
+                  <Icon name="download" size={13} />
+                  {t('media.downloadTemplate', 'Download')}
+                </span>
+              </div>
+            )}
+            <div className="dock-animation-tile__gradient" />
+            <div className="dock-animation-tile__info">
+              <span className="dock-animation-tile__name">{asset.fileName}</span>
+              <span className="dock-animation-tile__meta">{formatFileSize(asset.size)}</span>
+            </div>
+          </div>
         )}
+
+        {downloading && (
+          <div
+            className="dock-animation-tile__download-overlay"
+            role="progressbar"
+            aria-valuenow={progressPercent ?? undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={t('media.downloadingProgress', { progress: progressLabel })}
+          >
+            <div className="dock-animation-tile__progress-ring-wrap">
+              <svg className="dock-animation-tile__progress-ring" viewBox="0 0 36 36">
+                <path
+                  className="dock-animation-tile__progress-ring-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  strokeWidth="3.2"
+                />
+                <path
+                  className={`dock-animation-tile__progress-ring-bar${progressPercent == null ? " dock-animation-tile__progress-ring-bar--indeterminate" : ""}`}
+                  strokeDasharray={`${progressPercent ?? 28}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  strokeWidth="3.2"
+                />
+              </svg>
+              <div className="dock-animation-tile__progress-ring-text">
+                {progressPercent != null && progressPercent > 0 ? (
+                  `${progressPercent}%`
+                ) : (
+                  <Icon name="cloud_download" size={16} />
+                )}
+              </div>
+            </div>
+            <span className="dock-animation-tile__download-status">
+              {progressPercent == null || progressPercent === 0
+                ? t('media.preparing')
+                : progressPercent >= 100
+                  ? t('media.savingToLibrary', 'Saving…')
+                  : `${t('media.downloadProgress', 'Downloading…')} ${progressPercent}%`}
+            </span>
+            <div className="dock-animation-tile__progress-track">
+              <div
+                className={`dock-animation-tile__progress-fill${progressPercent == null ? " dock-animation-tile__progress-fill--indeterminate" : ""}`}
+                style={{ width: progressPercent != null ? `${progressPercent}%` : undefined }}
+              />
+            </div>
+          </div>
+        )}
+
         {downloadedItem && (
           <span className="dock-animation-tile__downloaded-label" role="status">
             <Icon name="check_circle" size={10} />
@@ -3915,7 +4113,10 @@ function DockMediaTab({
           aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
           title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
           disabled={downloading || Boolean(downloadedItem)}
-          onClick={() => void handleDownloadTemplateVideo(asset)}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleDownloadTemplateVideo(asset);
+          }}
         >
           <Icon
             name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
@@ -4250,8 +4451,8 @@ function DockMediaTab({
             className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("uploads")}
             title={t('media.uploads')}>
-            {useCompactMediaTabs ? <Icon name="upload" size={12} /> : t('media.uploads')}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{mediaEntries.length}</span>}
+            {t('media.uploads')}
+            <span className="dock-media-tab__count">{mediaEntries.length}</span>
           </button>
           <button
             type="button"
@@ -4261,8 +4462,8 @@ function DockMediaTab({
             onClick={() => setBrowserTab("templates")}
             title="Templates"
           >
-            {useCompactMediaTabs ? <Icon name="collections" size={12} /> : "Templates"}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{savedTemplateEntries.length}</span>}
+            Templates
+            <span className="dock-media-tab__count">{savedTemplateEntries.length}</span>
           </button>
           <button
             type="button"
@@ -4273,8 +4474,8 @@ function DockMediaTab({
             disabled={animationsLocked}
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
           >
-            {useCompactMediaTabs ? <Icon name={animationsLocked ? "lock" : "animation"} size={12} /> : t('media.tabAnimations')}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount}</span>}
+            {t('media.tabAnimations')}
+            <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount}</span>
           </button>
           <button
             type="button"
@@ -4283,8 +4484,8 @@ function DockMediaTab({
             className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("patterns")}
             title={t('media.gridView')}>
-            {useCompactMediaTabs ? <Icon name="grid_view" size={12} /> : t('media.patterns')}
-            {!useCompactMediaTabs && <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>}
+            {t('media.patterns')}
+            <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>
           </button>
           <button
             type="button"
@@ -4293,7 +4494,7 @@ function DockMediaTab({
             className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("text")}
             title={t('media.tabText')}>
-            {useCompactMediaTabs ? <Icon name="text_fields" size={12} /> : t('media.tabText')}
+            {t('media.tabText')}
           </button>
         </div>
       </div>
@@ -5812,75 +6013,7 @@ function DockMediaTab({
                     </div>
                   ) : (
                     <div className="dock-animation-grid">
-                      {filteredTemplateVideos.map((asset) => {
-                        const downloadedItem = findDownloadedTemplateVideo(asset);
-                        const downloading = templateVideoProgress[asset.id] !== undefined;
-                        const progressLabel = templateVideoProgress[asset.id] == null
-                          ? t('media.preparing')
-                          : `${Math.round((templateVideoProgress[asset.id] || 0) * 100)}%`;
-
-                        return (
-                          <div
-                            key={asset.id}
-                            className={`dock-animation-tile${downloadedItem ? " dock-animation-tile--downloaded" : ""}`}
-                          >
-                            {downloadedItem ? (
-                              <div
-                                className="dock-animation-tile__thumb dock-animation-tile__thumb--playable"
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`${t('common.play')}: ${asset.fileName}`}
-                                title={`${t('common.play')}: ${asset.fileName}`}
-                                onClick={() => playDownloadedTemplateVideo(downloadedItem)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    playDownloadedTemplateVideo(downloadedItem);
-                                  }
-                                }}
-                              >
-                                {downloadedItem.thumbnailUrl ? (
-                                  <img src={downloadedItem.thumbnailUrl} alt={asset.fileName} loading="lazy" className="dock-animation-tile__img" />
-                                ) : (
-                                  <video src={getMediaPreviewUrl(downloadedItem, overlayBaseUrl)} className="dock-animation-tile__img" muted playsInline preload="metadata" />
-                                )}
-                                <div className="dock-animation-tile__play-hint">
-                                  <Icon name="play_arrow" size={22} />
-                                </div>
-                                <div className="dock-animation-tile__gradient" />
-                                <div className="dock-animation-tile__info">
-                                  <span className="dock-animation-tile__name">{asset.fileName}</span>
-                                  <span className="dock-animation-tile__meta">
-                                    {downloadedItem?.durationSec ? fmtDuration(downloadedItem.durationSec) : formatFileSize(asset.size)}
-                                  </span>
-                                </div>
-                              </div>
-                            ) : (
-                              <AnimationTilePreview src={asset.videoUrl} label={asset.fileName} />
-                            )}
-                            {downloadedItem && (
-                              <span className="dock-animation-tile__downloaded-label" role="status">
-                                <Icon name="check_circle" size={10} />
-                                {t('media.downloaded')}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className="dock-animation-tile__dl-btn"
-                              aria-label={downloadedItem ? t('media.isAlreadySaved', { fileName: asset.fileName }) : t('media.downloadAsset', { fileName: asset.fileName })}
-                              title={downloadedItem ? t('media.alreadySavedToAnimations') : downloading ? t('media.downloadingProgress', { progress: progressLabel }) : t('media.downloadTemplateVideo')}
-                              disabled={downloading || Boolean(downloadedItem)}
-                              onClick={() => void handleDownloadTemplateVideo(asset)}
-                            >
-                              <Icon
-                                name={downloadedItem ? "check_circle" : downloading ? "downloading" : "download"}
-                                size={13}
-                                style={{ animation: downloading ? "spin 1s linear infinite" : undefined }}
-                              />
-                            </button>
-                          </div>
-                        );
-                      })}
+                      {filteredTemplateVideos.map(renderTemplateVideoTile)}
                     </div>
                   )}
                 </div>

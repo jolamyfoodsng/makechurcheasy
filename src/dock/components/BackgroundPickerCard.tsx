@@ -1093,12 +1093,15 @@ export default function BackgroundPickerCard({
                 <div className="dtb-bg-picker__settings">
                   <div className="dtb-control-section">
                     <div className="dtb-control-section__head">
-                      <span className="dtb-control-section__title">{t('bgPicker.sharedAppearance', 'Shared Text & Reference Styling')}</span>
+                      <span className="dtb-control-section__icon">
+                        <Icon name="palette" size={14} />
+                      </span>
+                      <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text Appearance')}</span>
                     </div>
                     <div className="dtb-control-section__body">
                       <div className="dtb-typography-control-row">
                         <ColorPickerCard
-                          label={t('common.color', 'Shared Color')}
+                          label={t('bgPicker.textColor', 'Text Color')}
                           value={quickSettings.fontColor ?? "#ffffff"}
                           onChange={(v) => onQuickSettingsChange((prev) => ({
                             ...prev,
@@ -1108,6 +1111,22 @@ export default function BackgroundPickerCard({
                         />
 
                         <SliderNumberField
+                          label={t('bgPicker.fontSize', 'Font Size')}
+                          value={quickSettings.fontSize}
+                          min={20}
+                          max={260}
+                          step={1}
+                          onChange={(value) => onQuickSettingsChange((prev) => ({
+                            ...prev,
+                            fontSize: value,
+                            refFontSize: Math.round(value * (prev.refFontSize / Math.max(1, prev.fontSize || 1))),
+                          }))}
+                        />
+                      </div>
+
+                      {/* Line Height and Letter Spacing */}
+                      <div className="dtb-typography-control-row">
+                        <SliderNumberField
                           label={t('bgPicker.lineHeight', 'Line Height')}
                           value={quickSettings.lineHeight}
                           min={1.05}
@@ -1115,10 +1134,7 @@ export default function BackgroundPickerCard({
                           step={0.01}
                           onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, lineHeight: value }))}
                         />
-                      </div>
 
-                      {/* Letter Spacing and Word Spacing */}
-                      <div className="dtb-typography-control-row">
                         <SliderNumberField
                           label={t('bgPicker.letterSpacing', 'Letter Spacing')}
                           value={quickSettings.letterSpacing ?? 0}
@@ -1132,6 +1148,10 @@ export default function BackgroundPickerCard({
                             refLetterSpacing: value,
                           }))}
                         />
+                      </div>
+
+                      {/* Word Spacing */}
+                      <div className="dtb-typography-control-row">
                         <SliderNumberField
                           label={t('bgPicker.wordSpacing', 'Word Spacing')}
                           value={quickSettings.wordSpacing ?? 0}
@@ -1142,7 +1162,15 @@ export default function BackgroundPickerCard({
                           onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, wordSpacing: value }))}
                         />
                       </div>
+                    </div>
+                  </div>
 
+                  <div className="dtb-control-section">
+                    <div className="dtb-control-section__head">
+                      <span className="dtb-control-section__icon qs-text-icon">Aa</span>
+                      <span className="dtb-control-section__title">{t('bgPicker.fontAndStyle', 'Font & Style')}</span>
+                    </div>
+                    <div className="dtb-control-section__body">
                       <div className="dtb-typography-control-row dtb-typography-control-row--selects">
                         <CompactSelectField<CompactFontWeight>
                           label={t('bgPicker.weight', 'Font Weight')}
@@ -1194,6 +1222,9 @@ export default function BackgroundPickerCard({
                     )}
                     <div className="dtb-control-section">
                       <div className="dtb-control-section__head">
+                        <span className="dtb-control-section__icon">
+                          <Icon name="palette" size={14} />
+                        </span>
                         <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
                       </div>
                       <div className="dtb-control-section__body">
@@ -1254,7 +1285,15 @@ export default function BackgroundPickerCard({
                             onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, wordSpacing: value }))}
                           />
                         </div>
+                      </div>
+                    </div>
 
+                    <div className="dtb-control-section">
+                      <div className="dtb-control-section__head">
+                        <span className="dtb-control-section__icon qs-text-icon">Aa</span>
+                        <span className="dtb-control-section__title">{t('bgPicker.fontAndStyle', 'Font & Style')}</span>
+                      </div>
+                      <div className="dtb-control-section__body">
                         <div className="dtb-typography-control-row dtb-typography-control-row--selects">
                           <CompactSelectField<CompactFontWeight>
                             label={t('bgPicker.weight')}
@@ -2607,50 +2646,54 @@ function ReferenceDisplaySection({
   ];
 
   return (
-    <div className="dtb-reference-display-card">
-      <div className="dock-bible-reference-popover__header">
-        {t("bible.referenceDisplay", "Reference display")}
+    <div className="dtb-control-section dtb-reference-display-card">
+      <div className="dtb-control-section__head">
+        <span className="dtb-control-section__icon">
+          <Icon name="bookmark" size={14} />
+        </span>
+        <span className="dtb-control-section__title">
+          {t("bible.referenceDisplay", "Reference Display")}
+        </span>
       </div>
-      <div className="dock-bible-reference-popover__section">
-        <div className="dock-bible-reference-popover__label">
-          {t("bible.referenceFormat", "Reference")}
+      <div className="dtb-control-section__body">
+        <div className="dock-bible-reference-options qs-choice-cards" role="group" aria-label={t("bible.referenceFormat", "Reference")}>
+          {options.map((option) => {
+            const isSelected = referenceFormat === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`dock-bible-reference-option qs-choice-card${isSelected ? " dock-bible-reference-option--active qs-choice-card--active" : ""}`}
+                onClick={() => onReferenceFormatChange?.(option.value)}
+                aria-pressed={isSelected}
+              >
+                <span className="qs-choice-card__title">{option.label}</span>
+                <span className="qs-choice-card__subtitle">{buildPreview(option.value)}</span>
+              </button>
+            );
+          })}
         </div>
-        <div className="dock-bible-reference-options" role="group" aria-label={t("bible.referenceFormat", "Reference")}>
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`dock-bible-reference-option${referenceFormat === option.value ? " dock-bible-reference-option--active" : ""}`}
-              onClick={() => onReferenceFormatChange?.(option.value)}
-              aria-pressed={referenceFormat === option.value}
-            >
-              <span>{option.label}</span>
-              <small>{buildPreview(option.value)}</small>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="dock-bible-reference-popover__toggle-row">
-        <div>
-          <div className="dock-bible-reference-popover__label">
-            {t("bible.showBibleVersion", "Show Bible version")}
+        <div className="dock-bible-reference-popover__toggle-row qs-toggle-row">
+          <div className="qs-toggle-copy">
+            <span className="dock-bible-reference-popover__label qs-toggle-label">
+              {t("bible.showBibleVersion", "Show Bible Version")}
+            </span>
+            <span className="dock-bible-reference-popover__hint qs-toggle-hint">
+              {t("bible.showBibleVersionHelp", "Display the Bible version e.g. KJV, NIV")}
+            </span>
           </div>
-          <div className="dock-bible-reference-popover__hint">
-            {translation || "KJV"}
-          </div>
+          <button
+            type="button"
+            className={`dtb-toggle${referenceVersionVisible ? " dtb-toggle--on" : ""}`}
+            onClick={() => onReferenceVersionVisibleChange?.(!referenceVersionVisible)}
+            role="switch"
+            aria-checked={referenceVersionVisible}
+            aria-label={t("bible.showBibleVersion", "Show Bible Version")}
+          >
+            <span className="dtb-toggle__knob" />
+          </button>
         </div>
-        <button
-          type="button"
-          className={`dtb-toggle${referenceVersionVisible ? " dtb-toggle--on" : ""}`}
-          onClick={() => onReferenceVersionVisibleChange?.(!referenceVersionVisible)}
-          role="switch"
-          aria-checked={referenceVersionVisible}
-          aria-label={t("bible.showBibleVersion", "Show Bible version")}
-        >
-          <span className="dtb-toggle__knob" />
-        </button>
       </div>
-
     </div>
   );
 }
@@ -2700,6 +2743,9 @@ function ReferenceSection({
 
       <div className="dtb-control-section">
         <div className="dtb-control-section__head">
+          <span className="dtb-control-section__icon">
+            <Icon name="palette" size={14} />
+          </span>
           <span className="dtb-control-section__title">{t('bgPicker.textAppearance', 'Text appearance')}</span>
         </div>
         <div className="dtb-control-section__body">
@@ -2761,37 +2807,33 @@ function ReferenceSection({
         />
       )}
 
-      <button
-        type="button"
-        className="dtb-colors__collapsible-header"
-        onClick={() => setAdvancedOpen((open) => !open)}
-        aria-expanded={advancedOpen}
-      >
-        <span className="dtb-section-title">{t('common.moreOptions', 'More options')}</span>
-        <Icon name={advancedOpen ? "expand_less" : "expand_more"} size={14} />
-      </button>
-      {advancedOpen && (
-        <>
-          {/* Opacity */}
-          <div className="dtb-slider-field">
-            <div className="dtb-slider-field__head">
-              <span>{t('common.opacity')}</span>
-              <span className="dtb-slider-field__value">{Math.round(refOpacity * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              className="dtb-slider"
+      <div className="dtb-control-section dtb-more-options-section">
+        <button
+          type="button"
+          className="dtb-colors__collapsible-header dtb-more-options-header"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+        >
+          <span className="dtb-more-options-title">
+            <Icon name="settings" size={14} />
+            <span>{t('common.moreOptions', 'More Options')}</span>
+          </span>
+          <Icon name={advancedOpen ? "expand_less" : "expand_more"} size={14} />
+        </button>
+        {advancedOpen && (
+          <div className="dtb-control-section__body dtb-more-options-body">
+            <SliderNumberField
+              label={t('common.opacity', 'Opacity')}
+              value={Math.round(refOpacity * 100)}
               min={10}
               max={100}
               step={1}
-              value={Math.round(refOpacity * 100)}
-              onChange={(e) => onQuickSettingsChange((prev) => ({ ...prev, refOpacity: Number(e.target.value) / 100 }))}
-              aria-label={t('common.opacity')}
+              unit="%"
+              onChange={(value) => onQuickSettingsChange((prev) => ({ ...prev, refOpacity: value / 100 }))}
             />
           </div>
-
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -2896,13 +2938,17 @@ function ReferenceBackgroundSection({
 }) {
   const { t } = useTranslation();
   const refBgEnabled = quickSettings.referenceBackgroundEnabled;
-  const [styleOpen, setStyleOpen] = useState(true);
 
   return (
-    <div className="dtb-colors__section">
-      <div className={`dtb-colors__ref-bg-header${showColorPicker ? "" : " dtb-colors__ref-bg-header--toggle-only"}`}>
-        <div className="dtb-colors__toggle-row">
-          <span className="dtb-colors__label">{t('bgPicker.referenceBackground')}</span>
+    <div className="dtb-control-section dtb-colors__section">
+      <div className={`dtb-control-section__head dtb-colors__ref-bg-header${showColorPicker ? "" : " dtb-colors__ref-bg-header--toggle-only"}`}>
+        <div className="dtb-colors__toggle-row qs-section-header-toggle">
+          <div className="qs-section-title-wrap">
+            <span className="dtb-control-section__icon">
+              <Icon name="brush" size={14} />
+            </span>
+            <span className="dtb-control-section__title dtb-colors__label">{t('bgPicker.referenceBackground', 'Reference Background')}</span>
+          </div>
           <button
             type="button"
             className={`dtb-toggle${refBgEnabled ? " dtb-toggle--on" : ""}`}
@@ -2919,28 +2965,25 @@ function ReferenceBackgroundSection({
             <span className="dtb-toggle__knob" />
           </button>
         </div>
-        {refBgEnabled && showColorPicker && (
-          <ColorPickerCard
-            className="dtb-colors__ref-bg-color-card"
-            label={t('bgPicker.background', 'Background')}
-            value={quickSettings.referenceBackgroundColor}
-            onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
-          />
-        )}
       </div>
 
       {refBgEnabled && (
-        <div className="dtb-colors__ref-bg-controls">
-          <button
-            type="button"
-            className="dtb-colors__collapsible-header dtb-colors__collapsible-header--sub"
-            onClick={() => setStyleOpen((v) => !v)}
-            aria-expanded={styleOpen}
-            title={t('bgPicker.style')}>
-            <span className="dtb-colors__sublabel">{t('bgPicker.style')}</span>
-            <Icon name={styleOpen ? "expand_less" : "expand_more"} size={13} />
-          </button>
-          {styleOpen && (
+        <div className="dtb-control-section__body dtb-colors__ref-bg-controls">
+          {showColorPicker && (
+            <div className="dtb-typography-control-row">
+              <ColorPickerCard
+                className="dtb-colors__ref-bg-color-card"
+                label={t('bgPicker.background', 'Background')}
+                value={quickSettings.referenceBackgroundColor}
+                onChange={(v) => onQuickSettingsChange((prev) => ({ ...prev, referenceBackgroundColor: v }))}
+              />
+            </div>
+          )}
+
+          <div className="dtb-colors__style-wrap">
+            <div className="dtb-colors__style-label-row">
+              <span className="dtb-colors__sublabel">{t('bgPicker.style', 'Style')}</span>
+            </div>
             <div className="dtb-colors__style-cards">
               {([
                 { id: "solid" as const, label: "bgPicker.solid", preview: "John 3:16" },
@@ -2974,30 +3017,23 @@ function ReferenceBackgroundSection({
                 );
               })}
             </div>
-          )}
+          </div>
 
           <div className="dtb-colors__slider-row">
-            <div className="dtb-slider-field">
-              <div className="dtb-slider-field__head">
-                <span>{t('common.cornerRadius')}</span>
-                <span className="dtb-slider-field__value">{quickSettings.referenceBackgroundRadius}px</span>
-              </div>
-              <input
-                type="range"
-                className="dtb-slider"
-                min={0}
-                max={40}
-                step={1}
-                value={quickSettings.referenceBackgroundRadius}
-                onChange={(e) =>
-                  onQuickSettingsChange((prev) => ({
-                    ...prev,
-                    referenceBackgroundRadius: Number(e.target.value),
-                  }))
-                }
-                aria-label={t('common.cornerRadius')}
-              />
-            </div>
+            <SliderNumberField
+              label={t('common.cornerRadius', 'Corner Radius')}
+              value={quickSettings.referenceBackgroundRadius}
+              min={0}
+              max={40}
+              step={1}
+              unit="px"
+              onChange={(value) =>
+                onQuickSettingsChange((prev) => ({
+                  ...prev,
+                  referenceBackgroundRadius: value,
+                }))
+              }
+            />
           </div>
         </div>
       )}
@@ -3341,16 +3377,19 @@ function CompactSelectField<T extends string>({
   return (
     <label className="dtb-compact-select-field">
       <span className="dtb-position-label">{label}</span>
-      <select
-        className="dtb-compact-select-field__select"
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        aria-label={label}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <div className="dtb-compact-select-field__control">
+        <select
+          className="dtb-compact-select-field__select"
+          value={value}
+          onChange={(event) => onChange(event.target.value as T)}
+          aria-label={label}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <Icon name="expand_more" size={14} className="dtb-compact-select-field__chevron" />
+      </div>
     </label>
   );
 }
@@ -4122,7 +4161,11 @@ function InlineColorPicker({
         title={variant === "card" ? `Choose ${label || "color"}` : undefined}
       >
         {variant === "card" ? (
-          <span className="dtb-color-inline__card-swatch" style={{ backgroundColor: value }} />
+          <div className="dtb-color-inline__card-inner">
+            <span className="dtb-color-inline__card-swatch" style={{ backgroundColor: value }} />
+            <span className="dtb-color-inline__card-divider" />
+            <span className="dtb-color-inline__card-wheel" aria-hidden="true" />
+          </div>
         ) : (
           <>
             <span className="dtb-color-inline__preview" style={{ backgroundColor: value }} />

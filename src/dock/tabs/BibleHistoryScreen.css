@@ -400,6 +400,14 @@
   min-width: 0;
 }
 
+.bible-history-card__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .bible-history-card__ref {
   font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
   font-size: 11.5px;
@@ -410,14 +418,77 @@
   text-overflow: ellipsis;
 }
 
+.bible-history-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.9;
+  transition: opacity 120ms ease;
+}
+
+.bible-history-card:hover .bible-history-card__actions,
+.bible-history-card--hovered .bible-history-card__actions {
+  opacity: 1;
+}
+
+.bible-history-card__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 120ms ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.bible-history-card__action-btn--goto {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.bible-history-card__action-btn--goto:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #FFFFFF;
+}
+
+.bible-history-card__action-btn--obs {
+  background: color-mix(in srgb, var(--dock-accent, #C56F4D) 25%, transparent);
+  border-color: color-mix(in srgb, var(--dock-accent, #C56F4D) 50%, transparent);
+  color: var(--dock-text, #F8FAFC);
+}
+
+.bible-history-card__action-btn--obs:hover {
+  background: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #C56F4D);
+  color: #FFFFFF;
+}
+
 .bible-history-card__preview {
   font-size: 10px;
   color: var(--dock-text-secondary, #B6C0D4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 1px;
-  line-height: 1.3;
+  margin-top: 2px;
+  line-height: 1.35;
+  transition: all 150ms ease;
+}
+
+.bible-history-card__preview--full,
+.bible-history-card:hover .bible-history-card__preview,
+.bible-history-card--hovered .bible-history-card__preview {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-card__meta {

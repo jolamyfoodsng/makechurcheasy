@@ -199,23 +199,25 @@ const TAB_PREVIEW_SCENE_NAMES: Record<DockPreviewTab, string> = {
 };
 
 /** Source names the dock creates as overlays in the user's scenes (descriptor first for narrowed docks) */
-const DOCK_LT_SOURCE = "Lower Third - MCE Lower Third";
-const DOCK_ANIMATED_LT_SOURCE = "Animated Lower Thirds - MCE";
+const DOCK_LT_SOURCE = SOURCE_NAMES.LOWER_THIRD;
+const DOCK_ANIMATED_LT_SOURCE = "Animated Lower Thirds - MCE Presentation";
 const DOCK_WORSHIP_SOURCE = FULLSCREEN_SOURCE_NAMES.WORSHIP;
 const DOCK_NOTES_SOURCE = FULLSCREEN_SOURCE_NAMES.NOTES;
-const DOCK_TICKER_SOURCE = "Ticker - MCE Ticker";
+const DOCK_TICKER_SOURCE = "Ticker - MCE Presentation";
 /** Media player source for playing uploaded/library media */
-const DOCK_MEDIA_VIDEO_SOURCE = "Video - MCE Media";
-const DOCK_MEDIA_IMAGE_SOURCE = "Image - MCE Media";
-const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "Audio - MCE Media Image";
-const DOCK_MEDIA_PATTERN_SOURCE = "Pattern - MCE Media";
-const DOCK_MEDIA_TEXT_SOURCE = "Text - MCE Media";
-const DOCK_MEDIA_TEMPLATE_SOURCE = "Template - MCE Media";
-const DOCK_LIVE_TOOL_SOURCE = "Live Tools - MCE";
-const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "Video - MCE Live Tools";
-const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "Image - MCE Live Tools";
+const DOCK_MEDIA_VIDEO_SOURCE = "Video - MCE Presentation";
+const DOCK_MEDIA_IMAGE_SOURCE = "Image - MCE Presentation";
+const DOCK_MEDIA_AUDIO_SOURCE = "Audio - MCE Presentation";
+const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "Audio - MCE Presentation";
+const DOCK_MEDIA_PATTERN_SOURCE = "Pattern - MCE Presentation";
+const DOCK_MEDIA_TEXT_SOURCE = "Text - MCE Presentation";
+const DOCK_MEDIA_TEMPLATE_SOURCE = "Template - MCE Presentation";
+const DOCK_MEDIA_REMOTE_SOURCE = "Remote - MCE Presentation";
+const DOCK_LIVE_TOOL_SOURCE = "Live Tools - MCE Presentation";
+const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "Video - MCE Presentation";
+const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "Image - MCE Presentation";
 /** Background source placed BEHIND fullscreen overlays to prevent flash/twitch between slides */
-const DOCK_FS_BG_SOURCE = "Fullscreen BG - MCE";
+const DOCK_FS_BG_SOURCE = "Fullscreen BG - MCE Presentation";
 /** Scene-local fullscreen background source prefix used in target scenes */
 const DOCK_FS_TARGET_BG_PREFIX = "Scene BG - MCE Fullscreen";
 /** Single presentation scene holding all module sources */
@@ -259,12 +261,22 @@ const MCE_PRESENTATION_MANAGED_SOURCE_PREFIXES = [
   "Time - MCE",
   "Video - MCE",
   "Image - MCE",
+  "Audio - MCE",
+  "Pattern - MCE",
+  "Text - MCE",
+  "Template - MCE",
+  "Remote - MCE",
+  "Live Tools - MCE",
+  "Live Video - MCE",
+  "Live Image - MCE",
+  "Animated Lower Thirds - MCE",
   "Bible BG - MCE",
   "Worship BG - MCE",
   "Notes BG - MCE",
   "Media BG - MCE",
   "Countdown BG - MCE",
   "Fullscreen BG - MCE",
+  "Scene BG - MCE",
   "MCE Browser -",
   "MCE BG -",
   "MCE Bible",
@@ -460,10 +472,12 @@ interface DockResourceNames {
   tickerSource: string;
   mediaVideoSource: string;
   mediaImageSource: string;
+  mediaAudioSource: string;
   mediaImageAudioSource: string;
   mediaPatternSource: string;
   mediaTextSource: string;
   mediaTemplateSource: string;
+  remoteMediaSource: string;
   fsBgSource: string;
   fsTargetBgPrefix: string;
   bibleScene: string;
@@ -479,10 +493,12 @@ const DOCK_RESOURCES: DockResourceNames = {
   tickerSource: DOCK_TICKER_SOURCE,
   mediaVideoSource: DOCK_MEDIA_VIDEO_SOURCE,
   mediaImageSource: DOCK_MEDIA_IMAGE_SOURCE,
+  mediaAudioSource: DOCK_MEDIA_AUDIO_SOURCE,
   mediaImageAudioSource: DOCK_MEDIA_IMAGE_AUDIO_SOURCE,
   mediaPatternSource: DOCK_MEDIA_PATTERN_SOURCE,
   mediaTextSource: DOCK_MEDIA_TEXT_SOURCE,
   mediaTemplateSource: DOCK_MEDIA_TEMPLATE_SOURCE,
+  remoteMediaSource: DOCK_MEDIA_REMOTE_SOURCE,
   fsBgSource: DOCK_FS_BG_SOURCE,
   fsTargetBgPrefix: DOCK_FS_TARGET_BG_PREFIX,
   bibleScene: DOCK_BIBLE_SCENE,
@@ -1301,6 +1317,12 @@ export class DockObsClient {
 
         if (isFreeDockPlan()) {
           void this.clearMCESourcesForFreePlan();
+        } else {
+          // Preemptively refresh CEF browser sources in the background so that
+          // any sources loaded by OBS before MakeChurchEasy finished booting
+          // (which hit ERR_CONNECTION_REFUSED) are immediately restored and ready
+          // before the operator clicks their first verse or song.
+          void this.refreshAllOverlayCaches();
         }
 
         const startupPromise = (async () => {
@@ -2035,15 +2057,42 @@ export class DockObsClient {
     }
 
     if (trimmed === DOCK_LT_SOURCE) {
+      aliases.add("Lower Third - MCE Lower Third");
       aliases.add("MCE Lower Third");
       aliases.add("MCE Lower Thirds");
     } else if (trimmed === DOCK_TICKER_SOURCE) {
+      aliases.add("Ticker - MCE Ticker");
       aliases.add("MCE Ticker");
     } else if (trimmed === DOCK_MEDIA_VIDEO_SOURCE) {
+      aliases.add("Video - MCE Media");
       aliases.add("MCE Media - Video");
       aliases.add("MCE Media");
+      aliases.add("MCE Video");
     } else if (trimmed === DOCK_MEDIA_IMAGE_SOURCE) {
+      aliases.add("Image - MCE Media");
       aliases.add("MCE Media - Image");
+      aliases.add("MCE Image");
+    } else if (trimmed === DOCK_MEDIA_AUDIO_SOURCE) {
+      aliases.add("Audio - MCE Media");
+      aliases.add("MCE Media - Audio");
+      aliases.add("Audio - MCE Media Image");
+      aliases.add("MCE Media - Image Audio");
+    } else if (trimmed === DOCK_MEDIA_PATTERN_SOURCE) {
+      aliases.add("Pattern - MCE Media");
+      aliases.add("MCE Media - Pattern");
+    } else if (trimmed === DOCK_MEDIA_TEXT_SOURCE) {
+      aliases.add("Text - MCE Media");
+      aliases.add("MCE Media - Text");
+    } else if (trimmed === DOCK_MEDIA_TEMPLATE_SOURCE) {
+      aliases.add("Template - MCE Media");
+    } else if (trimmed === DOCK_MEDIA_REMOTE_SOURCE) {
+      aliases.add("Remote - MCE Media");
+      aliases.add("MCE Media - Remote");
+    } else if (trimmed === DOCK_ANIMATED_LT_SOURCE) {
+      aliases.add("Animated Lower Thirds - MCE");
+      aliases.add("MCE Animated Lower Thirds");
+    } else if (trimmed === DOCK_FS_BG_SOURCE) {
+      aliases.add("Fullscreen BG - MCE");
     }
 
     return Array.from(aliases);
@@ -5275,7 +5324,9 @@ export class DockObsClient {
       // A newly loaded page must know its content before its first paint.
       // Setting both the URL hash and overlay CSS guarantees the slide renders
       // immediately on the very first click without requiring a second click.
-      await this.setBrowserSourceUrl(inputName, bootstrapUrlWithData, false, overlayCss);
+      // On initial untracked bootstrap, pass forceReload=true so CEF refreshes away
+      // any cached ERR_CONNECTION_REFUSED from before MCE booted.
+      await this.setBrowserSourceUrl(inputName, bootstrapUrlWithData, sourceWasNotTracked, overlayCss);
       void this.emitBrowserOverlayPacket(tabType, packet, overlayCss, inputName).catch(() => false);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
       return;
@@ -10583,57 +10634,76 @@ export class DockObsClient {
   }
 
   async setMediaVideoMuted(muted: boolean): Promise<void> {
-    try {
-      await this.call("SetInputMute", {
-        inputName: "MCE Media - Video",
-        inputMuted: muted,
-      });
-    } catch {
-      // The source may not exist yet; the preference will apply on next send.
+    for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
+      try {
+        await this.call("SetInputMute", {
+          inputName,
+          inputMuted: muted,
+        });
+        return;
+      } catch {
+        // try next alias
+      }
     }
   }
 
   async setMediaLooping(looping: boolean): Promise<void> {
-    try {
-      await this.call("SetInputSettings", {
-        inputName: "MCE Media - Video",
-        inputSettings: {
-          looping,
-          restart_on_activate: true,
-        },
-      });
-    } catch {
-      // source may not exist yet
+    for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
+      try {
+        await this.call("SetInputSettings", {
+          inputName,
+          inputSettings: {
+            looping,
+            restart_on_activate: true,
+          },
+        });
+        return;
+      } catch {
+        // try next alias
+      }
     }
   }
 
   async setMediaPlaybackPaused(paused: boolean): Promise<void> {
-    try {
-      await this.call("TriggerMediaInputAction", {
-        inputName: "MCE Media - Video",
-        mediaAction: paused
-          ? "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE"
-          : "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
-      });
-    } catch {
-      // source may not exist yet
+    for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
+      try {
+        await this.call("TriggerMediaInputAction", {
+          inputName,
+          mediaAction: paused
+            ? "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE"
+            : "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
+        });
+        return;
+      } catch {
+        // try next alias
+      }
     }
   }
 
   async restartMediaPlayback(): Promise<void> {
-    try {
-      await this.call("TriggerMediaInputAction", {
-        inputName: "MCE Media - Video",
-        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
-      });
-    } catch {
-      // source may not exist yet
+    for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
+      try {
+        await this.call("TriggerMediaInputAction", {
+          inputName,
+          mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+        });
+        return;
+      } catch {
+        // try next alias
+      }
     }
   }
 
   async setMediaFitMode(fitMode: "cover" | "contain" | "stretch"): Promise<void> {
     const { sceneName } = await this.getPresentationTargetScene("media");
-    for (const sourceName of ["MCE Media - Video", "MCE Media - Image"]) {
+    for (const sourceName of [
+      DOCK_MEDIA_VIDEO_SOURCE,
+      DOCK_MEDIA_IMAGE_SOURCE,
+      "MCE Media - Video",
+      "MCE Media - Image",
+      "Video - MCE Media",
+      "Image - MCE Media",
+    ]) {
       try {
         const resp = await this.call("GetSceneItemList", { sceneName }) as {
           sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
@@ -10721,7 +10791,7 @@ export class DockObsClient {
     _fileName: string,
     options: Pick<DockMediaSendOptions, "looping" | "muted"> = {},
   ): Promise<void> {
-    const sourceName = "MCE Media - Audio";
+    const sourceName = DOCK_MEDIA_AUDIO_SOURCE;
     if (this.isRemotePresentationSession()) {
       await this.pushVlcPlaylist({
         sourceName,
@@ -10796,12 +10866,12 @@ export class DockObsClient {
       return;
     }
 
-    const mediaVideoSource = "MCE Media - Video";
-    const mediaImageSource = "MCE Media - Image";
-    const mediaPatternSource = "MCE Media - Pattern";
-    const mediaImageAudioSource = "MCE Media - Image Audio";
-    const mediaTextSource = "MCE Media - Text";
-    const remoteMediaSource = "MCE Media - Remote";
+    const mediaVideoSource = DOCK_MEDIA_VIDEO_SOURCE;
+    const mediaImageSource = DOCK_MEDIA_IMAGE_SOURCE;
+    const mediaPatternSource = DOCK_MEDIA_PATTERN_SOURCE;
+    const mediaImageAudioSource = DOCK_MEDIA_IMAGE_AUDIO_SOURCE;
+    const mediaTextSource = DOCK_MEDIA_TEXT_SOURCE;
+    const remoteMediaSource = DOCK_MEDIA_REMOTE_SOURCE;
 
     // Fade transitions use the browser media source so the old native media can
     // remain underneath while the new page fades in. Cut keeps the native path.
@@ -11393,10 +11463,10 @@ export class DockObsClient {
   }
 
   async pushPatternBackground(patternSrc: string, patternLabel: string): Promise<void> {
-    const mediaVideoSource = "MCE Media - Video";
-    const mediaImageSource = "MCE Media - Image";
-    const mediaPatternSource = "MCE Media - Pattern";
-    const mediaTextSource = "MCE Media - Text";
+    const mediaVideoSource = DOCK_MEDIA_VIDEO_SOURCE;
+    const mediaImageSource = DOCK_MEDIA_IMAGE_SOURCE;
+    const mediaPatternSource = DOCK_MEDIA_PATTERN_SOURCE;
+    const mediaTextSource = DOCK_MEDIA_TEXT_SOURCE;
 
     void this.focusMcePresentationModule("media").catch(() => { });
 
@@ -11407,6 +11477,9 @@ export class DockObsClient {
     // Hide native media sources
     await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource);
     await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource);
+    try { await this.hideMediaSourceWithAnimation(sceneName, "MCE Media - Video"); } catch { /* ignore */ }
+    try { await this.hideMediaSourceWithAnimation(sceneName, "MCE Media - Image"); } catch { /* ignore */ }
+    try { await this.hideOverlaySource(sceneName, DOCK_MEDIA_IMAGE_AUDIO_SOURCE); } catch { /* ignore */ }
     try { await this.hideOverlaySource(sceneName, "MCE Media - Image Audio"); } catch { /* ignore */ }
 
     // Ensure pattern browser source exists directly in target scene
@@ -11498,7 +11571,7 @@ export class DockObsClient {
       };
     } | null,
   ): Promise<void> {
-    const mediaTextSource = "MCE Media - Text";
+    const mediaTextSource = DOCK_MEDIA_TEXT_SOURCE;
 
     const hasText = Boolean(payload?.headline?.trim() || String(payload?.subline || "").trim());
     const hasBackground = Boolean(payload?.background?.enabled && payload?.background?.mode !== "text-only");
@@ -11507,6 +11580,7 @@ export class DockObsClient {
         const target = await this.getPresentationTargetScene("media");
         if (target.sceneName) {
           await this.hideOverlaySource(target.sceneName, mediaTextSource);
+          await this.hideOverlaySource(target.sceneName, "MCE Media - Text").catch(() => { });
         }
       } catch { /* ignore */ }
       return;
@@ -11714,19 +11788,37 @@ export class DockObsClient {
   async clearMedia(_preserveSourceNames?: string[]): Promise<void> {
     const scene = PRESENTATION_SCENE_NAME;
 
-    // Hide all media sources in MCE Presentation
-    await this.hideOverlaySource(scene, "MCE Media - Video").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Image").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Audio").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Remote").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Pattern").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Image Audio").catch(() => { });
-    await this.hideOverlaySource(scene, "MCE Media - Text").catch(() => { });
-    await this.hideOverlaySource(scene, DOCK_MEDIA_TEMPLATE_SOURCE).catch(() => { });
+    // Hide all media sources in MCE Presentation (current standardized names and legacy aliases)
+    const sourcesToHide = [
+      DOCK_MEDIA_VIDEO_SOURCE,
+      DOCK_MEDIA_IMAGE_SOURCE,
+      DOCK_MEDIA_AUDIO_SOURCE,
+      DOCK_MEDIA_REMOTE_SOURCE,
+      DOCK_MEDIA_PATTERN_SOURCE,
+      DOCK_MEDIA_IMAGE_AUDIO_SOURCE,
+      DOCK_MEDIA_TEXT_SOURCE,
+      DOCK_MEDIA_TEMPLATE_SOURCE,
+      "MCE Media - Video",
+      "MCE Media - Image",
+      "MCE Media - Audio",
+      "MCE Media - Remote",
+      "MCE Media - Pattern",
+      "MCE Media - Image Audio",
+      "MCE Media - Text",
+      "Video - MCE Media",
+      "Image - MCE Media",
+      "Audio - MCE Media Image",
+      "Pattern - MCE Media",
+      "Text - MCE Media",
+      "Template - MCE Media",
+    ];
+
+    await Promise.all(
+      sourcesToHide.map((s) => this.hideOverlaySource(scene, s).catch(() => { }))
+    );
 
     // Restore Program scene to what it was before Media was pushed
     await this.restoreProgramSceneBeforePush("media");
-
   }
 
   /**
@@ -12420,10 +12512,37 @@ export class DockObsClient {
   }
 
   /**
-   * Refreshes the cache of all MCE browser sources (Bible, Worship, Notes, Countdown).
+   * Refreshes the cache of all active MCE browser sources (Bible, Worship, Notes, Countdown).
+   * Queries existing browser inputs to avoid unnecessary OBS errors and refreshes
+   * CEF documents concurrently in the background.
    */
   async refreshAllOverlayCaches(): Promise<void> {
     if (isFreeDockPlan()) return;
+    try {
+      const resp = await this.call("GetInputList").catch(() => null) as {
+        inputs?: Array<{ inputName: string; inputKind: string }>;
+      } | null;
+      if (resp?.inputs) {
+        const browserInputs = new Set(
+          resp.inputs.filter((i) => i.inputKind === "browser_source").map((i) => i.inputName),
+        );
+        const targetSources = new Set<string>();
+        for (const def of Object.values(this._fullscreenSceneDefs)) {
+          targetSources.add(def.browserSourceName);
+          for (const alias of this.getSourceAliases(def.browserSourceName)) {
+            targetSources.add(alias);
+          }
+        }
+        const toRefresh = Array.from(targetSources).filter((name) => browserInputs.has(name));
+        if (toRefresh.length > 0) {
+          await Promise.allSettled(toRefresh.map((name) => this.refreshBrowserSourceCache(name)));
+          return;
+        }
+      }
+    } catch {
+      // Fallback to configured source names
+    }
+
     const sources = Object.values(this._fullscreenSceneDefs).map((d) => d.browserSourceName);
     await Promise.allSettled(sources.map((name) => this.refreshBrowserSourceCache(name)));
   }
