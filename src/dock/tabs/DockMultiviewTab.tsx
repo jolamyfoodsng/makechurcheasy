@@ -3151,6 +3151,11 @@ function MVTemplateDropdown({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
+        {selectedLayout && (
+          <span className="dock-mv-template-trigger__preview" aria-hidden="true">
+            <LayoutMiniPreview layout={selectedLayout} />
+          </span>
+        )}
         <span className={`dock-mv-template-trigger__label ${!selectedLayout ? "dock-mv-template-trigger__label--empty" : ""}`}>
           {selectedLayout?.name ?? `— ${t('multiview.selectTemplate')} —`}
         </span>
@@ -3205,6 +3210,11 @@ function MVTemplateDropdown({
               <span className="dock-mv-template-item__check">
                 {!value && <Icon name="check" size={13} />}
               </span>
+              <span className="dock-mv-template-item__preview dock-mv-template-item__preview--muted" aria-hidden="true">
+                <span className="dock-mv-template-item__preview-placeholder">
+                  <Icon name="apps" size={13} />
+                </span>
+              </span>
               <span className="dock-mv-template-item__name dock-mv-template-item__name--muted">
                 — {t('multiview.selectTemplate')} —
               </span>
@@ -3225,6 +3235,9 @@ function MVTemplateDropdown({
                 >
                   <span className="dock-mv-template-item__check">
                     {isSelected && <Icon name="check" size={13} />}
+                  </span>
+                  <span className="dock-mv-template-item__preview" aria-hidden="true">
+                    <LayoutMiniPreview layout={l} />
                   </span>
                   <span className="dock-mv-template-item__name">{l.name}</span>
                   {onDeleteTemplate && (

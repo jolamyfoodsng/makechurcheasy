@@ -157,6 +157,10 @@ export interface DockMediaSendOptions {
   muted?: boolean;
   imageAudioInputName?: string | null;
   looping?: boolean;
+  restartOnActivate?: boolean;
+  closeWhenInactive?: boolean;
+  clearOnMediaEnd?: boolean;
+  playbackSpeed?: number;
   fitMode?: "cover" | "contain" | "stretch";
   transition?: "cut" | "fade";
   document?: DockDocumentMediaOptions;
@@ -10664,6 +10668,32 @@ export class DockObsClient {
     }
   }
 
+  async setMediaVideoSourceSettings(settings: {
+    looping?: boolean;
+    restartOnActivate?: boolean;
+    closeWhenInactive?: boolean;
+    clearOnMediaEnd?: boolean;
+    playbackSpeed?: number;
+  }): Promise<void> {
+    const inputSettings: Record<string, unknown> = {};
+    if (settings.looping !== undefined) inputSettings.looping = settings.looping;
+    if (settings.restartOnActivate !== undefined) inputSettings.restart_on_activate = settings.restartOnActivate;
+    if (settings.closeWhenInactive !== undefined) inputSettings.close_when_inactive = settings.closeWhenInactive;
+    if (settings.clearOnMediaEnd !== undefined) inputSettings.clear_on_media_end = settings.clearOnMediaEnd;
+    if (settings.playbackSpeed !== undefined) inputSettings.speed_percent = settings.playbackSpeed;
+
+    if (Object.keys(inputSettings).length === 0) return;
+
+    for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
+      try {
+        await this.call("SetInputSettings", { inputName, inputSettings });
+        return;
+      } catch {
+        // try next alias
+      }
+    }
+  }
+
   async setMediaPlaybackPaused(paused: boolean): Promise<void> {
     for (const inputName of [DOCK_MEDIA_VIDEO_SOURCE, "MCE Media - Video", "Video - MCE Media"]) {
       try {
@@ -11040,7 +11070,10 @@ export class DockObsClient {
           local_file: filePath,
           looping: options.looping ?? true,
           is_local_file: true,
-          restart_on_activate: true,
+          restart_on_activate: options.restartOnActivate ?? true,
+          close_when_inactive: options.closeWhenInactive ?? false,
+          clear_on_media_end: options.clearOnMediaEnd ?? false,
+          speed_percent: options.playbackSpeed ?? 100,
         },
         true,
       );
@@ -11305,6 +11338,10 @@ export class DockObsClient {
     fitMode?: "cover" | "contain" | "stretch";
     muted?: boolean;
     looping?: boolean;
+    restartOnActivate?: boolean;
+    closeWhenInactive?: boolean;
+    clearOnMediaEnd?: boolean;
+    playbackSpeed?: number;
   }): Promise<void> {
     const sceneName = options.sceneName.trim();
     const sourceName = options.sourceName.trim();
@@ -11326,9 +11363,10 @@ export class DockObsClient {
         local_file: filePath,
         looping: options.looping ?? true,
         is_local_file: true,
-        restart_on_activate: true,
-        close_when_inactive: false,
-        clear_on_media_end: false,
+        restart_on_activate: options.restartOnActivate ?? true,
+        close_when_inactive: options.closeWhenInactive ?? false,
+        clear_on_media_end: options.clearOnMediaEnd ?? false,
+        speed_percent: options.playbackSpeed ?? 100,
       },
       true,
     );
