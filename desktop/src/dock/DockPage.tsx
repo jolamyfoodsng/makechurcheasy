@@ -9,7 +9,13 @@ import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
 import { dockObsClient, type DockObsStatus } from "./dockObsClient";
-import { DOCK_TABS, type DockTab, type DockStagedItem } from "./dockTypes";
+import {
+  DOCK_TABS,
+  FREE_PLAN_HIDDEN_DOCK_TABS,
+  isDockTabAvailableForPlan,
+  type DockTab,
+  type DockStagedItem,
+} from "./dockTypes";
 import {
   isPresentationLinkTarget,
   resolveDockPresentationOutputTarget,
@@ -167,10 +173,10 @@ interface DockShellPreferences {
 
 import { loadProjectionSettings, saveProjectionSettings, type ProjectionSettings } from "./dockProjectionSettings";
 
-function resolveDockTab(tab?: DockTab | "live" | null): DockTab {
+function resolveDockTab(tab?: DockTab | "live" | null, isFreePlan = false): DockTab {
   if (tab === "notes") return "worship";
   if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
-    return tab;
+    return isDockTabAvailableForPlan(tab, isFreePlan) ? tab : "bible";
   }
   return "bible";
 }
@@ -282,7 +288,7 @@ function DockPageContent({
     appearance,
     setAppearance,
   } = useAppTheme();
-  const initialActiveTab = resolveDockTab(shellPreferences.activeTab);
+  const initialActiveTab = resolveDockTab(shellPreferences.activeTab, isFreePlan);
   const initialSearchPlacement = normalizeDockSearchPlacement(shellPreferences.searchPlacement);
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
   const [searchPlacement, setSearchPlacement] = useState<DockSearchPlacement>(() => initialSearchPlacement);
@@ -329,7 +335,13 @@ function DockPageContent({
   const presentationPublishRequestRef = useRef(0);
   const presentationPublishTailRef = useRef(Promise.resolve());
   const hiddenTabsKey = hiddenTabs.join("|");
-  const hiddenTabIds = useMemo(() => new Set<DockTab>(hiddenTabs), [hiddenTabsKey]);
+  const hiddenTabIds = useMemo(() => {
+    const ids = new Set<DockTab>(hiddenTabs);
+    if (isFreePlan) {
+      for (const tab of FREE_PLAN_HIDDEN_DOCK_TABS) ids.add(tab);
+    }
+    return ids;
+  }, [hiddenTabsKey, isFreePlan]);
   const visibleDockTabs = useMemo(() => DOCK_TABS.filter((tab) => !hiddenTabIds.has(tab.id)), [hiddenTabIds]);
   const navigableDockTabs = useMemo(
     () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
@@ -621,10 +633,12 @@ function DockPageContent({
   }, [activeTab, visibleDockTabs]);
 
   const mountedDockTabs = useMemo(() => {
-    const mounted = new Set(visitedTabs);
-    mounted.add(renderedTab);
+    const mounted = new Set([...visitedTabs, renderedTab]);
+    if (isFreePlan) {
+      for (const tab of FREE_PLAN_HIDDEN_DOCK_TABS) mounted.delete(tab);
+    }
     return mounted;
-  }, [renderedTab, visitedTabs]);
+  }, [isFreePlan, renderedTab, visitedTabs]);
 
   useEffect(() => {
     saveDockStagedItem(staged);
@@ -1479,57 +1493,59 @@ function DockPageContent({
                   </select>
                 </div>
 
-                <div className="dock-sidebar__divider" />
+                {!isFreePlan && <div className="dock-sidebar__divider" />}
 
-                {/* Tab Visibility */}
-                <button
-                  type="button"
-                  className="dock-sidebar__item"
-                  onClick={() => setShowTabVisibility(!showTabVisibility)}
-                  title={t('page.tabVisibility')}>
-                  <Icon name="visibility" size={16} />
-                  <span>{t('page.tabVisibility')}</span>
-                  <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
-                </button>
-                {showTabVisibility && (() => {
-                  const toggleableTabs = ([
-                    { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
-                    { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
-                  ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
-                  return (
-                    <div className="dock-sidebar__subpanel">
-                      {toggleableTabs.map(({ tab, label, icon }) => {
-                        const isDisabled = disabledTabs.includes(tab);
-                        return (
-                          <label
-                            key={tab}
-                            className="dock-sidebar__check"
-                            style={{ cursor: "pointer" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={!isDisabled}
-                              onChange={() => {
-                                setDisabledTabs((prev) => {
-                                  const next = isDisabled
-                                    ? prev.filter((t) => t !== tab)
-                                    : [...prev, tab];
-                                  return next;
-                                });
-                                // If the user is on a tab that just got disabled, switch away
-                                if (!isDisabled && activeTab === tab) {
-                                  setActiveTab("bible");
-                                }
-                              }}
-                            />
-                            <Icon name={icon} size={13} />
-                            <span>{label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+                {!isFreePlan && <>
+                  {/* Tab Visibility */}
+                  <button
+                    type="button"
+                    className="dock-sidebar__item"
+                    onClick={() => setShowTabVisibility(!showTabVisibility)}
+                    title={t('page.tabVisibility')}>
+                    <Icon name="visibility" size={16} />
+                    <span>{t('page.tabVisibility')}</span>
+                    <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
+                  </button>
+                  {showTabVisibility && (() => {
+                    const toggleableTabs = ([
+                      { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
+                      { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
+                    ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
+                    return (
+                      <div className="dock-sidebar__subpanel">
+                        {toggleableTabs.map(({ tab, label, icon }) => {
+                          const isDisabled = disabledTabs.includes(tab);
+                          return (
+                            <label
+                              key={tab}
+                              className="dock-sidebar__check"
+                              style={{ cursor: "pointer" }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!isDisabled}
+                                onChange={() => {
+                                  setDisabledTabs((prev) => {
+                                    const next = isDisabled
+                                      ? prev.filter((t) => t !== tab)
+                                      : [...prev, tab];
+                                    return next;
+                                  });
+                                  // If the user is on a tab that just got disabled, switch away
+                                  if (!isDisabled && activeTab === tab) {
+                                    setActiveTab("bible");
+                                  }
+                                }}
+                              />
+                              <Icon name={icon} size={13} />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>}
 
                 <div className="dock-sidebar__divider" />
 

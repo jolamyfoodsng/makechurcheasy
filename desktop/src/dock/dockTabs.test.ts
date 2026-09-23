@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { DOCK_TABS } from "./dockTypes";
+import {
+  DOCK_TABS,
+  FREE_PLAN_HIDDEN_DOCK_TABS,
+  isDockTabAvailableForPlan,
+} from "./dockTypes";
 import dockPageSource from "./DockPage.tsx?raw";
 
 const dockCssSource = readFileSync(fileURLToPath(new URL("./dock.css", import.meta.url)), "utf8");
@@ -42,5 +46,18 @@ describe("combined Worship and Notes Dock tab", () => {
     expect(dockCssSource).toContain("flex: 1 1 0;");
     expect(dockCssSource).toContain("height: auto;");
     expect(dockCssSource).toContain("min-height: 48px;");
+  });
+});
+
+describe("Free-plan Dock tabs", () => {
+  it("hides Ministry and Multi-View while keeping them available to paid plans", () => {
+    expect(FREE_PLAN_HIDDEN_DOCK_TABS).toEqual(["ministry", "multiview"]);
+    expect(isDockTabAvailableForPlan("ministry", true)).toBe(false);
+    expect(isDockTabAvailableForPlan("multiview", true)).toBe(false);
+    expect(isDockTabAvailableForPlan("bible", true)).toBe(true);
+    expect(isDockTabAvailableForPlan("ministry", false)).toBe(true);
+    expect(isDockTabAvailableForPlan("multiview", false)).toBe(true);
+    expect(DOCK_TABS.map((tab) => tab.id)).toContain("ministry");
+    expect(DOCK_TABS.map((tab) => tab.id)).toContain("multiview");
   });
 });
