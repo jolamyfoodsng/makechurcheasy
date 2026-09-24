@@ -232,11 +232,12 @@ export interface CreditDetails {
   unlimited?: boolean;
 }
 
-/**
- * Fetch full credit details from the backend API.
- * Returns the complete breakdown or null on failure.
- */
-export async function fetchCreditDetails(): Promise<CreditDetails | null> {
+export type FetchCreditsResult =
+  | { status: "ok"; credits: number; details: CreditDetails }
+  | { status: "unauthorized" }
+  | { status: "network_error" };
+
+export async function fetchCreditsResult(): Promise<FetchCreditsResult> {
   try {
     const { response, data } = await requestJsonWithRetry<CreditDetails>(
       `${API_BASE}/api/user/credits`,
@@ -246,9 +247,12 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         retryDelaysMs: [1000, 3000],
       },
     );
-    if (!response.ok || !data) return null;
+    if (response.status === 401 || response.status === 403) {
+      return { status: "unauthorized" };
+    }
+    if (!response.ok || !data) return { status: "network_error" };
     if (typeof data.credits === "number") {
-      return {
+      const details: CreditDetails = {
         credits: data.credits,
         totalConsumed: data.totalConsumed ?? 0,
         planAllocation: data.planAllocation ?? 0,
@@ -258,11 +262,21 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         isAdmin: data.isAdmin ?? false,
         unlimited: data.unlimited ?? data.credits === -1,
       };
+      return { status: "ok", credits: data.credits, details };
     }
-    return null;
+    return { status: "network_error" };
   } catch {
-    return null;
+    return { status: "network_error" };
   }
+}
+
+/**
+ * Fetch full credit details from the backend API.
+ * Returns the complete breakdown or null on failure.
+ */
+export async function fetchCreditDetails(): Promise<CreditDetails | null> {
+  const result = await fetchCreditsResult();
+  return result.status === "ok" ? result.details : null;
 }
 
 /**
@@ -272,8 +286,8 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
  * Auth is via X-Device-Id header — no userId param needed.
  */
 export async function fetchCreditsFromBackend(): Promise<number | null> {
-  const details = await fetchCreditDetails();
-  return details?.credits ?? null;
+  const result = await fetchCreditsResult();
+  return result.status === "ok" ? result.credits : null;
 }
 
 /**

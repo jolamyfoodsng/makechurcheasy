@@ -9,8 +9,9 @@
  */
 
 import { useEffect, useState } from "react";
-import { Zap, ExternalLink } from "lucide-react";
-import { fetchCreditsFromBackend, isProUnlocked } from "../services/credits";
+import { Zap, ExternalLink, LogOut } from "lucide-react";
+import { fetchCreditsResult, isProUnlocked } from "../services/credits";
+import { useAuth } from "../contexts/AuthContext";
 import LoadingScreen from "./LoadingScreen";
 
 const CREDITS_URL =
@@ -22,6 +23,7 @@ interface CreditsGuardProps {
 
 type GuardState =
   | { phase: "loading" }
+  | { phase: "unauthorized" }
   | { phase: "unavailable" }
   | { phase: "blocked" }
   | { phase: "pass" };
@@ -30,6 +32,7 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
   const [state, setState] = useState<GuardState>({ phase: "loading" });
   const [retryKey, setRetryKey] = useState(0);
   const fullAccess = isProUnlocked();
+  const { logout } = useAuth();
 
   useEffect(() => {
     if (fullAccess) return;
@@ -41,13 +44,15 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
       return () => { cancelled = true; };
     }
 
-    fetchCreditsFromBackend().then((credits) => {
+    fetchCreditsResult().then((result) => {
       if (cancelled) return;
-      if (credits === null) {
+      if (result.status === "unauthorized") {
+        setState({ phase: "unauthorized" });
+      } else if (result.status === "network_error") {
         setState({ phase: "unavailable" });
-      } else if (credits < 0) {
+      } else if (result.credits < 0) {
         setState({ phase: "pass" });
-      } else if (credits === 0) {
+      } else if (result.credits === 0) {
         setState({ phase: "blocked" });
       } else {
         setState({ phase: "pass" });
@@ -75,6 +80,31 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
     return <LoadingScreen variant="page" label="Verifying credits…" />;
   }
 
+  // Session expired / unauthorized — prompt to log in again
+  if (state.phase === "unauthorized") {
+    return (
+      <div style={styles.root}>
+        <div style={styles.card}>
+          <div style={{ ...styles.iconWrap, background: "rgba(239, 68, 68, 0.12)", color: "#ef4444" }}>
+            <LogOut size={28} />
+          </div>
+          <h2 style={styles.title}>Session Expired</h2>
+          <p style={styles.desc}>
+            Your login session is no longer recognized by the server. Please sign out and log back in to reconnect your account.
+          </p>
+          <button
+            type="button"
+            style={{ ...styles.cta, background: "#ef4444", cursor: "pointer" }}
+            onClick={() => logout()}
+          >
+            <LogOut size={14} />
+            Sign Out & Reconnect
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Offline / backend unreachable — block until credits can be verified
   if (state.phase === "unavailable") {
     return (
@@ -89,16 +119,32 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
             transcript library, or translation features. Check your connection
             and try again.
           </p>
-          <button
-            type="button"
-            style={styles.cta}
-            onClick={() => {
-              setState({ phase: "loading" });
-              setRetryKey((key) => key + 1);
-            }}
-          >
-            Retry
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <button
+              type="button"
+              style={{ ...styles.cta, cursor: "pointer" }}
+              onClick={() => {
+                setState({ phase: "loading" });
+                setRetryKey((key) => key + 1);
+              }}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              style={{
+                ...styles.cta,
+                background: "transparent",
+                border: "1px solid var(--border, rgba(255,255,255,0.15))",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+              }}
+              onClick={() => logout()}
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );
