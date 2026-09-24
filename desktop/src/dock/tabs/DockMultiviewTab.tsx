@@ -3039,6 +3039,236 @@ function FramePicker({
 }
 
 // ---------------------------------------------------------------------------
+// MV Template Dropdown — custom dropdown with reload button & hover-to-delete
+// ---------------------------------------------------------------------------
+
+function MVTemplateDropdown({
+  value,
+  layout,
+  addedLayouts,
+  onSelect,
+  onReloadTemplates,
+  onDeleteTemplate,
+  isReloading = false,
+}: {
+  value: string;
+  layout?: GalleryLayout;
+  addedLayouts: GalleryLayout[];
+  onSelect: (layoutId: string) => void;
+  onReloadTemplates?: () => void;
+  onDeleteTemplate?: (layoutId: string) => void;
+  isReloading?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 200 });
+
+  const allTemplates = useMemo(() => {
+    if (layout && !addedLayouts.some((l) => l.id === layout.id)) {
+      return [layout, ...addedLayouts];
+    }
+    return addedLayouts;
+  }, [addedLayouts, layout]);
+
+  const selectedLayout = useMemo(() => {
+    return allTemplates.find((l) => l.id === value);
+  }, [allTemplates, value]);
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.max(rect.width, 240);
+    const estimatedHeight = Math.min(320, 52 + (allTemplates.length + 1) * 32);
+    const fitsBelow = rect.bottom + estimatedHeight + 8 <= window.innerHeight;
+    const top = fitsBelow
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - estimatedHeight - 4);
+    const left = Math.max(
+      8,
+      Math.min(rect.left, window.innerWidth - width - 8),
+    );
+    setPosition({ top, left, width });
+  }, [allTemplates.length]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updatePosition();
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    const handleViewportChange = () => updatePosition();
+
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    document.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointer);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      document.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [isOpen, updatePosition]);
+
+  return (
+    <div className="dock-mv-property">
+      <div className="dock-mv-property__header">
+        <span className="dock-mv-property__label">{t('multiview.template')}</span>
+        {onReloadTemplates && (
+          <button
+            type="button"
+            className="dock-mv-property__reload-btn"
+            onClick={onReloadTemplates}
+            title={t('multiview.reloadTemplates', 'Reload templates')}
+            aria-label={t('multiview.reloadTemplates', 'Reload templates')}
+            disabled={isReloading}
+          >
+            <Icon name="refresh" size={13} className={isReloading ? "dock-mv-spin" : ""} />
+          </button>
+        )}
+      </div>
+
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`dock-mv-property__select dock-mv-property__select--visible dock-mv-template-trigger ${isOpen ? "dock-mv-template-trigger--open" : ""}`}
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        {selectedLayout && (
+          <span className="dock-mv-template-trigger__preview" aria-hidden="true">
+            <LayoutMiniPreview layout={selectedLayout} />
+          </span>
+        )}
+        <span className={`dock-mv-template-trigger__label ${!selectedLayout ? "dock-mv-template-trigger__label--empty" : ""}`}>
+          {selectedLayout?.name ?? `— ${t('multiview.selectTemplate')} —`}
+        </span>
+        <Icon name={isOpen ? "expand_less" : "expand_more"} size={14} className="dock-mv-template-trigger__chevron" />
+      </button>
+
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          className="dock-mv-template-dropdown"
+          style={{
+            top: position.top,
+            left: position.left,
+            width: position.width,
+          }}
+          role="listbox"
+        >
+          {onReloadTemplates && (
+            <>
+              <div className="dock-mv-template-dropdown__action-bar">
+                <span className="dock-mv-template-dropdown__count">
+                  {allTemplates.length} {allTemplates.length === 1 ? "template" : "templates"}
+                </span>
+                <button
+                  type="button"
+                  className="dock-mv-template-dropdown__action-reload"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReloadTemplates();
+                  }}
+                  title={t('multiview.reloadTemplates', 'Reload templates')}
+                  disabled={isReloading}
+                >
+                  <Icon name="refresh" size={12} className={isReloading ? "dock-mv-spin" : ""} />
+                  <span>{t('common.reload', 'Reload')}</span>
+                </button>
+              </div>
+              <div className="dock-mv-slot-row__dropdown-divider" />
+            </>
+          )}
+
+          <div className="dock-mv-template-dropdown__list">
+            <div
+              className={`dock-mv-template-item ${!value ? "dock-mv-template-item--selected" : ""}`}
+              onClick={() => {
+                onSelect("");
+                setIsOpen(false);
+              }}
+              role="option"
+              aria-selected={!value}
+            >
+              <span className="dock-mv-template-item__check">
+                {!value && <Icon name="check" size={13} />}
+              </span>
+              <span className="dock-mv-template-item__preview dock-mv-template-item__preview--muted" aria-hidden="true">
+                <span className="dock-mv-template-item__preview-placeholder">
+                  <Icon name="apps" size={13} />
+                </span>
+              </span>
+              <span className="dock-mv-template-item__name dock-mv-template-item__name--muted">
+                — {t('multiview.selectTemplate')} —
+              </span>
+            </div>
+
+            {allTemplates.map((l) => {
+              const isSelected = value === l.id;
+              return (
+                <div
+                  key={l.id}
+                  className={`dock-mv-template-item ${isSelected ? "dock-mv-template-item--selected" : ""}`}
+                  onClick={() => {
+                    onSelect(l.id);
+                    setIsOpen(false);
+                  }}
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  <span className="dock-mv-template-item__check">
+                    {isSelected && <Icon name="check" size={13} />}
+                  </span>
+                  <span className="dock-mv-template-item__preview" aria-hidden="true">
+                    <LayoutMiniPreview layout={l} />
+                  </span>
+                  <span className="dock-mv-template-item__name">{l.name}</span>
+                  {onDeleteTemplate && (
+                    <button
+                      type="button"
+                      className="dock-mv-template-item__delete-btn"
+                      title={t('multiview.deleteTemplate', 'Delete template')}
+                      aria-label={t('multiview.deleteTemplate', 'Delete template')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (value === l.id) {
+                          onSelect("");
+                        }
+                        onDeleteTemplate(l.id);
+                      }}
+                    >
+                      <Icon name="delete_outline" size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // MV Card — one independent card per saved Multi-View
 // ---------------------------------------------------------------------------
 
@@ -3071,6 +3301,9 @@ const MVCard = memo(function MVCard({
   onUpdateSlotGap,
   onDuplicate,
   onDelete,
+  onReloadTemplates,
+  onDeleteTemplate,
+  isReloadingTemplates,
 }: {
   mv: SavedMultiView;
   index: number;
@@ -3100,6 +3333,9 @@ const MVCard = memo(function MVCard({
   onUpdateSlotGap: (id: string, slotGap: number) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
+  onReloadTemplates?: () => void;
+  onDeleteTemplate?: (layoutId: string) => void;
+  isReloadingTemplates?: boolean;
 }) {
   const { t } = useTranslation();
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
@@ -3257,23 +3493,16 @@ const MVCard = memo(function MVCard({
         </div>
       </div>
 
-      {/* Template — always-visible select */}
-      <div className="dock-mv-property">
-        <span className="dock-mv-property__label">{t('multiview.template')}</span>
-        <select
-          className="dock-mv-property__select dock-mv-property__select--visible"
-          value={mv.layoutId}
-          onChange={(e) => onUpdateLayout(mv.id, e.target.value)}
-        >
-          <option value="">— {t('multiview.selectTemplate')} —</option>
-          {addedLayouts.map(l => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-          {!addedLayouts.some(l => l.id === mv.layoutId) && layout && (
-            <option key={layout.id} value={layout.id}>{layout.name}</option>
-          )}
-        </select>
-      </div>
+      {/* Template — custom dropdown with reload & hover-to-delete */}
+      <MVTemplateDropdown
+        value={mv.layoutId}
+        layout={layout}
+        addedLayouts={addedLayouts}
+        onSelect={(layoutId) => onUpdateLayout(mv.id, layoutId)}
+        onReloadTemplates={onReloadTemplates}
+        onDeleteTemplate={onDeleteTemplate}
+        isReloading={isReloadingTemplates}
+      />
 
       {/* Layout Preview — shown below template */}
       {layout && (
@@ -4112,6 +4341,46 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
     setDeleteTargetId(id);
   }, []);
 
+  const [isReloadingTemplates, setIsReloadingTemplates] = useState(false);
+
+  const handleReloadLayouts = useCallback(async () => {
+    setIsReloadingTemplates(true);
+    try {
+      const remoteIds = await loadAddedLayoutIdsFromDockData();
+      const localIds = loadLocalAddedLayoutIds();
+      const merged = mergeAddedLayoutIds(localIds, remoteIds);
+      setAddedLayoutIds(merged);
+      saveLocalAddedLayoutIds(merged);
+      void refreshObsScenes({ forceThumbnails: true });
+    } finally {
+      setTimeout(() => setIsReloadingTemplates(false), 400);
+    }
+  }, [refreshObsScenes]);
+
+  const handleDeleteTemplate = useCallback((layoutId: string) => {
+    const currentLocal = loadLocalAddedLayoutIds();
+    currentLocal.delete(layoutId);
+    saveLocalAddedLayoutIds(currentLocal);
+    saveAddedLayoutIdsToDockData(currentLocal).catch(() => {});
+    setAddedLayoutIds(new Set(currentLocal));
+
+    const next = savedListRef.current.map((item) => {
+      if (item.layoutId !== layoutId) return item;
+      return {
+        ...item,
+        layoutId: "",
+        assignments: {},
+        slotModes: {},
+        slotFraming: {},
+        slotThumbnails: {},
+        layoutFrameId: null,
+        slotFrames: {},
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    commitSavedList(next);
+  }, [commitSavedList]);
+
   // ════════════════════════════════════════════════════════════════════════
   // OBS Operations
   // ════════════════════════════════════════════════════════════════════════
@@ -4508,6 +4777,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             onUpdateAffectBackground={handleUpdateAffectBackground}
             onDuplicate={handleDuplicate}
             onDelete={handleDelete}
+            onReloadTemplates={handleReloadLayouts}
+            onDeleteTemplate={handleDeleteTemplate}
+            isReloadingTemplates={isReloadingTemplates}
           />
         ))}
       </div>

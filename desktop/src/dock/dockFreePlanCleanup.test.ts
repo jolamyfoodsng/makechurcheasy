@@ -51,6 +51,17 @@ describe("Dock Free Plan Cleanup & Source Filtering", () => {
       expect(DockObsClient.isMCESource("mce lower thirds")).toBe(true);
       expect(DockObsClient.isMCESource("Bible - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Worship - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Notes - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Video - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Audio - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Image - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Pattern - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Text - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Template - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Remote - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Lower Third - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Ticker - MCE Presentation")).toBe(true);
+      expect(DockObsClient.isMCESource("Animated Lower Thirds - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Video - MCE Media")).toBe(true);
       expect(DockObsClient.isMCESource("Bible - MCE Livestream Scene")).toBe(true);
       expect(DockObsClient.isMCESource("Ticker - MCE Ticker")).toBe(true);
@@ -66,6 +77,30 @@ describe("Dock Free Plan Cleanup & Source Filtering", () => {
       expect(DockObsClient.isMCESource("Audio Input Capture")).toBe(false);
       expect(DockObsClient.isMCESource("Worship Lyrics Custom")).toBe(false);
       expect(DockObsClient.isMCESource("")).toBe(false);
+    });
+
+    it("resolves legacy source aliases for standardized MCE Presentation sources", () => {
+      const client = new DockObsClient();
+      const videoAliases = client.getSourceAliases("Video - MCE Presentation");
+      expect(videoAliases).toContain("Video - MCE Media");
+      expect(videoAliases).toContain("MCE Media - Video");
+      expect(videoAliases).toContain("MCE Media");
+
+      const audioAliases = client.getSourceAliases("Audio - MCE Presentation");
+      expect(audioAliases).toContain("Audio - MCE Media");
+      expect(audioAliases).toContain("MCE Media - Audio");
+
+      const imageAliases = client.getSourceAliases("Image - MCE Presentation");
+      expect(imageAliases).toContain("Image - MCE Media");
+      expect(imageAliases).toContain("MCE Media - Image");
+
+      const ltAliases = client.getSourceAliases("Lower Third - MCE Presentation");
+      expect(ltAliases).toContain("Lower Third - MCE Lower Third");
+      expect(ltAliases).toContain("MCE Lower Third");
+
+      const tickerAliases = client.getSourceAliases("Ticker - MCE Presentation");
+      expect(tickerAliases).toContain("Ticker - MCE Ticker");
+      expect(tickerAliases).toContain("MCE Ticker");
     });
   });
 

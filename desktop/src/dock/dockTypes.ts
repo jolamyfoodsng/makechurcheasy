@@ -208,4 +208,3 @@ export {
   getCanonicalVerseCount,
   isCanonicalReferenceValid,
 } from "./bibleCanon";
-

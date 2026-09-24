@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeDefaultAutoAdvanceBannerPosition,
   getAutoAdvanceIndex,
   getAutoAdvancePopoverPosition,
 } from "./DockAutoAdvanceControl";
@@ -52,4 +53,79 @@ describe("dock auto-advance queue", () => {
     expect(position.top).toBe(202);
     expect(position.left).toBe(40);
   });
+
+  describe("computeDefaultAutoAdvanceBannerPosition", () => {
+    it("positions banner directly above worship bottom toolbar with 8px clearance", () => {
+      const mockToolbar = {
+        getBoundingClientRect: () => ({
+          top: 500,
+          bottom: 548,
+          left: 0,
+          right: 400,
+          width: 400,
+          height: 48,
+          x: 0,
+          y: 500,
+          toJSON: () => {},
+        }),
+      } as unknown as Element;
+
+      const mockDoc = {
+        querySelector: (sel: string) => {
+          if (sel.includes(".dock-worship-toolbar")) return mockToolbar;
+          return null;
+        },
+      };
+
+      const fakeBanner = {
+        offsetWidth: 300,
+        offsetHeight: 38,
+      } as HTMLElement;
+
+      const pos = computeDefaultAutoAdvanceBannerPosition(
+        fakeBanner,
+        {
+          innerWidth: 800,
+          innerHeight: 600,
+        },
+        mockDoc,
+      );
+
+      // targetY should be rect.top - bannerHeight - 8 = 500 - 38 - 8 = 454
+      expect(pos.y).toBe(454);
+      expect(pos.x).toBe(16);
+    });
+
+    it("falls back to window-height offset when toolbar is not present", () => {
+      const fakeBanner = {
+        offsetWidth: 280,
+        offsetHeight: 36,
+      } as HTMLElement;
+
+      const pos = computeDefaultAutoAdvanceBannerPosition(fakeBanner, {
+        innerWidth: 1000,
+        innerHeight: 700,
+      });
+
+      // targetY should be winHeight - 96 - bannerHeight = 700 - 96 - 36 = 568
+      expect(pos.y).toBe(568);
+      expect(pos.x).toBe(16);
+    });
+
+    it("clamps position within viewport bounds for small windows", () => {
+      const fakeBanner = {
+        offsetWidth: 200,
+        offsetHeight: 40,
+      } as HTMLElement;
+
+      const pos = computeDefaultAutoAdvanceBannerPosition(fakeBanner, {
+        innerWidth: 150,
+        innerHeight: 120,
+      });
+
+      expect(pos.x).toBeGreaterThanOrEqual(8);
+      expect(pos.y).toBeGreaterThanOrEqual(8);
+    });
+  });
 });
+

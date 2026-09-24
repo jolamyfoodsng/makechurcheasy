@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship + Notes, and Media production controls inside OBS.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, useTransition, type CSSProperties, type ChangeEvent } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -151,10 +151,10 @@ function preloadDockTab(tab: DockTab): void {
 }
 
 function isSubEightGbDevice(totalRAMMB?: number): boolean {
-  // If RAM is unknown (e.g. inside OBS CEF browser dock where Tauri IPC isn't available)
-  // or less than 8GB, default to true to protect the system from RAM exhaustion.
-  if (!totalRAMMB || totalRAMMB <= 0) return true;
-  return totalRAMMB < 8 * 1024;
+  // If RAM is unknown, assume standard modern hardware.
+  // Only enable low-memory mode on confirmed low-spec systems (< 4GB RAM).
+  if (!totalRAMMB || totalRAMMB <= 0) return false;
+  return totalRAMMB < 4 * 1024;
 }
 
 function normalizeDockVersion(version?: string): string | null {
@@ -296,7 +296,6 @@ function DockPageContent({
   const [lowMemoryMode, setLowMemoryMode] = useState(() =>
     isSubEightGbDevice(getDeviceProfile()?.hardware.totalRAMMB ?? 0),
   );
-  const [, startTransition] = useTransition();
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
   const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
     (shellPreferences.disabledTabs ?? []).filter((tab) => tab !== "notes"),
@@ -348,15 +347,29 @@ function DockPageContent({
     [disabledTabs, visibleDockTabs],
   );
 
-  // Keep the tab button and shell state responsive first. Heavy tab trees are
-  // rendered in a transition on the next task, so the click is painted before
-  // Bible/Worship/Media mount or rerender their larger panels.
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      startTransition(() => setRenderedTab(activeTab));
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [activeTab, startTransition]);
+    setRenderedTab(activeTab);
+  }, [activeTab]);
+
+  // Pre-warm the Bible and Worship tab chunks during idle time so they open instantly on first click
+  useEffect(() => {
+    const run = () => {
+      preloadDockTab("bible");
+      preloadDockTab("worship");
+    };
+    const win = typeof window !== "undefined" ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === "function") {
+      const handle = win.requestIdleCallback(run, { timeout: 2000 });
+      return () => {
+        if (typeof win.cancelIdleCallback === "function") {
+          win.cancelIdleCallback(handle);
+        }
+      };
+    } else {
+      const handle = setTimeout(run, 1500);
+      return () => clearTimeout(handle);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -608,20 +621,19 @@ function DockPageContent({
   }, [activeTab, onActiveTabChange]);
 
   // Keep visited tabs mounted when the operator moves around the dock so
-  // in-progress work is preserved. On sub-8 GB systems retain only the active
-  // tab and the most recently visited tab to keep the background tree bounded.
+  // in-progress work is preserved and tab switching between Bible, Worship,
+  // and Media is instant without re-initialization lag.
   useEffect(() => {
     setVisitedTabs((current) => {
-      if (!lowMemoryMode && current.has(activeTab)) return current;
+      const maxTabs = lowMemoryMode ? 3 : 6;
+      if (current.has(activeTab) && current.size <= maxTabs) return current;
       const next = new Set(current);
-      if (lowMemoryMode) next.delete(activeTab);
+      next.delete(activeTab);
       next.add(activeTab);
-      if (lowMemoryMode) {
-        while (next.size > 2) {
-          const oldest = next.values().next().value;
-          if (!oldest || oldest === activeTab) break;
-          next.delete(oldest);
-        }
+      while (next.size > maxTabs) {
+        const oldest = next.values().next().value;
+        if (!oldest || oldest === activeTab) break;
+        next.delete(oldest);
       }
       return next;
     });
@@ -1117,6 +1129,7 @@ function DockPageContent({
               className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
               onClick={() => {
                 setActiveTab(tab.id);
+                setRenderedTab(tab.id);
               }}
               onPointerEnter={() => preloadDockTab(tab.id)}
               onPointerDown={() => preloadDockTab(tab.id)}
@@ -1125,7 +1138,7 @@ function DockPageContent({
               title={tab.label}
               data-label={tab.label}
             >
-              <Icon name={tab.icon} size={18} />
+              <Icon name={tab.icon} size={16} />
             </button>
           ))}
         </nav>
@@ -1507,43 +1520,43 @@ function DockPageContent({
                     <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
                   </button>
                   {showTabVisibility && (() => {
-                    const toggleableTabs = ([
-                      { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
-                      { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
-                    ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
-                    return (
-                      <div className="dock-sidebar__subpanel">
-                        {toggleableTabs.map(({ tab, label, icon }) => {
-                          const isDisabled = disabledTabs.includes(tab);
-                          return (
-                            <label
-                              key={tab}
-                              className="dock-sidebar__check"
-                              style={{ cursor: "pointer" }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={!isDisabled}
-                                onChange={() => {
-                                  setDisabledTabs((prev) => {
-                                    const next = isDisabled
-                                      ? prev.filter((t) => t !== tab)
-                                      : [...prev, tab];
-                                    return next;
-                                  });
-                                  // If the user is on a tab that just got disabled, switch away
-                                  if (!isDisabled && activeTab === tab) {
-                                    setActiveTab("bible");
-                                  }
-                                }}
-                              />
-                              <Icon name={icon} size={13} />
-                              <span>{label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    );
+                  const toggleableTabs = ([
+                    { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
+                    { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
+                  ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
+                  return (
+                    <div className="dock-sidebar__subpanel">
+                      {toggleableTabs.map(({ tab, label, icon }) => {
+                        const isDisabled = disabledTabs.includes(tab);
+                        return (
+                          <label
+                            key={tab}
+                            className="dock-sidebar__check"
+                            style={{ cursor: "pointer" }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!isDisabled}
+                              onChange={() => {
+                                setDisabledTabs((prev) => {
+                                  const next = isDisabled
+                                    ? prev.filter((t) => t !== tab)
+                                    : [...prev, tab];
+                                  return next;
+                                });
+                                // If the user is on a tab that just got disabled, switch away
+                                if (!isDisabled && activeTab === tab) {
+                                  setActiveTab("bible");
+                                }
+                              }}
+                            />
+                            <Icon name={icon} size={13} />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
                   })()}
                 </>}
 
@@ -1976,6 +1989,7 @@ function DockPageContent({
                     showSubtabs
                     compactVerticalNav={verticalTabs}
                     initialSubTab={shellPreferences.activeTab === "notes" ? "notes" : undefined}
+                    isActive={renderedTab === "worship"}
                   />
                 </div>
               )}
@@ -2019,6 +2033,7 @@ function DockPageContent({
               className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
               onClick={() => {
                 setActiveTab(tab.id);
+                setRenderedTab(tab.id);
               }}
               onPointerEnter={() => preloadDockTab(tab.id)}
               onPointerDown={() => preloadDockTab(tab.id)}

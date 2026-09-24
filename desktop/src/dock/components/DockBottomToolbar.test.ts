@@ -60,4 +60,15 @@ describe("Dock bottom toolbar narrow actions", () => {
     expect(bottomPanelSource).toContain("if (!expanded && toggleInToolbar) return null;");
     expect(bottomPanelCss).toContain(".dock-bottom-search-panel__label {\n  display: none;");
   });
+
+  it("handles narrow dock width under 300px by moving quick edits and hide into the three-dots overflow", () => {
+    expect(toolbarSource).toContain("width < 300");
+    expect(toolbarSource).toContain("dock-btm-toolbar--below-300");
+    expect(toolbarSource).toContain("showCenterActionInRow");
+    expect(toolbarSource).toContain("showInlineClear");
+    expect(toolbarCss).toContain(".dock-btm-toolbar.dock-btm-toolbar--below-300");
+    expect(toolbarCss).toContain("flex-wrap: nowrap !important;");
+    expect(toolbarCss).toContain("z-index: 20050;");
+    expect(bibleTabSource).toContain("onQuickEdit={() => openThemeSettings(\"text\")}");
+  });
 });

@@ -58,8 +58,14 @@ interface Props {
   onOverflowChange?: (open: boolean) => void;
   /** Whether the toolbar is collapsed (controlled) */
   collapsed?: boolean;
+  /** Whether to hide the collapse button and suppress collapsed mode */
+  hideCollapse?: boolean;
   /** Called when collapse/expand is toggled */
   onCollapseChange?: (collapsed: boolean) => void;
+  /** Optional direct handler for quick edits when moved to overflow */
+  onQuickEdit?: () => void;
+  /** Optional label for quick edits when moved to overflow */
+  quickEditLabel?: string;
 }
 
 export default function DockBottomToolbar({
@@ -81,7 +87,10 @@ export default function DockBottomToolbar({
   bottomPanelToggle,
   onOverflowChange,
   collapsed = false,
+  hideCollapse = false,
   onCollapseChange,
+  onQuickEdit,
+  quickEditLabel,
 }: Props) {
   const { t } = useTranslation();
   const resolvedClearLabel = clearLabel ?? t("dock.bottomToolbar.hideBible");
@@ -92,6 +101,7 @@ export default function DockBottomToolbar({
   const displayModeMenuRef = useRef<HTMLDivElement>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   const [isUltraNarrow, setIsUltraNarrow] = useState(false);
+  const [isBelow300, setIsBelow300] = useState(false);
   const visibilityIcon = sourceVisible ? "visibility_off" : "visibility";
   const modeToggleDisabled = morphing || overlayModeToggleDisabled;
 
@@ -103,13 +113,20 @@ export default function DockBottomToolbar({
 
     const updateNarrowState = () => {
       const width = toolbar.clientWidth;
+      const dockRoot = toolbar.closest(".dock-root");
+      const dockRootWidth = dockRoot ? dockRoot.clientWidth : width;
       setIsNarrow(width <= 350);
       setIsUltraNarrow(width <= 239);
+      setIsBelow300(width < 300 || dockRootWidth < 300);
     };
     updateNarrowState();
 
     const observer = new ResizeObserver(updateNarrowState);
     observer.observe(toolbar);
+    const dockRoot = toolbar.closest(".dock-root");
+    if (dockRoot) {
+      observer.observe(dockRoot);
+    }
     return () => observer.disconnect();
   }, [collapsed]);
 
@@ -174,54 +191,60 @@ export default function DockBottomToolbar({
   );
 
   if (collapsed) {
-    if (bottomPanel) {
+    if (!hideCollapse) {
+      if (bottomPanel) {
+        return (
+          <div className="dock-btm-toolbar dock-btm-toolbar--bottom-panel-only" ref={toolbarRef}>
+            {bottomPanel}
+          </div>
+        );
+      }
       return (
-        <div className="dock-btm-toolbar dock-btm-toolbar--bottom-panel-only" ref={toolbarRef}>
-          {bottomPanel}
+        <div className="dock-btm-toolbar dock-btm-toolbar--collapsed" ref={toolbarRef}>
+          {onClear && !clearInOverflow && (
+            <button
+              type="button"
+              className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
+              onClick={onClear}
+              disabled={clearDisabled}
+              title={resolvedClearLabel}
+            >
+              <span>{t("dock.bottomToolbar.hideBible")}</span>
+            </button>
+          )}
+          {centerAction && (
+            <div
+              className="dock-btm-toolbar__center dock-btm-toolbar__center--collapsed"
+              aria-label={t("dock.bottomToolbar.centerActions", "Navigation")}
+            >
+              {centerAction}
+            </div>
+          )}
+          <button
+            type="button"
+            className="dock-btm-toolbar__icon-btn"
+            onClick={() => onCollapseChange?.(false)}
+            aria-label={t("dock.bottomToolbar.expandTooltip")}
+            title={t("dock.bottomToolbar.expandTooltip")}
+          >
+            <Icon name="expand_less" size={18} />
+          </button>
         </div>
       );
     }
-    return (
-      <div className="dock-btm-toolbar dock-btm-toolbar--collapsed" ref={toolbarRef}>
-        {onClear && !clearInOverflow && (
-          <button
-            type="button"
-            className="dock-btm-toolbar__clear dock-btm-toolbar__clear--bible"
-            onClick={onClear}
-            disabled={clearDisabled}
-            title={resolvedClearLabel}
-          >
-            <span>{t("dock.bottomToolbar.hideBible")}</span>
-          </button>
-        )}
-        {centerAction && (
-          <div
-            className="dock-btm-toolbar__center dock-btm-toolbar__center--collapsed"
-            aria-label={t("dock.bottomToolbar.centerActions", "Navigation")}
-          >
-            {centerAction}
-          </div>
-        )}
-        <button
-          type="button"
-          className="dock-btm-toolbar__icon-btn"
-          onClick={() => onCollapseChange?.(false)}
-          aria-label={t("dock.bottomToolbar.expandTooltip")}
-          title={t("dock.bottomToolbar.expandTooltip")}
-        >
-          <Icon name="expand_less" size={18} />
-        </button>
-      </div>
-    );
   }
+
+  const showCenterActionInRow = Boolean(centerAction) && !isBelow300;
+  const showInlineClear = Boolean(onClear) && !clearInOverflow && !isBelow300;
+  const hasOverflowItems = Boolean(children) || (Boolean(onClear) && (clearInOverflow || isBelow300)) || (isBelow300 && Boolean(onQuickEdit || centerAction));
 
   return (
     <div
-      className={`dock-btm-toolbar dock-btm-toolbar--compact${isNarrow ? " dock-btm-toolbar--narrow" : ""}${isUltraNarrow ? " dock-btm-toolbar--ultra-narrow" : ""}`}
+      className={`dock-btm-toolbar dock-btm-toolbar--compact${isNarrow ? " dock-btm-toolbar--narrow" : ""}${isUltraNarrow ? " dock-btm-toolbar--ultra-narrow" : ""}${isBelow300 ? " dock-btm-toolbar--below-300" : ""}`}
       ref={toolbarRef}
     >
       {bottomPanel}
-      <div className={`dock-btm-toolbar__row${centerAction ? " dock-btm-toolbar__row--centered" : ""}`}>
+      <div className={`dock-btm-toolbar__row${showCenterActionInRow ? " dock-btm-toolbar__row--centered" : ""}`}>
         {!hideOverlayModeToggle && (
           <div
             className={`dock-btm-segmented${morphing ? " dock-btm-segmented--morphing" : ""}`}
@@ -274,20 +297,20 @@ export default function DockBottomToolbar({
           </div>
         )}
 
-        {centerAction && (
+        {showCenterActionInRow && (
           <div className="dock-btm-toolbar__center" aria-label={t("dock.bottomToolbar.centerActions", "Navigation")}>
             {centerAction}
           </div>
         )}
 
         <div className="dock_bottom_bar">
-          {/* Visibility toggle — always accessible */}
-          {onClear && !clearInOverflow && (
+          {/* Visibility toggle — inline when not in narrow overflow mode */}
+          {showInlineClear && (
             renderVisibilityButton("dock-btm-toolbar__clear--inline")
           )}
 
           {/* ⋯ Overflow menu for hidden actions */}
-          {(children || (onClear && clearInOverflow)) && (
+          {hasOverflowItems && (
             <div className="dock-btm-overflow" ref={overflowRef}>
               <button
                 type="button"
@@ -300,7 +323,50 @@ export default function DockBottomToolbar({
               </button>
               {showOverflow && (
                 <div className="dock-btm-overflow__menu" role="menu">
-                  {onClear && clearInOverflow && renderVisibilityButton("dock-btm-toolbar__icon-btn")}
+                  {onClear && (clearInOverflow || isBelow300) && (
+                    <button
+                      type="button"
+                      className="dock-btm-overflow__menu-item"
+                      data-dock-close-overflow="true"
+                      onClick={() => {
+                        onClear();
+                        closeOverflow();
+                      }}
+                      disabled={clearDisabled}
+                      aria-label={resolvedClearLabel}
+                      aria-pressed={!sourceVisible}
+                      title={resolvedClearLabel}
+                    >
+                      <Icon name={visibilityIcon} size={16} />
+                      <span>{resolvedClearLabel}</span>
+                    </button>
+                  )}
+                  {isBelow300 && (onQuickEdit || centerAction) && (
+                    onQuickEdit ? (
+                      <button
+                        type="button"
+                        className="dock-btm-overflow__menu-item"
+                        data-dock-close-overflow="true"
+                        onClick={() => {
+                          onQuickEdit();
+                          closeOverflow();
+                        }}
+                        title={quickEditLabel ?? t("bible.quickEdits", "Quick Edits")}
+                        aria-label={quickEditLabel ?? t("bible.quickEdits", "Quick Edits")}
+                      >
+                        <Icon name="edit" size={16} />
+                        <span>{quickEditLabel ?? t("bible.quickEdits", "Quick Edits")}</span>
+                      </button>
+                    ) : (
+                      <div
+                        className="dock-btm-overflow__center-action"
+                        data-dock-close-overflow="true"
+                        onClick={() => closeOverflow()}
+                      >
+                        {centerAction}
+                      </div>
+                    )
+                  )}
                   {children && (
                     <div
                       className="dock-btm-overflow__children"
@@ -329,28 +395,32 @@ export default function DockBottomToolbar({
                 </button>
               )}
               {onCollapseChange && !bottomPanelToggle && (
-                <button
-                  type="button"
-                  className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
-                  onClick={() => onCollapseChange(true)}
-                  aria-label={t("dock.bottomToolbar.collapseTooltip")}
-                  title={t("dock.bottomToolbar.collapseTooltip")}
-                >
-                  <Icon name="expand_more" size={15} />
-                </button>
+                !hideCollapse ? (
+                  <button
+                    type="button"
+                    className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
+                    onClick={() => onCollapseChange(true)}
+                    aria-label={t("dock.bottomToolbar.collapseTooltip")}
+                    title={t("dock.bottomToolbar.collapseTooltip")}
+                  >
+                    <Icon name="expand_more" size={15} />
+                  </button>
+                ) : null
               )}
             </div>
           )}
-          {onCollapseChange && !bottomPanelToggle && !(children || (onClear && clearInOverflow)) && (
-            <button
-              type="button"
-              className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
-              onClick={() => onCollapseChange(true)}
-              aria-label={t("dock.bottomToolbar.collapseTooltip")}
-              title={t("dock.bottomToolbar.collapseTooltip")}
-            >
-              <Icon name="expand_more" size={15} />
-            </button>
+          {onCollapseChange && !bottomPanelToggle && !hasOverflowItems && (
+            !hideCollapse ? (
+              <button
+                type="button"
+                className="dock-btm-toolbar__icon-btn dock-btm-toolbar__collapse-btn"
+                onClick={() => onCollapseChange(true)}
+                aria-label={t("dock.bottomToolbar.collapseTooltip")}
+                title={t("dock.bottomToolbar.collapseTooltip")}
+              >
+                <Icon name="expand_more" size={15} />
+              </button>
+            ) : null
           )}
         </div>
       </div>

@@ -189,10 +189,10 @@ body.dock-modal-open {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px 12px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--dock-border-soft);
   color: var(--dock-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -208,16 +208,16 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  min-height: 38px;
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--dock-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -268,10 +268,10 @@ body.dock-modal-open {
 }
 
 .dock-media-context-menu__folder {
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 5px 8px;
   color: var(--dock-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .dock-media-context-menu__folder--active {
@@ -2697,6 +2697,13 @@ body.dock-modal-open {
   line-height: 1.35;
 }
 
+.dock-search__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
 .dock-search__clear {
   position: absolute;
   right: 6px;
@@ -2809,26 +2816,33 @@ body.dock-modal-open {
 
 .dock-search-dropdown__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   width: 100%;
-  min-height: 30px;
-  padding: 4px 7px;
+  min-height: 32px;
+  padding: 6px 8px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dock-text);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
+  transition: background 0.12s;
+  box-sizing: border-box;
 }
 
 .dock-search-dropdown__item:hover,
 .dock-search-dropdown__item--active {
   background: color-mix(in srgb, var(--dock-accent-soft) 86%, var(--dock-surface));
   color: var(--dock-text);
+}
+
+.dock-search-dropdown__item-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.75;
 }
 
 .dock-search-dropdown__heading {
@@ -2841,10 +2855,15 @@ body.dock-modal-open {
 
 .dock-search-dropdown__item--recent {
   min-height: 28px;
+  align-items: center;
 }
 
 .dock-search-dropdown__label {
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dock-text);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
 }
 
 .dock-search-dropdown__content {
@@ -2852,25 +2871,61 @@ body.dock-modal-open {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .dock-search-dropdown__snippet {
   display: block;
-  color: inherit;
-  font-size: 12px;
-  line-height: 1.35;
-  opacity: 0.72;
+  color: var(--dock-text-secondary, #e2e8f0);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 450;
+  opacity: 0.95;
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
 .dock-search-dropdown__highlight {
-  padding: 0 1px;
+  display: inline;
+  padding: 1px 4px;
+  margin: 0 1px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--dock-accent) 24%, transparent);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--dock-accent) 45%, rgba(255, 255, 255, 0.12));
+  color: #ffffff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 55%, transparent);
+}
+
+.dock-search-dropdown__goto-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  margin-top: 1px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dock-text-dim, #94a3b8);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dock-search-dropdown__item:hover .dock-search-dropdown__goto-btn,
+.dock-search-dropdown__item--active .dock-search-dropdown__goto-btn {
+  opacity: 0.75;
+}
+
+.dock-search-dropdown__goto-btn:hover {
+  opacity: 1 !important;
   color: var(--dock-text);
+  background: color-mix(in srgb, var(--dock-accent) 24%, var(--dock-surface-hover, rgba(255, 255, 255, 0.08)));
+  border-color: color-mix(in srgb, var(--dock-accent) 40%, transparent);
 }
 
 .dock-search-dropdown__hint {
@@ -2899,6 +2954,102 @@ body.dock-modal-open {
   padding: 6px;
 }
 
+.dock-search-dropdown__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 5px;
+  padding: 2px 2px 6px;
+}
+
+.dock-search-dropdown__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dock-surface-alt, #1f2333) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
+  color: var(--dock-text);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  box-sizing: border-box;
+}
+
+.dock-search-dropdown__chip:hover {
+  background: color-mix(in srgb, var(--dock-accent-soft) 86%, var(--dock-surface));
+  border-color: color-mix(in srgb, var(--dock-accent) 45%, transparent);
+  color: var(--dock-text);
+}
+
+.dock-search-dropdown__chip:active {
+  transform: scale(0.98);
+}
+
+.dock-search-dropdown__chip .dock-search-dropdown__content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+.dock-search-dropdown__chip .dock-search-dropdown__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dock-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.dock-search-dropdown__label--full {
+  display: inline;
+}
+
+.dock-search-dropdown__label--short {
+  display: none;
+}
+
+@media (max-width: 340px) {
+  .dock-search-dropdown__grid {
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+    gap: 4px;
+  }
+
+  .dock-search-dropdown__label--full {
+    display: none !important;
+  }
+
+  .dock-search-dropdown__label--short {
+    display: inline !important;
+  }
+}
+
+.dock-search-dropdown--compact .dock-search-dropdown__grid {
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 4px;
+}
+
+.dock-search-dropdown--compact .dock-search-dropdown__label--full {
+  display: none !important;
+}
+
+.dock-search-dropdown--compact .dock-search-dropdown__label--short {
+  display: inline !important;
+}
+
+.dock-search-dropdown__chip svg {
+  flex-shrink: 0;
+}
+
 .dock-search-dropdown__item--favorite {
   font-weight: 600;
 }
@@ -2906,6 +3057,233 @@ body.dock-modal-open {
 .dock-search-dropdown__item--favorite:hover {
   background: color-mix(in srgb, var(--dock-accent-soft) 86%, var(--dock-surface));
   color: var(--dock-text);
+}
+
+/* ── Search Dropdown Header Row & View All Link ── */
+.dock-search-dropdown__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+.dock-search-dropdown__header-row .dock-search-dropdown__heading {
+  margin: 0;
+  padding: 0;
+}
+
+.dock-search-dropdown__view-all-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-accent-color, #60a5fa);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+
+.dock-search-dropdown__view-all-link:hover {
+  background: rgba(96, 165, 250, 0.12);
+  text-decoration: underline;
+}
+
+/* ── High-visibility Recent Searches Chip ── */
+.dock-search-dropdown__item--recent {
+  background: color-mix(in srgb, var(--dock-accent) 14%, var(--dock-surface));
+  border: 1px solid color-mix(in srgb, var(--dock-accent) 38%, transparent);
+  color: var(--dock-text, #ffffff);
+}
+
+.dock-search-dropdown__item--recent .dock-search-dropdown__label {
+  font-weight: 700;
+  color: var(--dock-text, #ffffff);
+}
+
+.dock-search-dropdown__item--recent svg {
+  color: var(--dock-accent-color, #60a5fa);
+  opacity: 1 !important;
+}
+
+.dock-search-dropdown__item--recent:hover {
+  background: color-mix(in srgb, var(--dock-accent) 25%, var(--dock-surface));
+  border-color: var(--dock-accent, #3b82f6);
+}
+
+/* ── 3-letter Bible book in chapter bar for small width (<300px) ── */
+.dock-bible-chapter-trigger__book-short {
+  display: none;
+}
+.dock-bible-chapter-trigger__book-full {
+  display: inline;
+}
+
+@media (max-width: 300px) {
+  .dock-bible-chapter-trigger__book-full {
+    display: none !important;
+  }
+  .dock-bible-chapter-trigger__book-short {
+    display: inline !important;
+  }
+}
+
+.dock-bible--sub300 .dock-bible-chapter-trigger__book-full,
+.dock-bible-chapter-bar--sub300 .dock-bible-chapter-trigger__book-full {
+  display: none !important;
+}
+
+.dock-bible--sub300 .dock-bible-chapter-trigger__book-short,
+.dock-bible-chapter-bar--sub300 .dock-bible-chapter-trigger__book-short {
+  display: inline !important;
+}
+
+/* Chapter bar actions with favorites button */
+.dock-bible-chapter-bar__fav-btn {
+  color: var(--dock-accent-color, #eab308);
+}
+
+.dock-bible-chapter-bar__fav-btn:hover {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+}
+
+/* ── All Favorites Modal ── */
+.dock-bible-favorites-modal {
+  width: 95%;
+  max-width: 520px;
+  max-height: min(650px, 85vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-bible-favorites-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.dock-bible-favorites-modal__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--dock-surface-alt, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+}
+
+.dock-bible-favorites-modal__search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--dock-text, #ffffff);
+  font-size: 13px;
+}
+
+.dock-bible-favorites-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dock-bible-favorites-modal__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--dock-surface-alt, #1f2333) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
+  border-radius: 6px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dock-bible-favorites-modal__item:hover {
+  background: color-mix(in srgb, var(--dock-accent-soft) 86%, var(--dock-surface));
+  border-color: color-mix(in srgb, var(--dock-accent) 45%, transparent);
+}
+
+.dock-bible-favorites-modal__item-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-bible-favorites-modal__item-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dock-bible-favorites-modal__item-ref {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--dock-text, #ffffff);
+}
+
+.dock-bible-favorites-modal__item-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--dock-text-dim, #94a3b8);
+}
+
+.dock-bible-favorites-modal__item-snippet {
+  font-size: 11.5px;
+  color: var(--dock-text-secondary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dock-bible-favorites-modal__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dock-bible-favorites-modal__remove-btn {
+  color: var(--dock-text-dim, #94a3b8);
+}
+
+.dock-bible-favorites-modal__remove-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.dock-bible-favorites-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dock-bible-favorites-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
 }
 
 .dock-search-card {
@@ -7450,7 +7828,26 @@ body.dock-modal-open {
 }
 
 .dock-notes-text-tools--editor {
+  display: flex;
+  width: 100%;
   margin: -2px 0 2px;
+  box-sizing: border-box;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__autosplit {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+}
+
+.dock-notes-text-tools--editor .dock-notes-text-tools__autosplit .dock-notes-text-tools__btn {
+  width: 100%;
 }
 
 .dock-notes-text-tools__btn {
@@ -10087,6 +10484,7 @@ body.dock-modal-open {
 /* ── Lyrics toolbar ── */
 .dock-lyrics-toolbar {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: flex-start;
@@ -10097,6 +10495,7 @@ body.dock-modal-open {
   border: 1px solid var(--dock-border-soft, #334155);
   border-radius: 10px;
   background: var(--dock-surface-alt, #1F2937);
+  box-sizing: border-box;
 }
 
 .dock-lyrics-toolbar__actions {
@@ -10263,6 +10662,57 @@ body.dock-modal-open {
 .dock-lyrics-toolbar__btn--case:hover {
   background: var(--dock-surface-hover, #334155);
   color: var(--dock-text, #F8FAFC);
+}
+
+/* ── Lyrics toolbar row layouts ── */
+.dock-lyrics-toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.dock-lyrics-toolbar__row--actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.dock-lyrics-toolbar__row--actions > .dock-lyrics-toolbar__btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.dock-lyrics-toolbar__row--layout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-worship-lines-control {
+  flex: 1 1 140px;
+  min-width: 0;
+  width: auto;
+  justify-content: space-between;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-lyrics-toolbar__group {
+  flex: 1 1 100px;
+  min-width: 90px;
+  width: auto;
+  display: flex;
+}
+
+.dock-lyrics-toolbar__row--layout .dock-lyrics-toolbar__group > .dock-lyrics-toolbar__btn--case {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  text-align: center;
+  padding: 0;
 }
 
 /* ── Autosplit popover ── */
@@ -10859,7 +11309,9 @@ body.dock-modal-open {
 }
 
 .dock-bible-keyword-modal__text .dock-search-dropdown__highlight {
-  background: color-mix(in srgb, var(--dock-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--dock-accent) 45%, rgba(255, 255, 255, 0.12));
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .dock-bible-keyword-modal__direct-push {
@@ -11815,7 +12267,8 @@ body.dock-modal-open {
 .dock-bible-chapter-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 4px 8px;
   background: var(--dock-surface);
   position: relative;
@@ -11826,6 +12279,21 @@ body.dock-modal-open {
 .dock-bible-chapter-bar:has(.dock-bible-picker-popover),
 .dock-bible-chapter-bar--picker-open {
   z-index: 10005;
+}
+
+.dock-bible-chapter-bar__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  max-width: 320px;
+}
+
+.dock-bible-chapter-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .dock-bible-chapter-bar__btn {
@@ -11854,11 +12322,21 @@ body.dock-modal-open {
   cursor: not-allowed;
 }
 
+.dock-bible-chapter-bar__history-btn {
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dock-bible-chapter-bar__history-btn:hover {
+  color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #C56F4D);
+}
+
 .dock-bible-chapter-trigger {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 1;
+  max-width: 260px;
   height: 28px;
   padding: 0 8px;
   gap: 4px;
@@ -11880,6 +12358,24 @@ body.dock-modal-open {
 .dock-bible-chapter-trigger__text {
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* ── When placed at bottom ── */
+.dock-bible-chapter-bar--bottom {
+  border-top: 1px solid var(--dock-border, #334155);
+}
+
+.dock-bible-chapter-bar--bottom .dock-bible-picker-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
+  box-shadow: 0 -16px 36px rgba(0, 0, 0, 0.75);
+}
+
+.dock-bible-chapter-bar--bottom .dock-bible-picker-popover::before {
+  top: auto;
+  bottom: -6px;
+  border-bottom: none;
+  border-top: 6px solid #141720;
 }
 
 /* ── Floating Book & Chapter Dropdown ── */
@@ -12772,14 +13268,14 @@ body.dock-modal-open {
 .dock-vertical-nav {
   display: flex;
   flex-direction: column;
-  width: 54px;
+  width: 40px;
   flex-shrink: 0;
   background: var(--dock-surface);
   border-right: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 5px;
-  gap: 8px;
+  padding: 6px 3px;
+  gap: 6px;
   transition: width 0.2s ease, opacity 0.2s ease;
 }
 
@@ -12787,15 +13283,15 @@ body.dock-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
-  min-height: 42px;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
   margin: 0 auto;
   padding: 0;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--dock-text-dim);
   cursor: pointer;
@@ -15537,6 +16033,51 @@ body.dock-modal-open {
 .dock-media-inspector__chip:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.dock-media-inspector__card--full {
+  grid-column: 1 / -1;
+}
+
+.dock-media-inspector__toggle-list {
+  display: grid;
+  gap: 7px;
+}
+
+.dock-media-inspector__toggle-row,
+.dock-media-inspector__select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+  color: var(--dock-text-secondary);
+  font-size: 11px;
+}
+
+.dock-media-inspector__toggle-row {
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.dock-media-inspector__toggle-row input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--dock-accent);
+}
+
+.dock-media-inspector__select-row {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--dock-border-soft);
+}
+
+.dock-media-inspector__speed-select {
+  width: 82px;
+  min-height: 28px;
+  padding: 3px 6px;
+  font-size: 11px;
 }
 
 /* ── Info rows ── */
@@ -19800,13 +20341,13 @@ body.dock-modal-open {
 
 .dock-auto-advance-banner {
   position: fixed;
-  bottom: 22px;
-  right: 22px;
+  bottom: 96px;
+  left: 16px;
   z-index: 9999;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 5px 8px 5px 14px;
+  gap: 8px;
+  padding: 5px 8px 5px 8px;
   border-radius: 999px;
   background: rgba(18, 22, 28, 0.92);
   backdrop-filter: blur(14px);
@@ -19816,6 +20357,36 @@ body.dock-modal-open {
   box-sizing: border-box;
   animation: dock-banner-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+
+.dock-auto-advance-banner--dragging {
+  cursor: grabbing !important;
+  user-select: none;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.65);
+  transition: none !important;
+}
+
+.dock-auto-advance-banner__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 0 1px 0 3px;
+  transition: color 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dock-auto-advance-banner__drag-handle:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dock-auto-advance-banner--dragging .dock-auto-advance-banner__drag-handle {
+  cursor: grabbing !important;
+  color: #38bdf8;
 }
 
 @keyframes dock-banner-appear {
@@ -32821,6 +33392,275 @@ body.dock-modal-open {
   border-color: var(--dock-border-active);
 }
 
+.dock-mv-property__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dock-mv-property__reload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dock-text-muted, #94A3B8);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.dock-mv-property__reload-btn:hover:not(:disabled) {
+  color: var(--dock-text, #F8FAFC);
+  background: var(--dock-surface, rgba(255, 255, 255, 0.08));
+}
+
+.dock-mv-property__reload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dock-mv-template-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dock-mv-template-trigger--open {
+  border-color: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-trigger__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-template-trigger__preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 21px;
+  margin-right: 7px;
+  overflow: hidden;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 3px;
+  background: #0B1220;
+}
+
+.dock-mv-template-trigger__preview .dock-mv-layout-preview,
+.dock-mv-template-item__preview .dock-mv-layout-preview {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  border: 0 !important;
+  border-radius: 2px !important;
+}
+
+.dock-mv-template-trigger:hover .dock-mv-template-trigger__preview,
+.dock-mv-template-trigger--open .dock-mv-template-trigger__preview {
+  border-color: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-trigger__label--empty {
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-trigger__chevron {
+  flex-shrink: 0;
+  color: var(--dock-text-muted, #94A3B8);
+  margin-left: 4px;
+}
+
+/* ── Multi-View Template Dropdown Menu (Portal) ── */
+.dock-mv-template-dropdown {
+  position: fixed;
+  z-index: 10000;
+  max-height: min(320px, calc(100vh - 16px));
+  overflow: hidden;
+  background: var(--dock-bg, #0F172A);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-mv-template-dropdown__action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px 8px;
+}
+
+.dock-mv-template-dropdown__count {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-dropdown__action-reload {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 4px;
+  background: var(--dock-surface, #1E293B);
+  color: var(--dock-text, #F8FAFC);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dock-mv-template-dropdown__action-reload:hover:not(:disabled) {
+  background: var(--dock-surface-alt, #334155);
+  border-color: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-dropdown__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(270px, calc(100vh - 70px));
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.dock-mv-template-dropdown__list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.dock-mv-template-dropdown__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dock-mv-template-dropdown__list::-webkit-scrollbar-thumb {
+  background: var(--dock-border, #334155);
+  border-radius: 999px;
+}
+
+.dock-mv-template-dropdown__list::-webkit-scrollbar-thumb:hover {
+  background: var(--dock-border-active, #6366F1);
+}
+
+.dock-mv-template-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dock-text, #F8FAFC);
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.dock-mv-template-item:hover {
+  background: var(--dock-primary-muted, rgba(99, 102, 241, 0.25));
+}
+
+.dock-mv-template-item--selected {
+  font-weight: 500;
+  color: var(--dock-primary-hover, #A5B4FC);
+}
+
+.dock-mv-template-item__check {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--dock-primary-hover, #A5B4FC);
+}
+
+.dock-mv-template-item__preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 21px;
+  overflow: hidden;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 3px;
+  background: #0B1220;
+  opacity: 0.9;
+}
+
+.dock-mv-template-item--selected .dock-mv-template-item__preview {
+  border-color: var(--dock-primary-hover, #A5B4FC);
+  opacity: 1;
+}
+
+.dock-mv-template-item__preview--muted {
+  opacity: 0.65;
+}
+
+.dock-mv-template-item__preview-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-item__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-mv-template-item__name--muted {
+  color: var(--dock-text-muted, #94A3B8);
+}
+
+.dock-mv-template-item__delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dock-text-muted, #94A3B8);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-mv-template-item:hover .dock-mv-template-item__delete-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dock-mv-template-item__delete-btn:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.18);
+}
+
 /* ── Multi-View Margin Section & Affect Background ── */
 .dock-mv-margin-section {
   margin-top: 10px;
@@ -39241,6 +40081,8 @@ button.dock-btm-toolbar__clear--inline,
 
 /* ── Media inspector scene selector / send row ── */
 .dock-media-inspector__scene-select {
+  flex: 1 1 0;
+  min-width: 0;
   width: 100%;
   min-height: 30px;
   padding: 4px 8px;
@@ -39255,7 +40097,16 @@ button.dock-btm-toolbar__clear--inline,
 .dock-media-inspector__send-row {
   display: flex;
   align-items: center;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
   gap: 8px;
+}
+
+.dock-media-inspector__send-row .dock-media-inspector__action-btn {
+  flex: 0 0 auto;
+  min-width: 136px;
+  white-space: nowrap;
 }
 
 /* ── Sermon queue card variants ── */
@@ -40094,7 +40945,34 @@ button.dock-btm-toolbar__clear--inline,
    search field owns the flexible space; translation and more actions never
    overlay it or drift to the left. */
 .dock-bible-search-row {
+  position: relative;
   direction: ltr;
+  overflow: visible;
+}
+
+.dock-bible-search-row:focus-within,
+.dock-bible-search-row:has(.dock-search-dropdown) {
+  z-index: 10005;
+}
+
+.dock-bible-search-row .dock-bible-search-row__input,
+.dock-bible-search-row .dock-bible-search-bar,
+.dock-bible-search-row .dock-search {
+  position: static !important;
+}
+
+.dock-bible-search-row .dock-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 4px;
+  right: 4px;
+  width: calc(100% - 8px);
+  min-width: 0;
+  max-width: none;
+  max-height: min(750px, calc(100vh - 65px));
+  box-sizing: border-box;
+  z-index: 10005;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
 }
 
 .dock-bible-search-row__input {
@@ -41478,4 +42356,3 @@ button.dock-btm-toolbar__clear--inline,
 .force-update-btn--secondary:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-

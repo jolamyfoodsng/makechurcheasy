@@ -833,23 +833,26 @@ function parseChapterVerseCandidates(numPart: string, hasWhitespace = false): Ch
 
     // For 3+ digit numbers (like "316"), the ch:vs split is almost certainly
     // intended → give high confidence to early splits.
-    // For 2-digit numbers (like "23"), chapter-only is usually intended,
-    // so give splits lower confidence.
+    // For 2-digit numbers (like "22"):
+    //   - If jammed without whitespace ("gen22", "ge22"): media operators use this
+    //     as chapter:verse shorthand, so prioritize the ":" split (conf 18 > chapterConf 14).
+    //   - If separated by whitespace ("gen 22"): chapter-only is intended (chapterConf 20 > conf 12).
     let conf: number;
     if (digits.length >= 3) {
       // "316" → 3:16 (conf 25), 31:6 (conf 18)
       conf = 25 - (i - 1) * 7;
     } else {
-      // "23" → 2:3 (conf 12)  — lower than chapter-only (16 or 20)
-      conf = 12 - (i - 1) * 3;
+      // "22" → 2:2
+      conf = !hasWhitespace ? 18 - (i - 1) * 3 : 12 - (i - 1) * 3;
     }
     candidates.push({ chapter: ch, verse: vs, endVerse: null, confidence: Math.max(conf, 8) });
   }
 
   // Also add the whole number as chapter-only (if reasonable)
   if (num >= 1 && num <= 150) {
-    // For 2-digit numbers, chapter-only gets higher confidence, especially with whitespace
-    const chapterConf = digits.length <= 2 ? (hasWhitespace ? 20 : 16) : 5;
+    // For 2-digit numbers, chapter-only gets higher confidence when whitespace is present ("gen 22" -> 20),
+    // but lower than ch:vs split when jammed without whitespace ("gen22" -> 14).
+    const chapterConf = digits.length <= 2 ? (hasWhitespace ? 20 : 14) : 5;
     candidates.push({ chapter: num, verse: null, endVerse: null, confidence: chapterConf });
   }
 

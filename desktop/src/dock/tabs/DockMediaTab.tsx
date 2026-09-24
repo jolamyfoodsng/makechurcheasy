@@ -166,6 +166,10 @@ interface DockMediaPreference {
   videoMuted?: boolean;
   imageAudioInputName?: string | null;
   loop?: boolean;
+  restartOnActivate?: boolean;
+  closeWhenInactive?: boolean;
+  clearOnMediaEnd?: boolean;
+  playbackSpeed?: number;
   fitMode?: "cover" | "contain" | "stretch";
   label?: string;
   pinned?: boolean;
@@ -1048,7 +1052,7 @@ function DockMediaTab({
       MEDIA_CONTEXT_MENU_WIDTH,
       Math.max(0, window.innerWidth - MEDIA_CONTEXT_MENU_GUTTER * 2),
     );
-    const menuHeight = 420;
+    const menuHeight = entry.kind === "video" ? 460 : 420;
     const leftPlacement = event.clientX - menuWidth - MEDIA_CONTEXT_MENU_GAP;
     const rightmostX = Math.max(
       MEDIA_CONTEXT_MENU_GUTTER,
@@ -1931,6 +1935,10 @@ function DockMediaTab({
         return {
           muted: prefs.videoMuted ?? true,
           looping: prefs.loop ?? true,
+          restartOnActivate: prefs.restartOnActivate ?? true,
+          closeWhenInactive: prefs.closeWhenInactive ?? false,
+          clearOnMediaEnd: prefs.clearOnMediaEnd ?? false,
+          playbackSpeed: prefs.playbackSpeed ?? 100,
           fitMode: prefs.fitMode ?? "cover",
         };
       }
@@ -1974,6 +1982,10 @@ function DockMediaTab({
           fitMode: entryPrefs.fitMode ?? "cover",
           muted: entryPrefs.videoMuted ?? true,
           looping: entryPrefs.loop ?? true,
+          restartOnActivate: entryPrefs.restartOnActivate ?? true,
+          closeWhenInactive: entryPrefs.closeWhenInactive ?? false,
+          clearOnMediaEnd: entryPrefs.clearOnMediaEnd ?? false,
+          playbackSpeed: entryPrefs.playbackSpeed ?? 100,
         });
       } else if (entry.kind === "image") {
         await dockObsClient.addImageSourceToScene({
@@ -2414,9 +2426,12 @@ function DockMediaTab({
     if (!previewEntry || previewEntry.kind !== "video") return;
     const video = previewVideoRef.current;
     if (!video) return;
+    const previewPrefs = getEntryPrefs(previewEntry);
 
     const startPlayback = () => {
-      video.muted = true;
+      video.muted = previewPrefs.videoMuted ?? true;
+      video.loop = previewPrefs.loop ?? true;
+      video.playbackRate = (previewPrefs.playbackSpeed ?? 100) / 100;
       void video.play().catch((playError) => {
         console.warn("[DockMediaTab] Could not start video preview:", playError);
       });
@@ -2429,15 +2444,18 @@ function DockMediaTab({
 
     video.addEventListener("canplay", startPlayback, { once: true });
     return () => video.removeEventListener("canplay", startPlayback);
-  }, [previewEntry]);
+  }, [getEntryPrefs, mediaPrefs, previewEntry]);
 
   useEffect(() => {
     if (!previewPlaying || activeOptionsEntry?.kind !== "video") return;
     const video = inspectorPreviewVideoRef.current;
     if (!video) return;
+    const inspectorPrefs = getEntryPrefs(activeOptionsEntry);
 
     const startPlayback = () => {
-      video.muted = true;
+      video.muted = inspectorPrefs.videoMuted ?? true;
+      video.loop = inspectorPrefs.loop ?? true;
+      video.playbackRate = (inspectorPrefs.playbackSpeed ?? 100) / 100;
       void video.play().catch((playError) => {
         console.warn("[DockMediaTab] Could not start inspector video preview:", playError);
       });
@@ -2450,7 +2468,7 @@ function DockMediaTab({
 
     video.addEventListener("canplay", startPlayback, { once: true });
     return () => video.removeEventListener("canplay", startPlayback);
-  }, [activeOptionsEntry?.key, previewPlaying]);
+  }, [activeOptionsEntry, getEntryPrefs, mediaPrefs, previewPlaying]);
 
   useEffect(() => {
     if (presentationLinkMode || !activeOptionsEntry || !canSendEntryToScene(activeOptionsEntry)) {
@@ -2690,19 +2708,36 @@ function DockMediaTab({
     [activeTargets.active, getEntryPrefs, updateMediaPreference],
   );
 
-  const setEntryLoop = useCallback(
-    async (entry: DockMediaEntry, looping: boolean) => {
-      updateMediaPreference(entry.prefKey, { loop: looping });
-      if (activeTargets.active?.key === entry.key) {
-        try {
-          await ensureObsConnected();
-          await dockObsClient.setMediaLooping(looping);
-        } catch (err) {
-          console.warn("[DockMediaTab] setEntryLoop failed:", err);
-        }
+  const setEntryVideoSourceSetting = useCallback(
+    async (
+      entry: DockMediaEntry,
+      patch: Pick<DockMediaPreference, "loop" | "restartOnActivate" | "closeWhenInactive" | "clearOnMediaEnd" | "playbackSpeed">,
+      sourceSettings: {
+        looping?: boolean;
+        restartOnActivate?: boolean;
+        closeWhenInactive?: boolean;
+        clearOnMediaEnd?: boolean;
+        playbackSpeed?: number;
+      },
+    ) => {
+      updateMediaPreference(entry.prefKey, patch);
+      if (activeTargets.active?.key !== entry.key) return;
+
+      try {
+        await ensureObsConnected();
+        await dockObsClient.setMediaVideoSourceSettings(sourceSettings);
+      } catch (err) {
+        console.warn("[DockMediaTab] setEntryVideoSourceSetting failed:", err);
       }
     },
     [activeTargets.active, updateMediaPreference],
+  );
+
+  const setEntryLoop = useCallback(
+    async (entry: DockMediaEntry, looping: boolean) => {
+      await setEntryVideoSourceSetting(entry, { loop: looping }, { looping });
+    },
+    [setEntryVideoSourceSetting],
   );
 
   const setEntryFitMode = useCallback(
@@ -6086,6 +6121,10 @@ function DockMediaTab({
         const thumbUrl = entry.thumbnailUrl || (entry.previewUrl && entry.kind === "image" ? entry.previewUrl : null);
         const cleanName = entryPrefs.label?.trim()
           || entry.name.replace(/^media_\d+_/, "").replace(/\.[^.]+$/, "");
+        const restartOnActivate = entryPrefs.restartOnActivate ?? true;
+        const closeWhenInactive = entryPrefs.closeWhenInactive ?? false;
+        const clearOnMediaEnd = entryPrefs.clearOnMediaEnd ?? false;
+        const playbackSpeed = entryPrefs.playbackSpeed ?? 100;
         // const addedDate = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
         // const usedDate = entryPrefs.lastUsedAt ? new Date(entryPrefs.lastUsedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
@@ -6115,7 +6154,8 @@ function DockMediaTab({
                       controls
                       preload="metadata"
                       autoPlay
-                      muted
+                      muted={entryPrefs.videoMuted ?? true}
+                      loop={entryPrefs.loop ?? true}
                     />
                   ) : (
                     <>
@@ -6299,6 +6339,64 @@ function DockMediaTab({
                         {(entryPrefs.loop ?? true) ? t('media.loop') : t('media.once')}
                       </button>
                     </div>
+                  </div>
+                )}
+                {entry.kind === "video" && (
+                  <div className="dock-media-inspector__card dock-media-inspector__card--full">
+                    <h4 className="dock-media-inspector__card-title">{t('media.videoSettings', 'Video settings')}</h4>
+                    <div className="dock-media-inspector__toggle-list">
+                      <label className="dock-media-inspector__toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={restartOnActivate}
+                          onChange={(event) => void setEntryVideoSourceSetting(
+                            entry,
+                            { restartOnActivate: event.target.checked },
+                            { restartOnActivate: event.target.checked },
+                          )}
+                        />
+                        <span>{t('media.restartWhenShown', 'Restart when shown')}</span>
+                      </label>
+                      <label className="dock-media-inspector__toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={closeWhenInactive}
+                          onChange={(event) => void setEntryVideoSourceSetting(
+                            entry,
+                            { closeWhenInactive: event.target.checked },
+                            { closeWhenInactive: event.target.checked },
+                          )}
+                        />
+                        <span>{t('media.unloadWhenHidden', 'Unload when hidden')}</span>
+                      </label>
+                      <label className="dock-media-inspector__toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={clearOnMediaEnd}
+                          onChange={(event) => void setEntryVideoSourceSetting(
+                            entry,
+                            { clearOnMediaEnd: event.target.checked },
+                            { clearOnMediaEnd: event.target.checked },
+                          )}
+                        />
+                        <span>{t('media.clearWhenFinished', 'Clear when finished')}</span>
+                      </label>
+                    </div>
+                    <label className="dock-media-inspector__select-row">
+                      <span>{t('media.playbackSpeed', 'Playback speed')}</span>
+                      <select
+                        className="dock-input dock-media-inspector__speed-select"
+                        value={playbackSpeed}
+                        onChange={(event) => {
+                          const nextSpeed = Number(event.target.value);
+                          void setEntryVideoSourceSetting(entry, { playbackSpeed: nextSpeed }, { playbackSpeed: nextSpeed });
+                        }}
+                      >
+                        {[50, 75, 100, 125, 150, 200].map((speed) => (
+                          <option key={speed} value={speed}>{speed}%</option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 )}
               </div>
@@ -6491,7 +6589,8 @@ function DockMediaTab({
                     src={previewEntry.previewUrl}
                     controls
                     autoPlay
-                    muted
+                    muted={getEntryPrefs(previewEntry).videoMuted ?? true}
+                    loop={getEntryPrefs(previewEntry).loop ?? true}
                     style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 4 }}
                   />
                 ) : (
@@ -6635,6 +6734,21 @@ function DockMediaTab({
               <Icon name="open_in_full" size={16} />
               <span className="dock-media-context-menu__label">{t('common.preview')}</span>
             </button>
+            {contextEntry.kind === "video" && (
+              <button
+                type="button"
+                role="menuitem"
+                className="dock-media-context-menu__item"
+                onClick={() => {
+                  setPreviewPlaying(false);
+                  setOpenOptionsKey(contextEntry.key);
+                  setMediaContextMenu(null);
+                }}
+              >
+                <Icon name="settings" size={16} />
+                <span className="dock-media-context-menu__label">{t('media.settings', 'Settings')}</span>
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"

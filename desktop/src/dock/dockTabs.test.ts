@@ -47,6 +47,12 @@ describe("combined Worship and Notes Dock tab", () => {
     expect(dockCssSource).toContain("height: auto;");
     expect(dockCssSource).toContain("min-height: 48px;");
   });
+
+  it("keeps vertical navigation rail slim and compact to maximize content width", () => {
+    expect(dockCssSource).toContain("width: 40px;");
+    expect(dockCssSource).toContain("width: 34px;\n  height: 34px;\n  min-height: 34px;");
+    expect(dockPageSource).toContain("<Icon name={tab.icon} size={16} />");
+  });
 });
 
 describe("Free-plan Dock tabs", () => {
