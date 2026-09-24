@@ -432,23 +432,37 @@ pub async fn start_assemblyai_stream(
         *c = true;
     }
 
-    // ── 2. Spawn the AssemblyAI realtime STT task ─────────────────────────
+    // ── 2. Spawn the STT task (Cloudflare HTTP or AssemblyAI WebSocket) ────
     let realtime_app = app.clone();
     let task_stream = Arc::clone(&state.stream);
     let task_is_streaming = Arc::clone(&state.is_streaming);
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
-        let result = run_realtime_transcriber(
-            realtime_app.clone(),
-            api_key,
-            audio_rx,
-            shutdown_rx,
-            profile_rx,
-            profile,
-            Arc::clone(&task_audio_ready),
-            Arc::clone(&audio_drop_count),
-        )
-        .await;
+        let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
+        let result = if is_http_endpoint {
+            run_cloudflare_transcriber(
+                realtime_app.clone(),
+                api_key,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        } else {
+            run_realtime_transcriber(
+                realtime_app.clone(),
+                api_key,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                profile,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        };
 
         task_audio_ready.store(false, Ordering::Release);
 
@@ -489,6 +503,193 @@ pub async fn start_assemblyai_stream(
         "[AssemblyAI Realtime] Started — profile {}, native rate {native_rate} Hz, {channels} ch",
         profile.label
     );
+    Ok(())
+}
+
+// ── Cloudflare Workers AI Whisper Transcriber ────────────────────────────────
+
+fn compute_chunk_rms(chunk: &[u8]) -> f32 {
+    if chunk.len() < 2 {
+        return 0.0;
+    }
+    let mut sum_sq = 0.0f32;
+    let samples_count = chunk.len() / 2;
+    for i in (0..chunk.len()).step_by(2) {
+        let sample = i16::from_le_bytes([chunk[i], chunk[i + 1]]) as f32 / 32768.0;
+        sum_sq += sample * sample;
+    }
+    (sum_sq / samples_count as f32).sqrt()
+}
+
+fn pcm_to_wav(pcm_bytes: &[u8], sample_rate: u32, channels: u16, bits_per_sample: u16) -> Vec<u8> {
+    let mut header = Vec::with_capacity(44 + pcm_bytes.len());
+    let byte_rate = sample_rate * channels as u32 * (bits_per_sample as u32 / 8);
+    let block_align = channels * (bits_per_sample / 8);
+    let data_len = pcm_bytes.len() as u32;
+    let file_len = 36 + data_len;
+
+    header.extend_from_slice(b"RIFF");
+    header.extend_from_slice(&file_len.to_le_bytes());
+    header.extend_from_slice(b"WAVE");
+    header.extend_from_slice(b"fmt ");
+    header.extend_from_slice(&16u32.to_le_bytes()); // Subchunk1Size (16 for PCM)
+    header.extend_from_slice(&1u16.to_le_bytes());  // AudioFormat (1 = PCM)
+    header.extend_from_slice(&channels.to_le_bytes());
+    header.extend_from_slice(&sample_rate.to_le_bytes());
+    header.extend_from_slice(&byte_rate.to_le_bytes());
+    header.extend_from_slice(&block_align.to_le_bytes());
+    header.extend_from_slice(&bits_per_sample.to_le_bytes());
+    header.extend_from_slice(b"data");
+    header.extend_from_slice(&data_len.to_le_bytes());
+    header.extend_from_slice(pcm_bytes);
+    header
+}
+
+fn dispatch_cloudflare_phrase(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    endpoint_url: &str,
+    pcm_bytes: &[u8],
+) {
+    let wav_data = pcm_to_wav(pcm_bytes, TARGET_RATE, 1, 16);
+    let app_clone = app.clone();
+    let client_clone = client.clone();
+    let endpoint = endpoint_url.to_string();
+
+    tokio::spawn(async move {
+        let resp_result = client_clone
+            .post(&endpoint)
+            .header("Content-Type", "audio/wav")
+            .body(wav_data)
+            .send()
+            .await;
+
+        match resp_result {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    #[derive(Deserialize)]
+                    struct CfResponse {
+                        text: Option<String>,
+                    }
+                    if let Ok(data) = resp.json::<CfResponse>().await {
+                        if let Some(text) = data.text {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                println!("[Cloudflare STT] Transcript: {}", trimmed);
+                                let payload = TranscriptPayload {
+                                    text: trimmed.to_string(),
+                                    end_of_turn: true,
+                                    audio_start: 0.0,
+                                    audio_end: 0.0,
+                                };
+                                let _ = app_clone.emit("assemblyai-transcript", payload);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("[Cloudflare STT] Endpoint returned status: {}", resp.status());
+                }
+            }
+            Err(e) => {
+                eprintln!("[Cloudflare STT] Dispatch error: {e}");
+            }
+        }
+    });
+}
+
+async fn run_cloudflare_transcriber(
+    app: AppHandle,
+    endpoint_url: String,
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    mut profile_rx: mpsc::Receiver<RealtimeProfile>,
+    audio_ready: Arc<AtomicBool>,
+    _audio_drop_count: Arc<AtomicU32>,
+) -> Result<(), String> {
+    let _ = app.emit(
+        "assemblyai-status",
+        StatusPayload {
+            status: "connected".to_string(),
+        },
+    );
+    audio_ready.store(true, Ordering::Release);
+    println!("[Cloudflare STT] Connected to endpoint: {}", endpoint_url);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let mut speech_buffer: Vec<u8> = Vec::with_capacity(TARGET_RATE as usize * 2 * 4);
+    let mut is_speech_active = false;
+    let mut last_speech_time = Instant::now();
+    let mut phrase_start_time = Instant::now();
+
+    // 16kHz 16-bit mono = 32,000 bytes/sec
+    // 50ms chunk = 1600 bytes
+    // 350ms of silence after speech triggers phrase finalize
+    const SILENCE_FINALIZE_MS: u128 = 350;
+    // 3.5s max phrase length
+    const MAX_PHRASE_DURATION_MS: u128 = 3500;
+    // 350ms minimum audio to avoid transient clicks/pops
+    const MIN_PHRASE_BYTES: usize = 1600 * 7;
+    // RMS threshold for voice activity
+    const SPEECH_RMS_THRESHOLD: f32 = 0.015;
+
+    loop {
+        tokio::select! {
+            _ = &mut shutdown_rx => {
+                println!("[Cloudflare STT] Shutdown signal received");
+                break;
+            }
+            Some(_) = profile_rx.recv() => {
+                // Speed profile update; no-op for Cloudflare VAD
+            }
+            maybe_chunk = audio_rx.recv() => {
+                match maybe_chunk {
+                    Some(chunk) => {
+                        let rms = compute_chunk_rms(&chunk);
+                        let is_voiced = rms >= SPEECH_RMS_THRESHOLD;
+                        let now = Instant::now();
+
+                        if is_voiced {
+                            if !is_speech_active {
+                                is_speech_active = true;
+                                phrase_start_time = now;
+                            }
+                            last_speech_time = now;
+                            speech_buffer.extend_from_slice(&chunk);
+
+                            if now.duration_since(phrase_start_time).as_millis() >= MAX_PHRASE_DURATION_MS {
+                                if speech_buffer.len() >= MIN_PHRASE_BYTES {
+                                    dispatch_cloudflare_phrase(&app, &client, &endpoint_url, &speech_buffer);
+                                }
+                                speech_buffer.clear();
+                                is_speech_active = false;
+                            }
+                        } else if is_speech_active {
+                            // Retain up to 150ms of trailing silence for smooth natural word ending
+                            if now.duration_since(last_speech_time).as_millis() <= 150 {
+                                speech_buffer.extend_from_slice(&chunk);
+                            }
+
+                            if now.duration_since(last_speech_time).as_millis() >= SILENCE_FINALIZE_MS {
+                                if speech_buffer.len() >= MIN_PHRASE_BYTES {
+                                    dispatch_cloudflare_phrase(&app, &client, &endpoint_url, &speech_buffer);
+                                }
+                                speech_buffer.clear();
+                                is_speech_active = false;
+                            }
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

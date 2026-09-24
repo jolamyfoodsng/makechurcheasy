@@ -559,7 +559,7 @@ export default function DockNotesTab({
       : (initialPrefs.lowerThirdLinesPerSlide ?? initialPrefs.linesPerSlide);
     return clampNoteLinesPerSlide(active);
   });
-  const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit !== false);
+  const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit ?? false);
   const [quickActionsTop, setQuickActionsTop] = useState(() => (
     typeof initialPrefs.quickActionsTop === "number" && Number.isFinite(initialPrefs.quickActionsTop)
       ? initialPrefs.quickActionsTop
@@ -857,11 +857,16 @@ export default function DockNotesTab({
   const openNewNote = useCallback(() => {
     setEditingNote(null);
     setShowNoteEditor(true);
+    setNotesAutoSplit(false);
   }, []);
 
   const openEditNote = useCallback((note: DockNote) => {
     setEditingNote(note);
     setShowNoteEditor(true);
+    setNotesAutoSplit(note.autoSplit ?? false);
+    if (typeof note.linesPerSlide === "number") {
+      setNotesLinesPerSlide(clampNoteLinesPerSlide(note.linesPerSlide));
+    }
   }, []);
 
   const formatNoteDraft = useCallback((content: string, action: NoteTextToolAction, linesPerSlide?: number) => {
@@ -878,26 +883,39 @@ export default function DockNotesTab({
     if (!title || !content) return;
     const now = Date.now();
     if (editingNote) {
-      const updated: DockNote = { ...editingNote, title, content, splitOnLineBreaks: false, updatedAt: now };
+      const maintainedAutoSplit = editingNote.autoSplit ?? false;
+      const updated: DockNote = {
+        ...editingNote,
+        title,
+        content,
+        splitOnLineBreaks: false,
+        autoSplit: maintainedAutoSplit,
+        linesPerSlide: editingNote.linesPerSlide ?? notesLinesPerSlide,
+        updatedAt: now,
+      };
       const next = notes.map((n) => (n.id === updated.id ? updated : n));
       setNotes(next);
       saveDockNotes(next);
       setSelectedNote((cur) => (cur?.id === updated.id ? updated : cur));
+      setNotesAutoSplit(maintainedAutoSplit);
     } else {
       const newNote: DockNote = {
         id: crypto.randomUUID?.() ?? `note-${now}-${Math.random().toString(36).slice(2, 8)}`,
         title,
         content,
         splitOnLineBreaks: false,
+        autoSplit: false,
+        linesPerSlide: notesLinesPerSlide,
         updatedAt: now,
       };
       const next = [newNote, ...notes];
       setNotes(next);
       saveDockNotes(next);
+      setNotesAutoSplit(false);
     }
     setShowNoteEditor(false);
     setEditingNote(null);
-  }, [editingNote, notes]);
+  }, [editingNote, notes, notesLinesPerSlide]);
 
   const openNoteSlideEditor = useCallback((idx: number) => {
     const slide = selectedNoteSlides[idx];
@@ -1167,9 +1185,16 @@ export default function DockNotesTab({
     }
 
     if (nextLineMode !== undefined) {
-      setNotesAutoSplit(nextLineMode !== "original");
+      const nextAutoSplit = nextLineMode !== "original";
+      setNotesAutoSplit(nextAutoSplit);
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
+      if (selectedNote) {
+        const updated = { ...selectedNote, autoSplit: nextAutoSplit };
+        setSelectedNote(updated);
+        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
+        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
+      }
     }
     if (nextLineCount !== undefined) {
       const clamped = clampNoteLinesPerSlide(nextLineCount);
@@ -1181,6 +1206,12 @@ export default function DockNotesTab({
       }
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
+      if (selectedNote) {
+        const updated = { ...selectedNote, linesPerSlide: clamped };
+        setSelectedNote(updated);
+        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
+        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
+      }
     }
     const lineLayoutChanged = nextLineCount !== undefined || nextLineMode !== undefined;
     if (overlayVisible && activeSlideIndex !== null && !lineLayoutChanged) {
@@ -1509,6 +1540,10 @@ export default function DockNotesTab({
                         setSelectedSlideIdx(0);
                         setVisibleSlideIdx(null);
                         setNoteSlidesSearchQuery("");
+                        setNotesAutoSplit(note.autoSplit ?? false);
+                        if (typeof note.linesPerSlide === "number") {
+                          setNotesLinesPerSlide(clampNoteLinesPerSlide(note.linesPerSlide));
+                        }
                       }}
                       title={note.title}
                     >

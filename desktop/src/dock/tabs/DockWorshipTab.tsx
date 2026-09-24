@@ -784,7 +784,7 @@ function DockLyricsEditorDialog({
       artist: songArtist,
       lyrics,
       linesPerSlide,
-      autoSplit: true,
+      autoSplit: initialDraft.autoSplit ?? false,
     });
   }, [initialDraft, lyrics, linesPerSlide, onSave, saving, songArtist, songTitle]);
 
@@ -2891,11 +2891,16 @@ function DockWorshipTab({
       const derived = extractFirstLineAsTitle(draft.lyrics);
       if (derived) finalTitle = derived;
     }
-    const finalDraft = { ...draft, title: finalTitle };
+    const maintainedAutoSplit = draft.autoSplit ?? songEditor.autoSplit ?? false;
+    const finalDraft = { ...draft, title: finalTitle, autoSplit: maintainedAutoSplit };
     setSavingSong(true);
     setActionError("");
     try {
-      await persistSong(songEditor.id, finalDraft, songEditor);
+      const updatedSong = await persistSong(songEditor.id, finalDraft, songEditor);
+      if (updatedSong) {
+        setLineLayoutOverrideSongId(null);
+        setLineLayoutOverrideAutoSplit(null);
+      }
       showToast(t('worship.songSaved'), "success");
       closeSongEditor();
       track("song_created", { autoSplit: false });
@@ -2933,7 +2938,7 @@ function DockWorshipTab({
       title: draft?.title ?? nextAutoSongTitle(),
       artist: draft?.artist ?? "",
       lyrics: draft?.lyrics ?? "",
-      autoSplit: draft?.autoSplit ?? false,
+      autoSplit: false,
       linesPerSlide: draft?.linesPerSlide ?? DEFAULT_LINES_PER_SLIDE,
     });
     setNewSongSource({ importSourceType: "manual" });
@@ -2951,7 +2956,7 @@ function DockWorshipTab({
       const derived = extractFirstLineAsTitle(draft.lyrics);
       if (derived) finalTitle = derived;
     }
-    const finalDraft = { ...draft, title: finalTitle };
+    const finalDraft = { ...draft, title: finalTitle, autoSplit: false };
     setSavingSong(true);
     setActionError("");
     try {
@@ -2959,6 +2964,8 @@ function DockWorshipTab({
       if (newSong) {
         rememberDockSongDefault(newSong);
         closeNewSongModal();
+        setLineLayoutOverrideSongId(null);
+        setLineLayoutOverrideAutoSplit(null);
         setSelectedSong(newSong);
         setSelectedIdx(0);
         setVisibleIdx(null);
@@ -3277,16 +3284,17 @@ function DockWorshipTab({
     setSavingSong(true);
     setActionError("");
     try {
+      const maintainedAutoSplit = selectedSong.autoSplit ?? false;
       const updatedSong = await persistSong(selectedSong.id, {
         title: selectedSong.title,
         artist: selectedSong.artist,
         lyrics: nextLyrics,
-        autoSplit: true,
+        autoSplit: maintainedAutoSplit,
         linesPerSlide: nextLinesPerSlide,
       }, selectedSong);
       if (updatedSong) {
         setLineLayoutOverrideSongId(updatedSong.id);
-        setLineLayoutOverrideAutoSplit(true);
+        setLineLayoutOverrideAutoSplit(maintainedAutoSplit);
         setLinesPerSlideOverride(true);
         setLinesPerSlide(nextLinesPerSlide);
         setHiddenSectionIndexes(new Set());
@@ -4271,6 +4279,20 @@ function DockWorshipTab({
                       onModeChange={handleOverlayModeChange}
                       hideOverlayModeToggle={fullscreenOnlyMode}
                       overlayModeToggleDisabled={autoAdvanceActive}
+                      centerAction={
+                        <button
+                          type="button"
+                          className="dock-bible-reader__quick-edit-toolbar-btn"
+                          onClick={() => setShowThemeSettings(true)}
+                          title={t('worship.quickEdits', 'Quick Edits')}
+                          aria-label={t('worship.quickEdits', 'Quick Edits')}
+                        >
+                          <Icon name="edit" size={14} />
+                          <span className="dock-bible-reader__quick-edit-label">{t('worship.quickEdits', 'Quick Edits')}</span>
+                        </button>
+                      }
+                      onQuickEdit={() => setShowThemeSettings(true)}
+                      quickEditLabel={t('worship.quickEdits', 'Quick Edits')}
                       clearLabel={worshipOverlayVisible ? t("worship.hideLyrics") : t("worship.showLyrics")}
                       onClear={handleToggleWorshipVisibility}
                       clearDisabled={visibilityActionPending}
@@ -4295,12 +4317,12 @@ function DockWorshipTab({
                         type="button"
                         className="dock-btm-overflow__menu-item"
                         data-dock-close-overflow="true"
-                        onClick={() => setShowThemeSettings(true)}
-                        title={t('worship.quickEdits')}
-                        aria-label={t('worship.quickEdits')}
+                        onClick={handleToggleDeletedSectionsPopover}
+                        title={t("worship.viewDeletedSlides")}
+                        aria-label={t("worship.viewDeletedSlides")}
                       >
-                        <Icon name="edit" size={14} />
-                        <span>{t('worship.quickEdits')}</span>
+                        <Icon name="delete_sweep" size={14} />
+                        <span>{t("worship.viewDeletedSlides")}</span>
                       </button>
                       <DockSceneRoutingControl
                         module="worship"

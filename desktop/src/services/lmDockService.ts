@@ -199,7 +199,14 @@ const ASSEMBLYAI_API_KEYS = (
   .map((k: string) => k.trim())
   .filter(Boolean);
 
+const CLOUDFLARE_STT_URL = (
+  (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
+).trim();
+
 function getAssemblyAiKey(): string {
+  if (CLOUDFLARE_STT_URL) {
+    return CLOUDFLARE_STT_URL;
+  }
   if (ASSEMBLYAI_API_KEYS.length === 0) {
     console.warn("[VoiceService] No API keys configured. Set speech service API keys in your .env file.");
     return "";
