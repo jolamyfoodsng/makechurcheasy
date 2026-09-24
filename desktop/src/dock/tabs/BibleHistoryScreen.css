@@ -77,7 +77,7 @@
 .bible-history-header__back:hover,
 .bible-history-header__close:hover {
   background: var(--dock-surface-hover, #334155);
-  border-color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #6366F1);
   color: #FFFFFF;
 }
 
@@ -118,8 +118,8 @@
 }
 
 .bible-history-search:focus-within {
-  border-color: var(--dock-accent, #C56F4D);
-  box-shadow: 0 0 0 1px var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #6366F1);
+  box-shadow: 0 0 0 1px var(--dock-accent, #6366F1);
 }
 
 .bible-history-search__icon {
@@ -193,13 +193,13 @@
 }
 
 .bible-history-filter-btn svg {
-  color: var(--dock-accent, #C56F4D);
+  color: var(--dock-accent, #6366F1);
   flex-shrink: 0;
 }
 
 .bible-history-filter-btn:hover {
   background: var(--dock-surface-hover, #334155);
-  border-color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #6366F1);
   color: #FFFFFF;
 }
 
@@ -283,7 +283,7 @@
 
 .bible-history-sheet__close:hover {
   background: var(--dock-surface-hover, #334155);
-  border-color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #6366F1);
   color: #FFFFFF;
 }
 
@@ -370,7 +370,7 @@
 
 .bible-history-card:hover {
   background: var(--dock-surface-hover, #1E293B);
-  border-color: var(--dock-accent, #C56F4D);
+  border-color: var(--dock-accent, #6366F1);
 }
 
 .bible-history-card:active {
@@ -384,9 +384,9 @@
   width: 30px;
   height: 30px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--dock-accent, #C56F4D) 18%, var(--dock-surface, #111827));
+  background: color-mix(in srgb, var(--dock-accent, #6366F1) 18%, var(--dock-surface, #111827));
   color: var(--dock-accent, #E08A68);
-  border: 1px solid color-mix(in srgb, var(--dock-accent, #C56F4D) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-accent, #6366F1) 32%, transparent);
   flex-shrink: 0;
 }
 
@@ -460,14 +460,14 @@
 }
 
 .bible-history-card__action-btn--obs {
-  background: color-mix(in srgb, var(--dock-accent, #C56F4D) 25%, transparent);
-  border-color: color-mix(in srgb, var(--dock-accent, #C56F4D) 50%, transparent);
+  background: color-mix(in srgb, var(--dock-accent, #6366F1) 25%, transparent);
+  border-color: color-mix(in srgb, var(--dock-accent, #6366F1) 50%, transparent);
   color: var(--dock-text, #F8FAFC);
 }
 
 .bible-history-card__action-btn--obs:hover {
-  background: var(--dock-accent, #C56F4D);
-  border-color: var(--dock-accent, #C56F4D);
+  background: var(--dock-accent, #6366F1);
+  border-color: var(--dock-accent, #6366F1);
   color: #FFFFFF;
 }
 
@@ -565,9 +565,9 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--dock-accent, #C56F4D) 18%, var(--dock-surface, #111827));
+  background: color-mix(in srgb, var(--dock-accent, #6366F1) 18%, var(--dock-surface, #111827));
   color: var(--dock-accent, #E08A68);
-  border: 1px solid color-mix(in srgb, var(--dock-accent, #C56F4D) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-accent, #6366F1) 32%, transparent);
   margin-bottom: 4px;
 }
 

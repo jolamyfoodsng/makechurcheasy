@@ -1,0 +1,224 @@
+.ew-import-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(15, 20, 16, 0.7);
+  backdrop-filter: blur(6px);
+  padding: 1rem;
+}
+
+.ew-import-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background-color: #fcfaf4;
+  border: 1px solid rgba(40, 45, 41, 0.15);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  padding: 2rem;
+  color: #282d29;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.ew-import-modal__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(40, 45, 41, 0.06);
+  color: #282d29;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ew-import-modal__close:hover {
+  background: rgba(40, 45, 41, 0.12);
+}
+
+.ew-import-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.ew-import-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(125, 138, 66, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+.ew-import-icon-wrap.success {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.ew-import-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: #282d29;
+}
+
+.ew-import-subtitle {
+  font-size: 0.9rem;
+  color: rgba(40, 45, 41, 0.8);
+  line-height: 1.45;
+  margin: 0 0 1.5rem 0;
+}
+
+.ew-import-features {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.ew-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(125, 138, 66, 0.08);
+  border: 1px solid rgba(125, 138, 66, 0.2);
+  border-radius: 12px;
+}
+
+.ew-feature-icon {
+  color: #7d8a42;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ew-feature-item strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #282d29;
+}
+
+.ew-feature-item span {
+  display: block;
+  font-size: 0.78rem;
+  color: rgba(40, 45, 41, 0.7);
+}
+
+.ew-import-progress-box {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.ew-progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: rgba(40, 45, 41, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.ew-progress-bar-fill {
+  height: 100%;
+  background: #7d8a42;
+  transition: width 0.3s ease;
+}
+
+.ew-progress-stage-text {
+  font-size: 0.82rem;
+  color: rgba(40, 45, 41, 0.75);
+  margin: 0;
+}
+
+.ew-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.ew-summary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.88rem;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+}
+
+.ew-summary-num {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #059669;
+}
+
+.ew-summary-label {
+  font-size: 0.78rem;
+  color: rgba(40, 45, 41, 0.75);
+}
+
+.ew-import-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.ew-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  flex: 1;
+}
+
+.ew-btn--primary {
+  background: #282d29;
+  color: #f4f0e1;
+}
+
+.ew-btn--primary:hover {
+  background: #3a413b;
+}
+
+.ew-btn--secondary {
+  background: rgba(40, 45, 41, 0.08);
+  color: #282d29;
+}
+
+.ew-btn--secondary:hover {
+  background: rgba(40, 45, 41, 0.15);
+}
+
+.ew-import-error {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+  text-align: left;
+}

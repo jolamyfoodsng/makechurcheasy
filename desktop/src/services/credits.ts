@@ -226,6 +226,7 @@ export interface CreditDetails {
   totalConsumed: number;
   planAllocation: number;
   adminGranted: number;
+  totalAvailable?: number;
   effectivePlan?: string;
   isAdmin: boolean;
   unlimited?: boolean;
@@ -252,6 +253,7 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         totalConsumed: data.totalConsumed ?? 0,
         planAllocation: data.planAllocation ?? 0,
         adminGranted: data.adminGranted ?? 0,
+        totalAvailable: (data as any).totalAvailable ?? Math.max(0, (data.planAllocation ?? 0) + (data.adminGranted ?? 0)),
         effectivePlan: data.effectivePlan,
         isAdmin: data.isAdmin ?? false,
         unlimited: data.unlimited ?? data.credits === -1,

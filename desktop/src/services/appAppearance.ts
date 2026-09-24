@@ -43,7 +43,7 @@ export const DEFAULT_DOCK_VISUALS: DockVisualPreferences = {
 };
 export const DEFAULT_APP_APPEARANCE: AppAppearancePreferences = {
   palette: "classic-blue",
-  customAccent: "#1D4ED8",
+  customAccent: "#4F46E5",
   dockVisuals: { ...DEFAULT_DOCK_VISUALS },
   updatedAt: 0,
 };
@@ -51,45 +51,45 @@ export const DEFAULT_APP_APPEARANCE: AppAppearancePreferences = {
 export const APP_APPEARANCE_PALETTES: readonly AppAppearancePalette[] = [
   {
     id: "classic-blue",
-    label: "Classic Blue",
-    description: "Focused and familiar",
-    accent: "#1D4ED8",
-    swatches: ["#0F172A", "#1D4ED8", "#334155"],
+    label: "Antigravity Indigo",
+    description: "Deep, focused & native",
+    accent: "#4F46E5",
+    swatches: ["#0B0F17", "#4F46E5", "#1E293B"],
   },
   {
     id: "ocean-teal",
     label: "Ocean Teal",
     description: "Calm and modern",
     accent: "#0F766E",
-    swatches: ["#062A2A", "#0F766E", "#2DD4BF"],
+    swatches: ["#0B0F17", "#0F766E", "#1E293B"],
   },
   {
     id: "royal-purple",
     label: "Royal Purple",
     description: "Warm and expressive",
     accent: "#6D28D9",
-    swatches: ["#17112A", "#6D28D9", "#A78BFA"],
+    swatches: ["#0B0F17", "#6D28D9", "#1E293B"],
   },
   {
     id: "forest",
     label: "Forest",
     description: "Grounded and peaceful",
     accent: "#15803D",
-    swatches: ["#092117", "#15803D", "#4ADE80"],
+    swatches: ["#0B0F17", "#15803D", "#1E293B"],
   },
   {
     id: "ember",
     label: "Ember",
-    description: "Warm without being loud",
-    accent: "#C2410C",
-    swatches: ["#291208", "#C2410C", "#FB923C"],
+    description: "Warm amber tone",
+    accent: "#D97706",
+    swatches: ["#0B0F17", "#D97706", "#1E293B"],
   },
   {
     id: "slate",
     label: "Slate",
     description: "Quiet and professional",
-    accent: "#475569",
-    swatches: ["#0F172A", "#475569", "#94A3B8"],
+    accent: "#6366F1",
+    swatches: ["#0B0F17", "#6366F1", "#1E293B"],
   },
 ] as const;
 
@@ -289,34 +289,36 @@ export function getAppAppearanceCssVariables(
       inputBorder: "#CBD5E1",
     }
     : {
-      bg: "#0F172A",
-      bgSecondary: "#111827",
-      surface: "#111827",
-      surfaceRaised: "#1F2937",
-      surfaceHover: "#334155",
-      surfaceOverlay: "#1E2937",
-      border: "#334155",
-      borderSubtle: "#1E2937",
+      bg: "#0B0F17",
+      bgSecondary: "#0F172A",
+      surface: "#151D2C",
+      surfaceRaised: "#1E293B",
+      surfaceHover: "#26354D",
+      surfaceOverlay: "#151D2C",
+      border: "rgba(255, 255, 255, 0.08)",
+      borderSubtle: "rgba(255, 255, 255, 0.05)",
       text: "#F8FAFC",
-      textSecondary: "#CBD5E1",
-      textMuted: "#94A3B8",
-      inputBg: "#0F172A",
-      inputBorder: "#334155",
+      textSecondary: "#94A3B8",
+      textMuted: "#64748B",
+      inputBg: "#111827",
+      inputBorder: "rgba(255, 255, 255, 0.12)",
     };
 
+  // Antigravity & Material Design 3 preserve crisp neutral obsidian surfaces;
+  // accent colors are strictly focused on interactive controls, indicators, and badges.
   const tinted = {
-    bg: mixHex(base.bg, accent, isLight ? 0.035 : 0.08),
-    bgSecondary: mixHex(base.bgSecondary, accent, isLight ? 0.04 : 0.1),
-    surface: mixHex(base.surface, accent, isLight ? 0.018 : 0.08),
-    surfaceRaised: mixHex(base.surfaceRaised, accent, isLight ? 0.045 : 0.12),
-    surfaceHover: mixHex(base.surfaceHover, accent, isLight ? 0.08 : 0.16),
-    surfaceOverlay: mixHex(base.surfaceOverlay, accent, isLight ? 0.05 : 0.12),
-    border: mixHex(base.border, accent, isLight ? 0.08 : 0.18),
-    borderSubtle: mixHex(base.borderSubtle, accent, isLight ? 0.04 : 0.08),
+    bg: base.bg,
+    bgSecondary: base.bgSecondary,
+    surface: base.surface,
+    surfaceRaised: base.surfaceRaised,
+    surfaceHover: base.surfaceHover,
+    surfaceOverlay: base.surfaceOverlay,
+    border: base.border,
+    borderSubtle: base.borderSubtle,
   };
-  const primarySoft = rgba(accent, isLight ? 0.07 : 0.13);
-  const primarySoftBorder = rgba(accent, isLight ? 0.22 : 0.34);
-  const activeSurface = rgba(accent, isLight ? 0.07 : 0.14);
+  const primarySoft = rgba(accent, isLight ? 0.06 : 0.14);
+  const primarySoftBorder = rgba(accent, isLight ? 0.2 : 0.32);
+  const activeSurface = rgba(accent, isLight ? 0.06 : 0.16);
 
   return {
     // Main application tokens

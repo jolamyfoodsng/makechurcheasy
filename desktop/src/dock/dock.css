@@ -24,59 +24,59 @@
 
 /* ── Root container ── */
 .dock-root {
-  --dock-font-african-latin: "CMG Sans", "Questrial", "Charis SIL", "Noto Sans";
+  --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
   --dock-font-unicode-fallback: "Charis SIL", "Noto Sans", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  --dock-font-body: var(--dock-font-african-latin), -apple-system, BlinkMacSystemFont, "Segoe UI", var(--dock-font-unicode-fallback);
-  --dock-font-heading: "CMG Sans Bold", var(--dock-font-african-latin), -apple-system, BlinkMacSystemFont, var(--dock-font-unicode-fallback);
+  --dock-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
+  --dock-font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
   --dock-font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   --dock-font-scale: 1;
-  --dock-bg: #111211;
-  --dock-bg-secondary: #181513;
-  --dock-surface: #191817;
-  --dock-surface-alt: #24201D;
-  --dock-surface-hover: #332B25;
-  --dock-surface-overlay: #211D1A;
+  --dock-bg: #0B0F17;
+  --dock-bg-secondary: #0F172A;
+  --dock-surface: #151D2C;
+  --dock-surface-alt: #1E293B;
+  --dock-surface-hover: #26354D;
+  --dock-surface-overlay: #151D2C;
   /* Shared aliases used by newer Dock controls. Keep these derived from the
      canonical tokens so light mode changes propagate automatically. */
   --dock-surface-0: var(--dock-bg);
   --dock-surface-1: var(--dock-surface);
   --dock-surface-2: var(--dock-surface-alt);
   --dock-surface-3: var(--dock-surface-hover);
-  --dock-border: #4A3B32;
-  --dock-border-soft: #3D3028;
-  --dock-border-active: #C56F4D;
-  --dock-border-hover: var(--dock-border-active);
-  --dock-text: #F7F2EC;
-  --dock-text-secondary: #D5C5B9;
-  --dock-text-dim: #A59488;
-  --dock-text-muted: #A59488;
-  --dock-text-disabled: #85766C;
+  --dock-border: rgba(255, 255, 255, 0.08);
+  --dock-border-soft: rgba(255, 255, 255, 0.05);
+  --dock-border-active: #6366F1;
+  --dock-border-hover: rgba(99, 102, 241, 0.6);
+  --dock-text: #F8FAFC;
+  --dock-text-secondary: #94A3B8;
+  --dock-text-dim: #64748B;
+  --dock-text-muted: #64748B;
+  --dock-text-disabled: #475569;
   --dock-text-primary: var(--dock-text);
   --dock-text-tertiary: var(--dock-text-dim);
   --dock-text-quaternary: var(--dock-text-muted);
-  --text-primary: #F7F2EC;
-  --text-secondary: #D5C5B9;
-  --text-muted: #A59488;
-  --input-placeholder: #A59488;
-  --dock-accent: #C56F4D;
-  --dock-accent-hover: #DC8965;
-  --dock-accent-pressed: #A95537;
-  --dock-accent-soft: rgba(197, 111, 77, 0.14);
-  --dock-accent-soft-border: rgba(220, 137, 101, 0.34);
-  --dock-green: #72B494;
-  --dock-green-button: #5E9D7D;
-  --dock-green-pressed: #4E8569;
-  --dock-green-soft: rgba(114, 180, 148, 0.14);
-  --dock-green-soft-border: rgba(114, 180, 148, 0.28);
-  --dock-red: #E26B62;
-  --dock-red-hover: #F08075;
-  --dock-red-soft: rgba(226, 107, 98, 0.14);
-  --dock-red-soft-border: rgba(226, 107, 98, 0.28);
-  --dock-red-text: #F2AAA2;
-  --dock-yellow: #D6A14A;
-  --dock-yellow-soft: rgba(214, 161, 74, 0.14);
-  --dock-input-bg: #141413;
-  --dock-input-border: #4A3B32;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --input-placeholder: #64748B;
+  --dock-accent: #6366F1;
+  --dock-accent-hover: #818CF8;
+  --dock-accent-pressed: #4F46E5;
+  --dock-accent-soft: rgba(99, 102, 241, 0.14);
+  --dock-accent-soft-border: rgba(99, 102, 241, 0.35);
+  --dock-green: #10B981;
+  --dock-green-button: #059669;
+  --dock-green-pressed: #047857;
+  --dock-green-soft: rgba(16, 185, 129, 0.14);
+  --dock-green-soft-border: rgba(16, 185, 129, 0.28);
+  --dock-red: #EF4444;
+  --dock-red-hover: #F87171;
+  --dock-red-soft: rgba(239, 68, 68, 0.14);
+  --dock-red-soft-border: rgba(239, 68, 68, 0.28);
+  --dock-red-text: #FCA5A5;
+  --dock-yellow: #F59E0B;
+  --dock-yellow-soft: rgba(245, 158, 11, 0.14);
+  --dock-input-bg: #111827;
+  --dock-input-border: rgba(255, 255, 255, 0.12);
 
   display: flex;
   flex-direction: column;
@@ -88,12 +88,12 @@
   max-width: none;
   height: 100%;
   background: var(--dock-bg);
-  background-image: linear-gradient(155deg, rgba(197, 111, 77, 0.08), transparent 32%);
+  background-image: linear-gradient(155deg, rgba(99, 102, 241, 0.06), transparent 32%);
   color: var(--dock-text);
   font-family: var(--dock-font-body);
   font-size: 12px;
   zoom: var(--dock-font-scale, 1);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.4;
   overflow: hidden;
   user-select: none;
@@ -12327,8 +12327,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-chapter-bar__history-btn:hover {
-  color: var(--dock-accent, #C56F4D);
-  border-color: var(--dock-accent, #C56F4D);
+  color: var(--dock-accent, #6366F1);
+  border-color: var(--dock-accent, #6366F1);
 }
 
 .dock-bible-chapter-trigger {
@@ -40328,8 +40328,8 @@ button.dock-btm-toolbar__clear--inline,
   height: 24px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--dock-accent, #c56f4d);
-  border-right-color: rgba(220, 137, 101, 0.6);
+  border-top-color: var(--dock-accent, #6366F1);
+  border-right-color: rgba(99, 102, 241, 0.6);
   box-sizing: border-box;
   animation: dock-tab-loading-spin 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }

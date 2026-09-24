@@ -36,7 +36,7 @@ function toTitleCase(label: string): string {
 }
 
 function classifySectionLabel(rawLabel: string): SectionLabel | null {
-  const label = normalizeLabelText(rawLabel.replace(/^\[|\]$/g, ""));
+  const label = normalizeLabelText(rawLabel.replace(/^[<\[]|[>\]]$/g, ""));
   if (!label) return null;
 
   const verseMatch = label.match(/^(?:v|verse)\s*(\d+|[ivx]+)?$/i);
@@ -82,10 +82,10 @@ function classifySectionLabel(rawLabel: string): SectionLabel | null {
     return { label: `Outro${suffix}`, shortLabel: `O${outroMatch[1] ?? ""}`, type: "outro" };
   }
 
-  const presentationPageMatch = label.match(/^(?:slide|page)\s*(\d+)$/i);
+  const presentationPageMatch = label.match(/^(?:slide|page|section)\s*(\d+)?$/i);
   if (presentationPageMatch) {
-    const number = presentationPageMatch[1];
-    return { label: `Slide ${number}`, shortLabel: `S${number}`, type: "other" };
+    const number = presentationPageMatch[1] ? ` ${presentationPageMatch[1]}` : "";
+    return { label: `Section${number}`, shortLabel: `S${presentationPageMatch[1] ?? ""}`, type: "other" };
   }
 
   return null;
@@ -95,7 +95,7 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  const bracketMatch = trimmed.match(/^\[([^\]]+)\]\s*(.*)$/);
+  const bracketMatch = trimmed.match(/^[\<\[]([^\>\]]+)[\>\]]\s*(.*)$/);
   if (bracketMatch) {
     const section = classifySectionLabel(bracketMatch[1]);
     if (section) return { section, rest: bracketMatch[2]?.trim() ?? "" };

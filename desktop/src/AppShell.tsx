@@ -29,6 +29,7 @@ import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
 import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
+import EasyWorshipAnnouncementBanner from "./components/EasyWorshipAnnouncementBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
 import { safeTauriListen } from "./services/tauriSafe";
@@ -218,6 +219,7 @@ export function AppShell() {
         tabIndex={-1}
         className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}${isTranscriptDetailRoute ? " app-main--transcript-detail" : ""}${isFixedViewportRoute ? " app-main--fixed-viewport" : ""}`}>
         <LiveStatusBar />
+        <EasyWorshipAnnouncementBanner />
         <div className="app-glow" />
         <div className={`app-content${isTranscriptDetailRoute ? " app-content--transcript-detail" : ""}${isFixedViewportRoute ? " app-content--fixed-viewport" : ""}`}>
           <VoiceBibleResumeBanner />

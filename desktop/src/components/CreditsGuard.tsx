@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { Zap, ExternalLink } from "lucide-react";
 import { fetchCreditsFromBackend, isProUnlocked } from "../services/credits";
+import LoadingScreen from "./LoadingScreen";
 
 const CREDITS_URL =
   "https://makechurcheazy.com/credits";
@@ -71,11 +72,7 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
 
   // Loading state
   if (state.phase === "loading") {
-    return (
-      <div style={styles.root}>
-        <div style={styles.spinner} />
-      </div>
-    );
+    return <LoadingScreen variant="page" label="Verifying credits…" />;
   }
 
   // Offline / backend unreachable — block until credits can be verified
@@ -143,29 +140,37 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    minHeight: 400,
+    minHeight: 450,
     padding: 32,
+    background: "var(--bg, transparent)",
   },
   card: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: 12,
-    maxWidth: 360,
+    maxWidth: 400,
+    width: "100%",
     textAlign: "center",
+    padding: "32px 24px",
+    background: "var(--surface, rgba(255, 255, 255, 0.03))",
+    border: "1px solid var(--border, rgba(255, 255, 255, 0.08))",
+    borderRadius: "var(--radius, 6px)",
+    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
   },
   iconWrap: {
     width: 56,
     height: 56,
-    borderRadius: 12,
-    background: "rgba(var(--error-rgb, 239,68,68), 0.12)",
+    borderRadius: "50%",
+    background: "rgba(239, 68, 68, 0.12)",
     color: "var(--error, #ef4444)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
   title: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: 700,
     color: "var(--text, #e2e8f0)",
     margin: 0,
@@ -182,23 +187,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 6,
     marginTop: 8,
-    padding: "8px 20px",
-    borderRadius: "var(--radius, 3px)",
-    background: "var(--primary, #4f46e5)",
+    padding: "9px 20px",
+    borderRadius: "var(--radius, 4px)",
+    background: "var(--primary, #2563eb)",
     border: "none",
     color: "#fff",
     fontSize: 13,
     fontWeight: 600,
     textDecoration: "none",
     cursor: "pointer",
-    transition: "background 0.15s",
-  },
-  spinner: {
-    width: 24,
-    height: 24,
-    border: "2.5px solid var(--border, #2c3140)",
-    borderTopColor: "var(--primary, #4f46e5)",
-    borderRadius: "50%",
-    animation: "spin 0.6s linear infinite",
+    transition: "all 0.15s ease",
   },
 };

@@ -4392,6 +4392,45 @@ function DockBibleTab({
       }
     }
 
+    let nextProfiles: DockSceneQuickThemeSettings | undefined;
+    if (isSceneProfileActive && (hasSettingsPatch || (measurement && !compareEnabled))) {
+      const existingProfile = sceneQuickThemeSettingsRef.current[activeSceneProfileId] ?? {};
+      const fallbackTheme = isFullscreen ? selectedBibleThemeRef.current : selectedLowerThirdThemeRef.current;
+      const storedThemeSettings = isFullscreen
+        ? existingProfile.fullscreenThemeSettings
+        : existingProfile.lowerThirdThemeSettings;
+      const baseTheme = !storedThemeSettings
+        ? resolveThemeForOverlayMode(fallbackTheme, liveMode)
+        : {
+          ...resolveThemeForOverlayMode(fallbackTheme, liveMode),
+          settings: storedThemeSettings as unknown as BibleThemeSettings,
+        };
+      const nextTheme = isFullscreen
+        ? applyFullscreenQuickThemeSettings(baseTheme, nextFullscreenSettings)
+        : applyLowerThirdQuickThemeSettings(baseTheme, nextLowerThirdSettings);
+
+      const nextProfile: DockSceneQuickThemeProfile = {
+        ...existingProfile,
+        ...(isFullscreen
+          ? {
+            fullscreen: { ...nextFullscreenSettings },
+            fullscreenThemeId: existingProfile.fullscreenThemeId ?? fallbackTheme.id,
+            fullscreenThemeSettings: nextTheme.settings as unknown as Record<string, unknown>,
+          }
+          : {
+            lowerThird: { ...nextLowerThirdSettings },
+            lowerThirdThemeId: existingProfile.lowerThirdThemeId ?? fallbackTheme.id,
+            lowerThirdThemeSettings: nextTheme.settings as unknown as Record<string, unknown>,
+          }),
+      };
+      nextProfiles = {
+        ...sceneQuickThemeSettingsRef.current,
+        [activeSceneProfileId]: nextProfile,
+      };
+      sceneQuickThemeSettingsRef.current = nextProfiles;
+      setSceneQuickThemeSettings(nextProfiles);
+    }
+
     persistDockBiblePreferencesNow({
       ...((hasSettingsPatch || (measurement && !compareEnabled))
         ? {
@@ -4403,6 +4442,7 @@ function DockBibleTab({
             }),
         }
         : {}),
+      ...(nextProfiles ? { sceneQuickThemeSettings: nextProfiles } : {}),
       verseLineCount: nextLineCount !== null ? nextLineCount : verseLineCount,
       ...(isFullscreen
         ? (nextLineCount !== null ? { fullscreenVerseLineCount: nextLineCount } : {})
@@ -4411,9 +4451,12 @@ function DockBibleTab({
   }, [
     activeFullscreenQuickThemeSettings,
     activeLowerThirdQuickThemeSettings,
+    activeSceneProfileId,
     baseFullscreenTheme,
     baseLowerThirdTheme,
+    compareEnabled,
     fullscreenOnlyMode,
+    isSceneProfileActive,
     persistDockBiblePreferencesNow,
     refreshCurrentBibleOutputAfterThemeSave,
     refreshCurrentBibleOutputForLineCount,
@@ -4471,19 +4514,10 @@ function DockBibleTab({
       nextPatch.compareReferenceFontSizeRight = patch.refFontSize;
     }
 
-    if (browserQuickUpdateImmediately) {
-      void handleSyncBibleBrowserSettings(nextPatch);
-      return;
-    }
-
-    setDraftBrowserQuickThemeSettings((current) => ({
-      ...(current ?? activeBrowserFontSettings),
-      ...nextPatch,
-    }));
+    void handleSyncBibleBrowserSettings(nextPatch);
   }, [
     activeBrowserFontSettings,
     browserFontMode,
-    browserQuickUpdateImmediately,
     handleSyncBibleBrowserSettings,
   ]);
 
@@ -4703,16 +4737,27 @@ function DockBibleTab({
   const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
     setDisplayMode(mode);
     setCompareEnabled(mode === "compare");
-  }, []);
+    persistDockBiblePreferencesNow({
+      displayMode: mode,
+      compareEnabled: mode === "compare",
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   const handleCompareEnabledChange = useCallback((enabled: boolean) => {
     setCompareEnabled(enabled);
     setDisplayMode(enabled ? "compare" : "single");
-  }, []);
+    persistDockBiblePreferencesNow({
+      compareEnabled: enabled,
+      displayMode: enabled ? "compare" : "single",
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   const handleCompareModeChange = useCallback((mode: CompareMode) => {
     setCompareMode(mode);
-  }, []);
+    persistDockBiblePreferencesNow({
+      compareMode: mode,
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   // Preserve contract for narrow layout tests:
   // setShowComparePopover(true);

@@ -1,0 +1,226 @@
+/* AppErrorBoundary.css — MakeChurchEasy recovery styling */
+
+.mce-error-boundary-page {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-dark, #0d0e12);
+  color: var(--text-primary, #f1f3f9);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-y: auto;
+}
+
+.mce-error-boundary-card {
+  width: min(580px, 100%);
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: var(--surface-dark, #161820);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: mceErrorBoundaryFadeIn 0.25s ease-out forwards;
+}
+
+@keyframes mceErrorBoundaryFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mce-error-boundary-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--surface-raised, rgba(255, 255, 255, 0.03));
+}
+
+.mce-error-boundary-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mce-error-boundary-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mce-error-boundary-app-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #ffffff);
+}
+
+.mce-error-boundary-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted, #8b92a5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mce-error-boundary-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mce-error-boundary-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #ffffff);
+  line-height: 1.25;
+}
+
+.mce-error-boundary-copy {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-secondary, #b0b7c9);
+  line-height: 1.5;
+}
+
+.mce-error-boundary-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mce-error-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.mce-error-btn--primary {
+  background: var(--primary, #6366f1);
+  color: #ffffff;
+}
+
+.mce-error-btn--primary:hover {
+  background: var(--primary-hover, #4f46e5);
+  transform: translateY(-1px);
+}
+
+.mce-error-btn--secondary {
+  background: var(--surface-raised, rgba(255, 255, 255, 0.06));
+  border-color: var(--border-subtle, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #e2e8f0);
+}
+
+.mce-error-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.mce-error-boundary-details-section {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mce-error-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted, #8b92a5);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: color 0.15s ease;
+}
+
+.mce-error-details-toggle:hover {
+  color: var(--text-primary, #ffffff);
+}
+
+.mce-error-details-box {
+  border-radius: 8px;
+  background: #090a0d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.mce-error-details-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mce-error-details-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted, #717786);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mce-error-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--primary, #818cf8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.mce-error-copy-btn:hover {
+  background: rgba(129, 140, 248, 0.12);
+}
+
+.mce-error-code {
+  margin: 0;
+  padding: 12px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #f87171;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

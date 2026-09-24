@@ -4,7 +4,7 @@
  * The dock keeps Bible, Worship + Notes, and Media production controls inside OBS.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { dockClient, dockBridge, type DockStateMessage } from "../services/dockBridge";
@@ -111,6 +111,8 @@ import {
 } from "./dockBibleKeywordPreference";
 import { coerce, gt } from "semver";
 
+import { safeLazy } from "../utils/safeLazy";
+
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
 const loadDockWorshipTab = () => import("./tabs/DockWorshipTab");
@@ -120,14 +122,14 @@ const loadDockMinistryTab = () => import("./tabs/DockMinistryTab");
 const loadDockLmTab = () => import("./tabs/DockLmTab");
 const loadDockBibleCommandPaletteHost = () => import("./DockBibleCommandPaletteHost");
 
-const DockBibleTab = lazy(loadDockBibleTab);
-const DockMediaTab = lazy(loadDockMediaTab);
-const DockWorshipTab = lazy(loadDockWorshipTab);
-const DockPlannerTab = lazy(loadDockPlannerTab);
-const DockMultiviewTab = lazy(loadDockMultiviewTab);
-const DockMinistryTab = lazy(loadDockMinistryTab);
-const DockLmTab = lazy(loadDockLmTab);
-const DockBibleCommandPaletteHost = lazy(loadDockBibleCommandPaletteHost);
+const DockBibleTab = safeLazy(loadDockBibleTab);
+const DockMediaTab = safeLazy(loadDockMediaTab);
+const DockWorshipTab = safeLazy(loadDockWorshipTab);
+const DockPlannerTab = safeLazy(loadDockPlannerTab);
+const DockMultiviewTab = safeLazy(loadDockMultiviewTab);
+const DockMinistryTab = safeLazy(loadDockMinistryTab);
+const DockLmTab = safeLazy(loadDockLmTab);
+const DockBibleCommandPaletteHost = safeLazy(loadDockBibleCommandPaletteHost);
 
 const DOCK_TAB_PRELOADERS: Partial<Record<DockTab, () => Promise<unknown>>> = {
   bible: loadDockBibleTab,

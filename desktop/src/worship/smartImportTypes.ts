@@ -1,6 +1,6 @@
 import type { Slide } from "./types";
 
-export type SmartImportMethod = "ai" | "fallback";
+export type SmartImportMethod = "ai" | "fallback" | "easyworship";
 export type SmartImportSectionType =
   | Slide["type"]
   | "refrain";

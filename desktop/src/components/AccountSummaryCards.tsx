@@ -74,8 +74,8 @@ export function AccountSummaryCards({
           plan,
           planLabel,
           credits: creditDetails?.credits ?? getCreditsBalance(),
-          creditsTotal: creditDetails?.planAllocation ?? 0,
-          creditsConsumed: creditDetails?.totalConsumed ?? null,
+          creditsTotal: creditDetails?.totalAvailable ?? ((creditDetails?.planAllocation ?? 0) + (creditDetails?.adminGranted ?? 0)),
+          creditsConsumed: creditDetails?.totalConsumed ?? 0,
           deviceLimit: limits.devices,
           deviceUnlimited: limits.unlimitedDevices,
           renewalDate: sub?.payload?.expiresAt ?? null,
@@ -144,7 +144,7 @@ export function AccountSummaryCards({
           <span className="summary-card-value">{creditsLabel}</span>
           <span className="summary-card-sub">
             {data.creditsTotal > 0
-              ? t("dashboard.summary.creditsOf", { used: data.creditsConsumed ?? data.creditsTotal })
+              ? `${data.creditsConsumed ?? 0} of ${data.creditsTotal} used`
               : t("dashboard.summary.creditsSubtitle")}
           </span>
         </div>

@@ -1336,14 +1336,18 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                 </>
               )}
             </div>
-            <button className="btn btn-outline" onClick={async () => {
-              const access = await checkPremiumAccess('translation');
-              if (!access.allowed) {
-                setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
-                return;
-              }
-              setIsTranslateOpen(true);
-            }} style={{ padding: '8px 16px', color: '#adc7ff', borderColor: 'rgba(173,199,255,0.3)' }} title="Translate">
+            <button
+              className="btn-translate-action"
+              onClick={async () => {
+                const access = await checkPremiumAccess('translation');
+                if (!access.allowed) {
+                  setAccessDeniedDialog({ open: true, reason: access.reason || 'feature_not_available' });
+                  return;
+                }
+                setIsTranslateOpen(true);
+              }}
+              title="Translate"
+            >
               <Languages size={16} /> Translate
             </button>
           </div>

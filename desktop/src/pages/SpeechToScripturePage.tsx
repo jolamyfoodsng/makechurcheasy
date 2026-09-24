@@ -22,6 +22,7 @@ import {
   Lock,
   Mic,
   Radio,
+  Search,
   ShieldAlert,
   StopCircle,
   Wifi,
@@ -894,38 +895,39 @@ export default function SpeechToScripturePage() {
       <header className="sts3-header">
         <div className="sts3-header-left">
           <div className="sts3-logo-box">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+            <Mic size={18} />
           </div>
           <div>
             <div className="sts3-header-title">Verse AI</div>
-            <div className="sts3-header-sub">Real-time speech to scripture detection</div>
-            {effectivePlan === "free" && <div className="sts3-header-sub">Free plan: {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes daily · {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays</div>}
+            <div className="sts3-header-sub">{t("verseAi.headerDesc", "Real-time speech to scripture detection & OBS broadcast")}</div>
+            {effectivePlan === "free" && (
+              <div className="sts3-plan-badge">
+                Free plan: {FREE_SPEECH_TO_SCRIPTURE_MINUTES}m daily · {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES}m Sundays
+              </div>
+            )}
           </div>
         </div>
-        <CreditsDisplay userId={user?.id} />
         <div className="sts3-header-right">
-          <div className="sts3-header-mic-group">
-            <button
-              className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
-              onClick={canStopListening ? handleStop : handleStart}
-              disabled={checkingAccess || (!canStopListening && !hasCredits)}
-              title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
-              {canStopListening ? (
-                isConnecting ? (
-                  <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
-                ) : (
-                  <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
-                )
-              ) : checkingAccess ? (
-                <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
-              ) : !hasCredits ? (
-                <><Lock size={16} /> {t("verseAi.noCredits")}</>
+          <CreditsDisplay userId={user?.id} />
+          <button
+            className={`sts3-btn ${canStopListening ? "sts3-btn--red" : "sts3-btn--primary"}`}
+            onClick={canStopListening ? handleStop : handleStart}
+            disabled={checkingAccess || (!canStopListening && !hasCredits)}
+            title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+            {canStopListening ? (
+              isConnecting ? (
+                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : (
-                <><Mic size={16} /> {t("verseAi.showInObs")}</>
-              )}
-            </button>
-          </div>
-
+                <><StopCircle size={15} /> {t("verseAi.stopListening")}</>
+              )
+            ) : checkingAccess ? (
+              <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
+            ) : !hasCredits ? (
+              <><Lock size={15} /> {t("verseAi.noCredits")}</>
+            ) : (
+              <><Mic size={15} /> {t("verseAi.showInObs", "Start Listening")}</>
+            )}
+          </button>
         </div>
       </header>
 
@@ -1134,7 +1136,7 @@ export default function SpeechToScripturePage() {
 
             {/* Search */}
             <div className="sts3-search-box">
-              {/* <Search size={14} className="sts3-search-icon" /> */}
+              <Search size={13} className="sts3-search-icon" />
               <input
                 className="sts3-search-input"
                 type="text"

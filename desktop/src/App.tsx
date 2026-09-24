@@ -11,7 +11,7 @@
  *   5. Main app is always accessible — updates never block workflow
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
@@ -114,6 +114,8 @@ import "./App.css";
 import "./NewDashboard.css";
 import "./compat-mode.css";
 import "./accessibility.css";
+import AppErrorBoundary from "./components/AppErrorBoundary";
+import { safeLazy } from "./utils/safeLazy";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
 
 const UPDATE_POLL_INTERVAL_MS = 30_000;
@@ -123,24 +125,24 @@ const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 // Keep large route trees and their optional dependencies out of the startup
 // graph. The first screen stays small; a page pays its loading cost only when
 // the operator opens that page.
-const MVSettings = lazy(() => import("./multiview/pages/MVSettings").then(({ MVSettings: Component }) => ({ default: Component })));
-const MVShell = lazy(() => import("./multiview/MVShell").then(({ MVShell: Component }) => ({ default: Component })));
-const DevDashboard = lazy(() => import("./pages/DevDashboard"));
-const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
-const ProductionHomePage = lazy(() => import("./pages/ProductionHomePage"));
-const MultiViewGalleryPage = lazy(() => import("./pages/MultiViewGalleryPage"));
-const CountdownsPage = lazy(() => import("./pages/CountdownsPage"));
-const ProductionThemeSettingsPage = lazy(() => import("./pages/ProductionThemeSettingsPage"));
-const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
-const PresentationSetupPage = lazy(() => import("./pages/PresentationSetupPage"));
-const ServicePlannerPage = lazy(() => import("./pages/ServicePlannerPage"));
-const SpeechToScripturePage = lazy(() => import("./pages/SpeechToScripturePage"));
-const TranscriptLibraryPage = lazy(() => import("./pages/TranscriptLibraryPage"));
-const TranscriptDetailPage = lazy(() => import("./pages/TranscriptDetailPage"));
-const CreditsPage = lazy(() => import("./pages/CreditsPage"));
-const TutorialsPage = lazy(() => import("./pages/TutorialsPage"));
-const TemplatesPage = lazy(() => import("./pages/TemplatesPage"));
-const DesignStudioPage = lazy(() => import("./pages/DesignStudioPage"));
+const MVSettings = safeLazy(() => import("./multiview/pages/MVSettings").then(({ MVSettings: Component }) => ({ default: Component })));
+const MVShell = safeLazy(() => import("./multiview/MVShell").then(({ MVShell: Component }) => ({ default: Component })));
+const DevDashboard = safeLazy(() => import("./pages/DevDashboard"));
+const ResourcesPage = safeLazy(() => import("./pages/ResourcesPage"));
+const ProductionHomePage = safeLazy(() => import("./pages/ProductionHomePage"));
+const MultiViewGalleryPage = safeLazy(() => import("./pages/MultiViewGalleryPage"));
+const CountdownsPage = safeLazy(() => import("./pages/CountdownsPage"));
+const ProductionThemeSettingsPage = safeLazy(() => import("./pages/ProductionThemeSettingsPage"));
+const OnboardingPage = safeLazy(() => import("./pages/OnboardingPage"));
+const PresentationSetupPage = safeLazy(() => import("./pages/PresentationSetupPage"));
+const ServicePlannerPage = safeLazy(() => import("./pages/ServicePlannerPage"));
+const SpeechToScripturePage = safeLazy(() => import("./pages/SpeechToScripturePage"));
+const TranscriptLibraryPage = safeLazy(() => import("./pages/TranscriptLibraryPage"));
+const TranscriptDetailPage = safeLazy(() => import("./pages/TranscriptDetailPage"));
+const CreditsPage = safeLazy(() => import("./pages/CreditsPage"));
+const TutorialsPage = safeLazy(() => import("./pages/TutorialsPage"));
+const TemplatesPage = safeLazy(() => import("./pages/TemplatesPage"));
+const DesignStudioPage = safeLazy(() => import("./pages/DesignStudioPage"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -1321,108 +1323,110 @@ function App() {
 
       {/* 4. Main app — always rendered after splash, but blocked by force update modal */}
       {!splashVisible && (
-        <Suspense fallback={<AppRouteFallback />}>
-          <Routes>
-          <Route path="p/:sessionId" element={<PublicPresentationRoute />} />
-          <Route
-            path="*"
-            element={
-              <AuthGate>
-                <Routes>
-                  <Route
-                    path="presentation/*"
-                    element={
-                      <VerificationGate>
-                        <LicenseGuard>
-                          <LowerThirdProvider>
-                            <Routes>
-                              <Route index element={<PresentationSetupPage />} />
-                              <Route path="link" element={<PresentationSetupPage initialView="link" />} />
-                              <Route path="console" element={<Navigate to="/presentation/link" replace />} />
-                              <Route path="remote-obs" element={<PresentationSetupPage initialView="remote-obs" />} />
-                              <Route path="setup" element={<Navigate to="/presentation/remote-obs" replace />} />
-                              <Route path="*" element={<Navigate to="/presentation" replace />} />
-                            </Routes>
-                          </LowerThirdProvider>
-                        </LicenseGuard>
-                      </VerificationGate>
-                    }
-                  />
-                  <Route
-                    path="*"
-                    element={
-                      <OBSConnectGate>
-                        <VerificationGate>
-                          <LicenseGuard>
-                            <LowerThirdProvider>
-                              <Routes>
-                          {/* Onboarding — standalone layout, no sidebar */}
-                          {!mceOnboardingDone && (
-                            <Route path="onboarding" element={<OnboardingPage />} />
-                          )}
-                          <Route element={<AppShell />}>
-                            <Route
-                              index
-                              element={
-                                mceOnboardingDone ? <ProductionHomePage /> : <Navigate to="/onboarding" replace />
-                              }
-                            />
-                            <Route path="live-tools" element={<Navigate to="/" replace />} />
-                            <Route path="live" element={<Navigate to="/" replace />} />
-                            <Route path="service" element={<Navigate to="/" replace />} />
-                            <Route path="resources" element={<ResourcesPage />} />
-                            <Route path="service-planner" element={<ServicePlannerPage />} />
+        <AppErrorBoundary>
+          <Suspense fallback={<AppRouteFallback />}>
+            <Routes>
+              <Route path="p/:sessionId" element={<PublicPresentationRoute />} />
+              <Route
+                path="*"
+                element={
+                  <AuthGate>
+                    <Routes>
+                      <Route
+                        path="presentation/*"
+                        element={
+                          <VerificationGate>
+                            <LicenseGuard>
+                              <LowerThirdProvider>
+                                <Routes>
+                                  <Route index element={<PresentationSetupPage />} />
+                                  <Route path="link" element={<PresentationSetupPage initialView="link" />} />
+                                  <Route path="console" element={<Navigate to="/presentation/link" replace />} />
+                                  <Route path="remote-obs" element={<PresentationSetupPage initialView="remote-obs" />} />
+                                  <Route path="setup" element={<Navigate to="/presentation/remote-obs" replace />} />
+                                  <Route path="*" element={<Navigate to="/presentation" replace />} />
+                                </Routes>
+                              </LowerThirdProvider>
+                            </LicenseGuard>
+                          </VerificationGate>
+                        }
+                      />
+                      <Route
+                        path="*"
+                        element={
+                          <OBSConnectGate>
+                            <VerificationGate>
+                              <LicenseGuard>
+                                <LowerThirdProvider>
+                                  <Routes>
+                                    {/* Onboarding — standalone layout, no sidebar */}
+                                    {!mceOnboardingDone && (
+                                      <Route path="onboarding" element={<OnboardingPage />} />
+                                    )}
+                                    <Route element={<AppShell />}>
+                                      <Route
+                                        index
+                                        element={
+                                          mceOnboardingDone ? <ProductionHomePage /> : <Navigate to="/onboarding" replace />
+                                        }
+                                      />
+                                      <Route path="live-tools" element={<Navigate to="/" replace />} />
+                                      <Route path="live" element={<Navigate to="/" replace />} />
+                                      <Route path="service" element={<Navigate to="/" replace />} />
+                                      <Route path="resources" element={<ResourcesPage />} />
+                                      <Route path="service-planner" element={<ServicePlannerPage />} />
 
-                            <Route path="songs" element={<Navigate to="/resources?tab=worship" replace />} />
-                            <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
-                            <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
-                            <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
-                            <Route path="settings" element={<MVSettings />} />
-                            <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
-                            <Route path="transcribe" element={<Navigate to="/speech-to-scripture" replace />} />
-                            <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
-                            <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />
-                            <Route path="tutorials" element={<TutorialsPage />} />
-                            <Route path="credits" element={<CreditsPage />} />
-                            <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
-                            <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
-                            <Route path="library" element={<Navigate to="/resources?tab=media" replace />} />
-                            <Route path="design-studio" element={<DesignStudioPage />} />
-                            <Route path="templates" element={<TemplatesPage />} />
-                            <Route path="templates/*" element={<TemplatesPage />} />
-                            <Route path="hub" element={<Navigate to="/" replace />} />
-                            <Route path="hub/*" element={<Navigate to="/" replace />} />
-                            <Route path="service-hub" element={<Navigate to="/" replace />} />
-                            <Route path="service-control-hub" element={<Navigate to="/" replace />} />
-                            <Route path="quick-merge" element={<Navigate to="/" replace />} />
-                            <Route path="broadcast" element={<Navigate to="/" replace />} />
-                            <Route path="bible" element={<Navigate to="/settings" replace />} />
-                            <Route path="bible/*" element={<Navigate to="/settings" replace />} />
-                            <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />
-                            <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
-                            <Route path="scenes" element={<Navigate to="/settings" replace />} />
-                            <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
-                            <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
-                            <Route path="new" element={<Navigate to="/" replace />} />
+                                      <Route path="songs" element={<Navigate to="/resources?tab=worship" replace />} />
+                                      <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
+                                      <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
+                                      <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
+                                      <Route path="settings" element={<MVSettings />} />
+                                      <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
+                                      <Route path="transcribe" element={<Navigate to="/speech-to-scripture" replace />} />
+                                      <Route path="gallery" element={<FeatureGuard feature="multiview"><MultiViewGalleryPage /></FeatureGuard>} />
+                                      <Route path="countdowns" element={<FeatureGuard feature="countdowns"><CountdownsPage /></FeatureGuard>} />
+                                      <Route path="tutorials" element={<TutorialsPage />} />
+                                      <Route path="credits" element={<CreditsPage />} />
+                                      <Route path="transcripts" element={<CreditsGuard><TranscriptLibraryPageWrapper /></CreditsGuard>} />
+                                      <Route path="transcripts/:id" element={<CreditsGuard><TranscriptDetailPageWrapper /></CreditsGuard>} />
+                                      <Route path="library" element={<Navigate to="/resources?tab=media" replace />} />
+                                      <Route path="design-studio" element={<DesignStudioPage />} />
+                                      <Route path="templates" element={<TemplatesPage />} />
+                                      <Route path="templates/*" element={<TemplatesPage />} />
+                                      <Route path="hub" element={<Navigate to="/" replace />} />
+                                      <Route path="hub/*" element={<Navigate to="/" replace />} />
+                                      <Route path="service-hub" element={<Navigate to="/" replace />} />
+                                      <Route path="service-control-hub" element={<Navigate to="/" replace />} />
+                                      <Route path="quick-merge" element={<Navigate to="/" replace />} />
+                                      <Route path="broadcast" element={<Navigate to="/" replace />} />
+                                      <Route path="bible" element={<Navigate to="/settings" replace />} />
+                                      <Route path="bible/*" element={<Navigate to="/settings" replace />} />
+                                      <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />
+                                      <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
+                                      <Route path="scenes" element={<Navigate to="/settings" replace />} />
+                                      <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
+                                      <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
+                                      <Route path="new" element={<Navigate to="/" replace />} />
 
-                            {/* Developer Tools */}
-                            <Route path="dev/db" element={<DevDashboard />} />
-                          </Route>
+                                      {/* Developer Tools */}
+                                      <Route path="dev/db" element={<DevDashboard />} />
+                                    </Route>
 
-                          <Route path="*" element={<Navigate to="/" replace />} />
-                              </Routes>
-                            </LowerThirdProvider>
-                          </LicenseGuard>
-                        </VerificationGate>
-                      </OBSConnectGate>
-                    }
-                  />
-                </Routes>
-              </AuthGate>
-            }
-          />
-          </Routes>
-        </Suspense>
+                                    <Route path="*" element={<Navigate to="/" replace />} />
+                                  </Routes>
+                                </LowerThirdProvider>
+                              </LicenseGuard>
+                            </VerificationGate>
+                          </OBSConnectGate>
+                        }
+                      />
+                    </Routes>
+                  </AuthGate>
+                }
+              />
+            </Routes>
+          </Suspense>
+        </AppErrorBoundary>
       )}
 
       {!splashVisible && user && <DesktopReceiverNotification />}

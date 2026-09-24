@@ -30,14 +30,12 @@ import {
   getResolvedInterfaceLanguage,
 } from "../../services/interfaceLanguage";
 import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
-import { lmDockService } from "../../services/lmDockService";
 import { obsService } from "../../services/obsService";
 import { persistOBSWebSocketConfig } from "../../services/obsConnectionSettings";
 import { normalizeOBSWebSocketUrl } from "../../services/obsWebSocketUrl";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
-import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
 import { AutomationSettingsPanel } from "../components/AutomationSettingsPanel";
@@ -67,6 +65,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import {
   Bell,
+  BookOpen,
   Calendar,
   Check,
   CheckCircle,
@@ -85,7 +84,9 @@ import {
   Radio,
   RefreshCw,
   RotateCcw,
+  Save,
   Settings,
+  ShieldAlert,
   Smartphone,
   Sun,
   Trash2,
@@ -102,7 +103,44 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "mobile" | "automation" | "appearance" | "branding" | "bible" | "usage" | "audio";
+export type SettingsTab = "general" | "appearance" | "bible" | "branding" | "obs" | "mobile" | "automation" | "usage" | "storage" | "audio";
+
+export interface SettingsNavCategory {
+  group: string;
+  items: {
+    id: SettingsTab;
+    label: string;
+    icon: typeof Settings;
+    description: string;
+  }[];
+}
+
+export const SETTINGS_CATEGORIES: SettingsNavCategory[] = [
+  {
+    group: "Application",
+    items: [
+      { id: "general", label: "General", icon: Settings, description: "Studio preferences, language, and desktop updates." },
+      { id: "appearance", label: "Appearance", icon: Palette, description: "Theme modes, Antigravity accent colors, and UI density." },
+      { id: "bible", label: "Scripture & Bible", icon: BookOpen, description: "Default translation, slide layout, and verse presentation." },
+    ],
+  },
+  {
+    group: "Production & Stream",
+    items: [
+      { id: "branding", label: "Church & Branding", icon: Paintbrush, description: "Church identity, logo assets, lower-thirds, and speakers." },
+      { id: "obs", label: "OBS Studio", icon: Radio, description: "WebSocket connection, credentials, and live status." },
+      { id: "mobile", label: "Mobile Companion", icon: Smartphone, description: "Wireless phone pairing, QR code, and remote permissions." },
+      { id: "automation", label: "Automations", icon: Zap, description: "Create and manage desktop automations for OBS." },
+    ],
+  },
+  {
+    group: "Account & System",
+    items: [
+      { id: "usage", label: "Plan & AI Credits", icon: History, description: "Plan tier, remaining credits, and transaction history." },
+      { id: "storage", label: "Data & Storage", icon: Trash2, description: "Database reset, worship cleanup, and cache management." },
+    ],
+  },
+];
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
@@ -153,7 +191,7 @@ function formatUpdateBytes(bytes: number): string {
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "automation", "appearance", "branding", "bible", "usage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "mobile", "automation", "usage", "storage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
@@ -194,7 +232,7 @@ export function MVSettings() {
   const [bReduceMotion, setBReduceMotion] = useState(false);
   const [bHighContrast, setBHighContrast] = useState(false);
   const [_bSaved, setBSaved] = useState(false);
-  const [_bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
+  const [bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
   const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
 
   // ── Full access key state ──
@@ -233,7 +271,12 @@ export function MVSettings() {
     ? "Growth Trial"
     : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, displayPlan) : "Free"));
   const isUnlimited = planCredits === -1;
-  const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
+  const totalAvailableCredits = isUnlimited
+    ? -1
+    : (creditDetails?.totalAvailable ?? Math.max(0, planCredits + (creditDetails?.adminGranted ?? 0)));
+  const usagePct = (!isUnlimited && totalAvailableCredits > 0)
+    ? Math.min(100, Math.max(0, Math.round((creditsUsedThisMonth / totalAvailableCredits) * 100)))
+    : 0;
 
   useEffect(() => {
     getPlanConfig().then(setPlanConfig);
@@ -729,11 +772,20 @@ export function MVSettings() {
       case "automation": return "Create, run, and store desktop automations for OBS.";
       case "appearance": return t("mvSettings.tabDesc.appearance");
       case "branding": return t("mvSettings.tabDesc.branding");
-      case "bible": return t("mvSettings.tabDesc.bible");
+      case "bible": return "Configure default scripture translation, verse display, and slide presentation.";
       case "usage": return t("mvSettings.tabDesc.usage");
+      case "storage": return "Manage local databases, clear cached worship songs, or reset onboarding.";
       case "audio": return t("mvSettings.tabDesc.audio");
     }
-  }, [activeTab]);
+  }, [activeTab, t]);
+
+  const currentTabLabel = useMemo(() => {
+    for (const group of SETTINGS_CATEGORIES) {
+      const match = group.items.find((item) => item.id === activeTab);
+      if (match) return match.label;
+    }
+    return t("mvSettings.page.title");
+  }, [activeTab, t]);
 
   /* ── Mobile Remote state & handlers ── */
   const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
@@ -984,70 +1036,86 @@ export function MVSettings() {
         ))}
       </div>
 
-      {/* Main content */}
-      <main className="app-main settings-main">
-        <header className="main-header">
-          <div className="title-group">
-            <h2 className="main-title">{t("mvSettings.page.title")}</h2>
-            <p className="main-description">{tabDescription}</p>
+      {/* Main Settings Shell */}
+      <div className="settings-shell">
+        {/* Left Settings Navigation Sidebar */}
+        <aside className="settings-nav-sidebar">
+          <div className="settings-nav-sidebar-header">
+            <h2 className="settings-nav-title">{t("mvSettings.page.title", "Settings")}</h2>
           </div>
-          <button className="reset-button" onClick={() => {
-            if (activeTab === "general") handleResetSettings();
-            else if (activeTab === "branding") handleResetBrandingSettings();
-            else if (activeTab === "appearance") handleResetAppearance();
-            else if (activeTab === "bible") handleSaveBible();
-            else if (activeTab === "audio") {
-              db.updateSettings({ inputGain: 100 });
-              voiceBibleService.setInputGain(100);
-              lmDockService.setInputGain(100);
-              triggerToast(t("mvSettings.toast.inputGainReset"), "accent");
-            }
-            else if (activeTab === "mobile") {
-              db.updateSettings({
-                mobileRemoteEnabled: false,
-                mobileRequireApproval: true,
-                mobileAllowMultipleDevices: true,
-                mobileMaxDevices: 3,
-                mobileAutoRemoveInactive: true,
-                mobileDesktopName: "My Church",
-              });
-              setSettings(db.getSettings());
-              triggerToast(t("mvSettings.toast.mobileReset"), "accent");
-            }
-            else triggerToast(t("mvSettings.toast.resetOptionsAvailable"), "accent");
-          }} title="Reset">
-            <RotateCcw size={16} />
-            <span>{activeTab === "bible" ? t("mvSettings.page.saveBible") : t("mvSettings.page.resetDefaults")}</span>
-          </button>
-        </header>
+          <div className="settings-nav-groups">
+            {SETTINGS_CATEGORIES.map((category) => (
+              <div key={category.group} className="settings-nav-group">
+                <span className="settings-nav-group-label">{category.group}</span>
+                <div className="settings-nav-group-items">
+                  {category.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`settings-nav-item ${isActive ? "active" : ""}`}
+                        onClick={() => setActiveTab(item.id)}
+                      >
+                        <Icon size={16} className="settings-nav-item-icon" />
+                        <span className="settings-nav-item-text">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
 
-        {/* Tab bar */}
-        <div className="tabs-navigation">
-          {([
-            ["general", Settings, t("mvSettings.tabs.general")],
-            ["branding", Paintbrush, t("mvSettings.tabs.branding")],
-            ["appearance", Palette, t("mvSettings.tabs.appearance")],
-            ["usage", History, t("mvSettings.tabs.usage")],
-            ["obs", Radio, t("mvSettings.tabs.obs")],
-            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
-            ["automation", Zap, "Automations"],
-            // ["audio", Mic, t("mvSettings.tabs.audio")],
-            // ["full-access", ShieldCheck, "Full Access"],
-            // ["developer", Key, "Developer"],
-          ] as const).map(([id, IconComp, label]) => (
-            <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
-              <IconComp size={16} /> <span>{label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Right Main Viewport */}
+        <div className="settings-main-viewport">
+          <header className="main-header">
+            <div className="title-group">
+              <h2 className="main-title">{currentTabLabel}</h2>
+              <p className="main-description">{tabDescription}</p>
+            </div>
+            <div className="settings-viewport-actions">
+              {activeTab === "bible" && (
+                <button className="action-btn btn-primary" onClick={handleSaveBible} title="Save Bible Settings">
+                  <Save size={14} /> <span>Save Bible Settings</span>
+                </button>
+              )}
+              {activeTab === "general" && (
+                <>
+                  <button className="action-btn" onClick={handleResetSettings} title="Reset General Defaults">
+                    <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                  </button>
+                  <button className="action-btn" onClick={handleCheckForUpdates} disabled={manualUpdateBusy} title={t("mvSettings.general.checkForUpdates")}>
+                    <RefreshCw size={14} className={effectiveUpdateStatus === "checking" ? "animate-spin" : ""} />
+                    <span>{effectiveUpdateStatus === "checking" ? t("mvSettings.general.checkingForUpdates") : t("mvSettings.general.checkForUpdates")}</span>
+                  </button>
+                </>
+              )}
+              {activeTab === "obs" && (
+                <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Test OBS Connection">
+                  {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>{t("mvSettings.obs.connecting")}</span></>) : (<><CheckCircle size={14} /><span>{t("mvSettings.obs.testConnection")}</span></>)}
+                </button>
+              )}
+              {activeTab === "appearance" && (
+                <button className="action-btn" onClick={handleResetAppearance} title="Reset Appearance">
+                  <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                </button>
+              )}
+              {activeTab === "branding" && (
+                <button className="action-btn" onClick={handleResetBrandingSettings} title="Reset Branding">
+                  <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                </button>
+              )}
+            </div>
+          </header>
 
-        {/* Scrollable content */}
-        <div className="main-scroll-pane">
-          <AccountSummaryCards className="settings-summary-cards" />
-          <LocalDevPlanSwitcher />
-          <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
-            {/* Left: main form column */}
-            <div className="settings-form-column">
+          {/* Scrollable content pane */}
+          <div className="main-scroll-pane">
+            <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
+              {/* Main form column */}
+              <div className="settings-form-column">
 
               {/* ══════════════ GENERAL TAB ══════════════ */}
               {activeTab === "general" && (
@@ -1175,44 +1243,6 @@ export function MVSettings() {
 
 
 
-                  {/* Danger Zone */}
-                  <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                    <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> {t("mvSettings.general.dangerZone")}</h3>
-
-                    {/* Clear All Data */}
-                    <p className="section-desc">{t("mvSettings.general.clearAllDataDesc")}</p>
-                    {cleared ? (
-                      <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.databaseCleared")}</p>
-                    ) : confirmClear ? (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
-                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">{t("mvSettings.general.yesClearEverything")}</button>
-                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
-                      </div>
-                    ) : (
-                      <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
-                        <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
-                      </button>
-                    )}
-
-                    {/* Clear Worship Songs */}
-                    <div style={{ marginTop: 16, borderTop: "1px solid rgba(239,68,68,0.1)", paddingTop: 16 }}>
-                      <p className="section-desc">{t("mvSettings.general.clearWorshipSongsDesc")}</p>
-                      {worshipCleared ? (
-                        <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.worshipSongsCleared")}</p>
-                      ) : confirmClearWorship ? (
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
-                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">{t("mvSettings.general.yesClearWorship")}</button>
-                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
-                        </div>
-                      ) : (
-                        <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
-                          <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -1951,24 +1981,199 @@ export function MVSettings() {
                     </div>
                   </div>
 
-                  {/* First-launch setup */}
-                  <div className="settings-section" style={{ marginTop: "24px" }}>
-                    <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.branding.firstLaunchSetup")}</h3>
-                      <p className="section-desc">{t("mvSettings.branding.firstLaunchSetupDesc")}</p>
-                    </div>
-                    <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}><RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding")}</button>
-                  </div>
                 </div>
               )}
 
               {/* ══════════════ BIBLE TAB ══════════════ */}
+              {activeTab === "bible" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.bible.sectionTitle", "Scripture & Bible Presentation")}</h3>
+                    <p className="section-desc">{t("mvSettings.bible.sectionDesc", "Configure default translation, display themes, slide formatting, and presentation controls.")}</p>
+                  </div>
 
+                  {/* Defaults Card */}
+                  <div className="settings-card fields-rows-stack">
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.bible.defaultTranslation", "Default Bible Translation")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.bible.defaultTranslationDesc", "Select the scripture version loaded upon opening the Bible studio.")}</span>
+                      </div>
+                      <div className="form-select-container" style={{ width: "260px" }}>
+                        <select
+                          className="custom-select"
+                          value={bDefaultTranslation}
+                          onChange={(e) => {
+                            setBDefaultTranslation(e.target.value as BibleTranslation);
+                            setBibleSettingsDirty(true);
+                          }}
+                        >
+                          {bTranslations.map((tr) => (
+                            <option key={tr.value} value={tr.value}>{tr.label}</option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                    </div>
+
+                    <div className="flex-between-center" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.bible.defaultTheme", "Active Scripture Theme")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.bible.defaultThemeDesc", "Visual layout, color palette, and font styling used for Bible projection.")}</span>
+                      </div>
+                      <div className="form-select-container" style={{ width: "260px" }}>
+                        <select
+                          className="custom-select"
+                          value={bDefaultThemeId}
+                          onChange={(e) => {
+                            setBDefaultThemeId(e.target.value);
+                            setBibleSettingsDirty(true);
+                          }}
+                        >
+                          {bibleState.themes.map((th) => (
+                            <option key={th.id} value={th.id}>{th.name}{th.hidden ? " (hidden)" : ""}</option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide Configuration Card */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.bible.slideFormatting", "Slide Formatting & Typography")}</h3>
+                      <p className="section-desc">{t("mvSettings.bible.slideFormattingDesc", "Control how verses are split and rendered onto projector slides.")}</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.maxLines", "Maximum Lines Per Slide")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.maxLinesDesc", "Limit how many lines fit on a single slide before paginating.")}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="range"
+                            min={1}
+                            max={8}
+                            value={bMaxLines}
+                            onChange={(e) => {
+                              setBMaxLines(Number(e.target.value));
+                              setBibleSettingsDirty(true);
+                            }}
+                            style={{ width: "120px" }}
+                          />
+                          <span style={{ fontWeight: 700, minWidth: "28px", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                            {bMaxLines}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.showVerseNumbers", "Inline Verse Numbers")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.showVerseNumbersDesc", "Show superscripts and verse number headers on projected slides.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bShowVerseNumbers}
+                            onChange={(e) => {
+                              setBShowVerseNumbers(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Behavior & Display Options Card */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.bible.behaviorAndControls", "Projection & Controls")}</h3>
+                      <p className="section-desc">{t("mvSettings.bible.behaviorAndControlsDesc", "Quick actions and interface behavior during live services.")}</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="switch-row">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.autoSend", "Auto-send on Double Click")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.autoSendDesc", "Double-clicking any verse immediately pushes it live to OBS & projector.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bAutoSend}
+                            onChange={(e) => {
+                              setBAutoSend(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.reduceMotion", "Reduce Motion")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.reduceMotionDesc", "Disable transitions and animated slide changes for lower GPU usage.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bReduceMotion}
+                            onChange={(e) => {
+                              setBReduceMotion(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.highContrast", "High Contrast Readability")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.highContrastDesc", "Boost outline and contrast for washed-out sanctuaries or high-ambient light.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bHighContrast}
+                            onChange={(e) => {
+                              setBHighContrast(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                    <button
+                      className="action-btn btn-primary"
+                      onClick={handleSaveBible}
+                      title="Save Bible Settings"
+                      style={{ padding: "8px 20px" }}
+                    >
+                      <Save size={14} /> <span>{bibleSettingsDirty ? "Save Bible Settings *" : "Save Bible Settings"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ══════════════ CREDITS TAB ══════════════ */}
               {activeTab === "usage" && (
                 <div className="settings-section">
-                  <div className="section-header">
+                  {/* Account Summary Cards at top of Plan & Credits */}
+                  <AccountSummaryCards className="settings-summary-cards" />
+
+                  <div className="section-header" style={{ marginTop: "24px" }}>
                     <h3 className="section-title">{t("mvSettings.credits.creditsOverview")}</h3>
                     <p className="section-desc">{t("mvSettings.credits.creditsOverviewDesc")}</p>
                   </div>
@@ -2030,7 +2235,12 @@ export function MVSettings() {
                     {!isUnlimited && (
                       <div className="credits-progress-section">
                         <div className="credits-progress-header">
-                          <span className="credits-progress-text">{t("mvSettings.credits.creditsUsedOf", { creditsUsedThisMonth, planCredits: formatCredits(planCredits) })}</span>
+                          <span className="credits-progress-text">
+                            {t("mvSettings.credits.creditsUsedOf", {
+                              creditsUsedThisMonth,
+                              planCredits: formatCredits(totalAvailableCredits > 0 ? totalAvailableCredits : planCredits),
+                            })}
+                          </span>
                           <span className="credits-progress-pct">{usagePct}%</span>
                         </div>
                         <div className="credits-progress-track">
@@ -2162,8 +2372,102 @@ export function MVSettings() {
 
 
 
-                  {/* ── Plan Features ── */}
+                  {/* Local Dev Switcher */}
+                  <div className="settings-section" style={{ marginTop: "32px", borderTop: "1px solid var(--border-color)", paddingTop: "20px" }}>
+                    <LocalDevPlanSwitcher />
+                  </div>
+                </div>
+              )}
 
+              {/* ══════════════ DATA & STORAGE TAB ══════════════ */}
+              {activeTab === "storage" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.storage.sectionTitle", "Data & Storage Management")}</h3>
+                    <p className="section-desc">{t("mvSettings.storage.sectionDesc", "Manage local databases, purge cached media and worship catalogs, or reset initial setup.")}</p>
+                  </div>
+
+                  {/* Church Onboarding Reset Card */}
+                  <div className="settings-card fields-rows-stack" style={{ marginBottom: "20px" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.branding.firstLaunchSetup", "Initial Setup & Onboarding")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.branding.firstLaunchSetupDesc", "Rerun the church name, logo, and theme setup wizard without losing songs or data.")}</span>
+                      </div>
+                      <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}>
+                        <RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding", "Rerun Onboarding")}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Worship Song Library Cleanup Card */}
+                  <div className="settings-card fields-rows-stack" style={{ marginBottom: "20px" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.general.clearWorshipSongs", "Clear Worship Songs")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.general.clearWorshipSongsDesc", "Delete all imported songs and custom lyric sets from local storage.")}</span>
+                      </div>
+                      <div>
+                        {worshipCleared ? (
+                          <span style={{ color: "var(--success-color)", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <CheckCircle size={15} /> {t("mvSettings.general.worshipSongsCleared")}
+                          </span>
+                        ) : confirmClearWorship ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ color: "var(--danger-color)", fontSize: "0.82rem", fontWeight: 600 }}>{t("mvSettings.general.areYouSure")}</span>
+                            <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">
+                              {t("mvSettings.general.yesClearWorship")}
+                            </button>
+                            <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">
+                              {t("mvSettings.general.cancel")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
+                            <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danger Zone: Full Application Reset */}
+                  <div className="settings-card fields-rows-stack" style={{ border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.03)" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                          <ShieldAlert size={16} style={{ color: "var(--danger-color)" }} />
+                          <span className="switch-title" style={{ color: "var(--danger-color)", fontWeight: 700 }}>
+                            {t("mvSettings.general.dangerZone", "Danger Zone: Clear All Application Data")}
+                          </span>
+                        </div>
+                        <span className="switch-subtitle">
+                          {t("mvSettings.general.clearAllDataDesc", "Wipes all local database records, OBS settings, saved overlays, and restores default factory state.")}
+                        </span>
+                      </div>
+                      <div>
+                        {cleared ? (
+                          <span style={{ color: "var(--success-color)", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <CheckCircle size={15} /> {t("mvSettings.general.databaseCleared")}
+                          </span>
+                        ) : confirmClear ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ color: "var(--danger-color)", fontSize: "0.82rem", fontWeight: 600 }}>{t("mvSettings.general.areYouSure")}</span>
+                            <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">
+                              {t("mvSettings.general.yesClearEverything")}
+                            </button>
+                            <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">
+                              {t("mvSettings.general.cancel")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
+                            <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2241,7 +2545,8 @@ export function MVSettings() {
             )}
           </div>
         </div>
-      </main >
+      </div>
+    </div>
 
       {/* Language Change Confirmation Modal */}
       {

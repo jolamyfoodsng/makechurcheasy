@@ -29,6 +29,8 @@ import { checkEntitlementSync } from "../services/entitlementClient";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { BulkImportModal } from "../worship/BulkImportModal";
+import EasyWorshipOneClickImportModal from "../worship/EasyWorshipOneClickImportModal";
+import { triggerEasyWorshipBanner } from "../components/EasyWorshipAnnouncementBanner";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
@@ -111,6 +113,7 @@ export function SongsTab() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [easyWorshipModalOpen, setEasyWorshipModalOpen] = useState(false);
   const [languageFilter, setLanguageFilter] = useState<string>("all");
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
@@ -240,6 +243,35 @@ export function SongsTab() {
     }
     return scored.map((item) => item.song);
   }, [search, accessibleSongs, languageFilter]);
+
+  const SONGS_PER_PAGE = 24;
+  const [displayLimit, setDisplayLimit] = useState(SONGS_PER_PAGE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setDisplayLimit(SONGS_PER_PAGE);
+  }, [search, languageFilter]);
+
+  const displayedSongs = useMemo(() => {
+    return visible.slice(0, displayLimit);
+  }, [visible, displayLimit]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayLimit < visible.length) {
+          setDisplayLimit((prev) => Math.min(visible.length, prev + SONGS_PER_PAGE));
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [displayLimit, visible.length]);
 
   const hasActiveFilters = search.trim().length > 0 || languageFilter !== "all";
   const languageFilterLabel = languageFilter === "all"
@@ -494,6 +526,15 @@ export function SongsTab() {
           </button>
           <button
             type="button"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            onClick={() => triggerEasyWorshipBanner()}
+            title="Import songs, videos, images, and themes from EasyWorship"
+          >
+            <Icon name="folder_zip" size={18} />
+            Import EasyWorship
+          </button>
+          <button
+            type="button"
             className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
             onClick={handleAddSong}
             title="Add"
@@ -588,7 +629,7 @@ export function SongsTab() {
         {visible.length > 0 && (
           <>
             <PremiumContentGate
-              items={visible}
+              items={displayedSongs}
               limit={songLimit}
               plan={effectivePlan}
               upgradeTarget="songs"
@@ -678,6 +719,20 @@ export function SongsTab() {
                 })
               }
             </PremiumContentGate>
+
+            {displayLimit < visible.length && (
+              <div className="lib-songs-load-more-container">
+                <button
+                  type="button"
+                  className="lib-toolbar-btn lib-toolbar-btn--secondary lib-load-more-btn"
+                  onClick={() => setDisplayLimit((prev) => Math.min(visible.length, prev + SONGS_PER_PAGE))}
+                >
+                  <Icon name="expand_more" size={18} />
+                  Load More Songs ({visible.length - displayLimit} remaining)
+                </button>
+              </div>
+            )}
+            <div ref={sentinelRef} className="lib-songs-sentinel" aria-hidden="true" />
 
             {!isSongUnlimited && visible.length >= songLimit && (
               <div
@@ -921,6 +976,16 @@ export function SongsTab() {
       {bulkImportOpen && (
         <BulkImportModal
           onClose={() => setBulkImportOpen(false)}
+          onImported={() => {
+            void reload();
+          }}
+        />
+      )}
+
+      {/* EasyWorship 1-Click Import Modal */}
+      {easyWorshipModalOpen && (
+        <EasyWorshipOneClickImportModal
+          onClose={() => setEasyWorshipModalOpen(false)}
           onImported={() => {
             void reload();
           }}

@@ -228,7 +228,7 @@ function DockNoteEditorDialog({
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              placeholder={t("notes.contentPlaceholder")}
+              placeholder={t("notes.contentPlaceholderTips", "Type note content here...\n\nExample:\n[Point 1]\nFirst main point\nSupporting details\n\n[Point 2]\nSecond main point")}
               rows={8}
             />
           </div>
@@ -307,6 +307,7 @@ function DockNoteSlideEditorDialog({
               id="dock-note-slide-text"
               className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
               value={text}
+              placeholder={t("notes.slideTextPlaceholderTips", "Type note slide text here…\n\n• Add section tags like [Point 1], <Chorus>, or Header: at the top of a slide to display a header badge.")}
               onChange={setText}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);

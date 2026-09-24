@@ -912,6 +912,7 @@ function DockLyricsEditorDialog({
               id="dock-song-lyrics"
               className="dock-input dock-dialog-textarea"
               value={lyrics}
+              placeholder={t("worship.songLyricsPlaceholderTips", "Paste or type lyrics here...\n\nExample:\n[Verse 1]\nFirst line of verse 1\nSecond line\n\n<Chorus>\nFirst line of chorus\nSecond line\n\n[Verse 2]\nVerse 2 line...")}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
@@ -1062,6 +1063,7 @@ function DockWorshipSlideEditorDialog({
               id="dock-worship-slide-text"
               className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
               value={text}
+              placeholder={t("worship.slideTextPlaceholderTips", "Type slide text here…\n\n• Add section tags like [Verse 1], <Chorus>, [Bridge], Verse 1: or Chorus: at the top of a slide to display a header badge.")}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();

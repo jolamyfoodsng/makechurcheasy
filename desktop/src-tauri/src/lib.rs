@@ -3525,6 +3525,95 @@ async fn search_online_song_lyrics(query: String) -> Result<Vec<OnlineLyricsSear
         .map_err(|err| format!("Lyrics search task failed: {}", err))?
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EasyWorshipRawRecord {
+    pub rowid: i64,
+    pub title: String,
+    pub author: Option<String>,
+    pub copyright: Option<String>,
+    pub administrator: Option<String>,
+    pub reference_number: Option<String>,
+    pub words_rtf: String,
+}
+
+fn find_file_recursive(dir: &Path, name_part: &str, depth: usize) -> Option<PathBuf> {
+    if depth > 4 {
+        return None;
+    }
+    if let Ok(entries) = fs::read_dir(dir) {
+        let name_lower = name_part.to_lowercase();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let fname = entry.file_name().to_string_lossy().to_lowercase();
+                if fname.contains(&name_lower) && fname.ends_with(".db") {
+                    return Some(path);
+                }
+            } else if path.is_dir() {
+                if let Some(found) = find_file_recursive(&path, name_part, depth + 1) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn read_easyworship_db_folder(folder_path: String) -> Result<Vec<EasyWorshipRawRecord>, String> {
+    let base_path = PathBuf::from(&folder_path);
+
+    let search_dir = if base_path.is_file() {
+        base_path.parent().unwrap_or(&base_path).to_path_buf()
+    } else {
+        base_path.clone()
+    };
+
+    let songs_path = find_file_recursive(&search_dir, "songs", 0)
+        .ok_or_else(|| format!("Could not find Songs.db in {}", folder_path))?;
+    let words_path = find_file_recursive(&search_dir, "songwords", 0)
+        .ok_or_else(|| format!("Could not find SongWords.db in {}", folder_path))?;
+
+    let conn = rusqlite::Connection::open(&songs_path)
+        .map_err(|e| format!("Failed to open Songs.db: {}", e))?;
+
+    let attach_sql = format!("ATTACH DATABASE '{}' AS words_db;", words_path.to_string_lossy().replace("'", "''"));
+    conn.execute(&attach_sql, [])
+        .map_err(|e| format!("Failed to attach SongWords.db: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.rowid, s.title, s.author, s.copyright, s.administrator, s.reference_number, w.words \
+             FROM song s \
+             JOIN words_db.word w ON s.rowid = w.song_id ORDER BY s.title ASC"
+        )
+        .map_err(|e| format!("Query preparation failed: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(EasyWorshipRawRecord {
+                rowid: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2).ok(),
+                copyright: row.get(3).ok(),
+                administrator: row.get(4).ok(),
+                reference_number: row.get(5).ok(),
+                words_rtf: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Query execution failed: {}", e))?;
+
+    let mut records = Vec::new();
+    for row in rows {
+        if let Ok(record) = row {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8407,6 +8496,7 @@ pub fn run() {
             save_dock_setting,
             delete_dock_setting,
             search_online_song_lyrics,
+            read_easyworship_db_folder,
             load_transcripts,
             save_transcript,
             delete_transcript,
