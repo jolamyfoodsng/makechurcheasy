@@ -627,12 +627,12 @@ async fn run_cloudflare_transcriber(
 
     // 16kHz 16-bit mono = 32,000 bytes/sec
     // 50ms chunk = 1600 bytes
-    // 350ms of silence after speech triggers phrase finalize
-    const SILENCE_FINALIZE_MS: u128 = 350;
-    // 3.5s max phrase length
-    const MAX_PHRASE_DURATION_MS: u128 = 3500;
-    // 350ms minimum audio to avoid transient clicks/pops
-    const MIN_PHRASE_BYTES: usize = 1600 * 7;
+    // 220ms of silence after speech triggers phrase finalize (fast, responsive)
+    const SILENCE_FINALIZE_MS: u128 = 220;
+    // 3.0s max phrase length (keeps chunks bite-sized for fast inference)
+    const MAX_PHRASE_DURATION_MS: u128 = 3000;
+    // 250ms minimum audio to avoid transient clicks/pops
+    const MIN_PHRASE_BYTES: usize = 1600 * 5;
     // RMS threshold for voice activity
     const SPEECH_RMS_THRESHOLD: f32 = 0.015;
 
