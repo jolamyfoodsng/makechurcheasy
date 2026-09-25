@@ -394,6 +394,24 @@ describe("Speech command matrix", () => {
     expect(parseScriptureIntent("previous vase")).toMatchObject({ type: "prev-verse", count: 1 });
   });
 
+  it("recognizes STT phonetic misrecognitions of Deuteronomy (Ditatonomy, The theonomy)", () => {
+    expect(parseScriptureReference("Ditatonomy four five.")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 4,
+      verse: 5,
+    });
+    expect(parseScriptureReference("The theonomy four five.")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 4,
+      verse: 5,
+    });
+    expect(parseScriptureReference("diteronomy chapter 6 verse 4")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 6,
+      verse: 4,
+    });
+  });
+
   it("recognizes direct chapter and verse commands", () => {
     expect(parseScriptureIntent("verse 3")).toMatchObject({ type: "set-verse", verse: 3 });
     expect(parseScriptureIntent("go to verse 5")).toMatchObject({ type: "set-verse", verse: 5 });
