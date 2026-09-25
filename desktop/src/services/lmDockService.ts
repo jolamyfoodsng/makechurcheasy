@@ -1651,6 +1651,7 @@ export class LmDockService {
   }
 
   stopListening(): void {
+    console.log("[LmDockService] 🛑 stopListening() called. Call stack:\n", new Error().stack);
     this.shouldKeepListening = false;
     this.activeMicId = undefined;
     this.reconnectAttempts = 0;
@@ -1888,6 +1889,7 @@ export class LmDockService {
     // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task).
     // Keep one shared promise so a reconnect never races a previous shutdown.
     if (!this.nativeStopPromise) {
+      console.log("[LmDockService] 🛑 Invoking safeTauriInvoke('stop_assemblyai_stream'). Call stack:\n", new Error().stack);
       this.nativeStopPromise = Promise.resolve(safeTauriInvoke("stop_assemblyai_stream"))
         .then(() => undefined)
         .catch((err) => {

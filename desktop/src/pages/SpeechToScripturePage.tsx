@@ -162,9 +162,15 @@ export default function SpeechToScripturePage() {
     requiredPlan?: string;
   } | null>(null);
 
+  const hasCustomApiKey = Boolean(
+    (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ||
+    (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEY ||
+    (import.meta as any).env?.DEV
+  );
+
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
-    if (isAdmin) return; // Admins bypass all entitlement checks
+    if (isAdmin || hasCustomApiKey) return; // Admins and local dev / custom API keys bypass all entitlement checks
     const result = checkEntitlementSync("speechToScripture", effectivePlan);
     if (!result.allowed) {
       setAccessDenied({
@@ -173,7 +179,7 @@ export default function SpeechToScripturePage() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePlan, isAdmin]);
+  }, [effectivePlan, isAdmin, hasCustomApiKey]);
 
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
@@ -181,7 +187,7 @@ export default function SpeechToScripturePage() {
   const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
 
   useEffect(() => {
-    if (hasUnlimitedPlan) return;
+    if (hasUnlimitedPlan || hasCustomApiKey) return;
     void syncCreditsWithBackend().then((bal) => {
       if (bal === null) {
         setIsUnlimited(false);
@@ -194,9 +200,9 @@ export default function SpeechToScripturePage() {
     });
     const unsub = onCreditChange((bal) => setCreditBalance(bal));
     return unsub;
-  }, [hasUnlimitedPlan]);
+  }, [hasCustomApiKey, hasUnlimitedPlan]);
 
-  const hasCredits = isAdmin || hasUnlimitedPlan || isUnlimited || creditBalance > 0;
+  const hasCredits = isAdmin || hasUnlimitedPlan || isUnlimited || hasCustomApiKey || creditBalance > 0;
   const chargedSessionCreditsRef = useRef(0);
   const chargingSessionCreditsRef = useRef(false);
   const stoppedForCreditFailureRef = useRef(false);
@@ -331,7 +337,7 @@ export default function SpeechToScripturePage() {
     elapsedSeconds: number,
     reason: "live" | "final",
   ): Promise<boolean> => {
-    if (isAdmin || hasUnlimitedPlan || isUnlimited) {
+    if (isAdmin || hasUnlimitedPlan || isUnlimited || hasCustomApiKey) {
       chargedSessionCreditsRef.current = Math.max(chargedSessionCreditsRef.current, targetCredits);
       return true;
     }
@@ -374,7 +380,7 @@ export default function SpeechToScripturePage() {
     } finally {
       chargingSessionCreditsRef.current = false;
     }
-  }, [hasUnlimitedPlan, isAdmin, isUnlimited, t, user?.id]);
+  }, [hasCustomApiKey, hasUnlimitedPlan, isAdmin, isUnlimited, t, user?.id]);
 
   const handleStart = useCallback(async () => {
     // Disable button and show checking state
@@ -383,6 +389,18 @@ export default function SpeechToScripturePage() {
     setSessionLimitSeconds(null);
 
     try {
+      if (hasCustomApiKey) {
+        console.log("[SpeechToScripture] 🚀 Using direct API key / Dev mode — starting lmDockService directly");
+        chargedSessionCreditsRef.current = 0;
+        stoppedForCreditFailureRef.current = false;
+        limitStopTriggeredRef.current = false;
+        setSessionLimitSeconds(null);
+        track("sts_listening_started", { mic: selectedMic || "default" });
+        trackVoiceSessionStarted();
+        await lmDockService.startListening(selectedMic || undefined);
+        return;
+      }
+
       const deviceId = getDeviceId();
       console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
       const requestAccess = async () => {
@@ -445,7 +463,7 @@ export default function SpeechToScripturePage() {
     } finally {
       setCheckingAccess(false);
     }
-  }, [selectedMic]);
+  }, [hasCustomApiKey, selectedMic]);
 
   const confirmStop = useCallback(() => {
     track("sts_listening_stopped", { durationSec: elapsedRef.current });
@@ -631,6 +649,7 @@ export default function SpeechToScripturePage() {
 
       const ok = await chargeTranscriptionCredits(targetCredits, chargeSeconds, "live");
       if (!cancelled && !ok) {
+        console.warn("[SpeechToScripture] 🛑 Stopped listening due to credit failure!", { targetCredits, chargeSeconds });
         stoppedForCreditFailureRef.current = true;
         lmDockService.stopListening();
         setShowStopConfirm(false);

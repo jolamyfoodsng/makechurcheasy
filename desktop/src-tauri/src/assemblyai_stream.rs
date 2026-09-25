@@ -1240,6 +1240,7 @@ fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) 
 
 #[tauri::command]
 pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> Result<(), String> {
+    println!("[AssemblyAI Stream] stop_assemblyai_stream command received from frontend");
     // Drop the mic stream — stops cpal callbacks immediately.
     {
         let mut s = state.stream.lock().map_err(|e| e.to_string())?;
