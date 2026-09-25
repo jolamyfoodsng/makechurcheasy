@@ -203,13 +203,29 @@ const CLOUDFLARE_STT_URL = (
   (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
 ).trim();
 
-const DEEPGRAM_API_KEY = (
-  (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ?? ""
-).trim();
+const DEEPGRAM_API_KEYS = (
+  (import.meta as any).env?.VITE_DEEPGRAM_API_KEYS ??
+  (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ??
+  ""
+)
+  .split(/[\r\n,]+/)
+  .map((key: string) => key.trim())
+  .filter(Boolean);
+
+function shuffled<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
 
 function getAssemblyAiKey(): string {
-  if (DEEPGRAM_API_KEY) {
-    return `deepgram:${DEEPGRAM_API_KEY}`;
+  if (DEEPGRAM_API_KEYS.length > 0) {
+    // Each session gets a different starting key. The native stream receives
+    // the remaining keys as fallbacks if the first account rejects a session.
+    return `deepgram:${shuffled(DEEPGRAM_API_KEYS).join(",")}`;
   }
   if (CLOUDFLARE_STT_URL) {
     return CLOUDFLARE_STT_URL;

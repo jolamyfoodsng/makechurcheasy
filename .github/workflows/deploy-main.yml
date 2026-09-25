@@ -34,6 +34,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.PROD_AUTH_API_URL }}
           VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
           VITE_WS_URL: ${{ secrets.PROD_WS_URL }}
+          VITE_DEEPGRAM_API_KEYS: ${{ secrets.VITE_DEEPGRAM_API_KEYS }}
 
   build-api:
     name: Build API (Next.js)

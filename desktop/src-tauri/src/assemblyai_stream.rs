@@ -478,13 +478,17 @@ pub async fn start_assemblyai_stream(
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
         let result = if is_deepgram {
-            let clean_key = api_key
+            let clean_keys = api_key
                 .strip_prefix("deepgram:")
                 .unwrap_or(&api_key)
-                .to_string();
+                .split(',')
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
             run_deepgram_transcriber(
                 realtime_app.clone(),
-                clean_key,
+                clean_keys,
                 audio_rx,
                 shutdown_rx,
                 profile_rx,
@@ -879,7 +883,7 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
 
 async fn run_deepgram_transcriber(
     app: AppHandle,
-    api_key: String,
+    api_keys: Vec<String>,
     mut audio_rx: mpsc::Receiver<Vec<u8>>,
     mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
     mut _profile_rx: mpsc::Receiver<RealtimeProfile>,
@@ -887,21 +891,55 @@ async fn run_deepgram_transcriber(
     audio_drop_count: Arc<AtomicU32>,
 ) -> Result<(), String> {
     let endpoint = build_deepgram_endpoint();
-    let mut request = endpoint
-        .as_str()
-        .into_client_request()
-        .map_err(|e| format!("Failed to create Deepgram request: {e}"))?;
+    if api_keys.is_empty() {
+        return Err("No Deepgram API keys configured".to_string());
+    }
 
-    let auth_str = format!("Token {api_key}");
-    let auth = HeaderValue::from_str(&auth_str)
-        .map_err(|e| format!("Invalid Deepgram API key header: {e}"))?;
-    request.headers_mut().insert("Authorization", auth);
+    let mut connected = None;
+    let mut last_error = "Deepgram rejected every configured API key".to_string();
 
-    println!("[Deepgram STT] Connecting to WebSocket: {endpoint}");
-    let (ws_stream, _) = timeout(WS_CONNECT_TIMEOUT, connect_async(request))
-        .await
-        .map_err(|_| "Deepgram WebSocket connection timed out".to_string())?
-        .map_err(|e| format!("Deepgram WebSocket connection failed: {e}"))?;
+    for (index, api_key) in api_keys.iter().enumerate() {
+        let mut request = endpoint
+            .as_str()
+            .into_client_request()
+            .map_err(|e| format!("Failed to create Deepgram request: {e}"))?;
+
+        let auth_str = format!("Token {api_key}");
+        let auth = match HeaderValue::from_str(&auth_str) {
+            Ok(value) => value,
+            Err(_) => {
+                last_error = format!("Deepgram key {} has an invalid format", index + 1);
+                continue;
+            }
+        };
+        request.headers_mut().insert("Authorization", auth);
+
+        println!(
+            "[Deepgram STT] Connecting with key slot {}/{}",
+            index + 1,
+            api_keys.len()
+        );
+
+        match timeout(WS_CONNECT_TIMEOUT, connect_async(request)).await {
+            Ok(Ok(pair)) => {
+                connected = Some(pair);
+                break;
+            }
+            Ok(Err(_)) => {
+                last_error = format!("Deepgram key {} rejected the connection", index + 1);
+            }
+            Err(_) => {
+                last_error = format!("Deepgram key {} connection timed out", index + 1);
+            }
+        }
+
+        println!(
+            "[Deepgram STT] Key slot {} unavailable; trying the next configured key",
+            index + 1
+        );
+    }
+
+    let (ws_stream, _) = connected.ok_or(last_error)?;
     let (mut write, mut read) = ws_stream.split();
 
     println!("[Deepgram STT] WebSocket connected; sending KeepAlive and priming audio stream");

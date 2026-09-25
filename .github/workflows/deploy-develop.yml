@@ -34,6 +34,7 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.DEV_AUTH_API_URL || 'http://localhost:3004' }}
           VITE_API_BASE_URL: ${{ secrets.DEV_API_BASE_URL || 'http://localhost:3004' }}
           VITE_WS_URL: ${{ secrets.DEV_WS_URL || 'ws://localhost:3004' }}
+          VITE_DEEPGRAM_API_KEYS: ${{ secrets.VITE_DEEPGRAM_API_KEYS }}
 
   build-api:
     name: Build API (Next.js)
