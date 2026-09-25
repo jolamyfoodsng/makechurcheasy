@@ -286,6 +286,7 @@ struct DeepgramChannel {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct DeepgramResults {
     channel: Option<DeepgramChannel>,
     is_final: Option<bool>,
@@ -765,7 +766,8 @@ fn build_deepgram_endpoint() -> String {
         "channels=1".to_string(),
         "interim_results=true".to_string(),
         "smart_format=true".to_string(),
-        "endpointing=300".to_string(),
+        "endpointing=850".to_string(),
+        "utterance_end_ms=1000".to_string(),
     ];
 
     for term in REALTIME_KEYTERMS.iter().take(99) {
@@ -801,9 +803,8 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
                         if let Some(transcript) = &first_alt.transcript {
                             let trimmed = transcript.trim();
                             if !trimmed.is_empty() {
-                                let is_final = message.is_final.unwrap_or(false);
-                                let speech_final = message.speech_final.unwrap_or(false);
-                                let end_of_turn = is_final || speech_final;
+                                // speech_final is Deepgram's true end-of-turn indicator (after 850ms silence)
+                                let end_of_turn = message.speech_final.unwrap_or(false);
 
                                 let mut audio_start = message.start.unwrap_or(0.0);
                                 let mut audio_end = audio_start + message.duration.unwrap_or(0.0);
@@ -849,8 +850,18 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
             );
             return Ok(true);
         }
-        "SpeechStarted" | "UtteranceEnd" => {
-            // Expected Deepgram lifecycle events; no action needed
+        "UtteranceEnd" => {
+            println!("[Deepgram STT] UtteranceEnd received; finalizing turn");
+            let payload = TranscriptPayload {
+                text: String::new(),
+                end_of_turn: true,
+                audio_start: 0.0,
+                audio_end: 0.0,
+            };
+            let _ = app.emit("assemblyai-transcript", payload);
+        }
+        "SpeechStarted" => {
+            // Expected Deepgram lifecycle event
         }
         "Error" => {
             let detail = value

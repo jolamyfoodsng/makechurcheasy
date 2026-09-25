@@ -26,17 +26,17 @@ export const DETECTION_SPEED_CONFIG: Record<DetectionSpeed, {
   description: string;
 }> = {
   sharp: {
-    minWords: 2,
-    debounceMs: 80,
-    requireSentenceBoundary: false,
+    minWords: 3,
+    debounceMs: 120,
+    requireSentenceBoundary: true,
     label: "Sharp",
     icon: "",
-    description: "Lowest-latency scripture search profile",
+    description: "Line-by-line completed sentence scripture search",
   },
   accurate: {
     minWords: 5,
-    debounceMs: 300,
-    requireSentenceBoundary: false,
+    debounceMs: 350,
+    requireSentenceBoundary: true,
     label: "Best",
     icon: "",
     description: "Best scripture search profile",

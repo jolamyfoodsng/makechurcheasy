@@ -1214,19 +1214,24 @@ export class LmDockService {
       if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
 
       // Finalize all remaining sentences or trailing fragments
-      const { completed, remaining } = splitSentenceBoundaries(uncommitted, true);
-      const allToFinalize = [...completed];
-      if (remaining.trim()) {
+      const sourceText = uncommitted.trim() || this.speechBuffer.trim();
+      const { completed, remaining } = splitSentenceBoundaries(sourceText, true);
+      const allToFinalize = completed.length > 0 ? [...completed] : (sourceText ? [sourceText] : []);
+      if (remaining.trim() && !completed.includes(remaining.trim())) {
         allToFinalize.push(remaining.trim());
       }
 
       for (const lineText of allToFinalize) {
-        this.finalizeLine(lineText, audio_start, audio_end);
-        this.processLineQuoteSearch(lineText);
+        const trimmed = lineText.trim();
+        if (trimmed) {
+          this.finalizeLine(trimmed, audio_start, audio_end);
+          this.processLineQuoteSearch(trimmed);
+        }
       }
 
       this.turnCommittedText = "";
       this.speechBuffer = "";
+      this.upsertInterim("", audio_start, audio_end);
       this.flushTranscriptPush();
 
     } else {
