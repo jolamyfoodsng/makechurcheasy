@@ -203,7 +203,14 @@ const CLOUDFLARE_STT_URL = (
   (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
 ).trim();
 
+const DEEPGRAM_API_KEY = (
+  (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ?? ""
+).trim();
+
 function getAssemblyAiKey(): string {
+  if (DEEPGRAM_API_KEY) {
+    return `deepgram:${DEEPGRAM_API_KEY}`;
+  }
   if (CLOUDFLARE_STT_URL) {
     return CLOUDFLARE_STT_URL;
   }

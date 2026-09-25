@@ -257,6 +257,41 @@ struct RealtimeTranscriptMessage {
     message: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct DeepgramWord {
+    word: Option<String>,
+    start: Option<f64>,
+    end: Option<f64>,
+    confidence: Option<f64>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct DeepgramAlternative {
+    transcript: Option<String>,
+    confidence: Option<f64>,
+    words: Option<Vec<DeepgramWord>>,
+}
+
+#[derive(Deserialize)]
+struct DeepgramChannel {
+    alternatives: Option<Vec<DeepgramAlternative>>,
+}
+
+#[derive(Deserialize)]
+struct DeepgramResponse {
+    #[serde(rename = "type")]
+    message_type: Option<String>,
+    channel: Option<DeepgramChannel>,
+    is_final: Option<bool>,
+    speech_final: Option<bool>,
+    start: Option<f64>,
+    duration: Option<f64>,
+    error: Option<String>,
+    message: Option<String>,
+}
+
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
 
 /// Store an f32 as its raw bit pattern in an AtomicU32.
@@ -438,8 +473,26 @@ pub async fn start_assemblyai_stream(
     let task_is_streaming = Arc::clone(&state.is_streaming);
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
+        let is_deepgram = api_key.starts_with("deepgram:")
+            || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
         let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
-        let result = if is_http_endpoint {
+
+        let result = if is_deepgram {
+            let clean_key = api_key
+                .strip_prefix("deepgram:")
+                .unwrap_or(&api_key)
+                .to_string();
+            run_deepgram_transcriber(
+                realtime_app.clone(),
+                clean_key,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        } else if is_http_endpoint {
             run_cloudflare_transcriber(
                 realtime_app.clone(),
                 api_key,
@@ -684,6 +737,228 @@ async fn run_cloudflare_transcriber(
                     }
                     None => {
                         break;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ── Deepgram Nova-2 Realtime Transcriber ─────────────────────────────────────
+
+fn build_deepgram_endpoint() -> String {
+    let mut query = vec![
+        "model=nova-2".to_string(),
+        "encoding=linear16".to_string(),
+        "sample_rate=16000".to_string(),
+        "channels=1".to_string(),
+        "interim_results=true".to_string(),
+        "smart_format=true".to_string(),
+        "endpointing=300".to_string(),
+        "vad_events=true".to_string(),
+    ];
+
+    for term in REALTIME_KEYTERMS.iter().take(90) {
+        query.push(format!("keywords={}:2", urlencoding::encode(term)));
+    }
+
+    format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))
+}
+
+fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
+    let message: DeepgramResponse = match serde_json::from_str(raw) {
+        Ok(msg) => msg,
+        Err(e) => {
+            eprintln!("[Deepgram STT] JSON parse error: {e}: {raw}");
+            return Ok(false);
+        }
+    };
+
+    match message.message_type.as_deref() {
+        Some("Results") => {
+            if let Some(channel) = &message.channel {
+                if let Some(alternatives) = &channel.alternatives {
+                    if let Some(first_alt) = alternatives.first() {
+                        if let Some(transcript) = &first_alt.transcript {
+                            let trimmed = transcript.trim();
+                            if !trimmed.is_empty() {
+                                let is_final = message.is_final.unwrap_or(false);
+                                let speech_final = message.speech_final.unwrap_or(false);
+                                let end_of_turn = is_final || speech_final;
+
+                                let mut audio_start = message.start.unwrap_or(0.0);
+                                let mut audio_end = audio_start + message.duration.unwrap_or(0.0);
+
+                                if let Some(words) = &first_alt.words {
+                                    if let Some(first_w) = words.first() {
+                                        if let Some(s) = first_w.start {
+                                            audio_start = s;
+                                        }
+                                    }
+                                    if let Some(last_w) = words.last() {
+                                        if let Some(e) = last_w.end {
+                                            audio_end = e;
+                                        }
+                                    }
+                                }
+
+                                println!(
+                                    "[Deepgram STT] [{}] {trimmed}",
+                                    if end_of_turn { "FINAL" } else { "INTERIM" }
+                                );
+
+                                let payload = TranscriptPayload {
+                                    text: trimmed.to_string(),
+                                    end_of_turn,
+                                    audio_start,
+                                    audio_end,
+                                };
+                                let _ = app.emit("assemblyai-transcript", payload);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some("Metadata") => {
+            println!("[Deepgram STT] Session confirmed by Metadata");
+            let _ = app.emit(
+                "assemblyai-status",
+                StatusPayload {
+                    status: "connected".to_string(),
+                },
+            );
+            return Ok(true);
+        }
+        Some("Error") => {
+            let detail = message
+                .error
+                .or(message.message)
+                .unwrap_or_else(|| "Unknown Deepgram error".to_string());
+            eprintln!("[Deepgram STT] Received error from server: {detail}");
+            let _ = app.emit(
+                "assemblyai-status",
+                StatusPayload {
+                    status: format!("error: {detail}"),
+                },
+            );
+        }
+        _ => {}
+    }
+
+    Ok(false)
+}
+
+async fn run_deepgram_transcriber(
+    app: AppHandle,
+    api_key: String,
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    mut _profile_rx: mpsc::Receiver<RealtimeProfile>,
+    audio_ready: Arc<AtomicBool>,
+    audio_drop_count: Arc<AtomicU32>,
+) -> Result<(), String> {
+    let endpoint = build_deepgram_endpoint();
+    let mut request = endpoint
+        .as_str()
+        .into_client_request()
+        .map_err(|e| format!("Failed to create Deepgram request: {e}"))?;
+
+    let auth_str = format!("Token {api_key}");
+    let auth = HeaderValue::from_str(&auth_str)
+        .map_err(|e| format!("Invalid Deepgram API key header: {e}"))?;
+    request.headers_mut().insert("Authorization", auth);
+
+    println!("[Deepgram STT] Connecting to WebSocket: {endpoint}");
+    let (ws_stream, _) = timeout(WS_CONNECT_TIMEOUT, connect_async(request))
+        .await
+        .map_err(|_| "Deepgram WebSocket connection timed out".to_string())?
+        .map_err(|e| format!("Deepgram WebSocket connection failed: {e}"))?;
+    let (mut write, mut read) = ws_stream.split();
+
+    println!("[Deepgram STT] WebSocket connected; sending KeepAlive and priming audio stream");
+
+    // Deepgram is immediately connected and ready to process audio
+    let _ = app.emit(
+        "assemblyai-status",
+        StatusPayload {
+            status: "connected".to_string(),
+        },
+    );
+    audio_ready.store(true, Ordering::Release);
+
+    let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
+    let _ = write.send(Message::Text(keep_alive.into())).await;
+
+    let mut last_server_activity = Instant::now();
+    let mut heartbeat = interval(Duration::from_secs(5));
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    heartbeat.tick().await;
+
+    loop {
+        if audio_drop_count.load(Ordering::Relaxed) >= MAX_AUDIO_QUEUE_DROPS {
+            return Err("Deepgram WebSocket fell behind the microphone; restarting.".to_string());
+        }
+
+        tokio::select! {
+            _ = &mut shutdown_rx => {
+                println!("[Deepgram STT] Shutdown signal received");
+                let close_stream = serde_json::json!({ "type": "CloseStream" }).to_string();
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.send(Message::Text(close_stream.into()))).await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.close()).await;
+                break;
+            }
+            maybe_pcm = audio_rx.recv() => {
+                let Some(pcm_bytes) = maybe_pcm else {
+                    break;
+                };
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Binary(pcm_bytes.into())),
+                )
+                    .await
+                    .map_err(|_| "Deepgram WebSocket audio send timed out".to_string())?
+                    .map_err(|e| format!("Failed to send Deepgram audio: {e}"))?;
+            }
+            _ = heartbeat.tick() => {
+                if last_server_activity.elapsed() > WS_IDLE_TIMEOUT {
+                    return Err(format!(
+                        "Deepgram WebSocket stalled: no server response for {} seconds",
+                        WS_IDLE_TIMEOUT.as_secs(),
+                    ));
+                }
+
+                let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
+                let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Text(keep_alive.into()))).await;
+            }
+            maybe_message = read.next() => {
+                let Some(message) = maybe_message else {
+                    break;
+                };
+                last_server_activity = Instant::now();
+                match message {
+                    Ok(Message::Text(text)) => {
+                        let _ = handle_deepgram_message(&app, text.as_ref());
+                    }
+                    Ok(Message::Binary(bytes)) => {
+                        if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
+                            let _ = handle_deepgram_message(&app, text);
+                        }
+                    }
+                    Ok(Message::Ping(payload)) => {
+                        let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Pong(payload))).await;
+                    }
+                    Ok(Message::Close(frame)) => {
+                        if let Some(frame) = frame {
+                            println!("[Deepgram STT] WebSocket closed: {} {}", frame.code, frame.reason);
+                        }
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(format!("Deepgram WebSocket read failed: {error}"));
                     }
                 }
             }
