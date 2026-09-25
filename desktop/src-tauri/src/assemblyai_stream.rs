@@ -151,6 +151,9 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "Heb",
     "chapter",
     "verse",
+    "next verse",
+    "previous verse",
+    "next chapter",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────

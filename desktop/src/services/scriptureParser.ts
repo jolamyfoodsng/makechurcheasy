@@ -564,7 +564,15 @@ const TRANSLATION_ALIASES: Record<string, string> = {
  */
 export function parseScriptureIntent(text: string): ScriptureIntent {
   if (!text) return null;
-  const lower = normalizeSpokenNumbers(text.toLowerCase().trim()).replace(/[.,!?;]+$/g, "").trim();
+  let lower = normalizeSpokenNumbers(text.toLowerCase().trim()).replace(/[.,!?;]+$/g, "").trim();
+
+  // ── STT misrecognition correction ──
+  // Deepgram frequently mishears "verse" as "vase", "vas", "vass", "worse"
+  lower = lower
+    .replace(/\bnext\s+(?:vase|vas|vass|worse|first)\b/g, "next verse")
+    .replace(/\bprevious\s+(?:vase|vas|vass|worse)\b/g, "previous verse")
+    .replace(/\b(\d+)\s+(?:vase|vas|vass)\b/g, "$1 verse")
+    .replace(/\bverse?\s*\.\s*$/g, "verse");
 
   // ── Noise filtering: ignore vague, incomplete, or nonsensical inputs ──
   // Pure numbers, vague thresholds, or misrecognized speech
