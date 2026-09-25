@@ -20,6 +20,15 @@ export interface MongoUser {
   password?: boolean;
   language: string;
   onboardingCompleted: boolean;
+  ambassador?: {
+    active?: boolean;
+    grantedBy?: string;
+    grantedAt?: string;
+    expiresAt?: string;
+    creditsGranted?: number;
+    previousPlan?: string;
+    notes?: string;
+  } | null;
   trial?: {
     active?: boolean;
     status?: "active" | "expired" | "stopped" | "cancelled";

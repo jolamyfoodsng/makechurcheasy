@@ -23,6 +23,7 @@ import {
   GraduationCap,
   ArrowLeft,
   Percent,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -63,6 +64,7 @@ const growthSystemItems: NavItem[] = [
   { path: "/admin/activation", label: "Activation", icon: FlaskConical },
   { path: "/admin/support", labelKey: "admin.sidebar.support", icon: Headset },
   { path: "/admin/audit-logs", labelKey: "admin.sidebar.auditLogs", icon: FileText },
+  { path: "/admin/error-logs", label: "Error Logs", icon: AlertTriangle },
   { path: "/admin/settings", labelKey: "admin.sidebar.settings", icon: Settings },
 ];
 

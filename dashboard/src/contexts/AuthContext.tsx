@@ -38,7 +38,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_OPTIONAL_PATHS = new Set(["/", "/download", "/support", "/tutorials", "/signup"]);
 
 function isAuthOptionalPath(pathname: string | null): boolean {
-  return AUTH_OPTIONAL_PATHS.has(pathname || "/");
+  const path = pathname || "/";
+  return AUTH_OPTIONAL_PATHS.has(path) || path === "/features" || path.startsWith("/features/");
 }
 
 async function fetchMongoUser(): Promise<MongoUser | null> {

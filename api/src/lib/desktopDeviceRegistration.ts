@@ -31,8 +31,18 @@ let deviceIndexesReady: Promise<void> | null = null;
 async function ensureDeviceIndexes(db: Db): Promise<void> {
   if (!deviceIndexesReady) {
     deviceIndexesReady = (async () => {
+      await db.createCollection("devices").catch(() => {});
       const devices = db.collection("devices");
-      const indexes = await devices.listIndexes().toArray();
+      let indexes: Array<Record<string, unknown>> = [];
+      try {
+        indexes = await devices.listIndexes().toArray() as Array<Record<string, unknown>>;
+      } catch (error: any) {
+        if (error?.code === 26 || error?.codeName === "NamespaceNotFound") {
+          indexes = [];
+        } else {
+          throw error;
+        }
+      }
       const userIdIndex = indexes.find((index) => {
         const key = index.key as Record<string, unknown> | undefined;
         return index.name === "userId_1" || (
@@ -40,7 +50,7 @@ async function ensureDeviceIndexes(db: Db): Promise<void> {
         );
       });
 
-      if (userIdIndex?.unique) {
+      if (userIdIndex?.unique && typeof userIdIndex.name === "string") {
         await devices.dropIndex(userIdIndex.name);
       }
 

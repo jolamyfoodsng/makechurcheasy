@@ -18,12 +18,14 @@ import {
   Timer,
   Receipt,
   Gift,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/lib/useSubscription";
+import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 import { AppLogo } from "./AppLogo";
 
 const SUBSCRIPTION_ROUTES = ["/subscription"];
@@ -46,6 +48,8 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
     trialDurationDays,
     mongoUser,
   } = useSubscription();
+
+  const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador, mongoUser?.role);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -323,6 +327,29 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
                 {t("subscription.plans.managePlan")}
               </span>
             </Link>
+          ) : ambassadorInfo.isAmbassador ? (
+            <div className="border border-purple-200 bg-gradient-to-b from-purple-50/80 to-white rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-purple-700">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                    Ambassador
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                  {ambassadorInfo.tenureLabel}
+                </span>
+              </div>
+              <p className="text-sm font-bold text-slate-900">Growth Plan Unlocked</p>
+              <p className="text-xs text-purple-700 font-medium mt-0.5">
+                {ambassadorInfo.remainingLabel}
+              </p>
+              {mongoUser?.credits != null ? (
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  {Math.max(0, mongoUser.credits).toLocaleString()} AI credits available
+                </p>
+              ) : null}
+            </div>
           ) : (
             <div className="border border-slate-200 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1">

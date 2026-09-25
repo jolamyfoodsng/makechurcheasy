@@ -23,11 +23,15 @@ import {
   RefreshCw,
   TrendingUp,
   Zap,
+  Sparkles,
+  Shield,
+  Award,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { Card, Badge, Button, CardSkeleton } from "@/components/ui";
+import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -121,23 +125,117 @@ export default function Overview() {
     );
   }
 
-  const firstName = user?.name?.split(" ")[0] || "there";
+    const firstName = user?.name?.split(" ")[0] || "there";
   const churchName = user?.churchName || "";
+  const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador || (user as any)?.ambassador, mongoUser?.role || user?.role);
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto w-full space-y-8 pb-16">
       {/* Welcome header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">
-          Welcome back, {firstName}
-        </h1>
-        {churchName && churchName !== "Your Church" && (
-          <p className="text-sm text-slate-500">{churchName}</p>
-        )}
-      </div>
+      {ambassadorInfo.isAmbassador ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold text-slate-900">
+                Welcome as an Ambassador, {firstName}
+              </h1>
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                <Sparkles className="w-3 h-3 text-purple-600" />
+                Ambassador
+              </span>
+            </div>
+            <p className="text-sm text-slate-500">
+              {churchName && churchName !== "Your Church" ? `${churchName} · ` : ""}
+              {ambassadorInfo.tenureLabel} Ambassador Access · {ambassadorInfo.remainingLabel}
+            </p>
+          </div>
+          <Link
+            href="/credits"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold transition-colors w-fit"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <span>Ambassador AI Credits</span>
+          </Link>
+        </div>
+      ) : ambassadorInfo.isAdmin ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold text-slate-900">
+                Welcome back, Admin {firstName}
+              </h1>
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-slate-800 text-slate-100">
+                <Shield className="w-3 h-3 text-amber-300" />
+                System Admin
+              </span>
+            </div>
+            <p className="text-sm text-slate-500">
+              Full system privileges & platform controls
+            </p>
+          </div>
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors w-fit shadow-sm"
+          >
+            <span>Open Admin Panel</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      ) : (
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">
+            Welcome back, {firstName}
+          </h1>
+          {churchName && churchName !== "Your Church" && (
+            <p className="text-sm text-slate-500">{churchName}</p>
+          )}
+        </div>
+      )}
+
+      {/* Ambassador VIP Banner */}
+      {ambassadorInfo.isAmbassador && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border border-purple-500/30 p-5 sm:p-6 text-white shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                Ambassador Access Active · {ambassadorInfo.tenureLabel} Grant
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                Welcome as a MakeChurchEasy Ambassador!
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Thank you for championing MakeChurchEasy in your community. You have full <strong>Growth Plan</strong> capabilities unlocked with {ambassadorInfo.creditsGranted > 0 ? `${ambassadorInfo.creditsGranted.toLocaleString()} monthly AI credits` : "monthly AI credits"} to empower your church and ministry services.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-purple-200">
+                <span className="px-2.5 py-0.5 rounded-md bg-purple-900/60 border border-purple-500/30 font-medium">
+                  {ambassadorInfo.remainingLabel}
+                </span>
+                {ambassadorInfo.formattedExpiry && (
+                  <span className="px-2.5 py-0.5 rounded-md bg-purple-900/60 border border-purple-500/30 font-medium">
+                    Expires {ambassadorInfo.formattedExpiry}
+                  </span>
+                )}
+                <span className="px-2.5 py-0.5 rounded-md bg-purple-900/60 border border-purple-500/30 font-medium">
+                  Growth Plan Features Included
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href="/credits"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs sm:text-sm transition-all shadow-md shadow-purple-600/30 whitespace-nowrap"
+              >
+                <Zap className="w-4 h-4" />
+                <span>Check AI Credits</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Free Plan Overview Banner */}
-      {isFreePlan && !isOnTrial && (
+      {!ambassadorInfo.isAmbassador && isFreePlan && !isOnTrial && (
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 p-5 sm:p-6 text-white shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
             <div className="space-y-1.5 max-w-2xl">
@@ -175,10 +273,11 @@ export default function Overview() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xl font-bold text-slate-900">
-                {isOnTrial ? "Trial" : planLabel}
+                {ambassadorInfo.isAmbassador ? "Ambassador" : isOnTrial ? "Trial" : planLabel}
               </span>
               <Badge
                 variant={
+                  ambassadorInfo.isAmbassador ? "purple" :
                   isOnTrial ? "warning" :
                   isPastDue ? "error" :
                   isCancelling ? "warning" :
@@ -186,14 +285,16 @@ export default function Overview() {
                 }
                 size="sm"
               >
-                {isOnTrial ? "Trial" : isPastDue ? "Past Due" : isCancelling ? "Cancels" : subscription?.status === "active" ? "Active" : "Free"}
+                {ambassadorInfo.isAmbassador ? "Growth Tier" : isOnTrial ? "Trial" : isPastDue ? "Past Due" : isCancelling ? "Cancels" : subscription?.status === "active" ? "Active" : "Free"}
               </Badge>
             </div>
-            {isOnTrial && trialEndsAt && (
+            {ambassadorInfo.isAmbassador ? (
+              <p className="text-xs text-purple-700 font-medium">{ambassadorInfo.tenureLabel} ({ambassadorInfo.remainingLabel})</p>
+            ) : isOnTrial && trialEndsAt ? (
               <p className="text-xs text-slate-500">Ends {new Date(trialEndsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-            )}
-            <Link href="/subscription" className="text-xs font-medium text-blue-600 hover:underline mt-1 inline-block">
-              Manage plan →
+            ) : null}
+            <Link href={ambassadorInfo.isAmbassador ? "/credits" : "/subscription"} className="text-xs font-medium text-blue-600 hover:underline mt-1 inline-block">
+              {ambassadorInfo.isAmbassador ? "Ambassador credits →" : "Manage plan →"}
             </Link>
           </div>
         </Card>

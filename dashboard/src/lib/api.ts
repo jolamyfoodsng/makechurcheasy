@@ -66,6 +66,15 @@ export interface User {
   emailHistory?: { email: string; changedAt: string }[];
   createdAt: string;
   lastLogin: string;
+  ambassador?: {
+    active?: boolean;
+    grantedBy?: string;
+    grantedAt?: string;
+    expiresAt?: string;
+    creditsGranted?: number;
+    previousPlan?: string;
+    notes?: string;
+  } | null;
 }
 
 export async function getUser(userId: string): Promise<User | null> {

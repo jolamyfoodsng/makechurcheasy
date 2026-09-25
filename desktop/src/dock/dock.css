@@ -20963,7 +20963,12 @@ body.dock-modal-open {
   border: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
   border-radius: 4px;
   padding: 8px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1),
+              border-color 0.15s ease,
+              background 0.15s ease,
+              opacity 0.2s ease;
+  user-select: none;
 }
 
 .dock-worship-slide-card:hover {
@@ -20990,6 +20995,94 @@ body.dock-modal-open {
   border-color: color-mix(in srgb, var(--dock-accent) 22%, var(--dock-border));
   background: color-mix(in srgb, var(--dock-accent) 10%, var(--dock-surface));
 }
+
+/* Drag & Drop Reordering Styles */
+.dock-worship-slide-card__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dock-text-dim);
+  opacity: 0.45;
+  cursor: grab;
+  padding: 2px;
+  border-radius: 3px;
+  margin-right: 2px;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.dock-worship-slide-card__drag-handle:hover {
+  opacity: 1;
+  color: var(--dock-accent);
+  transform: scale(1.12);
+}
+
+.dock-worship-slide-card:active .dock-worship-slide-card__drag-handle {
+  cursor: grabbing;
+}
+
+.dock-worship-slide-card--dragging {
+  opacity: 0.35 !important;
+  transform: scale(0.97) !important;
+  border: 1px dashed var(--dock-accent) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+.dock-worship-slide-card--drop-above {
+  transform: translateY(5px);
+  border-color: var(--dock-accent) !important;
+}
+
+.dock-worship-slide-card--drop-above::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--dock-accent, #38BDF8);
+  border-radius: 3px;
+  box-shadow: 0 0 10px var(--dock-accent, #38BDF8), 0 0 20px rgba(56, 189, 248, 0.6);
+  z-index: 20;
+  animation: dock-drop-pulse 0.9s infinite alternate ease-in-out;
+}
+
+.dock-worship-slide-card--drop-below {
+  transform: translateY(-5px);
+  border-color: var(--dock-accent) !important;
+}
+
+.dock-worship-slide-card--drop-below::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--dock-accent, #38BDF8);
+  border-radius: 3px;
+  box-shadow: 0 0 10px var(--dock-accent, #38BDF8), 0 0 20px rgba(56, 189, 248, 0.6);
+  z-index: 20;
+  animation: dock-drop-pulse 0.9s infinite alternate ease-in-out;
+}
+
+.dock-worship-slide-queue.is-reordering .dock-worship-slide-card:not(.dock-worship-slide-card--dragging) {
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes dock-drop-pulse {
+  0% {
+    opacity: 0.65;
+    transform: scaleX(0.97);
+    box-shadow: 0 0 6px var(--dock-accent, #38BDF8);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+    box-shadow: 0 0 12px var(--dock-accent, #38BDF8), 0 0 22px rgba(56, 189, 248, 0.8);
+  }
+}
+
 
 .dock-worship-slide-card__main {
   display: block;
@@ -38103,7 +38196,7 @@ button.dock-btm-toolbar__clear--inline,
 
   .dock-bible-verse-row__num,
   .dock-bible-verse-row__text {
-    font-size: 9px;
+    font-size: 11.5px;
   }
 
   .dock-shell-header {
@@ -38253,8 +38346,9 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-module--bible--compact .dock-bible-verse-row__text {
-  font-size: 9px;
-  line-height: 1.4;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #f1f5f9;
 }
 
 /* ── Bottom toolbar: compressed ── */

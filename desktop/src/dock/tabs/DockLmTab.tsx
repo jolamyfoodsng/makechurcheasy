@@ -1840,11 +1840,17 @@ export default function DockLmTab({
                       }
                     }}
                   >
-                    <div style={S.queueCardTop}>
-                      <span style={S.queueRef}>{c.label}</span>
-                    </div>
-                    {c.snippet && (
-                      <div style={S.verseText}>{c.snippet}</div>
+                    {c.snippet ? (
+                      <>
+                        <div style={S.verseText}>{c.snippet}</div>
+                        <div style={S.queueCardTop}>
+                          <span style={S.verseRefBadge}>{c.label}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={S.queueCardTop}>
+                        <span style={S.queueRef}>{c.label}</span>
+                      </div>
                     )}
                     <div style={S.queueCardBottom}>
                       <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
@@ -1931,12 +1937,19 @@ export default function DockLmTab({
                         }
                       }}
                     >
-                      <div style={S.queueCardTop}>
-                        <span style={S.queueRef}>{c.label}</span>
-                        <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                      </div>
-                      {c.snippet && (
-                        <div style={S.verseText}>{c.snippet}</div>
+                      {c.snippet ? (
+                        <>
+                          <div style={S.verseText}>{c.snippet}</div>
+                          <div style={S.queueCardTop}>
+                            <span style={S.verseRefBadge}>{c.label}</span>
+                            <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={S.queueCardTop}>
+                          <span style={S.queueRef}>{c.label}</span>
+                          <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
+                        </div>
                       )}
                       <div style={S.queueCardBottom}>
                         <span style={S.suggestionHint}>{t("lm.manualSuggestion", "Suggested match")}</span>
@@ -3140,14 +3153,29 @@ const S: Record<string, React.CSSProperties> = {
 
 
   verseText: {
-    fontSize: 11,
-    lineHeight: "1.4",
-    color: "var(--dock-text-dim, #94A3B8)",
-    fontStyle: "italic",
+    fontSize: 13,
+    lineHeight: "1.45",
+    color: "#FFFFFF",
+    fontWeight: 500,
+    fontStyle: "normal",
     display: "-webkit-box",
     WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
+    WebkitLineClamp: 3,
     overflow: "hidden",
+    textOverflow: "ellipsis",
+    letterSpacing: "0.01em",
+  },
+  verseRefBadge: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "var(--dock-accent, #38BDF8)",
+    background: "color-mix(in srgb, var(--dock-accent, #38BDF8) 14%, transparent)",
+    border: "1px solid color-mix(in srgb, var(--dock-accent, #38BDF8) 28%, transparent)",
+    borderRadius: 4,
+    padding: "1px 6px",
+    display: "inline-flex",
+    alignItems: "center",
+    letterSpacing: "0.02em",
   },
 
   pushBtn: {

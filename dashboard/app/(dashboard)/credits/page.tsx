@@ -16,6 +16,7 @@ import {
   Mic,
   Brain,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import { getUserId } from "@/lib/userId";
+import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 import {
   AreaChart,
   Area,
@@ -88,6 +90,8 @@ export default function Credits() {
     trialEndsAt,
     loading: subLoading,
   } = useSubscription();
+
+  const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador, mongoUser?.role);
 
   const [recentTransactions, setRecentTransactions] = useState<
     CreditTransaction[]
@@ -227,12 +231,18 @@ export default function Credits() {
               <Zap className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                 <h2 className="text-xl font-bold text-slate-900">
                   AI Credits
                 </h2>
+                {ambassadorInfo.isAmbassador && (
+                  <Badge variant="purple" size="sm">
+                    <Sparkles className="w-3 h-3 mr-0.5 text-purple-600 inline" />
+                    Ambassador Grant
+                  </Badge>
+                )}
                 <Badge variant="default" size="sm">
-                  {planLabel} Plan
+                  {ambassadorInfo.isAmbassador ? "Growth Tier" : `${planLabel} Plan`}
                 </Badge>
               </div>
               <div className="flex items-baseline gap-2 mb-3">
@@ -256,6 +266,18 @@ export default function Credits() {
                   <p className="text-xs text-slate-500 mt-1.5">
                     {remainingPct}% remaining &middot; {usedCredits.toLocaleString()} used
                   </p>
+                </div>
+              )}
+              {ambassadorInfo.isAmbassador && (
+                <div className="mt-3 p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-start gap-2.5 max-w-xl">
+                  <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                  <div className="text-xs text-purple-900 leading-relaxed">
+                    <span className="font-bold">Ambassador Partnership Allocation:</span>{" "}
+                    You have a {ambassadorInfo.tenureLabel} grant with full Growth Tier privileges ({ambassadorInfo.remainingLabel} · expires {ambassadorInfo.formattedExpiry}).
+                    {ambassadorInfo.creditsGranted > 0 && (
+                      <span> Granted with {ambassadorInfo.creditsGranted.toLocaleString()} AI credits.</span>
+                    )}
+                  </div>
                 </div>
               )}
               {isUnlimited && (

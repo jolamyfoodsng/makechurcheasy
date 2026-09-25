@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "default" | "success" | "warning" | "error" | "info";
+type BadgeVariant = "default" | "success" | "warning" | "error" | "info" | "purple";
 type BadgeSize = "sm" | "md";
 
 interface BadgeProps {
@@ -17,6 +17,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   warning: "bg-amber-50 text-amber-700 border border-amber-200",
   error: "bg-red-50 text-red-700 border border-red-200",
   info: "bg-blue-50 text-blue-700 border border-blue-200",
+  purple: "bg-purple-50 text-purple-700 border border-purple-200",
 };
 
 const dotStyles: Record<BadgeVariant, string> = {
@@ -25,6 +26,7 @@ const dotStyles: Record<BadgeVariant, string> = {
   warning: "bg-amber-500",
   error: "bg-red-500",
   info: "bg-blue-500",
+  purple: "bg-purple-500",
 };
 
 const sizeStyles: Record<BadgeSize, string> = {

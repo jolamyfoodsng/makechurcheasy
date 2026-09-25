@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter, Sora } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -6,6 +7,7 @@ import I18nProvider from "@/i18n/provider";
 import { DEFAULT_LOCALE, resolveLocalePreference } from "@/i18n/routing";
 import { getInitialMongoUser } from "@/lib/serverAuth";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import ClientErrorTelemetry from "@/components/ClientErrorTelemetry";
 
 export const metadata: Metadata = {
   title: {
@@ -81,6 +83,19 @@ export const metadata: Metadata = {
   },
 };
 
+const bodyFont = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
+
+const displayFont = Sora({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["400", "600", "700", "800"],
+  display: "swap",
+});
+
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@graph": [
@@ -141,7 +156,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={locale} className="dark" suppressHydrationWarning>
+    <html lang={locale} className={`dark ${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -155,7 +170,7 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-white antialiased">
+      <body className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-white antialiased" style={{ fontFamily: "var(--font-body), var(--font-sans), ui-sans-serif, system-ui, sans-serif" }}>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -164,7 +179,10 @@ export default async function RootLayout({
         />
         <GoogleAnalytics />
         <I18nProvider locale={locale} messages={messages}>
-          <AuthProvider initialMongoUser={initialMongoUser}>{children}</AuthProvider>
+          <AuthProvider initialMongoUser={initialMongoUser}>
+            <ClientErrorTelemetry />
+            {children}
+          </AuthProvider>
         </I18nProvider>
       </body>
     </html>

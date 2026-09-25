@@ -36,9 +36,12 @@ import {
   type WorshipDockSongSavePayload,
 } from "../../services/worshipDockInterop";
 import {
+  calculateReorderTargetIndex,
   extractStructuredTextTitle,
   generateSlides,
   normalizeWorshipDisplayText,
+  reorderWorshipSections,
+  stripLeadingVerseMarker,
 } from "../../worship/slideEngine";
 import { extractFirstLineAsTitle } from "../../worship/songTitleFromLyrics";
 import { DEFAULT_WORSHIP_LINES_PER_SLIDE } from "../../worship/slideLayout";
@@ -479,7 +482,7 @@ function parseLyricSections(
   ).map((slide) => ({
     id: slide.id,
     label: slide.isContinuation ? "" : slide.label,
-    text: slide.content,
+    text: stripLeadingVerseMarker(slide.content),
   }));
 }
 
@@ -490,7 +493,10 @@ function serializeLyricSections(
   const content = sections
     .map((section) => {
       const label = section.label.trim();
-      return [label ? `${label}:` : "", normalizeDockMultilineText(section.text).trim()].filter(Boolean).join("\n");
+      const isGenericVerse = !label || /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(label);
+      const sectionTag = label && !isGenericVerse ? `[${label}]` : "";
+      const cleanText = stripLeadingVerseMarker(normalizeDockMultilineText(section.text).trim());
+      return [sectionTag, cleanText].filter(Boolean).join("\n");
     })
     .filter(Boolean)
     .join("\n\n");
@@ -3264,18 +3270,19 @@ function DockWorshipTab({
       setSlideEditor({
         index: idx,
         label: section.label.trim() || t('worship.slideNumber', { number: idx + 1 }),
-        text: section.text,
+        text: stripLeadingVerseMarker(section.text),
         linesPerSlide: effectiveLinesPerSlide,
       });
     },
-    [effectiveLinesPerSlide, selectedSongSections],
+    [effectiveLinesPerSlide, selectedSongSections, t],
   );
 
   const handleSaveSlideEditor = useCallback(async (payload: { text: string; linesPerSlide: number }) => {
     if (!selectedSong || !slideEditor) return;
     const nextLinesPerSlide = clampLinesPerSlide(payload.linesPerSlide);
+    const cleanText = stripLeadingVerseMarker(payload.text.trim());
     const nextSections = selectedSongSections.map((section, index) =>
-      index === slideEditor.index ? { ...section, text: payload.text.trim() } : section,
+      index === slideEditor.index ? { ...section, text: cleanText } : section,
     );
     const nextLyrics = serializeLyricSections(nextSections, selectedSongTitleMarker);
 

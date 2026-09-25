@@ -17,11 +17,14 @@
 }
 
 @theme {
-    --font-sans: "CMG Sans", ui-sans-serif, system-ui, sans-serif;
-    --font-display: "CMG Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Inter", "CMG Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Sora", "Inter", "CMG Sans", ui-sans-serif, system-ui, sans-serif;
 
-    /* ── Brand Colors ─────────────────────────────────────────────── */
-    --color-brand-blue: #1D4ED8;
+    /* ── Brand Colors (sampled from logo: #0238E9 vivid royal blue) ─────── */
+    --color-brand-blue: #0238E9;
+    --color-brand-blue-dark: #012CAE;
+    --color-brand-blue-light: #6E90FF;
+    --color-brand-blue-tint: #EEF3FF;
     --color-brand-purple: #7C3AED;
     --color-brand-orange: #F97316;
 
@@ -54,7 +57,11 @@
 body {
     background-color: #F8FAFC;
     color: #0F172A;
-    font-family: var(--font-sans);
+    font-family: var(--font-body), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+h1, h2, h3, .font-display {
+    font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ── MakeChurchEasy visual language ────────────────────────────────────── */

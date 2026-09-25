@@ -17,6 +17,7 @@
 import nodemailer from "nodemailer";
 import { renderEmailHtml } from "./emailBranding";
 import { resolveTransactionalSender, sendTransactionalEmail } from "./emailProvider";
+import { logEmailEvent } from "./emailLog";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -94,11 +95,26 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       });
       console.log(`[email] Dev SMTP sent → ${info.messageId}`);
       console.log(`[email] Preview: http://localhost:1080/#/email/${info.messageId}`);
+      logEmailEvent({
+        to,
+        subject,
+        html: renderedHtml,
+        status: "sent",
+        provider: "maildev-smtp",
+      }).catch(() => {});
       return true;
     } catch (err) {
       console.error("[email] Dev SMTP send failed:", err);
       console.log("[email] Falling back to console log. HTML:");
       console.log(renderedHtml);
+      logEmailEvent({
+        to,
+        subject,
+        html: renderedHtml,
+        status: "failed",
+        provider: "maildev-smtp",
+        error: String(err),
+      }).catch(() => {});
       return false;
     }
   }
@@ -112,9 +128,26 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
     category: "transactional",
   });
 
-  if (!result.sent) return false;
+  if (!result.sent) {
+    logEmailEvent({
+      to,
+      subject,
+      html: renderedHtml,
+      status: "failed",
+      provider: result.provider || "transactional",
+      error: "Provider failed to send email",
+    }).catch(() => {});
+    return false;
+  }
 
   console.log(`[email] ${result.provider} sent successfully to: ${to}`);
+  logEmailEvent({
+    to,
+    subject,
+    html: renderedHtml,
+    status: "sent",
+    provider: result.provider || "transactional",
+  }).catch(() => {});
   return true;
 }
 

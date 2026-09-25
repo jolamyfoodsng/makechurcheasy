@@ -16,6 +16,7 @@ import { UserPendingModalHost } from "@/components/UserPendingModalHost";
 import { AnnouncementModalHost } from "@/components/AnnouncementModalHost";
 import { ReferralCodePrompt } from "@/components/ReferralCodePrompt";
 import { ActivationSurveyModal } from "@/components/ActivationSurveyModal";
+import { AmbassadorWelcomeModal } from "@/components/AmbassadorWelcomeModal";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardLayout({
@@ -70,6 +71,7 @@ export default function DashboardLayout({
       {!isAdmin && <ProfileCompletionModal />}
       {!isAdmin && <PremiumWelcomeModal />}
       {!isAdmin && <TrialExpiredUpgradeModal />}
+      {!isAdmin && <AmbassadorWelcomeModal />}
       {!isAdmin && <UserPendingModalHost />}
       {!isAdmin && <AnnouncementModalHost />}
       {!isAdmin && <ReferralCodePrompt />}

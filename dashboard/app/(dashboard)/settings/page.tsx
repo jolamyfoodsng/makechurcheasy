@@ -14,17 +14,21 @@ import {
   Chrome,
   HelpCircle,
   Loader2,
-  Mail
+  Mail,
+  Sparkles,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 
 export default function ProfileSettings() {
   const t = useTranslations();
   const userId = getUserId();
-  const { hasPasswordProvider, isGoogleLinked } = useAuth();
+  const { mongoUser, hasPasswordProvider, isGoogleLinked } = useAuth();
   const [user, setUser] = useState<User | null>(null);
+  const ambassadorInfo = getAmbassadorInfo(user?.ambassador || mongoUser?.ambassador, user?.role || mongoUser?.role);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -155,7 +159,21 @@ export default function ProfileSettings() {
                 <h2 className="text-lg font-bold text-slate-900">{t("settings.personalInformation")}</h2>
                 <p className="text-sm text-slate-500 mt-1">{t("settings.personalInfoDescription")}</p>
               </div>
-              <Badge variant="success" size="md" dot>{t("common.verified")}</Badge>
+              <div className="flex flex-wrap items-center gap-2 justify-end">
+                {ambassadorInfo.isAmbassador && (
+                  <Badge variant="purple" size="md">
+                    <Sparkles className="w-3 h-3 text-purple-600 inline mr-1" />
+                    Ambassador
+                  </Badge>
+                )}
+                {ambassadorInfo.isAdmin && (
+                  <Badge variant="default" size="md" className="bg-slate-800 text-slate-100">
+                    <Shield className="w-3 h-3 text-amber-300 inline mr-1" />
+                    Admin
+                  </Badge>
+                )}
+                <Badge variant="success" size="md" dot>{t("common.verified")}</Badge>
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -291,6 +309,57 @@ export default function ProfileSettings() {
 
         {/* Right Column */}
         <div className="lg:col-span-4 space-y-6 md:space-y-8">
+          {/* Ambassador VIP Status Card */}
+          {ambassadorInfo.isAmbassador && (
+            <Card padding="lg" className="border-purple-200 bg-gradient-to-b from-purple-50/70 to-white shadow-sm">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700 shrink-0">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Ambassador Status</h2>
+                    <p className="text-xs text-purple-700 font-semibold">{ambassadorInfo.tenureLabel} Partnership</p>
+                  </div>
+                </div>
+                <Badge variant="purple" size="sm">Active</Badge>
+              </div>
+
+              <div className="space-y-2.5 text-xs text-slate-600 pt-3 border-t border-purple-100/90">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Access Period</span>
+                  <span className="font-semibold text-slate-800">{ambassadorInfo.tenureLabel} ({ambassadorInfo.remainingLabel})</span>
+                </div>
+                {ambassadorInfo.formattedExpiry && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Valid Until</span>
+                    <span className="font-semibold text-slate-800">{ambassadorInfo.formattedExpiry}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tier Unlocked</span>
+                  <span className="font-semibold text-purple-700">Growth Plan Features</span>
+                </div>
+                {ambassadorInfo.creditsGranted > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Granted AI Credits</span>
+                    <span className="font-semibold text-purple-700">{ambassadorInfo.creditsGranted.toLocaleString()} credits</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-purple-100/90">
+                <Link
+                  href="/credits"
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-100/80 hover:bg-purple-200/80 transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  View Ambassador Credits
+                </Link>
+              </div>
+            </Card>
+          )}
+
           {/* Login Methods */}
           <Card padding="lg">
             <h2 className="text-lg font-bold text-slate-900">{t("settings.loginMethods")}</h2>

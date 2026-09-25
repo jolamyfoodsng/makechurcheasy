@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Menu, User, Settings, Shield, LogOut } from "lucide-react";
+import { ChevronDown, Menu, User, Settings, Shield, LogOut, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -9,6 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { UserNotificationsBell } from "./UserNotificationsBell";
 import { getSubscriptionState } from "../lib/trialState";
+import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations();
@@ -22,8 +23,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const email = mongoUser?.email || "";
   const role = mongoUser?.role || "User";
   const isAdmin = pathname.startsWith("/admin");
+  const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador, mongoUser?.role);
   const subscriptionState = getSubscriptionState(mongoUser || null);
-  const planBadge = subscriptionState.isTrialActive
+  const planBadge = ambassadorInfo.isAmbassador
+    ? { label: "Ambassador", tone: "bg-purple-100 text-purple-700 border border-purple-200" }
+    : subscriptionState.isTrialActive
     ? { label: subscriptionState.planLabel, tone: isAdmin ? "bg-amber-500/15 text-amber-300" : "bg-amber-50 text-amber-700" }
     : subscriptionState.isFreePlan
       ? null
@@ -103,8 +107,17 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <div className="hidden md:block text-left">
               <div className={`text-sm font-semibold leading-none ${isAdmin ? "text-slate-50" : "text-slate-900"}`}>{displayName}</div>
               <div className="mt-0.5 flex items-center gap-2">
-                <div className={`text-[11px] ${isAdmin ? "text-slate-400" : "text-slate-500"}`}>{role}</div>
-                {planBadge ? (
+                {ambassadorInfo.isAmbassador ? (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                    <Sparkles className="w-2.5 h-2.5 text-purple-600" />
+                    Ambassador
+                  </span>
+                ) : (
+                  <div className={`text-[11px] ${isAdmin ? "text-slate-400" : "text-slate-500"}`}>
+                    {isAdmin ? "Admin" : role}
+                  </div>
+                )}
+                {planBadge && !ambassadorInfo.isAmbassador ? (
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${planBadge.tone}`}>
                     {planBadge.label}
                   </span>
@@ -115,11 +128,21 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
 
           {isProfileOpen && (
-            <div className={`absolute right-0 top-full mt-2 w-60 rounded-xl shadow-lg overflow-hidden z-50 border ${isAdmin ? "bg-gray-900 border-slate-700" : "bg-white border-slate-200"}`}>
+            <div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-lg overflow-hidden z-50 border ${isAdmin ? "bg-gray-900 border-slate-700" : "bg-white border-slate-200"}`}>
               <div className={`p-4 border-b ${isAdmin ? "border-slate-700" : "border-slate-100"}`}>
                 <p className={`text-sm font-semibold ${isAdmin ? "text-slate-50" : "text-slate-900"}`}>{displayName}</p>
                 <p className={`text-xs truncate ${isAdmin ? "text-slate-400" : "text-slate-500"}`}>{email}</p>
-                {planBadge ? (
+                {ambassadorInfo.isAmbassador ? (
+                  <div className="mt-2.5 p-2 rounded-lg bg-purple-50 border border-purple-100 space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Ambassador Access</span>
+                    </div>
+                    <p className="text-[11px] text-purple-700/90 font-medium">
+                      {ambassadorInfo.tenureLabel} ({ambassadorInfo.remainingLabel})
+                    </p>
+                  </div>
+                ) : planBadge ? (
                   <div className="mt-2">
                     <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${planBadge.tone}`}>
                       {planBadge.label}

@@ -24,10 +24,12 @@ import {
   Monitor as MonitorIcon,
   MoreHorizontal,
   Mail,
+  Activity,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { getPlanConfig, type PlanConfig } from "@/lib/planConfigService";
+import { calculateUserActivityScore, type ActivityScoreBreakdown } from "@/lib/userActivityScore";
 import {
   formatPlanCredits,
   getAdminManagedPlanAmount,
@@ -79,9 +81,29 @@ interface AdminUser {
   } | null;
   subscriptionExpiresAt?: string | null;
   scheduledDowngradeAt?: string | null;
+  activationMilestones?: {
+    devicePaired?: boolean;
+    obsConnected?: boolean;
+    firstPresentation?: boolean;
+    firstPresentationScreenshotUrl?: string;
+  } | null;
+  usage?: {
+    bibleSearches?: number;
+    songsCreated?: number;
+    mediaUploaded?: number;
+    transcriptCount?: number;
+    aiHoursUsed?: number;
+  } | null;
+  activityScore?: {
+    score: number;
+    grade: ActivityScoreBreakdown["grade"];
+    color: string;
+    badgeBg: string;
+    barColor: string;
+  };
 }
 
-type SortField = "name" | "email" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive";
+type SortField = "name" | "email" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive" | "activityScore";
 type ActivityFilter = "all" | "1d" | "3d" | "7d" | "14d" | "30d" | "inactive";
 type SortDir = "asc" | "desc";
 type AdminUserAction =
@@ -335,6 +357,10 @@ export default function AdminUsersPage() {
       else if (sortField === "lastActive") {
         av = a.lastActive || a.lastLogin || "";
         bv = b.lastActive || b.lastLogin || "";
+      }
+      else if (sortField === "activityScore") {
+        av = typeof a.activityScore?.score === "number" ? a.activityScore.score : calculateUserActivityScore(a).score;
+        bv = typeof b.activityScore?.score === "number" ? b.activityScore.score : calculateUserActivityScore(b).score;
       }
       if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
@@ -856,6 +882,11 @@ export default function AdminUsersPage() {
                   </button>
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden lg:table-cell">{t('admin.users.tableHeaders.status')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide">
+                  <button onClick={() => toggleSort("activityScore")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
+                    Activity <SortIcon field="activityScore" />
+                  </button>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden md:table-cell">
                   <button onClick={() => toggleSort("lastActive")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
                     Last Active <SortIcon field="lastActive" />
@@ -925,6 +956,21 @@ export default function AdminUsersPage() {
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const scoreData = user.activityScore || calculateUserActivityScore(user);
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold font-mono border ${scoreData.badgeBg}`}>
+                            {scoreData.score}%
+                          </span>
+                          <span className={`text-[11px] font-medium hidden sm:inline ${scoreData.color}`}>
+                            {scoreData.grade}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     {(() => {

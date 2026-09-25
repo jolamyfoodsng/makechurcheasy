@@ -595,3 +595,72 @@ export function generateSlides(
 
   return resultSlides;
 }
+
+/**
+ * Strips leading verse markers like "Verse 1:", "Verse 1", "[Verse 1]:", "V1:", etc.
+ * from slide body text.
+ */
+export function stripLeadingVerseMarker(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/^(\s*\[?\s*(?:verse|v)\s*\d+\s*\]?:?\s*[\r\n]*)+/i, "")
+    .replace(/^(\s*(?:verse|v)\s*\d+\s*:?\s*)+/i, "")
+    .trimStart();
+}
+
+/**
+ * Calculates drop target index for drag & drop slide reordering.
+ */
+export function calculateReorderTargetIndex(
+  sourceIdx: number,
+  hoverIdx: number,
+  position: "above" | "below",
+  totalLength: number,
+): number {
+  if (sourceIdx === hoverIdx) return sourceIdx;
+  let target = hoverIdx;
+  if (position === "above") {
+    target = sourceIdx < hoverIdx ? hoverIdx - 1 : hoverIdx;
+  } else {
+    target = sourceIdx > hoverIdx ? hoverIdx + 1 : hoverIdx;
+  }
+  return Math.max(0, Math.min(target, totalLength - 1));
+}
+
+/**
+ * Reorders a list of slide sections and automatically renumbers generic verse
+ * headers in sequential order (Verse 1, Verse 2, etc.) while preserving named
+ * section headers like Chorus, Bridge, Tag, Pre-Chorus, etc.
+ */
+export function reorderWorshipSections<T extends { label: string; text: string }>(
+  sections: T[],
+  sourceIndex: number,
+  targetIndex: number,
+): T[] {
+  if (
+    sourceIndex === targetIndex ||
+    sourceIndex < 0 ||
+    targetIndex < 0 ||
+    sourceIndex >= sections.length ||
+    targetIndex >= sections.length
+  ) {
+    return sections;
+  }
+  const result = [...sections];
+  const [removed] = result.splice(sourceIndex, 1);
+  result.splice(targetIndex, 0, removed);
+
+  let verseCounter = 0;
+  return result.map((section) => {
+    const trimmedLabel = section.label.trim();
+    const isVerse = !trimmedLabel || /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(trimmedLabel);
+    if (isVerse) {
+      verseCounter += 1;
+      return {
+        ...section,
+        label: `Verse ${verseCounter}`,
+      };
+    }
+    return section;
+  });
+}

@@ -5,6 +5,7 @@ import { calculateBulkCredits } from "@/lib/credits";
 import { checkAllExpiredAdminTemporaryPlans } from "@/lib/adminTemporaryPlan";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { getEffectivePlan } from "@/lib/trial";
+import { calculateUserActivityScore } from "@/lib/userActivityScore";
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,6 +42,9 @@ export async function GET(req: NextRequest) {
       }),
     );
 
+    const userIds = users.map((u) => u._id.toString());
+    const userObjectIds = users.map((u) => u._id);
+
     // Bulk-calculate real credit balances (2 queries total, regardless of user count)
     const creditBalances = await calculateBulkCredits(
       users.map((u) => ({
@@ -74,6 +78,49 @@ export async function GET(req: NextRequest) {
       console.warn("Could not aggregate security_sessions:", err);
     }
 
+    // Query device counts per user
+    const deviceCountMap = new Map<string, number>();
+    try {
+      const deviceAgg = await db
+        .collection("devices")
+        .aggregate<{ _id: string; count: number }>([
+          { $match: { userId: { $in: userIds }, $or: [{ status: "active" }, { status: { $exists: false } }] } },
+          { $group: { _id: "$userId", count: { $sum: 1 } } },
+        ])
+        .toArray();
+      for (const d of deviceAgg) {
+        if (d._id) deviceCountMap.set(String(d._id), d.count);
+      }
+    } catch (err) {
+      console.warn("Could not aggregate devices:", err);
+    }
+
+    // Query usage per user from user_usage collection
+    const usageMap = new Map<string, { bibleSearches: number; songsCreated: number; mediaUploaded: number; transcriptCount: number; aiHoursUsed: number }>();
+    try {
+      const usageDocs = await db
+        .collection("user_usage")
+        .find({
+          $or: [
+            { userId: { $in: userIds } },
+            { userId: { $in: userObjectIds } },
+          ],
+        })
+        .toArray();
+      for (const u of usageDocs) {
+        const uid = String(u.userId);
+        usageMap.set(uid, {
+          bibleSearches: (u.bibleSearches || 0) + (u.bibleSearchVersions || 0),
+          songsCreated: u.songs || 0,
+          mediaUploaded: (u.images || 0) + (u.videos || 0),
+          transcriptCount: u.transcripts || 0,
+          aiHoursUsed: u.aiHoursUsed || 0,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not query user_usage:", err);
+    }
+
     const formatted = users.map((u) => {
       const id = u._id.toString();
       const effectivePlan = getEffectivePlan(u as any);
@@ -94,6 +141,19 @@ export async function GET(req: NextRequest) {
 
       const latestActiveMs = timestamps.length > 0 ? Math.max(...timestamps) : null;
       const effectiveLastActive = latestActiveMs ? new Date(latestActiveMs).toISOString() : null;
+
+      const userUsage = usageMap.get(id) || usageMap.get(u._id.toString()) || null;
+      const deviceCount = deviceCountMap.get(id) ?? 0;
+      const activityBreakdown = calculateUserActivityScore({
+        lastLogin: lastLoginRaw,
+        lastActive: effectiveLastActive,
+        plan: effectivePlan,
+        trial,
+        ambassador: u.ambassador || null,
+        deviceIds: deviceCount > 0 ? Array(deviceCount).fill("device") : [],
+        activationMilestones: u.activationMilestones || null,
+        usage: userUsage,
+      });
 
       return {
         id,
@@ -121,6 +181,15 @@ export async function GET(req: NextRequest) {
         adminManagedSubscription: u.adminManagedSubscription || null,
         subscriptionExpiresAt: effectivePlan === "free" ? null : (u.subscriptionExpiresAt || null),
         scheduledDowngradeAt: u.scheduledDowngradeAt || null,
+        activationMilestones: u.activationMilestones || null,
+        usage: userUsage,
+        activityScore: {
+          score: activityBreakdown.score,
+          grade: activityBreakdown.grade,
+          color: activityBreakdown.color,
+          badgeBg: activityBreakdown.badgeBg,
+          barColor: activityBreakdown.barColor,
+        },
       };
     });
 

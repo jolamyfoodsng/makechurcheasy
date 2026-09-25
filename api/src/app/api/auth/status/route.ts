@@ -3,6 +3,7 @@ import { getAuthUser, getAuthUserFromRequest } from "@/lib/auth";
 import { calculateUserCredits } from "@/lib/credits";
 import { getActiveSubscription, getPlanConfig } from "@/lib/db";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
+import { checkAndExpireAmbassador } from "@/lib/ambassadorExpiration";
 
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUserFromRequest(req);
@@ -11,10 +12,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ authenticated: false });
   }
 
-  const mongoUser = await checkAndApplyScheduledDowngrade(
+  let mongoUser = await checkAndApplyScheduledDowngrade(
     authUser.mongoUser._id.toString(),
     authUser.mongoUser,
   );
+  mongoUser = (await checkAndExpireAmbassador(mongoUser._id.toString(), mongoUser)) as any;
   const creditsResult = await calculateUserCredits(mongoUser._id.toString(), mongoUser);
   const activeSubscription = await getActiveSubscription(mongoUser._id.toString()).catch(() => null);
   const planConfig = await getPlanConfig();
@@ -59,6 +61,7 @@ export async function GET(req: NextRequest) {
       adminTemporaryPlan: mongoUser.adminTemporaryPlan || null,
       adminManagedSubscription: mongoUser.adminManagedSubscription || null,
       subscriptionExpiresAt: mongoUser.subscriptionExpiresAt || null,
+      ambassador: mongoUser.ambassador || null,
       purchaseKind: activeSubscription?.purchaseKind || "subscription",
       oneTimeOfferId: activeSubscription?.oneTimeOfferId || null,
       oneTimeOfferName: activeSubscription?.oneTimeOfferName || null,

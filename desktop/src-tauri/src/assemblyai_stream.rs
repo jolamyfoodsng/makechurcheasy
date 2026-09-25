@@ -467,16 +467,23 @@ pub async fn start_assemblyai_stream(
         *c = true;
     }
 
-    // ── 2. Spawn the STT task (Cloudflare HTTP or AssemblyAI WebSocket) ────
+    // ── 2. Spawn the STT task (Deepgram, Cloudflare HTTP, or AssemblyAI) ────
+    let is_deepgram = api_key.starts_with("deepgram:")
+        || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
+    let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
+    let engine_label = if is_deepgram {
+        "Deepgram Nova-2"
+    } else if is_http_endpoint {
+        "Cloudflare Whisper"
+    } else {
+        "AssemblyAI"
+    };
+
     let realtime_app = app.clone();
     let task_stream = Arc::clone(&state.stream);
     let task_is_streaming = Arc::clone(&state.is_streaming);
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
-        let is_deepgram = api_key.starts_with("deepgram:")
-            || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
-        let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
-
         let result = if is_deepgram {
             let clean_key = api_key
                 .strip_prefix("deepgram:")
@@ -529,7 +536,7 @@ pub async fn start_assemblyai_stream(
         }
 
         if let Err(error) = result {
-            eprintln!("[AssemblyAI Realtime] Stream failed: {error}");
+            eprintln!("[Voice Stream ({engine_label})] Stream failed: {error}");
             let _ = realtime_app.emit(
                 "assemblyai-status",
                 StatusPayload {
@@ -543,7 +550,7 @@ pub async fn start_assemblyai_stream(
                     status: "stopped".to_string(),
                 },
             );
-            println!("[AssemblyAI Realtime] Capture task ended");
+            println!("[Voice Stream ({engine_label})] Capture task ended");
         }
     });
 
@@ -553,7 +560,7 @@ pub async fn start_assemblyai_stream(
     }
 
     println!(
-        "[AssemblyAI Realtime] Started — profile {}, native rate {native_rate} Hz, {channels} ch",
+        "[Voice Stream ({engine_label})] Started — profile {}, native rate {native_rate} Hz, {channels} ch",
         profile.label
     );
     Ok(())
@@ -1240,7 +1247,7 @@ fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) 
 
 #[tauri::command]
 pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> Result<(), String> {
-    println!("[AssemblyAI Stream] stop_assemblyai_stream command received from frontend");
+    println!("[Voice Stream] stop_assemblyai_stream command received from frontend");
     // Drop the mic stream — stops cpal callbacks immediately.
     {
         let mut s = state.stream.lock().map_err(|e| e.to_string())?;
@@ -1274,7 +1281,7 @@ pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> 
         *c = false;
     }
 
-    println!("[AssemblyAI Stream] Stopped");
+    println!("[Voice Stream] Stopped");
     Ok(())
 }
 
@@ -1285,7 +1292,7 @@ pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> 
 pub fn set_microphone_gain(gain: f32) {
     let clamped = gain.clamp(0.0, 3.0);
     USER_GAIN.store(f32_to_bits(clamped), Ordering::Relaxed);
-    println!("[AssemblyAI Stream] User gain set to {clamped:.2}");
+    println!("[Voice Stream] User gain set to {clamped:.2}");
 }
 
 #[tauri::command]

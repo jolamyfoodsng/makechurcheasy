@@ -24,6 +24,7 @@ import {
   type User,
   type UserUsage,
 } from "./api";
+import type { MongoUser } from "@/lib/authTypes";
 import {
   getPlanConfig,
   type PlanConfig,
@@ -123,7 +124,7 @@ export interface SubscriptionState {
   /** User object (credits, profile) */
   user: User | null;
   /** MongoUser from auth context (authoritative plan) */
-  mongoUser: { _id: string; name: string; email: string; plan: string; credits: number; planAllocation: number; adminGranted: number; totalConsumed: number; totalAvailable: number; trial?: { active?: boolean; status?: "active" | "expired" | "stopped" | "cancelled"; startedAt?: string | null; endsAt?: string | null; durationDays?: number | null; stoppedAt?: string | null; stoppedReason?: string; restartedAt?: string | null; grantedBy?: string; lastModifiedBy?: string } | null; ambassador?: { active?: boolean; grantedBy?: string; grantedAt?: string; expiresAt?: string; creditsGranted?: number; previousPlan?: string; notes?: string } | null; onboarding?: { downloadedStudio?: boolean; pairedFirstDevice?: boolean; completedWelcome?: boolean } | null } | null;
+  mongoUser: MongoUser | null;
   /** Current resource usage */
   usage: UserUsage | null;
   /** Total credits for current plan */
