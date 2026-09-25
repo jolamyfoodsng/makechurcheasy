@@ -468,35 +468,49 @@ export function SongsTab() {
   return (
     <>
       {/* Toolbar */}
-      <div className="lib-toolbar">
-        <div className="lib-toolbar-left">
-          <div className="lib-search-wrap">
-            <input
-              className="lib-search-input"
-              type="text"
-              placeholder="Search songs or hymn number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search songs"
-            />
-            {search && (
-              <button
-                type="button"
-                className="lib-search-clear"
-                onClick={() => setSearch("")}
-                aria-label="Clear song search"
-                title="Clear song search"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            )}
+      <div className="lib-toolbar lib-toolbar--song-library">
+        <div className="lib-toolbar-main">
+          <div className="lib-toolbar-search-block">
+            <div className="lib-search-wrap">
+              <Icon name="search" size={18} className="lib-search-leading-icon" />
+              <input
+                className="lib-search-input"
+                type="text"
+                placeholder="Search by title, artist, or hymn number"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search songs by title, artist, or hymn number"
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="lib-search-clear"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear song search"
+                  title="Clear song search"
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              )}
+            </div>
+            <span className="lib-search-help">Your library is ready for the next service.</span>
           </div>
-
-        </div>
-        <div className="lib-toolbar-actions">
           <button
             type="button"
-            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
+            onClick={handleAddSong}
+            title="Add a song"
+          >
+            <Icon name="add" size={20} />
+            Add Song
+          </button>
+        </div>
+
+        <div className="lib-toolbar-actions lib-toolbar-actions--song-library">
+          <span className="lib-toolbar-group-label">Library tools</span>
+          <button
+            type="button"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary lib-toolbar-btn--online"
             onClick={handleOpenOnlineSearch}
             title="Search lyrics online"
           >
@@ -526,21 +540,12 @@ export function SongsTab() {
           </button>
           <button
             type="button"
-            className="lib-toolbar-btn lib-toolbar-btn--secondary"
+            className="lib-toolbar-btn lib-toolbar-btn--secondary lib-toolbar-btn--import"
             onClick={() => triggerEasyWorshipBanner()}
             title="Import songs, videos, images, and themes from EasyWorship"
           >
             <Icon name="folder_zip" size={18} />
             Import EasyWorship
-          </button>
-          <button
-            type="button"
-            className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
-            onClick={handleAddSong}
-            title="Add"
-          >
-            <Icon name="add" size={20} />
-            Add Song
           </button>
         </div>
       </div>

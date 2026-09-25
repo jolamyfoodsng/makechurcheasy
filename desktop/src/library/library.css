@@ -450,6 +450,145 @@
   height: 20px;
 }
 
+/* ── Song library command area ──────────────────────────────────────────── */
+.lib-toolbar--song-library {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin: 2px 32px 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 68%, var(--bg-dark));
+}
+
+.lib-toolbar-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.lib-toolbar-search-block {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lib-toolbar--song-library .lib-search-wrap {
+  max-width: none;
+  min-width: 0;
+}
+
+.lib-toolbar--song-library .lib-search-leading-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.lib-toolbar--song-library .lib-search-input {
+  min-height: 44px;
+  padding: 10px 40px 10px 42px;
+  border-radius: 8px;
+  background: var(--surface-dark);
+  font-size: 13px;
+}
+
+.lib-search-help {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.lib-toolbar--song-library > .lib-toolbar-main > .lib-add-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.lib-toolbar-actions--song-library {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.lib-toolbar-group-label {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--online {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary-soft) 72%, var(--surface-raised));
+  color: var(--primary);
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--online:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 92%, var(--surface-raised));
+  color: var(--primary-hover);
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--import {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+}
+
+@media (max-width: 760px) {
+  .lib-toolbar--song-library {
+    margin: 2px 16px 16px;
+  }
+
+  .lib-toolbar-main {
+    flex-direction: column;
+  }
+
+  .lib-toolbar--song-library > .lib-toolbar-main > .lib-add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .lib-toolbar-actions--song-library {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .lib-toolbar--song-library {
+    margin: 2px 12px 14px;
+    padding: 12px;
+  }
+
+  .lib-toolbar-group-label {
+    width: 100%;
+  }
+
+  .lib-toolbar--song-library .lib-toolbar-btn {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+  }
+}
+
 /* ── Song usage badge (free/basic plan limits) ── */
 .lib-song-usage-badge {
   display: inline-flex;
