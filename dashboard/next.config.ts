@@ -4,7 +4,6 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3004";
 const configDir = fileURLToPath(new URL(".", import.meta.url));
 
 const nextConfig: NextConfig = {
@@ -28,18 +27,6 @@ const nextConfig: NextConfig = {
         ],
         destination: "https://makechurcheazy.com/:path*",
         permanent: true,
-      },
-    ];
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/uploads/:path*",
-        destination: `${BACKEND_URL}/uploads/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${BACKEND_URL}/api/:path*`,
       },
     ];
   },
