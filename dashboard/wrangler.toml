@@ -22,3 +22,7 @@ NEXT_PUBLIC_API_URL = "https://api.creatorstudioslabs.stream"
 [[routes]]
 pattern = "makechurcheazy.com/*"
 zone_name = "makechurcheazy.com"
+
+[[routes]]
+pattern = "www.makechurcheazy.com/*"
+zone_name = "makechurcheazy.com"
