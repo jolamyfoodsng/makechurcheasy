@@ -1,0 +1,28 @@
+name = "mce-api-cloudflare-staging"
+main = "cloudflare-container-worker.ts"
+compatibility_date = "2026-06-10"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+APP_ENV = "staging"
+NODE_ENV = "production"
+NEXT_PUBLIC_APP_ENV = "staging"
+NEXT_PUBLIC_APP_URL = "https://makechurcheazy.com"
+NEXT_PUBLIC_API_URL = "https://api.creatorstudioslabs.stream"
+
+[[containers]]
+class_name = "MceApiContainer"
+image = "./Dockerfile"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "MCE_API_CONTAINER"
+class_name = "MceApiContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MceApiContainer"]

@@ -25,3 +25,4 @@ npm-debug.log*
 next-env.d.ts
 .vercel
 .netlify
+cloudflare-env.d.ts
