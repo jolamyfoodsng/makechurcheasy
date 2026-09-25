@@ -141,10 +141,16 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "Second Thess",
     "First Tim",
     "Second Tim",
-    "First Sam",
-    "Second Sam",
-    "First Chron",
-    "Second Chron",
+    "Phil",
+    "Col",
+    "Thess",
+    "Cor",
+    "Tim",
+    "Rom",
+    "Matt",
+    "Heb",
+    "chapter",
+    "verse",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -280,16 +286,12 @@ struct DeepgramChannel {
 }
 
 #[derive(Deserialize)]
-struct DeepgramResponse {
-    #[serde(rename = "type")]
-    message_type: Option<String>,
+struct DeepgramResults {
     channel: Option<DeepgramChannel>,
     is_final: Option<bool>,
     speech_final: Option<bool>,
     start: Option<f64>,
     duration: Option<f64>,
-    error: Option<String>,
-    message: Option<String>,
 }
 
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
@@ -764,27 +766,35 @@ fn build_deepgram_endpoint() -> String {
         "interim_results=true".to_string(),
         "smart_format=true".to_string(),
         "endpointing=300".to_string(),
-        "vad_events=true".to_string(),
     ];
 
-    for term in REALTIME_KEYTERMS.iter().take(90) {
-        query.push(format!("keywords={}:2", urlencoding::encode(term)));
+    for term in REALTIME_KEYTERMS.iter().take(99) {
+        query.push(format!("keywords={}:3", urlencoding::encode(term)));
     }
 
     format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))
 }
 
 fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
-    let message: DeepgramResponse = match serde_json::from_str(raw) {
-        Ok(msg) => msg,
+    let value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
         Err(e) => {
             eprintln!("[Deepgram STT] JSON parse error: {e}: {raw}");
             return Ok(false);
         }
     };
 
-    match message.message_type.as_deref() {
-        Some("Results") => {
+    let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match msg_type {
+        "Results" => {
+            let message: DeepgramResults = match serde_json::from_value(value) {
+                Ok(msg) => msg,
+                Err(e) => {
+                    eprintln!("[Deepgram STT] Results parse error: {e}: {raw}");
+                    return Ok(false);
+                }
+            };
+
             if let Some(channel) = &message.channel {
                 if let Some(alternatives) = &channel.alternatives {
                     if let Some(first_alt) = alternatives.first() {
@@ -829,7 +839,7 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
                 }
             }
         }
-        Some("Metadata") => {
+        "Metadata" => {
             println!("[Deepgram STT] Session confirmed by Metadata");
             let _ = app.emit(
                 "assemblyai-status",
@@ -839,11 +849,15 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
             );
             return Ok(true);
         }
-        Some("Error") => {
-            let detail = message
-                .error
-                .or(message.message)
-                .unwrap_or_else(|| "Unknown Deepgram error".to_string());
+        "SpeechStarted" | "UtteranceEnd" => {
+            // Expected Deepgram lifecycle events; no action needed
+        }
+        "Error" => {
+            let detail = value
+                .get("error")
+                .or_else(|| value.get("message"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown Deepgram error");
             eprintln!("[Deepgram STT] Received error from server: {detail}");
             let _ = app.emit(
                 "assemblyai-status",
@@ -1401,34 +1415,39 @@ fn process_and_send_f32(
             let sum: f32 = filtered.iter().map(|s| s * s).sum();
             (sum / filtered.len() as f32).sqrt().max(1e-6)
         };
-        // Keep RMS floor at 0.02 so AGC gain does not blow up on background silence
-        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.02);
-        let agc_gain = (target_rms / st.rms_ema).min(3.5).max(0.2);
+        // Keep RMS floor at 0.005 so quiet microphones get cleanly boosted without clipping
+        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.005);
+        let agc_gain = (target_rms / st.rms_ema).min(6.0).max(0.2);
 
         // Read user gain from the atomic (lock-free, thread-safe).
         // Positioned AFTER AGC so it doesn't fight the dynamic range compression.
         let user_gain = f32_from_bits(USER_GAIN.load(Ordering::Relaxed));
         let effective_gain = agc_gain * user_gain;
 
-        // 3) Noise gate — hold open for ~200 ms (2 chunks) after level drops
-        let gate_threshold = 0.003;
+        // 3) Noise gate — sensitive threshold (~-66dB) with ~600ms hold time
+        // Preserves soft initial/trailing syllables ("Phil", "thirteen", "verses")
+        let gate_threshold = 0.0005;
         if chunk_rms > gate_threshold {
             st.gate_open = true;
-            st.gate_hold = 3; // ~300 ms hold
+            st.gate_hold = 6; // ~600 ms hold
         } else if st.gate_hold > 0 {
             st.gate_hold -= 1;
         } else {
             st.gate_open = false;
         }
 
-        // Apply effective gain (AGC × user) + gate
+        // Apply effective gain (AGC × user) with gentle attenuation instead of hard zeroing
         let processed: Vec<f32> = if st.gate_open {
             filtered
                 .iter()
                 .map(|s| (s * effective_gain).max(-1.0).min(1.0))
                 .collect()
         } else {
-            vec![0.0; filtered.len()]
+            // Soft attenuation (-16.5 dB) during silence rather than harsh 0.0 zeroes
+            filtered
+                .iter()
+                .map(|s| (s * effective_gain * 0.15).max(-1.0).min(1.0))
+                .collect()
         };
 
         // ── Resample ─────────────────────────────────────────────────────
