@@ -19,12 +19,17 @@ import {
   Clock,
   Copy,
   Download,
+  FileText,
   Lock,
   Mic,
   Radio,
+  RotateCcw,
+  Search,
   ShieldAlert,
   StopCircle,
+  Volume2,
   Wifi,
+  X,
   Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +41,7 @@ import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import MacSelect from "../components/MacSelect";
 import { useAuth } from "../contexts/AuthContext";
+import { getSettings as getMvSettings, updateSettings as updateMvSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
 import {
   APP_VERSION,
@@ -44,7 +50,12 @@ import {
   getDeviceSecret,
   refreshAccountBootstrapFromServer,
 } from "../services/authService";
-import { calculateTranscriptionCredits, deductCreditsWithSync, getCreditsBalance, onCreditChange, syncCreditsWithBackend } from "../services/credits";
+import {
+  deductTranscriptionDurationWithSync,
+  getCreditsBalance,
+  onCreditChange,
+  syncCreditsWithBackend,
+} from "../services/credits";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
@@ -65,8 +76,15 @@ const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
   "https://api.creatorstudioslabs.stream";
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
-const FREE_SPEECH_TO_SCRIPTURE_MINUTES = 15;
-const FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES = 20;
+
+type SpeechQuota = {
+  plan: string;
+  dailyLimitSeconds: number | null;
+  dailyRemainingSeconds: number | null;
+  weeklyLimitSeconds: number | null;
+  weeklyRemainingSeconds: number | null;
+  totalRemainingSeconds: number | null;
+};
 
 // ── Connectivity hook ──
 function useOnlineStatus(): boolean {
@@ -101,6 +119,15 @@ function formatTimerDisplay(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
   return `${String(h).padStart(2, "0")} : ${String(m).padStart(2, "0")} : ${String(s).padStart(2, "0")}`;
+}
+
+function formatQuotaTime(seconds: number | null): string {
+  if (seconds === null || seconds < 0 || !Number.isFinite(seconds)) return "Unlimited";
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function formatTimestamp(entry: { startTime?: number }, elapsed: number): string {
@@ -156,14 +183,21 @@ export default function SpeechToScripturePage() {
   // ── Backend access check (declared early for use in useEffects below) ──
   const [checkingAccess, setCheckingAccess] = useState(false);
   const [sessionLimitSeconds, setSessionLimitSeconds] = useState<number | null>(null);
+  const [speechQuota, setSpeechQuota] = useState<SpeechQuota | null>(null);
   const [accessDenied, setAccessDenied] = useState<{
     reason: string;
     requiredPlan?: string;
   } | null>(null);
 
+  const hasCustomApiKey = Boolean(
+    (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ||
+    (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEY ||
+    (import.meta as any).env?.DEV
+  );
+
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {
-    if (isAdmin) return; // Admins bypass all entitlement checks
+    if (isAdmin || hasCustomApiKey) return; // Admins and local dev / custom API keys bypass all entitlement checks
     const result = checkEntitlementSync("speechToScripture", effectivePlan);
     if (!result.allowed) {
       setAccessDenied({
@@ -172,15 +206,81 @@ export default function SpeechToScripturePage() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePlan, isAdmin]);
+  }, [effectivePlan, isAdmin, hasCustomApiKey]);
 
   // ── Track credit balance for Start button gating ──
   const [creditBalance, setCreditBalance] = useState(() => getCreditsBalance());
   const [isUnlimited, setIsUnlimited] = useState(false);
   const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
 
+  const updateSpeechQuota = useCallback((data: any) => {
+    const dailyRemainingSeconds = typeof data?.dailyRemainingSeconds === "number"
+      ? data.dailyRemainingSeconds
+      : null;
+    const weeklyRemainingSeconds = typeof data?.weeklyRemainingSeconds === "number"
+      ? data.weeklyRemainingSeconds
+      : null;
+    const transcriptionBalance = data?.transcriptionBalance;
+    const totalRemainingSeconds = typeof transcriptionBalance?.totalAvailableSeconds === "number"
+      ? transcriptionBalance.totalAvailableSeconds
+      : null;
+
+    if (typeof data?.plan !== "string" && dailyRemainingSeconds === null && totalRemainingSeconds === null) return;
+    setSpeechQuota({
+      plan: typeof data?.plan === "string" ? data.plan : effectivePlan,
+      dailyLimitSeconds: typeof data?.dailyLimitMinutes === "number" ? data.dailyLimitMinutes * 60 : null,
+      dailyRemainingSeconds,
+      weeklyLimitSeconds: typeof data?.weeklyLimitMinutes === "number" ? data.weeklyLimitMinutes * 60 : null,
+      weeklyRemainingSeconds,
+      totalRemainingSeconds,
+    });
+  }, [effectivePlan]);
+
+  const hasQuotaRemaining = !speechQuota || [
+    speechQuota.dailyRemainingSeconds,
+    speechQuota.weeklyRemainingSeconds,
+    speechQuota.plan !== "free" && speechQuota.totalRemainingSeconds !== null && speechQuota.totalRemainingSeconds >= 0
+      ? speechQuota.totalRemainingSeconds
+      : null,
+  ].filter((value): value is number => typeof value === "number").every((value) => value > 0);
+
+  const quotaRemainingSeconds = speechQuota
+    ? [
+        speechQuota.dailyRemainingSeconds,
+        speechQuota.weeklyRemainingSeconds,
+        speechQuota.plan !== "free" && speechQuota.totalRemainingSeconds !== null && speechQuota.totalRemainingSeconds >= 0
+          ? speechQuota.totalRemainingSeconds
+          : null,
+      ].filter((value): value is number => typeof value === "number").reduce((min, value) => Math.min(min, value), Number.POSITIVE_INFINITY)
+    : null;
+
+  // Read the server-controlled allowance when the page opens so the banner
+  // and Start button are accurate before the first listening session.
   useEffect(() => {
-    if (hasUnlimitedPlan) return;
+    if (isAdmin || hasCustomApiKey) return;
+    const deviceId = getDeviceId();
+    if (!deviceId) return;
+    void fetch(
+      `${API_BASE}/api/device/speech-to-scripture/check-access?deviceId=${encodeURIComponent(deviceId)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-App-Version": APP_VERSION,
+          "X-Device-Secret": getDeviceSecret() || "",
+        },
+      },
+    ).then((res) => res.json().catch(() => null)).then((data) => {
+      if (data) updateSpeechQuota(data);
+    }).catch(() => {
+      // The start flow remains the authoritative retry path.
+    });
+  }, [hasCustomApiKey, isAdmin, updateSpeechQuota]);
+
+  const quotaExhausted = Boolean(speechQuota && !hasQuotaRemaining);
+
+  useEffect(() => {
+    if (hasUnlimitedPlan || hasCustomApiKey) return;
     void syncCreditsWithBackend().then((bal) => {
       if (bal === null) {
         setIsUnlimited(false);
@@ -193,10 +293,12 @@ export default function SpeechToScripturePage() {
     });
     const unsub = onCreditChange((bal) => setCreditBalance(bal));
     return unsub;
-  }, [hasUnlimitedPlan]);
+  }, [hasCustomApiKey, hasUnlimitedPlan]);
 
-  const hasCredits = isAdmin || hasUnlimitedPlan || isUnlimited || creditBalance > 0;
+  const hasCredits = isAdmin || hasUnlimitedPlan || isUnlimited || hasCustomApiKey || creditBalance > 0;
   const chargedSessionCreditsRef = useRef(0);
+  const chargedSessionSecondsRef = useRef(0);
+  const sessionIdRef = useRef("");
   const chargingSessionCreditsRef = useRef(false);
   const stoppedForCreditFailureRef = useRef(false);
   const limitStopTriggeredRef = useRef(false);
@@ -219,6 +321,18 @@ export default function SpeechToScripturePage() {
   const selectMic = useCallback((micId: string) => {
     setSelectedMic(micId);
     savePreferredMicId(micId);
+  }, []);
+
+  const [inputGain, setInputGainState] = useState(() => {
+    const mv = getMvSettings();
+    return Number(mv.inputGain ?? 100);
+  });
+
+  const handleGainChange = useCallback((newGain: number) => {
+    const clamped = Math.max(50, Math.min(400, newGain));
+    setInputGainState(clamped);
+    updateMvSettings({ inputGain: clamped });
+    void lmDockService.setInputGain(clamped);
   }, []);
 
   // ── OBS ──
@@ -325,55 +439,89 @@ export default function SpeechToScripturePage() {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [generatedTranscriptId, setGeneratedTranscriptId] = useState<string | null>(null);
 
-  const chargeTranscriptionCredits = useCallback(async (
-    targetCredits: number,
+  const chargeTranscriptionDuration = useCallback(async (
     elapsedSeconds: number,
     reason: "live" | "final",
   ): Promise<boolean> => {
-    if (isAdmin || hasUnlimitedPlan || isUnlimited) {
-      chargedSessionCreditsRef.current = Math.max(chargedSessionCreditsRef.current, targetCredits);
+    if (isAdmin || hasUnlimitedPlan || isUnlimited || hasCustomApiKey) {
+      chargedSessionSecondsRef.current = Math.max(chargedSessionSecondsRef.current, elapsedSeconds);
       return true;
     }
 
-    const delta = targetCredits - chargedSessionCreditsRef.current;
-    if (delta <= 0) return true;
+    const deltaSeconds = Math.round(elapsedSeconds - chargedSessionSecondsRef.current);
+    if (deltaSeconds <= 0) return true;
     if (chargingSessionCreditsRef.current) return true;
 
     chargingSessionCreditsRef.current = true;
     try {
-      const ok = await deductCreditsWithSync(
-        user?.id || "device",
-        delta,
-        "transcription",
-        reason === "live"
-          ? `Transcription live charge: ${delta} credit${delta === 1 ? "" : "s"}`
-          : `Transcription final charge: ${Math.round(elapsedSeconds)}s audio`,
-        {
-          durationSec: Math.round(elapsedSeconds),
+      const offset = Math.round(chargedSessionSecondsRef.current);
+      const requestId = `${sessionIdRef.current || "sts"}_${offset}`;
+
+      const res = await deductTranscriptionDurationWithSync({
+        seconds: deltaSeconds,
+        requestId,
+        description: reason === "live"
+          ? `Transcription live charge: ${deltaSeconds}s audio`
+          : `Transcription final charge: ${deltaSeconds}s audio`,
+        metadata: {
+          durationSec: deltaSeconds,
           source: "speech_to_scripture",
           chargeReason: reason,
-          previouslyChargedCredits: chargedSessionCreditsRef.current,
+          previouslyChargedSeconds: offset,
+          sessionId: sessionIdRef.current,
         },
-        { allowOffline: false },
-      );
+      });
 
-      if (!ok) {
+      if (!res.success) {
+        setSpeechQuota((previous) => previous
+          ? {
+              ...previous,
+              dailyRemainingSeconds: typeof res.dailyRemainingSeconds === "number"
+                ? res.dailyRemainingSeconds
+                : previous.dailyRemainingSeconds,
+              weeklyRemainingSeconds: typeof res.weeklyRemainingSeconds === "number"
+                ? res.weeklyRemainingSeconds
+                : previous.weeklyRemainingSeconds,
+            }
+          : previous);
+        if (res.exhausted || res.reason === "daily_speech_limit" || res.reason === "weekly_speech_limit") {
+          setAccessDenied({ reason: res.reason || "TRANSCRIPTION_CREDITS_EXHAUSTED" });
+        }
         setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
         setTimeout(() => setSaveToast(null), 4000);
         return false;
       }
 
-      chargedSessionCreditsRef.current += delta;
+      chargedSessionSecondsRef.current += deltaSeconds;
+      chargedSessionCreditsRef.current = Math.round((chargedSessionSecondsRef.current / 60) * 100) / 100;
+      setSpeechQuota((previous) => {
+        if (!previous) return previous;
+        const subtract = (value: number | null) => value === null ? null : Math.max(0, value - deltaSeconds);
+        return {
+          ...previous,
+          dailyRemainingSeconds: subtract(previous.dailyRemainingSeconds),
+          weeklyRemainingSeconds: subtract(previous.weeklyRemainingSeconds),
+          totalRemainingSeconds: subtract(previous.totalRemainingSeconds),
+        };
+      });
       return true;
     } catch (err) {
-      console.warn("[Credits] Transcription credit deduction error:", err);
+      console.warn("[Credits] Transcription duration deduction error:", err);
       setSaveToast({ message: t("verseAi.creditSyncFailed"), isError: true });
       setTimeout(() => setSaveToast(null), 4000);
       return false;
     } finally {
       chargingSessionCreditsRef.current = false;
     }
-  }, [hasUnlimitedPlan, isAdmin, isUnlimited, t, user?.id]);
+  }, [hasCustomApiKey, hasUnlimitedPlan, isAdmin, isUnlimited, t]);
+
+  const chargeTranscriptionCredits = useCallback(async (
+    _targetCredits: number,
+    elapsedSeconds: number,
+    reason: "live" | "final",
+  ): Promise<boolean> => {
+    return chargeTranscriptionDuration(elapsedSeconds, reason);
+  }, [chargeTranscriptionDuration]);
 
   const handleStart = useCallback(async () => {
     // Disable button and show checking state
@@ -382,6 +530,18 @@ export default function SpeechToScripturePage() {
     setSessionLimitSeconds(null);
 
     try {
+      if (hasCustomApiKey) {
+        console.log("[SpeechToScripture] 🚀 Using direct API key / Dev mode — starting lmDockService directly");
+        chargedSessionCreditsRef.current = 0;
+        stoppedForCreditFailureRef.current = false;
+        limitStopTriggeredRef.current = false;
+        setSessionLimitSeconds(null);
+        track("sts_listening_started", { mic: selectedMic || "default" });
+        trackVoiceSessionStarted();
+        await lmDockService.startListening(selectedMic || undefined);
+        return;
+      }
+
       const deviceId = getDeviceId();
       console.log("[SpeechToScripture] 🎤 handleStart called, deviceId:", deviceId);
       const requestAccess = async () => {
@@ -401,6 +561,7 @@ export default function SpeechToScripturePage() {
       };
 
       let { data } = await requestAccess();
+      updateSpeechQuota(data);
       console.log("[SpeechToScripture] 📋 Access check response:", JSON.stringify(data));
 
       // If device not found, try refreshing bootstrap (may re-register device) and retry once
@@ -409,6 +570,7 @@ export default function SpeechToScripturePage() {
         const refreshResult = await refreshAccountBootstrapFromServer();
         if (refreshResult.status === "ok") {
           ({ data } = await requestAccess());
+          updateSpeechQuota(data);
         } else {
           console.warn("[SpeechToScripture] Bootstrap refresh failed:", refreshResult.status);
         }
@@ -420,6 +582,7 @@ export default function SpeechToScripturePage() {
         console.warn("[SpeechToScripture] Still not found, retrying without device secret...");
         await clearDeviceSecretForRecovery();
         ({ data } = await requestAccess());
+        updateSpeechQuota(data);
       }
 
       if (!data.allowed) {
@@ -430,10 +593,19 @@ export default function SpeechToScripturePage() {
 
       // Backend approved — start listening
       console.log("[SpeechToScripture] ✅ Access ALLOWED — calling lmDockService.startListening()");
+      sessionIdRef.current = `sts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      chargedSessionSecondsRef.current = 0;
       chargedSessionCreditsRef.current = 0;
       stoppedForCreditFailureRef.current = false;
       limitStopTriggeredRef.current = false;
-      setSessionLimitSeconds(typeof data.dailyRemainingSeconds === "number" ? data.dailyRemainingSeconds : null);
+      const sessionLimits = [
+        typeof data.dailyRemainingSeconds === "number" ? data.dailyRemainingSeconds : null,
+        typeof data.weeklyRemainingSeconds === "number" ? data.weeklyRemainingSeconds : null,
+        typeof data.transcriptionBalance?.totalAvailableSeconds === "number" && data.transcriptionBalance.totalAvailableSeconds >= 0
+          ? data.transcriptionBalance.totalAvailableSeconds
+          : null,
+      ].filter((value): value is number => typeof value === "number");
+      setSessionLimitSeconds(sessionLimits.length > 0 ? Math.min(...sessionLimits) : null);
       track("sts_listening_started", { mic: selectedMic || "default" });
       trackVoiceSessionStarted();
       await lmDockService.startListening(selectedMic || undefined);
@@ -444,7 +616,7 @@ export default function SpeechToScripturePage() {
     } finally {
       setCheckingAccess(false);
     }
-  }, [selectedMic]);
+  }, [hasCustomApiKey, selectedMic, updateSpeechQuota]);
 
   const confirmStop = useCallback(() => {
     track("sts_listening_stopped", { durationSec: elapsedRef.current });
@@ -458,12 +630,11 @@ export default function SpeechToScripturePage() {
     // AssemblyAI session can complete with no credit transaction recorded.
     void (async () => {
       try {
-        const creditsNeeded = await calculateTranscriptionCredits(durationSec);
-        const remainingCredits = Math.max(0, creditsNeeded - chargedSessionCreditsRef.current);
-        if (remainingCredits > 0 && !serviceFailed) {
-          const ok = await chargeTranscriptionCredits(creditsNeeded, durationSec, "final");
+        const remainingSeconds = Math.max(0, durationSec - chargedSessionSecondsRef.current);
+        if (remainingSeconds > 0 && !serviceFailed) {
+          const ok = await chargeTranscriptionDuration(durationSec, "final");
           if (!ok) {
-            setAccessDenied({ reason: "insufficient_credits" });
+            setAccessDenied((previous) => previous || { reason: "TRANSCRIPTION_CREDITS_EXHAUSTED" });
             setSaveToast({ message: t("verseAi.creditDeductionFailed"), isError: true });
             setTimeout(() => setSaveToast(null), 4000);
           }
@@ -615,9 +786,14 @@ export default function SpeechToScripturePage() {
   useEffect(() => {
     if (!isTranscribing || sessionLimitSeconds === null || sessionLimitSeconds <= 0 || elapsed < sessionLimitSeconds || limitStopTriggeredRef.current) return;
     limitStopTriggeredRef.current = true;
-    setAccessDenied({ reason: "daily_speech_limit" });
+    const limitReason = speechQuota?.dailyRemainingSeconds === 0
+      ? "daily_speech_limit"
+      : speechQuota?.weeklyRemainingSeconds === 0
+        ? "weekly_speech_limit"
+        : "TRANSCRIPTION_CREDITS_EXHAUSTED";
+    setAccessDenied({ reason: limitReason });
     confirmStop();
-  }, [confirmStop, elapsed, isTranscribing, sessionLimitSeconds]);
+  }, [confirmStop, elapsed, isTranscribing, sessionLimitSeconds, speechQuota]);
 
   useEffect(() => {
     if (!isListening || stoppedForCreditFailureRef.current) return;
@@ -625,22 +801,29 @@ export default function SpeechToScripturePage() {
     let cancelled = false;
     void (async () => {
       const chargeSeconds = Math.max(1, elapsed);
-      const targetCredits = await calculateTranscriptionCredits(chargeSeconds);
-      if (cancelled || targetCredits <= chargedSessionCreditsRef.current) return;
+      // Periodically charge every 15s elapsed
+      if (cancelled || (chargeSeconds - chargedSessionSecondsRef.current) < 15) return;
 
-      const ok = await chargeTranscriptionCredits(targetCredits, chargeSeconds, "live");
+      const ok = await chargeTranscriptionDuration(chargeSeconds, "live");
       if (!cancelled && !ok) {
+        console.warn("[SpeechToScripture] 🛑 Stopped listening due to credit failure!", { chargeSeconds });
         stoppedForCreditFailureRef.current = true;
         lmDockService.stopListening();
         setShowStopConfirm(false);
-        setAccessDenied({ reason: "insufficient_credits" });
+        setAccessDenied((previous) => previous || {
+          reason: speechQuota?.dailyRemainingSeconds === 0
+            ? "daily_speech_limit"
+            : speechQuota?.weeklyRemainingSeconds === 0
+              ? "weekly_speech_limit"
+              : "TRANSCRIPTION_CREDITS_EXHAUSTED",
+        });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [chargeTranscriptionCredits, elapsed, isListening]);
+  }, [chargeTranscriptionDuration, elapsed, isListening, speechQuota]);
 
   // ── Selected candidate (overrides auto top-match when set) ──
   const [selectedCandidate, setSelectedCandidate] = useState<VoiceBibleCandidate | null>(null);
@@ -894,40 +1077,95 @@ export default function SpeechToScripturePage() {
       <header className="sts3-header">
         <div className="sts3-header-left">
           <div className="sts3-logo-box">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+            <Mic size={18} />
           </div>
           <div>
             <div className="sts3-header-title">Verse AI</div>
-            <div className="sts3-header-sub">Real-time speech to scripture detection</div>
-            {effectivePlan === "free" && <div className="sts3-header-sub">Free plan: {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes daily · {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays</div>}
+            <div className="sts3-header-sub">{t("verseAi.headerDesc", "Real-time speech to scripture detection & OBS broadcast")}</div>
+            {speechQuota?.plan === "free" && (
+              <div className="sts3-plan-badge">
+                Free plan · {formatQuotaTime(speechQuota.dailyRemainingSeconds)} today · {formatQuotaTime(speechQuota.weeklyRemainingSeconds)} this week
+              </div>
+            )}
+            {speechQuota && speechQuota.plan !== "free" && (
+              <div className="sts3-plan-badge">
+                {speechQuota.plan} plan · {formatQuotaTime(speechQuota.totalRemainingSeconds)} remaining
+              </div>
+            )}
           </div>
         </div>
-        <CreditsDisplay userId={user?.id} />
         <div className="sts3-header-right">
-          <div className="sts3-header-mic-group">
-            <button
-              className={`sts3-btn ${canStopListening ? "sts3-btn--red" : ""}`}
-              onClick={canStopListening ? handleStop : handleStart}
-              disabled={checkingAccess || (!canStopListening && !hasCredits)}
-              title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
-              {canStopListening ? (
-                isConnecting ? (
-                  <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
-                ) : (
-                  <><StopCircle size={16} /> {t("verseAi.stopListening")}</>
-                )
-              ) : checkingAccess ? (
-                <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
-              ) : !hasCredits ? (
-                <><Lock size={16} /> {t("verseAi.noCredits")}</>
-              ) : (
-                <><Mic size={16} /> {t("verseAi.showInObs")}</>
-              )}
-            </button>
-          </div>
+          {/* Quick links: Transcripts library & New Session */}
+          <button
+            type="button"
+            className="sts3-header-icon-btn"
+            style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+            onClick={() => navigate("/transcripts")}
+            title="View all saved transcripts"
+          >
+            <FileText size={15} />
+            <span>Transcripts</span>
+          </button>
 
+          {!canStopListening && (snapshot.entries.length > 0 || snapshot.suggestions.length > 0) && (
+            <button
+              type="button"
+              className="sts3-header-icon-btn"
+              style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+              onClick={() => {
+                lmDockService.stopListening();
+                setElapsed(0);
+              }}
+              title="Start a new speech session"
+            >
+              <RotateCcw size={15} />
+              <span>New Session</span>
+            </button>
+          )}
+
+          <CreditsDisplay userId={user?.id} />
+          <button
+            className={`sts3-btn ${canStopListening ? "sts3-btn--red" : "sts3-btn--primary"}`}
+            onClick={canStopListening ? handleStop : handleStart}
+            disabled={checkingAccess || (!canStopListening && (!hasCredits || quotaExhausted))}
+            title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && quotaExhausted ? "Speech to Scripture limit reached" : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
+            {canStopListening ? (
+              isConnecting ? (
+                <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
+              ) : (
+                <><StopCircle size={15} /> {t("verseAi.stopListening")}</>
+              )
+            ) : checkingAccess ? (
+              <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
+            ) : quotaExhausted ? (
+              <><Clock size={15} /> Limit reached</>
+            ) : !hasCredits ? (
+              <><Lock size={15} /> {t("verseAi.noCredits")}</>
+            ) : (
+              <><Mic size={15} /> {t("verseAi.showInObs", "Start Listening")}</>
+            )}
+          </button>
         </div>
       </header>
+
+      {speechQuota && (
+        <div className={`sts3-quota-banner${quotaExhausted ? " sts3-quota-banner--exhausted" : ""}`}>
+          <Clock size={15} />
+          <span>
+            {quotaExhausted
+              ? speechQuota.plan === "free"
+                ? speechQuota.dailyRemainingSeconds === 0
+                  ? "Limit reached for today. Try again tomorrow."
+                  : "Weekly limit reached. Your allowance refreshes next week."
+                : "Transcription allowance reached. Upgrade or add more credits to continue."
+              : speechQuota.plan === "free"
+                ? `${formatQuotaTime(quotaRemainingSeconds)} left · ${formatQuotaTime(speechQuota.weeklyRemainingSeconds)} this week`
+                : `${formatQuotaTime(quotaRemainingSeconds)} left in your transcription allowance`}
+          </span>
+          {!quotaExhausted && <button type="button" onClick={() => navigate("/subscription/plans")}>Upgrade</button>}
+          {quotaExhausted && <button type="button" onClick={() => navigate("/subscription/plans")}>View plans</button>}
+        </div>
+      )}
 
       {/* ── Transcript generated banner ── */}
       {generatedTranscriptId && (
@@ -1130,11 +1368,36 @@ export default function SpeechToScripturePage() {
                 <Radio size={14} className={isBroadcastConnected ? "sts3-footer-icon--green" : ""} />
                 {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
               </div>
+              <div className="sts3-gain-control" title={t("verseAi.micGainTitle", "Microphone Sensitivity / Boost (50% - 400%)")}>
+                <Volume2 size={13} />
+                <span style={{ minWidth: 38 }}>{inputGain}%</span>
+                <input
+                  type="range"
+                  min="50"
+                  max="400"
+                  step="25"
+                  value={inputGain}
+                  onChange={(e) => handleGainChange(Number(e.target.value))}
+                  className="sts3-gain-slider"
+                  aria-label="Microphone Sensitivity Boost"
+                />
+                {isListening && (
+                  <div className="sts3-mini-meter" title={`Mic Level: ${levelPercent}%`}>
+                    <div
+                      className="sts3-mini-meter-fill"
+                      style={{
+                        width: `${levelPercent}%`,
+                        backgroundColor: levelPercent > 80 ? "var(--error, #ef4444)" : levelPercent > 50 ? "var(--warning, #f59e0b)" : "var(--success, #10b981)",
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Search */}
             <div className="sts3-search-box">
-              {/* <Search size={14} className="sts3-search-icon" /> */}
+              <Search size={13} className="sts3-search-icon" />
               <input
                 className="sts3-search-input"
                 type="text"
@@ -1579,16 +1842,22 @@ export default function SpeechToScripturePage() {
                 </button>
               </>
             )}
-            {accessDenied.reason === "insufficient_credits" && (
+            {(accessDenied.reason === "insufficient_credits" || accessDenied.reason === "TRANSCRIPTION_CREDITS_EXHAUSTED") && (
               <>
                 <Zap size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">{t("verseAi.insufficientCredits")}</h2>
+                <h2 className="sts3-lock-title">Transcription Credits Exhausted</h2>
                 <p className="sts3-lock-desc">
-                  {t("verseAi.insufficientCreditsDesc")}
+                  You have used all your included and top-up transcription credits. Top up credits or upgrade your plan to continue real-time sermon transcription.
                 </p>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                   <button
                     className="sts3-btn sts3-btn--primary"
+                    onClick={() => navigate("/credits")}
+                    title="Top Up Credits">
+                    Top Up Credits
+                  </button>
+                  <button
+                    className="sts3-btn sts3-btn--secondary"
                     onClick={() => navigate("/subscription/plans")}
                     title={t("verseAi.upgradePlan")}>
                     {t("verseAi.upgradePlan")}
@@ -1602,12 +1871,19 @@ export default function SpeechToScripturePage() {
                 </div>
               </>
             )}
-            {accessDenied.reason === "daily_speech_limit" && (
+            {(accessDenied.reason === "daily_speech_limit" || accessDenied.reason === "weekly_speech_limit") && (
               <>
                 <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
-                <h2 className="sts3-lock-title">Daily free allowance used</h2>
+                <h2 className="sts3-lock-title">
+                  {accessDenied.reason === "daily_speech_limit" ? "Daily limit reached" : "Weekly limit reached"}
+                </h2>
                 <p className="sts3-lock-desc">
-                  Free accounts can use Speech to Scripture for {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes each day and {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays. Your allowance will be available again tomorrow.
+                  {accessDenied.reason === "daily_speech_limit"
+                    ? "Limit reached for today. Try again tomorrow."
+                    : "Your weekly allowance is used. It will refresh at the start of the next week."}
+                  {speechQuota?.dailyLimitSeconds !== null && speechQuota?.dailyLimitSeconds !== undefined && (
+                    <> Free accounts have {formatQuotaTime(speechQuota.dailyLimitSeconds)} per day.</>
+                  )}
                 </p>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="sts3-btn sts3-btn--primary" onClick={() => navigate("/subscription/plans")} title="View plans">View plans</button>
@@ -1687,7 +1963,29 @@ export default function SpeechToScripturePage() {
       {/* ── Service Error ── */}
       {assemblyAIError && (
         <div className="sts3-lock-overlay">
-          <div className="sts3-lock-card">
+          <div className="sts3-lock-card" style={{ position: "relative" }}>
+            <button
+              onClick={() => {
+                setAssemblyAIError(false);
+                lmDockService.stopListening();
+              }}
+              title={t("common.close", "Close and Stop")}
+              style={{
+                position: "absolute",
+                top: 14,
+                right: 14,
+                background: "transparent",
+                border: "none",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+                padding: 6,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+              <X size={18} />
+            </button>
             <h2 className="sts3-lock-title">{t("verseAi.voiceBibleUnavailable")}</h2>
             <p className="sts3-lock-desc">
               {t("verseAi.voiceBibleUnavailableDesc")}
@@ -1697,15 +1995,26 @@ export default function SpeechToScripturePage() {
                 {snapshot.error}
               </p>
             )}
-            <button
-              className="sts3-btn sts3-btn--primary"
-              onClick={() => {
-                setAssemblyAIError(false);
-                void lmDockService.startListening(selectedMic || undefined);
-              }}
-              title={t("verseAi.retryConnection")}>
-              {t("verseAi.retryConnection")}
-            </button>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
+              <button
+                className="sts3-btn sts3-btn--primary"
+                onClick={() => {
+                  setAssemblyAIError(false);
+                  void lmDockService.startListening(selectedMic || undefined);
+                }}
+                title={t("verseAi.retryConnection")}>
+                {t("verseAi.retryConnection")}
+              </button>
+              <button
+                className="sts3-btn sts3-btn--red"
+                onClick={() => {
+                  setAssemblyAIError(false);
+                  lmDockService.stopListening();
+                }}
+                title={t("verseAi.stopListening", "Stop Listening")}>
+                <StopCircle size={15} /> {t("verseAi.stopListening", "Stop")}
+              </button>
+            </div>
           </div>
         </div>
       )}

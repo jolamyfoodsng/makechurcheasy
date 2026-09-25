@@ -531,7 +531,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                   ref={lyricsTextareaRef}
                   className="ws-lyrics-textarea"
                   style={{ fontFamily: '"Charis SIL", "SF Mono", "Noto Sans Mono", "Fira Code", "Consolas", monospace' }}
-                  placeholder={"Verse 1:\nLine 1\nLine 2\n\nChorus:\nChorus line 1\nChorus line 2"}
+                  placeholder={"Paste or type lyrics here…\n\n• Press Enter (or leave empty line) to split text into slides.\n• Add section tags like [Verse 1], <Chorus>, [Bridge], Verse 1: or Chorus: to set a header badge on the slide.\n\nExample:\n[Verse 1]\nFirst line of verse\nSecond line\n\n<Chorus>\nFirst line of chorus\nSecond line"}
                   value={lyrics}
                   onChange={(e) => handleLyricsChange(e.target.value)}
                   onSelect={syncSelectionRange}

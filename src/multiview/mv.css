@@ -168,6 +168,12 @@
   width: 100%;
 }
 
+.mv-content:has(.settings-page) {
+  overflow: hidden;
+  height: 100%;
+  max-width: 100%;
+}
+
 /* ════════════════════════════════════════════════════════════
    PAGES — shared page styles
    ════════════════════════════════════════════════════════════ */

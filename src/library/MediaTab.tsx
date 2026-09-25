@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { Search, Plus, Share2, Eye, MoreVertical, ArrowLeft, X as CloseIcon, Film } from "lucide-react";
 import i18n from "../i18n";
 import type { MediaItem } from "./libraryTypes";
 import { getAllMedia, saveMedia, deleteMedia, renameMedia } from "./libraryDb";
@@ -622,119 +623,126 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
         }
       }}
     >
-      <div className="lib-media-view-switcher" role="tablist" aria-label={t("library.share.mediaViews")}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mediaView === "library"}
-          className={`lib-media-view-btn${mediaView === "library" ? " is-active" : ""}`}
-          onClick={() => setMediaView("library")}
-        >
-          <Icon name="perm_media" size={16} />
-          <span>{t("library.receiver.mediaLibrary")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mediaView === "share"}
-          className={`lib-media-view-btn${mediaView === "share" ? " is-active" : ""}`}
-          onClick={() => setMediaView("share")}
-        >
-          <Icon name="send" size={16} />
-          <span className="lib-media-view-btn__copy">
-            <span>{t("library.share.openShare")}</span>
-            <small>{t("library.share.receiveTab")} / {t("library.share.sendTab")}</small>
-          </span>
-        </button>
-      </div>
-
-      {mediaView === "share" && <MediaShareTab initialMode={openReceiver ? "receive" : "send"} onMediaChanged={reload} />}
+      {mediaView === "share" && (
+        <div className="lib-media-share-container">
+          <div className="lib-media-share-topbar">
+            <button
+              type="button"
+              className="lib-media-back-btn"
+              onClick={() => setMediaView("library")}
+            >
+              <ArrowLeft size={16} />
+              <span>{t("library.receiver.backToMediaLibrary", "Back to Media Library")}</span>
+            </button>
+          </div>
+          <MediaShareTab initialMode={openReceiver ? "receive" : "send"} onMediaChanged={reload} />
+        </div>
+      )}
 
       {mediaView === "library" && (
         <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        style={{ display: "none" }}
-        onChange={(event) => {
-          const files = event.target.files;
-          if (files?.length) {
-            void handleDirectUpload(files);
-          }
-        }}
-      />
-      {/* Toolbar */}
-      <div className="lib-toolbar">
-        <div className="lib-toolbar-left">
-          {/* Search */}
-          <div className="lib-search-wrap">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const files = event.target.files;
+              if (files?.length) {
+                void handleDirectUpload(files);
+              }
+            }}
+          />
 
-            <input
-              className="lib-search-input"
-              type="text"
-              placeholder={t("library.mediaTab.searchPlaceholder")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label={t("library.mediaTab.searchPlaceholder")}
-            />
-            {search && (
-              <button
-                type="button"
-                className="lib-search-clear"
-                onClick={() => setSearch("")}
-                aria-label={t("library.mediaTab.clearSearch")}
-                title={t("library.mediaTab.clearSearch")}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Direct media filters */}
-          <div className="lib-media-filter-tabs" role="tablist" aria-label={t("library.mediaTab.filter")}>
-            {(["all", "image", "video"] as FilterType[]).map((f) => {
-              const label = f === "all"
-                ? t("common.all")
-                : f === "image"
-                  ? t("library.mediaTab.preview.image")
-                  : t("library.mediaTab.preview.video");
-              return (
+          {/* Top toolbar */}
+          <div className="lib-media-header-toolbar">
+            <div className="lib-media-search-box">
+              <Search size={18} className="lib-media-search-icon" />
+              <input
+                className="lib-media-search-input"
+                type="text"
+                placeholder={t("library.mediaTab.searchPlaceholder", "Search media...")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label={t("library.mediaTab.searchPlaceholder", "Search media...")}
+              />
+              {search && (
                 <button
-                  key={f}
                   type="button"
-                  role="tab"
-                  aria-selected={filter === f}
-                  className={`lib-media-filter-tab${filter === f ? " is-active" : ""}`}
-                  onClick={() => setFilter(f)}
-                  title={label}
+                  className="lib-media-search-clear"
+                  onClick={() => setSearch("")}
+                  aria-label={t("library.mediaTab.clearSearch", "Clear search")}
+                  title={t("library.mediaTab.clearSearch", "Clear search")}
                 >
-                  {label}
+                  <CloseIcon size={14} />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Segmented Filter Pills */}
+            <div className="lib-media-filter-segmented" role="tablist" aria-label={t("library.mediaTab.filter")}>
+              {(["all", "image", "video"] as FilterType[]).map((f) => {
+                const label = f === "all"
+                  ? t("common.all", "All")
+                  : f === "image"
+                    ? t("library.mediaTab.preview.image", "Image")
+                    : t("library.mediaTab.preview.video", "Video");
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === f}
+                    className={`lib-media-segmented-btn${filter === f ? " is-active" : ""}`}
+                    onClick={() => setFilter(f)}
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {showMediaUsage && (
+              <span className="lib-song-usage-badge">
+                {!isImageUnlimited && `Images ${imageCount}/${imageLimit}`}
+                {!isImageUnlimited && !isVideoUnlimited && " · "}
+                {!isVideoUnlimited && `Videos ${videoCount}/${videoLimit}`}
+              </span>
+            )}
+
+            <button
+              type="button"
+              className="lib-media-add-action-btn"
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
+              title={t("library.mediaTab.addMedia", "Add Media")}
+            >
+              <Plus size={18} />
+              <span>{pageUploading ? `${t("library.mediaTab.uploading")}...` : t("library.mediaTab.addMedia", "Add Media")}</span>
+            </button>
           </div>
-        </div>
 
-        {showMediaUsage && (
-          <span className="lib-song-usage-badge">
-            {!isImageUnlimited && `Images ${imageCount}/${imageLimit}`}
-            {!isImageUnlimited && !isVideoUnlimited && " · "}
-            {!isVideoUnlimited && `Videos ${videoCount}/${videoLimit}`}
-          </span>
-        )}
-
-        <button
-          className="lib-add-btn"
-          onClick={() => {
-            // Always open file picker — per-file quota is enforced after file selection
-            fileInputRef.current?.click();
-          }}
-          title={t("library.mediaTab.addMedia")}>
-          <Icon name="add" size={20} />
-          {pageUploading ? `${t("library.mediaTab.uploading")}...` : t("library.mediaTab.addMedia")}
-        </button>
-      </div>
+          {/* Share callout banner */}
+          <div className="lib-media-share-callout">
+            <div className="lib-media-share-callout__left">
+              <div className="lib-media-share-callout__icon">
+                <Share2 size={24} />
+              </div>
+              <div className="lib-media-share-callout__text">
+                <h4 className="lib-media-share-callout__title">{t("library.share.teamTitle", "Share files with your team")}</h4>
+                <p className="lib-media-share-callout__subtitle">{t("library.share.teamSubtitle", "Receive or send media between devices.")}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="lib-media-share-callout__btn"
+              onClick={() => setMediaView("share")}
+            >
+              {t("library.share.openShareFiles", "Open Share Files")}
+            </button>
+          </div>
 
       {/* Grid */}
       {loading ? (
@@ -826,7 +834,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                     />
                   ) : (
                     <div className="lib-media-thumb--video-placeholder">
-                      <Icon name="movie" size={32} />
+                      <Film size={36} />
                     </div>
                   )
                 ) : m.type === "image" ? (
@@ -848,7 +856,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                 <div className="lib-media-thumb-overlay" />
                 {/* Type badge */}
                 <span className="lib-media-badge-type">
-                  {(m.type === "video" ? t("library.mediaTab.preview.video") : t("library.mediaTab.preview.image")).toUpperCase()}
+                  {(m.type === "video" ? t("library.mediaTab.preview.video", "Video") : t("library.mediaTab.preview.image", "Image")).toUpperCase()}
                 </span>
                 {/* Duration badge */}
                 {m.type === "video" && m.durationSec != null && (
@@ -866,9 +874,9 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                 )}
               </div>
 
-              {/* Info row */}
-              <div className="lib-media-info">
-                <div className="lib-media-info-text">
+              {/* Card Footer */}
+              <div className="lib-media-card-footer">
+                <div className="lib-media-card-info">
                   {renameId === m.id ? (
                     <input
                       className="lib-rename-input"
@@ -896,67 +904,71 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                         className="lib-media-name"
                         title={m.name}
                       >
-                        {m.name.length > 25 ? `${m.name.slice(0, 25)}...` : m.name}
+                        {m.name.length > 22 ? `${m.name.slice(0, 22)}...` : m.name}
                       </h4>
                       <p className="lib-media-meta">
-                        {m.type === "image" && m.mimeType
-                          ? `${m.mimeType.split("/")[1]?.toUpperCase() || "IMG"}`
-                          : ""}
-                        {m.fileSize ? (m.type === "image" ? " • " : "") + fmtFileSize(m.fileSize) : ""}
-                        {!m.fileSize && m.createdAt ? timeAgo(m.createdAt) : ""}
+                        {m.createdAt ? timeAgo(m.createdAt) : "Just now"}
                       </p>
                     </>
                   )}
                 </div>
-                <button
-                  className="lib-media-view-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPreviewItem(m);
-                  }}
-                  aria-label={`${t("library.mediaTab.view")} ${m.name}`}
-                  title={t("library.mediaTab.view")}>
-                  <Icon name="visibility" size={16} />
-                  {t("library.mediaTab.view")}
-                </button>
-                {/* 3-dot menu */}
-                <div className="lib-media-menu-wrap" ref={menuOpenId === m.id ? menuRef : undefined}>
+
+                <div className="lib-media-card-actions">
                   <button
-                    className="lib-media-menu-btn"
+                    type="button"
+                    className="lib-media-card-view-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuOpenId(menuOpenId === m.id ? null : m.id);
+                      setPreviewItem(m);
                     }}
-                    title={t("library.mediaTab.filter")}>
-                    <Icon name="more_vert" size={20} />
+                    aria-label={`${t("library.mediaTab.view", "View")} ${m.name}`}
+                    title={t("library.mediaTab.view", "View")}>
+                    <Eye size={15} />
+                    <span>{t("library.mediaTab.view", "View")}</span>
                   </button>
-                  {menuOpenId === m.id && (
-                    <div className="lib-media-menu-dropdown">
-                      <button
-                        className="lib-media-menu-action"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenameId(m.id);
-                          setRenameValue(m.name);
-                          setMenuOpenId(null);
-                        }}
-                        title={t("library.mediaTab.rename")}>
-                        <Icon name="edit" size={16} />
-                        {t("library.mediaTab.rename")}
-                      </button>
-                      <button
-                        className="lib-media-menu-action lib-media-menu-action--danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmId(m.id);
-                          setMenuOpenId(null);
-                        }}
-                        title={t("common.delete")}>
-                        <Icon name="delete" size={16} />
-                        {t("common.delete")}
-                      </button>
-                    </div>
-                  )}
+
+                  {/* 3-dot menu */}
+                  <div className="lib-media-menu-wrap" ref={menuOpenId === m.id ? menuRef : undefined}>
+                    <button
+                      type="button"
+                      className="lib-media-card-menu-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpenId(menuOpenId === m.id ? null : m.id);
+                      }}
+                      title={t("library.mediaTab.filter")}>
+                      <MoreVertical size={16} />
+                    </button>
+                    {menuOpenId === m.id && (
+                      <div className="lib-media-menu-dropdown">
+                        <button
+                          type="button"
+                          className="lib-media-menu-action"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenameId(m.id);
+                            setRenameValue(m.name);
+                            setMenuOpenId(null);
+                          }}
+                          title={t("library.mediaTab.rename")}>
+                          <Icon name="edit" size={16} />
+                          {t("library.mediaTab.rename")}
+                        </button>
+                        <button
+                          type="button"
+                          className="lib-media-menu-action lib-media-menu-action--danger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmId(m.id);
+                            setMenuOpenId(null);
+                          }}
+                          title={t("common.delete")}>
+                          <Icon name="delete" size={16} />
+                          {t("common.delete")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

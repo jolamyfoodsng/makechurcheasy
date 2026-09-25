@@ -226,16 +226,18 @@ export interface CreditDetails {
   totalConsumed: number;
   planAllocation: number;
   adminGranted: number;
+  totalAvailable?: number;
   effectivePlan?: string;
   isAdmin: boolean;
   unlimited?: boolean;
 }
 
-/**
- * Fetch full credit details from the backend API.
- * Returns the complete breakdown or null on failure.
- */
-export async function fetchCreditDetails(): Promise<CreditDetails | null> {
+export type FetchCreditsResult =
+  | { status: "ok"; credits: number; details: CreditDetails }
+  | { status: "unauthorized" }
+  | { status: "network_error" };
+
+export async function fetchCreditsResult(): Promise<FetchCreditsResult> {
   try {
     const { response, data } = await requestJsonWithRetry<CreditDetails>(
       `${API_BASE}/api/user/credits`,
@@ -245,22 +247,36 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
         retryDelaysMs: [1000, 3000],
       },
     );
-    if (!response.ok || !data) return null;
+    if (response.status === 401 || response.status === 403) {
+      return { status: "unauthorized" };
+    }
+    if (!response.ok || !data) return { status: "network_error" };
     if (typeof data.credits === "number") {
-      return {
+      const details: CreditDetails = {
         credits: data.credits,
         totalConsumed: data.totalConsumed ?? 0,
         planAllocation: data.planAllocation ?? 0,
         adminGranted: data.adminGranted ?? 0,
+        totalAvailable: (data as any).totalAvailable ?? Math.max(0, (data.planAllocation ?? 0) + (data.adminGranted ?? 0)),
         effectivePlan: data.effectivePlan,
         isAdmin: data.isAdmin ?? false,
         unlimited: data.unlimited ?? data.credits === -1,
       };
+      return { status: "ok", credits: data.credits, details };
     }
-    return null;
+    return { status: "network_error" };
   } catch {
-    return null;
+    return { status: "network_error" };
   }
+}
+
+/**
+ * Fetch full credit details from the backend API.
+ * Returns the complete breakdown or null on failure.
+ */
+export async function fetchCreditDetails(): Promise<CreditDetails | null> {
+  const result = await fetchCreditsResult();
+  return result.status === "ok" ? result.details : null;
 }
 
 /**
@@ -270,8 +286,8 @@ export async function fetchCreditDetails(): Promise<CreditDetails | null> {
  * Auth is via X-Device-Id header — no userId param needed.
  */
 export async function fetchCreditsFromBackend(): Promise<number | null> {
-  const details = await fetchCreditDetails();
-  return details?.credits ?? null;
+  const result = await fetchCreditsResult();
+  return result.status === "ok" ? result.credits : null;
 }
 
 /**
@@ -499,5 +515,110 @@ export async function refundTranslationCredits(reservationId: string): Promise<{
     return { refunded: Boolean(data.refunded), credits: data.credits, refundedAmount: data.refundedAmount };
   } catch {
     return null;
+  }
+}
+
+// ── Second-Accurate Transcription Deductions ────────────────────────────────
+
+export interface TranscriptionDeductionParams {
+  seconds: number;
+  requestId: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TranscriptionBalanceInfo {
+  userId: string;
+  includedSeconds: number;
+  purchasedSeconds: number;
+  totalAvailableSeconds: number;
+  includedCredits: number;
+  purchasedCredits: number;
+  totalAvailableCredits: number;
+  includedHours: number;
+  purchasedHours: number;
+  totalAvailableHours: number;
+  effectivePlan: string;
+  isAdmin: boolean;
+  unlimited: boolean;
+  lastResetAt: string;
+  nextResetAt?: string | null;
+  formattedRemaining: string;
+}
+
+export async function fetchTranscriptionBalance(): Promise<TranscriptionBalanceInfo | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/transcription/balance`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function deductTranscriptionDurationWithSync(
+  params: TranscriptionDeductionParams,
+): Promise<{
+  success: boolean;
+  remainingCredits?: number;
+  exhausted?: boolean;
+  reason?: string;
+  dailyRemainingSeconds?: number;
+  weeklyRemainingSeconds?: number;
+}> {
+  if (params.seconds <= 0) return { success: true };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/transcription/deduct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(params),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const credits = data.balance?.totalAvailableCredits;
+      if (typeof credits === "number") {
+        setCreditsBalance(credits);
+        emitCreditChange(credits);
+      }
+      return { success: true, remainingCredits: credits };
+    }
+
+    if (res.status === 402) {
+      const err = await res.json().catch(() => ({}));
+      const credits = err.balance?.totalAvailableCredits ?? 0;
+      setCreditsBalance(credits);
+      emitCreditChange(credits);
+      return {
+        success: false,
+        exhausted: err.reason === "TRANSCRIPTION_CREDITS_EXHAUSTED",
+        reason: typeof err.reason === "string" ? err.reason : undefined,
+        dailyRemainingSeconds: typeof err.dailyRemainingSeconds === "number" ? err.dailyRemainingSeconds : undefined,
+        weeklyRemainingSeconds: typeof err.weeklyRemainingSeconds === "number" ? err.weeklyRemainingSeconds : undefined,
+        remainingCredits: credits,
+      };
+    }
+
+    // Fall back to general credit deduction if route not available
+    if (res.status === 404) {
+      const creditsNeeded = Math.ceil(params.seconds / 60);
+      const ok = await deductCreditsWithSync(
+        "device",
+        creditsNeeded,
+        "transcription",
+        params.description || `Transcription: ${params.seconds}s`,
+        { ...params.metadata, durationSec: params.seconds, requestId: params.requestId },
+        { allowOffline: false },
+      );
+      return { success: ok, exhausted: !ok };
+    }
+
+    return { success: false };
+  } catch (err) {
+    console.warn("[Credits] deductTranscriptionDurationWithSync error:", err);
+    return { success: false };
   }
 }

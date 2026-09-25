@@ -48,6 +48,7 @@ import DockThemeSettingsModal, {
   type DockThemeSettingsSaveContext,
 } from "../components/DockThemeSettingsModal";
 import BibleHistoryScreen from "./BibleHistoryScreen";
+import DockBibleFavoritesModal from "../components/DockBibleFavoritesModal";
 import { addToBibleHistory, loadBibleHistory } from "./bibleHistoryTypes";
 import type { BibleHistoryItem } from "./bibleHistoryTypes";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
@@ -1429,6 +1430,30 @@ function renderHighlightedKeywordText(text: string, query: string): React.ReactN
   ));
 }
 
+function formatCompactBibleReference(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const clean = trimmed
+    .replace(/\s*[—–-]\s*[A-Za-z0-9]{2,}\s*$/, "")
+    .replace(/\s*\([A-Za-z0-9]{2,}\)\s*$/, "")
+    .trim();
+  const parsed = parseBibleSearch(clean)[0] || parseBibleSearch(trimmed)[0];
+  if (parsed && parsed.book) {
+    const abbrev = bookAbbrev(parsed.book) || parsed.book.slice(0, 4);
+    if (parsed.chapter !== null && parsed.verse !== null) {
+      const versePart = parsed.endVerse && parsed.endVerse > parsed.verse
+        ? `${parsed.verse}-${parsed.endVerse}`
+        : `${parsed.verse}`;
+      return `${abbrev} ${parsed.chapter}:${versePart}`;
+    }
+    if (parsed.chapter !== null) {
+      return `${abbrev} ${parsed.chapter}`;
+    }
+    return abbrev;
+  }
+  return trimmed;
+}
+
 function DockBibleTab({
   staged,
   onStage,
@@ -1757,8 +1782,10 @@ function DockBibleTab({
     verse: number,
     verseText: string,
   ) => {
-    const updated = addToBibleHistory(book, chapter, verse, verseText);
-    setHistoryItems(getRecentBibleHistoryItems(updated));
+    window.setTimeout(() => {
+      const updated = addToBibleHistory(book, chapter, verse, verseText);
+      setHistoryItems(getRecentBibleHistoryItems(updated));
+    }, 0);
   }, []);
   const voiceHeldRef = useRef(false);
   const voiceBridgeTimeoutRef = useRef<number | null>(null);
@@ -1817,6 +1844,9 @@ function DockBibleTab({
     return el ? el.clientHeight <= 520 : false;
   });
   const [isNarrowWidth, setIsNarrowWidth] = useState(false);
+  const [isUltraNarrowWidth, setIsUltraNarrowWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 340 : false));
+  const [isSub300Width, setIsSub300Width] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 300 : false));
+  const [showAllFavoritesModal, setShowAllFavoritesModal] = useState(false);
 
   const _fsThemeDepId = productionDefaults.fullscreenTheme?.id;
   const _ltThemeDepId = productionDefaults.lowerThirdTheme?.id;
@@ -1838,6 +1868,8 @@ function DockBibleTab({
       if (target === element) {
         setIsShortHeight(height <= 520);
         setIsNarrowWidth(width < 400);
+        setIsUltraNarrowWidth(width <= 340);
+        setIsSub300Width(width <= 300);
         return;
       }
 
@@ -3825,19 +3857,11 @@ function DockBibleTab({
           ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload, fitOptions)
           : pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions);
 
-      // Publish the selected verse to the already-loaded Bible browser source
-      // before the full OBS scene reconciliation starts. Fullscreen pushes can
-      // otherwise spend several hundred milliseconds checking scenes and
-      // backgrounds while OBS continues showing the previous verse.
-      if (!hasSceneRoute) {
+      // In fullscreen mode, publish the selected verse to the already-loaded Bible
+      // browser source without queuing duplicate presentation focus mutations.
+      if (!hasSceneRoute && liveOverlayMode !== "lower-third") {
         void dockObsClient
           .primeBibleOverlay(stageData as unknown as Parameters<typeof dockObsClient.primeBibleOverlay>[0])
-          .then(() => {
-            if (requestId === liveVerseRequestIdRef.current && visibilityEpoch === visibilityEpochRef.current) {
-              return dockObsClient.focusMcePresentationModule("bible");
-            }
-            return undefined;
-          })
           .catch(() => { });
       }
 
@@ -4368,6 +4392,45 @@ function DockBibleTab({
       }
     }
 
+    let nextProfiles: DockSceneQuickThemeSettings | undefined;
+    if (isSceneProfileActive && (hasSettingsPatch || (measurement && !compareEnabled))) {
+      const existingProfile = sceneQuickThemeSettingsRef.current[activeSceneProfileId] ?? {};
+      const fallbackTheme = isFullscreen ? selectedBibleThemeRef.current : selectedLowerThirdThemeRef.current;
+      const storedThemeSettings = isFullscreen
+        ? existingProfile.fullscreenThemeSettings
+        : existingProfile.lowerThirdThemeSettings;
+      const baseTheme = !storedThemeSettings
+        ? resolveThemeForOverlayMode(fallbackTheme, liveMode)
+        : {
+          ...resolveThemeForOverlayMode(fallbackTheme, liveMode),
+          settings: storedThemeSettings as unknown as BibleThemeSettings,
+        };
+      const nextTheme = isFullscreen
+        ? applyFullscreenQuickThemeSettings(baseTheme, nextFullscreenSettings)
+        : applyLowerThirdQuickThemeSettings(baseTheme, nextLowerThirdSettings);
+
+      const nextProfile: DockSceneQuickThemeProfile = {
+        ...existingProfile,
+        ...(isFullscreen
+          ? {
+            fullscreen: { ...nextFullscreenSettings },
+            fullscreenThemeId: existingProfile.fullscreenThemeId ?? fallbackTheme.id,
+            fullscreenThemeSettings: nextTheme.settings as unknown as Record<string, unknown>,
+          }
+          : {
+            lowerThird: { ...nextLowerThirdSettings },
+            lowerThirdThemeId: existingProfile.lowerThirdThemeId ?? fallbackTheme.id,
+            lowerThirdThemeSettings: nextTheme.settings as unknown as Record<string, unknown>,
+          }),
+      };
+      nextProfiles = {
+        ...sceneQuickThemeSettingsRef.current,
+        [activeSceneProfileId]: nextProfile,
+      };
+      sceneQuickThemeSettingsRef.current = nextProfiles;
+      setSceneQuickThemeSettings(nextProfiles);
+    }
+
     persistDockBiblePreferencesNow({
       ...((hasSettingsPatch || (measurement && !compareEnabled))
         ? {
@@ -4379,6 +4442,7 @@ function DockBibleTab({
             }),
         }
         : {}),
+      ...(nextProfiles ? { sceneQuickThemeSettings: nextProfiles } : {}),
       verseLineCount: nextLineCount !== null ? nextLineCount : verseLineCount,
       ...(isFullscreen
         ? (nextLineCount !== null ? { fullscreenVerseLineCount: nextLineCount } : {})
@@ -4387,9 +4451,12 @@ function DockBibleTab({
   }, [
     activeFullscreenQuickThemeSettings,
     activeLowerThirdQuickThemeSettings,
+    activeSceneProfileId,
     baseFullscreenTheme,
     baseLowerThirdTheme,
+    compareEnabled,
     fullscreenOnlyMode,
+    isSceneProfileActive,
     persistDockBiblePreferencesNow,
     refreshCurrentBibleOutputAfterThemeSave,
     refreshCurrentBibleOutputForLineCount,
@@ -4447,19 +4514,10 @@ function DockBibleTab({
       nextPatch.compareReferenceFontSizeRight = patch.refFontSize;
     }
 
-    if (browserQuickUpdateImmediately) {
-      void handleSyncBibleBrowserSettings(nextPatch);
-      return;
-    }
-
-    setDraftBrowserQuickThemeSettings((current) => ({
-      ...(current ?? activeBrowserFontSettings),
-      ...nextPatch,
-    }));
+    void handleSyncBibleBrowserSettings(nextPatch);
   }, [
     activeBrowserFontSettings,
     browserFontMode,
-    browserQuickUpdateImmediately,
     handleSyncBibleBrowserSettings,
   ]);
 
@@ -4679,16 +4737,27 @@ function DockBibleTab({
   const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
     setDisplayMode(mode);
     setCompareEnabled(mode === "compare");
-  }, []);
+    persistDockBiblePreferencesNow({
+      displayMode: mode,
+      compareEnabled: mode === "compare",
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   const handleCompareEnabledChange = useCallback((enabled: boolean) => {
     setCompareEnabled(enabled);
     setDisplayMode(enabled ? "compare" : "single");
-  }, []);
+    persistDockBiblePreferencesNow({
+      compareEnabled: enabled,
+      displayMode: enabled ? "compare" : "single",
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   const handleCompareModeChange = useCallback((mode: CompareMode) => {
     setCompareMode(mode);
-  }, []);
+    persistDockBiblePreferencesNow({
+      compareMode: mode,
+    });
+  }, [persistDockBiblePreferencesNow]);
 
   // Preserve contract for narrow layout tests:
   // setShowComparePopover(true);
@@ -5425,6 +5494,40 @@ function DockBibleTab({
     ]
   );
 
+  const handleGoToChapter = useCallback(
+    (result: DockBibleSearchOption) => {
+      setRecentSearches(pushRecentBibleSearch(result.label));
+      setSearchQuery("");
+      setShowDropdown(false);
+      setShowRecentSearches(false);
+      setActiveIdx(-1);
+
+      if (result.book && result.chapter !== null) {
+        focusReference(result.book, result.chapter, result.verse ?? 1);
+        if (result.verse !== null) {
+          window.setTimeout(() => {
+            const verseRow = verseGridRef.current?.querySelector<HTMLElement>(
+              `[data-verse-row="${result.verse}"]`,
+            );
+            if (verseRow && verseGridRef.current) {
+              const container = verseGridRef.current;
+              const verseRect = verseRow.getBoundingClientRect();
+              const containerRect = container.getBoundingClientRect();
+              const targetScrollTop = container.scrollTop + (verseRect.top - containerRect.top) - containerRect.height * 0.1;
+              container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+            }
+          }, 150);
+        }
+      } else if (result.book) {
+        setSelectedBook(result.book);
+        setSelectedChapter(1);
+        setSelectedVerse(null);
+        pendingScrollVerseRef.current = null;
+      }
+    },
+    [focusReference]
+  );
+
   const applyRecentBibleSearch = useCallback(
     (query: string) => {
       const recentResult = parseBibleSearch(query)[0];
@@ -5992,6 +6095,21 @@ function DockBibleTab({
     }
   }, [favoriteRefs, selectedPassageForFavorite]);
 
+  const handleRemoveFavorite = useCallback(async (reference: string) => {
+    setFavoriteRefs((current) => {
+      const next = new Set(current);
+      next.delete(reference);
+      return next;
+    });
+    setFavoritePassages((current) => current.filter((item) => item.reference !== reference));
+    setFavoriteHistorySearches((current) => current.filter((item) => item.reference !== reference));
+    try {
+      await removeFavorite(reference);
+    } catch {
+      // Ignore removal errors
+    }
+  }, []);
+
   const handleToggleStarVerse = useCallback(async (verseNumber: number, verseText: string) => {
     if (!selectedBook || selectedChapter === null) return;
     const reference = `${selectedBook} ${selectedChapter}:${verseNumber}`;
@@ -6184,6 +6302,14 @@ function DockBibleTab({
       }
       const verseNum = Number(targetElement.dataset.verseRow);
       if (!verseNum) return;
+      // Instant visual feedback: mark the row active before React re-render cycle
+      const parent = targetElement.parentElement;
+      if (parent) {
+        parent.querySelectorAll(".dock-bible-verse-row--selected").forEach((el) => {
+          if (el !== targetElement) el.classList.remove("dock-bible-verse-row--selected");
+        });
+        targetElement.classList.add("dock-bible-verse-row--selected");
+      }
       void handleVerseClick(verseNum, activeColumnIndex, activeTranslation);
     },
     [activeColumnIndex, activeTranslation, handleVerseClick],
@@ -6787,7 +6913,7 @@ function DockBibleTab({
 
   const renderChapterBar = () => (
     <div
-      className={`dock-bible-chapter-bar${showChapterPicker ? " dock-bible-chapter-bar--picker-open" : ""}${searchPlacement === "bottom" ? " dock-bible-chapter-bar--bottom" : ""}`}
+      className={`dock-bible-chapter-bar${showChapterPicker ? " dock-bible-chapter-bar--picker-open" : ""}${searchPlacement === "bottom" ? " dock-bible-chapter-bar--bottom" : ""}${isSub300Width ? " dock-bible-chapter-bar--sub300" : ""}`}
       ref={chapterPickerRef}
     >
       <div className="dock-bible-chapter-bar__nav">
@@ -6825,7 +6951,9 @@ function DockBibleTab({
           title={`${selectedBook || "Genesis"} ${selectedChapter || 1}`}
         >
           <span className="dock-bible-chapter-trigger__text">
-            {selectedBook || "Genesis"} {selectedChapter || 1}
+            <span className="dock-bible-chapter-trigger__book-full">{selectedBook || "Genesis"}</span>
+            <span className="dock-bible-chapter-trigger__book-short">{getBookInitials(selectedBook || "Genesis")}</span>
+            {" "}{selectedChapter || 1}
           </span>
           <Icon name={showChapterPicker ? "arrow_drop_up" : "arrow_drop_down"} size={13} />
         </button>
@@ -6847,6 +6975,15 @@ function DockBibleTab({
       </div>
 
       <div className="dock-bible-chapter-bar__actions">
+        <button
+          type="button"
+          className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__fav-btn"
+          onClick={() => setShowAllFavoritesModal(true)}
+          title={t("bible.favorites", "Favorite Passages")}
+          aria-label={t("bible.favorites", "Favorite Passages")}
+        >
+          <Icon name="star" size={15} />
+        </button>
         <button
           type="button"
           className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__history-btn"
@@ -7177,57 +7314,67 @@ function DockBibleTab({
               style={{ flex: 1, marginBottom: 0 }}
               ref={searchRef}
             >
-              {/* <Icon name="search" size={14} className="dock-search__icon" /> */}
-              <input
-                className="dock-input dock_search__input"
-                placeholder={t("bible.searchPlaceholder")}
-                aria-label={t("bible.searchPlaceholder")}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-                onKeyUp={handleSearchKeyUp}
-                onFocus={() => {
-                  ensureSearchIndexPreloaded();
-                  if (searchQuery.trim()) setShowDropdown(true);
-                  else {
-                    const nextFavoriteHistorySearches = getFavoriteBibleHistoryItems();
-                    setFavoriteHistorySearches(nextFavoriteHistorySearches);
-                    setShowRecentSearches(
-                      recentSearches.length > 0
-                      || favoritePassages.length > 0
-                      || nextFavoriteHistorySearches.length > 0,
-                    );
-                  }
-                }}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="dock-search__clear"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setShowDropdown(false);
-                    setShowRecentSearches(hasSavedSearches);
+              <div className="dock-search__input-wrapper">
+                <input
+                  className="dock-input dock_search__input"
+                  placeholder={t("bible.searchPlaceholder")}
+                  aria-label={t("bible.searchPlaceholder")}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onKeyDown={handleSearchKeyDown}
+                  onKeyUp={handleSearchKeyUp}
+                  onFocus={() => {
+                    ensureSearchIndexPreloaded();
+                    if (searchQuery.trim()) setShowDropdown(true);
+                    else {
+                      const nextFavoriteHistorySearches = getFavoriteBibleHistoryItems();
+                      setFavoriteHistorySearches(nextFavoriteHistorySearches);
+                      setShowRecentSearches(
+                        recentSearches.length > 0
+                        || favoritePassages.length > 0
+                        || nextFavoriteHistorySearches.length > 0,
+                      );
+                    }
                   }}
-                  aria-label={t("bible.clearSearchShort")}
-                  title={t("bible.clearSearchShort")}
-                >
-                  <Icon name="close" size={13} />
-                </button>
-              )}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="dock-search__clear"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setShowDropdown(false);
+                      setShowRecentSearches(hasSavedSearches);
+                    }}
+                    aria-label={t("bible.clearSearchShort")}
+                    title={t("bible.clearSearchShort")}
+                  >
+                    <Icon name="close" size={13} />
+                  </button>
+                )}
+              </div>
 
               {showDropdown && displayedSearchResults.length > 0 && (
-                <div className="dock-search-dropdown">
+                <div className="dock-search-dropdown" role="listbox">
                   {displayedSearchResults.map((result, i) => (
-                    <button
+                    <div
                       key={result.label + i}
                       className={`dock-search-dropdown__item${i === activeIdx ? " dock-search-dropdown__item--active" : ""}`}
                       onClick={() => void handlePickResult(result)}
                       onMouseEnter={() => setActiveIdx(i)}
+                      role="option"
+                      aria-selected={i === activeIdx}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void handlePickResult(result);
+                        }
+                      }}
                       title={t("common.search")}>
                       <Icon
                         name={
@@ -7240,7 +7387,7 @@ function DockBibleTab({
                                 : "auto_stories"
                         }
                         size={14}
-                        style={{ opacity: 0.5 }}
+                        className="dock-search-dropdown__item-icon"
                       />
                       <span className="dock-search-dropdown__content">
                         <span className="dock-search-dropdown__label">{result.label}</span>
@@ -7250,52 +7397,105 @@ function DockBibleTab({
                           </span>
                         ) : null}
                       </span>
-                    </button>
+                      {result.book && result.chapter !== null && (
+                        <button
+                          type="button"
+                          className="dock-search-dropdown__goto-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleGoToChapter(result);
+                          }}
+                          title={t("dock.tooltip.goToChapter", t("bible.goToChapter", "Go to chapter"))}
+                          aria-label={t("dock.tooltip.goToChapter", t("bible.goToChapter", "Go to chapter"))}>
+                          <Icon name="menu_book" size={13} />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
 
               {showRecentSearches && !searchQuery.trim() && (
-                <div className="dock-search-dropdown dock-search-dropdown--recent">
-                  {favoriteSearches.length > 0 && (
-                    <>
-                      <div className="dock-search-dropdown__heading">{t("bible.favorites", "Favorites")}</div>
-                      {favoriteSearches.map((favorite) => (
-                        <button
-                          type="button"
-                          key={favorite.reference}
-                          className="dock-search-dropdown__item dock-search-dropdown__item--favorite"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => handleFavoriteClick(favorite)}
-                          title={formatDockFavoriteBibleSearch(favorite)}
-                        >
-                          <Icon name="star" size={13} style={{ opacity: 0.7 }} />
-                          <span className="dock-search-dropdown__content">
-                            <span className="dock-search-dropdown__label">
-                              {formatDockFavoriteBibleSearch(favorite)}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </>
-                  )}
+                <div className={`dock-search-dropdown dock-search-dropdown--recent${isUltraNarrowWidth ? " dock-search-dropdown--compact" : ""}`}>
                   {recentSearches.length > 0 && (
                     <>
-                      <div className="dock-search-dropdown__heading">{t("bible.recentSearches")}</div>
-                      {recentSearches.map((item) => (
+                      <div className="dock-search-dropdown__heading" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <Icon name="history" size={12} style={{ color: "var(--dock-accent-color, #60a5fa)" }} />
+                        <span>{t("bible.recentSearches", "Recent Searches")}</span>
+                      </div>
+                      <div className="dock-search-dropdown__grid">
+                        {recentSearches.map((item) => {
+                          const shortLabel = formatCompactBibleReference(item);
+                          return (
+                            <button
+                              type="button"
+                              key={item}
+                              className="dock-search-dropdown__chip dock-search-dropdown__item--recent"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => applyRecentBibleSearch(item)}
+                              title={item}
+                            >
+                              <Icon name="history" size={12} />
+                              <span className="dock-search-dropdown__content">
+                                <span className="dock-search-dropdown__label">
+                                  <span className="dock-search-dropdown__label--full">{item}</span>
+                                  <span className="dock-search-dropdown__label--short">{shortLabel}</span>
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                  {favoriteSearches.length > 0 && (
+                    <>
+                      <div className="dock-search-dropdown__header-row">
+                        <div className="dock-search-dropdown__heading" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <Icon name="star" size={12} style={{ color: "var(--dock-accent-color, #eab308)" }} />
+                          <span>{t("bible.favorites", "Favorites")}</span>
+                        </div>
                         <button
                           type="button"
-                          key={item}
-                          className="dock-search-dropdown__item dock-search-dropdown__item--recent"
+                          className="dock-search-dropdown__view-all-link"
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => applyRecentBibleSearch(item)}
-                          title={t("common.search")}>
-                          <Icon name="refresh" size={13} style={{ opacity: 0.5 }} />
-                          <span className="dock-search-dropdown__content">
-                            <span className="dock-search-dropdown__label">{item}</span>
-                          </span>
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setShowRecentSearches(false);
+                            setShowAllFavoritesModal(true);
+                          }}
+                          title={t("bible.viewAllFavorites", "View all favorites")}
+                        >
+                          <Icon name="open_in_new" size={11} />
+                          <span>{t("bible.viewAll", "View all")} ({favoriteSearches.length})</span>
                         </button>
-                      ))}
+                      </div>
+                      <div className="dock-search-dropdown__grid">
+                        {favoriteSearches.slice(0, 3).map((favorite) => {
+                          const fullLabel = formatDockFavoriteBibleSearch(favorite);
+                          const shortLabel = formatCompactBibleReference(favorite.reference);
+                          return (
+                            <button
+                              type="button"
+                              key={favorite.reference}
+                              className="dock-search-dropdown__chip dock-search-dropdown__item--favorite"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => handleFavoriteClick(favorite)}
+                              title={fullLabel}
+                            >
+                              <Icon name="star" size={12} style={{ opacity: 0.9, color: "var(--dock-accent-color, #eab308)" }} />
+                              <span className="dock-search-dropdown__content">
+                                <span className="dock-search-dropdown__label">
+                                  <span className="dock-search-dropdown__label--full">{fullLabel}</span>
+                                  <span className="dock-search-dropdown__label--short">{shortLabel}</span>
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </>
                   )}
                 </div>
@@ -8065,6 +8265,35 @@ function DockBibleTab({
                   columnIndex: activeColumnIndex,
                   reveal: true,
                 });
+              }}
+            />
+          )}
+
+          {showAllFavoritesModal && (
+            <DockBibleFavoritesModal
+              isOpen={showAllFavoritesModal}
+              onClose={() => setShowAllFavoritesModal(false)}
+              favorites={favoriteSearches}
+              favoritePassages={favoritePassages}
+              onSelectFavorite={(fav) => {
+                handleFavoriteClick(fav);
+                setShowAllFavoritesModal(false);
+              }}
+              onGoToChapter={(fav) => {
+                const result = parseBibleSearch(fav.reference)[0];
+                if (result && result.book && result.chapter !== null) {
+                  handleGoToChapter({ ...result, kind: "reference" });
+                } else {
+                  handleFavoriteClick(fav);
+                }
+                setShowAllFavoritesModal(false);
+              }}
+              onSendToObs={(fav) => {
+                handleFavoriteClick(fav);
+                setShowAllFavoritesModal(false);
+              }}
+              onRemoveFavorite={(reference) => {
+                void handleRemoveFavorite(reference);
               }}
             />
           )}

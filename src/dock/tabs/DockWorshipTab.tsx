@@ -36,9 +36,12 @@ import {
   type WorshipDockSongSavePayload,
 } from "../../services/worshipDockInterop";
 import {
+  calculateReorderTargetIndex,
   extractStructuredTextTitle,
   generateSlides,
   normalizeWorshipDisplayText,
+  reorderWorshipSections,
+  stripLeadingVerseMarker,
 } from "../../worship/slideEngine";
 import { extractFirstLineAsTitle } from "../../worship/songTitleFromLyrics";
 import { DEFAULT_WORSHIP_LINES_PER_SLIDE } from "../../worship/slideLayout";
@@ -479,7 +482,7 @@ function parseLyricSections(
   ).map((slide) => ({
     id: slide.id,
     label: slide.isContinuation ? "" : slide.label,
-    text: slide.content,
+    text: stripLeadingVerseMarker(slide.content),
   }));
 }
 
@@ -490,7 +493,10 @@ function serializeLyricSections(
   const content = sections
     .map((section) => {
       const label = section.label.trim();
-      return [label ? `${label}:` : "", normalizeDockMultilineText(section.text).trim()].filter(Boolean).join("\n");
+      const isGenericVerse = !label || /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(label);
+      const sectionTag = label && !isGenericVerse ? `[${label}]` : "";
+      const cleanText = stripLeadingVerseMarker(normalizeDockMultilineText(section.text).trim());
+      return [sectionTag, cleanText].filter(Boolean).join("\n");
     })
     .filter(Boolean)
     .join("\n\n");
@@ -784,7 +790,7 @@ function DockLyricsEditorDialog({
       artist: songArtist,
       lyrics,
       linesPerSlide,
-      autoSplit: true,
+      autoSplit: initialDraft.autoSplit ?? false,
     });
   }, [initialDraft, lyrics, linesPerSlide, onSave, saving, songArtist, songTitle]);
 
@@ -912,6 +918,7 @@ function DockLyricsEditorDialog({
               id="dock-song-lyrics"
               className="dock-input dock-dialog-textarea"
               value={lyrics}
+              placeholder={t("worship.songLyricsPlaceholderTips", "Paste or type lyrics here...\n\nExample:\n[Verse 1]\nFirst line of verse 1\nSecond line\n\n<Chorus>\nFirst line of chorus\nSecond line\n\n[Verse 2]\nVerse 2 line...")}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
@@ -1062,6 +1069,7 @@ function DockWorshipSlideEditorDialog({
               id="dock-worship-slide-text"
               className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
               value={text}
+              placeholder={t("worship.slideTextPlaceholderTips", "Type slide text here…\n\n• Add section tags like [Verse 1], <Chorus>, [Bridge], Verse 1: or Chorus: at the top of a slide to display a header badge.")}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
@@ -1742,6 +1750,9 @@ function DockWorshipTab({
     setShowCompactSummaryActions(false);
   }, []);
   const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [draggingSectionIdx, setDraggingSectionIdx] = useState<number | null>(null);
+  const [dragOverSectionIdx, setDragOverSectionIdx] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"above" | "below" | null>(null);
   const prefsReadyRef = useRef(false);
   const [preferencesHydrated, setPreferencesHydrated] = useState(true);
   const prefsLoadIdRef = useRef(0);
@@ -2579,7 +2590,7 @@ function DockWorshipTab({
           ? { ...renderedTheme, settings: liveThemeSettings as unknown as BibleTheme["settings"] }
           : renderedTheme;
       const presentationMeta = options?.showPresentationMeta ?? showPresentationMeta;
-      const sectionTextSource = normalizeWorshipDisplayText(section.text);
+      const sectionTextSource = stripLeadingVerseMarker(normalizeWorshipDisplayText(section.text));
       const translatedSectionText = getWorshipSectionTranslation(section.id, effectiveWorshipTranslation);
       const showBoth = Boolean(effectiveWorshipTranslation?.showBoth && translatedSectionText);
       const sectionText = showBoth ? sectionTextSource : (translatedSectionText || sectionTextSource);
@@ -2701,13 +2712,17 @@ function DockWorshipTab({
       // Fullscreen and lower-third use different OBS paths. Queue them at the
       // dock boundary so a slower fullscreen mutation cannot finish after the
       // lower-third mutation and overwrite the active mode in OBS.
-      const queuedPush = liveSectionPushTailRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          if (requestId !== liveSectionRequestIdRef.current) return null;
-          return pushLive();
-        });
-      liveSectionPushTailRef.current = queuedPush.catch(() => undefined);
+      const previousPush = liveSectionPushTailRef.current;
+      const queuedPush = (async () => {
+        try {
+          await previousPush;
+        } catch {
+          // ignore previous push failure
+        }
+        if (requestId !== liveSectionRequestIdRef.current) return null;
+        return pushLive();
+      })();
+      liveSectionPushTailRef.current = queuedPush;
       if (options?.awaitFontFit) {
         return queuedPush
           .then((measurement) => {
@@ -2885,11 +2900,16 @@ function DockWorshipTab({
       const derived = extractFirstLineAsTitle(draft.lyrics);
       if (derived) finalTitle = derived;
     }
-    const finalDraft = { ...draft, title: finalTitle };
+    const maintainedAutoSplit = draft.autoSplit ?? songEditor.autoSplit ?? false;
+    const finalDraft = { ...draft, title: finalTitle, autoSplit: maintainedAutoSplit };
     setSavingSong(true);
     setActionError("");
     try {
-      await persistSong(songEditor.id, finalDraft, songEditor);
+      const updatedSong = await persistSong(songEditor.id, finalDraft, songEditor);
+      if (updatedSong) {
+        setLineLayoutOverrideSongId(null);
+        setLineLayoutOverrideAutoSplit(null);
+      }
       showToast(t('worship.songSaved'), "success");
       closeSongEditor();
       track("song_created", { autoSplit: false });
@@ -2927,7 +2947,7 @@ function DockWorshipTab({
       title: draft?.title ?? nextAutoSongTitle(),
       artist: draft?.artist ?? "",
       lyrics: draft?.lyrics ?? "",
-      autoSplit: draft?.autoSplit ?? false,
+      autoSplit: false,
       linesPerSlide: draft?.linesPerSlide ?? DEFAULT_LINES_PER_SLIDE,
     });
     setNewSongSource({ importSourceType: "manual" });
@@ -2945,7 +2965,7 @@ function DockWorshipTab({
       const derived = extractFirstLineAsTitle(draft.lyrics);
       if (derived) finalTitle = derived;
     }
-    const finalDraft = { ...draft, title: finalTitle };
+    const finalDraft = { ...draft, title: finalTitle, autoSplit: false };
     setSavingSong(true);
     setActionError("");
     try {
@@ -2953,6 +2973,8 @@ function DockWorshipTab({
       if (newSong) {
         rememberDockSongDefault(newSong);
         closeNewSongModal();
+        setLineLayoutOverrideSongId(null);
+        setLineLayoutOverrideAutoSplit(null);
         setSelectedSong(newSong);
         setSelectedIdx(0);
         setVisibleIdx(null);
@@ -3251,18 +3273,19 @@ function DockWorshipTab({
       setSlideEditor({
         index: idx,
         label: section.label.trim() || t('worship.slideNumber', { number: idx + 1 }),
-        text: section.text,
+        text: stripLeadingVerseMarker(section.text),
         linesPerSlide: effectiveLinesPerSlide,
       });
     },
-    [effectiveLinesPerSlide, selectedSongSections],
+    [effectiveLinesPerSlide, selectedSongSections, t],
   );
 
   const handleSaveSlideEditor = useCallback(async (payload: { text: string; linesPerSlide: number }) => {
     if (!selectedSong || !slideEditor) return;
     const nextLinesPerSlide = clampLinesPerSlide(payload.linesPerSlide);
+    const cleanText = stripLeadingVerseMarker(payload.text.trim());
     const nextSections = selectedSongSections.map((section, index) =>
-      index === slideEditor.index ? { ...section, text: payload.text.trim() } : section,
+      index === slideEditor.index ? { ...section, text: cleanText } : section,
     );
     const nextLyrics = serializeLyricSections(nextSections, selectedSongTitleMarker);
 
@@ -3271,16 +3294,17 @@ function DockWorshipTab({
     setSavingSong(true);
     setActionError("");
     try {
+      const maintainedAutoSplit = selectedSong.autoSplit ?? false;
       const updatedSong = await persistSong(selectedSong.id, {
         title: selectedSong.title,
         artist: selectedSong.artist,
         lyrics: nextLyrics,
-        autoSplit: true,
+        autoSplit: maintainedAutoSplit,
         linesPerSlide: nextLinesPerSlide,
       }, selectedSong);
       if (updatedSong) {
         setLineLayoutOverrideSongId(updatedSong.id);
-        setLineLayoutOverrideAutoSplit(true);
+        setLineLayoutOverrideAutoSplit(maintainedAutoSplit);
         setLinesPerSlideOverride(true);
         setLinesPerSlide(nextLinesPerSlide);
         setHiddenSectionIndexes(new Set());
@@ -3429,6 +3453,73 @@ function DockWorshipTab({
     showToast,
     t,
   ]);
+
+  const handleReorderWorshipSection = useCallback(
+    async (sourceIdx: number, targetIdx: number) => {
+      if (!selectedSong || savingSong || sourceIdx === targetIdx || sourceIdx < 0 || targetIdx < 0) return;
+      if (sourceIdx >= selectedSongSections.length || targetIdx >= selectedSongSections.length) return;
+
+      const nextSections = reorderWorshipSections(selectedSongSections, sourceIdx, targetIdx);
+      const nextLyrics = serializeLyricSections(nextSections, selectedSongTitleMarker);
+      if (!nextLyrics.trim()) return;
+
+      setSavingSong(true);
+      setActionError("");
+      try {
+        const maintainedAutoSplit = selectedSong.autoSplit ?? false;
+        const updatedSong = await persistSong(
+          selectedSong.id,
+          {
+            title: selectedSong.title,
+            artist: selectedSong.artist,
+            lyrics: nextLyrics,
+            autoSplit: maintainedAutoSplit,
+            linesPerSlide: effectiveLinesPerSlide,
+          },
+          selectedSong,
+        );
+
+        if (updatedSong) {
+          setSelectedSong(updatedSong);
+          setSelectedIdx((current) => {
+            if (current === null) return targetIdx;
+            if (current === sourceIdx) return targetIdx;
+            if (sourceIdx < targetIdx) {
+              if (current > sourceIdx && current <= targetIdx) return current - 1;
+            } else {
+              if (current >= targetIdx && current < sourceIdx) return current + 1;
+            }
+            return current;
+          });
+          setVisibleIdx((current) => {
+            if (current === null) return null;
+            if (current === sourceIdx) return targetIdx;
+            if (sourceIdx < targetIdx) {
+              if (current > sourceIdx && current <= targetIdx) return current - 1;
+            } else {
+              if (current >= targetIdx && current < sourceIdx) return current + 1;
+            }
+            return current;
+          });
+          showToast(t("worship.slideReordered", "Slide reordered"), "info");
+        }
+      } catch (err) {
+        console.warn("[DockWorshipTab] reorder slide failed:", err);
+      } finally {
+        setSavingSong(false);
+      }
+    },
+    [
+      effectiveLinesPerSlide,
+      persistSong,
+      savingSong,
+      selectedSong,
+      selectedSongSections,
+      selectedSongTitleMarker,
+      showToast,
+      t,
+    ],
+  );
 
   // Auto-clamp linesPerSlide when selected song has fewer lines than the current setting
   useEffect(() => {
@@ -4138,17 +4229,69 @@ function DockWorshipTab({
                     </div>
                   </div>
                 ) : (
-                  <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
+                  <div className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSectionIdx !== null ? " is-reordering" : ""}`}>
                     {lyricsFilteredSectionIndexes.map((idx) => {
                       const section = selectedSongSections[idx];
                       if (!section) return null;
                       const displayLabel = section.label.trim();
                       const isVisible = visibleIdx === idx;
                       const isSelected = selectedIdx === idx;
+                      const isDragging = draggingSectionIdx === idx;
+                      const isDragOver = dragOverSectionIdx === idx && draggingSectionIdx !== idx;
                       return (
                         <div
                           key={section.id}
-                          className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                          draggable={!savingSong}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("text/plain", String(idx));
+                            event.dataTransfer.effectAllowed = "move";
+                            setDraggingSectionIdx(idx);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            const midY = rect.top + rect.height / 2;
+                            const position = event.clientY < midY ? "above" : "below";
+                            if (dragOverSectionIdx !== idx || dropPosition !== position) {
+                              setDragOverSectionIdx(idx);
+                              setDropPosition(position);
+                            }
+                          }}
+                          onDragLeave={(event) => {
+                            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                            if (dragOverSectionIdx === idx) {
+                              setDragOverSectionIdx(null);
+                              setDropPosition(null);
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceIdx = draggingSectionIdx ?? Number(event.dataTransfer.getData("text/plain"));
+                            if (Number.isFinite(sourceIdx) && dropPosition) {
+                              const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, dropPosition, selectedSongSections.length);
+                              void handleReorderWorshipSection(sourceIdx, targetIdx);
+                            }
+                            setDraggingSectionIdx(null);
+                            setDragOverSectionIdx(null);
+                            setDropPosition(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingSectionIdx(null);
+                            setDragOverSectionIdx(null);
+                            setDropPosition(null);
+                          }}
+                          className={`dock-worship-slide-card${
+                            isVisible ? " dock-worship-slide-card--visible" : ""
+                          }${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}${
+                            isDragging ? " dock-worship-slide-card--dragging" : ""
+                          }${
+                            isDragOver
+                              ? dropPosition === "above"
+                                ? " dock-worship-slide-card--drop-above"
+                                : " dock-worship-slide-card--drop-below"
+                              : ""
+                          }`}
                           title={presentationLinkMode ? t("worship.clickToShowPresentation") : t("worship.clickToViewObs")}
                         >
                           <button
@@ -4158,6 +4301,13 @@ function DockWorshipTab({
                           >
                             <div className="dock-worship-slide-card__header">
                               <div className="dock-worship-slide-card__label">
+                                <div
+                                  className="dock-worship-slide-card__drag-handle"
+                                  title={t("common.dragToReorder", "Drag to reorder slide")}
+                                  aria-label={t("common.dragToReorder", "Drag to reorder slide")}
+                                >
+                                  <Icon name="drag_indicator" size={14} />
+                                </div>
                                 {displayLabel ? (
                                   <span className="dock-worship-slide-card__name">{displayLabel}</span>
                                 ) : (
@@ -4172,7 +4322,7 @@ function DockWorshipTab({
                               </div>
                             </div>
                             {getOrderedTranslationParts(
-                              normalizeWorshipDisplayText(section.text),
+                              stripLeadingVerseMarker(normalizeWorshipDisplayText(section.text)),
                               getWorshipSectionTranslation(section.id, effectiveWorshipTranslation),
                               effectiveWorshipTranslation?.showBoth ?? false,
                               effectiveWorshipTranslation?.translationOrder,
@@ -4183,7 +4333,7 @@ function DockWorshipTab({
                                   ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
                                   : "dock-worship-slide-card__text"}
                               >
-                                {normalizeWorshipDisplayText(part.text)}
+                                {stripLeadingVerseMarker(normalizeWorshipDisplayText(part.text))}
                               </div>
                             ))}
                           </button>
@@ -4265,6 +4415,20 @@ function DockWorshipTab({
                       onModeChange={handleOverlayModeChange}
                       hideOverlayModeToggle={fullscreenOnlyMode}
                       overlayModeToggleDisabled={autoAdvanceActive}
+                      centerAction={
+                        <button
+                          type="button"
+                          className="dock-bible-reader__quick-edit-toolbar-btn"
+                          onClick={() => setShowThemeSettings(true)}
+                          title={t('worship.quickEdits', 'Quick Edits')}
+                          aria-label={t('worship.quickEdits', 'Quick Edits')}
+                        >
+                          <Icon name="edit" size={14} />
+                          <span className="dock-bible-reader__quick-edit-label">{t('worship.quickEdits', 'Quick Edits')}</span>
+                        </button>
+                      }
+                      onQuickEdit={() => setShowThemeSettings(true)}
+                      quickEditLabel={t('worship.quickEdits', 'Quick Edits')}
                       clearLabel={worshipOverlayVisible ? t("worship.hideLyrics") : t("worship.showLyrics")}
                       onClear={handleToggleWorshipVisibility}
                       clearDisabled={visibilityActionPending}
@@ -4289,12 +4453,12 @@ function DockWorshipTab({
                         type="button"
                         className="dock-btm-overflow__menu-item"
                         data-dock-close-overflow="true"
-                        onClick={() => setShowThemeSettings(true)}
-                        title={t('worship.quickEdits')}
-                        aria-label={t('worship.quickEdits')}
+                        onClick={handleToggleDeletedSectionsPopover}
+                        title={t("worship.viewDeletedSlides")}
+                        aria-label={t("worship.viewDeletedSlides")}
                       >
-                        <Icon name="edit" size={14} />
-                        <span>{t('worship.quickEdits')}</span>
+                        <Icon name="delete_sweep" size={14} />
+                        <span>{t("worship.viewDeletedSlides")}</span>
                       </button>
                       <DockSceneRoutingControl
                         module="worship"

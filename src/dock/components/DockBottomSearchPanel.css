@@ -91,9 +91,10 @@
 }
 
 /* Search menus in the bottom bar should grow into the available space above it. */
-.dock-bottom-search-panel .dock-search-dropdown {
-  top: auto;
-  bottom: calc(100% + 4px);
+.dock-bottom-search-panel .dock-search-dropdown,
+.dock-bottom-search-panel .dock-bible-search-row .dock-search-dropdown {
+  top: auto !important;
+  bottom: calc(100% + 4px) !important;
   margin-top: 0;
   margin-bottom: 4px;
 }

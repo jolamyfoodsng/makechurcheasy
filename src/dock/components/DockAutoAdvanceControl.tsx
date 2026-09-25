@@ -183,6 +183,43 @@ export function getAutoAdvanceIndex(
   return nextIndex < itemCount ? nextIndex : null;
 }
 
+export function computeDefaultAutoAdvanceBannerPosition(
+  bannerEl: HTMLElement | null,
+  windowObj?: Pick<Window, "innerWidth" | "innerHeight">,
+  docObj?: { querySelector: (selector: string) => Element | null },
+): { x: number; y: number } {
+  const win = windowObj || (typeof window !== "undefined" ? window : undefined);
+  const winWidth = win?.innerWidth ?? 800;
+  const winHeight = win?.innerHeight ?? 600;
+  const bannerWidth = bannerEl?.offsetWidth || 300;
+  const bannerHeight = bannerEl?.offsetHeight || 38;
+
+  // Look for the worship bottom toolbar first, then any dock bottom toolbar, then bottom navigation
+  const doc = docObj || (typeof document !== "undefined" ? document : undefined);
+  const toolbar = doc
+    ? (doc.querySelector(".dock-worship-toolbar .dock-btm-toolbar")
+      || doc.querySelector(".dock-btm-toolbar")
+      || doc.querySelector(".dock-bottom-nav"))
+    : null;
+
+  let targetY: number;
+  if (toolbar) {
+    const rect = toolbar.getBoundingClientRect();
+    // Directly above the toolbar with 8px clearance
+    targetY = Math.max(8, rect.top - bannerHeight - 8);
+  } else {
+    // 96px above window bottom (bottom nav ~42px + toolbar ~46px + 8px gap)
+    targetY = Math.max(8, winHeight - 96 - bannerHeight);
+  }
+
+  const maxX = Math.max(8, winWidth - bannerWidth - 8);
+  const targetX = Math.max(8, Math.min(16, maxX));
+
+  return { x: targetX, y: targetY };
+}
+
+const BANNER_POS_STORAGE_KEY = "ocs-dock-auto-advance-banner-pos";
+
 export default function DockAutoAdvanceControl({
   items,
   selectedIndex,
@@ -202,6 +239,7 @@ export default function DockAutoAdvanceControl({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
   const previousSelectedIndexRef = useRef(selectedIndex);
   const expectedIndexRef = useRef<number | null>(null);
   const currentIndexRef = useRef(selectedIndex);
@@ -228,6 +266,16 @@ export default function DockAutoAdvanceControl({
   const [remainingItemMs, setRemainingItemMs] = useState(0);
   const [activeRunDurationMs, setActiveRunDurationMs] = useState(0);
   const [popoverPosition, setPopoverPosition] = useState<DockAutoAdvancePopoverPosition | null>(null);
+  const [bannerPos, setBannerPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{
+    startX: number;
+    startY: number;
+    initialX: number;
+    initialY: number;
+    hasMoved: boolean;
+  } | null>(null);
+  const dragJustEndedRef = useRef(false);
 
   currentIndexRef.current = selectedIndex;
   statusRef.current = status;
@@ -237,6 +285,131 @@ export default function DockAutoAdvanceControl({
   const currentItem = items[selectedIndex];
   const canStart = items.length > 0 && selectedIndex >= 0 && selectedIndex < items.length;
   const isActive = status === "running" || status === "paused";
+
+  useLayoutEffect(() => {
+    if (!isActive || isOpen || typeof window === "undefined") return;
+
+    const saved = readNativeDockSetting<{ x: number; y: number }>(BANNER_POS_STORAGE_KEY);
+    const bannerWidth = bannerRef.current?.offsetWidth || 300;
+    const bannerHeight = bannerRef.current?.offsetHeight || 38;
+    const maxX = Math.max(8, window.innerWidth - bannerWidth - 8);
+    const maxY = Math.max(8, window.innerHeight - bannerHeight - 8);
+
+    if (saved && typeof saved.x === "number" && typeof saved.y === "number") {
+      setBannerPos({
+        x: Math.max(8, Math.min(maxX, saved.x)),
+        y: Math.max(8, Math.min(maxY, saved.y)),
+      });
+    } else {
+      setBannerPos(computeDefaultAutoAdvanceBannerPosition(bannerRef.current));
+    }
+  }, [isActive, isOpen]);
+
+  useEffect(() => {
+    if (!isActive || typeof window === "undefined") return;
+    const onResize = () => {
+      const bannerWidth = bannerRef.current?.offsetWidth || 300;
+      const bannerHeight = bannerRef.current?.offsetHeight || 38;
+      const maxX = Math.max(8, window.innerWidth - bannerWidth - 8);
+      const maxY = Math.max(8, window.innerHeight - bannerHeight - 8);
+
+      setBannerPos((curr) => {
+        if (!curr) return computeDefaultAutoAdvanceBannerPosition(bannerRef.current);
+        return {
+          x: Math.max(8, Math.min(maxX, curr.x)),
+          y: Math.max(8, Math.min(maxY, curr.y)),
+        };
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isActive]);
+
+  const handleBannerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button")) {
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const currentPos = bannerPos || computeDefaultAutoAdvanceBannerPosition(bannerRef.current);
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: currentPos.x,
+      initialY: currentPos.y,
+      hasMoved: false,
+    };
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+  }, [bannerPos]);
+
+  const handleBannerPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    const dx = e.clientX - dragStartRef.current.startX;
+    const dy = e.clientY - dragStartRef.current.startY;
+
+    if (!dragStartRef.current.hasMoved && Math.hypot(dx, dy) >= 4) {
+      dragStartRef.current.hasMoved = true;
+      setIsDragging(true);
+    }
+
+    if (dragStartRef.current.hasMoved) {
+      const bannerWidth = bannerRef.current?.offsetWidth || 300;
+      const bannerHeight = bannerRef.current?.offsetHeight || 38;
+      const maxX = Math.max(8, window.innerWidth - bannerWidth - 8);
+      const maxY = Math.max(8, window.innerHeight - bannerHeight - 8);
+
+      const nextX = Math.max(8, Math.min(maxX, dragStartRef.current.initialX + dx));
+      const nextY = Math.max(8, Math.min(maxY, dragStartRef.current.initialY + dy));
+
+      setBannerPos({ x: nextX, y: nextY });
+    }
+  }, []);
+
+  const handleBannerPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    if (dragStartRef.current.hasMoved) {
+      dragJustEndedRef.current = true;
+      setTimeout(() => {
+        dragJustEndedRef.current = false;
+      }, 120);
+
+      const bannerWidth = bannerRef.current?.offsetWidth || 300;
+      const bannerHeight = bannerRef.current?.offsetHeight || 38;
+      const dx = e.clientX - dragStartRef.current.startX;
+      const dy = e.clientY - dragStartRef.current.startY;
+      const maxX = Math.max(8, window.innerWidth - bannerWidth - 8);
+      const maxY = Math.max(8, window.innerHeight - bannerHeight - 8);
+      const finalX = Math.max(8, Math.min(maxX, dragStartRef.current.initialX + dx));
+      const finalY = Math.max(8, Math.min(maxY, dragStartRef.current.initialY + dy));
+
+      writeNativeDockSetting(BANNER_POS_STORAGE_KEY, { x: finalX, y: finalY });
+    }
+
+    dragStartRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  const handleBannerPointerCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    dragStartRef.current = null;
+    setIsDragging(false);
+  }, []);
 
   useEffect(() => {
     onActiveChange?.(isActive);
@@ -682,14 +855,30 @@ export default function DockAutoAdvanceControl({
 
       {!isOpen && isActive && typeof document !== "undefined" && createPortal(
         <div
-          className={`dock-auto-advance-banner dock-auto-advance-banner--${status}`}
+          ref={bannerRef}
+          className={`dock-auto-advance-banner dock-auto-advance-banner--${status}${isDragging ? " dock-auto-advance-banner--dragging" : ""}`}
           role="status"
           aria-live="polite"
           data-dock-keep-overflow-open="true"
+          style={bannerPos ? { left: `${bannerPos.x}px`, top: `${bannerPos.y}px`, right: "auto", bottom: "auto" } : undefined}
+          onPointerDown={handleBannerPointerDown}
+          onPointerMove={handleBannerPointerMove}
+          onPointerUp={handleBannerPointerUp}
+          onPointerCancel={handleBannerPointerCancel}
         >
+          <span
+            className="dock-auto-advance-banner__drag-handle"
+            title={t("autoAdvance.dragToMove", "Drag to move")}
+            aria-hidden="true"
+          >
+            <Icon name="drag_indicator" size={13} />
+          </span>
           <div
             className="dock-auto-advance-banner__info"
-            onClick={() => setIsOpen(true)}
+            onClick={() => {
+              if (dragJustEndedRef.current) return;
+              setIsOpen(true);
+            }}
             role="button"
             tabIndex={0}
             title={t("autoAdvance.clickToOpenSettings", "Click to open auto-advance settings")}

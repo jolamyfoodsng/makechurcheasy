@@ -9,8 +9,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Zap, ExternalLink } from "lucide-react";
-import { fetchCreditsFromBackend, isProUnlocked } from "../services/credits";
+import { Zap, ExternalLink, LogOut } from "lucide-react";
+import { fetchCreditsResult, isProUnlocked } from "../services/credits";
+import { useAuth } from "../contexts/AuthContext";
+import LoadingScreen from "./LoadingScreen";
 
 const CREDITS_URL =
   "https://makechurcheazy.com/credits";
@@ -21,6 +23,7 @@ interface CreditsGuardProps {
 
 type GuardState =
   | { phase: "loading" }
+  | { phase: "unauthorized" }
   | { phase: "unavailable" }
   | { phase: "blocked" }
   | { phase: "pass" };
@@ -29,6 +32,7 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
   const [state, setState] = useState<GuardState>({ phase: "loading" });
   const [retryKey, setRetryKey] = useState(0);
   const fullAccess = isProUnlocked();
+  const { logout } = useAuth();
 
   useEffect(() => {
     if (fullAccess) return;
@@ -40,13 +44,15 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
       return () => { cancelled = true; };
     }
 
-    fetchCreditsFromBackend().then((credits) => {
+    fetchCreditsResult().then((result) => {
       if (cancelled) return;
-      if (credits === null) {
+      if (result.status === "unauthorized") {
+        setState({ phase: "unauthorized" });
+      } else if (result.status === "network_error") {
         setState({ phase: "unavailable" });
-      } else if (credits < 0) {
+      } else if (result.credits < 0) {
         setState({ phase: "pass" });
-      } else if (credits === 0) {
+      } else if (result.credits === 0) {
         setState({ phase: "blocked" });
       } else {
         setState({ phase: "pass" });
@@ -71,9 +77,30 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
 
   // Loading state
   if (state.phase === "loading") {
+    return <LoadingScreen variant="page" label="Verifying credits…" />;
+  }
+
+  // Session expired / unauthorized — prompt to log in again
+  if (state.phase === "unauthorized") {
     return (
       <div style={styles.root}>
-        <div style={styles.spinner} />
+        <div style={styles.card}>
+          <div style={{ ...styles.iconWrap, background: "rgba(239, 68, 68, 0.12)", color: "#ef4444" }}>
+            <LogOut size={28} />
+          </div>
+          <h2 style={styles.title}>Session Expired</h2>
+          <p style={styles.desc}>
+            Your login session is no longer recognized by the server. Please sign out and log back in to reconnect your account.
+          </p>
+          <button
+            type="button"
+            style={{ ...styles.cta, background: "#ef4444", cursor: "pointer" }}
+            onClick={() => logout()}
+          >
+            <LogOut size={14} />
+            Sign Out & Reconnect
+          </button>
+        </div>
       </div>
     );
   }
@@ -92,16 +119,32 @@ export default function CreditsGuard({ children }: CreditsGuardProps) {
             transcript library, or translation features. Check your connection
             and try again.
           </p>
-          <button
-            type="button"
-            style={styles.cta}
-            onClick={() => {
-              setState({ phase: "loading" });
-              setRetryKey((key) => key + 1);
-            }}
-          >
-            Retry
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <button
+              type="button"
+              style={{ ...styles.cta, cursor: "pointer" }}
+              onClick={() => {
+                setState({ phase: "loading" });
+                setRetryKey((key) => key + 1);
+              }}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              style={{
+                ...styles.cta,
+                background: "transparent",
+                border: "1px solid var(--border, rgba(255,255,255,0.15))",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+              }}
+              onClick={() => logout()}
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -143,29 +186,37 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    minHeight: 400,
+    minHeight: 450,
     padding: 32,
+    background: "var(--bg, transparent)",
   },
   card: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: 12,
-    maxWidth: 360,
+    maxWidth: 400,
+    width: "100%",
     textAlign: "center",
+    padding: "32px 24px",
+    background: "var(--surface, rgba(255, 255, 255, 0.03))",
+    border: "1px solid var(--border, rgba(255, 255, 255, 0.08))",
+    borderRadius: "var(--radius, 6px)",
+    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
   },
   iconWrap: {
     width: 56,
     height: 56,
-    borderRadius: 12,
-    background: "rgba(var(--error-rgb, 239,68,68), 0.12)",
+    borderRadius: "50%",
+    background: "rgba(239, 68, 68, 0.12)",
     color: "var(--error, #ef4444)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
   title: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: 700,
     color: "var(--text, #e2e8f0)",
     margin: 0,
@@ -182,23 +233,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 6,
     marginTop: 8,
-    padding: "8px 20px",
-    borderRadius: "var(--radius, 3px)",
-    background: "var(--primary, #4f46e5)",
+    padding: "9px 20px",
+    borderRadius: "var(--radius, 4px)",
+    background: "var(--primary, #2563eb)",
     border: "none",
     color: "#fff",
     fontSize: 13,
     fontWeight: 600,
     textDecoration: "none",
     cursor: "pointer",
-    transition: "background 0.15s",
-  },
-  spinner: {
-    width: 24,
-    height: 24,
-    border: "2.5px solid var(--border, #2c3140)",
-    borderTopColor: "var(--primary, #4f46e5)",
-    borderRadius: "50%",
-    animation: "spin 0.6s linear infinite",
+    transition: "all 0.15s ease",
   },
 };

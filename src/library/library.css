@@ -450,6 +450,145 @@
   height: 20px;
 }
 
+/* ── Song library command area ──────────────────────────────────────────── */
+.lib-toolbar--song-library {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin: 2px 32px 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 68%, var(--bg-dark));
+}
+
+.lib-toolbar-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.lib-toolbar-search-block {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lib-toolbar--song-library .lib-search-wrap {
+  max-width: none;
+  min-width: 0;
+}
+
+.lib-toolbar--song-library .lib-search-leading-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.lib-toolbar--song-library .lib-search-input {
+  min-height: 44px;
+  padding: 10px 40px 10px 42px;
+  border-radius: 8px;
+  background: var(--surface-dark);
+  font-size: 13px;
+}
+
+.lib-search-help {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.lib-toolbar--song-library > .lib-toolbar-main > .lib-add-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.lib-toolbar-actions--song-library {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.lib-toolbar-group-label {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--online {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary-soft) 72%, var(--surface-raised));
+  color: var(--primary);
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--online:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 92%, var(--surface-raised));
+  color: var(--primary-hover);
+}
+
+.lib-toolbar--song-library .lib-toolbar-btn--import {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+}
+
+@media (max-width: 760px) {
+  .lib-toolbar--song-library {
+    margin: 2px 16px 16px;
+  }
+
+  .lib-toolbar-main {
+    flex-direction: column;
+  }
+
+  .lib-toolbar--song-library > .lib-toolbar-main > .lib-add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .lib-toolbar-actions--song-library {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .lib-toolbar--song-library {
+    margin: 2px 12px 14px;
+    padding: 12px;
+  }
+
+  .lib-toolbar-group-label {
+    width: 100%;
+  }
+
+  .lib-toolbar--song-library .lib-toolbar-btn {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+  }
+}
+
 /* ── Song usage badge (free/basic plan limits) ── */
 .lib-song-usage-badge {
   display: inline-flex;
@@ -724,18 +863,30 @@
 .lib-media-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px 20px;
+  padding: 0 24px 24px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   align-content: start;
+}
+
+@media (max-width: 1100px) {
+  .lib-media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .lib-media-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Card */
 .lib-media-card {
-  background: var(--surface-dark);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  background: #0d1527;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: visible;
   position: relative;
   z-index: 0;
@@ -750,7 +901,7 @@
 }
 
 .lib-media-card:hover {
-  border-color: rgba(var(--primary-rgb), 0.4);
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
 .lib-media-card--focused {
@@ -764,10 +915,10 @@
 /* Thumbnail area */
 .lib-media-thumb {
   aspect-ratio: 16 / 9;
-  background: #000;
+  background: #080d1a;
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: 10px 10px 0 0;
 }
 
 .lib-media-thumb-img {
@@ -790,13 +941,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1d24 0%, #0d0f13 100%);
-  color: rgba(255, 255, 255, 0.25);
+  background: #080d1a;
+  color: #334155;
 }
 
 .lib-media-thumb--video-placeholder svg,
 .lib-media-thumb--image-placeholder svg {
-  opacity: 0.4;
+  opacity: 0.6;
 }
 
 .lib-media-thumb-overlay {
@@ -814,17 +965,18 @@
 /* Type badge */
 .lib-media-badge-type {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 /* Duration badge */
@@ -872,24 +1024,30 @@
   height: 28px;
 }
 
-/* Info row */
+/* Info row / card footer */
+.lib-media-card-footer,
 .lib-media-info {
-  padding: 10px 12px;
+  padding: 12px 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  background: #090f1d;
+  border-radius: 0 0 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.lib-media-card-info,
 .lib-media-info-text {
   overflow: hidden;
   min-width: 0;
+  flex: 1;
 }
 
 .lib-media-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #f1f5f9;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -898,8 +1056,53 @@
 
 .lib-media-meta {
   font-size: 11px;
-  color: var(--text-muted);
-  margin: 2px 0 0;
+  color: #64748b;
+  margin: 3px 0 0;
+}
+
+.lib-media-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lib-media-card-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lib-media-card-view-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.lib-media-card-menu-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.lib-media-card-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 /* Rename inline input */
@@ -984,18 +1187,21 @@
 
 .lib-songs-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 4px 32px 32px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  contain: layout style;
 }
 
 .lib-song-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  contain: layout style;
 }
 
 .lib-song-section {
@@ -1087,6 +1293,9 @@
   padding: 14px;
   border-radius: var(--radius);
   cursor: default;
+  contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: 178px;
 }
 
 .lib-song-row--gated {
@@ -2351,6 +2560,223 @@
 .lib-modal-save-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Media Library Modern Header & Controls ────────────────────────── */
+.lib-media-header-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  flex-wrap: wrap;
+}
+
+.lib-media-search-box {
+  flex: 1 1 240px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  transition: border-color 0.15s ease;
+}
+
+.lib-media-search-box:focus-within {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.lib-media-search-icon {
+  color: #64748b;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.lib-media-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f8fafc;
+  font-size: 13px;
+  outline: none;
+}
+
+.lib-media-search-input::placeholder {
+  color: #64748b;
+}
+
+.lib-media-search-clear {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lib-media-search-clear:hover {
+  color: #f8fafc;
+}
+
+.lib-media-filter-segmented {
+  display: inline-flex;
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.lib-media-segmented-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lib-media-segmented-btn:hover {
+  color: #f8fafc;
+}
+
+.lib-media-segmented-btn.is-active {
+  background: #1e293b;
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.lib-media-add-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #22c55e;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 18px;
+  min-height: 40px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.lib-media-add-action-btn:hover {
+  background: #16a34a;
+}
+
+.lib-media-add-action-btn:active {
+  transform: scale(0.98);
+}
+
+/* ── Share Callout Banner ────────────────────────────────────────── */
+.lib-media-share-callout {
+  margin: 0 24px 20px;
+  background: #0d1527;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lib-media-share-callout__left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.lib-media-share-callout__icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.lib-media-share-callout__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.lib-media-share-callout__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.lib-media-share-callout__subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.lib-media-share-callout__btn {
+  background: #131d33;
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.lib-media-share-callout__btn:hover {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+/* ── Share Container & Back Topbar ───────────────────────────────── */
+.lib-media-share-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.lib-media-share-topbar {
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-raised, #0f172a);
+}
+
+.lib-media-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lib-media-back-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .lib-media-view-switcher {
@@ -4053,4 +4479,492 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* ── Load More & Infinite Scroll ── */
+.lib-songs-load-more-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 0 8px;
+  width: 100%;
+}
+
+.lib-load-more-btn {
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+.lib-songs-sentinel {
+  height: 20px;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   WORSHIP RESOURCES REDESIGN (Screenshot Matching)
+   ========================================================================== */
+
+.worship-resources-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 32px 32px;
+  box-sizing: border-box;
+}
+
+/* Toolbar row: Search input + Actions */
+.worship-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.worship-search-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(17, 24, 39, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0 14px;
+  height: 44px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.worship-search-wrap:focus-within {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.worship-search-icon {
+  color: #64748b;
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.worship-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f3f4f6;
+  font-size: 0.925rem;
+  outline: none;
+  min-width: 0;
+}
+
+.worship-search-input::placeholder {
+  color: #64748b;
+}
+
+.worship-search-clear {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.worship-search-clear:hover {
+  color: #f3f4f6;
+}
+
+.worship-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.worship-add-song-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.worship-add-song-btn:hover {
+  background: #15803d;
+}
+
+.worship-add-song-btn:active {
+  transform: translateY(1px);
+}
+
+.worship-more-tools-container {
+  position: relative;
+}
+
+.worship-more-tools-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+
+.worship-more-tools-btn:hover {
+  color: #f3f4f6;
+}
+
+.worship-more-tools-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  padding: 6px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.worship-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.worship-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.worship-dropdown-badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+}
+
+/* EasyWorship Import Banner */
+.worship-ew-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-sizing: border-box;
+}
+
+.worship-ew-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.worship-ew-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(245, 158, 11, 0.7);
+  background: rgba(245, 158, 11, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+.worship-ew-text {
+  min-width: 0;
+}
+
+.worship-ew-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  line-height: 1.3;
+}
+
+.worship-ew-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 0.825rem;
+  color: #9ca3af;
+  line-height: 1.3;
+}
+
+.worship-ew-import-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f3f4f6;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.worship-ew-import-btn:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fbbf24;
+}
+
+/* Song Grid (3 columns matching screenshot) */
+.worship-song-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1100px) {
+  .worship-song-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .worship-song-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Song Card */
+.worship-song-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 168px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+
+.worship-song-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(23, 32, 51, 0.95);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.worship-song-card--gated {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.worship-song-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.worship-song-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.worship-song-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.worship-song-card-header {
+  flex: 1;
+  min-width: 0;
+}
+
+.worship-song-card-title {
+  margin: 0 0 2px 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.worship-song-card-section {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.worship-song-card-line {
+  margin: 0;
+  font-size: 0.825rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.worship-song-card-line--primary {
+  color: #cbd5e1;
+}
+
+.worship-song-card-line--secondary {
+  color: #94a3b8;
+  padding-left: 2px;
+}
+
+/* Card bottom row: View > button and ... menu button */
+.worship-song-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 4px;
+}
+
+.worship-song-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f3f4f6;
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.worship-song-view-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.worship-card-menu-container {
+  position: relative;
+}
+
+.worship-song-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.worship-song-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #f3f4f6;
+}
+
+.worship-card-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.worship-card-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.worship-card-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.worship-card-dropdown-item--danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
 }

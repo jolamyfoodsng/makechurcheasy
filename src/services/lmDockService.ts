@@ -199,7 +199,37 @@ const ASSEMBLYAI_API_KEYS = (
   .map((k: string) => k.trim())
   .filter(Boolean);
 
+const CLOUDFLARE_STT_URL = (
+  (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
+).trim();
+
+const DEEPGRAM_API_KEYS = (
+  (import.meta as any).env?.VITE_DEEPGRAM_API_KEYS ??
+  (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ??
+  ""
+)
+  .split(/[\r\n,]+/)
+  .map((key: string) => key.trim())
+  .filter(Boolean);
+
+function shuffled<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
 function getAssemblyAiKey(): string {
+  if (DEEPGRAM_API_KEYS.length > 0) {
+    // Each session gets a different starting key. The native stream receives
+    // the remaining keys as fallbacks if the first account rejects a session.
+    return `deepgram:${shuffled(DEEPGRAM_API_KEYS).join(",")}`;
+  }
+  if (CLOUDFLARE_STT_URL) {
+    return CLOUDFLARE_STT_URL;
+  }
   if (ASSEMBLYAI_API_KEYS.length === 0) {
     console.warn("[VoiceService] No API keys configured. Set speech service API keys in your .env file.");
     return "";
@@ -365,8 +395,8 @@ export class LmDockService {
   private audioConnectedAt = 0;
   private lastAudioSignalAt = 0;
   private audioRecoveryAttempts = 0;
-  private static readonly AUDIO_SIGNAL_GRACE_MS = 6_000;
-  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 2;
+  private static readonly AUDIO_SIGNAL_GRACE_MS = 30_000;
+  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 3;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -805,9 +835,62 @@ export class LmDockService {
     const activeIndex = this.snapshot.entries.findIndex((e) => !e.finalized);
     const active = activeIndex >= 0 ? this.snapshot.entries[activeIndex] : null;
 
-    // Dedup guard: avoid duplicate identical finalized lines when fired in quick succession
-    if (activeIndex < 0 && trimmed === this.lastFinalizedLineText && now - this.lastFinalizedAt < 600) {
+    // 1. Strict Duplicate Suppression:
+    // If the exact same text was finalized recently (< 5000ms), do not add a duplicate entry!
+    const normTrimmed = trimmed.toLowerCase().replace(/[^\w\s]/g, "").trim();
+    const lastFinalized = [...this.snapshot.entries].reverse().find((e) => e.finalized);
+    const normLast = (this.lastFinalizedLineText || lastFinalized?.text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
+
+    if (normTrimmed && normLast && normTrimmed === normLast && now - this.lastFinalizedAt < 5000) {
+      if (activeIndex >= 0) {
+        this.snapshot = {
+          ...this.snapshot,
+          entries: this.snapshot.entries.filter((_, i) => i !== activeIndex),
+        };
+      }
       return;
+    }
+
+    // 2. STT Revision Rollup:
+    // When the ASR model refines a short phrase in quick succession (e.g. "Hebrews two five" -> "Hebrews two seven"):
+    // Check if the previous entry shares >= 50% prefix words and occurred within 2000ms.
+    const lastIndex = this.snapshot.entries.length - 1;
+    if (
+      lastIndex >= 0 &&
+      this.snapshot.entries[lastIndex].finalized &&
+      now - this.lastFinalizedAt < 2000
+    ) {
+      const prevWords = (normLast || "").split(/\s+/).filter(Boolean);
+      const currWords = normTrimmed.split(/\s+/).filter(Boolean);
+      if (prevWords.length <= 5 && currWords.length <= 6 && prevWords.length > 0 && currWords.length > 0) {
+        let sharedPrefixCount = 0;
+        while (
+          sharedPrefixCount < prevWords.length &&
+          sharedPrefixCount < currWords.length &&
+          prevWords[sharedPrefixCount] === currWords[sharedPrefixCount]
+        ) {
+          sharedPrefixCount++;
+        }
+
+        const overlap = sharedPrefixCount / Math.max(prevWords.length, 1);
+        if (sharedPrefixCount >= 2 || (prevWords.length <= 2 && sharedPrefixCount >= 1 && overlap >= 0.5)) {
+          console.log(`[LmDockService] Rolling up STT revision: "${this.snapshot.entries[lastIndex].text}" -> "${trimmed}"`);
+          const updatedEntry: TranscriptEntry = {
+            ...this.snapshot.entries[lastIndex],
+            text: trimmed,
+            endTime: audioEndMs != null && audioEndMs > 0 ? audioEndMs / 1000 : this.snapshot.entries[lastIndex].endTime,
+          };
+          let nextEntries = this.snapshot.entries.map((e, idx) => (idx === lastIndex ? updatedEntry : e));
+          if (activeIndex >= 0) {
+            nextEntries = nextEntries.filter((_, i) => i !== activeIndex);
+          }
+          this.snapshot = { ...this.snapshot, entries: nextEntries };
+          this.lastFinalizedLineText = trimmed;
+          this.lastFinalizedAt = now;
+          this.turnCommittedText = trimmed;
+          return;
+        }
+      }
     }
 
     this.lastFinalizedLineText = trimmed;
@@ -1200,19 +1283,24 @@ export class LmDockService {
       if (Date.now() - this.lastSpeechTime > 12_000) this.sentenceBuffer = "";
 
       // Finalize all remaining sentences or trailing fragments
-      const { completed, remaining } = splitSentenceBoundaries(uncommitted, true);
-      const allToFinalize = [...completed];
-      if (remaining.trim()) {
+      const sourceText = uncommitted.trim() || this.speechBuffer.trim();
+      const { completed, remaining } = splitSentenceBoundaries(sourceText, true);
+      const allToFinalize = completed.length > 0 ? [...completed] : (sourceText ? [sourceText] : []);
+      if (remaining.trim() && !completed.includes(remaining.trim())) {
         allToFinalize.push(remaining.trim());
       }
 
       for (const lineText of allToFinalize) {
-        this.finalizeLine(lineText, audio_start, audio_end);
-        this.processLineQuoteSearch(lineText);
+        const trimmed = lineText.trim();
+        if (trimmed) {
+          this.finalizeLine(trimmed, audio_start, audio_end);
+          this.processLineQuoteSearch(trimmed);
+        }
       }
 
       this.turnCommittedText = "";
       this.speechBuffer = "";
+      this.upsertInterim("", audio_start, audio_end);
       this.flushTranscriptPush();
 
     } else {
@@ -1447,12 +1535,11 @@ export class LmDockService {
           const { status } = event.payload;
           if (status === "connected") {
             this.reconnectAttempts = 0;
+            this.stopConnectionWatchdog();
             this.startAudioSignalMonitor();
-            // AssemblyAI's Begin message confirms the WebSocket, but not that
-            // the local cpal callback is delivering microphone frames yet.
-            // Keep the UI in Connecting… until the first audio-level event.
-            this.snapshot = { ...this.snapshot, status: "connecting", error: undefined };
+            this.snapshot = { ...this.snapshot, status: "listening", error: undefined };
             this.pushStatus();
+            this.startInactivityMonitor();
           } else if (status.startsWith("error")) {
             this.stopConnectionWatchdog();
             this.stopAudioSignalMonitor();
@@ -1537,24 +1624,9 @@ export class LmDockService {
               void this.processChunk(phrase, false);
             }
           }
-
-          // 2. Finalize active interim line on natural pause
-          // If speaker pauses > 450ms (or > 220ms if ending in punctuation), finalize the line!
-          const endsWithPunct = /[.!?,;:]\s*$/.test(this.speechBuffer);
-          const pauseThreshold = endsWithPunct ? 220 : 450;
-          if (silenceMs >= pauseThreshold && wordCount >= 2) {
-            const lineText = this.speechBuffer.trim();
-            this.speechBuffer = "";
-            this.finalizeLine(lineText);
-            this.turnCommittedText = this.turnCommittedText
-              ? `${this.turnCommittedText} ${lineText}`
-              : lineText;
-            this.processLineQuoteSearch(lineText);
-            this.flushTranscriptPush();
-          }
         }
 
-        // 3. Long-session anti-hallucination / refresh:
+        // 2. Long-session anti-hallucination / refresh:
         // Transparently recycle during natural silence (> 1.5s) if session has run for a long time (> 15 mins).
         if (
           this.sessionStartTime > 0 &&
@@ -1572,8 +1644,8 @@ export class LmDockService {
       // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
-      const rawGain = Number(mvSettings.inputGain ?? 100);
-      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0, Math.min(3, rawGain / 100)) : 1;
+      const rawGain = Number(mvSettings.inputGain ?? 150);
+      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0.1, Math.min(5, rawGain / 100)) : 1.5;
       const nativeStartPromise = safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
@@ -1637,6 +1709,7 @@ export class LmDockService {
   }
 
   stopListening(): void {
+    console.log("[LmDockService] 🛑 stopListening() called. Call stack:\n", new Error().stack);
     this.shouldKeepListening = false;
     this.activeMicId = undefined;
     this.reconnectAttempts = 0;
@@ -1812,11 +1885,11 @@ export class LmDockService {
   }
 
   /**
-   * Update the microphone input gain at runtime (0–300 → 0.0–3.0 multiplier).
+   * Update the microphone input gain at runtime (0–500 → 0.0–5.0 multiplier).
    * Calls the Rust-side set_microphone_gain command — no stream restart needed.
    */
   async setInputGain(gainPercent: number): Promise<void> {
-    const gain = Math.max(0, Math.min(3, gainPercent / 100));
+    const gain = Math.max(0.1, Math.min(5, gainPercent / 100));
     await safeTauriInvoke("set_microphone_gain", { gain }).catch(() => { });
   }
 
@@ -1874,6 +1947,7 @@ export class LmDockService {
     // Stop Rust-side AssemblyAI realtime STT (mic capture + transcription task).
     // Keep one shared promise so a reconnect never races a previous shutdown.
     if (!this.nativeStopPromise) {
+      console.log("[LmDockService] 🛑 Invoking safeTauriInvoke('stop_assemblyai_stream'). Call stack:\n", new Error().stack);
       this.nativeStopPromise = Promise.resolve(safeTauriInvoke("stop_assemblyai_stream"))
         .then(() => undefined)
         .catch((err) => {

@@ -42,6 +42,8 @@ import {
   type OnlineLyricsImportDraft,
 } from "../../worship/OnlineLyricsImportModal";
 import { BulkImportModal } from "../../worship/BulkImportModal";
+import EasyWorshipOneClickImportModal from "../../worship/EasyWorshipOneClickImportModal";
+import { triggerEasyWorshipBanner } from "../EasyWorshipAnnouncementBanner";
 import WorshipSongModal from "../../worship/WorshipSongModal";
 import { fuzzyMatch } from "../../services/fuzzySearch";
 import { lowerThirdObsService } from "../../lowerthirds/lowerThirdObsService";
@@ -249,6 +251,7 @@ export function WorshipModule({
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [easyWorshipModalOpen, setEasyWorshipModalOpen] = useState(false);
 
   const computeSongCount = useCallback(async () => {
     const slots = await getRemainingSongSlots(authUser);
@@ -1769,6 +1772,14 @@ export function WorshipModule({
                 Smart Import
               </button>
               <button
+                className="worship-sidebar-action"
+                onClick={() => triggerEasyWorshipBanner()}
+                title="Import songs, videos, images, and themes from EasyWorship"
+              >
+                <Icon name="folder_zip" size={20} />
+                EasyWorship
+              </button>
+              <button
                 className={`worship-sidebar-action primary${hasReachedSongLimit ? " at-limit" : ""}`}
                 disabled={hasReachedSongLimit}
                 onClick={() => {
@@ -2183,6 +2194,15 @@ export function WorshipModule({
       {bulkImportOpen && (
         <BulkImportModal
           onClose={() => setBulkImportOpen(false)}
+          onImported={() => {
+            void reloadSongs();
+          }}
+        />
+      )}
+
+      {easyWorshipModalOpen && (
+        <EasyWorshipOneClickImportModal
+          onClose={() => setEasyWorshipModalOpen(false)}
           onImported={() => {
             void reloadSongs();
           }}

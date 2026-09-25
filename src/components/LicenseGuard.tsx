@@ -31,6 +31,7 @@ import {
   refreshAppSettings,
   type ForcedUpdateState,
 } from "../services/forcedUpdateService";
+import { useAuth } from "@/contexts/AuthContext";
 import Icon from "./Icon";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
@@ -208,6 +209,7 @@ function LicenseLockScreen({
 }) {
   const config = getLockScreenConfig(reason, payload);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const { logout } = useAuth();
 
   const handleRetry = async () => {
     await retryVerification();
@@ -405,6 +407,15 @@ function LicenseLockScreen({
                 Retry Verification
               </button>
             )}
+
+            <button
+              type="button"
+              className="license-guard-button license-guard-button--secondary"
+              onClick={() => logout()}
+            >
+              <Icon name="logout" size={18} />
+              Sign Out & Reconnect
+            </button>
 
             <button
               type="button"

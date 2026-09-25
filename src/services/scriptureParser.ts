@@ -330,7 +330,11 @@ aliases("Genesis", ["genesis", "gen", "ge", "gn", "gs", "geneis", "genisis", "je
 aliases("Exodus", ["exodus", "exo", "ex", "exod", "exxodus", "exodos", "exadus"]);
 aliases("Leviticus", ["leviticus", "lev", "le", "lv", "leveticus", "levitcus", "laviticus"]);
 aliases("Numbers", ["numbers", "num", "nu", "nm", "nb", "nombers", "numburs", "number"]);
-aliases("Deuteronomy", ["deuteronomy", "deut", "de", "dt", "deuteronmy", "deuternomy", "deuteronomy"]);
+aliases("Deuteronomy", [
+  "deuteronomy", "deut", "de", "dt", "deuteronmy", "deuternomy", "deuteronomy",
+  "ditatonomy", "the theonomy", "theonomy", "diteronomy", "titeronomy",
+  "duteronomy", "dutaronomy", "dutronomy", "dueteronomy", "deuteronome", "deuteromy",
+]);
 aliases("Joshua", ["joshua", "josh", "jos", "jsh", "joshu", "josua", "joshwa"]);
 aliases("Judges", ["judges", "judg", "jdg", "jg", "jdgs", "juds", "judgess"]);
 aliases("Ruth", ["ruth", "rth", "ru", "ruths"]);
@@ -364,8 +368,8 @@ aliases("Obadiah", ["obadiah", "obad", "ob", "obadia", "obadya", "obedia", "obed
 aliases("Jonah", ["jonah", "jon", "jnh", "jona"]);
 aliases("Micah", ["micah", "mic", "mc", "mica", "mycah"]);
 aliases("Nahum", ["nahum", "nah", "na", "naha", "nahim"]);
-aliases("Habakkuk", ["habakkuk", "hab", "hb", "habbakuk", "habakuk", "habakook"]);
-aliases("Zephaniah", ["zephaniah", "zeph", "zep", "zp", "zepheniah", "zefaniah", "zefanias"]);
+aliases("Habakkuk", ["habakkuk", "hab", "hb", "habbakuk", "habakuk", "habakook", "habacuc", "abacus", "haba cook"]);
+aliases("Zephaniah", ["zephaniah", "zeph", "zep", "zp", "zepheniah", "zefaniah", "zefanias", "stephaniah", "zephania"]);
 aliases("Haggai", ["haggai", "hag", "hg", "hagai", "hagee"]);
 aliases("Zechariah", ["zechariah", "zech", "zec", "zc", "zekariah", "zechriah", "zachariah", "zaccariah"]);
 aliases("Malachi", ["malachi", "mal", "ml", "malakai", "malachai"]);
@@ -564,7 +568,15 @@ const TRANSLATION_ALIASES: Record<string, string> = {
  */
 export function parseScriptureIntent(text: string): ScriptureIntent {
   if (!text) return null;
-  const lower = normalizeSpokenNumbers(text.toLowerCase().trim()).replace(/[.,!?;]+$/g, "").trim();
+  let lower = normalizeSpokenNumbers(text.toLowerCase().trim()).replace(/[.,!?;]+$/g, "").trim();
+
+  // ── STT misrecognition correction ──
+  // Deepgram frequently mishears "verse" as "vase", "vas", "vass", "worse"
+  lower = lower
+    .replace(/\bnext\s+(?:vase|vas|vass|worse|first)\b/g, "next verse")
+    .replace(/\bprevious\s+(?:vase|vas|vass|worse)\b/g, "previous verse")
+    .replace(/\b(\d+)\s+(?:vase|vas|vass)\b/g, "$1 verse")
+    .replace(/\bverse?\s*\.\s*$/g, "verse");
 
   // ── Noise filtering: ignore vague, incomplete, or nonsensical inputs ──
   // Pure numbers, vague thresholds, or misrecognized speech
@@ -787,7 +799,7 @@ function cleanTranscript(text: string): string {
   return normalizeSpokenNumbers(normalizeNumberedBookNames(text.toLowerCase()))
     .replace(/[’']/g, "'")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
-    .replace(/\b(verse|verses|vs|vrs|vas|vass|buzz|bah|bus|bas)\b/g, " verse ")
+    .replace(/\b(verse|verses|vs|vrs|vase|vas|vass|buzz|bah|bus|bas|worse)\b/g, " verse ")
     .replace(/[–—]/g, "-")
     .replace(/(\d)\s*:\s*(\d)/g, "$1:$2")
     .replace(/[^\w\s:-]/g, " ")

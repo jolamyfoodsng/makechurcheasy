@@ -1512,15 +1512,11 @@ fn get_local_share_file_metadata(
 }
 
 fn probe_local_share_device(
+    client: &reqwest::blocking::Client,
     host: &str,
     port: u16,
     local_fingerprint: &str,
 ) -> Option<LocalShareDeviceInfo> {
-    let client = reqwest::blocking::Client::builder()
-        .connect_timeout(Duration::from_millis(240))
-        .timeout(Duration::from_millis(420))
-        .build()
-        .ok()?;
     let base_url = format!("http://{}:{}", host, port);
     let response = client
         .get(format!("{base_url}/api/localsend/v2/info"))
@@ -1541,56 +1537,71 @@ fn probe_local_share_device(
 }
 
 /// Find other MakeChurchEasy desktop instances on the current /24 LAN.
-/// Discovery stays native so the webview never needs broad network access.
+/// Discovery stays native and asynchronous so the UI never hangs.
 #[tauri::command]
-fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, String> {
-    let local_ip = get_local_ip()
-        .ok_or_else(|| "Could not determine this computer's LAN address".to_string())?;
-    let subnet = subnet_prefix_from_ip(&local_ip)
-        .ok_or_else(|| format!("Unsupported LAN address: {local_ip}"))?;
-    let local_suffix = local_ip
-        .split('.')
-        .last()
-        .and_then(|value| value.parse::<u8>().ok());
-    let local_fingerprint = local_share_device_info(Some(local_ip.clone()))?.fingerprint;
-    let port = {
-        let current = OVERLAY_PORT.load(Ordering::Relaxed);
-        if current == 0 { 45678 } else { current }
-    };
+async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, String> {
+    tokio::task::spawn_blocking(move || {
+        let local_ip = get_local_ip()
+            .ok_or_else(|| "Could not determine this computer's LAN address".to_string())?;
+        let subnet = subnet_prefix_from_ip(&local_ip)
+            .ok_or_else(|| format!("Unsupported LAN address: {local_ip}"))?;
+        let local_suffix = local_ip
+            .split('.')
+            .last()
+            .and_then(|value| value.parse::<u8>().ok());
+        let local_fingerprint = local_share_device_info(Some(local_ip.clone()))?.fingerprint;
+        let port = {
+            let current = OVERLAY_PORT.load(Ordering::Relaxed);
+            if current == 0 { 45678 } else { current }
+        };
 
-    let (tx, rx) = mpsc::channel::<LocalShareDeviceInfo>();
-    let mut handles = Vec::new();
-    let chunk_size = 24usize;
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_millis(150))
+            .timeout(Duration::from_millis(300))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let client = std::sync::Arc::new(client);
 
-    for chunk_start in (1u16..=254u16).step_by(chunk_size) {
-        let tx = tx.clone();
-        let subnet = subnet.clone();
-        let local_fingerprint = local_fingerprint.clone();
-        let local_suffix = local_suffix;
-        let chunk_end = (chunk_start + chunk_size as u16 - 1).min(254);
+        let (tx, rx) = mpsc::channel::<LocalShareDeviceInfo>();
+        let mut handles = Vec::new();
+        let chunk_size = 8usize;
 
-        handles.push(std::thread::spawn(move || {
-            for suffix in chunk_start..=chunk_end {
-                if Some(suffix as u8) == local_suffix {
-                    continue;
+        for chunk_start in (1u16..=254u16).step_by(chunk_size) {
+            let tx = tx.clone();
+            let subnet = subnet.clone();
+            let local_fingerprint = local_fingerprint.clone();
+            let local_suffix = local_suffix;
+            let client = std::sync::Arc::clone(&client);
+            let chunk_end = (chunk_start + chunk_size as u16 - 1).min(254);
+
+            handles.push(std::thread::spawn(move || {
+                for suffix in chunk_start..=chunk_end {
+                    if Some(suffix as u8) == local_suffix {
+                        continue;
+                    }
+                    let host = format!("{}.{}", subnet, suffix);
+                    // Fast TCP pre-check (35ms) before firing HTTP
+                    if host_is_reachable(&host, port, 35) {
+                        if let Some(device) = probe_local_share_device(&client, &host, port, &local_fingerprint) {
+                            let _ = tx.send(device);
+                        }
+                    }
                 }
-                let host = format!("{}.{}", subnet, suffix);
-                if let Some(device) = probe_local_share_device(&host, port, &local_fingerprint) {
-                    let _ = tx.send(device);
-                }
-            }
-        }));
-    }
+            }));
+        }
 
-    drop(tx);
-    for handle in handles {
-        let _ = handle.join();
-    }
+        drop(tx);
+        for handle in handles {
+            let _ = handle.join();
+        }
 
-    let mut devices = rx.try_iter().collect::<Vec<_>>();
-    devices.sort_by(|left, right| left.alias.to_lowercase().cmp(&right.alias.to_lowercase()));
-    devices.dedup_by(|left, right| left.fingerprint == right.fingerprint);
-    Ok(devices)
+        let mut devices = rx.try_iter().collect::<Vec<_>>();
+        devices.sort_by(|left, right| left.alias.to_lowercase().cmp(&right.alias.to_lowercase()));
+        devices.dedup_by(|left, right| left.fingerprint == right.fingerprint);
+        Ok(devices)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn share_request_error(status: reqwest::StatusCode, body: &str) -> String {
@@ -2070,8 +2081,12 @@ fn get_overlay_port() -> u16 {
 
 /// Return this desktop's LAN identity for the Media sharing surface.
 #[tauri::command]
-fn get_local_share_info() -> Result<LocalShareDeviceInfo, String> {
-    local_share_device_info(None)
+async fn get_local_share_info() -> Result<LocalShareDeviceInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        local_share_device_info(None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn get_local_ip_for_target(target_host: Option<&str>) -> Option<String> {
@@ -3523,6 +3538,95 @@ async fn search_online_song_lyrics(query: String) -> Result<Vec<OnlineLyricsSear
     tauri::async_runtime::spawn_blocking(move || search_online_song_lyrics_blocking(query))
         .await
         .map_err(|err| format!("Lyrics search task failed: {}", err))?
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EasyWorshipRawRecord {
+    pub rowid: i64,
+    pub title: String,
+    pub author: Option<String>,
+    pub copyright: Option<String>,
+    pub administrator: Option<String>,
+    pub reference_number: Option<String>,
+    pub words_rtf: String,
+}
+
+fn find_file_recursive(dir: &Path, name_part: &str, depth: usize) -> Option<PathBuf> {
+    if depth > 4 {
+        return None;
+    }
+    if let Ok(entries) = fs::read_dir(dir) {
+        let name_lower = name_part.to_lowercase();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let fname = entry.file_name().to_string_lossy().to_lowercase();
+                if fname.contains(&name_lower) && fname.ends_with(".db") {
+                    return Some(path);
+                }
+            } else if path.is_dir() {
+                if let Some(found) = find_file_recursive(&path, name_part, depth + 1) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn read_easyworship_db_folder(folder_path: String) -> Result<Vec<EasyWorshipRawRecord>, String> {
+    let base_path = PathBuf::from(&folder_path);
+
+    let search_dir = if base_path.is_file() {
+        base_path.parent().unwrap_or(&base_path).to_path_buf()
+    } else {
+        base_path.clone()
+    };
+
+    let songs_path = find_file_recursive(&search_dir, "songs", 0)
+        .ok_or_else(|| format!("Could not find Songs.db in {}", folder_path))?;
+    let words_path = find_file_recursive(&search_dir, "songwords", 0)
+        .ok_or_else(|| format!("Could not find SongWords.db in {}", folder_path))?;
+
+    let conn = rusqlite::Connection::open(&songs_path)
+        .map_err(|e| format!("Failed to open Songs.db: {}", e))?;
+
+    let attach_sql = format!("ATTACH DATABASE '{}' AS words_db;", words_path.to_string_lossy().replace("'", "''"));
+    conn.execute(&attach_sql, [])
+        .map_err(|e| format!("Failed to attach SongWords.db: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.rowid, s.title, s.author, s.copyright, s.administrator, s.reference_number, w.words \
+             FROM song s \
+             JOIN words_db.word w ON s.rowid = w.song_id ORDER BY s.title ASC"
+        )
+        .map_err(|e| format!("Query preparation failed: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(EasyWorshipRawRecord {
+                rowid: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2).ok(),
+                copyright: row.get(3).ok(),
+                administrator: row.get(4).ok(),
+                reference_number: row.get(5).ok(),
+                words_rtf: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Query execution failed: {}", e))?;
+
+    let mut records = Vec::new();
+    for row in rows {
+        if let Ok(record) = row {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
 }
 
 #[cfg(test)]
@@ -8407,6 +8511,7 @@ pub fn run() {
             save_dock_setting,
             delete_dock_setting,
             search_online_song_lyrics,
+            read_easyworship_db_folder,
             load_transcripts,
             save_transcript,
             delete_transcript,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../components/Icon";
+import LoadingScreen from "../components/LoadingScreen";
 import type { BibleTheme } from "../bible/types";
 import { deleteCustomTheme } from "../bible/bibleDb";
 import ThemeCreatorModal from "./ThemeCreatorModal";
@@ -562,18 +563,7 @@ export default function ProductionThemeSettingsPage() {
   // ---------------------------------------------------------------------------
 
   if (loading) {
-    return (
-      <div className="app-page production-page">
-        <div className="app-page__inner">
-          <section className="production-panel">
-            <div className="production-loading">
-              <Icon name="hourglass_empty" size={18} />
-              {t("themes.loading")}
-            </div>
-          </section>
-        </div>
-      </div>
-    );
+    return <LoadingScreen variant="page" label={t("themes.loading")} />;
   }
 
   return (
@@ -581,15 +571,14 @@ export default function ProductionThemeSettingsPage() {
       <div className="app-page__inner">
         <header className="app-page__header">
           <div className="app-page__header-copy">
-            <p className="app-page__eyebrow">{t("themes.pageEyebrow")}</p>
-            <h1 className="app-page__title">{t("themes.pageDescription")}</h1>
-
+            <h1 className="app-page__title">{t("themes.pageEyebrow", "Production Themes")}</h1>
+            <p className="app-page__subtitle">{t("themes.pageDescription")}</p>
           </div>
 
           <div className="app-page__actions">
             {activeTab === "custom" && (
               <button
-                className="production-btn production-btn--ghost"
+                className="production-btn production-btn--primary"
                 onClick={() => {
                   const { allowed } = checkEntitlementSync("themes", effectivePlan, customThemes.length);
                   if (!allowed) return;
@@ -598,7 +587,7 @@ export default function ProductionThemeSettingsPage() {
                 }}
                 title={t("themes.createTheme")}>
                 <Icon name="add" size={16} />
-                {t("themes.createTheme")}
+                <span>{t("themes.createTheme")}</span>
               </button>
             )}
           </div>
@@ -611,25 +600,37 @@ export default function ProductionThemeSettingsPage() {
           </div>
         )}
 
-        {/* ── Tab bar ── */}
-        <div className="production-tab-bar">
+        {/* ── Segmented Tab bar ── */}
+        <div className="production-tab-bar" role="tablist">
           <button
+            role="tab"
+            aria-selected={activeTab === "custom"}
             className={`production-tab ${activeTab === "custom" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("custom")}
             title={t("themes.tabCustom")}>
-            {t("themes.tabCustom")}
+            <Icon name="palette" size={15} />
+            <span>{t("themes.tabCustom")}</span>
+            <span className="production-tab__badge">{customThemes.length}</span>
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "obs"}
             className={`production-tab ${activeTab === "obs" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("obs")}
             title={t("themes.tabObs")}>
-            {t("themes.tabObs")}
+            <Icon name="tv" size={15} />
+            <span>{t("themes.tabObs")}</span>
+            <span className="production-tab__badge">{obsFilteredThemes.length}</span>
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "tickers"}
             className={`production-tab ${activeTab === "tickers" ? "production-tab--active" : ""}`}
             onClick={() => setActiveTab("tickers")}
             title={t("themes.tabTickers")}>
-            {t("themes.tabTickers")}
+            <Icon name="rss_feed" size={15} />
+            <span>{t("themes.tabTickers")}</span>
+            <span className="production-tab__badge">{allTickers.length}</span>
           </button>
         </div>
 

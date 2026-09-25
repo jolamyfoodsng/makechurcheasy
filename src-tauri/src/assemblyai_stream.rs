@@ -35,7 +35,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 /// User-controlled gain multiplier, stored as f32 bits in an AtomicU32.
 /// Positioned AFTER AGC so it doesn't fight the auto-gain.
-/// 1.0 = unity (100%), 0.0 = muted (0%), 3.0 = max boost (300%).
+/// 1.0 = unity (100%), 0.0 = muted (0%), 5.0 = max boost (500%).
 static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
 
 const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
@@ -52,6 +52,12 @@ const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, 
 
 // Bible vocabulary boosts recognition without guessing a book in the parser.
 const REALTIME_KEYTERMS: &[&str] = &[
+    "verse",
+    "next verse",
+    "previous verse",
+    "chapter",
+    "next chapter",
+    "scripture",
     "Genesis",
     "Exodus",
     "Leviticus",
@@ -135,16 +141,6 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "First John",
     "Second John",
     "Third John",
-    "First Cor",
-    "Second Cor",
-    "First Thess",
-    "Second Thess",
-    "First Tim",
-    "Second Tim",
-    "First Sam",
-    "Second Sam",
-    "First Chron",
-    "Second Chron",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -255,6 +251,38 @@ struct RealtimeTranscriptMessage {
     words: Option<Vec<RealtimeWord>>,
     error: Option<String>,
     message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct DeepgramWord {
+    word: Option<String>,
+    start: Option<f64>,
+    end: Option<f64>,
+    confidence: Option<f64>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct DeepgramAlternative {
+    transcript: Option<String>,
+    confidence: Option<f64>,
+    words: Option<Vec<DeepgramWord>>,
+}
+
+#[derive(Deserialize)]
+struct DeepgramChannel {
+    alternatives: Option<Vec<DeepgramAlternative>>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct DeepgramResults {
+    channel: Option<DeepgramChannel>,
+    is_final: Option<bool>,
+    speech_final: Option<bool>,
+    start: Option<f64>,
+    duration: Option<f64>,
 }
 
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
@@ -432,23 +460,66 @@ pub async fn start_assemblyai_stream(
         *c = true;
     }
 
-    // ── 2. Spawn the AssemblyAI realtime STT task ─────────────────────────
+    // ── 2. Spawn the STT task (Deepgram, Cloudflare HTTP, or AssemblyAI) ────
+    let is_deepgram = api_key.starts_with("deepgram:")
+        || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
+    let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
+    let engine_label = if is_deepgram {
+        "Deepgram Nova-2"
+    } else if is_http_endpoint {
+        "Cloudflare Whisper"
+    } else {
+        "AssemblyAI"
+    };
+
     let realtime_app = app.clone();
     let task_stream = Arc::clone(&state.stream);
     let task_is_streaming = Arc::clone(&state.is_streaming);
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
-        let result = run_realtime_transcriber(
-            realtime_app.clone(),
-            api_key,
-            audio_rx,
-            shutdown_rx,
-            profile_rx,
-            profile,
-            Arc::clone(&task_audio_ready),
-            Arc::clone(&audio_drop_count),
-        )
-        .await;
+        let result = if is_deepgram {
+            let clean_keys = api_key
+                .strip_prefix("deepgram:")
+                .unwrap_or(&api_key)
+                .split(',')
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            run_deepgram_transcriber(
+                realtime_app.clone(),
+                clean_keys,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        } else if is_http_endpoint {
+            run_cloudflare_transcriber(
+                realtime_app.clone(),
+                api_key,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        } else {
+            run_realtime_transcriber(
+                realtime_app.clone(),
+                api_key,
+                audio_rx,
+                shutdown_rx,
+                profile_rx,
+                profile,
+                Arc::clone(&task_audio_ready),
+                Arc::clone(&audio_drop_count),
+            )
+            .await
+        };
 
         task_audio_ready.store(false, Ordering::Release);
 
@@ -462,7 +533,7 @@ pub async fn start_assemblyai_stream(
         }
 
         if let Err(error) = result {
-            eprintln!("[AssemblyAI Realtime] Stream failed: {error}");
+            eprintln!("[Voice Stream ({engine_label})] Stream failed: {error}");
             let _ = realtime_app.emit(
                 "assemblyai-status",
                 StatusPayload {
@@ -476,7 +547,7 @@ pub async fn start_assemblyai_stream(
                     status: "stopped".to_string(),
                 },
             );
-            println!("[AssemblyAI Realtime] Capture task ended");
+            println!("[Voice Stream ({engine_label})] Capture task ended");
         }
     });
 
@@ -486,9 +557,478 @@ pub async fn start_assemblyai_stream(
     }
 
     println!(
-        "[AssemblyAI Realtime] Started — profile {}, native rate {native_rate} Hz, {channels} ch",
+        "[Voice Stream ({engine_label})] Started — profile {}, native rate {native_rate} Hz, {channels} ch",
         profile.label
     );
+    Ok(())
+}
+
+// ── Cloudflare Workers AI Whisper Transcriber ────────────────────────────────
+
+fn compute_chunk_rms(chunk: &[u8]) -> f32 {
+    if chunk.len() < 2 {
+        return 0.0;
+    }
+    let mut sum_sq = 0.0f32;
+    let samples_count = chunk.len() / 2;
+    for i in (0..chunk.len()).step_by(2) {
+        let sample = i16::from_le_bytes([chunk[i], chunk[i + 1]]) as f32 / 32768.0;
+        sum_sq += sample * sample;
+    }
+    (sum_sq / samples_count as f32).sqrt()
+}
+
+fn pcm_to_wav(pcm_bytes: &[u8], sample_rate: u32, channels: u16, bits_per_sample: u16) -> Vec<u8> {
+    let mut header = Vec::with_capacity(44 + pcm_bytes.len());
+    let byte_rate = sample_rate * channels as u32 * (bits_per_sample as u32 / 8);
+    let block_align = channels * (bits_per_sample / 8);
+    let data_len = pcm_bytes.len() as u32;
+    let file_len = 36 + data_len;
+
+    header.extend_from_slice(b"RIFF");
+    header.extend_from_slice(&file_len.to_le_bytes());
+    header.extend_from_slice(b"WAVE");
+    header.extend_from_slice(b"fmt ");
+    header.extend_from_slice(&16u32.to_le_bytes()); // Subchunk1Size (16 for PCM)
+    header.extend_from_slice(&1u16.to_le_bytes());  // AudioFormat (1 = PCM)
+    header.extend_from_slice(&channels.to_le_bytes());
+    header.extend_from_slice(&sample_rate.to_le_bytes());
+    header.extend_from_slice(&byte_rate.to_le_bytes());
+    header.extend_from_slice(&block_align.to_le_bytes());
+    header.extend_from_slice(&bits_per_sample.to_le_bytes());
+    header.extend_from_slice(b"data");
+    header.extend_from_slice(&data_len.to_le_bytes());
+    header.extend_from_slice(pcm_bytes);
+    header
+}
+
+fn dispatch_cloudflare_phrase(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    endpoint_url: &str,
+    pcm_bytes: &[u8],
+) {
+    let wav_data = pcm_to_wav(pcm_bytes, TARGET_RATE, 1, 16);
+    let app_clone = app.clone();
+    let client_clone = client.clone();
+    let endpoint = endpoint_url.to_string();
+
+    tokio::spawn(async move {
+        let resp_result = client_clone
+            .post(&endpoint)
+            .header("Content-Type", "audio/wav")
+            .body(wav_data)
+            .send()
+            .await;
+
+        match resp_result {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    #[derive(Deserialize)]
+                    struct CfResponse {
+                        text: Option<String>,
+                    }
+                    if let Ok(data) = resp.json::<CfResponse>().await {
+                        if let Some(text) = data.text {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                println!("[Cloudflare STT] Transcript: {}", trimmed);
+                                let payload = TranscriptPayload {
+                                    text: trimmed.to_string(),
+                                    end_of_turn: true,
+                                    audio_start: 0.0,
+                                    audio_end: 0.0,
+                                };
+                                let _ = app_clone.emit("assemblyai-transcript", payload);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("[Cloudflare STT] Endpoint returned status: {}", resp.status());
+                }
+            }
+            Err(e) => {
+                eprintln!("[Cloudflare STT] Dispatch error: {e}");
+            }
+        }
+    });
+}
+
+async fn run_cloudflare_transcriber(
+    app: AppHandle,
+    endpoint_url: String,
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    mut profile_rx: mpsc::Receiver<RealtimeProfile>,
+    audio_ready: Arc<AtomicBool>,
+    _audio_drop_count: Arc<AtomicU32>,
+) -> Result<(), String> {
+    let _ = app.emit(
+        "assemblyai-status",
+        StatusPayload {
+            status: "connected".to_string(),
+        },
+    );
+    audio_ready.store(true, Ordering::Release);
+    println!("[Cloudflare STT] Connected to endpoint: {}", endpoint_url);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let mut speech_buffer: Vec<u8> = Vec::with_capacity(TARGET_RATE as usize * 2 * 4);
+    let mut is_speech_active = false;
+    let mut last_speech_time = Instant::now();
+    let mut phrase_start_time = Instant::now();
+
+    // 16kHz 16-bit mono = 32,000 bytes/sec
+    // 50ms chunk = 1600 bytes
+    // 220ms of silence after speech triggers phrase finalize (fast, responsive)
+    const SILENCE_FINALIZE_MS: u128 = 220;
+    // 3.0s max phrase length (keeps chunks bite-sized for fast inference)
+    const MAX_PHRASE_DURATION_MS: u128 = 3000;
+    // 250ms minimum audio to avoid transient clicks/pops
+    const MIN_PHRASE_BYTES: usize = 1600 * 5;
+    // RMS threshold for voice activity
+    const SPEECH_RMS_THRESHOLD: f32 = 0.015;
+
+    loop {
+        tokio::select! {
+            _ = &mut shutdown_rx => {
+                println!("[Cloudflare STT] Shutdown signal received");
+                break;
+            }
+            Some(_) = profile_rx.recv() => {
+                // Speed profile update; no-op for Cloudflare VAD
+            }
+            maybe_chunk = audio_rx.recv() => {
+                match maybe_chunk {
+                    Some(chunk) => {
+                        let rms = compute_chunk_rms(&chunk);
+                        let is_voiced = rms >= SPEECH_RMS_THRESHOLD;
+                        let now = Instant::now();
+
+                        if is_voiced {
+                            if !is_speech_active {
+                                is_speech_active = true;
+                                phrase_start_time = now;
+                            }
+                            last_speech_time = now;
+                            speech_buffer.extend_from_slice(&chunk);
+
+                            if now.duration_since(phrase_start_time).as_millis() >= MAX_PHRASE_DURATION_MS {
+                                if speech_buffer.len() >= MIN_PHRASE_BYTES {
+                                    dispatch_cloudflare_phrase(&app, &client, &endpoint_url, &speech_buffer);
+                                }
+                                speech_buffer.clear();
+                                is_speech_active = false;
+                            }
+                        } else if is_speech_active {
+                            // Retain up to 150ms of trailing silence for smooth natural word ending
+                            if now.duration_since(last_speech_time).as_millis() <= 150 {
+                                speech_buffer.extend_from_slice(&chunk);
+                            }
+
+                            if now.duration_since(last_speech_time).as_millis() >= SILENCE_FINALIZE_MS {
+                                if speech_buffer.len() >= MIN_PHRASE_BYTES {
+                                    dispatch_cloudflare_phrase(&app, &client, &endpoint_url, &speech_buffer);
+                                }
+                                speech_buffer.clear();
+                                is_speech_active = false;
+                            }
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ── Deepgram Nova-2 Realtime Transcriber ─────────────────────────────────────
+
+fn build_deepgram_endpoint() -> String {
+    let mut query = vec![
+        "model=nova-2".to_string(),
+        "encoding=linear16".to_string(),
+        "sample_rate=16000".to_string(),
+        "channels=1".to_string(),
+        "interim_results=true".to_string(),
+        "smart_format=true".to_string(),
+        "endpointing=850".to_string(),
+        "utterance_end_ms=1000".to_string(),
+    ];
+
+    for term in REALTIME_KEYTERMS.iter() {
+        let weight = match *term {
+            "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" => 4,
+            _ => 3,
+        };
+        query.push(format!("keywords={}:{weight}", urlencoding::encode(term)));
+    }
+
+    format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))
+}
+
+fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
+    let value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[Deepgram STT] JSON parse error: {e}: {raw}");
+            return Ok(false);
+        }
+    };
+
+    let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match msg_type {
+        "Results" => {
+            let message: DeepgramResults = match serde_json::from_value(value) {
+                Ok(msg) => msg,
+                Err(e) => {
+                    eprintln!("[Deepgram STT] Results parse error: {e}: {raw}");
+                    return Ok(false);
+                }
+            };
+
+            if let Some(channel) = &message.channel {
+                if let Some(alternatives) = &channel.alternatives {
+                    if let Some(first_alt) = alternatives.first() {
+                        if let Some(transcript) = &first_alt.transcript {
+                            let trimmed = transcript.trim();
+                            if !trimmed.is_empty() {
+                                // speech_final is Deepgram's true end-of-turn indicator (after 850ms silence)
+                                let end_of_turn = message.speech_final.unwrap_or(false);
+
+                                let mut audio_start = message.start.unwrap_or(0.0);
+                                let mut audio_end = audio_start + message.duration.unwrap_or(0.0);
+
+                                if let Some(words) = &first_alt.words {
+                                    if let Some(first_w) = words.first() {
+                                        if let Some(s) = first_w.start {
+                                            audio_start = s;
+                                        }
+                                    }
+                                    if let Some(last_w) = words.last() {
+                                        if let Some(e) = last_w.end {
+                                            audio_end = e;
+                                        }
+                                    }
+                                }
+
+                                println!(
+                                    "[Deepgram STT] [{}] {trimmed}",
+                                    if end_of_turn { "FINAL" } else { "INTERIM" }
+                                );
+
+                                let payload = TranscriptPayload {
+                                    text: trimmed.to_string(),
+                                    end_of_turn,
+                                    audio_start: audio_start * 1000.0,
+                                    audio_end: audio_end * 1000.0,
+                                };
+                                let _ = app.emit("assemblyai-transcript", payload);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "Metadata" => {
+            println!("[Deepgram STT] Session confirmed by Metadata");
+            let _ = app.emit(
+                "assemblyai-status",
+                StatusPayload {
+                    status: "connected".to_string(),
+                },
+            );
+            return Ok(true);
+        }
+        "UtteranceEnd" => {
+            println!("[Deepgram STT] UtteranceEnd received; finalizing turn");
+            let payload = TranscriptPayload {
+                text: String::new(),
+                end_of_turn: true,
+                audio_start: 0.0,
+                audio_end: 0.0,
+            };
+            let _ = app.emit("assemblyai-transcript", payload);
+        }
+        "SpeechStarted" => {
+            // Expected Deepgram lifecycle event
+        }
+        "Error" => {
+            let detail = value
+                .get("error")
+                .or_else(|| value.get("message"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown Deepgram error");
+            eprintln!("[Deepgram STT] Received error from server: {detail}");
+            let _ = app.emit(
+                "assemblyai-status",
+                StatusPayload {
+                    status: format!("error: {detail}"),
+                },
+            );
+        }
+        _ => {}
+    }
+
+    Ok(false)
+}
+
+async fn run_deepgram_transcriber(
+    app: AppHandle,
+    api_keys: Vec<String>,
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    mut _profile_rx: mpsc::Receiver<RealtimeProfile>,
+    audio_ready: Arc<AtomicBool>,
+    audio_drop_count: Arc<AtomicU32>,
+) -> Result<(), String> {
+    let endpoint = build_deepgram_endpoint();
+    if api_keys.is_empty() {
+        return Err("No Deepgram API keys configured".to_string());
+    }
+
+    let mut connected = None;
+    let mut last_error = "Deepgram rejected every configured API key".to_string();
+
+    for (index, api_key) in api_keys.iter().enumerate() {
+        let mut request = endpoint
+            .as_str()
+            .into_client_request()
+            .map_err(|e| format!("Failed to create Deepgram request: {e}"))?;
+
+        let auth_str = format!("Token {api_key}");
+        let auth = match HeaderValue::from_str(&auth_str) {
+            Ok(value) => value,
+            Err(_) => {
+                last_error = format!("Deepgram key {} has an invalid format", index + 1);
+                continue;
+            }
+        };
+        request.headers_mut().insert("Authorization", auth);
+
+        println!(
+            "[Deepgram STT] Connecting with key slot {}/{}",
+            index + 1,
+            api_keys.len()
+        );
+
+        match timeout(WS_CONNECT_TIMEOUT, connect_async(request)).await {
+            Ok(Ok(pair)) => {
+                connected = Some(pair);
+                break;
+            }
+            Ok(Err(_)) => {
+                last_error = format!("Deepgram key {} rejected the connection", index + 1);
+            }
+            Err(_) => {
+                last_error = format!("Deepgram key {} connection timed out", index + 1);
+            }
+        }
+
+        println!(
+            "[Deepgram STT] Key slot {} unavailable; trying the next configured key",
+            index + 1
+        );
+    }
+
+    let (ws_stream, _) = connected.ok_or(last_error)?;
+    let (mut write, mut read) = ws_stream.split();
+
+    println!("[Deepgram STT] WebSocket connected; sending KeepAlive and priming audio stream");
+
+    // Deepgram is immediately connected and ready to process audio
+    let _ = app.emit(
+        "assemblyai-status",
+        StatusPayload {
+            status: "connected".to_string(),
+        },
+    );
+    audio_ready.store(true, Ordering::Release);
+
+    let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
+    let _ = write.send(Message::Text(keep_alive.into())).await;
+
+    let mut last_server_activity = Instant::now();
+    let mut heartbeat = interval(Duration::from_secs(5));
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    heartbeat.tick().await;
+
+    loop {
+        if audio_drop_count.load(Ordering::Relaxed) >= MAX_AUDIO_QUEUE_DROPS {
+            return Err("Deepgram WebSocket fell behind the microphone; restarting.".to_string());
+        }
+
+        tokio::select! {
+            _ = &mut shutdown_rx => {
+                println!("[Deepgram STT] Shutdown signal received");
+                let close_stream = serde_json::json!({ "type": "CloseStream" }).to_string();
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.send(Message::Text(close_stream.into()))).await;
+                let _ = timeout(WS_CLOSE_TIMEOUT, write.close()).await;
+                break;
+            }
+            maybe_pcm = audio_rx.recv() => {
+                let Some(pcm_bytes) = maybe_pcm else {
+                    break;
+                };
+                timeout(
+                    WS_WRITE_TIMEOUT,
+                    write.send(Message::Binary(pcm_bytes.into())),
+                )
+                    .await
+                    .map_err(|_| "Deepgram WebSocket audio send timed out".to_string())?
+                    .map_err(|e| format!("Failed to send Deepgram audio: {e}"))?;
+            }
+            _ = heartbeat.tick() => {
+                if last_server_activity.elapsed() > WS_IDLE_TIMEOUT {
+                    return Err(format!(
+                        "Deepgram WebSocket stalled: no server response for {} seconds",
+                        WS_IDLE_TIMEOUT.as_secs(),
+                    ));
+                }
+
+                let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
+                let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Text(keep_alive.into()))).await;
+            }
+            maybe_message = read.next() => {
+                let Some(message) = maybe_message else {
+                    break;
+                };
+                last_server_activity = Instant::now();
+                match message {
+                    Ok(Message::Text(text)) => {
+                        let _ = handle_deepgram_message(&app, text.as_ref());
+                    }
+                    Ok(Message::Binary(bytes)) => {
+                        if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
+                            let _ = handle_deepgram_message(&app, text);
+                        }
+                    }
+                    Ok(Message::Ping(payload)) => {
+                        let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Pong(payload))).await;
+                    }
+                    Ok(Message::Close(frame)) => {
+                        if let Some(frame) = frame {
+                            println!("[Deepgram STT] WebSocket closed: {} {}", frame.code, frame.reason);
+                        }
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(format!("Deepgram WebSocket read failed: {error}"));
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -764,6 +1304,7 @@ fn extract_realtime_word_range(words: &Option<Vec<RealtimeWord>>) -> (f64, f64) 
 
 #[tauri::command]
 pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> Result<(), String> {
+    println!("[Voice Stream] stop_assemblyai_stream command received from frontend");
     // Drop the mic stream — stops cpal callbacks immediately.
     {
         let mut s = state.stream.lock().map_err(|e| e.to_string())?;
@@ -797,18 +1338,18 @@ pub async fn stop_assemblyai_stream(state: State<'_, AssemblyAiStreamState>) -> 
         *c = false;
     }
 
-    println!("[AssemblyAI Stream] Stopped");
+    println!("[Voice Stream] Stopped");
     Ok(())
 }
 
-/// Update the user-controlled microphone gain at runtime (0.0–3.0).
+/// Update the user-controlled microphone gain at runtime (0.0–5.0).
 /// This multiplier is applied AFTER the auto-gain, so it acts as a post-AGC
 /// trim control that doesn't fight the dynamic range compression.
 #[tauri::command]
 pub fn set_microphone_gain(gain: f32) {
-    let clamped = gain.clamp(0.0, 3.0);
+    let clamped = gain.clamp(0.0, 5.0);
     USER_GAIN.store(f32_to_bits(clamped), Ordering::Relaxed);
-    println!("[AssemblyAI Stream] User gain set to {clamped:.2}");
+    println!("[Voice Stream] User gain set to {clamped:.2}");
 }
 
 #[tauri::command]
@@ -910,41 +1451,51 @@ fn process_and_send_f32(
             filtered.push(out);
         }
 
-        // 2) Running RMS for auto-gain (EMA, slow attack ~50 ms)
-        let rms_alpha = 0.005;
-        let target_rms = 0.08; // target RMS level
+        // 2) Running RMS for auto-gain (EMA, ~50 ms attack)
+        let rms_alpha = 0.01;
+        let target_rms = 0.08;
         let chunk_rms: f32 = {
             let sum: f32 = filtered.iter().map(|s| s * s).sum();
             (sum / filtered.len() as f32).sqrt().max(1e-6)
         };
-        // Keep RMS floor at 0.02 so AGC gain does not blow up on background silence
-        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.02);
-        let agc_gain = (target_rms / st.rms_ema).min(3.5).max(0.2);
+        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.005);
+        let agc_gain = (target_rms / st.rms_ema).min(6.0).max(0.6);
 
         // Read user gain from the atomic (lock-free, thread-safe).
         // Positioned AFTER AGC so it doesn't fight the dynamic range compression.
         let user_gain = f32_from_bits(USER_GAIN.load(Ordering::Relaxed));
         let effective_gain = agc_gain * user_gain;
 
-        // 3) Noise gate — hold open for ~200 ms (2 chunks) after level drops
-        let gate_threshold = 0.003;
+        // 3) Noise gate with ~600ms hold time to preserve soft syllables
+        let gate_threshold = 0.0003;
         if chunk_rms > gate_threshold {
             st.gate_open = true;
-            st.gate_hold = 3; // ~300 ms hold
+            st.gate_hold = 6; // ~600 ms hold
         } else if st.gate_hold > 0 {
             st.gate_hold -= 1;
         } else {
             st.gate_open = false;
         }
 
-        // Apply effective gain (AGC × user) + gate
+        // Apply effective gain with clean headroom and transparent soft limiter only near peak
         let processed: Vec<f32> = if st.gate_open {
             filtered
                 .iter()
-                .map(|s| (s * effective_gain).max(-1.0).min(1.0))
+                .map(|&s| {
+                    let scaled = s * effective_gain;
+                    if scaled.abs() > 0.85 {
+                        scaled.signum() * (0.85 + (scaled.abs() - 0.85).tanh() * 0.14)
+                    } else {
+                        scaled
+                    }
+                })
                 .collect()
         } else {
-            vec![0.0; filtered.len()]
+            // Soft attenuation during silence
+            filtered
+                .iter()
+                .map(|&s| (s * effective_gain * 0.1).clamp(-1.0, 1.0))
+                .collect()
         };
 
         // ── Resample ─────────────────────────────────────────────────────
@@ -964,7 +1515,7 @@ fn process_and_send_f32(
                 // RMS level for the input meter
                 let sum: f32 = chunk.iter().map(|s| s * s).sum();
                 let rms = (sum / chunk.len() as f32).sqrt();
-                let level = (rms * 3.0).min(1.0);
+                let level = (rms * 5.0).min(1.0);
 
                 // Convert to PCM16 little-endian bytes
                 let pcm16_bytes: Vec<u8> = chunk
@@ -980,6 +1531,11 @@ fn process_and_send_f32(
                     audio_tx.try_send(pcm16_bytes)
                 {
                     audio_drop_count.fetch_add(1, Ordering::Relaxed);
+                }
+                static CHUNK_COUNTER: AtomicU32 = AtomicU32::new(0);
+                let sent = CHUNK_COUNTER.fetch_add(1, Ordering::Relaxed);
+                if sent == 0 || sent % 200 == 0 {
+                    println!("[Voice Stream] Mic audio active — sent {sent} chunks to Deepgram (rms: {rms:.4}, level: {level:.3})");
                 }
                 let _ = app.emit("assemblyai-audio-level", LevelPayload { level });
             }

@@ -15,6 +15,12 @@ import { migrateStorageKeys } from "./services/storageMigration";
 // Migrate old storage keys before anything else reads them
 migrateStorageKeys();
 
+// Detect OS platform (Windows vs macOS) for native typography & metrics
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform ?? navigator.userAgent);
+if (typeof document !== "undefined") {
+  document.documentElement.dataset.platform = isMac ? "macos" : "windows";
+}
+
 // Initialize analytics before anything else
 initAnalytics();
 

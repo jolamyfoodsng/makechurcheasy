@@ -125,8 +125,8 @@
 
 .mce-loading-screen--dock .mce-spinner {
   border-color: rgba(255, 255, 255, 0.1);
-  border-top-color: var(--dock-accent, #c56f4d);
-  border-right-color: rgba(220, 137, 101, 0.6);
+  border-top-color: var(--dock-accent, #6366F1);
+  border-right-color: rgba(99, 102, 241, 0.6);
 }
 
 /* Spinner Sizes */
@@ -152,12 +152,12 @@
 .mce-spinner-core {
   position: absolute;
   border-radius: 50%;
-  background: var(--accent-blue, #60a5fa);
+  background: var(--accent-blue, #6366F1);
   animation: mce-pulse-core 1.5s ease-in-out infinite;
 }
 
 .mce-loading-screen--dock .mce-spinner-core {
-  background: var(--dock-accent, #c56f4d);
+  background: var(--dock-accent, #6366F1);
 }
 
 .mce-spinner--large .mce-spinner-core {

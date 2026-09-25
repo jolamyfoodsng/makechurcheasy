@@ -20,6 +20,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon";
+import {
+  Search,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  FolderUp,
+  ListMusic,
+  MoreHorizontal,
+  Globe,
+  Archive,
+  Upload,
+  X,
+  Edit,
+  Lock,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   getEffectivePlan,
@@ -29,6 +44,7 @@ import { checkEntitlementSync } from "../services/entitlementClient";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { BulkImportModal } from "../worship/BulkImportModal";
+import EasyWorshipOneClickImportModal from "../worship/EasyWorshipOneClickImportModal";
 import {
   formatOnlineLyricsSearchError,
   isSpotifyTrackLyricsQuery,
@@ -111,6 +127,10 @@ export function SongsTab() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [easyWorshipModalOpen, setEasyWorshipModalOpen] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
+  const [activeCardMenuId, setActiveCardMenuId] = useState<string | null>(null);
+  const moreToolsRef = useRef<HTMLDivElement>(null);
   const [languageFilter, setLanguageFilter] = useState<string>("all");
   const [showSongLimitModal, setShowSongLimitModal] = useState(false);
   const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
@@ -118,6 +138,20 @@ export function SongsTab() {
   const [savingOnlineImport, setSavingOnlineImport] = useState(false);
   const onlineSearchRequestRef = useRef(0);
   const spotifyAutoImportRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (moreToolsRef.current && !moreToolsRef.current.contains(target)) {
+        setShowMoreTools(false);
+      }
+      if (!target.closest(".worship-card-menu-container")) {
+        setActiveCardMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleDocumentClick);
+    return () => document.removeEventListener("mousedown", handleDocumentClick);
+  }, []);
 
   // ── Plan enforcement ──
   const { user: authUser } = useAuth();
@@ -240,6 +274,35 @@ export function SongsTab() {
     }
     return scored.map((item) => item.song);
   }, [search, accessibleSongs, languageFilter]);
+
+  const SONGS_PER_PAGE = 24;
+  const [displayLimit, setDisplayLimit] = useState(SONGS_PER_PAGE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setDisplayLimit(SONGS_PER_PAGE);
+  }, [search, languageFilter]);
+
+  const displayedSongs = useMemo(() => {
+    return visible.slice(0, displayLimit);
+  }, [visible, displayLimit]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayLimit < visible.length) {
+          setDisplayLimit((prev) => Math.min(visible.length, prev + SONGS_PER_PAGE));
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [displayLimit, visible.length]);
 
   const hasActiveFilters = search.trim().length > 0 || languageFilter !== "all";
   const languageFilterLabel = languageFilter === "all"
@@ -435,280 +498,370 @@ export function SongsTab() {
 
   return (
     <>
-      {/* Toolbar */}
-      <div className="lib-toolbar">
-        <div className="lib-toolbar-left">
-          <div className="lib-search-wrap">
-            <input
-              className="lib-search-input"
-              type="text"
-              placeholder="Search songs or hymn number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search songs"
-            />
-            {search && (
-              <button
-                type="button"
-                className="lib-search-clear"
-                onClick={() => setSearch("")}
-                aria-label="Clear song search"
-                title="Clear song search"
-              >
-                <Icon name="close" size={14} />
-              </button>
+      <div className="worship-resources-container">
+      {/* Search and Action Toolbar */}
+      <div className="worship-toolbar-row">
+        <div className="worship-search-wrap">
+          <Search size={18} className="worship-search-icon" />
+          <input
+            className="worship-search-input"
+            type="text"
+            placeholder="Search by title, artist, or hymn number"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search songs by title, artist, or hymn number"
+          />
+          {search && (
+            <button
+              type="button"
+              className="worship-search-clear"
+              onClick={() => setSearch("")}
+              aria-label="Clear song search"
+              title="Clear song search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="worship-toolbar-actions">
+          <button
+            type="button"
+            className={`worship-add-song-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
+            onClick={handleAddSong}
+            title="Add a song"
+          >
+            <Plus size={18} />
+            <span>Add Song</span>
+          </button>
+
+          <div className="worship-more-tools-container" ref={moreToolsRef}>
+            <button
+              type="button"
+              className="worship-more-tools-btn"
+              onClick={() => setShowMoreTools((prev) => !prev)}
+              aria-label="More tools"
+              title="More tools"
+            >
+              <span>More tools</span>
+              <ChevronDown size={14} />
+            </button>
+
+            {showMoreTools && (
+              <div className="worship-more-tools-dropdown">
+                <button
+                  type="button"
+                  className="worship-dropdown-item"
+                  onClick={() => {
+                    setShowMoreTools(false);
+                    handleOpenOnlineSearch();
+                  }}
+                >
+                  <Globe size={16} />
+                  <span>Search Online</span>
+                </button>
+                <button
+                  type="button"
+                  className="worship-dropdown-item"
+                  onClick={() => {
+                    setShowMoreTools(false);
+                    setShowArchiveModal(true);
+                  }}
+                >
+                  <Archive size={16} />
+                  <span>Archive</span>
+                  {archivedSongs.length > 0 && (
+                    <span className="worship-dropdown-badge">{archivedSongs.length}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="worship-dropdown-item"
+                  onClick={() => {
+                    setShowMoreTools(false);
+                    handleBulkImport();
+                  }}
+                >
+                  <Upload size={16} />
+                  <span>Import File</span>
+                </button>
+                <button
+                  type="button"
+                  className="worship-dropdown-item"
+                  onClick={() => {
+                    setShowMoreTools(false);
+                    setEasyWorshipModalOpen(true);
+                  }}
+                >
+                  <FolderUp size={16} />
+                  <span>Import EasyWorship</span>
+                </button>
+              </div>
             )}
           </div>
-
-        </div>
-        <div className="lib-toolbar-actions">
-          <button
-            type="button"
-            className="lib-toolbar-btn lib-toolbar-btn--secondary"
-            onClick={handleOpenOnlineSearch}
-            title="Search lyrics online"
-          >
-            <Icon name="travel_explore" size={18} />
-            Search Online
-          </button>
-          <button
-            type="button"
-            className="lib-toolbar-btn lib-toolbar-btn--secondary"
-            onClick={() => setShowArchiveModal(true)}
-            title="View archive"
-          >
-            <Icon name="archive" size={18} />
-            Archive
-            {archivedSongs.length > 0 && (
-              <span className="lib-toolbar-btn-badge">{archivedSongs.length}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            className="lib-toolbar-btn lib-toolbar-btn--secondary"
-            onClick={handleBulkImport}
-            title="Import songs from a document"
-          >
-            <Icon name="upload_file" size={18} />
-            Import File
-          </button>
-          <button
-            type="button"
-            className={`lib-add-btn ${hasReachedSongLimit ? "lib-add-btn--at-limit" : ""}`}
-            onClick={handleAddSong}
-            title="Add"
-          >
-            <Icon name="add" size={20} />
-            Add Song
-          </button>
         </div>
       </div>
 
-      {/* Songs list */}
-      <div className="lib-songs-list">
-        {hasActiveFilters && (
-          <div className="lib-song-section-head lib-song-section-head--active">
-            <div className="lib-song-section-summary">
-              <span className="lib-song-section-label">Library</span>
-              <span className="lib-song-section-note">
-                {visible.length} result{visible.length === 1 ? "" : "s"}
+      {/* EasyWorship Import Banner */}
+      <div className="worship-ew-banner">
+        <div className="worship-ew-banner-left">
+          <div className="worship-ew-icon-box">
+            <FolderUp size={22} />
+          </div>
+          <div className="worship-ew-text">
+            <h3 className="worship-ew-title">Bring in your EasyWorship library</h3>
+            <p className="worship-ew-subtitle">Import songs, media, and themes in one step.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="worship-ew-import-btn"
+          onClick={() => setEasyWorshipModalOpen(true)}
+          title="Import EasyWorship library"
+        >
+          Import EasyWorship
+        </button>
+      </div>
+
+      {/* Filter indicator chips if searching */}
+      {hasActiveFilters && (
+        <div className="lib-song-section-head lib-song-section-head--active" style={{ padding: "0 4px" }}>
+          <div className="lib-song-section-summary">
+            <span className="lib-song-section-label">Library</span>
+            <span className="lib-song-section-note">
+              {visible.length} result{visible.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="lib-song-section-chips">
+            {search.trim() && (
+              <span className="lib-song-section-chip">
+                <Search size={12} />
+                {search.trim()}
               </span>
+            )}
+            {languageFilter !== "all" && (
+              <span className="lib-song-section-chip">
+                {languageFilterLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Empty States */}
+      {visible.length === 0 &&
+        (hasActiveFilters ? (
+          <div className="lib-empty lib-empty--search">
+            <div className="lib-empty-icon">
+              <Globe size={30} />
             </div>
-            <div className="lib-song-section-chips">
-              {search.trim() && (
-                <span className="lib-song-section-chip">
-                  <Icon name="search" size={12} />
-                  {search.trim()}
-                </span>
-              )}
-              {languageFilter !== "all" && (
-                <span className="lib-song-section-chip">
-                  <Icon name="translate" size={12} />
-                  {languageFilterLabel}
-                </span>
-              )}
+            <h3 className="lib-empty-title">No songs match this view</h3>
+            <p className="lib-empty-copy">
+              Try a different title, hymn number, or language filter. You can also search online lyrics and import directly.
+            </p>
+            <div className="lib-empty-actions">
+              <button
+                type="button"
+                className="lib-toolbar-btn lib-toolbar-btn--secondary"
+                onClick={() => {
+                  setSearch("");
+                  setLanguageFilter("all");
+                }}
+              >
+                Clear Filters
+              </button>
+              <button type="button" className="worship-add-song-btn" onClick={handleOpenOnlineSearch}>
+                <Globe size={16} />
+                Search Online
+              </button>
             </div>
           </div>
-        )}
-
-        {visible.length === 0 &&
-          (hasActiveFilters ? (
-            <div className="lib-empty lib-empty--search">
-              <div className="lib-empty-icon">
-                <Icon name="travel_explore" size={30} />
-              </div>
-              <h3 className="lib-empty-title">No songs match this view</h3>
-              <p className="lib-empty-copy">
-                Try a different title, hymn number, or language filter. You can also search online lyrics and import directly.
-              </p>
-              <div className="lib-empty-actions">
-                <button
-                  type="button"
-                  className="lib-toolbar-btn lib-toolbar-btn--secondary"
-                  onClick={() => {
-                    setSearch("");
-                    setLanguageFilter("all");
-                  }}
-                >
-                  <Icon name="filter_alt_off" size={18} />
-                  Clear Filters
-                </button>
-                <button type="button" className="lib-add-btn" onClick={handleOpenOnlineSearch}>
-                  <Icon name="travel_explore" size={18} />
-                  Search Online
-                </button>
-              </div>
+        ) : (
+          <div className="lib-empty lib-empty--rich">
+            <div className="lib-empty-icon">
+              <ListMusic size={34} />
             </div>
-          ) : (
-            <div className="lib-empty lib-empty--rich">
-              <div className="lib-empty-icon">
-                <Icon name="library_music" size={34} />
-              </div>
-              <h3 className="lib-empty-title">Build your worship library</h3>
-              <p className="lib-empty-copy">
-                Add a single song, import a document, or pull lyrics from online sources. Songs added here become available across the app and dock.
-              </p>
-              <div className="lib-empty-actions">
-                <button type="button" className="lib-add-btn" onClick={handleAddSong} title="Add">
-                  <Icon name="add" size={20} />
-                  Add Song
-                </button>
-                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import songs from a document">
-                  <Icon name="upload_file" size={18} />
-                  Import File
-                </button>
-                <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleOpenOnlineSearch} title="Search lyrics online">
-                  <Icon name="travel_explore" size={18} />
-                  Search Online
-                </button>
-              </div>
+            <h3 className="lib-empty-title">Build your worship library</h3>
+            <p className="lib-empty-copy">
+              Add a single song, import a document, or pull lyrics from online sources. Songs added here become available across the app and dock.
+            </p>
+            <div className="lib-empty-actions">
+              <button type="button" className="worship-add-song-btn" onClick={handleAddSong} title="Add">
+                <Plus size={18} />
+                Add Song
+              </button>
+              <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleBulkImport} title="Import songs from a document">
+                <Upload size={16} />
+                Import File
+              </button>
+              <button type="button" className="lib-toolbar-btn lib-toolbar-btn--secondary" onClick={handleOpenOnlineSearch} title="Search lyrics online">
+                <Globe size={16} />
+                Search Online
+              </button>
             </div>
-          ))}
+          </div>
+        ))}
 
-        {visible.length > 0 && (
-          <>
-            <PremiumContentGate
-              items={visible}
-              limit={songLimit}
-              plan={effectivePlan}
-              upgradeTarget="songs"
-              entityName="songs"
-              className="lib-song-grid"
-            >
-              {({ all, gatedIds }) =>
-                all.map((s) => {
-                  const isGated = gatedIds.has(s.id);
-                  const lines = firstNLines(s.lyrics, 2);
-                  return (
-                    <div
-                      className={`lib-song-row lib-song-row--card ${isGated ? "lib-song-row--gated" : ""}`}
-                      key={s.id}
-                      onClick={isGated ? () => setShowUpgradeModal(true) : undefined}
-                      role={isGated ? "button" : undefined}
-                      tabIndex={isGated ? 0 : undefined}
-                      onKeyDown={isGated ? (e) => { if (e.key === "Enter" || e.key === " ") setShowUpgradeModal(true); } : undefined}
-                    >
-                      <div className="lib-song-card-main">
-                        <div className="lib-song-icon">
-                          <Icon name="lyrics" size={20} />
+      {/* Songs Grid */}
+      {visible.length > 0 && (
+        <>
+          <PremiumContentGate
+            items={displayedSongs}
+            limit={songLimit}
+            plan={effectivePlan}
+            upgradeTarget="songs"
+            entityName="songs"
+            className="worship-song-grid"
+          >
+            {({ all, gatedIds }) =>
+              all.map((s) => {
+                const isGated = gatedIds.has(s.id);
+                const firstSlide = s.slides?.[0];
+                const sectionLabel = firstSlide?.label
+                  ? (firstSlide.label.endsWith(":") ? firstSlide.label : `${firstSlide.label}:`)
+                  : "Verse 1:";
+                const lines = firstNLines(firstSlide?.content || s.lyrics || "", 2);
+
+                return (
+                  <div
+                    key={s.id}
+                    className={`worship-song-card ${isGated ? "worship-song-card--gated" : ""}`}
+                    onClick={isGated ? () => setShowUpgradeModal(true) : undefined}
+                    role={isGated ? "button" : undefined}
+                    tabIndex={isGated ? 0 : undefined}
+                  >
+                    <div className="worship-song-card-body">
+                      <div className="worship-song-card-top">
+                        <div className="worship-song-card-icon">
+                          <ListMusic size={22} />
                         </div>
-
-                        <div className="lib-song-content">
-                          <div className="lib-song-title-row">
-                            <h3 className="lib-song-title">{s.metadata.title}</h3>
-                            {s.metadata.hymnNumber && (
-                              <span className="lib-song-artist-badge">Hymn {s.metadata.hymnNumber}</span>
-                            )}
-                            {s.metadata.artist && (
-                              <span className="lib-song-artist-badge">{s.metadata.artist}</span>
-                            )}
-                            {s.metadata.language && (
-                              <span className={`lib-song-lang-badge lib-song-lang-badge--${s.metadata.language}`}>
-                                {s.metadata.language.charAt(0).toUpperCase() + s.metadata.language.slice(1)}
-                              </span>
-                            )}
-                            {s.importSourceType === "online" && (
-                              <span className="lib-song-imported-badge">
-                                Imported{s.importSourceName ? ` from ${s.importSourceName}` : ""}
-                              </span>
-                            )}
-                          </div>
-                          {lines[0] && <p className="lib-song-lyric-line">{lines[0]}</p>}
-                          {lines[1] && <p className="lib-song-lyric-line lib-song-lyric-line--faded">{lines[1]}</p>}
+                        <div className="worship-song-card-header">
+                          <h4 className="worship-song-card-title" title={s.metadata.title}>
+                            {s.metadata.title}
+                          </h4>
+                          <span className="worship-song-card-section">{sectionLabel}</span>
+                          {lines[0] && (
+                            <p className="worship-song-card-line worship-song-card-line--primary" title={lines[0]}>
+                              {lines[0]}
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      {isGated ? (
-                        <div className="lib-song-gated-badge">
-                          <Icon name="lock" size={14} />
-                          <span>Upgrade</span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="lib-song-meta">
-                            <span className="lib-song-slides-badge">
-                              {s.slides.length} slide{s.slides.length !== 1 ? "s" : ""}
-                            </span>
-                          </div>
-
-                          <div className="lib-song-actions lib-song-actions--card">
-                            <button
-                              type="button"
-                              className="lib-song-action-btn"
-                              title="Edit"
-                              aria-label={`Edit ${s.metadata.title}`}
-                              onClick={() => setEditSong(s)}
-                            >
-                              <Icon name="edit" size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              className="lib-song-action-btn lib-song-action-btn--danger"
-                              title="Archive"
-                              aria-label={`Archive ${s.metadata.title}`}
-                              onClick={() => setDeleteConfirmId(s.id)}
-                            >
-                              <Icon name="archive" size={16} />
-                            </button>
-                          </div>
-                        </>
+                      {lines[1] && (
+                        <p className="worship-song-card-line worship-song-card-line--secondary" title={lines[1]}>
+                          {lines[1]}
+                        </p>
                       )}
                     </div>
-                  );
-                })
-              }
-            </PremiumContentGate>
 
-            {!isSongUnlimited && visible.length >= songLimit && (
-              <div
-                className="lib-upgrade-banner"
-                onClick={() => setShowUpgradeModal(true)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setShowUpgradeModal(true);
-                }}
+                    {isGated ? (
+                      <div className="lib-song-gated-badge" style={{ marginTop: "14px" }}>
+                        <Lock size={14} />
+                        <span>Upgrade</span>
+                      </div>
+                    ) : (
+                      <div className="worship-song-card-bottom">
+                        <button
+                          type="button"
+                          className="worship-song-view-btn"
+                          onClick={() => setEditSong(s)}
+                          title={`View ${s.metadata.title}`}
+                        >
+                          <span>View</span>
+                          <ChevronRight size={14} />
+                        </button>
+
+                        <div className="worship-card-menu-container">
+                          <button
+                            type="button"
+                            className="worship-song-menu-btn"
+                            aria-label={`Options for ${s.metadata.title}`}
+                            title="More options"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveCardMenuId((prev) => (prev === s.id ? null : s.id));
+                            }}
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+
+                          {activeCardMenuId === s.id && (
+                            <div className="worship-card-dropdown" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                className="worship-card-dropdown-item"
+                                onClick={() => {
+                                  setActiveCardMenuId(null);
+                                  setEditSong(s);
+                                }}
+                              >
+                                <Edit size={14} />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="worship-card-dropdown-item worship-card-dropdown-item--danger"
+                                onClick={() => {
+                                  setActiveCardMenuId(null);
+                                  setDeleteConfirmId(s.id);
+                                }}
+                              >
+                                <Archive size={14} />
+                                <span>Archive</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            }
+          </PremiumContentGate>
+
+          {displayLimit < visible.length && (
+            <div className="lib-songs-load-more-container">
+              <button
+                type="button"
+                className="lib-toolbar-btn lib-toolbar-btn--secondary lib-load-more-btn"
+                onClick={() => setDisplayLimit((prev) => Math.min(visible.length, prev + SONGS_PER_PAGE))}
               >
-                <div className="lib-upgrade-banner-icon">
-                  <Icon name="lock" size={18} />
-                </div>
-                <div className="lib-upgrade-banner-body">
-                  <span className="lib-upgrade-banner-title">
-                    Song limit reached — {songLimit} of {songLimit}
-                  </span>
-                  <span className="lib-upgrade-banner-hint">
-                    Upgrade to upload more songs and unlock additional features
-                  </span>
-                </div>
-                <div className="lib-upgrade-banner-cta">
-                  <Icon name="star" size={14} />
-                  Upgrade
-                </div>
+                <ChevronDown size={18} />
+                Load More Songs ({visible.length - displayLimit} remaining)
+              </button>
+            </div>
+          )}
+          <div ref={sentinelRef} className="lib-songs-sentinel" aria-hidden="true" />
+
+          {!isSongUnlimited && visible.length >= songLimit && (
+            <div
+              className="lib-upgrade-banner"
+              onClick={() => setShowUpgradeModal(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setShowUpgradeModal(true);
+              }}
+            >
+              <div className="lib-upgrade-banner-icon">
+                <Lock size={18} />
               </div>
-            )}
-          </>
-        )}
-      </div>
+              <div className="lib-upgrade-banner-body">
+                <span className="lib-upgrade-banner-title">
+                  Song limit reached — {songLimit} of {songLimit}
+                </span>
+                <span className="lib-upgrade-banner-hint">
+                  Upgrade to upload more songs and unlock additional features
+                </span>
+              </div>
+              <span className="lib-upgrade-banner-cta">Upgrade</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
 
       {showOnlineSearchModal && (
         <div className="lib-modal-backdrop" onClick={() => setShowOnlineSearchModal(false)}>
@@ -921,6 +1074,16 @@ export function SongsTab() {
       {bulkImportOpen && (
         <BulkImportModal
           onClose={() => setBulkImportOpen(false)}
+          onImported={() => {
+            void reload();
+          }}
+        />
+      )}
+
+      {/* EasyWorship 1-Click Import Modal */}
+      {easyWorshipModalOpen && (
+        <EasyWorshipOneClickImportModal
+          onClose={() => setEasyWorshipModalOpen(false)}
           onImported={() => {
             void reload();
           }}

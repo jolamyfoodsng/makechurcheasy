@@ -36,7 +36,7 @@ function toTitleCase(label: string): string {
 }
 
 function classifySectionLabel(rawLabel: string): SectionLabel | null {
-  const label = normalizeLabelText(rawLabel.replace(/^\[|\]$/g, ""));
+  const label = normalizeLabelText(rawLabel.replace(/^[<\[]|[>\]]$/g, ""));
   if (!label) return null;
 
   const verseMatch = label.match(/^(?:v|verse)\s*(\d+|[ivx]+)?$/i);
@@ -82,10 +82,10 @@ function classifySectionLabel(rawLabel: string): SectionLabel | null {
     return { label: `Outro${suffix}`, shortLabel: `O${outroMatch[1] ?? ""}`, type: "outro" };
   }
 
-  const presentationPageMatch = label.match(/^(?:slide|page)\s*(\d+)$/i);
+  const presentationPageMatch = label.match(/^(?:slide|page|section)\s*(\d+)?$/i);
   if (presentationPageMatch) {
-    const number = presentationPageMatch[1];
-    return { label: `Slide ${number}`, shortLabel: `S${number}`, type: "other" };
+    const number = presentationPageMatch[1] ? ` ${presentationPageMatch[1]}` : "";
+    return { label: `Section${number}`, shortLabel: `S${presentationPageMatch[1] ?? ""}`, type: "other" };
   }
 
   return null;
@@ -95,7 +95,7 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  const bracketMatch = trimmed.match(/^\[([^\]]+)\]\s*(.*)$/);
+  const bracketMatch = trimmed.match(/^[\<\[]([^\>\]]+)[\>\]]\s*(.*)$/);
   if (bracketMatch) {
     const section = classifySectionLabel(bracketMatch[1]);
     if (section) return { section, rest: bracketMatch[2]?.trim() ?? "" };
@@ -594,4 +594,73 @@ export function generateSlides(
   }
 
   return resultSlides;
+}
+
+/**
+ * Strips leading verse markers like "Verse 1:", "Verse 1", "[Verse 1]:", "V1:", etc.
+ * from slide body text.
+ */
+export function stripLeadingVerseMarker(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/^(\s*\[?\s*(?:verse|v)\s*\d+\s*\]?:?\s*[\r\n]*)+/i, "")
+    .replace(/^(\s*(?:verse|v)\s*\d+\s*:?\s*)+/i, "")
+    .trimStart();
+}
+
+/**
+ * Calculates drop target index for drag & drop slide reordering.
+ */
+export function calculateReorderTargetIndex(
+  sourceIdx: number,
+  hoverIdx: number,
+  position: "above" | "below",
+  totalLength: number,
+): number {
+  if (sourceIdx === hoverIdx) return sourceIdx;
+  let target = hoverIdx;
+  if (position === "above") {
+    target = sourceIdx < hoverIdx ? hoverIdx - 1 : hoverIdx;
+  } else {
+    target = sourceIdx > hoverIdx ? hoverIdx + 1 : hoverIdx;
+  }
+  return Math.max(0, Math.min(target, totalLength - 1));
+}
+
+/**
+ * Reorders a list of slide sections and automatically renumbers generic verse
+ * headers in sequential order (Verse 1, Verse 2, etc.) while preserving named
+ * section headers like Chorus, Bridge, Tag, Pre-Chorus, etc.
+ */
+export function reorderWorshipSections<T extends { label: string; text: string }>(
+  sections: T[],
+  sourceIndex: number,
+  targetIndex: number,
+): T[] {
+  if (
+    sourceIndex === targetIndex ||
+    sourceIndex < 0 ||
+    targetIndex < 0 ||
+    sourceIndex >= sections.length ||
+    targetIndex >= sections.length
+  ) {
+    return sections;
+  }
+  const result = [...sections];
+  const [removed] = result.splice(sourceIndex, 1);
+  result.splice(targetIndex, 0, removed);
+
+  let verseCounter = 0;
+  return result.map((section) => {
+    const trimmedLabel = section.label.trim();
+    const isVerse = !trimmedLabel || /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(trimmedLabel);
+    if (isVerse) {
+      verseCounter += 1;
+      return {
+        ...section,
+        label: `Verse ${verseCounter}`,
+      };
+    }
+    return section;
+  });
 }

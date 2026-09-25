@@ -292,7 +292,77 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-search-dropdown__label {
-  color: inherit;
+  color: #0F172A;
+}
+
+:root.light .dock-search-dropdown__snippet {
+  color: #334155;
+  opacity: 0.95;
+}
+
+:root.light .dock-search-dropdown__highlight {
+  background: color-mix(in srgb, var(--dock-accent) 28%, #fef08a);
+  color: #0f172a;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 45%, transparent);
+}
+
+:root.light .dock-search-dropdown__goto-btn {
+  color: #64748B;
+}
+
+:root.light .dock-search-dropdown__goto-btn:hover {
+  color: #0F172A;
+  background: var(--dock-accent-soft);
+  border-color: color-mix(in srgb, var(--dock-accent) 30%, transparent);
+}
+
+:root.light .dock-search-dropdown__chip {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+:root.light .dock-search-dropdown__chip:hover {
+  background: var(--dock-accent-soft);
+  border-color: color-mix(in srgb, var(--dock-accent) 40%, transparent);
+  color: #0f172a;
+}
+
+:root.light .dock-search-dropdown__chip .dock-search-dropdown__label {
+  color: #0f172a;
+}
+
+:root.light .dock-search-dropdown__item--recent {
+  background: color-mix(in srgb, var(--dock-accent) 12%, #f1f5f9);
+  border-color: color-mix(in srgb, var(--dock-accent) 40%, #cbd5e1);
+  color: #0f172a;
+}
+
+:root.light .dock-search-dropdown__item--recent .dock-search-dropdown__label {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+:root.light .dock-search-dropdown__item--recent svg {
+  color: var(--dock-accent, #2563eb);
+}
+
+:root.light .dock-bible-favorites-modal__item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+:root.light .dock-bible-favorites-modal__item:hover {
+  background: var(--dock-accent-soft);
+  border-color: color-mix(in srgb, var(--dock-accent) 30%, transparent);
+}
+
+:root.light .dock-bible-favorites-modal__item-ref {
+  color: #0f172a;
+}
+
+:root.light .dock-bible-favorites-modal__item-snippet {
+  color: #475569;
 }
 
 :root.light .dock-input,

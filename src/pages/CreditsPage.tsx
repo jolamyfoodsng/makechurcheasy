@@ -1,10 +1,14 @@
 /**
- * CreditsPage.tsx — Dedicated Credits dashboard
+ * CreditsPage.tsx — Dedicated AI Credits & Usage Dashboard
  *
- * Shows credit balance, usage by feature, usage chart, recent activity,
- * and top-up / compare plans CTAs.
+ * Professional, native desktop interface for monitoring AI credit balances,
+ * usage telemetry across church features, historical consumption, and an
+ * interactive service estimator.
  *
- * All data comes from the backend — no hard-coded values.
+ * All formulas use backend-backed entitlements:
+ *   totalAvailable = planAllocation + adminGranted
+ *   remainingCredits = Math.max(0, totalAvailable - totalConsumed)
+ *   usagePct = (totalConsumed / totalAvailable) * 100
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -20,6 +24,13 @@ import {
   FileText,
   AlertTriangle,
   RefreshCw,
+  Crown,
+  Coins,
+  Calculator,
+  Layers,
+  CloudOff,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import {
   BarChart,
@@ -34,26 +45,37 @@ import {
   fetchCreditDetails,
   fetchCreditTransactions,
   onCreditChange,
+  getPendingCount,
   type CreditDetails,
   type CreditTransaction,
 } from "../services/credits";
 import {
   getPlanConfig,
+  getPlanLabel,
   formatCredits,
   type PlanConfig,
 } from "../services/planConfig";
+import { useAuth } from "../contexts/AuthContext";
+import { getCachedSubscription } from "../services/subscriptionCache";
+import {
+  getEffectivePlan,
+  getTrialDaysRemaining,
+  getUserPlan,
+  isInTrial,
+} from "../services/licenseService";
 import { getDeviceId, getDeviceSecret } from "../services/authService";
 import "./CreditsPage.css";
 
-// ── Feature icon mapping ─────────────────────────────────────────────────
+// ── Feature icon & label mapping ──────────────────────────────────────────
 
 const FEATURE_ICONS: Record<string, typeof Zap> = {
   "Speech-to-Scripture": Radio,
   "Transcript Translation": Globe,
+  "Live Translation": Globe,
   "Translation": Globe,
   "AI Sermon Summary": FileText,
   "AI Sermon Notes": FileText,
-  "AI Sermon Points": Zap,
+  "AI Sermon Points": Sparkles,
   "Worship Import": FileText,
 };
 
@@ -119,6 +141,7 @@ async function fetchUsageTimeline(days: number): Promise<UsageDay[]> {
 
 function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
+  if (isNaN(date.getTime())) return iso;
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -133,7 +156,13 @@ function formatRelativeDate(iso: string): string {
 }
 
 function formatChartDate(dateStr: string): string {
+  if (!dateStr) return "";
+  // If dateStr is already e.g. "Sep 24", return it directly without reparsing
+  if (/^[A-Za-z]{3}\s+\d{1,2}/.test(dateStr.trim())) {
+    return dateStr.trim();
+  }
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
@@ -145,7 +174,7 @@ function getTransactionLabel(tx: CreditTransaction): string {
     case "usage": return "AI Usage";
     case "admin_grant": return "Admin credit grant";
     case "allocation": return "Monthly credit allocation";
-    case "credit_pack_purchase": return "Credit purchase";
+    case "credit_pack_purchase": return "Credit pack purchase";
     case "refund": return "Credit refund";
     case "subscription_renewal": return "Subscription renewal";
     default: return tx.type.replace(/_/g, " ");
@@ -154,8 +183,7 @@ function getTransactionLabel(tx: CreditTransaction): string {
 
 function getTransactionIcon(tx: CreditTransaction): typeof Zap {
   if (tx.amount > 0) {
-    if (tx.type === "admin_grant") return CreditCard;
-    if (tx.type === "credit_pack_purchase") return CreditCard;
+    if (tx.type === "admin_grant" || tx.type === "credit_pack_purchase") return CreditCard;
     return TrendingUp;
   }
   const source = tx.source?.toLowerCase() || "";
@@ -165,81 +193,12 @@ function getTransactionIcon(tx: CreditTransaction): typeof Zap {
   return Zap;
 }
 
-// ── Skeleton components ──────────────────────────────────────────────────
-
-function SkeletonBlock({ width, height }: { width?: string; height: string }) {
-  return (
-    <div
-      className="credits-skeleton"
-      style={{ width: width || "100%", height }}
-    />
-  );
-}
-
-function BalanceCardSkeleton() {
-  return (
-    <div className="credits-page__balance-card">
-      <div className="credits-page__balance-left">
-        <SkeletonBlock width="80px" height="12px" />
-        <SkeletonBlock width="140px" height="36px" />
-        <SkeletonBlock width="180px" height="14px" />
-      </div>
-      <div className="credits-page__balance-right">
-        <SkeletonBlock height="6px" />
-        <div className="credits-page__balance-meta">
-          <SkeletonBlock width="100px" height="12px" />
-          <SkeletonBlock width="80px" height="12px" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FeatureRowsSkeleton() {
-  return (
-    <div className="credits-page__card">
-      <SkeletonBlock width="120px" height="14px" />
-      <div className="credits-page__feature-list">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="credits-page__feature-row">
-            <SkeletonBlock width="140px" height="14px" />
-            <SkeletonBlock width="50px" height="14px" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ChartSkeleton() {
-  return (
-    <div className="credits-page__card">
-      <SkeletonBlock width="150px" height="14px" />
-      <SkeletonBlock height="180px" />
-    </div>
-  );
-}
-
-function ActivitySkeleton() {
-  return (
-    <div className="credits-page__card">
-      <SkeletonBlock width="130px" height="14px" />
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="credits-page__activity-row">
-          <div className="credits-page__activity-left">
-            <SkeletonBlock width="120px" height="13px" />
-            <SkeletonBlock width="80px" height="11px" />
-          </div>
-          <SkeletonBlock width="60px" height="13px" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── Main component ───────────────────────────────────────────────────────
 
 export default function CreditsPage() {
+  const { user: authUser } = useAuth();
+  const cachedSub = getCachedSubscription();
+
   // ── State ──
   const [creditDetails, setCreditDetails] = useState<CreditDetails | null>(null);
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
@@ -248,43 +207,95 @@ export default function CreditsPage() {
   const [chartRange, setChartRange] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
 
-  // ── Derived state ──
+  // ── Service Estimator State ──
+  const [servicesPerMonth, setServicesPerMonth] = useState<number>(4);
+  const [sermonMinutes, setSermonMinutes] = useState<number>(40);
+  const [enableTranslation, setEnableTranslation] = useState<boolean>(false);
+  const [enableNotes, setEnableNotes] = useState<boolean>(true);
+
+  // ── Plan & License Resolution ──
+  const actualPlan = getUserPlan(authUser);
+  const effectivePlanTier = getEffectivePlan(authUser);
+  const trialActive = isInTrial(authUser);
+  const trialDaysLeft = getTrialDaysRemaining(authUser);
+
+  // ── Exact Credit Calculations ──
   const planAllocation = creditDetails?.planAllocation ?? 0;
-  const currentBalance = creditDetails?.credits ?? 0;
+  const adminGranted = creditDetails?.adminGranted ?? 0;
   const totalConsumed = creditDetails?.totalConsumed ?? 0;
-  const isUnlimited = currentBalance === -1;
-  const isAdmin = creditDetails?.isAdmin ?? false;
+  const currentBalance = creditDetails?.credits ?? 0;
+  const isUnlimited = currentBalance === -1 || creditDetails?.unlimited === true;
+  const isAdmin = creditDetails?.isAdmin ?? (authUser?.role === "admin");
 
+  // Total available pool = planAllocation + adminGranted (or backend totalAvailable)
+  const totalAvailable = useMemo(() => {
+    if (isUnlimited) return -1;
+    if (typeof creditDetails?.totalAvailable === "number" && creditDetails.totalAvailable >= 0) {
+      return creditDetails.totalAvailable;
+    }
+    return Math.max(0, planAllocation + adminGranted);
+  }, [isUnlimited, creditDetails?.totalAvailable, planAllocation, adminGranted]);
+
+  // Actual cycle usage: all consumed credits
   const cycleUsed = useMemo(() => {
     if (isUnlimited) return 0;
-    // cycleUsed = planAllocation - (credits - adminGranted)
-    // But simpler: totalConsumed covers all deductions
     return Math.max(0, totalConsumed);
   }, [isUnlimited, totalConsumed]);
 
+  // Accurate usage percentage based on total available pool
   const usagePct = useMemo(() => {
-    if (isUnlimited || planAllocation <= 0) return 0;
-    return Math.min(100, Math.round((cycleUsed / planAllocation) * 100));
-  }, [isUnlimited, planAllocation, cycleUsed]);
+    if (isUnlimited || totalAvailable <= 0) return 0;
+    return Math.min(100, Math.max(0, Math.round((cycleUsed / totalAvailable) * 100)));
+  }, [isUnlimited, totalAvailable, cycleUsed]);
 
-  const resetDate = useMemo(() => {
-    if (isUnlimited) return null;
+  // Formatted Plan Label
+  const planLabel = useMemo(() => {
+    if (isAdmin) return "Admin (Full Access)";
+    if (trialActive) return "Growth Trial";
+    if (planConfig) return getPlanLabel(planConfig, actualPlan);
+    return effectivePlanTier.charAt(0).toUpperCase() + effectivePlanTier.slice(1);
+  }, [isAdmin, trialActive, planConfig, actualPlan, effectivePlanTier]);
+
+  // Accurate renewal/reset label
+  const renewalOrResetLabel = useMemo(() => {
+    if (isUnlimited) return "Unlimited active";
+    if (trialActive && trialDaysLeft > 0) {
+      return `Trial ends in ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"}`;
+    }
+    const expiresAt = cachedSub?.payload?.expiresAt || (authUser as any)?.subscription?.current_period_end;
+    if (expiresAt) {
+      const d = new Date(expiresAt);
+      if (!isNaN(d.getTime())) {
+        return `Renews ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      }
+    }
     const d = new Date();
     d.setMonth(d.getMonth() + 1, 1);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }, [isUnlimited]);
+    return `Resets ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  }, [isUnlimited, trialActive, trialDaysLeft, cachedSub, authUser]);
 
+  // Low credit threshold: < 20% remaining
+  const isLow = useMemo(() => {
+    if (isUnlimited || isAdmin) return false;
+    if (totalAvailable <= 0) return currentBalance <= 5;
+    return (currentBalance / totalAvailable) < 0.2;
+  }, [isUnlimited, isAdmin, currentBalance, totalAvailable]);
+
+  const isZero = !isUnlimited && !isAdmin && currentBalance <= 0;
+
+  // Credit costs table
   const creditCosts = useMemo(() => {
     if (!planConfig) return [];
     return planConfig.creditCosts;
   }, [planConfig]);
 
-  // ── Aggregated feature usage ──
+  // ── Aggregated feature usage with proportional shares ──
   const featureUsage = useMemo(() => {
     const map = new Map<string, { label: string; credits: number; count: number }>();
     for (const tx of recentTransactions) {
-      if (tx.amount >= 0) continue; // only deductions
+      if (tx.amount >= 0) continue; // deductions only
       const metadataFeature = typeof tx.metadata?.feature === "string" ? tx.metadata.feature : "";
       const key = metadataFeature || tx.source || tx.type;
       const existing = map.get(key) ?? { label: getFeatureUsageLabel(tx), credits: 0, count: 0 };
@@ -292,10 +303,45 @@ export default function CreditsPage() {
       existing.count += 1;
       map.set(key, existing);
     }
+    const totalFeatureCredits = Array.from(map.values()).reduce((sum, f) => sum + f.credits, 0);
     return Array.from(map.entries())
-      .map(([key, val]) => ({ key, ...val }))
+      .map(([key, val]) => ({
+        key,
+        ...val,
+        sharePct: totalFeatureCredits > 0 ? Math.min(100, Math.round((val.credits / totalFeatureCredits) * 100)) : 0,
+      }))
       .sort((a, b) => b.credits - a.credits);
   }, [recentTransactions]);
+
+  // ── Interactive Service Estimator Calculation ──
+  const estimatedCredits = useMemo(() => {
+    // Audio: 1 credit per minute
+    const audioCreditsPerService = sermonMinutes * 1;
+    // Live Translation: ~2000 words per sermon = 2000 / 150 ~= 14 credits
+    const translationCreditsPerService = enableTranslation ? Math.ceil(2000 / 150) : 0;
+    // AI Sermon notes + summary: 8 credits
+    const notesCreditsPerService = enableNotes ? 8 : 0;
+
+    const totalPerService = audioCreditsPerService + translationCreditsPerService + notesCreditsPerService;
+    const monthlyTotal = totalPerService * servicesPerMonth;
+
+    let recommendedPlan = "Free (25 credits)";
+    if (monthlyTotal > 500) {
+      recommendedPlan = "Growth + Credit Top-up";
+    } else if (monthlyTotal > 100) {
+      recommendedPlan = "Growth Plan (500 credits)";
+    } else if (monthlyTotal > 25) {
+      recommendedPlan = "Basic Plan (100 credits)";
+    }
+
+    return {
+      monthlyTotal,
+      audioCreditsPerService,
+      translationCreditsPerService,
+      notesCreditsPerService,
+      recommendedPlan,
+    };
+  }, [servicesPerMonth, sermonMinutes, enableTranslation, enableNotes]);
 
   // ── Chart data ──
   const chartData = useMemo(() => {
@@ -314,17 +360,16 @@ export default function CreditsPage() {
       const [details, config, txs, timeline] = await Promise.all([
         fetchCreditDetails(),
         getPlanConfig(),
-        // Feature usage must represent the full recorded history, not only
-        // the small Recent Activity preview.
-        fetchCreditTransactions(10_000),
+        fetchCreditTransactions(100),
         fetchUsageTimeline(chartRange),
       ]);
       if (details) setCreditDetails(details);
       setPlanConfig(config);
       setRecentTransactions(txs);
       setUsageTimeline(timeline);
+      setPendingSyncCount(getPendingCount());
     } catch {
-      setError("Unable to load your credits.");
+      setError("Unable to load credit telemetry. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -342,12 +387,19 @@ export default function CreditsPage() {
   // Listen for live credit changes
   useEffect(() => {
     const unsub = onCreditChange((newBalance) => {
-      setCreditDetails((prev) => prev ? { ...prev, credits: newBalance } : prev);
-      // A deduction emits a balance event before this page necessarily
-      // remounts. Refresh the ledger and chart so the charge is documented
-      // immediately in the Credits screen.
+      setCreditDetails((prev) => {
+        if (!prev) return prev;
+        const diff = prev.credits - newBalance;
+        const newConsumed = diff > 0 ? prev.totalConsumed + diff : prev.totalConsumed;
+        return {
+          ...prev,
+          credits: newBalance,
+          totalConsumed: newConsumed,
+        };
+      });
+      setPendingSyncCount(getPendingCount());
       void Promise.all([
-        fetchCreditTransactions(10_000),
+        fetchCreditTransactions(100),
         fetchUsageTimeline(chartRange),
       ]).then(([transactions, timeline]) => {
         setRecentTransactions(transactions);
@@ -357,57 +409,36 @@ export default function CreditsPage() {
     return unsub;
   }, [chartRange]);
 
-  // ── Handlers ──
+  // ── External CTAs ──
   const handleComparePlans = useCallback(() => {
-    window.open(
-      "https://makechurcheazy.com/subscription/plans",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    window.open("https://makechurcheazy.com/subscription/plans", "_blank", "noopener,noreferrer");
   }, []);
 
   const handleTopUp = useCallback(() => {
-    window.open(
-      "https://makechurcheazy.com/credits",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    window.open("https://makechurcheazy.com/credits", "_blank", "noopener,noreferrer");
   }, []);
 
   const handleViewAll = useCallback(() => {
-    window.open(
-      "https://makechurcheazy.com/billing/history?type=credits",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    window.open("https://makechurcheazy.com/billing/history?type=credits", "_blank", "noopener,noreferrer");
   }, []);
-
-  // ── Low credit threshold (backend-driven if available, else 20%) ──
-  const isLow = useMemo(() => {
-    if (isUnlimited || isAdmin) return false;
-    if (planAllocation <= 0) return false;
-    return currentBalance / planAllocation < 0.2;
-  }, [isUnlimited, isAdmin, currentBalance, planAllocation]);
-
-  const isZero = !isUnlimited && !isAdmin && currentBalance === 0;
-
-  // ── Render ──
 
   if (error && !loading) {
     return (
       <div className="credits-page">
-        <div className="credits-page__header">
+        <header className="credits-header">
           <div>
-            <h1 className="credits-page__title">Credits</h1>
-            <p className="credits-page__subtitle">Track and manage your AI usage.</p>
+            <h1 className="credits-title">AI Credits & Usage</h1>
+            <p className="credits-subtitle">Real-time balance, consumption telemetry, and plan limits.</p>
           </div>
-        </div>
-        <div className="credits-page__error">
-          <AlertTriangle size={20} />
-          <span>{error}</span>
-          <button className="credits-page__retry-btn" onClick={loadData}>
-            <RefreshCw size={14} />
-            Try Again
+        </header>
+        <div className="credits-error-card">
+          <AlertTriangle size={24} className="credits-error-icon" />
+          <div className="credits-error-content">
+            <h4>Failed to load credits</h4>
+            <p>{error}</p>
+          </div>
+          <button className="credits-btn credits-btn--primary" onClick={loadData}>
+            <RefreshCw size={14} /> Retry Sync
           </button>
         </div>
       </div>
@@ -416,280 +447,481 @@ export default function CreditsPage() {
 
   return (
     <div className="credits-page">
-      {/* ── Header ── */}
-      <div className="credits-page__header">
-        <div>
-          <h1 className="credits-page__title">Credits</h1>
-          <p className="credits-page__subtitle">Track and manage your AI usage.</p>
-        </div>
-        <div className="credits-page__header-actions">
-          <button className="credits-page__btn credits-page__btn--secondary" onClick={handleComparePlans}>
-            Compare Plans
-          </button>
-          <button className="credits-page__btn credits-page__btn--primary" onClick={handleTopUp}>
-            <Zap size={14} />
-            Top Up Credits
-          </button>
-        </div>
-      </div>
-
-      {/* ── Balance Card ── */}
-      {loading ? (
-        <BalanceCardSkeleton />
-      ) : (
-        <div className={`credits-page__balance-card${isLow ? " credits-page__balance-card--low" : ""}${isZero ? " credits-page__balance-card--zero" : ""}`}>
-          <div className="credits-page__balance-left">
-            <span className="credits-page__balance-label">AI CREDITS</span>
-            <div className="credits-page__balance-value-row">
-              <span className="credits-page__balance-value">
-                {isUnlimited ? "Unlimited" : formatCredits(currentBalance)}
+      {/* ── Native Desktop Header ── */}
+      <header className="credits-header">
+        <div className="credits-header-left">
+          <div className="credits-title-row">
+            <h1 className="credits-title">AI Credits & Telemetry</h1>
+            <span className={`credits-plan-badge ${trialActive ? "credits-plan-badge--trial" : ""}`}>
+              <Crown size={12} />
+              {planLabel}
+            </span>
+            {pendingSyncCount > 0 && (
+              <span className="credits-pending-badge" title={`${pendingSyncCount} transactions stored locally pending server sync`}>
+                <CloudOff size={11} /> {pendingSyncCount} offline queued
               </span>
-              <span className="credits-page__balance-unit">credits remaining</span>
-            </div>
-            {!isUnlimited && planAllocation > 0 && (
-              <p className="credits-page__balance-sub">of {formatCredits(planAllocation)} included this cycle</p>
-            )}
-            {isAdmin && (
-              <span className="credits-page__admin-badge">Admin</span>
             )}
           </div>
-          <div className="credits-page__balance-right">
-            {!isUnlimited && planAllocation > 0 && (
-              <>
-                <div className="credits-page__progress-track">
-                  <div
-                    className="credits-page__progress-fill"
-                    style={{ width: `${usagePct}%` }}
-                  />
-                </div>
-                <div className="credits-page__balance-meta">
-                  <span>{formatCredits(cycleUsed)} credits used</span>
-                  {resetDate && <span>Resets {resetDate}</span>}
-                </div>
-              </>
-            )}
-            {isLow && (
-              <div className="credits-page__low-warning">
-                <AlertTriangle size={14} />
-                <span>You're running low on AI credits.</span>
-              </div>
-            )}
-            {isZero && (
-              <div className="credits-page__zero-notice">
-                AI-powered features may be unavailable until credits are renewed or topped up.
-              </div>
+          <p className="credits-subtitle">
+            Monitors real-time credit consumption for Speech-to-Scripture, live translation, and sermon generation.
+          </p>
+        </div>
+
+        <div className="credits-header-actions">
+          <button
+            className="credits-btn credits-btn--ghost"
+            onClick={loadData}
+            disabled={loading}
+            title="Refresh balance and logs from server"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            <span>Sync</span>
+          </button>
+          <button
+            className="credits-btn credits-btn--secondary"
+            onClick={handleComparePlans}
+            title="View plan tiers and allocations"
+          >
+            <Layers size={13} />
+            <span>Compare Plans</span>
+          </button>
+          <button
+            className="credits-btn credits-btn--primary"
+            onClick={handleTopUp}
+            title="Purchase additional credit pack"
+          >
+            <Zap size={13} />
+            <span>Top Up Credits</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ── Top Metrics Grid ── */}
+      <section className="credits-metrics-grid" aria-label="Key credit metrics">
+        {/* Metric 1: Current Balance */}
+        <div className={`credits-metric-card ${isLow ? "credits-metric-card--warning" : ""} ${isZero ? "credits-metric-card--danger" : ""}`}>
+          <div className="credits-metric-header">
+            <span className="credits-metric-label">Remaining Balance</span>
+            <div className="credits-metric-icon-wrap credits-metric-icon-wrap--accent">
+              <Coins size={16} />
+            </div>
+          </div>
+          <div className="credits-metric-value-row">
+            <span className="credits-metric-number">
+              {loading ? "..." : (isUnlimited ? "Unlimited" : formatCredits(currentBalance))}
+            </span>
+            {!isUnlimited && <span className="credits-metric-unit">credits</span>}
+          </div>
+          <div className="credits-metric-footer">
+            {isUnlimited ? (
+              <span className="credits-metric-subtext credits-metric-subtext--highlight">
+                <CheckCircle2 size={12} /> Unlimited AI speech & translation
+              </span>
+            ) : (
+              <span className="credits-metric-subtext">
+                {adminGranted > 0
+                  ? `${formatCredits(planAllocation)} plan + ${formatCredits(adminGranted)} top-up (${formatCredits(totalAvailable)} total)`
+                  : `of ${formatCredits(totalAvailable)} total allocated this cycle`}
+              </span>
             )}
           </div>
         </div>
-      )}
 
-      {/* ── Main Grid: Feature Usage + Chart ── */}
-      <div className="credits-page__grid">
-        {/* Usage by Feature */}
-        {loading ? (
-          <FeatureRowsSkeleton />
-        ) : (
-          <div className="credits-page__card">
-            <h3 className="credits-page__card-title">
-              <BarChart3 size={15} />
-              Usage by Feature
-            </h3>
-            {featureUsage.length === 0 ? (
-              <div className="credits-page__empty-feature">
-                <p>No AI usage yet.</p>
-                <p className="credits-page__empty-feature-sub">Your feature usage will appear here once you start using AI features.</p>
+        {/* Metric 2: Cycle Usage */}
+        <div className="credits-metric-card">
+          <div className="credits-metric-header">
+            <span className="credits-metric-label">Used This Billing Cycle</span>
+            <div className="credits-metric-icon-wrap">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div className="credits-metric-value-row">
+            <span className="credits-metric-number">
+              {loading ? "..." : (isUnlimited ? "—" : formatCredits(cycleUsed))}
+            </span>
+            {!isUnlimited && <span className="credits-metric-unit">credits consumed</span>}
+          </div>
+          <div className="credits-metric-footer">
+            {!isUnlimited && totalAvailable > 0 ? (
+              <div className="credits-progress-wrapper">
+                <div className="credits-progress-track">
+                  <div className="credits-progress-bar" style={{ width: `${usagePct}%` }} />
+                </div>
+                <div className="credits-progress-meta">
+                  <span>{usagePct}% consumed</span>
+                  <span>{renewalOrResetLabel}</span>
+                </div>
               </div>
             ) : (
-              <div className="credits-page__feature-list">
+              <span className="credits-metric-subtext">{renewalOrResetLabel}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Metric 3: Active Tier Status */}
+        <div className="credits-metric-card">
+          <div className="credits-metric-header">
+            <span className="credits-metric-label">Production Tier</span>
+            <div className="credits-metric-icon-wrap credits-metric-icon-wrap--gold">
+              <Crown size={16} />
+            </div>
+          </div>
+          <div className="credits-metric-value-row">
+            <span className="credits-metric-number credits-metric-number--sm">{planLabel}</span>
+          </div>
+          <div className="credits-metric-footer credits-metric-footer--tier">
+            {trialActive ? (
+              <span className="credits-tier-trial-text">
+                {trialDaysLeft > 0 ? `${trialDaysLeft} days remaining in trial` : "Trial expired"}
+              </span>
+            ) : (
+              <span className="credits-metric-subtext">
+                {actualPlan === "free" ? "25 monthly credits included" : "High-priority transcription pipeline"}
+              </span>
+            )}
+            <button className="credits-inline-link" onClick={handleComparePlans}>
+              Manage Tier <ArrowUpRight size={11} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Main Two-Column Viewport ── */}
+      <div className="credits-viewport-split">
+        {/* Left Column: Breakdown + Estimator */}
+        <div className="credits-column">
+          {/* Feature Breakdown Card */}
+          <div className="credits-card">
+            <div className="credits-card-header">
+              <div className="credits-card-title-group">
+                <BarChart3 size={15} className="credits-card-title-icon" />
+                <h3 className="credits-card-title">Consumption by AI Tool</h3>
+              </div>
+              <span className="credits-card-tag">{featureUsage.length} features tracked</span>
+            </div>
+
+            {featureUsage.length === 0 ? (
+              <div className="credits-empty-state">
+                <p>No feature deductions recorded yet.</p>
+                <span className="credits-empty-sub">
+                  Credits are automatically tracked whenever speech transcription, live translation, or sermon AI notes are generated.
+                </span>
+              </div>
+            ) : (
+              <div className="credits-feature-list">
                 {featureUsage.map((feat) => {
                   const Icon = getFeatureIcon(feat.label);
-                  const pct = planAllocation > 0
-                    ? Math.min(100, Math.round((feat.credits / planAllocation) * 100))
-                    : 0;
                   return (
-                    <div key={feat.key} className="credits-page__feature-row">
-                      <div className="credits-page__feature-info">
-                        <div className="credits-page__feature-icon">
+                    <div key={feat.key} className="credits-feature-item">
+                      <div className="credits-feature-left">
+                        <div className="credits-feature-icon-box">
                           <Icon size={14} />
                         </div>
-                        <div>
-                          <span className="credits-page__feature-name">{feat.label}</span>
-                          <span className="credits-page__feature-count">{feat.count} {feat.count === 1 ? "use" : "uses"}</span>
+                        <div className="credits-feature-meta">
+                          <span className="credits-feature-name">{feat.label}</span>
+                          <span className="credits-feature-count">{feat.count} execution{feat.count === 1 ? "" : "s"}</span>
                         </div>
                       </div>
-                      <div className="credits-page__feature-right">
-                        <div className="credits-page__feature-bar-track">
-                          <div
-                            className="credits-page__feature-bar-fill"
-                            style={{ width: `${pct}%` }}
-                          />
+
+                      <div className="credits-feature-right">
+                        <div className="credits-feature-bar-container" title={`${feat.sharePct}% of all AI deductions`}>
+                          <div className="credits-feature-bar-fill" style={{ width: `${feat.sharePct}%` }} />
                         </div>
-                        <span className="credits-page__feature-credits">-{feat.credits}</span>
+                        <span className="credits-feature-value">-{feat.credits}</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-            {/* Credit Costs Reference */}
-            {creditCosts.length > 0 && (
-              <div className="credits-page__costs-ref">
-                <span className="credits-page__costs-label">Credit costs</span>
-                {creditCosts.map((cost) => (
-                  <div key={cost.name} className="credits-page__cost-row">
-                    <span className="credits-page__cost-name">{cost.name}</span>
-                    <span className="credits-page__cost-value">{cost.cost} credit{cost.cost !== 1 ? "s" : ""} / {cost.unit}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-        )}
 
-        {/* Credit Usage Chart */}
-        {loading ? (
-          <ChartSkeleton />
-        ) : (
-          <div className="credits-page__card">
-            <div className="credits-page__chart-header">
-              <h3 className="credits-page__card-title">
-                <TrendingUp size={15} />
-                Credit Usage
-              </h3>
-              <div className="credits-page__chart-range">
+          {/* Interactive Church Usage Estimator */}
+          <div className="credits-card credits-estimator-card">
+            <div className="credits-card-header">
+              <div className="credits-card-title-group">
+                <Calculator size={15} className="credits-card-title-icon" />
+                <h3 className="credits-card-title">Church Service Credit Estimator</h3>
+              </div>
+              <span className="credits-card-tag credits-card-tag--estimator">Interactive</span>
+            </div>
+            <p className="credits-card-desc">
+              Calculate the exact credits needed for your church's weekly sermon audio and live translation schedule.
+            </p>
+
+            <div className="credits-estimator-controls">
+              {/* Slider 1: Services per month */}
+              <div className="credits-estimator-row">
+                <div className="credits-estimator-label-group">
+                  <label className="credits-estimator-label">Sunday Services / Month</label>
+                  <span className="credits-estimator-sublabel">Services recorded or transcribed</span>
+                </div>
+                <div className="credits-estimator-stepper">
+                  <button
+                    type="button"
+                    className="credits-stepper-btn"
+                    onClick={() => setServicesPerMonth((s) => Math.max(1, s - 1))}
+                  >
+                    -
+                  </button>
+                  <span className="credits-stepper-val">{servicesPerMonth}</span>
+                  <button
+                    type="button"
+                    className="credits-stepper-btn"
+                    onClick={() => setServicesPerMonth((s) => Math.min(20, s + 1))}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Slider 2: Average Sermon Length */}
+              <div className="credits-estimator-row">
+                <div className="credits-estimator-label-group">
+                  <label className="credits-estimator-label">Average Sermon Duration</label>
+                  <span className="credits-estimator-sublabel">1 credit per audio minute</span>
+                </div>
+                <div className="credits-estimator-slider-wrap">
+                  <input
+                    type="range"
+                    min={15}
+                    max={90}
+                    step={5}
+                    value={sermonMinutes}
+                    onChange={(e) => setSermonMinutes(Number(e.target.value))}
+                    className="credits-range-slider"
+                  />
+                  <span className="credits-slider-val">{sermonMinutes} min</span>
+                </div>
+              </div>
+
+              {/* Toggle 1: Live Translation */}
+              <div className="credits-estimator-toggle-row">
+                <div className="credits-estimator-label-group">
+                  <label className="credits-estimator-label">Live Multi-Language Translation</label>
+                  <span className="credits-estimator-sublabel">~2,000 words per sermon (~14 credits)</span>
+                </div>
+                <label className="credits-switch">
+                  <input
+                    type="checkbox"
+                    checked={enableTranslation}
+                    onChange={(e) => setEnableTranslation(e.target.checked)}
+                  />
+                  <span className="credits-switch-slider" />
+                </label>
+              </div>
+
+              {/* Toggle 2: AI Notes & Summary */}
+              <div className="credits-estimator-toggle-row">
+                <div className="credits-estimator-label-group">
+                  <label className="credits-estimator-label">AI Notes, Points & Summary</label>
+                  <span className="credits-estimator-sublabel">Instant bulletin & study notes (~8 credits)</span>
+                </div>
+                <label className="credits-switch">
+                  <input
+                    type="checkbox"
+                    checked={enableNotes}
+                    onChange={(e) => setEnableNotes(e.target.checked)}
+                  />
+                  <span className="credits-switch-slider" />
+                </label>
+              </div>
+            </div>
+
+            {/* Estimator Result Box */}
+            <div className="credits-estimator-summary">
+              <div className="credits-estimator-summary-left">
+                <span className="credits-estimator-summary-title">Estimated Monthly Demand</span>
+                <span className="credits-estimator-summary-val">{estimatedCredits.monthlyTotal} Credits</span>
+              </div>
+              <div className="credits-estimator-summary-right">
+                <span className="credits-estimator-plan-badge">
+                  {estimatedCredits.recommendedPlan}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Chart + Rate Card */}
+        <div className="credits-column">
+          {/* Usage Chart Card */}
+          <div className="credits-card">
+            <div className="credits-card-header">
+              <div className="credits-card-title-group">
+                <TrendingUp size={15} className="credits-card-title-icon" />
+                <h3 className="credits-card-title">Daily Consumption History</h3>
+              </div>
+              <div className="credits-chart-range-pills">
                 <button
-                  className={`credits-page__range-btn${chartRange === 7 ? " credits-page__range-btn--active" : ""}`}
+                  type="button"
+                  className={`credits-chart-pill ${chartRange === 7 ? "active" : ""}`}
                   onClick={() => setChartRange(7)}
                 >
-                  7d
+                  7 Days
                 </button>
                 <button
-                  className={`credits-page__range-btn${chartRange === 30 ? " credits-page__range-btn--active" : ""}`}
+                  type="button"
+                  className={`credits-chart-pill ${chartRange === 30 ? "active" : ""}`}
                   onClick={() => setChartRange(30)}
                 >
-                  30d
+                  30 Days
                 </button>
               </div>
             </div>
+
             {chartData.length === 0 || chartData.every((d) => d.credits === 0) ? (
-              <div className="credits-page__empty-chart">
-                <BarChart3 size={28} />
-                <p>No credit usage in this period.</p>
-                <p className="credits-page__empty-chart-sub">Your AI usage will appear here once you start using AI features.</p>
+              <div className="credits-empty-chart">
+                <BarChart3 size={32} className="credits-empty-icon" />
+                <p>No credit deductions in this window.</p>
+                <span className="credits-empty-sub">Daily usage will populate as live services stream and transcribe.</span>
               </div>
             ) : (
-              <div className="credits-page__chart-container">
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={chartData} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+              <div className="credits-chart-container">
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={chartData} barCategoryGap="22%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border, rgba(0, 0, 0, 0.08))" vertical={false} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                      tick={{ fontSize: 11, fill: "var(--text-muted, #64748B)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                      tick={{ fontSize: 11, fill: "var(--text-muted, #64748B)" }}
                       axisLine={false}
                       tickLine={false}
-                      width={30}
+                      width={28}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "var(--bg-card)",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "4px",
+                        background: "var(--card-bg, #FFFFFF)",
+                        border: "1px solid var(--border, #E2E8F0)",
+                        borderRadius: "6px",
                         fontSize: "12px",
-                        color: "var(--text-primary)",
+                        boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
+                        color: "var(--text-primary, #0F172A)",
                       }}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       formatter={((value: any) => [`${value} credits`, "Used"]) as any}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      labelFormatter={((label: any) => label) as any}
                     />
                     <Bar
                       dataKey="credits"
-                      fill="var(--accent-color)"
-                      radius={[3, 3, 0, 0]}
+                      fill="var(--primary, #4F46E5)"
+                      radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
           </div>
-        )}
+
+          {/* Official Rate Reference Card */}
+          <div className="credits-card">
+            <div className="credits-card-header">
+              <div className="credits-card-title-group">
+                <Zap size={15} className="credits-card-title-icon" />
+                <h3 className="credits-card-title">Official AI Consumption Rates</h3>
+              </div>
+            </div>
+            <div className="credits-rate-table">
+              {(creditCosts.length > 0 ? creditCosts : [
+                { name: "Speech-to-Scripture", cost: 1, unit: "1 min audio" },
+                { name: "Live Translation", cost: 1, unit: "150 words" },
+                { name: "AI Sermon Summary", cost: 5, unit: "full sermon" },
+                { name: "AI Sermon Notes", cost: 5, unit: "bulletin export" },
+                { name: "AI Sermon Points", cost: 3, unit: "key takeaways" },
+              ]).map((cost) => (
+                <div key={cost.name} className="credits-rate-row">
+                  <div className="credits-rate-info">
+                    <span className="credits-rate-name">{cost.name}</span>
+                    <span className="credits-rate-unit">per {cost.unit}</span>
+                  </div>
+                  <span className="credits-rate-pill">
+                    {cost.cost} credit{cost.cost !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="credits-free-notice">
+              <CheckCircle2 size={13} className="credits-free-icon" />
+              <span>
+                OBS scene projection, Scripture searching, offline worship lyrics, and lower-thirds are 100% free and never consume credits.
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* ── Recent Activity ── */}
-      {loading ? (
-        <ActivitySkeleton />
-      ) : (
-        <div className="credits-page__card">
-          <div className="credits-page__activity-header">
-            <h3 className="credits-page__card-title">
-              <Clock size={15} />
-              Recent Activity
-            </h3>
-            {recentTransactions.length > 0 && (
-              <button className="credits-page__view-all" onClick={handleViewAll}>
-                View all
-                <ArrowUpRight size={13} />
-              </button>
-            )}
+      {/* ── Bottom Section: Transaction Audit Ledger ── */}
+      <section className="credits-card credits-ledger-card">
+        <div className="credits-card-header">
+          <div className="credits-card-title-group">
+            <Clock size={15} className="credits-card-title-icon" />
+            <h3 className="credits-card-title">Audit Ledger & Transaction History</h3>
           </div>
-          {recentTransactions.length === 0 ? (
-            <div className="credits-page__empty-activity">
-              <Clock size={24} />
-              <p>No credit activity yet.</p>
-              <p className="credits-page__empty-activity-sub">Your credit transactions will appear here.</p>
-            </div>
-          ) : (
-            <div className="credits-page__activity-list">
-              {recentTransactions.slice(0, 8).map((tx) => {
-                const Icon = getTransactionIcon(tx);
-                const isDeduction = tx.amount < 0;
-                return (
-                  <div key={tx._id || tx.createdAt} className="credits-page__activity-row">
-                    <div className="credits-page__activity-left">
-                      <div className={`credits-page__activity-icon${isDeduction ? " credits-page__activity-icon--deduction" : " credits-page__activity-icon--credit"}`}>
-                        <Icon size={14} />
-                      </div>
-                      <div>
-                        <span className="credits-page__activity-title">{getTransactionLabel(tx)}</span>
-                        <span className="credits-page__activity-date">
-                          {formatRelativeDate(tx.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <span className={`credits-page__activity-amount${isDeduction ? " credits-page__activity-amount--deduction" : " credits-page__activity-amount--credit"}`}>
-                      {tx.amount > 0 ? "+" : ""}{tx.amount}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          {recentTransactions.length > 0 && (
+            <button className="credits-view-all-btn" onClick={handleViewAll}>
+              Full Billing History <ArrowUpRight size={12} />
+            </button>
           )}
         </div>
-      )}
 
-      {/* ── Bottom CTA ── */}
-      {!loading && (
-        <div className="credits-page__bottom-cta">
-          <div className="credits-page__cta-content">
-            <h3 className="credits-page__cta-title">Need more credits?</h3>
-            <p className="credits-page__cta-subtitle">Top up your credits or upgrade your plan for higher monthly allocations.</p>
+        {recentTransactions.length === 0 ? (
+          <div className="credits-empty-state">
+            <Clock size={28} className="credits-empty-icon" />
+            <p>No transactions found in this account.</p>
+            <span className="credits-empty-sub">
+              Deductions, plan allocations, and admin credit grants will appear here chronologically.
+            </span>
           </div>
-          <div className="credits-page__cta-actions">
-            <button className="credits-page__btn credits-page__btn--primary" onClick={handleTopUp}>
-              <Zap size={14} />
-              Top Up Credits
-            </button>
-            <button className="credits-page__btn credits-page__btn--secondary" onClick={handleComparePlans}>
-              Compare Plans
-            </button>
+        ) : (
+          <div className="credits-ledger-table-wrap">
+            <table className="credits-ledger-table">
+              <thead>
+                <tr>
+                  <th>Activity / Feature</th>
+                  <th>Transaction Type</th>
+                  <th>Timestamp</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentTransactions.slice(0, 10).map((tx) => {
+                  const Icon = getTransactionIcon(tx);
+                  const isDeduction = tx.amount < 0;
+                  return (
+                    <tr key={tx._id || tx.createdAt}>
+                      <td>
+                        <div className="credits-ledger-activity">
+                          <div className={`credits-ledger-icon-box ${isDeduction ? "deduction" : "credit"}`}>
+                            <Icon size={13} />
+                          </div>
+                          <span className="credits-ledger-title" title={tx.description || getTransactionLabel(tx)}>
+                            {getTransactionLabel(tx)}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="credits-type-badge">
+                          {tx.type.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="credits-ledger-time">
+                        {formatRelativeDate(tx.createdAt)}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className={`credits-ledger-amount ${isDeduction ? "deduction" : "credit"}`}>
+                          {tx.amount > 0 ? "+" : ""}{tx.amount}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </section>
     </div>
   );
 }

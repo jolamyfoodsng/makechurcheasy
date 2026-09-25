@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Clock, Crown, Sparkles, X } from "lucide-react";
+import { Check, Clock, Sparkles, Tag, X } from "lucide-react";
 import {
   clearCachedDesktopAnnouncement,
   getCachedDesktopAnnouncement,
@@ -37,14 +37,17 @@ export function withOfferCode(url: string, offerCode?: string | null): string {
   }
 }
 
-export function resolveActionUrl(announcement: DesktopAnnouncement | null): string {
+export function resolveActionUrl(
+  announcement: DesktopAnnouncement | null,
+  billingCycle?: DiscountBillingCycle
+): string {
   if (!announcement) return "";
   if (announcement.ctaUrl) {
     return withOfferCode(announcement.ctaUrl, announcement.offerCode);
   }
   const code = announcement.offerCode || "";
   const plan = announcement.offerApplicablePlans?.[0] || "growth";
-  const cycle = announcement.offerApplicableBillingCycles?.[0] || "monthly";
+  const cycle = billingCycle || announcement.offerApplicableBillingCycles?.[0] || "monthly";
   const params = new URLSearchParams();
   if (code) params.set("promo", code);
   params.set("plan", plan);
@@ -75,8 +78,9 @@ function formatCountdown(expiresAt?: string | null, now = Date.now()): string | 
   const seconds = totalSeconds % 60;
   const pad = (value: number) => String(value).padStart(2, "0");
 
-  if (days > 0) return `${pad(days)}:${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  if (days > 0) return `${days}d ${hours}h ${pad(minutes)}m`;
+  if (hours > 0) return `${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+  return `${minutes}m ${pad(seconds)}s`;
 }
 
 function useAnnouncementCountdown(expiresAt?: string | null): string | null {
@@ -100,27 +104,28 @@ function getOfferCards(announcement: DesktopAnnouncement, discountPercent: numbe
   return [
     {
       cycle: "monthly" as DiscountBillingCycle,
-      title: "Premium Monthly",
+      title: "Monthly Billing",
       meta: `Save ${discountPercent}%`,
       body: `Discount applies for ${duration}.`,
     },
     {
       cycle: "yearly" as DiscountBillingCycle,
-      title: "Premium Yearly",
+      title: "Yearly Billing",
       meta: `Save ${discountPercent}%`,
-      body: "Use the same code at yearly checkout.",
+      body: "Applies to annual plan checkout.",
     },
     {
       cycle: "lifetime" as DiscountBillingCycle,
       title: "Lifetime Access",
       meta: `Save ${discountPercent}%`,
-      body: "One-time premium access when available.",
+      body: "One-time premium access.",
     },
   ].filter((card) => cycles.includes(card.cycle));
 }
 
 export function AnnouncementModalHost() {
   const [announcement, setAnnouncement] = useState<DesktopAnnouncement | null>(null);
+  const [selectedCycle, setSelectedCycle] = useState<DiscountBillingCycle | null>(null);
   const countdown = useAnnouncementCountdown(announcement?.expiresAt);
 
   useEffect(() => {
@@ -136,8 +141,10 @@ export function AnnouncementModalHost() {
     await dismissDesktopAnnouncement(current.deliveryId, clicked);
   }
 
-  async function openAction() {
-    const url = resolveActionUrl(announcement);
+  async function openAction(cycle?: DiscountBillingCycle) {
+    const targetCycle =
+      cycle || selectedCycle || announcement?.offerApplicableBillingCycles?.[0] || "monthly";
+    const url = resolveActionUrl(announcement, targetCycle);
     if (!url) return;
     await dismiss(true);
     if (url.startsWith("http")) {
@@ -149,8 +156,6 @@ export function AnnouncementModalHost() {
 
   if (!announcement) return null;
 
-  const actionUrl = resolveActionUrl(announcement);
-
   const isImageOnly = Boolean(
     announcement.imageUrl &&
       (announcement.tags?.some((t) => t.toLowerCase().includes("image-only")) ||
@@ -158,6 +163,7 @@ export function AnnouncementModalHost() {
   );
 
   if (isImageOnly && announcement.imageUrl) {
+    const actionUrl = resolveActionUrl(announcement);
     return (
       <div className="desktop-announcement-overlay desktop-announcement-overlay--image-only">
         <div className="desktop-announcement-backdrop" onClick={() => void dismiss(false)} />
@@ -209,12 +215,22 @@ export function AnnouncementModalHost() {
   if (showOfferLayout) {
     const effectivePercent = discountPercent || 50;
     const offerCards = getOfferCards(announcement, effectivePercent);
-    const actionLabel = announcement.ctaLabel || (announcement.offerCode ? `Upgrade with ${announcement.offerCode}` : (discountPercent ? `Claim ${discountPercent}% Discount` : "Upgrade Now"));
+    const activeCycle =
+      selectedCycle && offerCards.some((c) => c.cycle === selectedCycle)
+        ? selectedCycle
+        : offerCards[0]?.cycle || "monthly";
+    const actionLabel =
+      announcement.ctaLabel ||
+      (discountPercent ? `Claim ${discountPercent}% Discount` : "Upgrade Now");
+    const actionUrl = resolveActionUrl(announcement, activeCycle);
 
     return (
       <div className="desktop-announcement-overlay desktop-announcement-overlay--promo">
-        <div className="desktop-announcement-backdrop desktop-announcement-backdrop--promo" onClick={() => void dismiss(false)} />
-        <section className="desktop-announcement-promo">
+        <div
+          className="desktop-announcement-backdrop desktop-announcement-backdrop--promo"
+          onClick={() => void dismiss(false)}
+        />
+        <section className="desktop-announcement-promo" role="dialog" aria-modal="true">
           <button
             type="button"
             className="desktop-announcement-close"
@@ -224,97 +240,126 @@ export function AnnouncementModalHost() {
             <X size={16} />
           </button>
 
-          <div className="desktop-announcement-promo__visual">
-            {announcement.imageUrl ? (
-              <img className="desktop-announcement-promo__image" src={announcement.imageUrl} alt="" />
-            ) : (
-              <div className="desktop-announcement-promo__fallback" />
-            )}
-            <div className="desktop-announcement-promo__shade" />
-            <div className="desktop-announcement-promo__visual-content">
-              <div className="desktop-announcement-promo__topline">
-                <span className="desktop-announcement-promo__badge">
-                  <Crown size={16} />
-                  Premium Offer
-                </span>
-                {discountPercent ? (
-                  <span className="desktop-announcement-promo__discount">{discountPercent}% OFF</span>
-                ) : (
-                  <span className="desktop-announcement-promo__discount">SPECIAL OFFER</span>
-                )}
-              </div>
-              <div>
-                <p className="desktop-announcement-promo__kicker">Limited time discount</p>
-                <h2 className="desktop-announcement-promo__title">{announcement.title}</h2>
-              </div>
-
-              <div className="desktop-announcement-promo__meta">
-                <span className="desktop-announcement-promo__meta-item">
-                  <Check size={14} />
-                  Instant unlock
-                </span>
-                <span className="desktop-announcement-promo__meta-item">
-                  <Clock size={14} />
-                  {countdown ? `Ends in ${countdown}` : "Available now"}
-                </span>
-              </div>
+          {announcement.imageUrl ? (
+            <div className="desktop-announcement-promo__cover">
+              <img
+                src={announcement.imageUrl}
+                alt=""
+                className="desktop-announcement-promo__cover-img"
+              />
             </div>
-          </div>
+          ) : null}
 
-          <div className="desktop-announcement-promo__content">
-            <div className="desktop-announcement-promo__copy">
-              <p>{announcement.message}</p>
+          <div className="desktop-announcement-promo__inner">
+            <div className="desktop-announcement-promo__badge-row">
+              <span className="desktop-announcement-promo__tag">
+                <Tag size={12} />
+                <span>{discountPercent ? `${discountPercent}% OFF` : "SPECIAL OFFER"}</span>
+              </span>
+              {countdown ? (
+                <span className="desktop-announcement-promo__timer">
+                  <Clock size={12} />
+                  <span>Ends in {countdown}</span>
+                </span>
+              ) : null}
             </div>
 
-            <div className="desktop-announcement-promo__box">
-              <div className="desktop-announcement-promo__box-head">
-                <span>Select a plan to apply discount</span>
-                {announcement.offerCode ? (
-                  <code>PROMO: {announcement.offerCode}</code>
-                ) : (
-                  <code>SPECIAL DISCOUNT</code>
-                )}
-              </div>
+            <div className="desktop-announcement-promo__headings">
+              <h2 className="desktop-announcement-promo__title">{announcement.title}</h2>
+              {announcement.message ? (
+                <p className="desktop-announcement-promo__desc">{announcement.message}</p>
+              ) : null}
+            </div>
 
-              <div className="desktop-announcement-offer-grid">
-                {offerCards.map((card, index) => (
-                  <div
-                    key={card.cycle}
-                    className={`desktop-announcement-offer-card${index === 0 ? " desktop-announcement-offer-card--selected" : ""}`}
-                  >
-                    <div className="desktop-announcement-offer-card__head">
-                      <div>
-                        <strong>{card.title}</strong>
-                        <span>{card.meta}</span>
-                      </div>
-                      <i aria-hidden="true" />
-                    </div>
-                    <p>{card.body}</p>
-                  </div>
-                ))}
+            {announcement.offerCode ? (
+              <div className="desktop-announcement-promo__code-banner">
+                <div className="desktop-announcement-promo__code-left">
+                  <span className="desktop-announcement-promo__code-label">PROMO CODE</span>
+                  <code className="desktop-announcement-promo__code-val">{announcement.offerCode}</code>
+                </div>
+                <span className="desktop-announcement-promo__code-note">✓ Auto-applied at checkout</span>
+              </div>
+            ) : null}
+
+            {offerCards.length > 0 ? (
+              <div className="desktop-announcement-promo__plans-section">
+                <span className="desktop-announcement-promo__plans-title">Choose billing cycle</span>
+                <div className="desktop-announcement-offer-list">
+                  {offerCards.map((card) => {
+                    const isSelected = activeCycle === card.cycle;
+                    return (
+                      <button
+                        type="button"
+                        key={card.cycle}
+                        onClick={() => setSelectedCycle(card.cycle)}
+                        className={`desktop-announcement-offer-card ${
+                          isSelected ? "desktop-announcement-offer-card--selected" : ""
+                        }`}
+                      >
+                        <span className="desktop-announcement-offer-card__radio">
+                          {isSelected ? (
+                            <span className="desktop-announcement-offer-card__radio-dot" />
+                          ) : null}
+                        </span>
+                        <div className="desktop-announcement-offer-card__content">
+                          <div className="desktop-announcement-offer-card__header">
+                            <span className="desktop-announcement-offer-card__name">{card.title}</span>
+                            <span className="desktop-announcement-offer-card__badge">{card.meta}</span>
+                          </div>
+                          <p className="desktop-announcement-offer-card__sub">{card.body}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="desktop-announcement-promo__perks">
+              <div className="desktop-announcement-promo__perk">
+                <Check size={14} className="desktop-announcement-promo__check" />
+                <span>Instant unlock of all premium features</span>
+              </div>
+              <div className="desktop-announcement-promo__perk">
+                <Check size={14} className="desktop-announcement-promo__check" />
+                <span>Cancel or switch plans anytime</span>
               </div>
             </div>
 
-            <div className="desktop-announcement-promo__actions">
+            <div className="desktop-announcement-promo__footer">
               {actionUrl ? (
-                <button type="button" className="desktop-announcement-promo__cta" onClick={() => void openAction()}>
-                  <Sparkles size={16} />
-                  {actionLabel}
+                <button
+                  type="button"
+                  className="desktop-announcement-promo__cta"
+                  onClick={() => void openAction(activeCycle)}
+                >
+                  <Sparkles size={15} />
+                  <span>{actionLabel}</span>
                 </button>
               ) : (
-                <button type="button" className="desktop-announcement-promo__cta desktop-announcement-promo__cta--dark" onClick={() => void dismiss(false)}>
+                <button
+                  type="button"
+                  className="desktop-announcement-promo__cta"
+                  onClick={() => void dismiss(false)}
+                >
                   OK
                 </button>
               )}
-              {announcement.offerCode ? (
-                <p>The discount code will be applied at checkout.</p>
-              ) : null}
+              <button
+                type="button"
+                className="desktop-announcement-promo__dismiss-btn"
+                onClick={() => void dismiss(false)}
+              >
+                Maybe later
+              </button>
             </div>
           </div>
         </section>
       </div>
     );
   }
+
+  const actionUrl = resolveActionUrl(announcement);
 
   return (
     <div className="desktop-announcement-overlay">

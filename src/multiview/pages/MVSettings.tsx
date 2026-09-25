@@ -30,14 +30,12 @@ import {
   getResolvedInterfaceLanguage,
 } from "../../services/interfaceLanguage";
 import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
-import { lmDockService } from "../../services/lmDockService";
 import { obsService } from "../../services/obsService";
 import { persistOBSWebSocketConfig } from "../../services/obsConnectionSettings";
 import { normalizeOBSWebSocketUrl } from "../../services/obsWebSocketUrl";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { formatCredits, getPlanConfig, getPlanCredits, getPlanLabel, type PlanConfig } from "../../services/planConfig";
 import { isProUnlocked } from "../../services/proLicense";
-import { voiceBibleService } from "../../services/voiceBibleService";
 import { clearAllSongs } from "../../worship/worshipDb";
 import { refreshTheme } from "../components/MVThemeProvider";
 import { AutomationSettingsPanel } from "../components/AutomationSettingsPanel";
@@ -67,6 +65,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import {
   Bell,
+  BookOpen,
   Calendar,
   Check,
   CheckCircle,
@@ -76,6 +75,7 @@ import {
   FileText,
   Globe,
   History,
+  Mic,
   Monitor,
   Moon,
   Music,
@@ -85,13 +85,19 @@ import {
   Radio,
   RefreshCw,
   RotateCcw,
+  Save,
   Settings,
+  ShieldAlert,
   Smartphone,
   Sun,
   Trash2,
   Zap,
 } from "lucide-react";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
+import { safeTauriInvoke, safeTauriListen } from "../../services/tauriSafe";
+import { lmDockService } from "../../services/lmDockService";
+import { getUserScopedKey } from "../../services/userScopedStorage";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import QRCode from "qrcode";
 
@@ -102,7 +108,71 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-type SettingsTab = "general" | "obs" | "mobile" | "automation" | "appearance" | "branding" | "bible" | "usage" | "audio";
+export type SettingsTab = "general" | "appearance" | "bible" | "branding" | "obs" | "mobile" | "automation" | "usage" | "storage" | "audio";
+
+export interface SettingsNavCategory {
+  group: string;
+  items: {
+    id: SettingsTab;
+    label: string;
+    icon: typeof Settings;
+    description: string;
+  }[];
+}
+
+export const SETTINGS_CATEGORIES: SettingsNavCategory[] = [
+  {
+    group: "Application",
+    items: [
+      { id: "general", label: "General", icon: Settings, description: "Studio preferences, language, and desktop updates." },
+      { id: "appearance", label: "Appearance", icon: Palette, description: "Theme modes, Antigravity accent colors, and UI density." },
+      { id: "bible", label: "Scripture & Bible", icon: BookOpen, description: "Default translation, slide layout, and verse presentation." },
+    ],
+  },
+  {
+    group: "Production & Stream",
+    items: [
+      { id: "branding", label: "Church & Branding", icon: Paintbrush, description: "Church identity, logo assets, lower-thirds, and speakers." },
+      { id: "obs", label: "OBS Studio", icon: Radio, description: "WebSocket connection, credentials, and live status." },
+      { id: "audio", label: "Audio & Voice AI", icon: Mic, description: "Microphone input, gain boost, and speech-to-scripture settings." },
+      { id: "mobile", label: "Mobile Companion", icon: Smartphone, description: "Wireless phone pairing, QR code, and remote permissions." },
+      { id: "automation", label: "Automations", icon: Zap, description: "Create and manage desktop automations for OBS." },
+    ],
+  },
+  {
+    group: "Account & System",
+    items: [
+      { id: "usage", label: "Plan & AI Credits", icon: History, description: "Plan tier, remaining credits, and transaction history." },
+      { id: "storage", label: "Data & Storage", icon: Trash2, description: "Database reset, worship cleanup, and cache management." },
+    ],
+  },
+];
+
+const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
+
+function loadPreferredMicId(): string {
+  const nativeMic = readNativeDockSetting<string>(PREFERRED_MIC_STORAGE_KEY);
+  if (nativeMic?.trim()) return nativeMic.trim();
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return localStorage.getItem(getUserScopedKey(PREFERRED_MIC_STORAGE_KEY))?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function savePreferredMicId(micId: string): void {
+  writeNativeDockSetting(PREFERRED_MIC_STORAGE_KEY, micId.trim());
+  if (typeof localStorage === "undefined") return;
+  try {
+    const key = getUserScopedKey(PREFERRED_MIC_STORAGE_KEY);
+    const trimmed = micId.trim();
+    if (trimmed) localStorage.setItem(key, trimmed);
+    else localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted browser contexts
+  }
+}
 
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
@@ -153,7 +223,7 @@ function formatUpdateBytes(bytes: number): string {
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "obs", "mobile", "automation", "appearance", "branding", "bible", "usage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "mobile", "automation", "usage", "storage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
@@ -194,7 +264,7 @@ export function MVSettings() {
   const [bReduceMotion, setBReduceMotion] = useState(false);
   const [bHighContrast, setBHighContrast] = useState(false);
   const [_bSaved, setBSaved] = useState(false);
-  const [_bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
+  const [bTranslations, setBTranslations] = useState(FALLBACK_TRANSLATIONS);
   const [bibleSettingsDirty, setBibleSettingsDirty] = useState(false);
 
   // ── Full access key state ──
@@ -233,7 +303,12 @@ export function MVSettings() {
     ? "Growth Trial"
     : (proUnlocked ? "Full Access" : (planConfig ? getPlanLabel(planConfig, displayPlan) : "Free"));
   const isUnlimited = planCredits === -1;
-  const usagePct = planCredits > 0 ? Math.min(100, Math.round((creditsUsedThisMonth / planCredits) * 100)) : 0;
+  const totalAvailableCredits = isUnlimited
+    ? -1
+    : (creditDetails?.totalAvailable ?? Math.max(0, planCredits + (creditDetails?.adminGranted ?? 0)));
+  const usagePct = (!isUnlimited && totalAvailableCredits > 0)
+    ? Math.min(100, Math.max(0, Math.round((creditsUsedThisMonth / totalAvailableCredits) * 100)))
+    : 0;
 
   useEffect(() => {
     getPlanConfig().then(setPlanConfig);
@@ -376,8 +451,6 @@ export function MVSettings() {
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: "success" | "accent" }>>([]);
 
   // ── OBS advanced state ──
-  const [obsMethod, setObsMethod] = useState<"WebSocket" | "Remote">("WebSocket");
-  const [obsReconnectInterval, setObsReconnectInterval] = useState("5 seconds");
   const [showLogsPanel, setShowLogsPanel] = useState(false);
   const [obsLogs, setObsLogs] = useState<Array<{ id: number; timestamp: string; message: string; source: string }>>([
     { id: 1, timestamp: "10:24:02", message: "Initializing OBS WebSocket connection module...", source: "System" },
@@ -385,12 +458,68 @@ export function MVSettings() {
     { id: 3, timestamp: "10:24:04", message: "OBS server accepted connection. Version 30.1.2", source: "OBS" },
   ]);
 
+  // ── Audio & Voice AI state ──
+  const [audioMics, setAudioMics] = useState<Array<{ id: string; label: string }>>([]);
+  const [audioMicsLoading, setAudioMicsLoading] = useState(false);
+  const [selectedMicId, setSelectedMicId] = useState(() => loadPreferredMicId());
+  const [inputGainDraft, setInputGainDraft] = useState<number>(settings.inputGain ?? 100);
+  const [liveAudioLevel, setLiveAudioLevel] = useState<number>(0);
+
   /* ── Toast helper ── */
   const triggerToast = useCallback((message: string, type: "success" | "accent" = "accent") => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
+
+  const refreshAudioMics = useCallback(async () => {
+    setAudioMicsLoading(true);
+    try {
+      const devices = await lmDockService.getMics();
+      setAudioMics(devices);
+      const savedMic = loadPreferredMicId();
+      if (devices.length > 0) {
+        const stillValid = devices.some((d) => d.id === savedMic);
+        if (!stillValid && !savedMic) {
+          const defaultMic = devices[0].id;
+          setSelectedMicId(defaultMic);
+          savePreferredMicId(defaultMic);
+        }
+      }
+    } catch (err) {
+      console.warn("[MVSettings] Failed to enumerate mics:", err);
+    } finally {
+      setAudioMicsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "audio") {
+      void refreshAudioMics();
+    }
+  }, [activeTab, refreshAudioMics]);
+
+  useEffect(() => {
+    if (activeTab !== "audio") return;
+    let unlisten: (() => void) | undefined;
+    safeTauriListen<{ level: number }>("assemblyai-audio-level", (event) => {
+      setLiveAudioLevel(event.payload.level);
+    }).then((fn) => { unlisten = fn; }).catch(() => {});
+    return () => { unlisten?.(); };
+  }, [activeTab]);
+
+  const handleGainChange = (gain: number) => {
+    setInputGainDraft(gain);
+    update({ inputGain: gain });
+    const gainMultiplier = Number.isFinite(gain) ? Math.max(0, Math.min(3, gain / 100)) : 1;
+    safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => {});
+  };
+
+  const handleMicChange = (micId: string) => {
+    setSelectedMicId(micId);
+    savePreferredMicId(micId);
+    triggerToast("Preferred microphone saved", "success");
+  };
 
   /* ── Effects ── */
   useEffect(() => {
@@ -550,12 +679,6 @@ export function MVSettings() {
     setObsTestResult(null);
     setObsStatus("connecting");
     try {
-      if (obsMethod !== "WebSocket") {
-        setObsStatus("disconnected");
-        setObsTestResult("Alternative Remote API is not available for OBS connections yet. Select WebSocket.");
-        return;
-      }
-
       const obsUrl = normalizeOBSWebSocketUrl(settings.obsUrl);
       if (obsUrl !== settings.obsUrl) {
         update({ obsUrl });
@@ -729,11 +852,20 @@ export function MVSettings() {
       case "automation": return "Create, run, and store desktop automations for OBS.";
       case "appearance": return t("mvSettings.tabDesc.appearance");
       case "branding": return t("mvSettings.tabDesc.branding");
-      case "bible": return t("mvSettings.tabDesc.bible");
+      case "bible": return "Configure default scripture translation, verse display, and slide presentation.";
       case "usage": return t("mvSettings.tabDesc.usage");
+      case "storage": return "Manage local databases, clear cached worship songs, or reset onboarding.";
       case "audio": return t("mvSettings.tabDesc.audio");
     }
-  }, [activeTab]);
+  }, [activeTab, t]);
+
+  const currentTabLabel = useMemo(() => {
+    for (const group of SETTINGS_CATEGORIES) {
+      const match = group.items.find((item) => item.id === activeTab);
+      if (match) return match.label;
+    }
+    return t("mvSettings.page.title");
+  }, [activeTab, t]);
 
   /* ── Mobile Remote state & handlers ── */
   const [mobileServerStatus, setMobileServerStatus] = useState<{ running: boolean; port: number } | null>(null);
@@ -984,70 +1116,92 @@ export function MVSettings() {
         ))}
       </div>
 
-      {/* Main content */}
-      <main className="app-main settings-main">
-        <header className="main-header">
-          <div className="title-group">
-            <h2 className="main-title">{t("mvSettings.page.title")}</h2>
-            <p className="main-description">{tabDescription}</p>
+      {/* Main Settings Shell */}
+      <div className="settings-shell">
+        {/* Left Settings Navigation Sidebar */}
+        <aside className="settings-nav-sidebar">
+          <div className="settings-nav-sidebar-header">
+            <h2 className="settings-nav-title">{t("mvSettings.page.title", "Settings")}</h2>
           </div>
-          <button className="reset-button" onClick={() => {
-            if (activeTab === "general") handleResetSettings();
-            else if (activeTab === "branding") handleResetBrandingSettings();
-            else if (activeTab === "appearance") handleResetAppearance();
-            else if (activeTab === "bible") handleSaveBible();
-            else if (activeTab === "audio") {
-              db.updateSettings({ inputGain: 100 });
-              voiceBibleService.setInputGain(100);
-              lmDockService.setInputGain(100);
-              triggerToast(t("mvSettings.toast.inputGainReset"), "accent");
-            }
-            else if (activeTab === "mobile") {
-              db.updateSettings({
-                mobileRemoteEnabled: false,
-                mobileRequireApproval: true,
-                mobileAllowMultipleDevices: true,
-                mobileMaxDevices: 3,
-                mobileAutoRemoveInactive: true,
-                mobileDesktopName: "My Church",
-              });
-              setSettings(db.getSettings());
-              triggerToast(t("mvSettings.toast.mobileReset"), "accent");
-            }
-            else triggerToast(t("mvSettings.toast.resetOptionsAvailable"), "accent");
-          }} title="Reset">
-            <RotateCcw size={16} />
-            <span>{activeTab === "bible" ? t("mvSettings.page.saveBible") : t("mvSettings.page.resetDefaults")}</span>
-          </button>
-        </header>
+          <div className="settings-nav-groups">
+            {SETTINGS_CATEGORIES.map((category) => (
+              <div key={category.group} className="settings-nav-group">
+                <span className="settings-nav-group-label">{category.group}</span>
+                <div className="settings-nav-group-items">
+                  {category.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`settings-nav-item ${isActive ? "active" : ""}`}
+                        onClick={() => setActiveTab(item.id)}
+                      >
+                        <Icon size={16} className="settings-nav-item-icon" />
+                        <span className="settings-nav-item-text">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
 
-        {/* Tab bar */}
-        <div className="tabs-navigation">
-          {([
-            ["general", Settings, t("mvSettings.tabs.general")],
-            ["branding", Paintbrush, t("mvSettings.tabs.branding")],
-            ["appearance", Palette, t("mvSettings.tabs.appearance")],
-            ["usage", History, t("mvSettings.tabs.usage")],
-            ["obs", Radio, t("mvSettings.tabs.obs")],
-            ["mobile", Smartphone, t("mvSettings.tabs.mobile")],
-            ["automation", Zap, "Automations"],
-            // ["audio", Mic, t("mvSettings.tabs.audio")],
-            // ["full-access", ShieldCheck, "Full Access"],
-            // ["developer", Key, "Developer"],
-          ] as const).map(([id, IconComp, label]) => (
-            <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id)}>
-              <IconComp size={16} /> <span>{label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Right Main Viewport */}
+        <div className="settings-main-viewport">
+          <header className="main-header">
+            <div className="title-group">
+              <h2 className="main-title">{currentTabLabel}</h2>
+              <p className="main-description">{tabDescription}</p>
+            </div>
+            <div className="settings-viewport-actions">
+              {activeTab === "bible" && (
+                <button className="action-btn btn-primary" onClick={handleSaveBible} title="Save Bible Settings">
+                  <Save size={14} /> <span>Save Bible Settings</span>
+                </button>
+              )}
+              {activeTab === "general" && (
+                <>
+                  <button className="action-btn" onClick={handleResetSettings} title="Reset General Defaults">
+                    <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                  </button>
+                  <button className="action-btn" onClick={handleCheckForUpdates} disabled={manualUpdateBusy} title={t("mvSettings.general.checkForUpdates")}>
+                    <RefreshCw size={14} className={effectiveUpdateStatus === "checking" ? "animate-spin" : ""} />
+                    <span>{effectiveUpdateStatus === "checking" ? t("mvSettings.general.checkingForUpdates") : t("mvSettings.general.checkForUpdates")}</span>
+                  </button>
+                </>
+              )}
+              {activeTab === "obs" && (
+                <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Test OBS Connection">
+                  {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>{t("mvSettings.obs.connecting")}</span></>) : (<><CheckCircle size={14} /><span>{t("mvSettings.obs.testConnection")}</span></>)}
+                </button>
+              )}
+              {activeTab === "appearance" && (
+                <button className="action-btn" onClick={handleResetAppearance} title="Reset Appearance">
+                  <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                </button>
+              )}
+              {activeTab === "branding" && (
+                <button className="action-btn" onClick={handleResetBrandingSettings} title="Reset Branding">
+                  <RotateCcw size={14} /> <span>{t("mvSettings.page.resetDefaults")}</span>
+                </button>
+              )}
+              {activeTab === "audio" && (
+                <button className="action-btn" onClick={refreshAudioMics} disabled={audioMicsLoading} title="Rescan Audio Devices">
+                  <RefreshCw size={14} className={audioMicsLoading ? "animate-spin" : ""} />
+                  <span>Rescan Devices</span>
+                </button>
+              )}
+            </div>
+          </header>
 
-        {/* Scrollable content */}
-        <div className="main-scroll-pane">
-          <AccountSummaryCards className="settings-summary-cards" />
-          <LocalDevPlanSwitcher />
-          <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
-            {/* Left: main form column */}
-            <div className="settings-form-column">
+          {/* Scrollable content pane */}
+          <div className="main-scroll-pane">
+            <div className={`settings-grid ${hasSettingsSidebar ? "" : "settings-grid--no-sidebar"} ${activeTab === "usage" ? "settings-grid--usage" : ""}`}>
+              {/* Main form column */}
+              <div className="settings-form-column">
 
               {/* ══════════════ GENERAL TAB ══════════════ */}
               {activeTab === "general" && (
@@ -1175,44 +1329,6 @@ export function MVSettings() {
 
 
 
-                  {/* Danger Zone */}
-                  <div className="settings-section" style={{ marginTop: "24px", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                    <h3 className="section-title" style={{ color: "var(--danger-color)" }}><Trash2 size={18} style={{ verticalAlign: "text-bottom" }} /> {t("mvSettings.general.dangerZone")}</h3>
-
-                    {/* Clear All Data */}
-                    <p className="section-desc">{t("mvSettings.general.clearAllDataDesc")}</p>
-                    {cleared ? (
-                      <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.databaseCleared")}</p>
-                    ) : confirmClear ? (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
-                        <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">{t("mvSettings.general.yesClearEverything")}</button>
-                        <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
-                      </div>
-                    ) : (
-                      <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
-                        <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
-                      </button>
-                    )}
-
-                    {/* Clear Worship Songs */}
-                    <div style={{ marginTop: 16, borderTop: "1px solid rgba(239,68,68,0.1)", paddingTop: 16 }}>
-                      <p className="section-desc">{t("mvSettings.general.clearWorshipSongsDesc")}</p>
-                      {worshipCleared ? (
-                        <p style={{ color: "var(--success-color)", fontSize: 13 }}><CheckCircle size={16} style={{ verticalAlign: "middle" }} /> {t("mvSettings.general.worshipSongsCleared")}</p>
-                      ) : confirmClearWorship ? (
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span style={{ color: "var(--danger-color)" }}>{t("mvSettings.general.areYouSure")}</span>
-                          <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">{t("mvSettings.general.yesClearWorship")}</button>
-                          <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">{t("mvSettings.general.cancel")}</button>
-                        </div>
-                      ) : (
-                        <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
-                          <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -1220,37 +1336,46 @@ export function MVSettings() {
               {activeTab === "obs" && (
                 <div className="settings-section">
                   <div className="section-header">
+                    <h3 className="section-title">OBS Studio WebSocket</h3>
                     <p className="section-desc">{t("mvSettings.obs.webSocketDesc")}</p>
                   </div>
 
                   <div className="settings-card fields-rows-stack">
-                    {/* Connection method */}
-                    <div className="form-group">
-                      <label className="form-label">{t("mvSettings.obs.connectionMethod")}</label>
-                      <div className="grid-2-col" style={{ marginTop: "4px" }}>
-                        <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "WebSocket"} onChange={() => { setObsMethod("WebSocket"); setObsTestResult(null); setObsStatus(obsService.isConnected ? "connected" : "disconnected"); }} />
-                          <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
-                            <div className="checked-indicator"><Check size={10} /></div>
-                            <div className="density-icon-box" style={{ background: obsMethod === "WebSocket" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "WebSocket" ? "var(--accent-color)" : "var(--text-secondary)" }}><Radio size={16} /></div>
-                            <div style={{ marginTop: "8px" }}>
-                              <span className="option-title">{t("mvSettings.obs.webSocketRecommended")}</span>
-                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.webSocketDirectDesc")}</p>
-                            </div>
+                    {/* Live Status Card */}
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderRadius: "8px",
+                      background: obsStatus === "connected" ? "rgba(34, 197, 94, 0.08)" : obsStatus === "connecting" ? "rgba(245, 158, 11, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                      border: `1px solid ${obsStatus === "connected" ? "rgba(34, 197, 94, 0.25)" : obsStatus === "connecting" ? "rgba(245, 158, 11, 0.25)" : "rgba(239, 68, 68, 0.25)"}`,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          backgroundColor: obsStatus === "connected" ? "var(--success-color)" : obsStatus === "connecting" ? "var(--warning)" : "var(--danger-color)",
+                          boxShadow: obsStatus === "connected" ? "0 0 8px var(--success-color)" : "none",
+                        }} />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                            {obsStatus === "connected" ? "Connected to OBS Studio" : obsStatus === "connecting" ? "Connecting to OBS..." : "Disconnected from OBS Studio"}
                           </div>
-                        </label>
-                        <label className="option-select-card">
-                          <input type="radio" name="obs_method" checked={obsMethod === "Remote"} onChange={() => { setObsMethod("Remote"); setObsTestResult(null); setObsStatus("disconnected"); }} />
-                          <div className="option-select-inner" style={{ padding: "16px", alignItems: "flex-start", textAlign: "left" }}>
-                            <div className="checked-indicator"><Check size={10} /></div>
-                            <div className="density-icon-box" style={{ background: obsMethod === "Remote" ? "rgba(var(--accent-rgb), 0.15)" : "var(--bg-card-hover)", color: obsMethod === "Remote" ? "var(--accent-color)" : "var(--text-secondary)" }}><ExternalLink size={16} /></div>
-                            <div style={{ marginTop: "8px" }}>
-                              <span className="option-title">{t("mvSettings.obs.alternativeRemoteApi")}</span>
-                              <p className="option-desc" style={{ marginTop: "4px" }}>{t("mvSettings.obs.alternativeRemoteApiDesc")}</p>
-                            </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                            {obsStatus === "connected" ? "WebSocket v5 server responding at " + (settings.obsUrl || "ws://localhost:4455") : "Ensure OBS is running with WebSocket server enabled"}
                           </div>
-                        </label>
+                        </div>
                       </div>
+                      <span className="feature-tag-pill" style={{
+                        fontSize: "11px",
+                        textTransform: "uppercase",
+                        background: obsStatus === "connected" ? "rgba(34,197,94,0.15)" : obsStatus === "connecting" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)",
+                        color: obsStatus === "connected" ? "var(--success-color)" : obsStatus === "connecting" ? "var(--warning)" : "var(--danger-color)",
+                      }}>
+                        {obsStatus}
+                      </span>
                     </div>
 
                     <hr className="settings-divider" />
@@ -1259,25 +1384,63 @@ export function MVSettings() {
                     <div className="form-group">
                       <label className="form-label">{t("mvSettings.obs.webSocketHostAddress")}</label>
                       <div className="custom-input-container">
-                        <input type="text" className="custom-textbox" value={settings.obsUrl} onChange={(e) => update({ obsUrl: e.target.value })} placeholder="ws://localhost:4455" />
-                        <button className="action-btn btn-primary" onClick={handleTestObs} disabled={obsStatus === "connecting"} title="Refresh">
-                          {obsStatus === "connecting" ? (<><RefreshCw size={14} className="animate-spin" /><span>{t("mvSettings.obs.connecting")}</span></>) : (<><CheckCircle size={14} /><span>{t("mvSettings.obs.testConnection")}</span></>)}
+                        <input
+                          type="text"
+                          className="custom-textbox"
+                          value={settings.obsUrl}
+                          onChange={(e) => update({ obsUrl: e.target.value })}
+                          placeholder="ws://localhost:4455"
+                        />
+                        <button
+                          className="action-btn btn-primary"
+                          onClick={handleTestObs}
+                          disabled={obsStatus === "connecting"}
+                          title="Test OBS Connection"
+                        >
+                          {obsStatus === "connecting" ? (
+                            <>
+                              <RefreshCw size={14} className="animate-spin" />
+                              <span>{t("mvSettings.obs.connecting")}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle size={14} />
+                              <span>{t("mvSettings.obs.testConnection")}</span>
+                            </>
+                          )}
                         </button>
                       </div>
+                      <span className="mv-settings-hint" style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px", display: "block" }}>
+                        Default OBS WebSocket v5 port is 4455. In OBS: Tools &rarr; WebSocket Server Settings.
+                      </span>
                     </div>
 
                     {/* Password */}
                     <div className="form-group" style={{ marginTop: "12px" }}>
                       <label className="form-label">{t("mvSettings.obs.passwordOptional")}</label>
                       <div className="custom-input-container">
-                        <input type="password" className="custom-textbox" value={obsPasswordDraft} onChange={(e) => setObsPasswordDraft(e.target.value)} placeholder={t("mvSettings.obs.obsAuthKey")} />
+                        <input
+                          type="password"
+                          className="custom-textbox"
+                          value={obsPasswordDraft}
+                          onChange={(e) => setObsPasswordDraft(e.target.value)}
+                          placeholder={t("mvSettings.obs.obsAuthKey")}
+                        />
                       </div>
-                      <span className="mv-settings-hint" style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>{t("mvSettings.obs.storedInSession")}</span>
+                      <span className="mv-settings-hint" style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>
+                        {t("mvSettings.obs.storedInSession")}
+                      </span>
                     </div>
 
                     {obsTestResult && (
-                      <p style={{ fontSize: 12, color: obsStatus === "connected" ? "var(--success-color)" : "var(--danger-color)" }}>
-                        {obsStatus === "connected" ? "✓" : "✗"} {obsTestResult}
+                      <p style={{
+                        fontSize: 12,
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        background: obsStatus === "connected" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                        color: obsStatus === "connected" ? "var(--success-color)" : "var(--danger-color)",
+                      }}>
+                        {obsStatus === "connected" ? "✓ " : "✗ "} {obsTestResult}
                       </p>
                     )}
 
@@ -1292,28 +1455,176 @@ export function MVSettings() {
                           <span className="switch-subtitle">{t("mvSettings.obs.autoReconnectDesc")}</span>
                         </div>
                         <label className="switch-toggle-label">
-                          <input type="checkbox" checked={settings.obsAutoReconnect} onChange={() => update({ obsAutoReconnect: !settings.obsAutoReconnect })} />
-                          <span className="switch-slider"></span>
+                          <input
+                            type="checkbox"
+                            checked={settings.obsAutoReconnect}
+                            onChange={() => update({ obsAutoReconnect: !settings.obsAutoReconnect })}
+                          />
+                          <span className="switch-slider" />
                         </label>
                       </div>
-                      <div className="flex-between-center" style={{ padding: "10px 0" }}>
-                        <div className="switch-left">
-                          <span className="switch-title">{t("mvSettings.obs.reconnectInterval")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.obs.reconnectIntervalDesc")}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ══════════════ AUDIO & VOICE AI TAB ══════════════ */}
+              {activeTab === "audio" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">Microphone & Speech-to-Scripture</h3>
+                    <p className="section-desc">
+                      Configure your primary audio input, adjust software pre-amp gain, and monitor real-time speech detection levels.
+                    </p>
+                  </div>
+
+                  <div className="settings-card fields-rows-stack">
+                    {/* Microphone Device Selection */}
+                    <div className="form-group">
+                      <div className="flex-between-center" style={{ marginBottom: "8px" }}>
+                        <label className="form-label" style={{ marginBottom: 0 }}>
+                          Preferred Microphone Input
+                        </label>
+                        <button
+                          type="button"
+                          className="action-btn"
+                          style={{ padding: "4px 8px", fontSize: "12px", height: "auto" }}
+                          onClick={refreshAudioMics}
+                          disabled={audioMicsLoading}
+                        >
+                          <RefreshCw size={12} className={audioMicsLoading ? "animate-spin" : ""} />
+                          <span>{audioMicsLoading ? "Scanning..." : "Rescan"}</span>
+                        </button>
+                      </div>
+                      <div className="form-select-container">
+                        <select
+                          className="custom-select"
+                          value={selectedMicId}
+                          onChange={(e) => handleMicChange(e.target.value)}
+                        >
+                          <option value="">Default System Microphone</option>
+                          {audioMics.map((mic) => (
+                            <option key={mic.id} value={mic.id}>
+                              {mic.label || `Microphone (${mic.id.slice(0, 8)}...)`}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                      <p className="form-help-text" style={{ marginTop: "6px" }}>
+                        MakeChurchEasy listens to this microphone feed to detect spoken verses during live preaching.
+                      </p>
+                    </div>
+
+                    <hr className="settings-divider" />
+
+                    {/* Microphone Gain / Pre-amp */}
+                    <div className="form-group">
+                      <div className="flex-between-center" style={{ marginBottom: "8px" }}>
+                        <div>
+                          <label className="form-label" style={{ marginBottom: "2px" }}>Input Gain & Digital Pre-amp</label>
+                          <span className="switch-subtitle">Boost microphone pickup sensitivity before speech recognition processing.</span>
                         </div>
-                        <div className="form-select-container" style={{ width: "130px" }}>
-                          <select className="custom-select" value={obsReconnectInterval} onChange={(e) => { setObsReconnectInterval(e.target.value); triggerToast(t("mvSettings.obs.intervalSetTo", { interval: e.target.value }), "accent"); }}>
-                            <option>{t("mvSettings.obs.fiveSeconds")}</option>
-                            <option>{t("mvSettings.obs.tenSeconds")}</option>
-                            <option>{t("mvSettings.obs.thirtySeconds")}</option>
+                        <span style={{ fontFamily: "monospace", fontWeight: 600, fontSize: "13px", color: "var(--accent-color)" }}>
+                          {inputGainDraft}%
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <input
+                          type="range"
+                          min={0}
+                          max={300}
+                          step={5}
+                          value={inputGainDraft}
+                          onChange={(e) => handleGainChange(Number(e.target.value))}
+                          style={{ flex: 1, accentColor: "var(--accent-color)" }}
+                        />
+                        <button
+                          type="button"
+                          className="action-btn"
+                          style={{ padding: "4px 10px", fontSize: "12px", height: "28px" }}
+                          onClick={() => handleGainChange(100)}
+                          title="Reset to 100%"
+                        >
+                          100%
+                        </button>
+                      </div>
+                    </div>
+
+                    <hr className="settings-divider" />
+
+                    {/* Live VU Meter */}
+                    <div className="form-group">
+                      <div className="flex-between-center" style={{ marginBottom: "6px" }}>
+                        <span className="form-label" style={{ marginBottom: 0 }}>Input Level Meter</span>
+                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                          {liveAudioLevel > 0.05 ? "Signal Active" : "No Signal"}
+                        </span>
+                      </div>
+                      <div style={{
+                        width: "100%",
+                        height: "10px",
+                        backgroundColor: "var(--bg-tertiary)",
+                        borderRadius: "5px",
+                        overflow: "hidden",
+                        border: "1px solid var(--border-color)",
+                        position: "relative"
+                      }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${Math.min(100, Math.round(liveAudioLevel * 100))}%`,
+                          backgroundColor: liveAudioLevel > 0.85 ? "#ef4444" : liveAudioLevel > 0.6 ? "#f59e0b" : "#10b981",
+                          transition: "width 80ms ease-out"
+                        }} />
+                      </div>
+                      <p className="form-help-text" style={{ marginTop: "6px" }}>
+                        Speak into your pulpit or headset mic. The meter should fluctuate in the green/amber zone.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Speech Detection & Offline Engine Card */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">Voice AI Engine & Offline Capabilities</h3>
+                      <p className="section-desc">Local and cloud processing options for real-time live captioning and verse detection.</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">Default Bible Version for Spoken Scriptures</span>
+                          <span className="switch-subtitle">When a preacher references a chapter and verse, project verses from this version by default.</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "220px" }}>
+                          <select
+                            className="custom-select"
+                            value={bDefaultTranslation}
+                            onChange={(e) => {
+                              setBDefaultTranslation(e.target.value as BibleTranslation);
+                              setBibleSettingsDirty(true);
+                            }}
+                          >
+                            {bTranslations.map((tr) => (
+                              <option key={tr.value} value={tr.value}>{tr.label}</option>
+                            ))}
                           </select>
                           <span className="select-arrow"><ChevronDown size={14} /></span>
                         </div>
                       </div>
+
+                      <div className="flex-between-center" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">Local Whisper Offline Engine</span>
+                          <span className="switch-subtitle">High-speed on-device speech processing fallback when internet connectivity drops.</span>
+                        </div>
+                        <span className="badge" style={{ padding: "4px 10px", fontSize: "12px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderRadius: "999px", fontWeight: 500 }}>
+                          Ready & Available
+                        </span>
+                      </div>
                     </div>
                   </div>
-
-
                 </div>
               )}
 
@@ -1786,13 +2097,92 @@ export function MVSettings() {
 
                     <hr className="settings-divider" />
 
-                    {/* Density */}
-
+                    {/* Interface Density */}
+                    <div className="form-group">
+                      <label className="form-label">{t("mvSettings.appearance.density", "Interface Density")}</label>
+                      <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
+                        {t("mvSettings.appearance.densityDesc", "Adjust layout spacing and button padding across the desktop app.")}
+                      </p>
+                      <div className="grid-3-col" style={{ marginTop: "4px" }}>
+                        {([
+                          ["comfortable", t("mvSettings.appearance.densityComfortable", "Comfortable"), "Spacious with generous padding"],
+                          ["balanced", t("mvSettings.appearance.densityBalanced", "Balanced"), "Standard layout for live production"],
+                          ["compact", t("mvSettings.appearance.densityCompact", "Compact"), "Maximum screen real-estate"],
+                        ] as const).map(([id, label, desc]) => (
+                          <label key={id} className="option-select-card">
+                            <input
+                              type="radio"
+                              name="ui_density"
+                              checked={density === id}
+                              onChange={() => {
+                                setDensity(id);
+                                triggerToast(`Density set to ${label}`, "accent");
+                              }}
+                            />
+                            <div className="option-select-inner density-card-inner" style={{ padding: "14px 12px", textAlign: "left" }}>
+                              <div className="checked-indicator"><Check size={10} /></div>
+                              <span className="option-title" style={{ fontWeight: 600 }}>{label}</span>
+                              <p className="option-desc" style={{ marginTop: "4px", fontSize: "0.75rem", color: "var(--text-muted)" }}>{desc}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
                     <hr className="settings-divider" />
 
+                    {/* Accessibility & Visual Enhancements */}
+                    <div className="form-group">
+                      <label className="form-label">{t("mvSettings.appearance.accessibility", "Accessibility & Display")}</label>
+                      <div className="switch-row" style={{ padding: "12px 0" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.appearance.highContrast", "High Contrast Readability")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.appearance.highContrastDesc", "Boost borders and text contrast for low-glare visibility in control booths.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={highContrastUI}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setHighContrastUI(checked);
+                              update({ highContrast: checked } as any);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
 
-                    {/* Toggles */}
+                      <div className="switch-row" style={{ padding: "12px 0", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.appearance.reduceMotion", "Reduce Motion & Animations")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.appearance.reduceMotionDesc", "Disable non-essential slide and UI animations to save GPU/CPU during broadcasts.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={reduceMotion}
+                            onChange={(e) => setReduceMotion(e.target.checked)}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      <div className="switch-row" style={{ padding: "12px 0", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.appearance.roundedCorners", "Rounded Corners")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.appearance.roundedCornersDesc", "Use smooth modern rounded corners on interface cards and dialogs.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={roundedCorners}
+                            onChange={(e) => setRoundedCorners(e.target.checked)}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+                    </div>
 
 
                   </div>
@@ -1951,24 +2341,274 @@ export function MVSettings() {
                     </div>
                   </div>
 
-                  {/* First-launch setup */}
+                  {/* Presentation & Overlay Defaults */}
                   <div className="settings-section" style={{ marginTop: "24px" }}>
                     <div className="section-header">
-                      <h3 className="section-title">{t("mvSettings.branding.firstLaunchSetup")}</h3>
-                      <p className="section-desc">{t("mvSettings.branding.firstLaunchSetupDesc")}</p>
+                      <h3 className="section-title">Lower-Third & Presentation Defaults</h3>
+                      <p className="section-desc">Default behavior for live lower-third overlays, scripture projection mode, and ticker crawls.</p>
                     </div>
-                    <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}><RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding")}</button>
+
+                    <div className="settings-card fields-rows-stack">
+                      {/* Lower Third Auto-Dismiss Duration */}
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">Lower-Third Display Duration</span>
+                          <span className="switch-subtitle">How long lower-third speaker and sermon titles remain on screen before auto-dismissing.</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "220px" }}>
+                          <select
+                            className="custom-select"
+                            value={settings.lowerThirdDefaultDurationSec ?? 10}
+                            onChange={(e) => update({ lowerThirdDefaultDurationSec: Number(e.target.value) })}
+                          >
+                            <option value={0}>Manual (Stay until closed)</option>
+                            <option value={5}>5 seconds</option>
+                            <option value={8}>8 seconds</option>
+                            <option value={10}>10 seconds (Default)</option>
+                            <option value={15}>15 seconds</option>
+                            <option value={20}>20 seconds</option>
+                            <option value={30}>30 seconds</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+
+                      {/* Default Bible Projection Mode */}
+                      <div className="flex-between-center" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">Default Scripture Projection Style</span>
+                          <span className="switch-subtitle">Choose whether projected scriptures appear full screen or as lower-third broadcast overlays.</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "220px" }}>
+                          <select
+                            className="custom-select"
+                            value={settings.defaultBibleOverlayMode ?? "fullscreen"}
+                            onChange={(e) => update({ defaultBibleOverlayMode: e.target.value as "fullscreen" | "lower-third" })}
+                          >
+                            <option value="fullscreen">Full Screen Projector</option>
+                            <option value="lower-third">Lower-Third Overlay</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+
+                      {/* Live Ticker Crawl Speed */}
+                      <div className="flex-between-center" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">Stream Ticker Crawl Speed</span>
+                          <span className="switch-subtitle">Speed of scrolling announcement tickers displayed along the bottom of the stream.</span>
+                        </div>
+                        <div className="form-select-container" style={{ width: "220px" }}>
+                          <select
+                            className="custom-select"
+                            value={settings.defaultTickerScrollSpeed ?? 2}
+                            onChange={(e) => update({ defaultTickerScrollSpeed: Number(e.target.value) })}
+                          >
+                            <option value={1}>1 — Gentle / Slow</option>
+                            <option value={2}>2 — Standard (Default)</option>
+                            <option value={3}>3 — Moderate</option>
+                            <option value={4}>4 — Brisk</option>
+                            <option value={5}>5 — Fast</option>
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
+
                 </div>
               )}
 
               {/* ══════════════ BIBLE TAB ══════════════ */}
+              {activeTab === "bible" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.bible.sectionTitle", "Scripture & Bible Presentation")}</h3>
+                    <p className="section-desc">{t("mvSettings.bible.sectionDesc", "Configure default translation, display themes, slide formatting, and presentation controls.")}</p>
+                  </div>
 
+                  {/* Defaults Card */}
+                  <div className="settings-card fields-rows-stack">
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.bible.defaultTranslation", "Default Bible Translation")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.bible.defaultTranslationDesc", "Select the scripture version loaded upon opening the Bible studio.")}</span>
+                      </div>
+                      <div className="form-select-container" style={{ width: "260px" }}>
+                        <select
+                          className="custom-select"
+                          value={bDefaultTranslation}
+                          onChange={(e) => {
+                            setBDefaultTranslation(e.target.value as BibleTranslation);
+                            setBibleSettingsDirty(true);
+                          }}
+                        >
+                          {bTranslations.map((tr) => (
+                            <option key={tr.value} value={tr.value}>{tr.label}</option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                    </div>
+
+                    <div className="flex-between-center" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.bible.defaultTheme", "Active Scripture Theme")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.bible.defaultThemeDesc", "Visual layout, color palette, and font styling used for Bible projection.")}</span>
+                      </div>
+                      <div className="form-select-container" style={{ width: "260px" }}>
+                        <select
+                          className="custom-select"
+                          value={bDefaultThemeId}
+                          onChange={(e) => {
+                            setBDefaultThemeId(e.target.value);
+                            setBibleSettingsDirty(true);
+                          }}
+                        >
+                          {bibleState.themes.map((th) => (
+                            <option key={th.id} value={th.id}>{th.name}{th.hidden ? " (hidden)" : ""}</option>
+                          ))}
+                        </select>
+                        <span className="select-arrow"><ChevronDown size={14} /></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide Configuration Card */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.bible.slideFormatting", "Slide Formatting & Typography")}</h3>
+                      <p className="section-desc">{t("mvSettings.bible.slideFormattingDesc", "Control how verses are split and rendered onto projector slides.")}</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="flex-between-center">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.maxLines", "Maximum Lines Per Slide")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.maxLinesDesc", "Limit how many lines fit on a single slide before paginating.")}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="range"
+                            min={1}
+                            max={8}
+                            value={bMaxLines}
+                            onChange={(e) => {
+                              setBMaxLines(Number(e.target.value));
+                              setBibleSettingsDirty(true);
+                            }}
+                            style={{ width: "120px" }}
+                          />
+                          <span style={{ fontWeight: 700, minWidth: "28px", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                            {bMaxLines}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.showVerseNumbers", "Inline Verse Numbers")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.showVerseNumbersDesc", "Show superscripts and verse number headers on projected slides.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bShowVerseNumbers}
+                            onChange={(e) => {
+                              setBShowVerseNumbers(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Behavior & Display Options Card */}
+                  <div className="settings-section" style={{ marginTop: "24px" }}>
+                    <div className="section-header">
+                      <h3 className="section-title">{t("mvSettings.bible.behaviorAndControls", "Projection & Controls")}</h3>
+                      <p className="section-desc">{t("mvSettings.bible.behaviorAndControlsDesc", "Quick actions and interface behavior during live services.")}</p>
+                    </div>
+
+                    <div className="settings-card fields-rows-stack">
+                      <div className="switch-row">
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.autoSend", "Auto-send on Double Click")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.autoSendDesc", "Double-clicking any verse immediately pushes it live to OBS & projector.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bAutoSend}
+                            onChange={(e) => {
+                              setBAutoSend(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.reduceMotion", "Reduce Motion")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.reduceMotionDesc", "Disable transitions and animated slide changes for lower GPU usage.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bReduceMotion}
+                            onChange={(e) => {
+                              setBReduceMotion(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
+                        <div className="switch-left">
+                          <span className="switch-title">{t("mvSettings.bible.highContrast", "High Contrast Readability")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.highContrastDesc", "Boost outline and contrast for washed-out sanctuaries or high-ambient light.")}</span>
+                        </div>
+                        <label className="switch-toggle-label">
+                          <input
+                            type="checkbox"
+                            checked={bHighContrast}
+                            onChange={(e) => {
+                              setBHighContrast(e.target.checked);
+                              setBibleSettingsDirty(true);
+                            }}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                    <button
+                      className="action-btn btn-primary"
+                      onClick={handleSaveBible}
+                      title="Save Bible Settings"
+                      style={{ padding: "8px 20px" }}
+                    >
+                      <Save size={14} /> <span>{bibleSettingsDirty ? "Save Bible Settings *" : "Save Bible Settings"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ══════════════ CREDITS TAB ══════════════ */}
               {activeTab === "usage" && (
                 <div className="settings-section">
-                  <div className="section-header">
+                  {/* Account Summary Cards at top of Plan & Credits */}
+                  <AccountSummaryCards className="settings-summary-cards" />
+
+                  <div className="section-header" style={{ marginTop: "24px" }}>
                     <h3 className="section-title">{t("mvSettings.credits.creditsOverview")}</h3>
                     <p className="section-desc">{t("mvSettings.credits.creditsOverviewDesc")}</p>
                   </div>
@@ -2030,7 +2670,12 @@ export function MVSettings() {
                     {!isUnlimited && (
                       <div className="credits-progress-section">
                         <div className="credits-progress-header">
-                          <span className="credits-progress-text">{t("mvSettings.credits.creditsUsedOf", { creditsUsedThisMonth, planCredits: formatCredits(planCredits) })}</span>
+                          <span className="credits-progress-text">
+                            {t("mvSettings.credits.creditsUsedOf", {
+                              creditsUsedThisMonth,
+                              planCredits: formatCredits(totalAvailableCredits > 0 ? totalAvailableCredits : planCredits),
+                            })}
+                          </span>
                           <span className="credits-progress-pct">{usagePct}%</span>
                         </div>
                         <div className="credits-progress-track">
@@ -2162,8 +2807,102 @@ export function MVSettings() {
 
 
 
-                  {/* ── Plan Features ── */}
+                  {/* Local Dev Switcher */}
+                  <div className="settings-section" style={{ marginTop: "32px", borderTop: "1px solid var(--border-color)", paddingTop: "20px" }}>
+                    <LocalDevPlanSwitcher />
+                  </div>
+                </div>
+              )}
 
+              {/* ══════════════ DATA & STORAGE TAB ══════════════ */}
+              {activeTab === "storage" && (
+                <div className="settings-section">
+                  <div className="section-header">
+                    <h3 className="section-title">{t("mvSettings.storage.sectionTitle", "Data & Storage Management")}</h3>
+                    <p className="section-desc">{t("mvSettings.storage.sectionDesc", "Manage local databases, purge cached media and worship catalogs, or reset initial setup.")}</p>
+                  </div>
+
+                  {/* Church Onboarding Reset Card */}
+                  <div className="settings-card fields-rows-stack" style={{ marginBottom: "20px" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.branding.firstLaunchSetup", "Initial Setup & Onboarding")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.branding.firstLaunchSetupDesc", "Rerun the church name, logo, and theme setup wizard without losing songs or data.")}</span>
+                      </div>
+                      <button className="action-btn" onClick={handleResetChurchOnboarding} title={t("mvSettings.branding.resetOnboarding")}>
+                        <RefreshCw size={14} /> {t("mvSettings.branding.resetOnboarding", "Rerun Onboarding")}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Worship Song Library Cleanup Card */}
+                  <div className="settings-card fields-rows-stack" style={{ marginBottom: "20px" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <span className="switch-title">{t("mvSettings.general.clearWorshipSongs", "Clear Worship Songs")}</span>
+                        <span className="switch-subtitle">{t("mvSettings.general.clearWorshipSongsDesc", "Delete all imported songs and custom lyric sets from local storage.")}</span>
+                      </div>
+                      <div>
+                        {worshipCleared ? (
+                          <span style={{ color: "var(--success-color)", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <CheckCircle size={15} /> {t("mvSettings.general.worshipSongsCleared")}
+                          </span>
+                        ) : confirmClearWorship ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ color: "var(--danger-color)", fontSize: "0.82rem", fontWeight: 600 }}>{t("mvSettings.general.areYouSure")}</span>
+                            <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClearWorship} title="Yes">
+                              {t("mvSettings.general.yesClearWorship")}
+                            </button>
+                            <button className="action-btn" onClick={() => setConfirmClearWorship(false)} title="Cancel">
+                              {t("mvSettings.general.cancel")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClearWorship(true)} title="Clear">
+                            <Trash2 size={14} /><span>{t("mvSettings.general.clearWorshipSongs")}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danger Zone: Full Application Reset */}
+                  <div className="settings-card fields-rows-stack" style={{ border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.03)" }}>
+                    <div className="flex-between-center">
+                      <div className="switch-left">
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                          <ShieldAlert size={16} style={{ color: "var(--danger-color)" }} />
+                          <span className="switch-title" style={{ color: "var(--danger-color)", fontWeight: 700 }}>
+                            {t("mvSettings.general.dangerZone", "Danger Zone: Clear All Application Data")}
+                          </span>
+                        </div>
+                        <span className="switch-subtitle">
+                          {t("mvSettings.general.clearAllDataDesc", "Wipes all local database records, OBS settings, saved overlays, and restores default factory state.")}
+                        </span>
+                      </div>
+                      <div>
+                        {cleared ? (
+                          <span style={{ color: "var(--success-color)", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <CheckCircle size={15} /> {t("mvSettings.general.databaseCleared")}
+                          </span>
+                        ) : confirmClear ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ color: "var(--danger-color)", fontSize: "0.82rem", fontWeight: 600 }}>{t("mvSettings.general.areYouSure")}</span>
+                            <button className="action-btn btn-primary" style={{ backgroundColor: "var(--danger-color)" }} onClick={handleClear} title="Yes">
+                              {t("mvSettings.general.yesClearEverything")}
+                            </button>
+                            <button className="action-btn" onClick={() => setConfirmClear(false)} title="Cancel">
+                              {t("mvSettings.general.cancel")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button className="action-btn" style={{ color: "var(--danger-color)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => setConfirmClear(true)} title="Clear">
+                            <Trash2 size={14} /><span>{t("mvSettings.general.clearAllData")}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2241,7 +2980,8 @@ export function MVSettings() {
             )}
           </div>
         </div>
-      </main >
+      </div>
+    </div>
 
       {/* Language Change Confirmation Modal */}
       {

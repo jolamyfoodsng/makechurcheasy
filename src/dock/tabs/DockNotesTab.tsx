@@ -12,8 +12,10 @@ import {
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { LOWER_THIRD_SIZE_PRESETS, type BibleTheme } from "../../bible/types";
 import {
+  calculateReorderTargetIndex,
   extractStructuredTextTitle,
   parseWorshipSectionLabelLine,
+  stripLeadingVerseMarker,
 } from "../../worship/slideEngine";
 import { extractFirstLineAsTitle } from "../../worship/songTitleFromLyrics";
 import { nextAutoNoteTitle, isDummyTitle } from "../../worship/songTitleAutoGen";
@@ -228,7 +230,7 @@ function DockNoteEditorDialog({
                 handleUndoRedoKeyDown(event);
                 if (event.key === "Enter" || event.key === " ") event.stopPropagation();
               }}
-              placeholder={t("notes.contentPlaceholder")}
+              placeholder={t("notes.contentPlaceholderTips", "Type note content here...\n\nExample:\n[Point 1]\nFirst main point\nSupporting details\n\n[Point 2]\nSecond main point")}
               rows={8}
             />
           </div>
@@ -307,6 +309,7 @@ function DockNoteSlideEditorDialog({
               id="dock-note-slide-text"
               className="dock-input dock-dialog-textarea dock-dialog-textarea--short"
               value={text}
+              placeholder={t("notes.slideTextPlaceholderTips", "Type note slide text here…\n\n• Add section tags like [Point 1], <Chorus>, or Header: at the top of a slide to display a header badge.")}
               onChange={setText}
               onKeyDown={(event) => {
                 handleUndoRedoKeyDown(event);
@@ -348,14 +351,21 @@ function generateNoteSlides(
     sections.forEach((text) => {
       const lines = text.split("\n");
       const heading = parseWorshipSectionLabelLine(lines[0] ?? "");
-      const sectionText = heading
-        ? [heading.rest, ...lines.slice(1)].filter(Boolean).join("\n")
+      // In notes, DO NOT treat "Verse 1" or numbered list prefixes as hymn verses
+      const isVerseHeading = Boolean(
+        heading && (heading.type === "verse" || /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(heading.label)),
+      );
+      const validHeading = heading && !isVerseHeading ? heading : null;
+
+      const sectionText = validHeading
+        ? [validHeading.rest, ...lines.slice(1)].filter(Boolean).join("\n")
         : text;
-      const sectionLines = sectionText.split("\n").map((line) => line.trim()).filter(Boolean);
+      const cleanSectionText = stripLeadingVerseMarker(sectionText);
+      const sectionLines = cleanSectionText.split("\n").map((line) => line.trim()).filter(Boolean);
       if (sectionLines.length === 0) return;
 
-      if (heading) {
-        groupedSections.push({ headingLabel: heading.label, lines: sectionLines });
+      if (validHeading) {
+        groupedSections.push({ headingLabel: validHeading.label, lines: sectionLines });
         return;
       }
 
@@ -367,10 +377,12 @@ function generateNoteSlides(
       : preserveNoteSections(groupedSections);
 
     generatedSections.forEach((slide, slideIndex) => {
+      const isVerseHeading = /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(slide.headingLabel.trim());
+      const cleanHeading = isVerseHeading ? "" : slide.headingLabel;
       slides.push({
         id: `note-${note.id}-${slideIndex}`,
-        label: slide.headingLabel || (slideIndex === 0 ? displayTitle : ""),
-        text: slide.text,
+        label: cleanHeading || (slideIndex === 0 ? displayTitle : ""),
+        text: stripLeadingVerseMarker(slide.text),
       });
     });
   }
@@ -384,8 +396,10 @@ function serializeNoteSlides(note: DockNote, slides: Array<{ label: string; text
     .map((slide) => {
       const label = slide.label.trim();
       const isDocumentTitle = label === structuredText.title || (!structuredText.title && label === note.title);
-      const heading = !isDocumentTitle && parseWorshipSectionLabelLine(label) ? `${label}:` : "";
-      return [heading, slide.text.trim()].filter(Boolean).join("\n");
+      const isVerseHeading = /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(label);
+      const heading = !isDocumentTitle && !isVerseHeading && parseWorshipSectionLabelLine(label) ? `[${label}]` : "";
+      const cleanText = stripLeadingVerseMarker(slide.text.trim());
+      return [heading, cleanText].filter(Boolean).join("\n");
     })
     .filter(Boolean)
     .join("\n\n");
@@ -558,7 +572,7 @@ export default function DockNotesTab({
       : (initialPrefs.lowerThirdLinesPerSlide ?? initialPrefs.linesPerSlide);
     return clampNoteLinesPerSlide(active);
   });
-  const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit !== false);
+  const [notesAutoSplit, setNotesAutoSplit] = useState(() => initialPrefs.autoSplit ?? false);
   const [quickActionsTop, setQuickActionsTop] = useState(() => (
     typeof initialPrefs.quickActionsTop === "number" && Number.isFinite(initialPrefs.quickActionsTop)
       ? initialPrefs.quickActionsTop
@@ -569,6 +583,9 @@ export default function DockNotesTab({
   const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [showCompactSummaryActions, setShowCompactSummaryActions] = useState(false);
+  const [draggingSlideIdx, setDraggingSlideIdx] = useState<number | null>(null);
+  const [dragOverSlideIdx, setDragOverSlideIdx] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"above" | "below" | null>(null);
   const [showAutoAdvanceModal, setShowAutoAdvanceModal] = useState(false);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [editingNote, setEditingNote] = useState<DockNote | null>(null);
@@ -856,11 +873,16 @@ export default function DockNotesTab({
   const openNewNote = useCallback(() => {
     setEditingNote(null);
     setShowNoteEditor(true);
+    setNotesAutoSplit(false);
   }, []);
 
   const openEditNote = useCallback((note: DockNote) => {
     setEditingNote(note);
     setShowNoteEditor(true);
+    setNotesAutoSplit(note.autoSplit ?? false);
+    if (typeof note.linesPerSlide === "number") {
+      setNotesLinesPerSlide(clampNoteLinesPerSlide(note.linesPerSlide));
+    }
   }, []);
 
   const formatNoteDraft = useCallback((content: string, action: NoteTextToolAction, linesPerSlide?: number) => {
@@ -877,39 +899,59 @@ export default function DockNotesTab({
     if (!title || !content) return;
     const now = Date.now();
     if (editingNote) {
-      const updated: DockNote = { ...editingNote, title, content, splitOnLineBreaks: false, updatedAt: now };
+      const maintainedAutoSplit = editingNote.autoSplit ?? false;
+      const updated: DockNote = {
+        ...editingNote,
+        title,
+        content,
+        splitOnLineBreaks: false,
+        autoSplit: maintainedAutoSplit,
+        linesPerSlide: editingNote.linesPerSlide ?? notesLinesPerSlide,
+        updatedAt: now,
+      };
       const next = notes.map((n) => (n.id === updated.id ? updated : n));
       setNotes(next);
       saveDockNotes(next);
       setSelectedNote((cur) => (cur?.id === updated.id ? updated : cur));
+      setNotesAutoSplit(maintainedAutoSplit);
     } else {
       const newNote: DockNote = {
         id: crypto.randomUUID?.() ?? `note-${now}-${Math.random().toString(36).slice(2, 8)}`,
         title,
         content,
         splitOnLineBreaks: false,
+        autoSplit: false,
+        linesPerSlide: notesLinesPerSlide,
         updatedAt: now,
       };
       const next = [newNote, ...notes];
       setNotes(next);
       saveDockNotes(next);
+      setNotesAutoSplit(false);
     }
     setShowNoteEditor(false);
     setEditingNote(null);
-  }, [editingNote, notes]);
+  }, [editingNote, notes, notesLinesPerSlide]);
 
   const openNoteSlideEditor = useCallback((idx: number) => {
     const slide = selectedNoteSlides[idx];
     if (!slide) return;
-    setNoteSlideEditor({ index: idx, label: slide.label || `${t("notes.slideLabel")} ${idx + 1}`, text: slide.text });
+    const isVerse = /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(slide.label.trim());
+    const displayLabel = isVerse ? "" : slide.label;
+    setNoteSlideEditor({
+      index: idx,
+      label: displayLabel || `${t("notes.slideLabel")} ${idx + 1}`,
+      text: stripLeadingVerseMarker(slide.text),
+    });
   }, [selectedNoteSlides, t]);
 
   const closeNoteSlideEditor = useCallback(() => setNoteSlideEditor(null), []);
 
   const saveNoteSlideEditor = useCallback((nextText: string) => {
     if (!selectedNote || !noteSlideEditor || !nextText.trim()) return;
+    const cleanText = stripLeadingVerseMarker(nextText);
     const nextSlides = selectedNoteSlides.map((slide, index) => (
-      index === noteSlideEditor.index ? { ...slide, text: nextText } : slide
+      index === noteSlideEditor.index ? { ...slide, text: cleanText } : slide
     ));
     const updated: DockNote = {
       ...selectedNote,
@@ -944,6 +986,49 @@ export default function DockNotesTab({
     showToast(t("notes.slideDeleted"), "info");
   }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
 
+  const handleReorderNoteSlide = useCallback((sourceIdx: number, targetIdx: number) => {
+    if (!selectedNote || sourceIdx === targetIdx || sourceIdx < 0 || targetIdx < 0) return;
+    if (sourceIdx >= selectedNoteSlides.length || targetIdx >= selectedNoteSlides.length) return;
+
+    const nextSlides = [...selectedNoteSlides];
+    const [moved] = nextSlides.splice(sourceIdx, 1);
+    nextSlides.splice(targetIdx, 0, moved);
+
+    const updated: DockNote = {
+      ...selectedNote,
+      content: serializeNoteSlides(selectedNote, nextSlides),
+      updatedAt: Date.now(),
+    };
+    const nextNotes = notes.map((note) => note.id === updated.id ? updated : note);
+    setNotes(nextNotes);
+    saveDockNotes(nextNotes);
+    setSelectedNote(updated);
+
+    setSelectedSlideIdx((current) => {
+      if (current === null) return targetIdx;
+      if (current === sourceIdx) return targetIdx;
+      if (sourceIdx < targetIdx) {
+        if (current > sourceIdx && current <= targetIdx) return current - 1;
+      } else {
+        if (current >= targetIdx && current < sourceIdx) return current + 1;
+      }
+      return current;
+    });
+
+    setVisibleSlideIdx((current) => {
+      if (current === null) return null;
+      if (current === sourceIdx) return targetIdx;
+      if (sourceIdx < targetIdx) {
+        if (current > sourceIdx && current <= targetIdx) return current - 1;
+      } else {
+        if (current >= targetIdx && current < sourceIdx) return current + 1;
+      }
+      return current;
+    });
+
+    showToast(t("notes.slideReordered", "Slide reordered"), "info");
+  }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
+
   const handleNotesTranslationChange = useCallback((next: DockTranslationValue | null) => {
     notesTranslationChangeRef.current = true;
     setNotesTranslation(next);
@@ -967,11 +1052,14 @@ export default function DockNotesTab({
       const quickSettings = quickSettingsOverride
         ?? (overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings);
       const themeSettings = resolveNotesOutputThemeSettings(selectedTheme, overlayMode, quickSettings);
-      const slideText = normalizeDockMultilineText(slide.text);
+      const slideText = stripLeadingVerseMarker(normalizeDockMultilineText(slide.text));
       const translatedText = normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? "").trim();
       const showBoth = Boolean(effectiveNotesTranslation?.showBoth && translatedText);
       const sectionText = showBoth ? slideText : (translatedText || slideText);
       const translationText = showBoth ? translatedText : "";
+      const isVerse = /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(slide.label.trim());
+      const cleanLabel = isVerse ? "" : slide.label;
+      const displayLabel = cleanLabel || selectedNoteDisplayTitle;
       const resolvedThemeSettings = (() => {
         const base = (themeSettings as unknown as Record<string, unknown>) || {};
         if (overlayMode === "lower-third") {
@@ -989,13 +1077,13 @@ export default function DockNotesTab({
       return {
         stageItem: {
           type: "notes" as const,
-          label: slide.label || selectedNoteDisplayTitle,
+          label: displayLabel,
           subtitle: selectedNoteDisplayTitle,
           data: {
             sectionText,
             translationText,
             translationOrder: normalizeDockTranslationOrder(effectiveNotesTranslation?.translationOrder),
-            sectionLabel: slide.label,
+            sectionLabel: cleanLabel,
             note: selectedNote,
             slideIdx: idx,
             overlayMode,
@@ -1008,7 +1096,7 @@ export default function DockNotesTab({
           sectionText,
           translationText,
           translationOrder: normalizeDockTranslationOrder(effectiveNotesTranslation?.translationOrder),
-          sectionLabel: slide.label || selectedNoteDisplayTitle,
+          sectionLabel: displayLabel,
           songTitle: selectedNoteDisplayTitle,
           overlayMode,
           bibleThemeSettings: resolvedThemeSettings,
@@ -1166,9 +1254,16 @@ export default function DockNotesTab({
     }
 
     if (nextLineMode !== undefined) {
-      setNotesAutoSplit(nextLineMode !== "original");
+      const nextAutoSplit = nextLineMode !== "original";
+      setNotesAutoSplit(nextAutoSplit);
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
+      if (selectedNote) {
+        const updated = { ...selectedNote, autoSplit: nextAutoSplit };
+        setSelectedNote(updated);
+        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
+        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
+      }
     }
     if (nextLineCount !== undefined) {
       const clamped = clampNoteLinesPerSlide(nextLineCount);
@@ -1180,6 +1275,12 @@ export default function DockNotesTab({
       }
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
+      if (selectedNote) {
+        const updated = { ...selectedNote, linesPerSlide: clamped };
+        setSelectedNote(updated);
+        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
+        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
+      }
     }
     const lineLayoutChanged = nextLineCount !== undefined || nextLineMode !== undefined;
     if (overlayVisible && activeSlideIndex !== null && !lineLayoutChanged) {
@@ -1508,6 +1609,10 @@ export default function DockNotesTab({
                         setSelectedSlideIdx(0);
                         setVisibleSlideIdx(null);
                         setNoteSlidesSearchQuery("");
+                        setNotesAutoSplit(note.autoSplit ?? false);
+                        if (typeof note.linesPerSlide === "number") {
+                          setNotesLinesPerSlide(clampNoteLinesPerSlide(note.linesPerSlide));
+                        }
                       }}
                       title={note.title}
                     >
@@ -1698,26 +1803,87 @@ export default function DockNotesTab({
                 <div className="dock-empty__text">{t("notes.noSlidesMatch", { query: noteSlidesSearchQuery })}</div>
               </div>
             ) : (
-              <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
+              <div className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSlideIdx !== null ? " is-reordering" : ""}`}>
                 {filteredNoteSlides.map(({ slide, idx }) => {
                   const isVisible = visibleSlideIdx === idx;
                   const isSelected = selectedSlideIdx === idx;
+                  const isDragging = draggingSlideIdx === idx;
+                  const isDragOver = dragOverSlideIdx === idx && draggingSlideIdx !== idx;
+                  const isVerse = /^(?:verse(?:\s*\d+)?|v\d+)$/i.test(slide.label.trim());
+                  const cleanLabel = isVerse ? "" : slide.label;
                   return (
                     <div
                       key={slide.id}
-                      className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                      draggable={true}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", String(idx));
+                        event.dataTransfer.effectAllowed = "move";
+                        setDraggingSlideIdx(idx);
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        const position = event.clientY < midY ? "above" : "below";
+                        if (dragOverSlideIdx !== idx || dropPosition !== position) {
+                          setDragOverSlideIdx(idx);
+                          setDropPosition(position);
+                        }
+                      }}
+                      onDragLeave={(event) => {
+                        if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                        if (dragOverSlideIdx === idx) {
+                          setDragOverSlideIdx(null);
+                          setDropPosition(null);
+                        }
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const sourceIdx = draggingSlideIdx ?? Number(event.dataTransfer.getData("text/plain"));
+                        if (Number.isFinite(sourceIdx) && dropPosition) {
+                          const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, dropPosition, selectedNoteSlides.length);
+                          handleReorderNoteSlide(sourceIdx, targetIdx);
+                        }
+                        setDraggingSlideIdx(null);
+                        setDragOverSlideIdx(null);
+                        setDropPosition(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingSlideIdx(null);
+                        setDragOverSlideIdx(null);
+                        setDropPosition(null);
+                      }}
+                      className={`dock-worship-slide-card${
+                        isVisible ? " dock-worship-slide-card--visible" : ""
+                      }${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}${
+                        isDragging ? " dock-worship-slide-card--dragging" : ""
+                      }${
+                        isDragOver
+                          ? dropPosition === "above"
+                            ? " dock-worship-slide-card--drop-above"
+                            : " dock-worship-slide-card--drop-below"
+                          : ""
+                      }`}
                       title={t("notes.clickToView")}
                     >
                       <button type="button" className="dock-worship-slide-card__main" onClick={() => void pushNoteSlide(idx)}>
                         <div className="dock-worship-slide-card__header">
                           <div className="dock-worship-slide-card__label">
-                            <span className="dock-worship-slide-card__name">{slide.label || `${t("notes.slideLabel")} ${idx + 1}`}</span>
+                            <div
+                              className="dock-worship-slide-card__drag-handle"
+                              title={t("common.dragToReorder", "Drag to reorder slide")}
+                              aria-label={t("common.dragToReorder", "Drag to reorder slide")}
+                            >
+                              <Icon name="drag_indicator" size={14} />
+                            </div>
+                            <span className="dock-worship-slide-card__name">{cleanLabel || `${t("notes.slideLabel")} ${idx + 1}`}</span>
                             <span className="dock-worship-slide-card__index">{idx + 1}</span>
                           </div>
                           <div className="dock-worship-slide-card__badges" />
                         </div>
                         {getOrderedTranslationParts(
-                          slide.text,
+                          stripLeadingVerseMarker(slide.text),
                           normalizeDockMultilineText(effectiveNotesTranslation?.translatedSections[slide.id] ?? ""),
                           effectiveNotesTranslation?.showBoth ?? false,
                           effectiveNotesTranslation?.translationOrder,
@@ -1728,7 +1894,7 @@ export default function DockNotesTab({
                               ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
                               : "dock-worship-slide-card__text"}
                           >
-                            {normalizeDockMultilineText(part.text)}
+                            {stripLeadingVerseMarker(normalizeDockMultilineText(part.text))}
                           </div>
                         ))}
                       </button>
