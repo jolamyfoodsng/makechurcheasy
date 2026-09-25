@@ -5,6 +5,12 @@ type WorkerEnv = Record<string, unknown> & {
   MCE_API_CONTAINER: DurableObjectNamespace;
 };
 
+type CloudflareRequest = Request & {
+  cf?: {
+    country?: string | null;
+  };
+};
+
 const CONTAINER_ENV_NAMES = [
   "APP_ENV",
   "AUTH_GOOGLE_ID",
@@ -86,6 +92,23 @@ function buildContainerEnv(source: Record<string, unknown>): Record<string, stri
   return values;
 }
 
+function forwardEdgeMetadata(request: Request): Request {
+  const headers = new Headers(request.headers);
+  const cloudflareRequest = request as CloudflareRequest;
+  const country = cloudflareRequest.cf?.country?.trim().toUpperCase();
+  const clientIp = headers.get("CF-Connecting-IP")?.trim();
+
+  // Never trust these values from the browser. They are replaced with
+  // metadata derived by Cloudflare at the edge before reaching the container.
+  headers.delete("x-mce-geo-country");
+  headers.delete("x-mce-client-ip");
+
+  if (country) headers.set("x-mce-geo-country", country);
+  if (clientIp) headers.set("x-mce-client-ip", clientIp);
+
+  return new Request(request, { headers });
+}
+
 export class MceApiContainer extends Container {
   defaultPort = 3000;
   sleepAfter = "30m";
@@ -104,6 +127,6 @@ export default {
     }
 
     const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
-    return container.fetch(request);
+    return container.fetch(forwardEdgeMetadata(request));
   },
 };
