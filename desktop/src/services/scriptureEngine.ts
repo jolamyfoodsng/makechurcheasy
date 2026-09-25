@@ -431,14 +431,16 @@ function fastKeywordMatch(speech: string): { book: string; chapter: number; vers
     // Dynamic threshold: for verses with many keywords, require fewer matches
     // For verses with few keywords, require more matches
     const ratio = matched / kv.keywords.length;
+    const queryCoverage = matched / words.length;
     const minRatio = kv.keywords.length > 5 ? 0.33 : 0.45;
     if (ratio >= minRatio && matched >= 2 && matched > bestScore) {
       bestScore = matched;
+      const conf = queryCoverage >= 0.8 && matched >= 3 ? 1.0 : Math.min(0.95, 0.5 + ratio * 0.5);
       bestMatch = {
         book: kv.book,
         chapter: kv.chapter,
         verse: kv.verse,
-        confidence: Math.min(0.95, 0.5 + ratio * 0.5),
+        confidence: conf,
       };
     }
   }

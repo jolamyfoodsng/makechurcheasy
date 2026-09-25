@@ -131,8 +131,8 @@ async function loadTranslation(t: BibleTranslation): Promise<RawBibleData> {
   if (key === "KJV") {
     try {
       const url = `${import.meta.env.BASE_URL}bible-kjv.json`;
-      const res = await fetch(url);
-      if (res.ok) {
+      const res = await fetch(url, { signal: AbortSignal.timeout(500) }).catch(() => null);
+      if (res?.ok) {
         const data: RawBibleData = await res.json();
         translationCache.set(key, data);
         return data;

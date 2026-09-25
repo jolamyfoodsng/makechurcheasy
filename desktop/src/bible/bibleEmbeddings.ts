@@ -66,13 +66,16 @@ function isLowMemoryDevice(): boolean {
   return false;
 }
 
+let embeddingsAttempted = false;
+
 /**
  * Load pre-computed embeddings and build HNSW index.
  * Call once on app init — subsequent searches use the in-memory index.
  */
 export function loadBibleEmbeddings(): Promise<void> {
-  if (hnswIndex) return Promise.resolve();
+  if (hnswIndex || embeddingsAttempted) return Promise.resolve();
   if (isLowMemoryDevice()) {
+    embeddingsAttempted = true;
     console.info("[BibleEmbeddings] Skipping heavy 257MB embeddings loading on <8GB RAM device. Using enhanced fast keyword & fuzzy search.");
     return Promise.resolve();
   }
@@ -82,6 +85,7 @@ export function loadBibleEmbeddings(): Promise<void> {
   if (embeddingsLoadPromise) return embeddingsLoadPromise;
 
   embeddingsLoadPromise = loadBibleEmbeddingsInternal().finally(() => {
+    embeddingsAttempted = true;
     embeddingsLoadPromise = null;
   });
   return embeddingsLoadPromise;
@@ -92,7 +96,7 @@ async function loadBibleEmbeddingsInternal(): Promise<void> {
   // Try loading pre-built HNSW index first (faster)
   try {
     const indexUrl = `${import.meta.env.BASE_URL}bible-hnsw-index.json`;
-    const indexRes = await fetch(indexUrl);
+    const indexRes = await fetch(indexUrl, { signal: AbortSignal.timeout(1000) });
     if (indexRes.ok) {
       const indexData = await indexRes.json();
       hnswIndex = HnswIndex.deserialize(indexData);
@@ -123,48 +127,10 @@ async function loadBibleEmbeddingsInternal(): Promise<void> {
     // Fall through to building index from raw embeddings
   }
 
-  // Fallback: load raw embeddings and build HNSW index
-  try {
-    const url = `${import.meta.env.BASE_URL}bible-embeddings-kjv.json`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn("[BibleEmbeddings] Failed to load embeddings file:", res.statusText);
-      return;
-    }
-
-    const data = await res.json() as Array<{
-      book: string;
-      chapter: number;
-      verse: number;
-      reference: string;
-      text: string;
-      embedding: number[];
-    }>;
-
-    // Build HNSW index
-    hnswIndex = new HnswIndex({
-      maxConnections: 16,
-      maxConnections0: 32,
-      efConstruction: 200,
-      efSearch: 64,
-      maxLevel: 4,
-    });
-
-    verses = [];
-    for (let i = 0; i < data.length; i++) {
-      const v = data[i];
-      verses.push({
-        book: v.book,
-        chapter: v.chapter,
-        verse: v.verse,
-        reference: v.reference,
-        text: v.text,
-      });
-      hnswIndex.add(i, new Float32Array(v.embedding));
-    }
-  } catch (err) {
-    console.warn("[BibleEmbeddings] Failed to load embeddings:", err);
-  }
+  // Do NOT build a 31,102-vector HNSW index dynamically from 245MB raw JSON
+  // inside the browser thread. It blocks the JavaScript event loop for 15-20 minutes.
+  // The system falls back cleanly to the sub-5ms lexical & fuzzy search pipeline.
+  console.info("[BibleEmbeddings] Pre-built HNSW index not found. Using high-speed lexical & fuzzy search pipeline.");
 }
 
 /**
