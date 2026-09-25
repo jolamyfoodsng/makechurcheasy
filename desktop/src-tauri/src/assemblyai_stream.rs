@@ -52,6 +52,12 @@ const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, 
 
 // Bible vocabulary boosts recognition without guessing a book in the parser.
 const REALTIME_KEYTERMS: &[&str] = &[
+    "verse",
+    "next verse",
+    "previous verse",
+    "chapter",
+    "next chapter",
+    "scripture",
     "Genesis",
     "Exodus",
     "Leviticus",
@@ -135,25 +141,6 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "First John",
     "Second John",
     "Third John",
-    "First Cor",
-    "Second Cor",
-    "First Thess",
-    "Second Thess",
-    "First Tim",
-    "Second Tim",
-    "Phil",
-    "Col",
-    "Thess",
-    "Cor",
-    "Tim",
-    "Rom",
-    "Matt",
-    "Heb",
-    "chapter",
-    "verse",
-    "next verse",
-    "previous verse",
-    "next chapter",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -773,8 +760,12 @@ fn build_deepgram_endpoint() -> String {
         "utterance_end_ms=1000".to_string(),
     ];
 
-    for term in REALTIME_KEYTERMS.iter().take(99) {
-        query.push(format!("keywords={}:3", urlencoding::encode(term)));
+    for term in REALTIME_KEYTERMS.iter() {
+        let weight = match *term {
+            "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" => 4,
+            _ => 3,
+        };
+        query.push(format!("keywords={}:{weight}", urlencoding::encode(term)));
     }
 
     format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))

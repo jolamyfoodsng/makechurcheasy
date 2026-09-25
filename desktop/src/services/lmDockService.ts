@@ -208,13 +208,6 @@ const DEEPGRAM_API_KEY = (
 ).trim();
 
 function getAssemblyAiKey(): string {
-  const mvSettings = getMvSettings();
-  const provider = mvSettings.sttProvider ?? "deepgram";
-
-  if (provider === "assemblyai" && ASSEMBLYAI_API_KEYS.length > 0) {
-    return ASSEMBLYAI_API_KEYS[Math.floor(Math.random() * ASSEMBLYAI_API_KEYS.length)];
-  }
-
   if (DEEPGRAM_API_KEY) {
     return `deepgram:${DEEPGRAM_API_KEY}`;
   }
