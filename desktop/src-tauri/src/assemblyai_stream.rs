@@ -35,8 +35,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 /// User-controlled gain multiplier, stored as f32 bits in an AtomicU32.
 /// Positioned AFTER AGC so it doesn't fight the auto-gain.
-/// 1.5 = 150% default boost, 0.0 = muted (0%), 5.0 = max boost (500%).
-static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.5));
+/// 1.0 = unity (100%), 0.0 = muted (0%), 5.0 = max boost (500%).
+static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
 
 const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
 const REALTIME_MODEL: &str = "universal-3-5-pro";
@@ -833,8 +833,8 @@ fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
                                 let payload = TranscriptPayload {
                                     text: trimmed.to_string(),
                                     end_of_turn,
-                                    audio_start,
-                                    audio_end,
+                                    audio_start: audio_start * 1000.0,
+                                    audio_end: audio_end * 1000.0,
                                 };
                                 let _ = app.emit("assemblyai-transcript", payload);
                             }
@@ -1424,44 +1424,48 @@ fn process_and_send_f32(
 
         // 2) Running RMS for auto-gain (EMA, ~50 ms attack)
         let rms_alpha = 0.01;
-        let target_rms = 0.16; // Boosted target RMS level for strong speech audibility
+        let target_rms = 0.08;
         let chunk_rms: f32 = {
             let sum: f32 = filtered.iter().map(|s| s * s).sum();
             (sum / filtered.len() as f32).sqrt().max(1e-6)
         };
-        // Keep RMS floor at 0.003 so quiet microphones receive clean dynamic boost up to 12.0x
-        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.003);
-        let agc_gain = (target_rms / st.rms_ema).min(12.0).max(0.5);
+        st.rms_ema = (rms_alpha * chunk_rms + (1.0 - rms_alpha) * st.rms_ema).max(0.005);
+        let agc_gain = (target_rms / st.rms_ema).min(6.0).max(0.6);
 
         // Read user gain from the atomic (lock-free, thread-safe).
         // Positioned AFTER AGC so it doesn't fight the dynamic range compression.
         let user_gain = f32_from_bits(USER_GAIN.load(Ordering::Relaxed));
         let effective_gain = agc_gain * user_gain;
 
-        // 3) Noise gate — ultra-sensitive threshold (~-74dB) with ~800ms hold time
-        // Preserves soft initial/trailing syllables ("Phil", "thirteen", "verses")
-        let gate_threshold = 0.0002;
+        // 3) Noise gate with ~600ms hold time to preserve soft syllables
+        let gate_threshold = 0.0003;
         if chunk_rms > gate_threshold {
             st.gate_open = true;
-            st.gate_hold = 8; // ~800 ms hold
+            st.gate_hold = 6; // ~600 ms hold
         } else if st.gate_hold > 0 {
             st.gate_hold -= 1;
         } else {
             st.gate_open = false;
         }
 
-        // Apply effective gain (AGC × user) with smooth analog-style tanh saturation
-        // This eliminates digital clipping even when high gain is applied
+        // Apply effective gain with clean headroom and transparent soft limiter only near peak
         let processed: Vec<f32> = if st.gate_open {
             filtered
                 .iter()
-                .map(|s| (s * effective_gain).tanh())
+                .map(|&s| {
+                    let scaled = s * effective_gain;
+                    if scaled.abs() > 0.85 {
+                        scaled.signum() * (0.85 + (scaled.abs() - 0.85).tanh() * 0.14)
+                    } else {
+                        scaled
+                    }
+                })
                 .collect()
         } else {
-            // Soft attenuation (-14 dB) during silence rather than harsh 0.0 zeroes
+            // Soft attenuation during silence
             filtered
                 .iter()
-                .map(|s| (s * effective_gain * 0.2).tanh())
+                .map(|&s| (s * effective_gain * 0.1).clamp(-1.0, 1.0))
                 .collect()
         };
 

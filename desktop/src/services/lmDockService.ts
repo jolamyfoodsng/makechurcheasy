@@ -208,6 +208,13 @@ const DEEPGRAM_API_KEY = (
 ).trim();
 
 function getAssemblyAiKey(): string {
+  const mvSettings = getMvSettings();
+  const provider = mvSettings.sttProvider ?? "deepgram";
+
+  if (provider === "assemblyai" && ASSEMBLYAI_API_KEYS.length > 0) {
+    return ASSEMBLYAI_API_KEYS[Math.floor(Math.random() * ASSEMBLYAI_API_KEYS.length)];
+  }
+
   if (DEEPGRAM_API_KEY) {
     return `deepgram:${DEEPGRAM_API_KEY}`;
   }
@@ -819,9 +826,62 @@ export class LmDockService {
     const activeIndex = this.snapshot.entries.findIndex((e) => !e.finalized);
     const active = activeIndex >= 0 ? this.snapshot.entries[activeIndex] : null;
 
-    // Dedup guard: avoid duplicate identical finalized lines when fired in quick succession
-    if (activeIndex < 0 && trimmed === this.lastFinalizedLineText && now - this.lastFinalizedAt < 600) {
+    // 1. Strict Duplicate Suppression:
+    // If the exact same text was finalized recently (< 5000ms), do not add a duplicate entry!
+    const normTrimmed = trimmed.toLowerCase().replace(/[^\w\s]/g, "").trim();
+    const lastFinalized = [...this.snapshot.entries].reverse().find((e) => e.finalized);
+    const normLast = lastFinalized?.text?.toLowerCase().replace(/[^\w\s]/g, "").trim();
+
+    if (normTrimmed && normLast && normTrimmed === normLast && now - this.lastFinalizedAt < 5000) {
+      if (activeIndex >= 0) {
+        this.snapshot = {
+          ...this.snapshot,
+          entries: this.snapshot.entries.filter((_, i) => i !== activeIndex),
+        };
+      }
       return;
+    }
+
+    // 2. STT Revision Rollup:
+    // When the ASR model refines a short phrase in quick succession (e.g. "Hebrews two five" -> "Hebrews two seven"):
+    // Check if the previous entry shares >= 50% prefix words and occurred within 2000ms.
+    const lastIndex = this.snapshot.entries.length - 1;
+    if (
+      lastIndex >= 0 &&
+      this.snapshot.entries[lastIndex].finalized &&
+      now - this.lastFinalizedAt < 2000
+    ) {
+      const prevWords = (normLast || "").split(/\s+/).filter(Boolean);
+      const currWords = normTrimmed.split(/\s+/).filter(Boolean);
+      if (prevWords.length <= 5 && currWords.length <= 6 && prevWords.length > 0 && currWords.length > 0) {
+        let sharedPrefixCount = 0;
+        while (
+          sharedPrefixCount < prevWords.length &&
+          sharedPrefixCount < currWords.length &&
+          prevWords[sharedPrefixCount] === currWords[sharedPrefixCount]
+        ) {
+          sharedPrefixCount++;
+        }
+
+        const overlap = sharedPrefixCount / Math.max(prevWords.length, 1);
+        if (sharedPrefixCount >= 2 || (prevWords.length <= 2 && sharedPrefixCount >= 1 && overlap >= 0.5)) {
+          console.log(`[LmDockService] Rolling up STT revision: "${this.snapshot.entries[lastIndex].text}" -> "${trimmed}"`);
+          const updatedEntry: TranscriptEntry = {
+            ...this.snapshot.entries[lastIndex],
+            text: trimmed,
+            endTime: audioEndMs != null && audioEndMs > 0 ? audioEndMs / 1000 : this.snapshot.entries[lastIndex].endTime,
+          };
+          let nextEntries = this.snapshot.entries.map((e, idx) => (idx === lastIndex ? updatedEntry : e));
+          if (activeIndex >= 0) {
+            nextEntries = nextEntries.filter((_, i) => i !== activeIndex);
+          }
+          this.snapshot = { ...this.snapshot, entries: nextEntries };
+          this.lastFinalizedLineText = trimmed;
+          this.lastFinalizedAt = now;
+          this.turnCommittedText = trimmed;
+          return;
+        }
+      }
     }
 
     this.lastFinalizedLineText = trimmed;
@@ -1555,24 +1615,9 @@ export class LmDockService {
               void this.processChunk(phrase, false);
             }
           }
-
-          // 2. Finalize active interim line on natural pause
-          // If speaker pauses > 450ms (or > 220ms if ending in punctuation), finalize the line!
-          const endsWithPunct = /[.!?,;:]\s*$/.test(this.speechBuffer);
-          const pauseThreshold = endsWithPunct ? 220 : 450;
-          if (silenceMs >= pauseThreshold && wordCount >= 2) {
-            const lineText = this.speechBuffer.trim();
-            this.speechBuffer = "";
-            this.finalizeLine(lineText);
-            this.turnCommittedText = this.turnCommittedText
-              ? `${this.turnCommittedText} ${lineText}`
-              : lineText;
-            this.processLineQuoteSearch(lineText);
-            this.flushTranscriptPush();
-          }
         }
 
-        // 3. Long-session anti-hallucination / refresh:
+        // 2. Long-session anti-hallucination / refresh:
         // Transparently recycle during natural silence (> 1.5s) if session has run for a long time (> 15 mins).
         if (
           this.sessionStartTime > 0 &&

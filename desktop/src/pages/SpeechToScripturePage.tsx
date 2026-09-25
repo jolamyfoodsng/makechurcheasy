@@ -235,7 +235,7 @@ export default function SpeechToScripturePage() {
 
   const [inputGain, setInputGainState] = useState(() => {
     const mv = getMvSettings();
-    return Number(mv.inputGain ?? 150);
+    return Number(mv.inputGain ?? 100);
   });
 
   const handleGainChange = useCallback((newGain: number) => {
@@ -244,6 +244,20 @@ export default function SpeechToScripturePage() {
     updateMvSettings({ inputGain: clamped });
     void lmDockService.setInputGain(clamped);
   }, []);
+
+  const [sttProvider, setSttProvider] = useState<"deepgram" | "assemblyai">(() => {
+    const mv = getMvSettings();
+    return mv.sttProvider ?? "deepgram";
+  });
+
+  const handleProviderChange = useCallback(async (newProvider: "deepgram" | "assemblyai") => {
+    setSttProvider(newProvider);
+    updateMvSettings({ sttProvider: newProvider });
+    if (isListening) {
+      await lmDockService.stopListening();
+      await lmDockService.startListening(selectedMic);
+    }
+  }, [isListening, selectedMic]);
 
   // ── OBS ──
   const [obsConnected, setObsConnected] = useState(obsService.status === "connected");
@@ -1195,6 +1209,17 @@ export default function SpeechToScripturePage() {
               <div className="sts3-footer-item">
                 <Radio size={14} className={isBroadcastConnected ? "sts3-footer-icon--green" : ""} />
                 {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
+              </div>
+              <div className="sts3-provider-control" title={t("verseAi.sttEngineTitle", "Speech Recognition Engine")}>
+                <select
+                  value={sttProvider}
+                  onChange={(e) => void handleProviderChange(e.target.value as "deepgram" | "assemblyai")}
+                  className="sts3-provider-select"
+                  aria-label="Speech Engine"
+                >
+                  <option value="deepgram">Deepgram</option>
+                  <option value="assemblyai">AssemblyAI</option>
+                </select>
               </div>
               <div className="sts3-gain-control" title={t("verseAi.micGainTitle", "Microphone Sensitivity / Boost (50% - 400%)")}>
                 <Volume2 size={13} />

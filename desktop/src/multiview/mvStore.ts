@@ -497,6 +497,7 @@ export interface MVSettings {
 
   // ── Audio ──
   inputGain: number;  // 0–300 (percent), default 100
+  sttProvider?: "deepgram" | "assemblyai";
 
   // ── Floating Icon ──
   hideFloatingIcon: boolean;
@@ -542,6 +543,7 @@ export const DEFAULT_SETTINGS: MVSettings = {
   sermonPoints: [],
 
   inputGain: 100,
+  sttProvider: "deepgram",
 
   // ── Floating Icon ──
   hideFloatingIcon: false,
