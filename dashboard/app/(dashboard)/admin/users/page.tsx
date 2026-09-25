@@ -169,6 +169,57 @@ function formatLastActive(timestamp: string | null | undefined): {
   };
 }
 
+function getCountryFlagEmoji(countryCode?: string | null): string {
+  if (!countryCode || countryCode.trim().length !== 2) return "";
+  const code = countryCode.trim().toUpperCase();
+  const codePoints = [...code].map((c) => 127397 + c.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
+function getCountryDisplayName(countryCode?: string | null): string {
+  if (!countryCode || !countryCode.trim()) return "";
+  const code = countryCode.trim().toUpperCase();
+  const flag = getCountryFlagEmoji(code);
+  try {
+    const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+    const name = regionNames.of(code);
+    return name ? `${flag ? `${flag} ` : ""}${name}` : `${flag ? `${flag} ` : ""}${code}`;
+  } catch {
+    return `${flag ? `${flag} ` : ""}${code}`;
+  }
+}
+
+function formatCreatedDate(timestamp: string | null | undefined): { text: string; full: string } {
+  if (!timestamp) return { text: "—", full: "Unknown" };
+  const date = new Date(timestamp);
+  const time = date.getTime();
+  if (Number.isNaN(time) || time <= 0) return { text: "—", full: "Unknown" };
+
+  const full = date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - time);
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+
+  if (diffMin < 60) return { text: "Just now", full };
+  if (diffHr < 24) return { text: `${diffHr}h ago`, full };
+  if (diffDays === 1) return { text: "Yesterday", full };
+  if (diffDays <= 6) return { text: `${diffDays} days ago`, full };
+  if (diffDays <= 13) return { text: "Last week", full };
+  if (diffDays <= 27) return { text: `${Math.floor(diffDays / 7)} weeks ago`, full };
+
+  // If older than a few weeks / a month, show the date with the relative info
+  return { text: full, full };
+}
+
+
 export default function AdminUsersPage() {
   const t = useTranslations();
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -876,11 +927,6 @@ export default function AdminUsersPage() {
                     {t('admin.users.tableHeaders.user')} <SortIcon field="name" />
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden md:table-cell">
-                  <button onClick={() => toggleSort("plan")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
-                    {t('admin.users.tableHeaders.plan')} <SortIcon field="plan" />
-                  </button>
-                </th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide hidden lg:table-cell">{t('admin.users.tableHeaders.status')}</th>
                 <th className="text-left px-4 py-3 font-semibold text-slate-400 text-xs uppercase tracking-wide">
                   <button onClick={() => toggleSort("activityScore")} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
@@ -915,25 +961,35 @@ export default function AdminUsersPage() {
                           {user.ambassador?.active && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                         </div>
                         <p className="text-xs text-slate-500 truncate">{user.email}</p>
-                        {user.churchName && <p className="text-[11px] text-slate-600 truncate">{user.churchName}</p>}
+                        {/* Third line: Country, Church, and Plan */}
+                        <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-400">
+                          {user.country && (
+                            <span className="text-[11px] text-slate-400 font-medium tracking-tight shrink-0" title={getCountryDisplayName(user.country)}>
+                              {getCountryDisplayName(user.country)}
+                            </span>
+                          )}
+                          {user.churchName && (
+                            <>
+                              {user.country && <span className="text-slate-600 text-[10px]">•</span>}
+                              <span className="text-slate-500 truncate max-w-[140px]" title={user.churchName}>{user.churchName}</span>
+                            </>
+                          )}
+                          {(user.country || user.churchName) && <span className="text-slate-600 text-[10px]">/</span>}
+                          <span className={`inline-flex px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase tracking-wider ${planBadge(user.plan)}`}>
+                            {user.plan}
+                          </span>
+                          {user.adminTemporaryPlan?.active && user.adminTemporaryPlan.expiresAt && (
+                            <span className="text-[10px] text-amber-300">
+                              (until {new Date(user.adminTemporaryPlan.expiresAt).toLocaleDateString()})
+                            </span>
+                          )}
+                          {!user.adminTemporaryPlan?.active && user.subscriptionExpiresAt && user.plan !== "free" && (
+                            <span className="text-[10px] text-emerald-300">
+                              (until {new Date(user.subscriptionExpiresAt).toLocaleDateString()})
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <div className="flex flex-col items-start gap-1">
-                      <span className={`inline-flex px-2 py-0.5 rounded-xl text-[11px] font-semibold ${planBadge(user.plan)}`}>
-                        {user.plan}
-                      </span>
-                      {user.adminTemporaryPlan?.active && user.adminTemporaryPlan.expiresAt && (
-                        <span className="text-[10px] text-amber-300">
-                          {t('admin.users.temporaryPlan.until', { date: new Date(user.adminTemporaryPlan.expiresAt).toLocaleDateString() })}
-                        </span>
-                      )}
-                      {!user.adminTemporaryPlan?.active && user.subscriptionExpiresAt && user.plan !== "free" && (
-                        <span className="text-[10px] text-emerald-300">
-                          {t('admin.users.changePlan.until', { date: new Date(user.subscriptionExpiresAt).toLocaleDateString() })}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
@@ -1001,9 +1057,21 @@ export default function AdminUsersPage() {
                     })()}
                   </td>
                   <td className="px-4 py-3 hidden xl:table-cell">
-                    <span className="text-xs text-slate-500">
-                      {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
-                    </span>
+                    {(() => {
+                      const createdInfo = formatCreatedDate(user.createdAt);
+                      return (
+                        <div className="flex flex-col" title={createdInfo.full}>
+                          <span className="text-xs font-medium text-slate-300">
+                            {createdInfo.text}
+                          </span>
+                          {createdInfo.text !== createdInfo.full && createdInfo.full !== "Unknown" && (
+                            <span className="text-[10px] text-slate-500">
+                              {createdInfo.full}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

@@ -1849,7 +1849,7 @@ export default function DockLmTab({
                       </>
                     ) : (
                       <div style={S.queueCardTop}>
-                        <span style={S.queueRef}>{c.label}</span>
+                        <span style={S.verseRefBadgeLarge}>{c.label}</span>
                       </div>
                     )}
                     <div style={S.queueCardBottom}>
@@ -1947,7 +1947,7 @@ export default function DockLmTab({
                         </>
                       ) : (
                         <div style={S.queueCardTop}>
-                          <span style={S.queueRef}>{c.label}</span>
+                          <span style={S.verseRefBadgeLarge}>{c.label}</span>
                           <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
                         </div>
                       )}
@@ -3153,26 +3153,38 @@ const S: Record<string, React.CSSProperties> = {
 
 
   verseText: {
-    fontSize: 13,
-    lineHeight: "1.45",
+    fontSize: 14,
+    lineHeight: "1.5",
     color: "#FFFFFF",
-    fontWeight: 500,
+    fontWeight: 600,
     fontStyle: "normal",
     display: "-webkit-box",
     WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 3,
+    WebkitLineClamp: 2,
     overflow: "hidden",
     textOverflow: "ellipsis",
     letterSpacing: "0.01em",
   },
   verseRefBadge: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: 700,
-    color: "var(--dock-accent, #38BDF8)",
-    background: "color-mix(in srgb, var(--dock-accent, #38BDF8) 14%, transparent)",
-    border: "1px solid color-mix(in srgb, var(--dock-accent, #38BDF8) 28%, transparent)",
-    borderRadius: 4,
-    padding: "1px 6px",
+    color: "#38BDF8",
+    background: "rgba(56, 189, 248, 0.16)",
+    border: "1px solid rgba(56, 189, 248, 0.45)",
+    borderRadius: 5,
+    padding: "2px 8px",
+    display: "inline-flex",
+    alignItems: "center",
+    letterSpacing: "0.02em",
+  },
+  verseRefBadgeLarge: {
+    fontSize: 14.5,
+    fontWeight: 700,
+    color: "#38BDF8",
+    background: "rgba(56, 189, 248, 0.16)",
+    border: "1px solid rgba(56, 189, 248, 0.45)",
+    borderRadius: 5,
+    padding: "3px 10px",
     display: "inline-flex",
     alignItems: "center",
     letterSpacing: "0.02em",

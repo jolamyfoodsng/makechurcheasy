@@ -1750,6 +1750,9 @@ function DockWorshipTab({
     setShowCompactSummaryActions(false);
   }, []);
   const [deletedSectionsPopoverPos, setDeletedSectionsPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [draggingSectionIdx, setDraggingSectionIdx] = useState<number | null>(null);
+  const [dragOverSectionIdx, setDragOverSectionIdx] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"above" | "below" | null>(null);
   const prefsReadyRef = useRef(false);
   const [preferencesHydrated, setPreferencesHydrated] = useState(true);
   const prefsLoadIdRef = useRef(0);
@@ -2587,7 +2590,7 @@ function DockWorshipTab({
           ? { ...renderedTheme, settings: liveThemeSettings as unknown as BibleTheme["settings"] }
           : renderedTheme;
       const presentationMeta = options?.showPresentationMeta ?? showPresentationMeta;
-      const sectionTextSource = normalizeWorshipDisplayText(section.text);
+      const sectionTextSource = stripLeadingVerseMarker(normalizeWorshipDisplayText(section.text));
       const translatedSectionText = getWorshipSectionTranslation(section.id, effectiveWorshipTranslation);
       const showBoth = Boolean(effectiveWorshipTranslation?.showBoth && translatedSectionText);
       const sectionText = showBoth ? sectionTextSource : (translatedSectionText || sectionTextSource);
@@ -3451,6 +3454,73 @@ function DockWorshipTab({
     t,
   ]);
 
+  const handleReorderWorshipSection = useCallback(
+    async (sourceIdx: number, targetIdx: number) => {
+      if (!selectedSong || savingSong || sourceIdx === targetIdx || sourceIdx < 0 || targetIdx < 0) return;
+      if (sourceIdx >= selectedSongSections.length || targetIdx >= selectedSongSections.length) return;
+
+      const nextSections = reorderWorshipSections(selectedSongSections, sourceIdx, targetIdx);
+      const nextLyrics = serializeLyricSections(nextSections, selectedSongTitleMarker);
+      if (!nextLyrics.trim()) return;
+
+      setSavingSong(true);
+      setActionError("");
+      try {
+        const maintainedAutoSplit = selectedSong.autoSplit ?? false;
+        const updatedSong = await persistSong(
+          selectedSong.id,
+          {
+            title: selectedSong.title,
+            artist: selectedSong.artist,
+            lyrics: nextLyrics,
+            autoSplit: maintainedAutoSplit,
+            linesPerSlide: effectiveLinesPerSlide,
+          },
+          selectedSong,
+        );
+
+        if (updatedSong) {
+          setSelectedSong(updatedSong);
+          setSelectedIdx((current) => {
+            if (current === null) return targetIdx;
+            if (current === sourceIdx) return targetIdx;
+            if (sourceIdx < targetIdx) {
+              if (current > sourceIdx && current <= targetIdx) return current - 1;
+            } else {
+              if (current >= targetIdx && current < sourceIdx) return current + 1;
+            }
+            return current;
+          });
+          setVisibleIdx((current) => {
+            if (current === null) return null;
+            if (current === sourceIdx) return targetIdx;
+            if (sourceIdx < targetIdx) {
+              if (current > sourceIdx && current <= targetIdx) return current - 1;
+            } else {
+              if (current >= targetIdx && current < sourceIdx) return current + 1;
+            }
+            return current;
+          });
+          showToast(t("worship.slideReordered", "Slide reordered"), "info");
+        }
+      } catch (err) {
+        console.warn("[DockWorshipTab] reorder slide failed:", err);
+      } finally {
+        setSavingSong(false);
+      }
+    },
+    [
+      effectiveLinesPerSlide,
+      persistSong,
+      savingSong,
+      selectedSong,
+      selectedSongSections,
+      selectedSongTitleMarker,
+      showToast,
+      t,
+    ],
+  );
+
   // Auto-clamp linesPerSlide when selected song has fewer lines than the current setting
   useEffect(() => {
     if (!selectedSong || totalLyricLines === 0) return;
@@ -4159,17 +4229,69 @@ function DockWorshipTab({
                     </div>
                   </div>
                 ) : (
-                  <div className="dock-console-list dock-worship-workspace__list dock-worship-slide-queue">
+                  <div className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSectionIdx !== null ? " is-reordering" : ""}`}>
                     {lyricsFilteredSectionIndexes.map((idx) => {
                       const section = selectedSongSections[idx];
                       if (!section) return null;
                       const displayLabel = section.label.trim();
                       const isVisible = visibleIdx === idx;
                       const isSelected = selectedIdx === idx;
+                      const isDragging = draggingSectionIdx === idx;
+                      const isDragOver = dragOverSectionIdx === idx && draggingSectionIdx !== idx;
                       return (
                         <div
                           key={section.id}
-                          className={`dock-worship-slide-card${isVisible ? " dock-worship-slide-card--visible" : ""}${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}`}
+                          draggable={!savingSong}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("text/plain", String(idx));
+                            event.dataTransfer.effectAllowed = "move";
+                            setDraggingSectionIdx(idx);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            const midY = rect.top + rect.height / 2;
+                            const position = event.clientY < midY ? "above" : "below";
+                            if (dragOverSectionIdx !== idx || dropPosition !== position) {
+                              setDragOverSectionIdx(idx);
+                              setDropPosition(position);
+                            }
+                          }}
+                          onDragLeave={(event) => {
+                            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                            if (dragOverSectionIdx === idx) {
+                              setDragOverSectionIdx(null);
+                              setDropPosition(null);
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceIdx = draggingSectionIdx ?? Number(event.dataTransfer.getData("text/plain"));
+                            if (Number.isFinite(sourceIdx) && dropPosition) {
+                              const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, dropPosition, selectedSongSections.length);
+                              void handleReorderWorshipSection(sourceIdx, targetIdx);
+                            }
+                            setDraggingSectionIdx(null);
+                            setDragOverSectionIdx(null);
+                            setDropPosition(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingSectionIdx(null);
+                            setDragOverSectionIdx(null);
+                            setDropPosition(null);
+                          }}
+                          className={`dock-worship-slide-card${
+                            isVisible ? " dock-worship-slide-card--visible" : ""
+                          }${isSelected && !isVisible ? " dock-worship-slide-card--selected" : ""}${
+                            isDragging ? " dock-worship-slide-card--dragging" : ""
+                          }${
+                            isDragOver
+                              ? dropPosition === "above"
+                                ? " dock-worship-slide-card--drop-above"
+                                : " dock-worship-slide-card--drop-below"
+                              : ""
+                          }`}
                           title={presentationLinkMode ? t("worship.clickToShowPresentation") : t("worship.clickToViewObs")}
                         >
                           <button
@@ -4179,6 +4301,13 @@ function DockWorshipTab({
                           >
                             <div className="dock-worship-slide-card__header">
                               <div className="dock-worship-slide-card__label">
+                                <div
+                                  className="dock-worship-slide-card__drag-handle"
+                                  title={t("common.dragToReorder", "Drag to reorder slide")}
+                                  aria-label={t("common.dragToReorder", "Drag to reorder slide")}
+                                >
+                                  <Icon name="drag_indicator" size={14} />
+                                </div>
                                 {displayLabel ? (
                                   <span className="dock-worship-slide-card__name">{displayLabel}</span>
                                 ) : (
@@ -4193,7 +4322,7 @@ function DockWorshipTab({
                               </div>
                             </div>
                             {getOrderedTranslationParts(
-                              normalizeWorshipDisplayText(section.text),
+                              stripLeadingVerseMarker(normalizeWorshipDisplayText(section.text)),
                               getWorshipSectionTranslation(section.id, effectiveWorshipTranslation),
                               effectiveWorshipTranslation?.showBoth ?? false,
                               effectiveWorshipTranslation?.translationOrder,
@@ -4204,7 +4333,7 @@ function DockWorshipTab({
                                   ? `dock-worship-slide-card__translation${partIndex === 0 ? " dock-worship-slide-card__translation--first" : ""}`
                                   : "dock-worship-slide-card__text"}
                               >
-                                {normalizeWorshipDisplayText(part.text)}
+                                {stripLeadingVerseMarker(normalizeWorshipDisplayText(part.text))}
                               </div>
                             ))}
                           </button>

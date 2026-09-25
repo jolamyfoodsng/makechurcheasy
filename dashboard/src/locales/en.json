@@ -1389,6 +1389,9 @@
     "emailSupportDesc": "Send us a detailed message and we'll respond within 24 hours.",
     "whatsappTitle": "WhatsApp Community",
     "whatsappDesc": "Get quick help from the community and our team.",
+    "telegramTitle": "Telegram Support",
+    "telegramDesc": "Reach out directly via Telegram for instant updates and support.",
+    "joinTelegram": "Chat on Telegram",
     "docsTitle": "Simple Help Guide",
     "docsDesc": "Open short, plain instructions without leaving this page.",
     "viewDocs": "Open Guide",
@@ -2556,7 +2559,9 @@
       "documentationDescription": "Open setup guides, troubleshooting steps, and product docs.",
       "documentation": "Documentation",
       "liveChatDescription": "Chat with support when live assistance is available.",
-      "liveChat": "Live Chat",
+      "liveChat": "WhatsApp Community",
+      "telegram": "Telegram Support",
+      "telegramDescription": "Reach out directly via Telegram for real-time support.",
       "emailDescription": "Contact the MakeChurchEasy support team by email.",
       "emailSupport": "Email Support"
     }

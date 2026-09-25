@@ -10,10 +10,12 @@ import {
   HelpCircle,
   Bug,
   Lightbulb,
+  Send,
 } from "lucide-react";
 
 const SUPPORT_EMAIL = "support@makechurcheazy.com";
 const COMMUNITY_URL = "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t";
+const TELEGRAM_URL = "https://t.me/makechurcheasy";
 const DOCS_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/wiki";
 
 export default function AdminSupportPage() {
@@ -21,18 +23,25 @@ export default function AdminSupportPage() {
 
   const supportChannels = [
     {
-      icon: Mail,
-      title: t("admin.support.emailSupport"),
-      description: t("admin.support.emailDescription"),
-      action: `mailto:${SUPPORT_EMAIL}`,
-      iconColor: "bg-sky-500/15 text-sky-400",
-    },
-    {
       icon: MessageSquare,
       title: t("admin.support.liveChat"),
       description: t("admin.support.liveChatDescription"),
       action: COMMUNITY_URL,
       iconColor: "bg-emerald-500/15 text-emerald-400",
+    },
+    {
+      icon: Send,
+      title: t("admin.support.telegram"),
+      description: t("admin.support.telegramDescription"),
+      action: TELEGRAM_URL,
+      iconColor: "bg-sky-500/15 text-sky-400",
+    },
+    {
+      icon: Mail,
+      title: t("admin.support.emailSupport"),
+      description: t("admin.support.emailDescription"),
+      action: `mailto:${SUPPORT_EMAIL}`,
+      iconColor: "bg-blue-500/15 text-blue-400",
     },
     {
       icon: BookOpen,
@@ -80,7 +89,7 @@ export default function AdminSupportPage() {
       </div>
 
       {/* Support Channels */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {supportChannels.map((channel) => {
           const Icon = channel.icon;
           return (

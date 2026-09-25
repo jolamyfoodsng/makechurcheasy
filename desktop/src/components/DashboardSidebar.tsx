@@ -25,6 +25,13 @@ import {
   Tv,
   Zap,
   GraduationCap,
+  HelpCircle,
+  FolderClosed,
+  MessageCircle,
+  Send,
+  Mail,
+  Phone,
+  ExternalLink,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
@@ -116,12 +123,8 @@ export default function DashboardSidebar({
         <div className="sidebar-nav-list">
           {navItem("/", LayoutDashboard, t("sidebar.dashboard"))}
           {navItem("/speech-to-scripture", Mic, t("sidebar.verseAi"))}
-          {navItem("/transcripts", FileText, t("sidebar.transcripts"))}
           {navItem("/production/themes", Palette, t("sidebar.themes"))}
-
-          {navItem("/resources?tab=bible", BookOpen, t("sidebar.bible"))}
-          {navItem("/resources?tab=worship", Music, t("sidebar.worship"))}
-          {navItem("/resources?tab=media", Images, t("sidebar.media"))}
+          {navItem("/resources", FolderClosed, t("sidebar.resources", { defaultValue: "Media & Worship" }))}
           {navItem("/gallery", LayoutGrid, t("sidebar.multiView"))}
           {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
@@ -132,6 +135,22 @@ export default function DashboardSidebar({
           {navItem("/tutorials", GraduationCap, "Tutorials")}
           {navItem("/credits", Zap, t("sidebar.credits", { defaultValue: "Credits" }))}
           {navItem("/settings", Settings, t("sidebar.settings"))}
+          <a
+            className="sidebar-nav-item"
+            href="#"
+            title={collapsed ? t("sidebar.support", { defaultValue: "Support" }) : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              setShowSupportModal(true);
+            }}
+          >
+            <HelpCircle className="sidebar-nav-icon" />
+            <span className="sidebar-nav-text">{t("sidebar.support", { defaultValue: "Support" })}</span>
+            <span className="sidebar-support-dot-container" title="Live support available">
+              <span className="sidebar-support-ripple" />
+              <span className="sidebar-support-dot" />
+            </span>
+          </a>
         </div>
 
 

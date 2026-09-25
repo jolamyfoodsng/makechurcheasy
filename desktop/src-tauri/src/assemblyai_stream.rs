@@ -1465,6 +1465,11 @@ fn process_and_send_f32(
                 {
                     audio_drop_count.fetch_add(1, Ordering::Relaxed);
                 }
+                static CHUNK_COUNTER: AtomicU32 = AtomicU32::new(0);
+                let sent = CHUNK_COUNTER.fetch_add(1, Ordering::Relaxed);
+                if sent == 0 || sent % 200 == 0 {
+                    println!("[Voice Stream] Mic audio active — sent {sent} chunks to Deepgram (rms: {rms:.4}, level: {level:.3})");
+                }
                 let _ = app.emit("assemblyai-audio-level", LevelPayload { level });
             }
         });

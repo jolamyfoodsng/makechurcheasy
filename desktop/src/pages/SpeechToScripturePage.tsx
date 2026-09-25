@@ -26,6 +26,7 @@ import {
   ShieldAlert,
   StopCircle,
   Wifi,
+  X,
   Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1708,7 +1709,29 @@ export default function SpeechToScripturePage() {
       {/* ── Service Error ── */}
       {assemblyAIError && (
         <div className="sts3-lock-overlay">
-          <div className="sts3-lock-card">
+          <div className="sts3-lock-card" style={{ position: "relative" }}>
+            <button
+              onClick={() => {
+                setAssemblyAIError(false);
+                lmDockService.stopListening();
+              }}
+              title={t("common.close", "Close and Stop")}
+              style={{
+                position: "absolute",
+                top: 14,
+                right: 14,
+                background: "transparent",
+                border: "none",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+                padding: 6,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+              <X size={18} />
+            </button>
             <h2 className="sts3-lock-title">{t("verseAi.voiceBibleUnavailable")}</h2>
             <p className="sts3-lock-desc">
               {t("verseAi.voiceBibleUnavailableDesc")}
@@ -1718,15 +1741,26 @@ export default function SpeechToScripturePage() {
                 {snapshot.error}
               </p>
             )}
-            <button
-              className="sts3-btn sts3-btn--primary"
-              onClick={() => {
-                setAssemblyAIError(false);
-                void lmDockService.startListening(selectedMic || undefined);
-              }}
-              title={t("verseAi.retryConnection")}>
-              {t("verseAi.retryConnection")}
-            </button>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
+              <button
+                className="sts3-btn sts3-btn--primary"
+                onClick={() => {
+                  setAssemblyAIError(false);
+                  void lmDockService.startListening(selectedMic || undefined);
+                }}
+                title={t("verseAi.retryConnection")}>
+                {t("verseAi.retryConnection")}
+              </button>
+              <button
+                className="sts3-btn sts3-btn--red"
+                onClick={() => {
+                  setAssemblyAIError(false);
+                  lmDockService.stopListening();
+                }}
+                title={t("verseAi.stopListening", "Stop Listening")}>
+                <StopCircle size={15} /> {t("verseAi.stopListening", "Stop")}
+              </button>
+            </div>
           </div>
         </div>
       )}

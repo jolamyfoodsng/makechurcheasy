@@ -161,6 +161,7 @@ export async function GET(req: NextRequest) {
         email: u.email || "",
         avatar: u.avatar || "",
         churchName: u.churchName || "",
+        country: u.country || "",
         role: u.role || "user",
         accountStatus: u.isActive === false ? "suspended" : "active",
         credits: creditBalances.get(id) ?? 0,

@@ -379,8 +379,8 @@ export class LmDockService {
   private audioConnectedAt = 0;
   private lastAudioSignalAt = 0;
   private audioRecoveryAttempts = 0;
-  private static readonly AUDIO_SIGNAL_GRACE_MS = 6_000;
-  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 2;
+  private static readonly AUDIO_SIGNAL_GRACE_MS = 30_000;
+  private static readonly MAX_AUDIO_RECOVERY_ATTEMPTS = 3;
 
   // ── Sentence detection state ──────────────────────────────────────────────
   /** Accumulated text for the current sentence (across ASR finals) */
@@ -1461,12 +1461,11 @@ export class LmDockService {
           const { status } = event.payload;
           if (status === "connected") {
             this.reconnectAttempts = 0;
+            this.stopConnectionWatchdog();
             this.startAudioSignalMonitor();
-            // AssemblyAI's Begin message confirms the WebSocket, but not that
-            // the local cpal callback is delivering microphone frames yet.
-            // Keep the UI in Connecting… until the first audio-level event.
-            this.snapshot = { ...this.snapshot, status: "connecting", error: undefined };
+            this.snapshot = { ...this.snapshot, status: "listening", error: undefined };
             this.pushStatus();
+            this.startInactivityMonitor();
           } else if (status.startsWith("error")) {
             this.stopConnectionWatchdog();
             this.stopAudioSignalMonitor();

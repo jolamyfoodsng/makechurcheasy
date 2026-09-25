@@ -20,6 +20,7 @@ import {
   Mic,
   Monitor,
   Search,
+  Send,
   Shield,
   UploadCloud,
   Wifi,
@@ -56,6 +57,7 @@ interface QuickStep {
 
 const SUPPORT_EMAIL = "support@makechurcheazy.com";
 const COMMUNITY_URL = "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t";
+const TELEGRAM_URL = "https://t.me/makechurcheasy";
 
 const HELP_RESOURCES: HelpResource[] = [
   {
@@ -276,6 +278,16 @@ export default function SupportPage() {
       description: t("whatsappDesc"),
       href: COMMUNITY_URL,
       label: t("joinCommunity"),
+      external: true,
+    },
+    {
+      icon: Send,
+      iconBg: "bg-sky-50",
+      iconColor: "text-sky-600",
+      title: t("telegramTitle"),
+      description: t("telegramDesc"),
+      href: TELEGRAM_URL,
+      label: t("joinTelegram"),
       external: true,
     },
     {
