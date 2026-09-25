@@ -12,9 +12,13 @@ binding = "ASSETS"
 enabled = true
 
 [vars]
-APP_ENV = "staging"
+APP_ENV = "production"
 NODE_ENV = "production"
 BACKEND_URL = "https://api.creatorstudioslabs.stream"
-NEXT_PUBLIC_APP_ENV = "staging"
-NEXT_PUBLIC_APP_URL = "https://mce-dashboard-cloudflare-staging.workers.dev"
+NEXT_PUBLIC_APP_ENV = "production"
+NEXT_PUBLIC_APP_URL = "https://makechurcheazy.com"
 NEXT_PUBLIC_API_URL = "https://api.creatorstudioslabs.stream"
+
+[[routes]]
+pattern = "makechurcheazy.com/*"
+zone_name = "makechurcheazy.com"
