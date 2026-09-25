@@ -823,7 +823,7 @@ export class LmDockService {
     // If the exact same text was finalized recently (< 5000ms), do not add a duplicate entry!
     const normTrimmed = trimmed.toLowerCase().replace(/[^\w\s]/g, "").trim();
     const lastFinalized = [...this.snapshot.entries].reverse().find((e) => e.finalized);
-    const normLast = lastFinalized?.text?.toLowerCase().replace(/[^\w\s]/g, "").trim();
+    const normLast = (this.lastFinalizedLineText || lastFinalized?.text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 
     if (normTrimmed && normLast && normTrimmed === normLast && now - this.lastFinalizedAt < 5000) {
       if (activeIndex >= 0) {
