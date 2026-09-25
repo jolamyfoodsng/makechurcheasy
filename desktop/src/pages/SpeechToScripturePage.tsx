@@ -19,12 +19,15 @@ import {
   Clock,
   Copy,
   Download,
+  FileText,
   Lock,
   Mic,
   Radio,
+  RotateCcw,
   Search,
   ShieldAlert,
   StopCircle,
+  Volume2,
   Wifi,
   X,
   Zap
@@ -38,6 +41,7 @@ import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import MacSelect from "../components/MacSelect";
 import { useAuth } from "../contexts/AuthContext";
+import { getSettings as getMvSettings, updateSettings as updateMvSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
 import {
   APP_VERSION,
@@ -227,6 +231,18 @@ export default function SpeechToScripturePage() {
   const selectMic = useCallback((micId: string) => {
     setSelectedMic(micId);
     savePreferredMicId(micId);
+  }, []);
+
+  const [inputGain, setInputGainState] = useState(() => {
+    const mv = getMvSettings();
+    return Number(mv.inputGain ?? 150);
+  });
+
+  const handleGainChange = useCallback((newGain: number) => {
+    const clamped = Math.max(50, Math.min(400, newGain));
+    setInputGainState(clamped);
+    updateMvSettings({ inputGain: clamped });
+    void lmDockService.setInputGain(clamped);
   }, []);
 
   // ── OBS ──
@@ -928,6 +944,34 @@ export default function SpeechToScripturePage() {
           </div>
         </div>
         <div className="sts3-header-right">
+          {/* Quick links: Transcripts library & New Session */}
+          <button
+            type="button"
+            className="sts3-header-icon-btn"
+            style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+            onClick={() => navigate("/transcripts")}
+            title="View all saved transcripts"
+          >
+            <FileText size={15} />
+            <span>Transcripts</span>
+          </button>
+
+          {!canStopListening && (snapshot.entries.length > 0 || snapshot.suggestions.length > 0) && (
+            <button
+              type="button"
+              className="sts3-header-icon-btn"
+              style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+              onClick={() => {
+                lmDockService.stopListening();
+                setElapsed(0);
+              }}
+              title="Start a new speech session"
+            >
+              <RotateCcw size={15} />
+              <span>New Session</span>
+            </button>
+          )}
+
           <CreditsDisplay userId={user?.id} />
           <button
             className={`sts3-btn ${canStopListening ? "sts3-btn--red" : "sts3-btn--primary"}`}
@@ -1151,6 +1195,31 @@ export default function SpeechToScripturePage() {
               <div className="sts3-footer-item">
                 <Radio size={14} className={isBroadcastConnected ? "sts3-footer-icon--green" : ""} />
                 {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
+              </div>
+              <div className="sts3-gain-control" title={t("verseAi.micGainTitle", "Microphone Sensitivity / Boost (50% - 400%)")}>
+                <Volume2 size={13} />
+                <span style={{ minWidth: 38 }}>{inputGain}%</span>
+                <input
+                  type="range"
+                  min="50"
+                  max="400"
+                  step="25"
+                  value={inputGain}
+                  onChange={(e) => handleGainChange(Number(e.target.value))}
+                  className="sts3-gain-slider"
+                  aria-label="Microphone Sensitivity Boost"
+                />
+                {isListening && (
+                  <div className="sts3-mini-meter" title={`Mic Level: ${levelPercent}%`}>
+                    <div
+                      className="sts3-mini-meter-fill"
+                      style={{
+                        width: `${levelPercent}%`,
+                        backgroundColor: levelPercent > 80 ? "var(--error, #ef4444)" : levelPercent > 50 ? "var(--warning, #f59e0b)" : "var(--success, #10b981)",
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

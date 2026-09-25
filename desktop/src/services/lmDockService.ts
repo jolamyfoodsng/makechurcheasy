@@ -1585,8 +1585,8 @@ export class LmDockService {
       // Invoke the Rust backend to start mic capture + AssemblyAI realtime STT.
       // Pass the current user gain so the Rust pipeline applies it from the start.
       const mvSettings = getMvSettings();
-      const rawGain = Number(mvSettings.inputGain ?? 100);
-      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0, Math.min(3, rawGain / 100)) : 1;
+      const rawGain = Number(mvSettings.inputGain ?? 150);
+      const gainMultiplier = Number.isFinite(rawGain) ? Math.max(0.1, Math.min(5, rawGain / 100)) : 1.5;
       const nativeStartPromise = safeTauriInvoke("start_assemblyai_stream", {
         apiKey,
         deviceId: micId || null,
@@ -1826,11 +1826,11 @@ export class LmDockService {
   }
 
   /**
-   * Update the microphone input gain at runtime (0–300 → 0.0–3.0 multiplier).
+   * Update the microphone input gain at runtime (0–500 → 0.0–5.0 multiplier).
    * Calls the Rust-side set_microphone_gain command — no stream restart needed.
    */
   async setInputGain(gainPercent: number): Promise<void> {
-    const gain = Math.max(0, Math.min(3, gainPercent / 100));
+    const gain = Math.max(0.1, Math.min(5, gainPercent / 100));
     await safeTauriInvoke("set_microphone_gain", { gain }).catch(() => { });
   }
 

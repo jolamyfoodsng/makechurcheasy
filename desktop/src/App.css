@@ -17593,6 +17593,37 @@ html.mv-theme-light .dash-v2-footer {
   background: var(--surface-raised);
 }
 
+.sts3-gain-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sts3-gain-slider {
+  width: 68px;
+  height: 4px;
+  accent-color: var(--accent, #6366f1);
+  cursor: pointer;
+}
+
+.sts3-mini-meter {
+  width: 34px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sts3-mini-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.08s ease;
+}
+
 .sts3-status-badge {
   display: flex;
   align-items: center;
