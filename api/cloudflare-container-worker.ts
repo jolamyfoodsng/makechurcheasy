@@ -96,6 +96,13 @@ export class MceApiContainer extends Container {
 
 export default {
   async fetch(request: Request, workerEnv: WorkerEnv): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/health") {
+      return new Response(JSON.stringify({ status: "ok" }), {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
     const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
     return container.fetch(request);
   },
