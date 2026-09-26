@@ -279,7 +279,7 @@ export default function TranscriptLibraryPage({
               title={canStartSession ? t("transcript.tooltip.newSession") : t("transcript.tooltip.upgradeRequired")}
             >
               {!canStartSession && <Lock size={14} />}
-              <Mic size={16} /> {t("transcript.newSession")}
+              <Mic size={16} /> Start Recording
             </button>
           </div>
         </header>

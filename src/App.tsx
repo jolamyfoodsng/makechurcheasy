@@ -128,6 +128,9 @@ const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 const MVSettings = safeLazy(() => import("./multiview/pages/MVSettings").then(({ MVSettings: Component }) => ({ default: Component })));
 const MVShell = safeLazy(() => import("./multiview/MVShell").then(({ MVShell: Component }) => ({ default: Component })));
 const DevDashboard = safeLazy(() => import("./pages/DevDashboard"));
+const DevModalsGalleryPage = import.meta.env.DEV
+  ? safeLazy(() => import("./pages/DevModalsGalleryPage"))
+  : null;
 const ResourcesPage = safeLazy(() => import("./pages/ResourcesPage"));
 const ProductionHomePage = safeLazy(() => import("./pages/ProductionHomePage"));
 const MultiViewGalleryPage = safeLazy(() => import("./pages/MultiViewGalleryPage"));
@@ -1410,6 +1413,9 @@ function App() {
 
                                       {/* Developer Tools */}
                                       <Route path="dev/db" element={<DevDashboard />} />
+                                      {import.meta.env.DEV && DevModalsGalleryPage && (
+                                        <Route path="dev/modals" element={<DevModalsGalleryPage />} />
+                                      )}
                                     </Route>
 
                                     <Route path="*" element={<Navigate to="/" replace />} />

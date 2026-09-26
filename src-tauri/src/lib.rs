@@ -1397,6 +1397,43 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
     let _ = request.respond(response);
 }
 
+/// Copy text directly to the system clipboard using native OS utilities (pbcopy on macOS, clip on Windows)
+#[tauri::command]
+fn copy_to_clipboard(text: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("pbcopy")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn pbcopy: {}", e))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("clip")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn clip: {}", e))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(())
+    }
+}
+
 /// Save a background image to ~/Documents/MakeChurchEasy/backgrounds/
 /// Accepts raw image bytes and a hash-based filename.
 /// Returns the absolute path to the saved file.
@@ -8481,6 +8518,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            copy_to_clipboard,
             save_bg_image,
             save_upload_file,
             delete_upload_file,

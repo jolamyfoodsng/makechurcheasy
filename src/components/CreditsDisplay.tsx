@@ -129,11 +129,15 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
 
   if (isUnlimited) {
     return (
-      <div className="sts3-usage-pill" style={{ gap: 6 }}>
+      <div
+        className="sts3-usage-pill"
+        style={{ gap: 6, cursor: "help" }}
+        title="Unlimited Coins — Active plan includes unlimited live sermon transcription"
+      >
         <Zap size={12} style={{ color: "var(--gold)" }} />
-        <span className="sts3-usage-label">CREDITS</span>
+        <span className="sts3-usage-label">COINS</span>
         <span className="sts3-usage-value" style={{ color: "var(--gold)" }}>
-          Unlimited
+          Unlimited Coins
         </span>
         <PendingBadge count={pendingCount} />
       </div>
@@ -144,26 +148,28 @@ export default function CreditsDisplay({ refreshKey, userId, sessionCreditsUsed 
   const tier =
     effectiveBalance <= 0 ? "red" : effectiveBalance <= 10 ? "orange" : "gold";
 
+  const hours = Math.floor(effectiveBalance / 60);
+  const minutes = effectiveBalance % 60;
+  const timeDesc =
+    hours > 0
+      ? `${hours} hr${hours > 1 ? "s" : ""}${minutes > 0 ? ` ${minutes} min${minutes > 1 ? "s" : ""}` : ""}`
+      : `${minutes} min${minutes > 1 ? "s" : ""}`;
+  const hoverTooltip = `${effectiveBalance} Coins (~${timeDesc} of live transcription remaining · 1 Coin = 1 min)`;
+
   return (
     <div
       className={`sts3-usage-pill sts3-usage-pill--${tier}`}
-      style={{ gap: 6 }}
-      title={
-        synced
-          ? "Synced with server"
-          : userId
-            ? "Loading…"
-            : "Using local credits"
-      }
+      style={{ gap: 6, cursor: "help" }}
+      title={hoverTooltip}
     >
       <Zap size={12} />
-      <span className="sts3-usage-label">CREDITS</span>
+      <span className="sts3-usage-label">COINS</span>
       <span className="sts3-usage-value">
         {!synced && userId
           ? "…"
           : effectiveBalance <= 0
-            ? "0 — Buy Credits"
-            : `${effectiveBalance} remaining`}
+            ? "0 Coins — Top Up"
+            : `${effectiveBalance} Coins`}
       </span>
       <PendingBadge count={pendingCount} />
     </div>

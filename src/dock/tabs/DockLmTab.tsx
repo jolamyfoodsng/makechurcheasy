@@ -1558,36 +1558,38 @@ export default function DockLmTab({
       <style>{`
         @keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}
         .lm-candidate-card {
-          border: 1px solid var(--dock-border, rgba(255,255,255,0.06));
-          background: rgba(255,255,255,0.02);
-          transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.55) 100%);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
         }
         .lm-candidate-card:hover {
-          border-color: rgba(96,165,250,0.55);
-          background: rgba(59,130,246,0.08);
-          box-shadow: 0 4px 14px rgba(15,23,42,0.24);
+          border-color: rgba(56, 189, 248, 0.6);
+          background: linear-gradient(180deg, rgba(30, 58, 95, 0.55) 0%, rgba(15, 23, 42, 0.7) 100%);
+          box-shadow: 0 4px 16px rgba(14, 165, 233, 0.16);
           transform: translateY(-1px);
         }
         .lm-candidate-card:focus-visible {
-          outline: 2px solid #60A5FA;
+          outline: 2px solid #38BDF8;
           outline-offset: 1px;
         }
         .lm-candidate-card--suggestion {
-          border-color: rgba(34,197,94,0.22);
-          background: rgba(34,197,94,0.05);
+          border-color: rgba(255, 255, 255, 0.08);
+          background: linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.55) 100%);
         }
         .lm-candidate-card--suggestion:hover {
-          border-color: rgba(74,222,128,0.62);
-          background: rgba(34,197,94,0.11);
+          border-color: rgba(56, 189, 248, 0.6);
+          background: linear-gradient(180deg, rgba(30, 58, 95, 0.55) 0%, rgba(15, 23, 42, 0.7) 100%);
+          box-shadow: 0 4px 16px rgba(14, 165, 233, 0.16);
         }
         .lm-candidate-card--pinned {
-          box-shadow: inset 3px 0 0 rgba(96,165,250,0.72);
+          box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.9);
         }
         .lm-candidate-card--active,
         .lm-candidate-card--active:hover {
-          border-color: rgba(96,165,250,0.8);
-          background: rgba(59,130,246,0.18);
-          box-shadow: 0 0 0 1px rgba(96,165,250,0.18), 0 4px 14px rgba(15,23,42,0.28);
+          border-color: rgba(56, 189, 248, 0.85);
+          background: linear-gradient(180deg, rgba(14, 165, 233, 0.28) 0%, rgba(15, 23, 42, 0.7) 100%);
+          box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3), 0 4px 16px rgba(14, 165, 233, 0.25);
         }
         .lm-tab--compact:hover {
           border-color: rgba(96,165,250,0.58) !important;
@@ -1840,21 +1842,21 @@ export default function DockLmTab({
                       }
                     }}
                   >
-                    {c.snippet ? (
-                      <>
-                        <div style={S.verseText}>{c.snippet}</div>
-                        <div style={S.queueCardTop}>
-                          <span style={S.verseRefBadge}>{c.label}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div style={S.queueCardTop}>
-                        <span style={S.verseRefBadgeLarge}>{c.label}</span>
-                      </div>
+                    <div style={S.queueCardHeader}>
+                      <span style={S.verseRefBadge}>
+                        <Icon name="book" size={13} style={{ marginRight: 6, flexShrink: 0, opacity: 0.95 }} />
+                        {c.label}
+                      </span>
+                      <span style={{ fontSize: 10, color: "var(--dock-text-dim, #94A3B8)", fontWeight: 500 }}>{freshness.label}</span>
+                    </div>
+
+                    {c.snippet && (
+                      <div style={S.verseText}>{c.snippet}</div>
                     )}
+
                     <div style={S.queueCardBottom}>
-                      <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                      <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ flex: 1 }} />
+                      <div style={{ display: "flex", gap: 5 }}>
                         <button
                           className={`lm-pin-button${isPinned ? " lm-pin-button--active" : ""}`}
                           style={S.pinBtnSmall}
@@ -1937,20 +1939,17 @@ export default function DockLmTab({
                         }
                       }}
                     >
-                      {c.snippet ? (
-                        <>
-                          <div style={S.verseText}>{c.snippet}</div>
-                          <div style={S.queueCardTop}>
-                            <span style={S.verseRefBadge}>{c.label}</span>
-                            <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={S.queueCardTop}>
-                          <span style={S.verseRefBadgeLarge}>{c.label}</span>
-                          <span style={{ fontSize: 10, color: freshness.color }}>{freshness.label}</span>
-                        </div>
-                      )}
+                    <div style={S.queueCardHeader}>
+                      <span style={S.verseRefBadge}>
+                        <Icon name="book" size={13} style={{ marginRight: 6, flexShrink: 0, opacity: 0.95 }} />
+                        {c.label}
+                      </span>
+                      <span style={{ fontSize: 10, color: "var(--dock-text-dim, #94A3B8)", fontWeight: 500 }}>{freshness.label}</span>
+                    </div>
+
+                    {c.snippet && (
+                      <div style={S.verseText}>{c.snippet}</div>
+                    )}
                       <div style={S.queueCardBottom}>
                         <span style={S.suggestionHint}>{t("lm.manualSuggestion", "Suggested match")}</span>
                         <div style={{ display: "flex", gap: 4 }}>
@@ -3114,20 +3113,26 @@ const S: Record<string, React.CSSProperties> = {
   },
 
   queueCard: {
-    padding: "6px 10px",
-    borderRadius: 6,
+    padding: "10px 12px",
+    borderRadius: 10,
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: 7,
     cursor: "pointer",
   },
   suggestionCard: {
-    padding: "6px 10px",
-    borderRadius: 6,
+    padding: "10px 12px",
+    borderRadius: 10,
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: 7,
     cursor: "pointer",
+  },
+  queueCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
   queueCardTop: {
     display: "flex",
@@ -3135,7 +3140,7 @@ const S: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
   },
   queueRef: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 700,
     color: "var(--dock-text, #E2E8F0)",
   },
@@ -3150,41 +3155,41 @@ const S: Record<string, React.CSSProperties> = {
     color: "var(--dock-text-dim, #94A3B8)",
   },
 
-
-
   verseText: {
-    fontSize: 14,
-    lineHeight: "1.5",
-    color: "#FFFFFF",
-    fontWeight: 600,
+    fontSize: 13.5,
+    lineHeight: "1.55",
+    color: "rgba(255, 255, 255, 0.92)",
+    fontWeight: 500,
     fontStyle: "normal",
     display: "-webkit-box",
     WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
+    WebkitLineClamp: 3,
     overflow: "hidden",
     textOverflow: "ellipsis",
     letterSpacing: "0.01em",
   },
   verseRefBadge: {
-    fontSize: 12.5,
-    fontWeight: 700,
-    color: "#38BDF8",
-    background: "rgba(56, 189, 248, 0.16)",
-    border: "1px solid rgba(56, 189, 248, 0.45)",
-    borderRadius: 5,
-    padding: "2px 8px",
+    fontSize: 14.5,
+    fontWeight: 800,
+    color: "#F8FAFC",
+    background: "rgba(255, 255, 255, 0.08)",
+    border: "1px solid rgba(255, 255, 255, 0.22)",
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.3)",
+    borderRadius: 6,
+    padding: "3px 10px",
     display: "inline-flex",
     alignItems: "center",
     letterSpacing: "0.02em",
   },
   verseRefBadgeLarge: {
-    fontSize: 14.5,
-    fontWeight: 700,
-    color: "#38BDF8",
-    background: "rgba(56, 189, 248, 0.16)",
-    border: "1px solid rgba(56, 189, 248, 0.45)",
-    borderRadius: 5,
-    padding: "3px 10px",
+    fontSize: 15.5,
+    fontWeight: 800,
+    color: "#F8FAFC",
+    background: "rgba(255, 255, 255, 0.1)",
+    border: "1px solid rgba(255, 255, 255, 0.25)",
+    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.35)",
+    borderRadius: 7,
+    padding: "4px 12px",
     display: "inline-flex",
     alignItems: "center",
     letterSpacing: "0.02em",
@@ -3193,16 +3198,16 @@ const S: Record<string, React.CSSProperties> = {
   pushBtn: {
     display: "inline-flex",
     alignItems: "center",
-    gap: 4,
-    padding: "3px 10px",
-    fontSize: 10,
+    gap: 5,
+    padding: "4px 11px",
+    fontSize: 10.5,
     fontWeight: 600,
-    borderRadius: 5,
-    border: "1px solid rgba(59,130,246,0.3)",
-    background: "rgba(59,130,246,0.12)",
-    color: "#60A5FA",
+    borderRadius: 6,
+    border: "1px solid rgba(59, 130, 246, 0.4)",
+    background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.12) 100%)",
+    color: "#93C5FD",
     cursor: "pointer",
-    transition: "all 0.15s",
+    transition: "all 0.15s ease",
   },
 
   // ── Transcript ──

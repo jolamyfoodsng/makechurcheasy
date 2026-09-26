@@ -113,6 +113,31 @@
     color: var(--text-primary);
 }
 
+.local-dev-plan-switcher__gallery-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 7px 12px;
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    border-radius: var(--radius-md);
+    background: rgba(99, 102, 241, 0.12);
+    color: #a5b4fc;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 650;
+    transition: all 0.15s ease;
+}
+
+.local-dev-plan-switcher__gallery-btn:hover {
+    background: rgba(99, 102, 241, 0.22);
+    border-color: rgba(99, 102, 241, 0.6);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
 @media (max-width: 640px) {
     .local-dev-plan-switcher {
         flex-direction: column;

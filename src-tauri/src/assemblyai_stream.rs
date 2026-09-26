@@ -48,7 +48,7 @@ const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
-const REALTIME_PROMPT: &str = "English Christian church sermon, Bible teaching, worship service, pastor speech, scripture references, Bible book names, chapters, verses, worship phrases, First Corinthians, Second Corinthians, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, First Peter, Second Peter, First John, Second John, Third John.";
+const REALTIME_PROMPT: &str = "English Christian church sermon, Bible preaching, scripture reading, Holy Bible, Old Testament, New Testament, Genesis, Exodus, Leviticus, Numbers, Deuteronomy, Joshua, Judges, Ruth, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, Ezra, Nehemiah, Esther, Job, Psalms, Proverbs, Ecclesiastes, Song of Solomon, Isaiah, Jeremiah, Lamentations, Ezekiel, Daniel, Hosea, Joel, Amos, Obadiah, Jonah, Micah, Nahum, Habakkuk, Zephaniah, Haggai, Zechariah, Malachi, Matthew, Mark, Luke, John, Acts, Romans, First Corinthians, Second Corinthians, Galatians, Ephesians, Philippians, Colossians, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, Titus, Philemon, Hebrews, James, First Peter, Second Peter, First John, Second John, Third John, Jude, Revelation, chapter and verse, King James Version, New International Version, New Living Translation, English Standard Version, The Message, Amplified Bible, KJV, NIV, NLT, ESV, MSG, switch to NLT, switch to NIV, switch to KJV.";
 
 // Bible vocabulary boosts recognition without guessing a book in the parser.
 const REALTIME_KEYTERMS: &[&str] = &[
@@ -58,11 +58,13 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "chapter",
     "next chapter",
     "scripture",
+    "Holy Bible",
     "Genesis",
     "Exodus",
     "Leviticus",
     "Numbers",
     "Deuteronomy",
+    "Deut",
     "Joshua",
     "Judges",
     "Ruth",
@@ -141,6 +143,18 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "First John",
     "Second John",
     "Third John",
+    "KJV",
+    "NIV",
+    "NLT",
+    "ESV",
+    "NKJV",
+    "The Message",
+    "Amplified",
+    "switch to NLT",
+    "switch to NIV",
+    "switch to KJV",
+    "switch to ESV",
+    "switch to Message",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -766,8 +780,15 @@ fn build_deepgram_endpoint() -> String {
 
     for term in REALTIME_KEYTERMS.iter() {
         let weight = match *term {
-            "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" => 4,
-            _ => 3,
+            "Deuteronomy" | "Deut" => 10,
+            "Habakkuk" | "Ecclesiastes" | "Zephaniah" | "Leviticus"
+            | "1 Thessalonians" | "2 Thessalonians" | "First Thessalonians" | "Second Thessalonians"
+            | "1 Corinthians" | "2 Corinthians" | "First Corinthians" | "Second Corinthians"
+            | "Philippians" | "Colossians" | "Philemon" | "Lamentations" | "Zechariah" | "Malachi" | "Nehemiah" => 9,
+            "NIV" | "NLT" | "KJV" | "ESV" | "NKJV" | "The Message" | "Amplified"
+            | "switch to NLT" | "switch to NIV" | "switch to KJV" | "switch to ESV" | "switch to Message" => 8,
+            "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" | "scripture" | "Holy Bible" => 7,
+            _ => 6,
         };
         query.push(format!("keywords={}:{weight}", urlencoding::encode(term)));
     }

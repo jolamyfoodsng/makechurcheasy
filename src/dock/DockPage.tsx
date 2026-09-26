@@ -95,6 +95,7 @@ import {
 import "./dock.css";
 import "./dock-theme.css";
 import "../accessibility.css";
+import { Globe } from "lucide-react";
 import Icon from "./DockIcon";
 import {
   normalizeDockSearchPlacement,
@@ -2193,24 +2194,29 @@ function DockPageContent({
       {/* ── Language change confirmation modal ── */}
       {showLanguageModal && pendingLanguage && (
         <div className="dock-modal-overlay" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-          <div className="dock-modal" role="dialog" aria-modal="true" aria-labelledby="dock-language-title" onClick={(e) => e.stopPropagation()}>
-            <div className="dock-modal__header">
-              <h3 id="dock-language-title">{t('dock.changeLanguage') || 'Change Language'}</h3>
+          <div className="dock-modal dock-modal--language" role="dialog" aria-modal="true" aria-labelledby="dock-language-title" onClick={(e) => e.stopPropagation()}>
+            <div className="mv-modal-icon-badge mv-modal-icon-badge--indigo" style={{ margin: "0 auto 16px" }}>
+              <Globe size={28} />
             </div>
-            <div className="dock-modal__body">
+            <div className="dock-modal__header" style={{ textAlign: "center" }}>
+              <h3 id="dock-language-title" style={{ fontSize: "1.15rem", fontWeight: 700, margin: "0 0 8px" }}>
+                {t('dock.changeLanguage') || 'Change Language'}
+              </h3>
+            </div>
+            <div className="dock-modal__body" style={{ textAlign: "center", color: "var(--text-secondary, #cbd5e1)", fontSize: "0.88rem", lineHeight: 1.5, margin: "0 0 16px" }}>
               <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>
             </div>
-            <div className="dock-modal__footer">
+            <div className="dock-modal__footer" style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
               <button
                 type="button"
-                className="dock-btn dock-btn--ghost"
+                className="mv-modal-btn mv-modal-btn--ghost"
                 onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}
               >
                 {t('common.cancel') || 'Cancel'}
               </button>
               <button
                 type="button"
-                className="dock-btn dock-btn--primary"
+                className="mv-modal-btn mv-modal-btn--primary"
                 onClick={() => {
                   const lang = pendingLanguage!;
                   const langToCode: Record<string, string> = {

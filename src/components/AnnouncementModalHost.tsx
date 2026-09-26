@@ -123,19 +123,59 @@ function getOfferCards(announcement: DesktopAnnouncement, discountPercent: numbe
   ].filter((card) => cycles.includes(card.cycle));
 }
 
+const DISMISS_STORAGE_KEY = "mce_dismissed_announcements_v1";
+
+function isLocallyDismissed(id?: string, deliveryId?: string): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return false;
+    const record: Record<string, number> = JSON.parse(raw);
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (id && record[id] && now - record[id] < oneDayMs) return true;
+    if (deliveryId && record[deliveryId] && now - record[deliveryId] < oneDayMs) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function recordLocalDismissal(id?: string, deliveryId?: string): void {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    const record: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    if (id) record[id] = now;
+    if (deliveryId) record[deliveryId] = now;
+    for (const key of Object.keys(record)) {
+      if (now - record[key] > 7 * 24 * 60 * 60 * 1000) delete record[key];
+    }
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(record));
+  } catch {}
+}
+
 export function AnnouncementModalHost() {
   const [announcement, setAnnouncement] = useState<DesktopAnnouncement | null>(null);
   const [selectedCycle, setSelectedCycle] = useState<DiscountBillingCycle | null>(null);
   const countdown = useAnnouncementCountdown(announcement?.expiresAt);
 
   useEffect(() => {
-    setAnnouncement(getCachedDesktopAnnouncement());
-    return subscribeToDesktopAnnouncement(setAnnouncement);
+    const cached = getCachedDesktopAnnouncement();
+    if (cached && !isLocallyDismissed(cached.id, cached.deliveryId)) {
+      setAnnouncement(cached);
+    }
+    return subscribeToDesktopAnnouncement((next) => {
+      if (next && isLocallyDismissed(next.id, next.deliveryId)) {
+        return;
+      }
+      setAnnouncement(next);
+    });
   }, []);
 
   async function dismiss(clicked = false) {
     if (!announcement) return;
     const current = announcement;
+    recordLocalDismissal(current.id, current.deliveryId);
     setAnnouncement(null);
     clearCachedDesktopAnnouncement();
     await dismissDesktopAnnouncement(current.deliveryId, clicked);
@@ -154,7 +194,7 @@ export function AnnouncementModalHost() {
     window.open(`https://makechurcheasy.com${url}`, "_blank", "noopener,noreferrer");
   }
 
-  if (!announcement) return null;
+  if (!announcement || isLocallyDismissed(announcement.id, announcement.deliveryId)) return null;
 
   const isImageOnly = Boolean(
     announcement.imageUrl &&

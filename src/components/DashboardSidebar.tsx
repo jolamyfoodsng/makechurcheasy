@@ -34,6 +34,7 @@ import {
   Phone,
   ExternalLink,
   X,
+  FileText,
 } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
@@ -67,6 +68,7 @@ export default function DashboardSidebar({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [isResourcesOpen, setIsResourcesOpen] = useState(true);
+  const [isTranscriptsOpen, setIsTranscriptsOpen] = useState(true);
 
 
 
@@ -126,7 +128,75 @@ export default function DashboardSidebar({
         <p className="sidebar-label">{t("sidebar.navigation")}</p>
         <div className="sidebar-nav-list">
           {navItem("/", LayoutDashboard, t("sidebar.dashboard"))}
-          {navItem("/speech-to-scripture", Mic, t("sidebar.verseAi"))}
+
+          {/* Transcripts & Verse AI collapsible parent item */}
+          <div
+            className={`sidebar-nav-item sidebar-nav-parent${currentPath.startsWith("/transcripts") || currentPath.startsWith("/speech-to-scripture") ? " sidebar-nav-item-active" : ""}`}
+            title={collapsed ? t("sidebar.transcripts", { defaultValue: "Transcripts" }) : undefined}
+            onClick={collapsed ? (e) => {
+              e.preventDefault();
+              onNavigate("/speech-to-scripture");
+            } : undefined}
+          >
+            <a
+              className="sidebar-nav-parent-link"
+              href="#"
+              title={collapsed ? t("sidebar.transcripts", { defaultValue: "Transcripts" }) : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                onNavigate("/speech-to-scripture");
+              }}
+            >
+              <FileText className="sidebar-nav-icon" />
+              <span className="sidebar-nav-text">{t("sidebar.transcripts", { defaultValue: "Transcripts" })}</span>
+            </a>
+            {!collapsed && (
+              <button
+                type="button"
+                className={`sidebar-nav-chevron-btn${isTranscriptsOpen ? " sidebar-nav-chevron-btn--open" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsTranscriptsOpen((prev) => !prev);
+                }}
+                title={isTranscriptsOpen ? "Collapse Transcripts" : "Expand Transcripts"}
+                aria-label={isTranscriptsOpen ? "Collapse Transcripts" : "Expand Transcripts"}
+              >
+                <ChevronDown className="sidebar-nav-chevron" />
+              </button>
+            )}
+          </div>
+
+          {/* Subchildren under Transcripts (only visible when sidebar is expanded) */}
+          {!collapsed && isTranscriptsOpen && (
+            <div className="sidebar-subnav-list">
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/speech-to-scripture") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title="Verse AI (Live Detection)"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/speech-to-scripture");
+                }}
+              >
+                <Mic className="sidebar-subnav-icon" />
+                <span>Verse AI</span>
+              </a>
+
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/transcripts") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title="All Transcripts Library"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/transcripts");
+                }}
+              >
+                <FileText className="sidebar-subnav-icon" />
+                <span>All Transcripts</span>
+              </a>
+            </div>
+          )}
+
           {navItem("/production/themes", Palette, t("sidebar.themes"))}
 
           {/* Resources collapsible parent item */}
