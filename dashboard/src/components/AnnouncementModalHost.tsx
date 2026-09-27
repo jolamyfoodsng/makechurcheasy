@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, Crown, Gift, Info, Sparkles, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Info, Sparkles, Tag, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type AnnouncementTone = "info" | "success" | "warning" | "offer" | "upgrade";
@@ -44,7 +44,7 @@ function isPageVisible(): boolean {
 function iconForTone(tone: AnnouncementTone) {
   if (tone === "success") return CheckCircle2;
   if (tone === "warning") return AlertTriangle;
-  if (tone === "offer") return Gift;
+  if (tone === "offer") return Tag;
   if (tone === "upgrade") return Sparkles;
   return Info;
 }
@@ -52,24 +52,35 @@ function iconForTone(tone: AnnouncementTone) {
 function accentForTone(tone: AnnouncementTone) {
   if (tone === "success") return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
   if (tone === "warning") return "bg-amber-500/10 text-amber-600 border-amber-500/20";
-  if (tone === "offer") return "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20";
+  if (tone === "offer") return "bg-blue-500/10 text-blue-600 border-blue-500/20";
   if (tone === "upgrade") return "bg-blue-500/10 text-blue-600 border-blue-500/20";
   return "bg-indigo-500/10 text-indigo-600 border-indigo-500/20";
 }
 
-function withOfferCode(url: string, offerCode?: string | null): string {
-  if (!offerCode || !url.includes("/subscription/plans")) return url;
+function withOfferParams(
+  url: string,
+  offerCode?: string | null,
+  cycle?: DiscountBillingCycle
+): string {
   try {
-    const parsed = url.startsWith("http")
+    const isAbsolute = url.startsWith("http://") || url.startsWith("https://");
+    const parsed = isAbsolute
       ? new URL(url)
-      : new URL(url, "https://makechurcheazy.com");
-    if (!parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
+      : new URL(url, "https://makechurcheasy.com");
+    if (offerCode && !parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
       parsed.searchParams.set("promo", offerCode);
     }
-    return url.startsWith("http") ? parsed.toString() : `${parsed.pathname}${parsed.search}`;
+    if (
+      cycle &&
+      parsed.pathname.includes("/subscription/plans") &&
+      !parsed.searchParams.has("billing")
+    ) {
+      parsed.searchParams.set("billing", cycle);
+    }
+    return isAbsolute ? parsed.toString() : `${parsed.pathname}${parsed.search}`;
   } catch {
     const separator = url.includes("?") ? "&" : "?";
-    return `${url}${separator}promo=${encodeURIComponent(offerCode)}`;
+    return offerCode ? `${url}${separator}promo=${encodeURIComponent(offerCode)}` : url;
   }
 }
 
@@ -96,8 +107,9 @@ function formatCountdown(expiresAt?: string | null, now = Date.now()): string | 
   const seconds = totalSeconds % 60;
   const pad = (value: number) => String(value).padStart(2, "0");
 
-  if (days > 0) return `${pad(days)}:${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  if (days > 0) return `${days}d ${hours}h ${pad(minutes)}m`;
+  if (hours > 0) return `${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+  return `${minutes}m ${pad(seconds)}s`;
 }
 
 function useAnnouncementCountdown(expiresAt?: string | null): string | null {
@@ -121,28 +133,60 @@ function getOfferCards(announcement: Announcement, discountPercent: number) {
   return [
     {
       cycle: "monthly" as DiscountBillingCycle,
-      title: "Premium Monthly",
+      title: "Monthly Billing",
       meta: `Save ${discountPercent}%`,
       body: `Discount applies for ${duration}.`,
     },
     {
       cycle: "yearly" as DiscountBillingCycle,
-      title: "Premium Yearly",
+      title: "Yearly Billing",
       meta: `Save ${discountPercent}%`,
-      body: "Use the same code at yearly checkout.",
+      body: "Applies to annual plan checkout.",
     },
     {
       cycle: "lifetime" as DiscountBillingCycle,
       title: "Lifetime Access",
       meta: `Save ${discountPercent}%`,
-      body: "One-time premium access when available.",
+      body: "One-time premium access.",
     },
   ].filter((card) => cycles.includes(card.cycle));
+}
+
+const DISMISS_STORAGE_KEY = "mce_dismissed_announcements_v1";
+
+function isLocallyDismissed(id?: string, deliveryId?: string): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return false;
+    const record: Record<string, number> = JSON.parse(raw);
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (id && record[id] && now - record[id] < oneDayMs) return true;
+    if (deliveryId && record[deliveryId] && now - record[deliveryId] < oneDayMs) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function recordLocalDismissal(id?: string, deliveryId?: string): void {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    const record: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    if (id) record[id] = now;
+    if (deliveryId) record[deliveryId] = now;
+    for (const key of Object.keys(record)) {
+      if (now - record[key] > 7 * 24 * 60 * 60 * 1000) delete record[key];
+    }
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(record));
+  } catch {}
 }
 
 export function AnnouncementModalHost() {
   const router = useRouter();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [selectedCycle, setSelectedCycle] = useState<DiscountBillingCycle | null>(null);
   const countdown = useAnnouncementCountdown(announcement?.expiresAt);
 
   const refresh = useCallback(async () => {
@@ -150,7 +194,11 @@ export function AnnouncementModalHost() {
       const res = await fetch("/api/user/announcements?surface=dashboard", { credentials: "include" });
       if (!res.ok) return;
       const body = await res.json();
-      setAnnouncement(body.announcement || null);
+      const next = body.announcement || null;
+      if (next && isLocallyDismissed(next.id, next.deliveryId)) {
+        return;
+      }
+      setAnnouncement(next);
     } catch (error) {
       console.error("[AnnouncementModalHost] Failed to fetch announcement:", error);
     }
@@ -188,6 +236,7 @@ export function AnnouncementModalHost() {
   async function dismiss(clicked = false) {
     if (!announcement) return;
     const current = announcement;
+    recordLocalDismissal(current.id, current.deliveryId);
     setAnnouncement(null);
     await fetch("/api/user/announcements", {
       method: "POST",
@@ -203,9 +252,11 @@ export function AnnouncementModalHost() {
         announcement.format === "image_only")
   );
 
-  async function openAction() {
-    if (!announcement?.ctaUrl) return;
-    const url = withOfferCode(announcement.ctaUrl, announcement.offerCode);
+  async function openAction(cycle?: DiscountBillingCycle) {
+    const rawTarget = announcement?.ctaUrl || "/subscription/plans";
+    const targetCycle =
+      cycle || selectedCycle || announcement?.offerApplicableBillingCycles?.[0] || "monthly";
+    const url = withOfferParams(rawTarget, announcement?.offerCode, targetCycle);
     await dismiss(true);
     if (url.startsWith("http") || isImageOnly) {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -265,126 +316,168 @@ export function AnnouncementModalHost() {
   const Icon = iconForTone(announcement.tone);
   const accent = accentForTone(announcement.tone);
   const discountPercent = clampDiscount(announcement.offerDiscountPercent);
-  const showOfferLayout = Boolean(announcement.offerCode && discountPercent && ["offer", "upgrade"].includes(announcement.tone));
+  const showOfferLayout = Boolean(
+    announcement.offerCode &&
+    discountPercent &&
+    ["offer", "upgrade"].includes(announcement.tone)
+  );
 
   if (showOfferLayout && discountPercent) {
     const offerCards = getOfferCards(announcement, discountPercent);
-    const actionLabel = announcement.ctaLabel || `Upgrade with ${announcement.offerCode}`;
+    const activeCycle =
+      selectedCycle && offerCards.some((c) => c.cycle === selectedCycle)
+        ? selectedCycle
+        : offerCards[0]?.cycle || "monthly";
+    const actionLabel =
+      announcement.ctaLabel ||
+      (discountPercent ? `Claim ${discountPercent}% Discount` : "Upgrade Now");
 
     return (
-      <div className="fixed inset-0 z-[55] flex items-center justify-center overflow-y-auto p-3 sm:p-5">
-        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-md" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(124,58,237,0.64),transparent_34%),radial-gradient(circle_at_80%_75%,rgba(249,115,22,0.55),transparent_32%),linear-gradient(135deg,rgba(29,78,216,0.74),rgba(15,23,42,0.82))]" />
-        <section className="relative my-auto grid w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/40 bg-white p-2 text-slate-950 shadow-[0_30px_110px_rgba(15,23,42,0.42)] lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+          onClick={() => void dismiss(false)}
+        />
+        <section
+          className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
           <button
             type="button"
             onClick={() => void dismiss(false)}
-            className="absolute right-4 top-4 z-10 rounded-full bg-white/80 p-2 text-slate-500 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white hover:text-slate-900"
+            className="absolute right-3.5 top-3.5 z-10 rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Dismiss announcement"
           >
             <X className="h-4 w-4" />
           </button>
 
-          <div className="relative min-h-[260px] overflow-hidden rounded-[22px] bg-slate-950 text-white lg:min-h-[560px]">
-            {announcement.imageUrl ? (
-              <img src={announcement.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 bg-[linear-gradient(145deg,#0f172a_0%,#1d4ed8_52%,#7c3aed_100%)]" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/20 to-slate-950/8" />
-            <div className="relative flex h-full min-h-[260px] flex-col justify-between p-6 sm:p-8 lg:min-h-[560px]">
-              <div className="flex items-center justify-between gap-3 pr-8">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/24 bg-white/16 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm backdrop-blur">
-                  <Crown className="h-4 w-4" />
-                  Premium Offer
-                </div>
-                <div className="rounded-full bg-orange-500 px-3 py-1.5 text-sm font-black text-white shadow-lg">
-                  {discountPercent}% OFF
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white/78">MakeChurchEasy Premium</p>
-                <h2 className="mt-3 max-w-sm text-4xl font-black leading-[0.98] tracking-normal text-white sm:text-5xl">
-                  Special price for your church
-                </h2>
-                <div className="mt-7 inline-flex flex-col rounded-2xl border border-white/20 bg-white/14 px-4 py-3 backdrop-blur">
-                  <span className="text-xs font-bold uppercase tracking-wide text-white/70">Offer code</span>
-                  <strong className="mt-1 text-2xl font-black tracking-normal text-white">{announcement.offerCode}</strong>
-                </div>
-              </div>
+          {announcement.imageUrl ? (
+            <div className="h-40 w-full overflow-hidden border-b border-slate-100 bg-slate-50">
+              <img
+                src={announcement.imageUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
             </div>
-          </div>
+          ) : null}
 
-          <div className="flex min-h-[520px] flex-col justify-between px-5 py-7 sm:px-8 lg:px-10">
-            <div>
+          <div className="space-y-4 p-6 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">
+                <Tag className="h-3 w-3" />
+                <span>{discountPercent}% OFF</span>
+              </span>
               {countdown ? (
-                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-sm">
-                  <Clock3 className="h-4 w-4 text-orange-500" />
-                  <span>{countdown}</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-600">
+                  <Clock3 className="h-3.5 w-3.5 text-orange-500" />
+                  <span>Ends in {countdown}</span>
+                </span>
               ) : null}
+            </div>
 
-              <h2 className="mt-6 max-w-xl text-3xl font-black leading-tight tracking-normal text-slate-950 sm:text-4xl">
+            <div className="space-y-1.5">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
                 {announcement.title}
               </h2>
-              <p className="mt-3 whitespace-pre-wrap text-base leading-7 text-slate-600">{announcement.message}</p>
+              {announcement.message ? (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                  {announcement.message}
+                </p>
+              ) : null}
+            </div>
 
-              <div className="mt-6 grid gap-2">
-                {PREMIUM_FEATURES.map((feature) => (
-                  <div key={feature} className="flex items-center gap-3 text-sm font-medium text-slate-800">
-                    <CheckCircle2 className="h-4 w-4 flex-none text-emerald-500" />
-                    <span>{feature}</span>
-                  </div>
-                ))}
+            {announcement.offerCode ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-3.5 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Promo Code
+                  </span>
+                  <code className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-bold text-slate-900">
+                    {announcement.offerCode}
+                  </code>
+                </div>
+                <span className="text-xs font-medium text-emerald-600">
+                  ✓ Auto-applied at checkout
+                </span>
               </div>
+            ) : null}
 
-              <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                {offerCards.map((card, index) => (
-                  <div
-                    key={card.cycle}
-                    className={`rounded-2xl border p-4 ${
-                      index === 0
-                        ? "border-orange-500 bg-orange-50 shadow-[0_12px_28px_rgba(249,115,22,0.16)]"
-                        : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black text-slate-950">{card.title}</p>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-orange-600">{card.meta}</p>
-                      </div>
-                      <span
-                        className={`mt-1 h-4 w-4 rounded-full border ${
-                          index === 0 ? "border-orange-500 bg-orange-500 ring-4 ring-white" : "border-slate-300 bg-white"
+            {offerCards.length > 0 ? (
+              <div className="space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Choose billing cycle
+                </span>
+                <div className="space-y-2">
+                  {offerCards.map((card) => {
+                    const isSelected = activeCycle === card.cycle;
+                    return (
+                      <button
+                        type="button"
+                        key={card.cycle}
+                        onClick={() => setSelectedCycle(card.cycle)}
+                        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                          isSelected
+                            ? "border-blue-600 bg-blue-50/40 ring-1 ring-blue-600"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                         }`}
-                      />
-                    </div>
-                    <p className="mt-3 text-sm leading-5 text-slate-600">{card.body}</p>
-                  </div>
-                ))}
+                      >
+                        <span
+                          className={`flex h-4 w-4 flex-none items-center justify-center rounded-full border ${
+                            isSelected
+                              ? "border-blue-600 bg-blue-600"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {isSelected ? (
+                            <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                          ) : null}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {card.title}
+                            </span>
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                              {card.meta}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500">{card.body}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-1.5 py-1">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <CheckCircle2 className="h-3.5 w-3.5 flex-none text-emerald-600" />
+                <span>Instant unlock of all premium features</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <CheckCircle2 className="h-3.5 w-3.5 flex-none text-emerald-600" />
+                <span>Cancel or switch plans anytime</span>
               </div>
             </div>
 
-            <div className="mt-8 space-y-3">
-              {announcement.ctaUrl ? (
-                <button
-                  type="button"
-                  onClick={() => void openAction()}
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 text-sm font-black uppercase tracking-normal text-white shadow-[0_16px_34px_rgba(249,115,22,0.28)] transition hover:bg-orange-600"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {actionLabel}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void dismiss(false)}
-                  className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-black uppercase tracking-normal text-white transition hover:bg-slate-800"
-                >
-                  OK
-                </button>
-              )}
-              <p className="text-center text-xs text-slate-500">The discount code will be applied at checkout.</p>
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => void openAction(activeCycle)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99]"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>{actionLabel}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void dismiss(false)}
+                className="w-full text-center text-xs font-medium text-slate-500 transition hover:text-slate-800 py-1"
+              >
+                Maybe later
+              </button>
             </div>
           </div>
         </section>

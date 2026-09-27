@@ -1,14 +1,14 @@
 /**
  * GET /api/cron/trial-check
  *
- * Vercel Cron job — runs daily to:
+ * Cloudflare Workers Cron Trigger — runs daily to:
  * 1. Send 3-day trial ending reminder
  * 2. Send 1-day trial ending reminder
  * 3. Process expired trials — downgrade to free + send expired email
  * 4. Paid subscription expiry/reconciliation is handled by subscription-lifecycle.
  *
  * Reads trial data from the `trials` collection (single source of truth).
- * Protected by CRON_SECRET — only Vercel cron or the secret bearer token can call this.
+ * Protected by CRON_SECRET — only the Cloudflare dispatcher or a secret bearer token can call this.
  */
 
 import { NextRequest, NextResponse } from "next/server";

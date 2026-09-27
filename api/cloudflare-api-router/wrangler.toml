@@ -15,8 +15,8 @@ ORIGIN_TIMEOUT_MS = "12000"
 ORIGINS = """
 [
   {
-    "name": "vercel",
-    "url": "https://mce-api-failover.vercel.app",
+    "name": "cloudflare-api",
+    "url": "https://api.makechurcheazy.com",
     "weight": 100
   }
 ]

@@ -81,7 +81,7 @@ const COUNTRY_CURRENCY_META: Record<string, CountryCurrencyMeta> = {
   ST: { name: "São Tomé and Príncipe", currency: "STN", symbol: "Db" },
   SN: { name: "Senegal", currency: "XOF", symbol: "CFA" },
   SC: { name: "Seychelles", currency: "SCR", symbol: "Rs" },
-  SL: { name: "Sierra Leone", currency: "SLE", symbol: "Le" },
+  SL: { name: "Sierra Leone", currency: "SLL", symbol: "Le" },
   SO: { name: "Somalia", currency: "SOS", symbol: "Sh" },
   ZA: { name: "South Africa", currency: "ZAR", symbol: "R" },
   SS: { name: "South Sudan", currency: "SSP", symbol: "£" },
@@ -148,29 +148,27 @@ const COUNTRY_CURRENCY_META: Record<string, CountryCurrencyMeta> = {
 };
 
 const FLUTTERWAVE_LOCAL_COUNTRIES = new Set([
-  "NG", "GH", "KE", "RW", "TZ", "UG", "ZA", "ZM",
+  "NG", "GH", "KE", "ZA", "UG", "TZ", "RW", "ZM",
+  "CM", "CI", "SN", "EG", "ET", "MW", "SL", "GB", "US", "CA", "EUR",
 ]);
 
 const NIGERIA_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 4000, yearly: 40000, introductoryMonthly: 3500 },
-  growth: { monthly: 8000, yearly: 80000, introductoryMonthly: 7500 },
+  basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
+  growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
 };
 
 const AFRICA_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
   basic: { monthly: 5, yearly: 50 },
-  growth: { monthly: 8, yearly: 80 },
+  growth: { monthly: 10, yearly: 100 },
 };
 
 const GLOBAL_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
   basic: { monthly: 7, yearly: 70 },
-  growth: { monthly: 10, yearly: 100 },
+  growth: { monthly: 15, yearly: 150 },
 };
 
-// Version 3 repairs the original Ghana seed/override, which was persisted as
-// USD even though the supported Flutterwave market and source defaults are GHS.
-// Version 4 makes every enabled database country row authoritative for new
-// pricing lookups, including rows that use USD and the explicit Nigeria row.
-const COUNTRY_PRICING_MIGRATION_VERSION = 4;
+// Version 9: Set Nigeria to ₦3.5k/₦4k Basic and ₦7.5k/₦8k Growth.
+const COUNTRY_PRICING_MIGRATION_VERSION = 9;
 
 export function invalidateCountryPricingCache() {
   _cache = null;
@@ -186,8 +184,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "₦",
     enabled: true,
     plans: {
-      basic: { monthly: 4000, yearly: 40000, introductoryMonthly: 3500 },
-      growth: { monthly: 8000, yearly: 80000, introductoryMonthly: 7500 },
+      basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
+      growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
     },
   },
   GH: {
@@ -196,8 +194,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "GH₵",
     enabled: true,
     plans: {
-      basic: { monthly: 50, yearly: 500 },
-      growth: { monthly: 220, yearly: 2200 },
+      basic: { monthly: 60, yearly: 600 },
+      growth: { monthly: 120, yearly: 1200 },
     },
   },
   KE: {
@@ -207,7 +205,7 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     enabled: true,
     plans: {
       basic: { monthly: 500, yearly: 5000 },
-      growth: { monthly: 2200, yearly: 22000 },
+      growth: { monthly: 1000, yearly: 10000 },
     },
   },
   ZA: {
@@ -216,8 +214,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "R",
     enabled: true,
     plans: {
-      basic: { monthly: 80, yearly: 800 },
-      growth: { monthly: 350, yearly: 3500 },
+      basic: { monthly: 70, yearly: 700 },
+      growth: { monthly: 140, yearly: 1400 },
     },
   },
   UG: {
@@ -227,7 +225,7 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     enabled: true,
     plans: {
       basic: { monthly: 15000, yearly: 150000 },
-      growth: { monthly: 70000, yearly: 700000 },
+      growth: { monthly: 30000, yearly: 300000 },
     },
   },
   TZ: {
@@ -237,7 +235,149 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     enabled: true,
     plans: {
       basic: { monthly: 12000, yearly: 120000 },
-      growth: { monthly: 55000, yearly: 550000 },
+      growth: { monthly: 24000, yearly: 240000 },
+    },
+  },
+  RW: {
+    country: "Rwanda",
+    currency: "RWF",
+    currencySymbol: "FRw",
+    enabled: true,
+    plans: {
+      basic: { monthly: 6000, yearly: 60000 },
+      growth: { monthly: 12000, yearly: 120000 },
+    },
+  },
+  ZM: {
+    country: "Zambia",
+    currency: "ZMW",
+    currencySymbol: "ZK",
+    enabled: true,
+    plans: {
+      basic: { monthly: 130, yearly: 1300 },
+      growth: { monthly: 260, yearly: 2600 },
+    },
+  },
+  CM: {
+    country: "Cameroon",
+    currency: "XAF",
+    currencySymbol: "FCFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  CI: {
+    country: "Côte d'Ivoire",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  SN: {
+    country: "Senegal",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  BJ: {
+    country: "Benin",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  BF: {
+    country: "Burkina Faso",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  ML: {
+    country: "Mali",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  TG: {
+    country: "Togo",
+    currency: "XOF",
+    currencySymbol: "CFA",
+    enabled: true,
+    plans: {
+      basic: { monthly: 3000, yearly: 30000 },
+      growth: { monthly: 6000, yearly: 60000 },
+    },
+  },
+  EG: {
+    country: "Egypt",
+    currency: "EGP",
+    currencySymbol: "E£",
+    enabled: true,
+    plans: {
+      basic: { monthly: 240, yearly: 2400 },
+      growth: { monthly: 480, yearly: 4800 },
+    },
+  },
+  ET: {
+    country: "Ethiopia",
+    currency: "ETB",
+    currencySymbol: "Br",
+    enabled: true,
+    plans: {
+      basic: { monthly: 600, yearly: 6000 },
+      growth: { monthly: 1200, yearly: 12000 },
+    },
+  },
+  MW: {
+    country: "Malawi",
+    currency: "MWK",
+    currencySymbol: "MK",
+    enabled: true,
+    plans: {
+      basic: { monthly: 8500, yearly: 85000 },
+      growth: { monthly: 17000, yearly: 170000 },
+    },
+  },
+  SL: {
+    country: "Sierra Leone",
+    currency: "SLL",
+    currencySymbol: "Le",
+    enabled: true,
+    plans: {
+      basic: { monthly: 110000, yearly: 1100000 },
+      growth: { monthly: 220000, yearly: 2200000 },
+    },
+  },
+
+  // ── Eurozone / SEPA ($7/$15 USD equivalent) ──
+  EUR: {
+    country: "Eurozone",
+    currency: "EUR",
+    currencySymbol: "€",
+    enabled: true,
+    plans: {
+      basic: { monthly: 7, yearly: 70 },
+      growth: { monthly: 14, yearly: 140 },
     },
   },
 
@@ -285,15 +425,15 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     },
   },
 
-  // ── Western markets ──
+  // ── Western markets ($7/$15 USD equivalent) ──
   US: {
     country: "United States",
     currency: "USD",
     currencySymbol: "$",
     enabled: true,
     plans: {
-      basic: { monthly: 5, yearly: 50 },
-      growth: { monthly: 10, yearly: 100 },
+      basic: { monthly: 7, yearly: 70 },
+      growth: { monthly: 15, yearly: 150 },
     },
   },
   CA: {
@@ -302,7 +442,7 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "CA$",
     enabled: true,
     plans: {
-      basic: { monthly: 7, yearly: 70 },
+      basic: { monthly: 10, yearly: 100 },
       growth: { monthly: 20, yearly: 200 },
     },
   },
@@ -312,7 +452,7 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "£",
     enabled: true,
     plans: {
-      basic: { monthly: 4, yearly: 40 },
+      basic: { monthly: 6, yearly: 60 },
       growth: { monthly: 12, yearly: 120 },
     },
   },
@@ -322,7 +462,7 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "A$",
     enabled: true,
     plans: {
-      basic: { monthly: 7, yearly: 70 },
+      basic: { monthly: 11, yearly: 110 },
       growth: { monthly: 22, yearly: 220 },
     },
   },
@@ -331,26 +471,26 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
 // Regional fallback mappings: unsupported country → region → use closest supported country
 const REGIONAL_FALLBACKS: Record<string, string> = {
   // West Africa
-  SN: "NG", CI: "NG", CM: "NG", GH: "GH", BF: "NG", ML: "NG", NE: "NG",
-  TG: "NG", BJ: "NG", GN: "NG", SL: "NG", LR: "NG", GM: "NG", CV: "NG",
+  NE: "NG", GN: "NG", LR: "NG", GM: "NG", CV: "NG",
   GW: "NG", GQ: "NG", GA: "NG", CG: "NG", CD: "NG", AO: "NG", ST: "NG",
   // East Africa
-  ET: "KE", RW: "KE", BI: "KE", SS: "KE", SO: "KE", DJ: "KE", ER: "KE",
-  MG: "KE", MU: "KE", SC: "KE", MZ: "KE", MW: "KE", ZM: "KE", ZW: "KE",
+  BI: "KE", SS: "KE", SO: "KE", DJ: "KE", ER: "KE",
+  MG: "KE", MU: "KE", SC: "KE", MZ: "KE", ZW: "KE",
   BW: "ZA", NA: "ZA", LS: "ZA", SZ: "ZA",
   // North Africa
-  EG: "ZA", LY: "NG", TN: "ZA", DZ: "ZA", MA: "ZA", SD: "KE",
+  LY: "NG", TN: "ZA", DZ: "ZA", MA: "ZA", SD: "KE",
   // Central Asia
   PK: "PK", AF: "PK", IR: "PK",
   // South Asia
   LK: "IN", NP: "IN", BT: "IN", MV: "IN", MM: "IN",
   // Southeast Asia
   VN: "PH", TH: "PH", MY: "PH", ID: "PH", SG: "PH", KH: "PH", LA: "PH", BN: "PH",
-  // Europe (fallback to GBP)
-  IE: "GB", FR: "GB", DE: "GB", ES: "GB", IT: "GB", NL: "GB", BE: "GB",
-  PT: "GB", SE: "GB", NO: "GB", DK: "GB", FI: "GB", PL: "GB", CZ: "GB",
-  AT: "GB", CH: "GB", RO: "GB", HU: "GB", BG: "GB", HR: "GB", SK: "GB",
-  SI: "GB", LT: "GB", LV: "GB", EE: "GB", GR: "GB", CY: "GB", MT: "GB",
+  // Europe (SEPA countries use EUR, non-Euro use GBP/USD)
+  IE: "EUR", FR: "EUR", DE: "EUR", ES: "EUR", IT: "EUR", NL: "EUR", BE: "EUR",
+  PT: "EUR", FI: "EUR", AT: "EUR", GR: "EUR", CY: "EUR", MT: "EUR",
+  SK: "EUR", SI: "EUR", LT: "EUR", LV: "EUR", EE: "EUR", HR: "EUR",
+  SE: "GB", NO: "GB", DK: "GB", PL: "GB", CZ: "GB",
+  CH: "GB", RO: "GB", HU: "GB", BG: "GB",
   // Americas (fallback to USD)
   MX: "US", BR: "US", AR: "US", CO: "US", CL: "US", PE: "US", EC: "US",
   VE: "US", BO: "US", PY: "US", UY: "US", CR: "US", PA: "US", GT: "US",
@@ -598,6 +738,10 @@ async function loadDoc(): Promise<CountryPricingDoc> {
     const entry = doc.countries?.[code];
     const meta = COUNTRY_CURRENCY_META[code];
     const defaultEntry = DEFAULT_COUNTRIES[code];
+    if (!entry && defaultEntry) {
+      localCurrencyRepairs[code] = defaultEntry;
+      continue;
+    }
     const needsCurrencyRepair = Boolean(
       entry && meta && (
         entry.currency?.toUpperCase() !== meta.currency
@@ -612,12 +756,30 @@ async function loadDoc(): Promise<CountryPricingDoc> {
         : repaired;
     }
   }
+
+  // Version 8: Refresh revised default countries (Nigeria ₦6k/₦12k, Ghana 60/120 GHS, South Africa R 70/R 140 ZAR)
+  if ((doc.version || 0) < 8) {
+    for (const [code, defaultEntry] of Object.entries(DEFAULT_COUNTRIES)) {
+      const current = doc.countries?.[code];
+      if (!current || FLUTTERWAVE_LOCAL_COUNTRIES.has(code) || ["US", "CA", "GB", "AU", "EUR", "GH", "NG", "ZA"].includes(code)) {
+        localCurrencyRepairs[code] = defaultEntry;
+      }
+    }
+  }
+
+  // Version 9: Apply the requested Nigerian monthly prices to existing DB
+  // rows, including rows created by the previous v8 pricing migration.
+  if ((doc.version || 0) < 9) {
+    localCurrencyRepairs.NG = DEFAULT_COUNTRIES.NG;
+  }
+
   if (needsGhanaFullRepair || Object.keys(localCurrencyRepairs).length > 0 || doc.version < COUNTRY_PRICING_MIGRATION_VERSION) {
     const now = new Date().toISOString();
     const nextVersion = Math.max(doc.version || 0, COUNTRY_PRICING_MIGRATION_VERSION);
     const update: Record<string, unknown> = {
       version: nextVersion,
       updatedAt: now,
+      regionalFallbacks: REGIONAL_FALLBACKS,
     };
 
     if (needsGhanaFullRepair) {
@@ -632,6 +794,7 @@ async function loadDoc(): Promise<CountryPricingDoc> {
       ...doc,
       version: nextVersion,
       updatedAt: now,
+      regionalFallbacks: REGIONAL_FALLBACKS,
       countries: {
         ...doc.countries,
         ...(needsGhanaFullRepair ? { GH: DEFAULT_COUNTRIES.GH } : {}),

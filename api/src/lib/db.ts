@@ -45,6 +45,8 @@ export const COLLECTIONS = {
   CHURCH_PROFILES: "church_profiles",
   SUBSCRIPTIONS: "subscriptions",
   CREDIT_TRANSACTIONS: "credit_transactions",
+  TRANSCRIPTION_BALANCES: "transcription_balances",
+  TRANSCRIPTION_TRANSACTIONS: "transcription_transactions",
   SECURITY_SESSIONS: "security_sessions",
   PLAN_CONFIG: "plan_config",
   USER_USAGE: "user_usage",
@@ -102,6 +104,13 @@ export async function ensureIndexes() {
     // credit_transactions
     db.collection(COLLECTIONS.CREDIT_TRANSACTIONS).createIndex({ userId: 1, createdAt: -1 }),
     db.collection(COLLECTIONS.CREDIT_TRANSACTIONS).createIndex({ userId: 1, type: 1 }),
+
+    // transcription_balances
+    db.collection(COLLECTIONS.TRANSCRIPTION_BALANCES).createIndex({ userId: 1 }, { unique: true }),
+
+    // transcription_transactions
+    db.collection(COLLECTIONS.TRANSCRIPTION_TRANSACTIONS).createIndex({ userId: 1, createdAt: -1 }),
+    db.collection(COLLECTIONS.TRANSCRIPTION_TRANSACTIONS).createIndex({ userId: 1, requestId: 1 }, { sparse: true }),
 
     // security_sessions
     db.collection(COLLECTIONS.SECURITY_SESSIONS).createIndex({ userId: 1, lastActive: -1 }),
@@ -603,6 +612,7 @@ interface BillingTransactionData {
   oneTimeOfferName?: string | null;
   offerOriginalPrice?: number | null;
   offerAppliedPrice?: number | null;
+  trialDaysCarried?: number;
   receiptUrl?: string;
   failureCode?: string;
   failureReason?: string;
@@ -688,7 +698,7 @@ export function getPlanMonthlyPrice(planCfg: { price?: number; pricing?: { NGN?:
 
 /** Hardcoded defaults — used to seed or migrate the DB-backed plan config. */
 const DEFAULT_PLAN_CONFIG: PlanConfig = {
-  version: 10,
+  version: 11,
   plans: {
     trial: {
       label: "Trial",
@@ -726,7 +736,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       label: "Basic",
       pricing: { NGN: { monthly: 4000, yearly: 40000 }, USD: { monthly: 5, yearly: 50 } },
       paystack: { monthlyPlanCode: "mce_basic_monthly", yearlyPlanCode: "mce_basic_yearly" },
-      credits: 100,
+      credits: 720,
       entitlements: {
         songs: 100, images: 100, videos: 100, themes: 3, lowerThirds: 0, devices: 3,
         bibleVersions: -1, multiviewTemplates: 5, tickerThemes: 0, themePresets: 3,
@@ -740,9 +750,9 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
     },
     growth: {
       label: "Growth",
-      pricing: { NGN: { monthly: 8500, yearly: 85000 }, USD: { monthly: 15, yearly: 150 } },
+      pricing: { NGN: { monthly: 8000, yearly: 85000 }, USD: { monthly: 15, yearly: 150 } },
       paystack: { monthlyPlanCode: "mce_growth_monthly", yearlyPlanCode: "mce_growth_yearly" },
-      credits: 2000,
+      credits: 1800,
       entitlements: {
         songs: -1, images: -1, videos: -1, themes: -1, lowerThirds: -1, devices: 10,
         bibleVersions: -1, multiviewTemplates: -1, tickerThemes: -1, themePresets: -1,
@@ -770,7 +780,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       iconName: "leaf",
       styles: { iconBg: "bg-emerald-50", iconColor: "text-emerald-500", border: "border-emerald-100", button: "bg-emerald-500 text-white", buttonHover: "hover:bg-emerald-600", checkColor: "text-emerald-500" },
       pricing: {
-        NGN: { monthly: "₦3,500", yearly: "₦40,000" },
+        NGN: { monthly: "₦3,500", originalMonthly: "₦4,000", yearly: "₦40,000" },
         USD: { monthly: "$5", yearly: "$50" },
       },
       features: [
@@ -791,7 +801,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       iconName: "chart",
       styles: { iconBg: "bg-blue-50", iconColor: "text-blue-500", border: "border-blue-200 border-2", button: "bg-blue-600 text-white", buttonHover: "hover:bg-blue-700", popular: true, popularBadgeBg: "bg-blue-600", checkColor: "text-blue-500" },
       pricing: {
-        NGN: { monthly: "₦7,500", yearly: "₦85,000" },
+        NGN: { monthly: "₦7,500", originalMonthly: "₦8,000", yearly: "₦85,000" },
         USD: { monthly: "$15", yearly: "$150" },
       },
       features: [
@@ -902,17 +912,28 @@ export async function getPlanConfig(): Promise<PlanConfig> {
       .updateOne({ _id: "default" as any }, { $set: seed }, { upsert: true });
     doc = seed;
   } else {
-    // v10: enable the free Speech to Scripture allowance and align the Dock and app feature limits with the current product offer. This is a
+    // v11: enable the free Speech to Scripture allowance, align product limits,
+    // and set the canonical Nigerian monthly prices. This is a
     // targeted migration so existing paid users receive the new entitlements
-    // without overwriting custom pricing or Growth settings.
+    // while preserving USD prices and unrelated plan settings.
     if ((doc.version ?? 0) < DEFAULT_PLAN_CONFIG.version) {
       const defaultBasic = DEFAULT_PLAN_CONFIG.plans.basic;
       const defaultFree = DEFAULT_PLAN_CONFIG.plans.free;
       const defaultGrowth = DEFAULT_PLAN_CONFIG.plans.growth;
       const existingBasic = (doc.plans as any)?.basic || {};
       const pricingPlans = (doc.pricingPlans || DEFAULT_PLAN_CONFIG.pricingPlans || []).map((plan) =>
-        plan.id === "basic"
-          ? { ...plan, features: DEFAULT_PLAN_CONFIG.pricingPlans?.find((candidate) => candidate.id === "basic")?.features || plan.features }
+        plan.id === "basic" || plan.id === "growth"
+          ? (() => {
+              const defaultPlan = DEFAULT_PLAN_CONFIG.pricingPlans?.find((candidate) => candidate.id === plan.id);
+              return {
+                ...plan,
+                ...(plan.id === "basic" ? { features: defaultPlan?.features || plan.features } : {}),
+                ...(defaultPlan ? {
+                  pricing: { ...plan.pricing, NGN: defaultPlan.pricing.NGN },
+                  paystackAmount: { ...plan.paystackAmount, NGN: defaultPlan.paystackAmount?.NGN },
+                } : {}),
+              };
+            })()
           : plan,
       );
       await db
@@ -924,6 +945,10 @@ export async function getPlanConfig(): Promise<PlanConfig> {
               "plans.basic": {
                 ...existingBasic,
                 credits: defaultBasic.credits,
+                pricing: {
+                  ...(existingBasic.pricing || {}),
+                  NGN: defaultBasic.pricing.NGN,
+                },
                 entitlements: {
                   ...(existingBasic.entitlements || {}),
                   ...defaultBasic.entitlements,
@@ -937,6 +962,7 @@ export async function getPlanConfig(): Promise<PlanConfig> {
               "plans.growth.entitlements.tickerThemes": defaultGrowth.entitlements.tickerThemes,
               "plans.growth.entitlements.lowerThirds": defaultGrowth.entitlements.lowerThirds,
               "plans.growth.entitlements.countdowns": defaultGrowth.entitlements.countdowns,
+              "plans.growth.pricing.NGN": defaultGrowth.pricing.NGN,
               pricingPlans,
               version: DEFAULT_PLAN_CONFIG.version,
               updatedAt: new Date().toISOString(),

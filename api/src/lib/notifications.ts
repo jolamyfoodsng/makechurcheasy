@@ -19,7 +19,8 @@ export type NotificationType =
   | "payment_receipt"
   | "plan_upgraded"
   | "new_device_login"
-  | "security_alert";
+  | "security_alert"
+  | "credit_low_balance";
 
 interface CreateNotificationParams {
   userId: string;
@@ -133,5 +134,23 @@ export async function notifyNewDeviceLogin(userId: string, deviceName: string, d
     type: "new_device_login",
     title: "New device connected",
     message: `A new ${deviceOs} device "${deviceName}" was connected to your account.`,
+  });
+}
+
+export async function notifySubscriptionExpiring(userId: string, planName: string, daysLeft: number): Promise<void> {
+  await createNotification({
+    userId,
+    type: "subscription_expiring",
+    title: "Subscription renewing soon",
+    message: `Your ${planName} subscription will renew in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
+  });
+}
+
+export async function notifyLowCreditBalance(userId: string, remainingDesc: string): Promise<void> {
+  await createNotification({
+    userId,
+    type: "credit_low_balance",
+    title: "Credits running low",
+    message: `You have ${remainingDesc} remaining. Top up your balance anytime to ensure uninterrupted Sunday service coverage.`,
   });
 }

@@ -48,16 +48,16 @@ test("uses configured local pricing for a mapped country", () => {
 
 test("falls back to the configured USD price for an unsupported country", () => {
   const result = selectFlutterwavePricing({
-    countryCode: "ET",
-    countryName: "Ethiopia",
+    countryCode: "IN",
+    countryName: "India",
     countryPricing: pricing({
-      countryCode: "ET",
-      countryName: "Ethiopia",
-      currency: "ETB",
-      currencySymbol: "Br",
+      countryCode: "IN",
+      countryName: "India",
+      currency: "INR",
+      currencySymbol: "₹",
       plans: {
-        basic: { monthly: 500, yearly: 5000 },
-        growth: { monthly: 800, yearly: 8000 },
+        basic: { monthly: 299, yearly: 2990 },
+        growth: { monthly: 1299, yearly: 12990 },
       },
     }),
     usdPricing: pricing({
@@ -71,7 +71,7 @@ test("falls back to the configured USD price for an unsupported country", () => 
   assert.equal(result.currency, "USD");
   assert.equal(result.currencySymbol, "$");
   assert.equal(result.plans.basic.monthly, 7);
-  assert.equal(result.checkoutCountryCode, "ET");
+  assert.equal(result.checkoutCountryCode, "IN");
   assert.equal(result.checkoutCurrencySource, "usd_fallback");
 });
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Coins, CreditCard, Gift, Globe2, Loader2, Star, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Coins, Gift, Globe2, Loader2, Star, X } from "lucide-react";
 import { useSubscription } from "@/lib/useSubscription";
 import { useLocalizedPricing } from "@/lib/useLocalizedPricing";
 import { Card, Badge, Button } from "@/components/ui";
@@ -12,7 +12,7 @@ import { requestCountrySelection } from "@/components/ProfileCompletionModal";
 type BillingCycle = "monthly" | "yearly";
 type PublicPlan = "free" | "basic" | "growth";
 type PaidPlan = Exclude<PublicPlan, "free">;
-type PaymentMethod = "paystack" | "nowpayments" | "flutterwave";
+type PaymentMethod = "flutterwave" | "nowpayments";
 
 type EligibleSpecialOffer = {
   id: string;
@@ -98,7 +98,7 @@ function formatOfferAmount(amount: number, currency: string, symbol: string) {
 
 export default function ComparePlansPage() {
   const pricing = useLocalizedPricing();
-  const { plan: currentPlan, isOnTrial } = useSubscription();
+  const { plan: currentPlan, isOnTrial, trialDaysLeft } = useSubscription();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [promoCode, setPromoCode] = useState("");
   const [upgrading, setUpgrading] = useState<PaidPlan | null>(null);
@@ -128,27 +128,24 @@ export default function ComparePlansPage() {
   const currentPlanKey = normalizePublicPlan(currentPlan);
   const plans: PaidPlan[] = ["basic", "growth"];
   const isNigerian = pricing.pricing?.country?.toUpperCase() === "NG";
-  const paymentMethodsReady = isNigerian || (
+  const paymentMethodsReady =
     flutterwaveConfigLoaded &&
     nowPaymentsConfigLoaded &&
-    (flutterwaveEnabled || nowPaymentsEnabled)
-  );
+    (flutterwaveEnabled || nowPaymentsEnabled);
 
   useEffect(() => {
     if (!flutterwaveConfigLoaded || !nowPaymentsConfigLoaded) return;
     setPaymentMethodByPlan((current) => ({
       basic: getAvailablePaymentMethod(current.basic, {
-        isNigerian,
         flutterwaveEnabled,
         nowPaymentsEnabled,
       }),
       growth: getAvailablePaymentMethod(current.growth, {
-        isNigerian,
         flutterwaveEnabled,
         nowPaymentsEnabled,
       }),
     }));
-  }, [isNigerian, flutterwaveConfigLoaded, nowPaymentsConfigLoaded, flutterwaveEnabled, nowPaymentsEnabled]);
+  }, [flutterwaveConfigLoaded, nowPaymentsConfigLoaded, flutterwaveEnabled, nowPaymentsEnabled]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -365,7 +362,6 @@ export default function ComparePlansPage() {
 
   const getPaymentMethodForPlan = (plan: PaidPlan): PaymentMethod => {
     return getAvailablePaymentMethod(paymentMethodByPlan[plan], {
-      isNigerian,
       flutterwaveEnabled,
       nowPaymentsEnabled,
     });
@@ -386,27 +382,7 @@ export default function ComparePlansPage() {
         await startNowPaymentsPayment({ plan, billingCycle: billing });
         return;
       }
-      if (paymentMethod === "flutterwave") {
-        await startFlutterwavePayment({ plan, billingCycle: billing });
-        return;
-      }
-      const { res, data } = await initializePayment({
-        plan,
-        billingCycle: billing,
-        ...(promoCode.trim() ? { discountCode: promoCode.trim() } : {}),
-      });
-      if (!res.ok || !data.authorization_url) {
-        throw new Error(data.error || "Could not start checkout");
-      }
-      try {
-        localStorage.setItem(
-          "mce_pending_payment",
-          JSON.stringify({ type: "subscription", reference: data.reference, planId: plan, billingCycle: billing, discountCode: promoCode.trim() || undefined }),
-        );
-      } catch {
-        // Best effort only.
-      }
-      window.location.href = data.authorization_url;
+      await startFlutterwavePayment({ plan, billingCycle: billing });
     } catch (e) {
       trackProductEvent("payment_failed", {
         plan,
@@ -435,34 +411,7 @@ export default function ComparePlansPage() {
         await startNowPaymentsPayment({ plan: offer.plan, billingCycle: offer.billingCycle, offerId: offer.id });
         return;
       }
-      if (paymentMethod === "flutterwave") {
-        await startFlutterwavePayment({ plan: offer.plan, billingCycle: offer.billingCycle, offerId: offer.id });
-        return;
-      }
-      const { res, data } = await initializePayment({
-        plan: offer.plan,
-        billingCycle: offer.billingCycle,
-        offerId: offer.id,
-      });
-      if (!res.ok || !data.authorization_url) {
-        throw new Error(data.error || "Could not start checkout");
-      }
-      try {
-        localStorage.setItem(
-          "mce_pending_payment",
-          JSON.stringify({
-            type: "subscription",
-            reference: data.reference,
-            planId: data.plan || offer.plan,
-            billingCycle: data.billingCycle || offer.billingCycle,
-            offerId: offer.id,
-            purchaseKind: data.purchaseKind || offer.purchaseKind,
-          }),
-        );
-      } catch {
-        // Best effort only.
-      }
-      window.location.href = data.authorization_url;
+      await startFlutterwavePayment({ plan: offer.plan, billingCycle: offer.billingCycle, offerId: offer.id });
     } catch (e) {
       trackProductEvent("payment_failed", {
         plan: offer.plan,
@@ -651,9 +600,13 @@ export default function ComparePlansPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {plans.map((planKey) => {
           const isCurrent = currentPlanKey === planKey;
+          const isPaidCurrent = !isOnTrial && isCurrent;
+          const isBlockedByPaidGrowth = !isOnTrial && currentPlanKey === "growth";
           const isGrowth = planKey === "growth";
           const price = pricing.getPlanPrice(planKey, billing);
           const monthlyEquivalent = billing === "yearly" ? price / 12 : price;
+          const paidPeriodDays = billing === "yearly" ? 365 : 30;
+          const nextPaymentInDays = paidPeriodDays + trialDaysLeft;
           const introPrice = billing === "monthly" ? pricing.getIntroPrice(planKey) : undefined;
           const isDiscountApplicable = Boolean(validatedDiscount);
           const discountedPrice = isDiscountApplicable && validatedDiscount
@@ -677,7 +630,7 @@ export default function ComparePlansPage() {
                 </div>
               )}
 
-              {isCurrent && (
+              {(isCurrent || (isOnTrial && isGrowth)) && (
                 <div className="absolute right-5 top-5">
                   <Badge variant={isOnTrial && isGrowth ? "warning" : "success"} size="sm">
                     {isOnTrial && isGrowth ? "Growth Trial" : "Current Plan"}
@@ -750,16 +703,21 @@ export default function ComparePlansPage() {
               />
 
               <Button
-                variant={isCurrent ? "secondary" : isGrowth ? "primary" : "secondary"}
+                variant={isPaidCurrent ? "secondary" : isGrowth ? "primary" : "secondary"}
                 size="md"
                 loading={upgrading === planKey}
-                disabled={isCurrent || !!upgrading || currentPlanKey === "growth" || !paymentMethodsReady}
-                icon={!isCurrent && currentPlanKey !== "growth" ? <ArrowRight className="h-4 w-4" /> : undefined}
+                disabled={isPaidCurrent || !!upgrading || isBlockedByPaidGrowth || !paymentMethodsReady}
+                icon={!isPaidCurrent && !isBlockedByPaidGrowth ? <ArrowRight className="h-4 w-4" /> : undefined}
                 onClick={() => handleUpgrade(planKey)}
                 className="w-full"
               >
-                {isCurrent ? "Current Plan" : currentPlanKey === "growth" ? `${PLAN_NAMES[planKey]} Plan` : `Upgrade to ${PLAN_NAMES[planKey]}`}
+                {isPaidCurrent ? "Current Plan" : isBlockedByPaidGrowth ? `${PLAN_NAMES[planKey]} Plan` : `Upgrade to ${PLAN_NAMES[planKey]}`}
               </Button>
+              {isOnTrial && trialDaysLeft > 0 && (
+                <p className="mt-2 text-center text-xs leading-4 text-slate-500">
+                  You&apos;re on a free trial, but you can upgrade now. Your {trialDaysLeft} unused day{trialDaysLeft === 1 ? "" : "s"} are added after this {paidPeriodDays}-day period, so your next payment is due in {nextPaymentInDays} days.
+                </p>
+              )}
             </Card>
           );
         })}
@@ -850,11 +808,20 @@ function PaymentMethodOptions({
     icon: ReactNode;
     enabled: boolean;
   }> = [
-    { method: "flutterwave", title: "Local payment", description: `${localMethods} · Flutterwave`, icon: <Globe2 className="h-4 w-4" />, enabled: flutterwaveEnabled },
-    ...(isNigerian
-      ? [{ method: "paystack" as const, title: "Nigerian payment", description: "Cards, bank transfer, and USSD · Paystack", icon: <CreditCard className="h-4 w-4" />, enabled: true }]
-      : []),
-    { method: "nowpayments", title: "Pay with crypto", description: "BTC, ETH, USDT, and more · NOWPayments", icon: <Coins className="h-4 w-4" />, enabled: nowPaymentsEnabled },
+    {
+      method: "flutterwave",
+      title: isNigerian ? "Nigerian payment (Cards, transfer, USSD)" : "Cards & local payment",
+      description: `${localMethods} · Flutterwave`,
+      icon: <Globe2 className="h-4 w-4" />,
+      enabled: flutterwaveEnabled,
+    },
+    {
+      method: "nowpayments",
+      title: "Pay with crypto",
+      description: "BTC, ETH, USDT, and more · NOWPayments",
+      icon: <Coins className="h-4 w-4" />,
+      enabled: nowPaymentsEnabled,
+    },
   ];
 
   return (
@@ -898,12 +865,7 @@ function PaymentMethodOptions({
 
       {selected === "flutterwave" && flutterwaveEnabled && (
         <p className="mt-2 text-xs leading-4 text-slate-500">
-          {localMethods}. The available methods depend on your country and currency.
-        </p>
-      )}
-      {selected === "paystack" && isNigerian && (
-        <p className="mt-2 text-xs leading-4 text-slate-500">
-          Nigerian cards, bank transfer, and USSD checkout.
+          {localMethods}. Powered by Flutterwave.
         </p>
       )}
       {selected === "nowpayments" && nowPaymentsEnabled && (
@@ -918,29 +880,40 @@ function PaymentMethodOptions({
 function getAvailablePaymentMethod(
   selected: PaymentMethod,
   availability: {
-    isNigerian: boolean;
     flutterwaveEnabled: boolean;
     nowPaymentsEnabled: boolean;
   },
 ): PaymentMethod {
   if (selected === "flutterwave" && availability.flutterwaveEnabled) return selected;
   if (selected === "nowpayments" && availability.nowPaymentsEnabled) return selected;
-  if (selected === "paystack" && availability.isNigerian) return selected;
   if (availability.flutterwaveEnabled) return "flutterwave";
-  if (availability.isNigerian) return "paystack";
   if (availability.nowPaymentsEnabled) return "nowpayments";
-  return selected;
+  return "flutterwave";
 }
 
 function getLocalPaymentMethods(countryCode?: string, currency?: string) {
   const country = String(countryCode || "").toUpperCase();
   const code = String(currency || "").toUpperCase();
-  if (country === "GH" || code === "GHS") return "Cards, bank transfer, and Ghana Mobile Money";
-  if (country === "KE" || code === "KES") return "Cards and M-Pesa";
-  if (country === "NG" || code === "NGN") return "Cards, bank transfer, and USSD";
-  if (["UG", "TZ", "RW"].includes(country) || ["UGX", "TZS", "RWF"].includes(code)) {
-    return "Cards and mobile money";
-  }
+  if (country === "NG" || code === "NGN") return "Cards, Bank Transfer, and USSD";
+  if (country === "GH" || code === "GHS") return "Cards, Bank Transfer, and Mobile Money (MTN, Telecel, AirtelTigo)";
+  if (country === "KE" || code === "KES") return "Cards, Bank Transfer, and M-Pesa";
+  if (country === "ZA" || code === "ZAR") return "Cards and Instant EFT";
+  if (country === "EG" || code === "EGP") return "Cards and Fawry";
+  if (country === "ET" || code === "ETB") return "Cards and Amole Money";
+  if (country === "RW" || code === "RWF") return "Cards and Mobile Money (MTN, M-Pesa)";
+  if (country === "UG" || code === "UGX") return "Cards, Bank Transfer, and Mobile Money (MTN, Airtel)";
+  if (country === "TZ" || code === "TZS") return "Cards, Bank Transfer, and Mobile Money (M-Pesa, Tigo, Airtel, Halopesa)";
+  if (country === "ZM" || code === "ZMW") return "Cards, Bank Transfer, and M-Pesa";
+  if (country === "CM" || code === "XAF") return "Cards and Mobile Money (MTN, Orange Money)";
+  if (country === "CI" || (country === "CI" && code === "XOF")) return "Cards and Mobile Money (Moov, MTN, Orange, Wave)";
+  if (country === "SN" || (country === "SN" && code === "XOF")) return "Cards and Mobile Money (Orange Money, Wave)";
+  if (country === "MW" || code === "MWK") return "Cards and Bank Transfer";
+  if (country === "SL" || code === "SLL" || code === "SLE") return "Cards and Bank Transfer";
+  if (country === "GB" || code === "GBP") return "Cards, Apple Pay, and Google Pay";
+  if (country === "CA" || code === "CAD") return "Cards, Apple Pay, and Google Pay";
+  if (country === "US") return "Cards, Apple Pay, and Google Pay";
+  if (code === "EUR") return "Cards and SEPA Transfer";
+  if (code === "USD") return "International Cards (USD)";
   return "Cards and local payment methods";
 }
 

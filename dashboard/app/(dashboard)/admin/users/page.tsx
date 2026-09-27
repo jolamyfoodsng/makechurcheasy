@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   Search,
   Shield,
@@ -25,6 +25,10 @@ import {
   MoreHorizontal,
   Mail,
   Activity,
+  Globe,
+  Check,
+  ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -81,6 +85,12 @@ interface AdminUser {
   } | null;
   subscriptionExpiresAt?: string | null;
   scheduledDowngradeAt?: string | null;
+  reactivationOffer?: {
+    status: string;
+    offeredAt: string | null;
+    grantedAt: string | null;
+    expiresAt: string | null;
+  } | null;
   activationMilestones?: {
     devicePaired?: boolean;
     obsConnected?: boolean;
@@ -103,7 +113,7 @@ interface AdminUser {
   };
 }
 
-type SortField = "name" | "email" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive" | "activityScore";
+type SortField = "name" | "email" | "country" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive" | "activityScore";
 type ActivityFilter = "all" | "1d" | "3d" | "7d" | "14d" | "30d" | "inactive";
 type SortDir = "asc" | "desc";
 type AdminUserAction =
@@ -169,6 +179,44 @@ function formatLastActive(timestamp: string | null | undefined): {
   };
 }
 
+const COMMON_COUNTRY_NAME_TO_CODE: Record<string, string> = {
+  nigeria: "NG",
+  ghana: "GH",
+  kenya: "KE",
+  uganda: "UG",
+  "south africa": "ZA",
+  ethiopia: "ET",
+  rwanda: "RW",
+  tanzania: "TZ",
+  zambia: "ZM",
+  zimbabwe: "ZW",
+  namibia: "NA",
+  botswana: "BW",
+  malawi: "MW",
+  cameroon: "CM",
+  liberia: "LR",
+  "sierra leone": "SL",
+  kiribati: "KI",
+  "united states": "US",
+  usa: "US",
+  "united kingdom": "GB",
+  uk: "GB",
+  canada: "CA",
+  australia: "AU",
+  india: "IN",
+  philippines: "PH",
+  brazil: "BR",
+  germany: "DE",
+  france: "FR",
+  egypt: "EG",
+  benin: "BJ",
+  togo: "TG",
+  "cote d'ivoire": "CI",
+  "ivory coast": "CI",
+  senegal: "SN",
+  gambia: "GM",
+};
+
 function getCountryFlagEmoji(countryCode?: string | null): string {
   if (!countryCode || countryCode.trim().length !== 2) return "";
   const code = countryCode.trim().toUpperCase();
@@ -176,17 +224,45 @@ function getCountryFlagEmoji(countryCode?: string | null): string {
   return String.fromCodePoint(...codePoints);
 }
 
-function getCountryDisplayName(countryCode?: string | null): string {
-  if (!countryCode || !countryCode.trim()) return "";
-  const code = countryCode.trim().toUpperCase();
-  const flag = getCountryFlagEmoji(code);
-  try {
-    const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
-    const name = regionNames.of(code);
-    return name ? `${flag ? `${flag} ` : ""}${name}` : `${flag ? `${flag} ` : ""}${code}`;
-  } catch {
-    return `${flag ? `${flag} ` : ""}${code}`;
+interface NormalizedCountry {
+  code: string;
+  name: string;
+  flag: string;
+}
+
+function normalizeCountry(raw?: string | null): NormalizedCountry {
+  if (!raw || !raw.trim()) {
+    return { code: "UNKNOWN", name: "Unspecified", flag: "🌐" };
   }
+  const clean = raw.trim();
+  let code = "";
+  if (clean.length === 2) {
+    code = clean.toUpperCase();
+  } else {
+    const lookup = COMMON_COUNTRY_NAME_TO_CODE[clean.toLowerCase()];
+    if (lookup) {
+      code = lookup;
+    }
+  }
+
+  if (code && code.length === 2) {
+    const flag = getCountryFlagEmoji(code);
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const name = regionNames.of(code) || clean;
+      return { code, name, flag };
+    } catch {
+      return { code, name: clean, flag };
+    }
+  }
+
+  return { code: clean.toUpperCase(), name: clean, flag: "🌐" };
+}
+
+function getCountryDisplayName(countryCode?: string | null): string {
+  const norm = normalizeCountry(countryCode);
+  if (norm.code === "UNKNOWN") return "";
+  return norm.flag ? `${norm.flag} ${norm.name}` : norm.name;
 }
 
 function formatCreatedDate(timestamp: string | null | undefined): { text: string; full: string } {
@@ -226,6 +302,10 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  const [countrySearchQuery, setCountrySearchQuery] = useState("");
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -277,13 +357,45 @@ export default function AdminUsersPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmActionState | null>(null);
 
   const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchUsers = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const res = await fetch("/api/admin/users", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users || []);
+        if (isRefresh) {
+          setActionMsg({ type: "success", text: "User list refreshed successfully." });
+          setTimeout(() => setActionMsg(null), 3000);
+        }
+      } else {
+        if (isRefresh) {
+          setActionMsg({ type: "error", text: "Failed to refresh user list." });
+          setTimeout(() => setActionMsg(null), 3000);
+        }
+      }
+    } catch {
+      if (isRefresh) {
+        setActionMsg({ type: "error", text: "Failed to refresh user list." });
+        setTimeout(() => setActionMsg(null), 3000);
+      }
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    fetch("/api/admin/users", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then((data) => setUsers(data.users || []))
-      .catch(() => { })
-      .finally(() => setLoading(false));
+    fetchUsers(false);
 
     fetch("/api/admin/platform-settings", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
@@ -320,6 +432,58 @@ export default function AdminUsersPage() {
       ),
     );
   }, [newPlan, planConfig, showChangePlan, subscriptionBillingCycle, subscriptionCurrency]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(e.target as Node)) {
+        setCountryDropdownOpen(false);
+      }
+    }
+    if (countryDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [countryDropdownOpen]);
+
+  const countryOptions = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; flag: string; count: number }>();
+
+    for (const u of users) {
+      const norm = normalizeCountry(u.country);
+      const existing = map.get(norm.code);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(norm.code, {
+          code: norm.code,
+          name: norm.name,
+          flag: norm.flag,
+          count: 1,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.code === "UNKNOWN") return 1;
+      if (b.code === "UNKNOWN") return -1;
+      if (b.count !== a.count) return b.count - a.count;
+      return a.name.localeCompare(b.name);
+    });
+  }, [users]);
+
+  const displayedCountryOptions = useMemo(() => {
+    if (!countrySearchQuery.trim()) return countryOptions;
+    const q = countrySearchQuery.trim().toLowerCase();
+    return countryOptions.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+    );
+  }, [countryOptions, countrySearchQuery]);
+
+  function toggleCountry(code: string) {
+    setSelectedCountries((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  }
 
   const activityCounts = useMemo(() => {
     const counts = {
@@ -367,6 +531,13 @@ export default function AdminUsersPage() {
       );
     }
 
+    if (selectedCountries.length > 0) {
+      result = result.filter((u) => {
+        const norm = normalizeCountry(u.country);
+        return selectedCountries.includes(norm.code);
+      });
+    }
+
     if (filter === "active") result = result.filter((u) => u.isActive);
     else if (filter === "inactive") result = result.filter((u) => !u.isActive);
     else if (filter === "paid") result = result.filter((u) => u.plan !== "free");
@@ -401,6 +572,10 @@ export default function AdminUsersPage() {
       let bv: string | number = "";
       if (sortField === "name") { av = a.name; bv = b.name; }
       else if (sortField === "email") { av = a.email; bv = b.email; }
+      else if (sortField === "country") {
+        av = normalizeCountry(a.country).name;
+        bv = normalizeCountry(b.country).name;
+      }
       else if (sortField === "plan") { av = a.plan; bv = b.plan; }
       else if (sortField === "credits") { av = a.credits; bv = b.credits; }
       else if (sortField === "createdAt") { av = a.createdAt || ""; bv = b.createdAt || ""; }
@@ -418,7 +593,7 @@ export default function AdminUsersPage() {
     });
 
     return result;
-  }, [users, search, filter, activityFilter, sortField, sortDir]);
+  }, [users, search, filter, selectedCountries, activityFilter, sortField, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paged = filtered.slice((page - 1) * perPage, page * perPage);
@@ -427,7 +602,7 @@ export default function AdminUsersPage() {
     ? users.find((u) => u.id === showRevokeAmbassador) ?? null
     : null;
 
-  useEffect(() => { setPage(1); }, [search, filter, activityFilter]);
+  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -814,9 +989,23 @@ export default function AdminUsersPage() {
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-50">{t('admin.users.title')}</h1>
-        <p className="text-sm text-slate-400 mt-1">{t('admin.users.totalUsers', { count: users.length })}</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-50">{t('admin.users.title')}</h1>
+          <p className="text-sm text-slate-400 mt-1">{t('admin.users.totalUsers', { count: users.length })}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => fetchUsers(true)}
+            disabled={refreshing || loading}
+            title="Refresh user list"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-700 bg-gray-900 text-slate-200 hover:bg-gray-800 hover:border-slate-600 hover:text-white transition shadow-sm disabled:opacity-60 cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-400 ${refreshing ? "animate-spin text-indigo-400" : ""}`} />
+            <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        </div>
       </div>
 
       {actionMsg && (
@@ -887,8 +1076,8 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             type="text"
@@ -898,6 +1087,136 @@ export default function AdminUsersPage() {
             className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-700 text-sm bg-gray-900 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
           />
         </div>
+
+        {/* Country Filter Selector */}
+        <div className="relative" ref={countryDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setCountryDropdownOpen((prev) => !prev)}
+            className={`h-11 px-3.5 rounded-xl border text-sm flex items-center justify-between gap-2.5 transition-all whitespace-nowrap min-w-[170px] ${
+              selectedCountries.length > 0
+                ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 font-semibold shadow-sm"
+                : "bg-gray-900 border-slate-700 text-slate-300 hover:text-slate-100 hover:border-slate-600"
+            }`}
+          >
+            <div className="flex items-center gap-2 truncate">
+              <Globe className="w-4 h-4 text-slate-400 shrink-0" />
+              <span className="truncate">
+                {selectedCountries.length === 0
+                  ? "All Countries"
+                  : selectedCountries.length === 1
+                    ? (() => {
+                        const c = countryOptions.find((opt) => opt.code === selectedCountries[0]);
+                        return c ? `${c.flag ? `${c.flag} ` : ""}${c.name}` : "1 Country";
+                      })()
+                    : `${selectedCountries.length} Countries`}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {selectedCountries.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/30 text-indigo-200">
+                  {countryOptions
+                    .filter((c) => selectedCountries.includes(c.code))
+                    .reduce((sum, c) => sum + c.count, 0)}
+                </span>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${countryDropdownOpen ? "rotate-180" : ""}`} />
+            </div>
+          </button>
+
+          {countryDropdownOpen && (
+            <div className="absolute right-0 sm:left-0 sm:right-auto mt-2 w-72 rounded-2xl border border-slate-700 bg-gray-900 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
+              {countryOptions.length > 5 && (
+                <div className="relative mb-2 px-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search countries..."
+                    value={countrySearchQuery}
+                    onChange={(e) => setCountrySearchQuery(e.target.value)}
+                    className="w-full h-8 pl-8 pr-2.5 rounded-lg border border-slate-800 text-xs bg-gray-950 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* All countries option / Clear */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCountries([]);
+                  setCountryDropdownOpen(false);
+                }}
+                className={`w-full px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                  selectedCountries.length === 0
+                    ? "bg-indigo-600 text-white font-semibold"
+                    : "text-slate-300 hover:bg-gray-800"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span>🌍</span>
+                  <span>All Countries</span>
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${selectedCountries.length === 0 ? "bg-white/20 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  {users.length}
+                </span>
+              </button>
+
+              <div className="my-1 border-t border-slate-800" />
+
+              {/* Scrollable list of signed-up countries */}
+              <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
+                {displayedCountryOptions.map((c) => {
+                  const isChecked = selectedCountries.includes(c.code);
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => toggleCountry(c.code)}
+                      className={`w-full px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                        isChecked
+                          ? "bg-indigo-600/20 text-indigo-200 font-semibold"
+                          : "text-slate-300 hover:bg-gray-800 hover:text-slate-100"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate pr-2">
+                        <span className="text-sm shrink-0">{c.flag || "🌐"}</span>
+                        <span className="truncate">{c.name}</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
+                          {c.count}
+                        </span>
+                        {isChecked && (
+                          <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+                {displayedCountryOptions.length === 0 && (
+                  <p className="text-center py-3 text-xs text-slate-500">No countries match "{countrySearchQuery}"</p>
+                )}
+              </div>
+
+              {selectedCountries.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center px-1">
+                  <span className="text-[11px] text-slate-400">
+                    {selectedCountries.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCountries([])}
+                    className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -915,6 +1234,42 @@ export default function AdminUsersPage() {
           <option value="suspended">Suspended</option>
         </select>
       </div>
+
+      {/* Active Country Filter Chips */}
+      {selectedCountries.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mb-4 text-xs">
+          <span className="text-slate-400 text-[11px] uppercase tracking-wide font-semibold">Filtered by country:</span>
+          {selectedCountries.map((code) => {
+            const c = countryOptions.find((opt) => opt.code === code);
+            if (!c) return null;
+            return (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 font-medium"
+              >
+                <span>{c.flag}</span>
+                <span>{c.name}</span>
+                <span className="text-[10px] text-indigo-300/70 font-mono">({c.count})</span>
+                <button
+                  type="button"
+                  onClick={() => toggleCountry(code)}
+                  className="hover:text-white p-0.5 rounded transition-colors"
+                  title="Remove country filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setSelectedCountries([])}
+            className="text-xs text-slate-400 hover:text-slate-200 underline underline-offset-2 ml-1"
+          >
+            Clear country filter
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-gray-900 border border-slate-700 rounded-2xl overflow-hidden">
@@ -957,6 +1312,18 @@ export default function AdminUsersPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="font-medium text-slate-100 truncate">{user.name || t('common.unnamed')}</p>
+                          {user.reactivationOffer && (
+                            <span
+                              title={user.reactivationOffer.status === "granted"
+                                ? `Returned after an inactive period; free Growth month claimed${user.reactivationOffer.expiresAt ? ` through ${new Date(user.reactivationOffer.expiresAt).toLocaleDateString()}` : ""}.`
+                                : "Returning user selected for the free Growth month reactivation offer."}
+                              className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${user.reactivationOffer.status === "granted"
+                                ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300"
+                                : "border-violet-700/60 bg-violet-900/30 text-violet-300"}`}
+                            >
+                              {user.reactivationOffer.status === "granted" ? "Reactivated" : "Returning"}
+                            </span>
+                          )}
                           {user.role === "admin" && <Shield className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
                           {user.ambassador?.active && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                         </div>
@@ -964,9 +1331,18 @@ export default function AdminUsersPage() {
                         {/* Third line: Country, Church, and Plan */}
                         <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-400">
                           {user.country && (
-                            <span className="text-[11px] text-slate-400 font-medium tracking-tight shrink-0" title={getCountryDisplayName(user.country)}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const code = normalizeCountry(user.country).code;
+                                setSelectedCountries([code]);
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-indigo-300 hover:underline font-medium tracking-tight shrink-0 transition-colors"
+                              title={`Filter by ${getCountryDisplayName(user.country)}`}
+                            >
                               {getCountryDisplayName(user.country)}
-                            </span>
+                            </button>
                           )}
                           {user.churchName && (
                             <>

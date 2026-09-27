@@ -226,6 +226,8 @@ export interface CreditTransactionMetadata {
   offlineSync?: boolean;
   /** Previous credits balance before this transaction (informational) */
   previousCredits?: number;
+  /** Granted credits related to ambassador/promotional actions */
+  creditsGranted?: number;
   /** Previous plan before a system allocation/downgrade. */
   previousPlan?: string;
   /** New plan related to a billing/allocation transaction. */
@@ -950,7 +952,8 @@ export type AnnouncementAudience =
   | "expired_trials"
   | "inactive_7d"
   | "inactive_30d"
-  | "never_opened_app";
+  | "never_opened_app"
+  | "reactivation_offer_users";
 
 export interface Announcement {
   _id?: ObjectId;

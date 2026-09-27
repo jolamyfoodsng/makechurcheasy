@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   CreditCard,
-  ArrowUp,
   History,
   Zap,
   Wallet,
-  ArrowRight,
   RefreshCw,
   FileAudio,
   Loader2,
@@ -17,13 +15,22 @@ import {
   Brain,
   AlertCircle,
   Sparkles,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
   getCreditTransactions,
   getCreditUsageByDay,
+  getTranscriptionBalance,
+  getTranscriptionPackages,
+  createTranscriptionTopup,
+  verifyTranscriptionTopup,
   type CreditTransaction,
+  type TranscriptionBalanceSummary,
+  type TopupPackage,
+  type TopupPricingResult,
 } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import { getUserId } from "@/lib/userId";
@@ -55,9 +62,9 @@ function formatCurrency(amount: number, currency: string): string {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currency || "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      currency: currency || "NGN",
+      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   } catch {
     if (currency === "NGN") return `₦${amount.toLocaleString()}`;
@@ -65,15 +72,13 @@ function formatCurrency(amount: number, currency: string): string {
   }
 }
 
-interface CreditPack {
-  id: string;
-  name: string;
-  description: string;
-  credits: number;
-  price: number;
-  currency: "USD" | "NGN";
-  currencySymbol: string;
-  badge?: string;
+function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "0 min";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
 }
 
 export default function Credits() {
@@ -85,92 +90,129 @@ export default function Credits() {
     subscription,
     mongoUser,
     maxCredits,
-    isUnlimited,
+    isUnlimited: subIsUnlimited,
     isOnTrial,
-    trialEndsAt,
     loading: subLoading,
   } = useSubscription();
 
   const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador, mongoUser?.role);
 
-  const [recentTransactions, setRecentTransactions] = useState<
-    CreditTransaction[]
-  >([]);
-  const [chartData, setChartData] = useState<
-    { date: string; usage: number }[]
-  >([]);
-  const [creditPacks, setCreditPacks] = useState<CreditPack[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<CreditTransaction[]>([]);
+  const [chartData, setChartData] = useState<{ date: string; usage: number }[]>([]);
+  const [transcriptionBalance, setTranscriptionBalance] = useState<TranscriptionBalanceSummary | null>(null);
+  const [topupPricing, setTopupPricing] = useState<TopupPricingResult | null>(null);
   const [purchaseError, setPurchaseError] = useState("");
   const [purchasingPackId, setPurchasingPackId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [topupSuccessMessage, setTopupSuccessMessage] = useState("");
+  const [isVerifyingTopup, setIsVerifyingTopup] = useState(false);
 
-  const credits = mongoUser?.credits ?? 0;
-  const creditCosts = planConfig?.creditCosts || [];
-  const totalAvailable = mongoUser?.totalAvailable ?? maxCredits;
-  const displayCredits = credits >= 0 ? credits : maxCredits;
-  const displayTotal = totalAvailable >= 0 ? totalAvailable : maxCredits;
-  const usedCredits = isUnlimited
-    ? 0
-    : Math.max(0, displayTotal - displayCredits);
-  const usagePct = isUnlimited
-    ? 0
-    : displayTotal > 0
-      ? Math.round((usedCredits / displayTotal) * 100)
-      : 0;
-  const remainingPct = isUnlimited ? 100 : Math.max(0, 100 - usagePct);
-  const currency = subscription?.currency || "USD";
+  const currency = subscription?.currency || "NGN";
+  const isUnlimited = subIsUnlimited || Boolean(transcriptionBalance?.unlimited);
 
-  const showBuyCredits =
-    !isUnlimited &&
-    !isOnTrial &&
-    (planTier?.pricing?.NGN?.monthly ?? 0) > 0 &&
-    maxCredits > 0 &&
-    displayCredits <= displayTotal * 0.1;
+  // Fallback calculations if transcription balance summary is not yet loaded
+  const fallbackCredits = mongoUser?.credits ?? 0;
+  const totalAvailableCredits = transcriptionBalance
+    ? transcriptionBalance.totalAvailableCredits
+    : (mongoUser?.totalAvailable ?? maxCredits);
 
+  const totalAvailableHours = transcriptionBalance
+    ? transcriptionBalance.totalAvailableHours
+    : Math.round((fallbackCredits / 60) * 10) / 10;
+
+  const includedHours = transcriptionBalance
+    ? transcriptionBalance.includedHours
+    : Math.round((Math.min(fallbackCredits, maxCredits) / 60) * 10) / 10;
+
+  const includedCredits = transcriptionBalance
+    ? transcriptionBalance.includedCredits
+    : Math.min(fallbackCredits, maxCredits);
+
+  const purchasedHours = transcriptionBalance ? transcriptionBalance.purchasedHours : 0;
+  const purchasedCredits = transcriptionBalance ? transcriptionBalance.purchasedCredits : 0;
+
+  // Initial data loading + handle return from Paystack verification
   useEffect(() => {
     const userId = getUserId();
     if (!userId) {
       setLoading(false);
       return;
     }
+
+    // Check if returning from a payment gateway redirect
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isTopupSuccess = params.get("topup") === "success";
+      const reference = params.get("reference") || params.get("tx_ref");
+      const transactionId = params.get("transaction_id") || undefined;
+      if (isTopupSuccess && reference) {
+        setIsVerifyingTopup(true);
+        verifyTranscriptionTopup(reference, transactionId)
+          .then((res) => {
+            if (res.success) {
+              setTopupSuccessMessage(
+                res.alreadyProcessed
+                  ? "Your top-up was previously confirmed and added to your balance."
+                  : "Top-up verified successfully! Your hours have been credited."
+              );
+              if (res.balance) {
+                setTranscriptionBalance(res.balance);
+              }
+            } else {
+              setPurchaseError("Payment verification could not be completed. Please contact support if you were debited.");
+            }
+          })
+          .catch((err) => {
+            setPurchaseError(err instanceof Error ? err.message : "Failed to verify top-up");
+          })
+          .finally(() => {
+            setIsVerifyingTopup(false);
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+          });
+      }
+    }
+
     Promise.all([
       getCreditTransactions(userId, { limit: 5 }),
       getCreditUsageByDay(userId, 7),
-      fetch("/api/credits/purchase").then((res) =>
-        res.ok ? res.json() : { packs: [] },
-      ),
+      getTranscriptionBalance().catch(() => null),
+      getTranscriptionPackages(currency).catch(() => null),
     ])
-      .then(([txns, usage, packsData]) => {
-        setRecentTransactions(txns.transactions);
+      .then(([txns, usage, balanceData, packagesData]) => {
+        setRecentTransactions(txns.transactions || []);
         setChartData(usage.usage.map((d) => ({ date: d.date, usage: d.amount })));
-        setCreditPacks(
-          Array.isArray(packsData.packs) ? packsData.packs : [],
-        );
+        if (balanceData) {
+          setTranscriptionBalance(balanceData);
+        }
+        if (packagesData) {
+          setTopupPricing(packagesData);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [currency]);
 
-  const handleBuyCredits = async (pack: CreditPack) => {
+  const handleBuyCredits = async (pack: TopupPackage) => {
     setPurchaseError("");
     setPurchasingPackId(pack.id);
     try {
-      const res = await fetch("/api/credits/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId: pack.id }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.authorization_url) {
-        throw new Error(data.error || "Could not start checkout");
+      const returnUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/credits?topup=success`
+          : undefined;
+
+      const data = await createTranscriptionTopup(pack.id, returnUrl);
+      if (!data.authorization_url) {
+        throw new Error("Could not initialize payment gateway");
       }
       try {
         localStorage.setItem(
           "mce_pending_payment",
           JSON.stringify({
-            type: "credits",
+            type: "transcription_topup",
             reference: data.reference,
-            creditPackId: pack.id,
+            packId: pack.id,
           }),
         );
       } catch {
@@ -199,14 +241,78 @@ export default function Credits() {
     );
   }
 
+  // Fallback packages if pricing endpoint hasn't finished loading yet
+  const displayPackages: TopupPackage[] = topupPricing?.packages || [
+    {
+      id: "topup-1h",
+      hours: 1,
+      credits: 60,
+      seconds: 3600,
+      price: currency === "NGN" ? 100 : 0.07,
+      currency,
+      pricePerHour: currency === "NGN" ? 100 : 0.07,
+      pricePerCredit: currency === "NGN" ? 1.67 : 0.001,
+      badge: undefined,
+      description: "Quick top-up for a single service or practice run.",
+    },
+    {
+      id: "topup-5h",
+      hours: 5,
+      credits: 300,
+      seconds: 18000,
+      price: currency === "NGN" ? 500 : 0.35,
+      currency,
+      pricePerHour: currency === "NGN" ? 100 : 0.07,
+      pricePerCredit: currency === "NGN" ? 1.67 : 0.001,
+      badge: undefined,
+      description: "Ideal for a full weekend of Sunday services.",
+    },
+    {
+      id: "topup-10h",
+      hours: 10,
+      credits: 600,
+      seconds: 36000,
+      price: currency === "NGN" ? 950 : 0.70,
+      currency,
+      pricePerHour: currency === "NGN" ? 95 : 0.07,
+      pricePerCredit: currency === "NGN" ? 1.58 : 0.001,
+      badge: "Popular",
+      description: "Best for active ministries running multiple weekly meetings.",
+    },
+    {
+      id: "topup-20h",
+      hours: 20,
+      credits: 1200,
+      seconds: 72000,
+      price: currency === "NGN" ? 1900 : 1.40,
+      currency,
+      pricePerHour: currency === "NGN" ? 95 : 0.07,
+      pricePerCredit: currency === "NGN" ? 1.58 : 0.001,
+      badge: undefined,
+      description: "Extended coverage for monthly conferences and youth camps.",
+    },
+    {
+      id: "topup-50h",
+      hours: 50,
+      credits: 3000,
+      seconds: 180000,
+      price: currency === "NGN" ? 4750 : 3.50,
+      currency,
+      pricePerHour: currency === "NGN" ? 95 : 0.07,
+      pricePerCredit: currency === "NGN" ? 1.58 : 0.001,
+      badge: "Best Value",
+      description: "Maximum savings for large productions and multi-campus events.",
+    },
+  ];
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto w-full space-y-8 pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Credits</h1>
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">Credits & Transcription</h1>
           <p className="text-sm text-slate-500">
-            Monitor your AI credit balance, usage and top up when needed.
+            Monitor your transcription balance, plan allowances, and top up hours with zero expiration.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -223,17 +329,40 @@ export default function Credits() {
         </div>
       </div>
 
-      {/* Credit Balance Card */}
+      {/* Verification status notifications */}
+      {topupSuccessMessage && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{topupSuccessMessage}</span>
+          </div>
+          <button
+            onClick={() => setTopupSuccessMessage("")}
+            className="text-xs text-emerald-700 hover:text-emerald-900 font-bold ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {isVerifyingTopup && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 animate-pulse">
+          <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+          <span>Verifying your top-up payment...</span>
+        </div>
+      )}
+
+      {/* Credit Balance Card with Two Separate Balances */}
       <Card padding="lg">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
               <Zap className="w-6 h-6 text-amber-600" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <h2 className="text-xl font-bold text-slate-900">
-                  AI Credits
+                  AI & Transcription Balance
                 </h2>
                 {ambassadorInfo.isAmbassador && (
                   <Badge variant="purple" size="sm">
@@ -245,31 +374,64 @@ export default function Credits() {
                   {ambassadorInfo.isAmbassador ? "Growth Tier" : `${planLabel} Plan`}
                 </Badge>
               </div>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-3xl font-bold text-slate-900">
-                  {isUnlimited ? "∞" : displayCredits.toLocaleString()}
+
+              {/* Total Balance Headline */}
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                  {isUnlimited ? "∞" : `${totalAvailableHours.toLocaleString()} hrs`}
                 </span>
                 {!isUnlimited && (
-                  <span className="text-sm text-slate-500">
-                    of {displayTotal.toLocaleString()}
+                  <span className="text-sm font-semibold text-slate-500">
+                    ({totalAvailableCredits.toLocaleString()} credits)
                   </span>
                 )}
               </div>
+              <p className="text-xs text-slate-500 mb-4">
+                {isUnlimited
+                  ? "Unlimited live transcription and AI credits on your current plan"
+                  : "1 credit = 1 minute of live transcription • Billed down to exact seconds"}
+              </p>
+
+              {/* Separate Balances Cards */}
               {!isUnlimited && (
-                <div className="mb-2">
-                  <div className="w-full md:w-64 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                      style={{ width: `${remainingPct}%` }}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                  {/* Included Plan Balance */}
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                    <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                      <span className="font-semibold text-slate-700">Included Plan Allowance</span>
+                      <span className="text-[11px] font-medium text-slate-400">Resets monthly</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg font-bold text-slate-900">{includedHours} hrs</span>
+                      <span className="text-xs text-slate-500 font-medium">({includedCredits} credits)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Consumed first during live transcription.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1.5">
-                    {remainingPct}% remaining &middot; {usedCredits.toLocaleString()} used
-                  </p>
+
+                  {/* Purchased Top-Up Balance */}
+                  <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200/80">
+                    <div className="flex items-center justify-between text-xs text-amber-900 mb-1">
+                      <span className="font-bold text-amber-800">Purchased Top-Up</span>
+                      <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                        Never expires
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg font-bold text-amber-950">{purchasedHours} hrs</span>
+                      <span className="text-xs text-amber-800 font-medium">({purchasedCredits} credits)</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 mt-1">
+                      Rolls over indefinitely; used when plan hours deplete.
+                    </p>
+                  </div>
                 </div>
               )}
+
+              {/* Ambassador Note */}
               {ambassadorInfo.isAmbassador && (
-                <div className="mt-3 p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-start gap-2.5 max-w-xl">
+                <div className="mt-4 p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-start gap-2.5 max-w-xl">
                   <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
                   <div className="text-xs text-purple-900 leading-relaxed">
                     <span className="font-bold">Ambassador Partnership Allocation:</span>{" "}
@@ -280,26 +442,21 @@ export default function Credits() {
                   </div>
                 </div>
               )}
-              {isUnlimited && (
-                <p className="text-sm text-slate-500">
-                  Unlimited AI credits on your current plan
-                </p>
-              )}
             </div>
           </div>
-          {showBuyCredits && (
-            <div className="shrink-0">
-              <Link href="#buy-credits">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Wallet className="w-4 h-4" />}
-                >
-                  Buy More Credits
-                </Button>
-              </Link>
-            </div>
-          )}
+
+          <div className="shrink-0">
+            <Link href="#buy-credits">
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Wallet className="w-4 h-4" />}
+                className="w-full sm:w-auto"
+              >
+                Top Up Credits
+              </Button>
+            </Link>
+          </div>
         </div>
       </Card>
 
@@ -310,7 +467,7 @@ export default function Credits() {
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-4 h-4 text-slate-500" />
             <h3 className="text-sm font-semibold text-slate-900">
-              AI Features
+              AI Features & Billing Rates
             </h3>
           </div>
           <div className="space-y-3">
@@ -321,12 +478,12 @@ export default function Credits() {
                   <span className="text-sm font-medium text-slate-900">
                     Speech-to-Scripture
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    1 credit/min
+                  <span className="text-xs font-semibold text-slate-600">
+                    1 credit/min (per second)
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Real-time sermon transcription
+                  Real-time sermon speech recognition & scripture detection
                 </p>
               </div>
             </div>
@@ -337,12 +494,12 @@ export default function Credits() {
                   <span className="text-sm font-medium text-slate-900">
                     Live Translation
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    1 credit/min
+                  <span className="text-xs font-semibold text-slate-600">
+                    1 credit/min (per second)
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Real-time multilingual captioning
+                  Real-time multilingual captioning & translation
                 </p>
               </div>
             </div>
@@ -351,14 +508,14 @@ export default function Credits() {
               <div className="flex-1">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-slate-900">
-                    AI Summaries
+                    AI Sermon Summaries
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    5 credits
+                  <span className="text-xs font-semibold text-slate-600">
+                    5 credits / run
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Sermon summary generator
+                  Comprehensive sermon summary & study points generation
                 </p>
               </div>
             </div>
@@ -371,7 +528,7 @@ export default function Credits() {
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-4 h-4 text-slate-500" />
               <h3 className="text-sm font-semibold text-slate-900">
-                Credits Per Day
+                Credits Used (Last 7 Days)
               </h3>
             </div>
             <div className="h-56 w-full">
@@ -431,11 +588,119 @@ export default function Credits() {
               <TrendingUp className="w-8 h-8 text-slate-200 mb-3" />
               <p className="text-sm text-slate-500">No usage data yet</p>
               <p className="text-xs text-slate-400 mt-1">
-                Start using AI features to see your credit usage chart.
+                Start transcribing live services to see your credit usage chart.
               </p>
             </div>
           </Card>
         )}
+      </div>
+
+      {/* Top-up Packages Grid */}
+      <div id="buy-credits" className="scroll-mt-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">
+              Top Up Transcription Credits
+            </h2>
+            <p className="text-sm text-slate-500">
+              1 credit = 1 minute of transcription. Top-up credits never expire and roll over automatically every month.
+            </p>
+          </div>
+          {topupPricing && (
+            <span className="text-xs font-medium text-slate-400">
+              Live Exchange Rate • Instant Paystack Checkout
+            </span>
+          )}
+        </div>
+
+        {purchaseError && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <AlertCircle className="w-4 h-4 shrink-0" /> {purchaseError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {displayPackages.map((pack) => {
+            const isBuying = purchasingPackId === pack.id;
+            const isBestValue = pack.badge === "Best Value";
+            const isPopular = pack.badge === "Popular";
+
+            return (
+              <Card
+                key={pack.id}
+                padding="md"
+                className={`flex flex-col justify-between relative transition-all ${
+                  isBestValue
+                    ? "border-amber-400 shadow-sm ring-1 ring-amber-300 bg-gradient-to-b from-amber-50/20 to-white"
+                    : isPopular
+                      ? "border-blue-400 shadow-sm ring-1 ring-blue-300 bg-gradient-to-b from-blue-50/20 to-white"
+                      : "hover:border-slate-300"
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                      <Clock className="w-4 h-4 text-slate-700" />
+                    </div>
+                    {pack.badge && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          isBestValue
+                            ? "bg-amber-100 text-amber-800 border border-amber-200"
+                            : "bg-blue-100 text-blue-800 border border-blue-200"
+                        }`}
+                      >
+                        {pack.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    {pack.hours} {pack.hours === 1 ? "Hour" : "Hours"}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {pack.credits.toLocaleString()} credits ({formatDuration(pack.seconds)})
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500 leading-relaxed min-h-[32px]">
+                    {pack.description}
+                  </p>
+
+                  <div className="my-4 pt-3 border-t border-slate-100">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-slate-900">
+                        {formatCurrency(pack.price, pack.currency)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {formatCurrency(pack.pricePerHour, pack.currency)} / hr
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleBuyCredits(pack)}
+                  disabled={!!purchasingPackId || isVerifyingTopup}
+                  className={`w-full h-10 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                    isBestValue
+                      ? "bg-amber-500 hover:bg-amber-600 text-white"
+                      : isPopular
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "bg-slate-900 hover:bg-slate-800 text-white"
+                  } disabled:opacity-50`}
+                >
+                  {isBuying ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Redirecting...
+                    </>
+                  ) : (
+                    `Top Up ${pack.hours}h`
+                  )}
+                </button>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       {/* Recent Credit Activity */}
@@ -501,100 +766,6 @@ export default function Credits() {
           )}
         </Card>
       </section>
-
-      {/* Credit Packs */}
-      {creditPacks.length > 0 && (
-        <div id="buy-credits" className="scroll-mt-6">
-          <div className="mb-4">
-            <h2 className="text-lg font-bold text-slate-900 mb-1">
-              Buy Credits
-            </h2>
-            <p className="text-sm text-slate-500">
-              Recharge only when you need more. Packs are added to your balance
-              after payment.
-            </p>
-          </div>
-          {purchaseError && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              <AlertCircle className="w-4 h-4 shrink-0" /> {purchaseError}
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {creditPacks.map((pack) => {
-              const estimatedMinutes = pack.credits;
-              const pricePer100 = pack.price / (pack.credits / 100);
-              const isBuying = purchasingPackId === pack.id;
-              return (
-                <Card
-                  key={pack.id}
-                  padding="md"
-                  className={
-                    pack.badge ? "border-blue-300" : undefined
-                  }
-                >
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                      <Wallet className="w-5 h-5 text-slate-600" />
-                    </div>
-                    {pack.badge && (
-                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-600">
-                        {pack.badge}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {pack.name}
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-500 leading-relaxed min-h-[36px]">
-                    {pack.description}
-                  </p>
-                  <div className="my-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-slate-900 tabular-nums">
-                        {pack.credits.toLocaleString()}
-                      </span>
-                      <span className="text-sm font-medium text-slate-500">
-                        credits
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      About {estimatedMinutes.toLocaleString()}{" "}
-                      Speech-to-Scripture minutes
-                    </p>
-                  </div>
-                  <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-500">
-                        Price
-                      </span>
-                      <span className="text-lg font-bold text-slate-900">
-                        {formatCurrency(pack.price, pack.currency)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 flex items-center justify-between text-xs text-slate-500">
-                      <span>Per 100 credits</span>
-                      <span className="font-semibold">
-                        {formatCurrency(pricePer100, pack.currency)}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleBuyCredits(pack)}
-                    disabled={!!purchasingPackId}
-                    className="w-full h-10 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    {isBuying ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      `Buy ${pack.credits.toLocaleString()} credits`
-                    )}
-                  </button>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

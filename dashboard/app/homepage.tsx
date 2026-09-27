@@ -7,11 +7,10 @@ import styles from "./homepage.module.css";
 import { presentationFeatures } from "./feature-content";
 import FeatureVisual from "./feature-visual";
 import { MarketingHeader, MarketingFooter } from "./marketing-shell";
+import VerseAiShowcase from "./verse-ai-showcase";
 
 const featureIcons = [BookOpen, Music2, Type, ImageIcon, Timer, Layers];
 const features = presentationFeatures.slice(0, 6).map((feature, index) => ({ ...feature, icon: featureIcons[index] }));
-const showcaseFeatures = [features[0], features[1], features[3]];
-
 const questions = [
   { q: "Do I need to create OBS scenes and sources myself?", a: "On paid plans, MakeChurchEazy creates and manages the OBS scenes and sources for you. The Free plan uses a presentation link that you add once as an OBS Browser Source." },
   { q: "Does it work on Windows and Mac?", a: "Yes. MakeChurchEazy is available for Windows and macOS. The download page lets you choose the right installer for your computer." },
@@ -21,29 +20,15 @@ const questions = [
 ];
 
 function ProductView() {
-  const [active, setActive] = useState(0);
-  const selected = showcaseFeatures[active];
-  const select = (index: number, focus = false) => {
-    setActive(index);
-    if (focus) document.getElementById(`showcase-tab-${showcaseFeatures[index].id}`)?.focus();
-  };
-  return <>
-    <div className={styles.showcaseTabs} role="tablist" aria-label="Preview MakeChurchEazy">
-      {showcaseFeatures.map((feature, index) => <button key={feature.id} id={`showcase-tab-${feature.id}`} role="tab" aria-selected={index === active} aria-controls="showcase-panel" tabIndex={index === active ? 0 : -1} onClick={() => select(index)} onKeyDown={event => {
-        let next = index;
-        if (event.key === "ArrowRight") next = (index + 1) % showcaseFeatures.length;
-        else if (event.key === "ArrowLeft") next = (index - 1 + showcaseFeatures.length) % showcaseFeatures.length;
-        else if (event.key === "Home") next = 0;
-        else if (event.key === "End") next = showcaseFeatures.length - 1;
-        else return;
-        event.preventDefault(); select(next, true);
-      }}><feature.icon size={18} />{feature.label}</button>)}
+  return <div className={styles.showcasePanel}>
+    <div className={styles.showcaseImage}>
+      <img className={styles.showcasePoster} src="/homepage/church-presentation-software-obs-hero-poster.jpg" alt="" aria-hidden="true" fetchPriority="high" />
+      <video className={styles.showcaseVideo} autoPlay muted loop playsInline preload="metadata" poster="/homepage/church-presentation-software-obs-hero-poster.jpg" aria-label="MakeChurchEazy church presentation software displaying Bible verses in OBS">
+        <source src="/homepage/church-presentation-software-obs-hero.mp4" type="video/mp4" />
+        <source src="/homepage/church-presentation-software-obs-hero.webm" type="video/webm" />
+      </video>
     </div>
-    <div className={styles.showcasePanel} id="showcase-panel" role="tabpanel" aria-labelledby={`showcase-tab-${selected.id}`} tabIndex={0}>
-      <div className={styles.showcaseImage} key={selected.id}><FeatureVisual feature={selected} priority /></div>
-      <div className={styles.showcaseCaption}><div><span>{selected.label} in MakeChurchEazy</span><p>{selected.note}</p></div><Link href={`/features/${selected.id}`}>Explore {selected.label}<ArrowRight size={18} /></Link></div>
-    </div>
-  </>;
+  </div>;
 }
 
 export default function Homepage() {
@@ -82,15 +67,22 @@ export default function Homepage() {
     <main id="main">
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <h1>Everything your church needs.<br /><span>Right inside OBS.</span></h1>
-          <p className={styles.heroDescription}>Display Bible verses, worship lyrics, media, lower thirds and more — without manually creating scenes, sources or complicated OBS setups. MakeChurchEazy sets up what you need and keeps everything inside the OBS workflow you already use.</p>
-          <div className={styles.heroActions}><Link href="/download" className={styles.downloadButton}><Download size={18} /> {downloadLabel}</Link><button className={styles.demoLink} onClick={openDemo}><span className={styles.playCircle}><Play size={13} fill="currentColor" /></span> Watch demo <ArrowRight size={16} /></button></div>
-          <p className={styles.platforms}><Monitor size={14} /> Windows & macOS <span>·</span> Start free</p>
+          <h1>The Complete Church Presentation Dock.<br /><span>Built Directly Into OBS Studio.</span></h1>
+          <p className={styles.heroDescription}>Everything your church broadcasts, unified in one window: real-time Voice-to-Scripture AI, instant multi-version Bible comparisons, one-click worship setlists, animated lower thirds, and live countdowns. Pre-configured for your stream and projector with zero NDI lag and zero window juggling.</p>
+          <div className={styles.heroActions}>
+            <Link href="/download" className={styles.downloadButton}>
+              <Download size={17} /> Download for Free
+            </Link>
+            <button className={styles.demoLink} onClick={openDemo}>
+              <Play size={14} fill="currentColor" /> Watch Demo
+            </button>
+          </div>
+          <p className={styles.platforms}><Monitor size={14} /> Mac &amp; Windows <span>·</span> 30-second setup <span>·</span> 100% Offline Sunday mode</p>
         </div>
         <div className={styles.heroProduct}><ProductView /></div>
       </section>
 
-      <div className={styles.featureRail} aria-label="Tools included"><span>ONE WORKFLOW. EVERY MOMENT.</span>{[{ name: "Bible", icon: BookOpen }, { name: "Worship", icon: Music2 }, { name: "Media", icon: ImageIcon }, { name: "Lower thirds", icon: Type }, { name: "Verse AI", icon: Mic }].map(item => <a key={item.name} href={item.name === "Verse AI" ? "#voice-bible" : "#features"} onClick={() => { const index = features.findIndex(feature => feature.label === item.name); if (index >= 0) selectFeature(index); }}><item.icon size={18} />{item.name}</a>)}</div>
+      <VerseAiShowcase />
 
       <section className={`${styles.section} ${styles.setupSection}`} id="how-it-works">
         <div className={styles.setupCopy}><p className={styles.eyebrow}>LESS SETUP. MORE SERVICE.</p><h2>You focus on what<br />goes on screen.<br /><span>We handle the setup.</span></h2><p>MakeChurchEazy creates, manages and updates the OBS scenes and sources required for its presentation workflow.</p><span className={styles.setupPlanNote}>Automatic OBS setup is included on paid plans. <Link href="/subscription/plans">Compare plans <ArrowRight size={13} /></Link></span></div>

@@ -247,15 +247,20 @@ export default function ProfileSettings() {
                 />
               </div>
 
-              <Select
-                label={t("settings.country")}
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                options={[
-                  { value: "", label: `— ${t("common.select")} —` },
-                  ...countries.map((c) => ({ value: c.code, label: c.name })),
-                ]}
-              />
+              <div>
+                <Select
+                  label={t("settings.country")}
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  options={[
+                    { value: "", label: `— ${t("common.select")} —` },
+                    ...countries.map((c) => ({ value: c.code, label: c.name })),
+                  ]}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Your country determines subscription pricing and local payment options (Cards, bank transfer, USSD). Auto-detected on login, or customize it here.
+                </p>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
                 <Select

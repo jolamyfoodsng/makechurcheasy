@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Sora } from "next/font/google";
+import { Inter, Sora, Open_Sans } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -96,6 +96,13 @@ const displayFont = Sora({
   display: "swap",
 });
 
+const openSans = Open_Sans({
+  subsets: ["latin"],
+  variable: "--font-open-sans",
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@graph": [
@@ -156,7 +163,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={locale} className={`dark ${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
+    <html lang={locale} className={`dark ${bodyFont.variable} ${displayFont.variable} ${openSans.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

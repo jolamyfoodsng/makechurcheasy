@@ -354,7 +354,11 @@ export default function AdminUserDetailPage() {
 
   // Admin Action Dropdown Modals State
   const [showGrantCredits, setShowGrantCredits] = useState(false);
-  const [creditsAmount, setCreditsAmount] = useState("");
+  const [creditsAmount, setCreditsAmount] = useState("5");
+  const [creditsAction, setCreditsAction] = useState<"increase" | "decrease">("increase");
+  const [creditsUnit, setCreditsUnit] = useState<"hours" | "credits">("hours");
+  const [creditsTarget, setCreditsTarget] = useState<"purchased" | "included" | "auto">("purchased");
+  const [creditsReason, setCreditsReason] = useState("");
   const [grantingCredits, setGrantingCredits] = useState(false);
 
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -394,6 +398,8 @@ export default function AdminUserDetailPage() {
 
   const [showCancelTrial, setShowCancelTrial] = useState(false);
   const [cancellingTrial, setCancellingTrial] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -453,6 +459,28 @@ export default function AdminUserDetailPage() {
       setUserEmailsLoading(false);
     }
   }, [params.id]);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshSuccess(false);
+    try {
+      const promises: Promise<any>[] = [fetchUser()];
+      if (activeTab === "logs" || userErrorLogs.length > 0 || userErrorLogsTotal !== null) {
+        promises.push(fetchUserErrorLogs());
+      }
+      if (activeTab === "emails" || userEmails.length > 0 || userEmailsTotal !== null) {
+        promises.push(fetchUserEmails());
+      }
+      await Promise.all(promises);
+      setRefreshSuccess(true);
+      setTimeout(() => setRefreshSuccess(false), 2500);
+    } catch {
+      // ignore
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, fetchUser, activeTab, userErrorLogs.length, userErrorLogsTotal, fetchUserErrorLogs, userEmails.length, userEmailsTotal, fetchUserEmails]);
 
   useEffect(() => {
     if (activeTab === "logs" && userErrorLogsTotal === null) {
@@ -649,21 +677,29 @@ export default function AdminUserDetailPage() {
     if (!amount || amount <= 0) return;
     setGrantingCredits(true);
     try {
+      const finalAmount = creditsAction === "decrease" ? -amount : amount;
       const res = await fetch(`/api/admin/users/${user.id}/credits`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({
+          amount: finalAmount,
+          unit: creditsUnit,
+          action: creditsAction,
+          target: creditsTarget,
+          reason: creditsReason || undefined,
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed");
       const data = await res.json();
       setUser((prev) => (prev ? { ...prev, credits: data.credits } : null));
-      setAccountActionMessage(t('admin.users.flash.grantedCredits', { amount }));
+      setAccountActionMessage(data.message || `Successfully adjusted user balance`);
       setShowGrantCredits(false);
-      setCreditsAmount("");
+      setCreditsAmount("5");
+      setCreditsReason("");
       fetchUser();
     } catch (err: any) {
-      setAccountActionMessage(err?.message || t('admin.users.errors.grantCreditsFailed'));
+      setAccountActionMessage(err?.message || "Failed to adjust credits");
     } finally {
       setGrantingCredits(false);
     }
@@ -1210,13 +1246,26 @@ export default function AdminUserDetailPage() {
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        {t('admin.userDetail.backToUsers')}
-      </button>
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {t('admin.userDetail.backToUsers')}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-slate-700 bg-gray-900 text-xs sm:text-sm font-medium text-slate-200 hover:text-white hover:bg-gray-800 hover:border-slate-600 transition disabled:opacity-60 cursor-pointer shadow-sm"
+          title="Refresh user data"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 ${refreshing ? "animate-spin text-indigo-400" : ""}`} />
+          <span>{refreshing ? "Refreshing..." : refreshSuccess ? "Refreshed!" : "Refresh"}</span>
+        </button>
+      </div>
 
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-start gap-5 mb-7">
@@ -1286,6 +1335,17 @@ export default function AdminUserDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="h-10 px-3.5 inline-flex items-center gap-2 text-sm font-medium rounded-lg border border-slate-700 bg-gray-900 text-slate-200 hover:bg-gray-800 hover:border-slate-600 transition disabled:opacity-60 cursor-pointer shadow-sm"
+            title="Refresh user data"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-400 ${refreshing ? "animate-spin text-indigo-400" : ""}`} />
+            <span>{refreshing ? "Refreshing..." : refreshSuccess ? "Refreshed!" : "Refresh"}</span>
+          </button>
+
           {/* Actions Dropdown */}
           <details className="relative">
             <summary className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-700 bg-gray-900 px-3 text-sm font-medium text-slate-200 hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
@@ -1294,10 +1354,10 @@ export default function AdminUserDetailPage() {
             <div className="absolute right-0 z-30 mt-2 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-slate-700 bg-gray-900 p-1.5 shadow-2xl">
               <button
                 type="button"
-                onClick={() => { setShowGrantCredits(true); setCreditsAmount(""); }}
+                onClick={() => { setShowGrantCredits(true); setCreditsAmount("5"); }}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs text-slate-300 hover:bg-gray-800"
               >
-                Grant credits
+                Adjust credits & hours
               </button>
               <button
                 type="button"
@@ -1771,8 +1831,8 @@ export default function AdminUserDetailPage() {
             <InfoRow
               label={t('admin.userDetail.activeStatus')}
               value={
-                user.lastLogin &&
-                  new Date(user.lastLogin).getTime() >
+                (user.lastActive || user.lastLogin) &&
+                  new Date(user.lastActive || user.lastLogin!).getTime() >
                   Date.now() - 30 * 24 * 60 * 60 * 1000
                   ? t('admin.userDetail.activeLast30d')
                   : t('admin.userDetail.notActive')
@@ -2297,9 +2357,12 @@ export default function AdminUserDetailPage() {
           <p className="mt-1 text-xs text-slate-500">{formatDateTime(user.createdAt)}</p>
         </div>
         <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last sign-in</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">{user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never"}</p>
-          <p className="mt-1 text-xs text-slate-500">{formatDateTime(user.lastLogin)}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last active</p>
+          <p className="mt-2 text-base font-semibold text-slate-100">{user.lastActive ? formatRelativeTime(user.lastActive) : (user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never")}</p>
+          <p className="mt-1 text-xs text-slate-500">{user.lastActive ? formatDateTime(user.lastActive) : (user.lastLogin ? formatDateTime(user.lastLogin) : "No activity recorded")}</p>
+          {user.lastLogin && user.lastActive && user.lastLogin !== user.lastActive && (
+            <p className="mt-1 text-[11px] text-slate-500">Signed in {formatRelativeTime(user.lastLogin)}</p>
+          )}
         </div>
         <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Connected devices</p>
@@ -3867,32 +3930,132 @@ export default function AdminUserDetailPage() {
         </div>
       )}
 
-      {/* Grant Credits Modal */}
+      {/* Adjust Credits & Hours Modal */}
       {showGrantCredits && (
-        <Modal onClose={() => setShowGrantCredits(false)} title={t('admin.users.grantCredits.title')}>
+        <Modal onClose={() => setShowGrantCredits(false)} title="Adjust User Credits & Transcription Hours">
           <div className="space-y-4">
+            {/* Increase vs Decrease Selector */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">{t('admin.users.grantCredits.amountLabel')}</label>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Action</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCreditsAction("increase")}
+                  className={`h-9 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors ${
+                    creditsAction === "increase"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "border border-slate-700 bg-gray-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Increase (+)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreditsAction("decrease")}
+                  className={`h-9 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors ${
+                    creditsAction === "decrease"
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "border border-slate-700 bg-gray-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                  Decrease (-)
+                </button>
+              </div>
+            </div>
+
+            {/* Unit & Amount */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Unit</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCreditsUnit("hours")}
+                    className={`h-9 rounded-lg text-xs font-bold transition-colors ${
+                      creditsUnit === "hours" ? "bg-amber-500 text-slate-950" : "border border-slate-700 bg-gray-800 text-slate-400"
+                    }`}
+                  >
+                    Hours
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreditsUnit("credits")}
+                    className={`h-9 rounded-lg text-xs font-bold transition-colors ${
+                      creditsUnit === "credits" ? "bg-amber-500 text-slate-950" : "border border-slate-700 bg-gray-800 text-slate-400"
+                    }`}
+                  >
+                    Credits
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                  Amount ({creditsUnit})
+                </label>
+                <input
+                  type="number"
+                  min="0.5"
+                  step={creditsUnit === "hours" ? "0.5" : "1"}
+                  value={creditsAmount}
+                  onChange={(e) => setCreditsAmount(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-700 text-xs bg-gray-800 text-slate-100 focus:outline-none focus:border-amber-400"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Target Balance */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Destination Balance</label>
+              <select
+                value={creditsTarget}
+                onChange={(e) => setCreditsTarget(e.target.value as any)}
+                className="w-full h-9 px-3 rounded-lg border border-slate-700 text-xs bg-gray-800 text-slate-100 focus:outline-none focus:border-amber-400"
+              >
+                <option value="purchased">Purchased Top-Up (Never expires • Recommended)</option>
+                <option value="included">Included Plan Allowance (Resets monthly)</option>
+                <option value="auto">Auto (Deduct available balance)</option>
+              </select>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Audit Note / Reason</label>
               <input
-                type="number"
-                min="1"
-                value={creditsAmount}
-                onChange={(e) => setCreditsAmount(e.target.value)}
-                placeholder={t('admin.users.grantCredits.amountPlaceholder')}
-                className="w-full h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                autoFocus
+                type="text"
+                value={creditsReason}
+                onChange={(e) => setCreditsReason(e.target.value)}
+                placeholder="e.g. Courtesy bonus, session adjustment"
+                className="w-full h-9 px-3 rounded-lg border border-slate-700 text-xs bg-gray-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-400"
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowGrantCredits(false)} className="px-5 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors">
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowGrantCredits(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition-colors"
+              >
                 {t('common.cancel')}
               </button>
               <button
+                type="button"
                 onClick={handleGrantCredits}
                 disabled={!creditsAmount || parseFloat(creditsAmount) <= 0 || grantingCredits}
-                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+                className={`px-5 py-2 text-xs font-bold text-white rounded-xl disabled:opacity-50 transition-colors flex items-center gap-1.5 ${
+                  creditsAction === "decrease" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
               >
-                {grantingCredits ? t('admin.users.grantCredits.granting') : t('admin.users.grantCredits.button')}
+                {grantingCredits ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  `${creditsAction === "decrease" ? "Deduct" : "Add"} ${creditsAmount} ${creditsUnit}`
+                )}
               </button>
             </div>
           </div>

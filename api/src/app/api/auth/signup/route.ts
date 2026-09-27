@@ -93,6 +93,10 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    const signupCity = req.headers.get("x-mce-geo-city")?.trim() || "";
+    const signupTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
+    const signupIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+
     // Create user
     const now = new Date().toISOString();
     const planConfig = await getPlanConfig();
@@ -105,6 +109,14 @@ export async function POST(req: NextRequest) {
       appId: generateAppId(),
       churchName: churchName || "",
       country: normalizedCountry,
+      city: signupCity,
+      timezone: signupTimezone,
+      signupCountry: normalizedCountry,
+      signupCity,
+      signupIp,
+      lastLoginCountry: normalizedCountry,
+      lastLoginCity: signupCity,
+      lastLoginIp: signupIp,
       language: signupLanguage,
       phone: "",
       role: "user",

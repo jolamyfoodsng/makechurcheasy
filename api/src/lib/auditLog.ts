@@ -15,6 +15,8 @@ export type AuditAction =
   | "temporary_plan_revoke"
   | "temporary_plan_expired"
   | "credit_grant"
+  | "credit_deduct"
+  | "credit_adjustment"
   | "ambassador_grant"
   | "ambassador_revoke"
   | "ambassador_expired"

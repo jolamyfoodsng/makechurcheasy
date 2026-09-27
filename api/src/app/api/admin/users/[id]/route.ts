@@ -151,6 +151,24 @@ export async function GET(
         }
         : null;
 
+    const latestEvent = activityPage === 1
+      ? activity[0]
+      : await eventsCol.findOne(activityMatch, { projection: { timestamp: 1, createdAt: 1 }, sort: { timestamp: -1, createdAt: -1 } });
+    const latestActivityTimestamp = latestEvent?.timestamp || latestEvent?.createdAt || null;
+    const latestDeviceLastSeen = devices[0]?.lastSeen || null;
+
+    const candidateTimestamps = [
+      user.lastActive?.toISOString?.() || user.lastActive,
+      user.lastLogin?.toISOString?.() || user.lastLogin,
+      latestActivityTimestamp ? new Date(latestActivityTimestamp).toISOString() : null,
+      latestDeviceLastSeen ? new Date(latestDeviceLastSeen).toISOString() : null,
+    ]
+      .map((t) => (t ? new Date(t).getTime() : NaN))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    const latestActiveMs = candidateTimestamps.length > 0 ? Math.max(...candidateTimestamps) : null;
+    const effectiveLastActive = latestActiveMs ? new Date(latestActiveMs).toISOString() : null;
+
     return NextResponse.json({
       id: user._id.toString(),
       name: user.name || "",
@@ -182,7 +200,7 @@ export async function GET(
       signupDate: user.createdAt?.toISOString?.() || user.createdAt || null,
       createdAt: user.createdAt?.toISOString?.() || user.createdAt || null,
       lastLogin: user.lastLogin?.toISOString?.() || user.lastLogin || null,
-      lastActive: user.lastActive?.toISOString?.() || user.lastActive || user.lastLogin?.toISOString?.() || user.lastLogin || null,
+      lastActive: effectiveLastActive,
       appId: user.appId || "",
       trialId: user.trialId || null,
       trial: trialResponse,

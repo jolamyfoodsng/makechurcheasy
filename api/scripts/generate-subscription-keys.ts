@@ -23,7 +23,7 @@ console.log("══════════════════════�
 console.log("  Subscription Signing Keys Generated");
 console.log("═══════════════════════════════════════════════════════════════\n");
 
-console.log("1. Add to your Vercel env vars (SUBSCRIPTION_PRIVATE_KEY):");
+console.log("1. Add as a Cloudflare Worker secret (SUBSCRIPTION_PRIVATE_KEY):");
 console.log("───────────────────────────────────────────────────────────────");
 console.log(privateKeyOneLine);
 console.log("\n");

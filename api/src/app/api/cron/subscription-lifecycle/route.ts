@@ -43,6 +43,7 @@ import {
   subscriptionDaysLeft,
   toSubscriptionExpiryKey,
 } from "@/lib/subscriptionLifecycle";
+import { resetMonthlyIncludedSeconds } from "@/lib/transcriptionCredits";
 
 const CRON_SECRET = process.env.CRON_SECRET || "";
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
@@ -530,6 +531,12 @@ export async function GET(req: NextRequest) {
             createdAt: nowISO,
           });
 
+          try {
+            await resetMonthlyIncludedSeconds(sub.userId, plan);
+          } catch (resetErr) {
+            console.warn("[subscription-lifecycle] Failed to reset transcription balance:", resetErr);
+          }
+
           await sendEmail(subscriptionRenewedEmail({
             userName: user.name || "there",
             userEmail: user.email,
@@ -627,6 +634,12 @@ export async function GET(req: NextRequest) {
           description: `Plan downgraded to ${targetPlan} — credit reset`,
           createdAt: nowISO,
         } as any);
+
+        try {
+          await resetMonthlyIncludedSeconds(sub.userId, targetPlan);
+        } catch (resetErr) {
+          console.warn("[subscription-lifecycle] Failed to reset transcription balance:", resetErr);
+        }
 
         // Notify
         const user = await db.collection("users").findOne({ _id: new (await import("mongodb")).ObjectId(sub.userId) });

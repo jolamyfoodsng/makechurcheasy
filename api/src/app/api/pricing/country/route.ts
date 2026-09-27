@@ -17,6 +17,7 @@ import { getAuthUserFromRequest } from "@/lib/auth";
 import { getCountryPricing } from "@/lib/countryPricing";
 import { resolveFlutterwavePricing } from "@/lib/flutterwavePricing";
 import { resolveRequestCountry } from "@/lib/requestCountry";
+import { hasSuccessfulPaidSubscription } from "@/lib/subscriptionPricingEligibility";
 
 // ── African country codes (ISO 3166-1 alpha-2, excluding Nigeria) ──
 const AFRICAN_COUNTRIES = new Set([
@@ -66,7 +67,13 @@ export async function GET(req: NextRequest) {
 
     // 3. Resolve country through the admin-managed pricing table.
     const region = getPricingRegion(countryCode);
-    const pricing = await getCountryPricing(countryCode);
+    const countryPricing = await getCountryPricing(countryCode);
+    const hasPriorPaidSubscription = authUser?.mongoUser?._id
+      ? await hasSuccessfulPaidSubscription(authUser.mongoUser._id.toString())
+      : false;
+    const pricing = hasPriorPaidSubscription
+      ? withoutIntroductoryPrices(countryPricing)
+      : countryPricing;
     const flutterwavePricing = await resolveFlutterwavePricing(countryCode, pricing);
 
       return NextResponse.json({
@@ -120,4 +127,19 @@ export async function GET(req: NextRequest) {
       });
     }
   }
+}
+
+function withoutIntroductoryPrices<T extends {
+  plans: Record<string, { introductoryMonthly?: number }>;
+  baseUsdPlans?: Record<string, { introductoryMonthly?: number }>;
+}>(pricing: T): T {
+  const plans = Object.fromEntries(
+    Object.entries(pricing.plans).map(([id, plan]) => [id, { ...plan, introductoryMonthly: undefined }]),
+  ) as T["plans"];
+  const baseUsdPlans = pricing.baseUsdPlans
+    ? Object.fromEntries(
+        Object.entries(pricing.baseUsdPlans).map(([id, plan]) => [id, { ...plan, introductoryMonthly: undefined }]),
+      ) as T["baseUsdPlans"]
+    : undefined;
+  return { ...pricing, plans, ...(baseUsdPlans ? { baseUsdPlans } : {}) };
 }

@@ -7,7 +7,6 @@ import { rateLimit } from "@/lib/rateLimit";
 import { CreditTransactionType } from "@/types/schemas";
 import { getEffectivePlan } from "@/lib/trial";
 import {
-  getFreeSpeechToScriptureLimitMinutes,
   getFreeSpeechToScriptureUsage,
 } from "@/lib/speechToScriptureUsage";
 
@@ -110,17 +109,23 @@ export async function POST(req: NextRequest) {
         const planConfig = await getPlanConfig();
         const transcriptionCost = planConfig.creditCosts.find((cost) => cost.name === "Speech-to-Scripture")?.cost || 1;
         const usage = await getFreeSpeechToScriptureUsage(db, userId, transcriptionCost);
-        const dailyLimitMinutes = getFreeSpeechToScriptureLimitMinutes();
         const requestedMinutes = amount / (transcriptionCost > 0 ? transcriptionCost : 1);
-        if (usage.usedMinutes + requestedMinutes > dailyLimitMinutes) {
+        const dailyExceeded = usage.dailyUsedMinutes + requestedMinutes > usage.dailyLimitMinutes;
+        const weeklyExceeded = usage.weeklyUsedMinutes + requestedMinutes > usage.weeklyLimitMinutes;
+        if (dailyExceeded || weeklyExceeded) {
           return NextResponse.json(
             {
-              error: "Daily Speech to Scripture limit reached",
-              reason: "daily_speech_limit",
+              error: dailyExceeded
+                ? "Daily Speech to Scripture limit reached"
+                : "Weekly Speech to Scripture limit reached",
+              reason: dailyExceeded ? "daily_speech_limit" : "weekly_speech_limit",
               newBalance: check.remaining,
-              dailyLimitMinutes,
-              dailyUsedMinutes: usage.usedMinutes,
-              dailyRemainingSeconds: Math.max(0, Math.floor((dailyLimitMinutes - usage.usedMinutes) * 60)),
+              dailyLimitMinutes: usage.dailyLimitMinutes,
+              dailyUsedMinutes: usage.dailyUsedMinutes,
+              dailyRemainingSeconds: usage.dailyRemainingSeconds,
+              weeklyLimitMinutes: usage.weeklyLimitMinutes,
+              weeklyUsedMinutes: usage.weeklyUsedMinutes,
+              weeklyRemainingSeconds: usage.weeklyRemainingSeconds,
             },
             { status: 402 },
           );

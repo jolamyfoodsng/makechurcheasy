@@ -6,6 +6,8 @@ import { signSessionToken } from "@/lib/jwt";
 import { setAuthCookieOnResponse } from "@/lib/auth";
 import { sendEmail, verificationCodeEmail } from "@/lib/emailTemplates";
 import { rateLimit } from "@/lib/rateLimit";
+import { detectRequestCountry } from "@/lib/signupDefaults";
+import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -124,11 +126,36 @@ export async function POST(req: NextRequest) {
     const tokenVersion = user.tokenVersion ?? 0;
     const jwt = await signSessionToken(user._id.toString(), tokenVersion);
 
-    // Update lastLogin
+    // Detect edge location from Cloudflare
+    const detectedCountry = detectRequestCountry(req.headers);
+    const normalizedCountry = detectedCountry && (await isKnownCountryCode(detectedCountry))
+      ? await normalizeCountryCode(detectedCountry)
+      : null;
+    const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
+    const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
+    const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+
+    const now = new Date().toISOString();
+    const loginUpdates: Record<string, any> = {
+      lastLogin: now,
+    };
+    if (normalizedCountry) {
+      loginUpdates.country = normalizedCountry;
+      loginUpdates.lastLoginCountry = normalizedCountry;
+    }
+    if (clientCity) loginUpdates.lastLoginCity = clientCity;
+    if (clientTimezone) {
+      loginUpdates.lastLoginTimezone = clientTimezone;
+      if (!user.timezone) loginUpdates.timezone = clientTimezone;
+    }
+    if (clientIp) loginUpdates.lastLoginIp = clientIp;
+
     await db.collection("users").updateOne(
       { _id: user._id },
-      { $set: { lastLogin: new Date().toISOString() } }
+      { $set: loginUpdates }
     );
+
+    const activeCountry = normalizedCountry || user.country || "";
 
     const response = NextResponse.json({
       user: {
@@ -138,7 +165,7 @@ export async function POST(req: NextRequest) {
         avatar: user.avatar || "",
         appId: user.appId,
         churchName: user.churchName || "",
-        country: user.country || "",
+        country: activeCountry,
         phone: user.phone || "",
         role: user.role || "user",
         plan: user.plan || "free",

@@ -7,9 +7,9 @@ import { apiLimiter } from "@/lib/rateLimit";
 import { CreditTransactionType } from "@/types/schemas";
 import { getEffectivePlan } from "@/lib/trial";
 import {
-  getFreeSpeechToScriptureLimitMinutes,
   getFreeSpeechToScriptureUsage,
 } from "@/lib/speechToScriptureUsage";
+import { deductTranscriptionSeconds } from "@/lib/transcriptionCredits";
 
 /**
  * POST /api/credit-transactions/deduct
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     }
 
     const client = await clientPromise;
+    const db = client.db();
     const clientSession = client.startSession();
 
     try {
@@ -64,17 +65,23 @@ export async function POST(req: NextRequest) {
         const planConfig = await getPlanConfig();
         const transcriptionCost = planConfig.creditCosts.find((cost) => cost.name === "Speech-to-Scripture")?.cost || 1;
         const usage = await getFreeSpeechToScriptureUsage(db, userId, transcriptionCost);
-        const dailyLimitMinutes = getFreeSpeechToScriptureLimitMinutes();
         const requestedMinutes = amount / (transcriptionCost > 0 ? transcriptionCost : 1);
-        if (usage.usedMinutes + requestedMinutes > dailyLimitMinutes) {
+        const dailyExceeded = usage.dailyUsedMinutes + requestedMinutes > usage.dailyLimitMinutes;
+        const weeklyExceeded = usage.weeklyUsedMinutes + requestedMinutes > usage.weeklyLimitMinutes;
+        if (dailyExceeded || weeklyExceeded) {
           return NextResponse.json(
             {
-              error: "Daily Speech to Scripture limit reached",
-              reason: "daily_speech_limit",
+              error: dailyExceeded
+                ? "Daily Speech to Scripture limit reached"
+                : "Weekly Speech to Scripture limit reached",
+              reason: dailyExceeded ? "daily_speech_limit" : "weekly_speech_limit",
               currentBalance: check.remaining,
-              dailyLimitMinutes,
-              dailyUsedMinutes: usage.usedMinutes,
-              dailyRemainingSeconds: Math.max(0, Math.floor((dailyLimitMinutes - usage.usedMinutes) * 60)),
+              dailyLimitMinutes: usage.dailyLimitMinutes,
+              dailyUsedMinutes: usage.dailyUsedMinutes,
+              dailyRemainingSeconds: usage.dailyRemainingSeconds,
+              weeklyLimitMinutes: usage.weeklyLimitMinutes,
+              weeklyUsedMinutes: usage.weeklyUsedMinutes,
+              weeklyRemainingSeconds: usage.weeklyRemainingSeconds,
             },
             { status: 402 },
           );
@@ -107,6 +114,22 @@ export async function POST(req: NextRequest) {
         } else {
           throw txErr;
         }
+      }
+
+      // Sync transcription balance in seconds for transcription events
+      if (["transcription", "speech_to_scripture"].includes(String(source).toLowerCase()) && getEffectivePlan(mongoUser) !== "free") {
+        const seconds = typeof metadata?.durationSec === "number" && metadata.durationSec > 0
+          ? metadata.durationSec
+          : amount * 60;
+        const requestId = typeof metadata?.requestId === "string" ? metadata.requestId : undefined;
+        await deductTranscriptionSeconds({
+          userId,
+          seconds,
+          requestId,
+          description,
+          metadata,
+          mongoUser,
+        }).catch((err) => console.warn("[deduct route] Transcription balance sync warning:", err));
       }
 
       // Re-aggregate after commit for accurate balance

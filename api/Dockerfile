@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+ARG CACHEBUST=20260925-v8
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1

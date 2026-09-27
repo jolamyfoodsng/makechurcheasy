@@ -184,7 +184,7 @@ export async function recordActivationEvent(
     unset["trialExperiment.activationRequired"] = "";
   }
 
-  if (Object.keys(set).length > 1 || Object.keys(unset).length > 0) {
+  if (Object.keys(set).length > 0 || Object.keys(unset).length > 0) {
     const update: Record<string, Record<string, unknown>> = { $set: set };
     if (Object.keys(unset).length > 0) update.$unset = unset;
     await db.collection("users").updateOne({ _id: objectId }, update);

@@ -3,15 +3,15 @@
  *
  * Provider:
  *   - Development: nodemailer via local MailDev SMTP (localhost:1025)
- *   - Production:  provider selected by EMAIL_PROVIDER (Mailtrap or Resend)
+ *   - Production:  provider selected by EMAIL_PROVIDER (Cloudflare Email Service or Mailtrap)
  *
  * Configure via environment variables:
- *   EMAIL_PROVIDER  — mailtrap, resend, or console
+ *   EMAIL_PROVIDER  — cloudflare, mailtrap, or console
  *   EMAIL_FALLBACK_PROVIDER — optional fallback provider
  *   MAILTRAP_API_TOKEN — Mailtrap sending API token
  *   MAILTRAP_FROM_EMAIL / MAILTRAP_FROM_NAME — Mailtrap-specific sender identity
- *   RESEND_API_KEY  — Resend API key when selected
- *   EMAIL_FROM      — sender address (default: noreply@makechurcheazy.com)
+ *   CLOUDFLARE_EMAIL_ACCOUNT_ID / CLOUDFLARE_EMAIL_API_TOKEN — Cloudflare sender credentials
+ *   EMAIL_FROM      — sender address (default: noreply@notifications.makechurcheazy.com)
  */
 
 import nodemailer from "nodemailer";
@@ -21,7 +21,7 @@ import { logEmailEvent } from "./emailLog";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_EMAIL_FROM = "noreply@makechurcheazy.com";
+const DEFAULT_EMAIL_FROM = "noreply@notifications.makechurcheazy.com";
 const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || "MakeChurchEasy";
 const EMAIL_FROM = resolveEmailFrom(process.env.EMAIL_FROM);
 const APP_URL =
@@ -1393,4 +1393,3 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
     html,
   };
 }
-

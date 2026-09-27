@@ -6,6 +6,7 @@ import { checkAllExpiredAdminTemporaryPlans } from "@/lib/adminTemporaryPlan";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { getEffectivePlan } from "@/lib/trial";
 import { calculateUserActivityScore } from "@/lib/userActivityScore";
+import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,6 +46,31 @@ export async function GET(req: NextRequest) {
     const userIds = users.map((u) => u._id.toString());
     const userObjectIds = users.map((u) => u._id);
 
+    const reactivationOfferMap = new Map<string, {
+      status: string;
+      offeredAt: string | null;
+      grantedAt: string | null;
+      expiresAt: string | null;
+    }>();
+    try {
+      const offers = await db.collection("reactivation_offers")
+        .find(
+          { campaignKey: GROWTH_REACTIVATION_CAMPAIGN_KEY, userId: { $in: userIds } },
+          { projection: { userId: 1, status: 1, offeredAt: 1, grantedAt: 1, expiresAt: 1 } },
+        )
+        .toArray();
+      for (const offer of offers) {
+        reactivationOfferMap.set(String(offer.userId), {
+          status: String(offer.status || "available"),
+          offeredAt: offer.offeredAt?.toISOString?.() || offer.offeredAt || null,
+          grantedAt: offer.grantedAt?.toISOString?.() || offer.grantedAt || null,
+          expiresAt: offer.expiresAt?.toISOString?.() || offer.expiresAt || null,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not query reactivation offers:", err);
+    }
+
     // Bulk-calculate real credit balances (2 queries total, regardless of user count)
     const creditBalances = await calculateBulkCredits(
       users.map((u) => ({
@@ -78,21 +104,58 @@ export async function GET(req: NextRequest) {
       console.warn("Could not aggregate security_sessions:", err);
     }
 
-    // Query device counts per user
+    // Query device counts and latest lastSeen per user
     const deviceCountMap = new Map<string, number>();
+    const deviceLastSeenMap = new Map<string, string>();
     try {
       const deviceAgg = await db
         .collection("devices")
-        .aggregate<{ _id: string; count: number }>([
+        .aggregate<{ _id: string; count: number; latestSeen?: string | Date }>([
           { $match: { userId: { $in: userIds }, $or: [{ status: "active" }, { status: { $exists: false } }] } },
-          { $group: { _id: "$userId", count: { $sum: 1 } } },
+          { $group: { _id: "$userId", count: { $sum: 1 }, latestSeen: { $max: "$lastSeen" } } },
         ])
         .toArray();
       for (const d of deviceAgg) {
-        if (d._id) deviceCountMap.set(String(d._id), d.count);
+        if (d._id) {
+          deviceCountMap.set(String(d._id), d.count);
+          if (d.latestSeen) {
+            deviceLastSeenMap.set(String(d._id), new Date(d.latestSeen).toISOString());
+          }
+        }
       }
     } catch (err) {
       console.warn("Could not aggregate devices:", err);
+    }
+
+    // Query latest activity per user from activity_events
+    const activityLastSeenMap = new Map<string, string>();
+    try {
+      const activityAgg = await db
+        .collection("activity_events")
+        .aggregate<{ _id: string; latestTime: string | Date }>([
+          {
+            $match: {
+              $or: [
+                { userId: { $in: userIds } },
+                { userId: { $in: userObjectIds } },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: "$userId",
+              latestTime: { $max: { $ifNull: ["$timestamp", "$createdAt"] } },
+            },
+          },
+        ])
+        .toArray();
+      for (const a of activityAgg) {
+        if (a._id && a.latestTime) {
+          activityLastSeenMap.set(String(a._id), new Date(a.latestTime).toISOString());
+        }
+      }
+    } catch (err) {
+      console.warn("Could not aggregate activity_events:", err);
     }
 
     // Query usage per user from user_usage collection
@@ -121,6 +184,39 @@ export async function GET(req: NextRequest) {
       console.warn("Could not query user_usage:", err);
     }
 
+    // Query transcription balances
+    const transcriptionBalanceMap = new Map<
+      string,
+      {
+        includedSeconds: number;
+        purchasedSeconds: number;
+        totalAvailableSeconds: number;
+        includedHours: number;
+        purchasedHours: number;
+        totalAvailableHours: number;
+        totalAvailableCredits: number;
+      }
+    >();
+    try {
+      const transDocs = await db.collection("transcription_balances").find({ userId: { $in: userIds } }).toArray();
+      for (const tb of transDocs) {
+        const inc = tb.includedSeconds || 0;
+        const pur = tb.purchasedSeconds || 0;
+        const tot = inc + pur;
+        transcriptionBalanceMap.set(tb.userId, {
+          includedSeconds: inc,
+          purchasedSeconds: pur,
+          totalAvailableSeconds: tot,
+          includedHours: Math.round((inc / 3600) * 10) / 10,
+          purchasedHours: Math.round((pur / 3600) * 10) / 10,
+          totalAvailableHours: Math.round((tot / 3600) * 10) / 10,
+          totalAvailableCredits: Math.round(tot / 60),
+        });
+      }
+    } catch (err) {
+      console.warn("Could not query transcription_balances:", err);
+    }
+
     const formatted = users.map((u) => {
       const id = u._id.toString();
       const effectivePlan = getEffectivePlan(u as any);
@@ -134,8 +230,10 @@ export async function GET(req: NextRequest) {
       const lastActiveRaw = u.lastActive?.toISOString?.() || u.lastActive || null;
       const lastLoginRaw = u.lastLogin?.toISOString?.() || u.lastLogin || null;
       const sessionActiveRaw = sessionMap.get(id) || null;
+      const deviceActiveRaw = deviceLastSeenMap.get(id) || null;
+      const activityActiveRaw = activityLastSeenMap.get(id) || activityLastSeenMap.get(u._id.toString()) || null;
 
-      const timestamps = [lastActiveRaw, lastLoginRaw, sessionActiveRaw]
+      const timestamps = [lastActiveRaw, lastLoginRaw, sessionActiveRaw, deviceActiveRaw, activityActiveRaw]
         .map((t) => (t ? new Date(t).getTime() : NaN))
         .filter((n) => Number.isFinite(n) && n > 0);
 
@@ -165,6 +263,7 @@ export async function GET(req: NextRequest) {
         role: u.role || "user",
         accountStatus: u.isActive === false ? "suspended" : "active",
         credits: creditBalances.get(id) ?? 0,
+        transcriptionBalance: transcriptionBalanceMap.get(id) || null,
         // Display the effective entitlement, not a stale stored paid plan.
         // Active trials remain labelled Free so the existing trial badge is shown.
         plan: effectivePlan === "trial" ? "free" : effectivePlan,
@@ -183,6 +282,7 @@ export async function GET(req: NextRequest) {
         subscriptionExpiresAt: effectivePlan === "free" ? null : (u.subscriptionExpiresAt || null),
         scheduledDowngradeAt: u.scheduledDowngradeAt || null,
         activationMilestones: u.activationMilestones || null,
+        reactivationOffer: reactivationOfferMap.get(id) || null,
         usage: userUsage,
         activityScore: {
           score: activityBreakdown.score,

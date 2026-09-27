@@ -105,6 +105,16 @@ export async function POST(
     // Sync subscription collection to keep plan consistent
     await upsertSubscription(id, { plan: "growth", status: "active" });
 
+    // Sync transcription balance to ambassador allowance
+    try {
+      const { resetMonthlyIncludedSeconds } = await import("@/lib/transcriptionCredits");
+      await resetMonthlyIncludedSeconds(id, "ambassador", {
+        reason: `Ambassador access granted (${finalCredits} credits)`,
+      });
+    } catch (err) {
+      console.warn("[Ambassador] Failed to sync transcription balance on grant:", err);
+    }
+
     // Audit log
     await logAuditEvent({
       adminId: auth.adminUserId,
@@ -315,6 +325,16 @@ export async function DELETE(
     // Sync subscription collection to keep plan consistent
     const revokeStatus = previousPlan === "free" ? "cancelled" : "active";
     await upsertSubscription(id, { plan: previousPlan, status: revokeStatus });
+
+    // Sync transcription balance to reverted plan allowance
+    try {
+      const { resetMonthlyIncludedSeconds } = await import("@/lib/transcriptionCredits");
+      await resetMonthlyIncludedSeconds(id, previousPlan, {
+        reason: "Ambassador access revoked",
+      });
+    } catch (err) {
+      console.warn("[Ambassador] Failed to sync transcription balance on revoke:", err);
+    }
 
     await logAuditEvent({
       adminId: auth.adminUserId,

@@ -17,8 +17,9 @@
 }
 
 @theme {
-    --font-sans: "Inter", "CMG Sans", ui-sans-serif, system-ui, sans-serif;
-    --font-display: "Sora", "Inter", "CMG Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: var(--font-open-sans), "Open Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-display: var(--font-open-sans), "Open Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-open-sans: var(--font-open-sans), "Open Sans", ui-sans-serif, system-ui, sans-serif;
 
     /* ── Brand Colors (sampled from logo: #0238E9 vivid royal blue) ─────── */
     --color-brand-blue: #0238E9;

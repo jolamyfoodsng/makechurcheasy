@@ -82,7 +82,6 @@ export async function POST(
             "trial.active": true,
             "trial.status": "active",
             "trial.endsAt": newEndsAt,
-            plan: "growth",
             updatedAt: now,
           },
         }

@@ -794,3 +794,171 @@ export async function deleteCustomTheme(themeId: string): Promise<{ success: boo
     method: "DELETE",
   });
 }
+
+// ─── Transcription Credits & Top-ups ──────────────────────────────────────────
+
+export interface TranscriptionBalanceSummary {
+  userId: string;
+  includedSeconds: number;
+  purchasedSeconds: number;
+  totalAvailableSeconds: number;
+  includedCredits: number;
+  purchasedCredits: number;
+  totalAvailableCredits: number;
+  includedHours: number;
+  purchasedHours: number;
+  totalAvailableHours: number;
+  effectivePlan: string;
+  isAdmin: boolean;
+  unlimited: boolean;
+  lastResetAt: string;
+  nextResetAt?: string | null;
+  formattedRemaining: string;
+}
+
+export interface TopupPackage {
+  id: string;
+  hours: number;
+  credits: number;
+  seconds: number;
+  price: number;
+  currency: string;
+  pricePerHour: number;
+  pricePerCredit: number;
+  badge?: string;
+  description: string;
+}
+
+export interface TopupPricingResult {
+  currency: string;
+  usdRate: number;
+  providerCostPerHourUSD: number;
+  profitPerHourNGN: number;
+  sellingPricePerHour: number;
+  packages: TopupPackage[];
+}
+
+export async function getTranscriptionBalance(): Promise<TranscriptionBalanceSummary> {
+  return request<TranscriptionBalanceSummary>("/api/transcription/balance");
+}
+
+export async function getTranscriptionPackages(currency?: string): Promise<TopupPricingResult> {
+  const query = currency ? `?currency=${encodeURIComponent(currency)}` : "";
+  return request<TopupPricingResult>(`/api/transcription/packages${query}`);
+}
+
+export async function createTranscriptionTopup(
+  packId: string,
+  returnUrl?: string
+): Promise<{ authorization_url: string; reference: string }> {
+  return request<{ authorization_url: string; reference: string }>("/api/transcription/topup", {
+    method: "POST",
+    body: JSON.stringify({ packId, returnUrl }),
+  });
+}
+
+export async function verifyTranscriptionTopup(
+  reference: string,
+  transactionId?: string
+): Promise<{ success: boolean; balance: TranscriptionBalanceSummary; alreadyProcessed?: boolean }> {
+  return request<{ success: boolean; balance: TranscriptionBalanceSummary; alreadyProcessed?: boolean }>(
+    "/api/transcription/topup/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({ reference, transactionId }),
+    }
+  );
+}
+
+// ─── Admin Transcription Pricing & Balance Adjustments ────────────────────────
+
+export interface AdminTranscriptionPricingResponse {
+  transcriptionPricing: {
+    providerCostPerHourUSD: number;
+    profitPerHourNGN: number;
+    freeDailyMinutes: number;
+    freeWeeklyMinutes: number;
+    sellingPricePerHourNGN?: number;
+    sellingPricePerHourUSD?: number;
+    tierPackages: Array<{
+      id: string;
+      hours: number;
+      badge?: string;
+      description: string;
+      customPriceNGN?: number;
+      customPriceUSD?: number;
+    }>;
+    planIncludedHours: {
+      free: number;
+      trial: number;
+      basic: number;
+      growth: number;
+      pro: number;
+      ambassador?: number;
+    };
+  };
+  usdRate: number;
+  pricingPreviewNGN: TopupPricingResult;
+  pricingPreviewUSD: TopupPricingResult;
+}
+
+export async function getAdminTranscriptionPricing(): Promise<AdminTranscriptionPricingResponse> {
+  return request<AdminTranscriptionPricingResponse>("/api/admin/transcription-pricing");
+}
+
+export async function updateAdminTranscriptionPricing(
+  data: Partial<AdminTranscriptionPricingResponse["transcriptionPricing"]>
+): Promise<{
+  success: boolean;
+  transcriptionPricing: AdminTranscriptionPricingResponse["transcriptionPricing"];
+  pricingPreviewNGN: TopupPricingResult;
+  pricingPreviewUSD: TopupPricingResult;
+  balanceSync?: { matched: number; reset: number; failed: number };
+}> {
+  return request("/api/admin/transcription-pricing", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getAdminUserCredits(
+  userId: string
+): Promise<{
+  credits: number;
+  transcriptionBalance: TranscriptionBalanceSummary;
+  recentTransactions: Array<{
+    _id?: string;
+    type: string;
+    source: string;
+    seconds: number;
+    credits: number;
+    description: string;
+    createdAt: string;
+  }>;
+}> {
+  return request(`/api/admin/users/${encodeURIComponent(userId)}/credits`);
+}
+
+export async function adminAdjustUserCredits(
+  userId: string,
+  params: {
+    amount: number;
+    unit?: "hours" | "credits" | "seconds";
+    action?: "increase" | "decrease" | "set";
+    target?: "purchased" | "included" | "auto";
+    reason?: string;
+  }
+): Promise<{
+  success: boolean;
+  credits: number;
+  transcriptionBalance: TranscriptionBalanceSummary;
+  adjustedHours: number;
+  adjustedCredits: number;
+  action: "increase" | "decrease" | "set";
+  message: string;
+}> {
+  return request(`/api/admin/users/${encodeURIComponent(userId)}/credits`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}

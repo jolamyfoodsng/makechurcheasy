@@ -66,6 +66,7 @@ const AUDIENCE_REACH_MAP: Record<string, string> = {
   just_subscribed: "380 recent sessions",
   cancelled_users: "890 past accounts",
   expired_trials: "1,240 lapsed trials",
+  reactivation_offer_users: "Eligible users with an unclaimed Growth gift",
 };
 
 export function AnnouncementStudioModal({

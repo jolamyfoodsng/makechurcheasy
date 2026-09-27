@@ -12,7 +12,8 @@ export type AnnouncementAudience =
   | "ambassador_users"
   | "just_subscribed"
   | "cancelled_users"
-  | "expired_trials";
+  | "expired_trials"
+  | "reactivation_offer_users";
 export type AnnouncementStatus = "draft" | "scheduled" | "active" | "paused" | "archived";
 export type AnnouncementSurface = "dashboard" | "desktop";
 export type PaidPlan = "basic" | "growth";
@@ -162,6 +163,7 @@ export const AUDIENCES: Array<{ value: AnnouncementAudience; label: string; hint
   { value: "just_subscribed", label: "New subscribers", hint: "Subscribed within the last 14 days", badge: "Welcome" },
   { value: "cancelled_users", label: "Cancelled users", hint: "Win-back offers & reactivations", badge: "Retention" },
   { value: "expired_trials", label: "Expired trials", hint: "Trial recovery discounts & nudges", badge: "Recovery" },
+  { value: "reactivation_offer_users", label: "Returning users with a Growth gift", hint: "Users selected for the June–August reactivation campaign who have not claimed their free Growth month", badge: "Reactivation" },
 ];
 
 export const TONES: Array<{

@@ -39,6 +39,10 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { discountFromPaymentMetadata, recordDiscountRedemption } from "@/lib/discounts";
 import { markReferralPaidForUser } from "@/lib/referrals";
 import { stopActiveTrialForPaidPlan } from "@/lib/trialRecords";
+import {
+  addPurchasedTranscriptionSeconds,
+  resetMonthlyIncludedSeconds,
+} from "@/lib/transcriptionCredits";
 import { CreditTransactionType, type PlanTier, type TransactionSource } from "@/types/schemas";
 import { ObjectId } from "mongodb";
 import crypto from "node:crypto";
@@ -156,6 +160,27 @@ export async function POST(req: NextRequest) {
 
         if (!targetUserId) {
           console.warn("[Paystack Webhook] No user found for charge.success");
+          break;
+        }
+
+        // Handle transcription credit top-ups
+        if (metadata.type === "transcription_topup") {
+          const seconds = Number(metadata.seconds) || (Number(metadata.hours) * 3600) || (Number(metadata.credits) * 60) || 0;
+          const amountPaid = (Number(data.amount) || 0) / 100;
+          const currency = data.currency || "NGN";
+          const reference = data.reference || `wh_${Date.now()}`;
+          if (seconds > 0) {
+            await addPurchasedTranscriptionSeconds({
+              userId: targetUserId,
+              seconds,
+              amountPaid,
+              currency,
+              reference,
+              packId: metadata.packId as string,
+              description: `Paystack top-up: ${seconds / 3600}h (${seconds / 60} credits)`,
+            });
+            console.log(`[Paystack Webhook] Credited ${seconds}s top-up to user ${targetUserId}`);
+          }
           break;
         }
 
@@ -373,6 +398,13 @@ export async function POST(req: NextRequest) {
           createdAt: now.toISOString(),
         });
 
+        // Reset monthly included transcription seconds (preserves purchasedSeconds)
+        try {
+          await resetMonthlyIncludedSeconds(targetUserId, plan);
+        } catch (resetErr) {
+          console.warn("[Paystack Webhook] Failed to reset transcription balance:", resetErr);
+        }
+
         // Resolve user name for emails
         let userName = "there";
         try {
@@ -533,6 +565,13 @@ export async function POST(req: NextRequest) {
           },
           createdAt: now.toISOString(),
         });
+
+        // Reset monthly included transcription seconds (preserves purchasedSeconds)
+        try {
+          await resetMonthlyIncludedSeconds(user._id.toString(), plan);
+        } catch (resetErr) {
+          console.warn("[Paystack Webhook] Failed to reset transcription balance:", resetErr);
+        }
 
         console.log(`[Paystack Webhook] Subscription created: ${user._id} → ${plan}`);
         break;

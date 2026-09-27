@@ -65,9 +65,7 @@ export function isFlutterwaveConfigured() {
 
 export function isFlutterwaveCurrencySupported(currency: string) {
   const normalizedCurrency = currency.trim().toUpperCase();
-  // The explicit market map is the source of truth. This prevents a stale
-  // environment variable from accidentally disabling a configured local
-  // market or enabling a currency that has no configured checkout pricing.
+  if (normalizedCurrency === "SLE") return true;
   return getFlutterwaveSupportedCurrencies().has(normalizedCurrency);
 }
 
@@ -144,8 +142,14 @@ export async function createFlutterwavePayment(input: {
   description: string;
   metadata: Record<string, unknown>;
 }) {
-  const currency = input.currency.trim().toUpperCase();
-  const amount = Number(input.amount.toFixed(2));
+  let currency = input.currency.trim().toUpperCase();
+  let amount = Number(input.amount.toFixed(2));
+  if (currency === "SLE") {
+    currency = "SLL";
+    if (amount < 1000) {
+      amount = amount * 1000;
+    }
+  }
   const body = {
     tx_ref: input.txRef,
     amount,

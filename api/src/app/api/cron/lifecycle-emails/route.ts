@@ -1,7 +1,7 @@
 /**
  * GET /api/cron/lifecycle-emails
  *
- * Vercel Cron job — runs every 5 minutes to send onboarding lifecycle emails:
+ * Cloudflare Workers Cron Trigger — runs daily at 03:15 UTC to send onboarding lifecycle emails:
  *
  *   Email 3: Trial Activated       — 5–10 min after email verification
  *   Email 4: Day 1 Activation      — 24 hours after email verification
@@ -12,7 +12,7 @@
  *   Email 9: Trial Expired          — at trial expiry
  *   Email 10: Re-engagement         — 7 days after trial expiry
  *
- * Protected by CRON_SECRET — only Vercel cron or the secret bearer token can call this.
+ * Protected by CRON_SECRET — only the Cloudflare dispatcher or a secret bearer token can call this.
  */
 
 import { NextRequest, NextResponse } from "next/server";

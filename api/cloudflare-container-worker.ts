@@ -8,6 +8,14 @@ type WorkerEnv = Record<string, unknown> & {
 type CloudflareRequest = Request & {
   cf?: {
     country?: string | null;
+    city?: string | null;
+    region?: string | null;
+    regionCode?: string | null;
+    timezone?: string | null;
+    continent?: string | null;
+    postalCode?: string | null;
+    latitude?: string | null;
+    longitude?: string | null;
   };
 };
 
@@ -21,6 +29,8 @@ const CONTAINER_ENV_NAMES = [
   "EMAIL_FROM_NAME",
   "EMAIL_FALLBACK_PROVIDER",
   "EMAIL_PROVIDER",
+  "CLOUDFLARE_EMAIL_ACCOUNT_ID",
+  "CLOUDFLARE_EMAIL_API_TOKEN",
   "FLW_API_BASE_URL",
   "FLW_SECRET_KEY",
   "GITHUB_TOKEN",
@@ -63,7 +73,6 @@ const CONTAINER_ENV_NAMES = [
   "R2_PREFIX",
   "R2_PUBLIC_BASE_URL",
   "R2_SECRET_ACCESS_KEY",
-  "RESEND_API_KEY",
   "SMTP_HOST",
   "SMTP_PORT",
   "SUBSCRIPTION_PRIVATE_KEY",
@@ -73,10 +82,26 @@ const CONTAINER_ENV_NAMES = [
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_CHAT_ID",
   "TELEGRAM_NOTIFICATION_TIMEZONE",
-  "TELEGRAM_NOTIFICATIONS_ENABLED",
+  "AUTH_URL",
   "TRIAL_ABUSE_SALT",
   "TRIAL_BLOCK_IP_UA",
   "TRIAL_REQUIRE_DEVICE_FINGERPRINT",
+  "FLW_PUBLIC_KEY",
+  "FLW_ENCRYPTION_KEY",
+  "FLW_SECRET_HASH",
+  "FLW_SUPPORTED_CURRENCIES",
+  "OPENCODE_API_KEY",
+  "OPENCODE_MODEL",
+  "TRANSCRIPTION_PROFIT_NGN_PER_HOUR",
+  "TRANSCRIPTION_PROVIDER_COST_USD_PER_HOUR",
+  "FIREBASE_SERVICE_ACCOUNT_KEY",
+  "SUBSCRIPTION_PUBLIC_KEY",
+  "NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY",
+  "NEXT_PUBLIC_POSTHOG_KEY",
+  "NEXT_PUBLIC_POSTHOG_HOST",
+  "NEXT_PUBLIC_GA_ID",
+  "AUTH_FACEBOOK_ID",
+  "AUTH_FACEBOOK_SECRET",
 ] as const;
 
 function buildContainerEnv(source: Record<string, unknown>): Record<string, string> {
@@ -95,16 +120,36 @@ function buildContainerEnv(source: Record<string, unknown>): Record<string, stri
 function forwardEdgeMetadata(request: Request): Request {
   const headers = new Headers(request.headers);
   const cloudflareRequest = request as CloudflareRequest;
-  const country = cloudflareRequest.cf?.country?.trim().toUpperCase();
-  const clientIp = headers.get("CF-Connecting-IP")?.trim();
+  const cfCountry = cloudflareRequest.cf?.country?.trim().toUpperCase() || "";
+  const country = cfCountry !== "XX" && cfCountry !== "T1" ? cfCountry : "";
+  const city = cloudflareRequest.cf?.city?.trim() || "";
+  const region = cloudflareRequest.cf?.region?.trim() || cloudflareRequest.cf?.regionCode?.trim() || "";
+  const timezone = cloudflareRequest.cf?.timezone?.trim() || "";
+  const clientIp = headers.get("CF-Connecting-IP")?.trim() || "";
 
-  // Never trust these values from the browser. They are replaced with
-  // metadata derived by Cloudflare at the edge before reaching the container.
-  headers.delete("x-mce-geo-country");
-  headers.delete("x-mce-client-ip");
+  // These headers are replaced with values from Cloudflare's request metadata;
+  // never forward client-provided location or IP claims to the container.
+  for (const name of [
+    "cf-ipcountry",
+    "x-mce-geo-country",
+    "x-mce-geo-city",
+    "x-mce-geo-region",
+    "x-mce-geo-timezone",
+    "x-mce-client-ip",
+  ]) {
+    headers.delete(name);
+  }
 
-  if (country) headers.set("x-mce-geo-country", country);
-  if (clientIp) headers.set("x-mce-client-ip", clientIp);
+  if (country) {
+    headers.set("x-mce-geo-country", country);
+    headers.set("cf-ipcountry", country);
+  }
+  if (city) headers.set("x-mce-geo-city", city);
+  if (region) headers.set("x-mce-geo-region", region);
+  if (timezone) headers.set("x-mce-geo-timezone", timezone);
+  if (clientIp) {
+    headers.set("x-mce-client-ip", clientIp);
+  }
 
   return new Request(request, { headers });
 }
@@ -128,5 +173,41 @@ export default {
 
     const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
     return container.fetch(forwardEdgeMetadata(request));
+  },
+
+  async scheduled(controller: ScheduledController, workerEnv: WorkerEnv, ctx: ExecutionContext): Promise<void> {
+    const cronSecret = String((workerEnv as Record<string, unknown>).CRON_SECRET || "");
+    if (!cronSecret) {
+      console.error("[Cloudflare Cron] CRON_SECRET is not configured; skipping scheduled job");
+      return;
+    }
+    const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
+    const cron = controller.cron || "";
+
+    const dispatchUrl = `http://localhost:3000/api/cron/dispatcher?cron=${encodeURIComponent(cron)}`;
+    ctx.waitUntil(
+      container
+        .fetch(
+          new Request(dispatchUrl, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${cronSecret}`,
+              "content-type": "application/json",
+              "x-cloudflare-cron": cron,
+            },
+          }),
+        )
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            console.error(`[Cloudflare Cron] Scheduled job failed for ${cron}: HTTP ${res.status}`, body);
+          } else {
+            console.log(`[Cloudflare Cron] Scheduled job succeeded for ${cron}`);
+          }
+        })
+        .catch((err) => {
+          console.error(`[Cloudflare Cron] Error triggering scheduled job ${cron}:`, err);
+        }),
+    );
   },
 };

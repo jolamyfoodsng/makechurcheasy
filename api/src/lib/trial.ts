@@ -158,13 +158,15 @@ export function getEffectivePlan(user: TrialUser | null | undefined): EffectiveP
   if (!user) return "free";
   const localDevPlan = getLocalDevPlanOverride((user as any)._id);
   if (localDevPlan) return localDevPlan;
+  if (user.ambassador?.active) return "growth";
+  if (isInTrial(user)) return "trial";
+
   if (hasExpiredAdminTemporaryPlan(user)) return "free";
   if (hasExpiredAdminManagedSubscription(user)) return "free";
-  if (user.ambassador?.active) return "growth";
   if (hasExpiredStoredPaidSubscription(user)) return "free";
   const storedPlan = normalizeStoredPlan(user.plan);
   if (storedPlan !== "free") return storedPlan;
-  return isInTrial(user) ? "trial" : "free";
+  return "free";
 }
 
 // ── Raw MongoDB User Helpers ────────────────────────────────────────────────

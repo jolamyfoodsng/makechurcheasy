@@ -65,12 +65,18 @@ export async function GET(req: NextRequest) {
     }
     user = await checkAndExpireAdminTemporaryPlan(userId, user);
 
-    // 3. Update lastSeen
+    // 3. Update lastSeen and user lastActive
     const { appVersion, appPlatform } = extractDeviceInfo(req);
-    await db.collection("devices").updateOne(
-      { deviceId },
-      { $set: { lastSeen: new Date(), appVersion, appPlatform } }
-    );
+    await Promise.all([
+      db.collection("devices").updateOne(
+        { deviceId },
+        { $set: { lastSeen: new Date(), appVersion, appPlatform } }
+      ),
+      db.collection("users").updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: { lastActive: new Date().toISOString() } }
+      ),
+    ]);
 
     // 4. Determine account status
     const accountStatus: "active" | "suspended" =
@@ -139,6 +145,12 @@ export async function GET(req: NextRequest) {
       trialActive = trialRecord.status === "active" && endsAtMs > nowMs;
       trialExpired = trialRecord.status === "expired" || (trialRecord.status === "active" && endsAtMs <= nowMs);
       trialEndsAt = trialRecord.endsAt || null;
+      user.trial = {
+        active: trialActive,
+        status: trialRecord.status,
+        endsAt: trialRecord.endsAt,
+        startedAt: trialRecord.startedAt,
+      };
     } else {
       // Fallback to legacy embedded trial
       trialActive = isInTrial(user as TrialUser);
@@ -190,16 +202,15 @@ export async function GET(req: NextRequest) {
     const resolvedPlan = getEffectivePlan(user as TrialUser);
     const isTrialPlan = resolvedPlan === "trial";
     const effectivePlan = isTrialPlan ? "growth" : resolvedPlan;
-    trialActive = isTrialPlan && trialActive;
-    if (!isTrialPlan) {
-      trialExpired = false;
+    trialActive = isTrialPlan || trialActive;
+    if (!trialActive) {
       trialEndsAt = null;
     }
 
-    // Free plan users have no payment obligation — override paymentStatus so
+    // Free plan users and active trial users have no payment obligation — override paymentStatus so
     // the desktop licenseGuard doesn't flag them for payment issues.
     const isFreePlan = effectivePlan === "free";
-    if (isFreePlan) {
+    if (isFreePlan || trialActive) {
       paymentStatus = "paid";
     }
 
@@ -234,8 +245,8 @@ export async function GET(req: NextRequest) {
 
     // 11. Determine lock reason (mirrors licenseGuard.ts evaluateLicense logic)
     // Security/compliance locks apply to ALL users. Payment/subscription/trial
-    // locks only apply to paid plan users — free plan users are never locked
-    // for these reasons since they have no payment obligation.
+    // locks only apply to paid plan users — free plan users and active trial users
+    // are never locked for these reasons.
     let lockReason: string | null = null;
 
     // Backend-forced maintenance lock
@@ -250,8 +261,8 @@ export async function GET(req: NextRequest) {
     else if (accountStatus === "suspended") {
       lockReason = "account_suspended";
     }
-    // Payment/subscription/trial locks — only for paid plan users
-    else if (!isFreePlan) {
+    // Payment/subscription/trial locks — only for paid plan users (not active in trial)
+    else if (!isFreePlan && !trialActive) {
       if (paymentStatus === "failed" || paymentStatus === "refunded") {
         lockReason = "payment_expired";
       } else if (subscriptionStatus === "cancelled") {

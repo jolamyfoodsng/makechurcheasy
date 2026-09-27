@@ -17,14 +17,32 @@ export async function proxyToBackend(
   headers.delete("host");
   headers.delete("content-length");
 
+  const edgeCountry =
+    request.headers.get("cf-ipcountry") ||
+    request.headers.get("x-mce-geo-country") ||
+    request.headers.get("x-vercel-ip-country");
+  if (edgeCountry && !headers.has("x-mce-geo-country")) {
+    headers.set("x-mce-geo-country", edgeCountry.trim().toUpperCase());
+  }
+
+  const clientIp =
+    request.headers.get("cf-connecting-ip") ||
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-mce-client-ip");
+  if (clientIp && !headers.has("x-mce-client-ip")) {
+    headers.set("x-mce-client-ip", clientIp.trim());
+  }
+
   try {
     const method = request.method.toUpperCase();
+    const hasBody = method !== "GET" && method !== "HEAD";
     const response = await fetch(backendUrl(pathname, request.nextUrl.search), {
       method,
       headers,
-      body: method === "GET" || method === "HEAD" ? undefined : request.body,
+      body: hasBody ? request.body : undefined,
       redirect: "manual",
-    });
+      ...(hasBody && request.body ? { duplex: "half" } : {}),
+    } as RequestInit);
 
     return new NextResponse(response.body, {
       status: response.status,

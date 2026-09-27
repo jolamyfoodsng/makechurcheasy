@@ -10,6 +10,7 @@ import type {
   AnnouncementSurface,
   AnnouncementTone,
 } from "@/types/schemas";
+import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 import { EventEmitter } from "node:events";
 
 // ── Event Bus for real-time notification ─────────────────────────────────────
@@ -50,6 +51,7 @@ export const ANNOUNCEMENT_AUDIENCES: AnnouncementAudience[] = [
   "inactive_7d",
   "inactive_30d",
   "never_opened_app",
+  "reactivation_offer_users",
 ];
 
 export const ANNOUNCEMENT_SURFACES: AnnouncementSurface[] = ["dashboard", "desktop"];
@@ -547,6 +549,16 @@ export async function userMatchesAnnouncement(
         });
       return !desktopSession;
     }
+    case "reactivation_offer_users": {
+      if (!userId) return false;
+      const client = await clientPromise;
+      const db = client.db();
+      return Boolean(await db.collection("reactivation_offers").findOne({
+        campaignKey: GROWTH_REACTIVATION_CAMPAIGN_KEY,
+        userId,
+        status: "available",
+      }, { projection: { _id: 1 } }));
+    }
     default:
       return false;
   }
@@ -963,12 +975,30 @@ export async function getNextAnnouncementForUser(
     if (currentShowCount >= Math.max(1, candidate.maxShowsPerUser || 1)) continue;
     if (!(await userMatchesAnnouncement(candidate, user))) continue;
 
-    if (existingDelivery?.shownAt) {
-      const spacingMs = Math.max(0, candidate.deliverySpacingMinutes || 0) * 60 * 1000;
-      const allowedAtMs = new Date(existingDelivery.shownAt).getTime() + spacingMs;
-      if (allowedAtMs > now.getTime()) {
-        nextAvailableAt = new Date(allowedAtMs).toISOString();
-        continue;
+    if (existingDelivery) {
+      if (existingDelivery.dismissedAt) {
+        const spacingMinutes = candidate.deliverySpacingMinutes ?? 0;
+        // If no spacing interval is set (<= 0), an explicit dismissal means do not re-show.
+        if (spacingMinutes <= 0) {
+          continue;
+        }
+        // If a spacing interval is set, enforce the cooldown after dismissal.
+        const dismissedAtMs = new Date(existingDelivery.dismissedAt).getTime();
+        const spacingMs = spacingMinutes * 60 * 1000;
+        const allowedAtMs = dismissedAtMs + spacingMs;
+        if (allowedAtMs > now.getTime()) {
+          nextAvailableAt = new Date(allowedAtMs).toISOString();
+          continue;
+        }
+      } else if (existingDelivery.shownAt) {
+        const spacingMs = Math.max(0, candidate.deliverySpacingMinutes || 0) * 60 * 1000;
+        if (spacingMs > 0) {
+          const allowedAtMs = new Date(existingDelivery.shownAt).getTime() + spacingMs;
+          if (allowedAtMs > now.getTime()) {
+            nextAvailableAt = new Date(allowedAtMs).toISOString();
+            continue;
+          }
+        }
       }
     }
 
@@ -1031,11 +1061,11 @@ export async function dismissAnnouncementDelivery(
   await ensureIndexes();
   const client = await clientPromise;
   const db = client.db();
-  let objectId: ObjectId;
+  let objectId: ObjectId | null = null;
   try {
     objectId = new ObjectId(deliveryId);
   } catch {
-    return false;
+    objectId = null;
   }
 
   const now = new Date().toISOString();
@@ -1043,14 +1073,18 @@ export async function dismissAnnouncementDelivery(
     ? { dismissedAt: now, clickedAt: now, updatedAt: now }
     : { dismissedAt: now, updatedAt: now };
 
-  const delivery = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).findOne({
-    _id: objectId,
-    userId,
-  });
-  if (!delivery || delivery.dismissedAt) return false;
+  const query: any = { userId, dismissedAt: null };
+  if (objectId) {
+    query.$or = [{ _id: objectId }, { announcementId: deliveryId }];
+  } else {
+    query.announcementId = deliveryId;
+  }
 
-  const result = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).updateOne(
-    { _id: objectId, userId, dismissedAt: null },
+  const delivery = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).findOne(query);
+  if (!delivery) return false;
+
+  const result = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).updateMany(
+    { userId, announcementId: delivery.announcementId, dismissedAt: null },
     { $set: update },
   );
 

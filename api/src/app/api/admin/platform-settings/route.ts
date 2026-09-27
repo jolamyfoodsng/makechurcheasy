@@ -6,6 +6,7 @@ const VALID_SECTIONS = [
   "appUpdates",
   "trial",
   "credits",
+  "transcriptionPricing",
   "ambassador",
   "earlyAccess",
   "authentication",

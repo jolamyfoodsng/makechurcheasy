@@ -11,7 +11,7 @@ import clientPromise from "./mongodb";
 import { logAuditEvent } from "./auditLog";
 import { insertCreditTransaction, getPlanConfig, upsertSubscription } from "./db";
 import { getPlatformSettings } from "./platformSettings";
-import type { PlanTier } from "@/types/schemas";
+import { CreditTransactionType, type PlanTier } from "@/types/schemas";
 
 /**
  * Check if a user's ambassador access has expired and handle expiration.
@@ -76,7 +76,7 @@ export async function checkAndExpireAmbassador(
     if (creditsGranted > 0) {
       await insertCreditTransaction({
         userId,
-        type: "revocation",
+        type: CreditTransactionType.REVOCATION,
         source: "ambassador_expired",
         amount: -creditsGranted,
         balanceAfter: newCredits,

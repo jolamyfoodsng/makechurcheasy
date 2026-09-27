@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth";
-import { getPlanConfig } from "@/lib/db";
+import { getActiveSubscription, getPlanConfig } from "@/lib/db";
 import { getPricingVersion } from "@/lib/countryPricing";
 import { resolvePaymentPricing } from "@/lib/paymentPricing";
 import { rateLimit } from "@/lib/rateLimit";
@@ -21,6 +21,8 @@ import { resolveEarlyAccessOffer } from "@/lib/earlyAccess";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { DiscountCodeError, resolveDiscountCode } from "@/lib/discounts";
 import { resolveSpecialOfferById, type ResolvedSpecialOffer } from "@/lib/specialOffers";
+import { getActiveTrialDaysRemaining } from "@/lib/trialRecords";
+import { hasSuccessfulPaidSubscription } from "@/lib/subscriptionPricingEligibility";
 import {
   createMtnMomoRequest,
   getMtnMomoPublicConfig,
@@ -101,20 +103,14 @@ export async function POST(req: NextRequest) {
     const email = authUser.mongoUser.email;
 
     const body = (await req.json()) as InitializePaymentBody;
-    const paymentMethod = body.paymentMethod || "paystack";
+    const requestedMethod = body.paymentMethod || "flutterwave";
+    const paymentMethod = requestedMethod === "paystack" ? "flutterwave" : requestedMethod;
     if (
-      paymentMethod !== "paystack" &&
       paymentMethod !== "mtn_momo" &&
       paymentMethod !== "nowpayments" &&
       paymentMethod !== "flutterwave"
     ) {
       return NextResponse.json({ error: "Unsupported payment method" }, { status: 400 });
-    }
-    if (paymentMethod === "paystack" && !PAYSTACK_SECRET_KEY) {
-      return NextResponse.json(
-        { error: "Paystack not configured" },
-        { status: 500 }
-      );
     }
     if (paymentMethod === "nowpayments") {
       const callbackUrl = getNowPaymentsIpnCallbackUrl();
@@ -172,12 +168,6 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (paymentMethod === "paystack" && userCountry !== "NG") {
-      return NextResponse.json(
-        { error: "Paystack checkout is available for Nigerian users only." },
-        { status: 400 },
-      );
-    }
     const planConfig = await getPlanConfig();
     let numericAmount = 0;
     let paymentCurrency = checkoutPricing.currency;
@@ -186,6 +176,7 @@ export async function POST(req: NextRequest) {
     let appliedDiscount: Awaited<ReturnType<typeof resolveDiscountCode>> | null = null;
     let appliedOffer: ResolvedSpecialOffer | null = null;
     let purchaseKind: "subscription" | "one_time" = "subscription";
+    let hasPriorPaidSubscription = false;
 
     if (offerId) {
       const offerResult = resolveSpecialOfferById({
@@ -247,11 +238,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      hasPriorPaidSubscription = await hasSuccessfulPaidSubscription(userId);
+      const applyIntroductoryPrice =
+        billingCycle === "monthly" && !hasPriorPaidSubscription && planPricing.introductoryMonthly != null;
       numericAmount = billingCycle === "yearly"
         ? planPricing.yearly
-        : planPricing.introductoryMonthly ?? planPricing.monthly;
+        : applyIntroductoryPrice
+          ? planPricing.introductoryMonthly!
+          : planPricing.monthly;
       originalAmount = numericAmount;
-      if (billingCycle === "monthly" && planPricing.introductoryMonthly != null) {
+      if (applyIntroductoryPrice) {
         originalAmount = planPricing.monthly;
       }
     }
@@ -284,7 +280,7 @@ export async function POST(req: NextRequest) {
       if (standardPlanPurchase && !appliedDiscount) {
         const basePlan = countryPricing.baseUsdPlans[purchasePlan];
         if (basePlan) {
-          cryptoAmount = billingCycle === "monthly" && basePlan.introductoryMonthly != null
+          cryptoAmount = billingCycle === "monthly" && !hasPriorPaidSubscription && basePlan.introductoryMonthly != null
             ? basePlan.introductoryMonthly
             : billingCycle === "yearly" ? basePlan.yearly : basePlan.monthly;
           cryptoOriginalAmount = billingCycle === "yearly" ? basePlan.yearly : basePlan.monthly;
@@ -330,10 +326,36 @@ export async function POST(req: NextRequest) {
 
     const pricingVersion = await getPricingVersion();
 
+    const activeTrialDays = purchaseKind === "subscription"
+      ? await getActiveTrialDaysRemaining(userId)
+      : 0;
+    const activeSubscription = activeTrialDays > 0
+      ? await getActiveSubscription(userId).catch(() => null)
+      : null;
+    const subscriptionEndsAtMs = authUser.mongoUser.subscriptionExpiresAt
+      ? new Date(authUser.mongoUser.subscriptionExpiresAt).getTime()
+      : 0;
+    const hasCurrentPaidSubscription = Boolean(activeSubscription) ||
+      (Number.isFinite(subscriptionEndsAtMs) && subscriptionEndsAtMs > Date.now());
+    const nowMs = Date.now();
+    const isGrantActive = (grant: { active?: boolean; expiresAt?: string | null } | null | undefined) => {
+      if (!grant?.active) return false;
+      if (!grant.expiresAt) return true;
+      const expiresAtMs = new Date(grant.expiresAt).getTime();
+      return Number.isFinite(expiresAtMs) && expiresAtMs > nowMs;
+    };
+    const hasManagedAccess = authUser.mongoUser.role === "admin" ||
+      Boolean(authUser.mongoUser.ambassador?.active) ||
+      isGrantActive(authUser.mongoUser.adminTemporaryPlan) ||
+      isGrantActive(authUser.mongoUser.adminManagedSubscription);
+    const trialDaysCarried = activeTrialDays > 0 && !hasCurrentPaidSubscription && !hasManagedAccess
+      ? activeTrialDays
+      : 0;
     const paymentMetadata = {
       userId,
       plan: purchasePlan,
       billingCycle,
+      trialDaysCarried,
       country: userCountry,
       currency: paymentCurrency,
       currencySymbol: paymentCurrencySymbol,

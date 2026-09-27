@@ -10,7 +10,7 @@ import { extractDeviceInfo } from "@/lib/deviceInfo";
 import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import { getLocalDevPlanOverride } from "@/lib/localDevPlanOverride";
 import {
-  getFreeSpeechToScriptureLimitMinutes,
+  getFreeSpeechToScriptureAllowance,
   getFreeSpeechToScriptureUsage,
 } from "@/lib/speechToScriptureUsage";
 
@@ -213,21 +213,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let dailySpeechAllowance: { limitMinutes: number; usedMinutes: number; remainingMinutes: number } | null = null;
+    let freeSpeechAllowance: {
+      dailyLimitMinutes: number;
+      dailyUsedMinutes: number;
+      dailyRemainingSeconds: number;
+      weeklyLimitMinutes: number;
+      weeklyUsedMinutes: number;
+      weeklyRemainingSeconds: number;
+    } | null = null;
     if (feature === "speechToScripture" && effectivePlan === "free" && user.role !== "admin") {
       const transcriptionCost = planConfig.creditCosts.find((cost) => cost.name === "Speech-to-Scripture")?.cost || 1;
-      const limitMinutes = getFreeSpeechToScriptureLimitMinutes();
+      const allowance = await getFreeSpeechToScriptureAllowance();
       const usage = await getFreeSpeechToScriptureUsage(db, user._id.toString(), transcriptionCost);
-      const remainingMinutes = Math.max(0, limitMinutes - usage.usedMinutes);
-      dailySpeechAllowance = { limitMinutes, usedMinutes: usage.usedMinutes, remainingMinutes };
-      if (remainingMinutes <= 0) {
+      freeSpeechAllowance = {
+        dailyLimitMinutes: allowance.dailyLimitMinutes,
+        dailyUsedMinutes: usage.dailyUsedMinutes,
+        dailyRemainingSeconds: usage.dailyRemainingSeconds,
+        weeklyLimitMinutes: allowance.weeklyLimitMinutes,
+        weeklyUsedMinutes: usage.weeklyUsedMinutes,
+        weeklyRemainingSeconds: usage.weeklyRemainingSeconds,
+      };
+      if (usage.dailyRemainingSeconds <= 0 || usage.weeklyRemainingSeconds <= 0) {
         return NextResponse.json(
           {
             allowed: false,
-            reason: "daily_speech_limit",
-            dailyLimitMinutes: limitMinutes,
-            dailyUsedMinutes: usage.usedMinutes,
-            dailyRemainingSeconds: 0,
+            reason: usage.dailyRemainingSeconds <= 0 ? "daily_speech_limit" : "weekly_speech_limit",
+            ...freeSpeechAllowance,
           },
           { headers: CORS_HEADERS },
         );
@@ -235,12 +246,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 9. Credits check (if feature requires credits)
+    let calculatedCredits: any = null;
     if (featureConfig.requiresCredits) {
-      const credits = await calculateUserCredits(user._id.toString(), user);
+      calculatedCredits = await calculateUserCredits(user._id.toString(), user);
 
       // Admin and unlimited plans bypass credit checks
-      if (!credits.unlimited && !credits.isAdmin) {
-        const available = credits.credits;
+      if (!calculatedCredits.unlimited && !calculatedCredits.isAdmin) {
+        const available = calculatedCredits.credits;
         const needed = requiredCredits ?? 1;
 
         if (available <= 0) {
@@ -274,9 +286,12 @@ export async function POST(req: NextRequest) {
             plan: effectivePlan,
             trialActive: exposeTrial && trialActive,
             trialEndsAt: exposeTrial ? user.trial?.endsAt || null : null,
-            dailyLimitMinutes: dailySpeechAllowance?.limitMinutes ?? null,
-            dailyUsedMinutes: dailySpeechAllowance?.usedMinutes ?? null,
-            dailyRemainingSeconds: dailySpeechAllowance ? Math.floor(dailySpeechAllowance.remainingMinutes * 60) : null,
+            dailyLimitMinutes: freeSpeechAllowance?.dailyLimitMinutes ?? null,
+            dailyUsedMinutes: freeSpeechAllowance?.dailyUsedMinutes ?? null,
+            dailyRemainingSeconds: freeSpeechAllowance?.dailyRemainingSeconds ?? null,
+            weeklyLimitMinutes: freeSpeechAllowance?.weeklyLimitMinutes ?? null,
+            weeklyUsedMinutes: freeSpeechAllowance?.weeklyUsedMinutes ?? null,
+            weeklyRemainingSeconds: freeSpeechAllowance?.weeklyRemainingSeconds ?? null,
           },
           { headers: CORS_HEADERS }
         );
@@ -284,15 +299,24 @@ export async function POST(req: NextRequest) {
     }
 
     // 10. All checks passed
+    const isAdminUser = user.role === "admin" || Boolean(calculatedCredits?.isAdmin);
+    const isUnlimited = Boolean(calculatedCredits?.unlimited) || isAdminUser;
+
     return NextResponse.json(
       {
         allowed: true,
         plan: effectivePlan,
+        credits: isUnlimited ? -1 : (calculatedCredits?.credits ?? undefined),
+        isAdmin: isAdminUser,
+        unlimited: isUnlimited,
         trialActive: exposeTrial && trialActive,
         trialEndsAt: exposeTrial ? user.trial?.endsAt || null : null,
-        dailyLimitMinutes: dailySpeechAllowance?.limitMinutes ?? null,
-        dailyUsedMinutes: dailySpeechAllowance?.usedMinutes ?? null,
-        dailyRemainingSeconds: dailySpeechAllowance ? Math.floor(dailySpeechAllowance.remainingMinutes * 60) : null,
+        dailyLimitMinutes: freeSpeechAllowance?.dailyLimitMinutes ?? null,
+        dailyUsedMinutes: freeSpeechAllowance?.dailyUsedMinutes ?? null,
+        dailyRemainingSeconds: freeSpeechAllowance?.dailyRemainingSeconds ?? null,
+        weeklyLimitMinutes: freeSpeechAllowance?.weeklyLimitMinutes ?? null,
+        weeklyUsedMinutes: freeSpeechAllowance?.weeklyUsedMinutes ?? null,
+        weeklyRemainingSeconds: freeSpeechAllowance?.weeklyRemainingSeconds ?? null,
       },
       { headers: CORS_HEADERS }
     );

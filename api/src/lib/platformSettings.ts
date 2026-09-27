@@ -58,6 +58,30 @@ export interface PlatformSettings {
     speechToScriptureCost: number;
     aiSummaryCost: number;
   };
+  transcriptionPricing: {
+    providerCostPerHourUSD: number;
+    profitPerHourNGN: number;
+    freeDailyMinutes: number;
+    freeWeeklyMinutes: number;
+    sellingPricePerHourNGN?: number;
+    sellingPricePerHourUSD?: number;
+    tierPackages: Array<{
+      id: string;
+      hours: number;
+      badge?: string;
+      description: string;
+      customPriceNGN?: number;
+      customPriceUSD?: number;
+    }>;
+    planIncludedHours: {
+      free: number;
+      trial: number;
+      basic: number;
+      growth: number;
+      pro: number;
+      ambassador: number;
+    };
+  };
   ambassador: {
     enabled: boolean;
     creditsPerAmbassador: number;
@@ -93,6 +117,7 @@ export interface PlatformSettings {
     websocketPort: number;
     autoDetect: boolean;
     reconnectIntervalMs: number;
+    tutorialVideoUrl?: string;
   };
   ai: {
     featureToggles: {
@@ -227,6 +252,27 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
     speechToScriptureCost: 2,
     aiSummaryCost: 3,
   },
+  transcriptionPricing: {
+    providerCostPerHourUSD: 0.027,
+    profitPerHourNGN: 40,
+    freeDailyMinutes: 15,
+    freeWeeklyMinutes: 60,
+    tierPackages: [
+      { id: "topup-1h", hours: 1, badge: "", description: "Quick top-up for a single service or practice run." },
+      { id: "topup-5h", hours: 5, badge: "", description: "Ideal for a full weekend of Sunday services." },
+      { id: "topup-10h", hours: 10, badge: "Popular", description: "Best for active ministries running multiple weekly meetings." },
+      { id: "topup-20h", hours: 20, badge: "", description: "Extended coverage for monthly conferences and youth camps." },
+      { id: "topup-50h", hours: 50, badge: "Best Value", description: "Maximum savings for large productions and multi-campus events." },
+    ],
+    planIncludedHours: {
+      free: 0,
+      trial: 5,
+      basic: 12,
+      growth: 30,
+      pro: 30,
+      ambassador: 30,
+    },
+  },
   ambassador: {
     enabled: true,
     creditsPerAmbassador: 1000,
@@ -262,6 +308,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
     websocketPort: 4455,
     autoDetect: true,
     reconnectIntervalMs: 3000,
+    tutorialVideoUrl: "https://www.youtube.com/watch?v=makechurcheasy-obs-dock",
   },
   ai: {
     featureToggles: {

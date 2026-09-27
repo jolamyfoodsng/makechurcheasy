@@ -4,6 +4,10 @@ import { calculateUserCredits } from "@/lib/credits";
 import { getActiveSubscription, getPlanConfig } from "@/lib/db";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { checkAndExpireAmbassador } from "@/lib/ambassadorExpiration";
+import { detectRequestCountry } from "@/lib/signupDefaults";
+import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
+import { getTrialForUser } from "@/lib/trialRecords";
+import clientPromise from "@/lib/mongodb";
 
 export async function GET(req: NextRequest) {
   const authUser = await getAuthUserFromRequest(req);
@@ -17,20 +21,63 @@ export async function GET(req: NextRequest) {
     authUser.mongoUser,
   );
   mongoUser = (await checkAndExpireAmbassador(mongoUser._id.toString(), mongoUser)) as any;
+
+  if (!mongoUser.country) {
+    const detectedCountry = detectRequestCountry(req.headers);
+    if (detectedCountry && (await isKnownCountryCode(detectedCountry))) {
+      const normalized = await normalizeCountryCode(detectedCountry);
+      const client = await clientPromise;
+      await client.db().collection("users").updateOne(
+        { _id: mongoUser._id },
+        { $set: { country: normalized, lastLoginCountry: normalized } },
+      );
+      mongoUser.country = normalized;
+    }
+  }
+
   const creditsResult = await calculateUserCredits(mongoUser._id.toString(), mongoUser);
   const activeSubscription = await getActiveSubscription(mongoUser._id.toString()).catch(() => null);
   const planConfig = await getPlanConfig();
+  const trialRecord = await getTrialForUser(mongoUser._id.toString()).catch(() => null);
+  const nowMs = Date.now();
+  const trialEndsAtMs = trialRecord?.endsAt ? new Date(trialRecord.endsAt).getTime() : 0;
+  const canonicalTrialActive = trialRecord?.status === "active" && Number.isFinite(trialEndsAtMs) && trialEndsAtMs > nowMs;
+  const subscriptionEndsAtMs = mongoUser.subscriptionExpiresAt ? new Date(mongoUser.subscriptionExpiresAt).getTime() : 0;
+  const hasCurrentPaidSubscription = Boolean(activeSubscription) ||
+    (Number.isFinite(subscriptionEndsAtMs) && subscriptionEndsAtMs > nowMs);
+  const isGrantActive = (grant: { active?: boolean; expiresAt?: string | null } | null | undefined) => {
+    if (!grant?.active) return false;
+    if (!grant.expiresAt) return true;
+    const expiresAtMs = new Date(grant.expiresAt).getTime();
+    return Number.isFinite(expiresAtMs) && expiresAtMs > nowMs;
+  };
+  const hasManagedAccess = mongoUser.role === "admin" ||
+    Boolean(mongoUser.ambassador?.active) ||
+    isGrantActive(mongoUser.adminTemporaryPlan) ||
+    isGrantActive(mongoUser.adminManagedSubscription);
+  // Older trial-extension flows wrote "growth" into users.plan. Use the
+  // canonical trial record to keep those users eligible to upgrade, unless
+  // they also have a current paid or managed plan.
+  const isTrialAccess = !hasCurrentPaidSubscription && !hasManagedAccess &&
+    (creditsResult.effectivePlan === "trial" || canonicalTrialActive);
   const entitlementPlan = creditsResult.effectivePlan === "admin" ? "growth" : creditsResult.effectivePlan;
   const entitlements = planConfig.plans[entitlementPlan]?.entitlements || planConfig.plans.free.entitlements;
   const clientPlan =
-    creditsResult.effectivePlan === "trial"
+    isTrialAccess
       ? "free"
       : creditsResult.effectivePlan === "admin"
         ? "growth"
         : creditsResult.effectivePlan;
   const trial =
-    creditsResult.effectivePlan === "trial"
-      ? mongoUser.trial || null
+    isTrialAccess
+      ? {
+          ...(mongoUser.trial || {}),
+          active: true,
+          status: "active",
+          startedAt: trialRecord?.startedAt || mongoUser.trial?.startedAt,
+          endsAt: trialRecord?.endsAt || mongoUser.trial?.endsAt,
+          durationDays: trialRecord?.durationDays || mongoUser.trial?.durationDays,
+        }
       : mongoUser.trial
         ? { ...mongoUser.trial, active: false }
         : null;

@@ -9,6 +9,8 @@ import {
   claimTrialForUserIfEligible,
 } from "@/lib/trialAbuse";
 import { findMatchingDesktopDevice } from "@/lib/desktopDeviceRegistration";
+import { detectRequestCountry } from "@/lib/signupDefaults";
+import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 
 const verifyLimiter = rateLimit({ windowMs: 60_000, max: 10 });
 const MAX_ATTEMPTS = 5;
@@ -240,14 +242,36 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
-    // Delete used code
-    await db.collection("loginCodes").deleteOne({ _id: loginCode._id });
+    // Detect edge location from Cloudflare
+    const detectedCountry = detectRequestCountry(req.headers);
+    const normalizedCountry = detectedCountry && (await isKnownCountryCode(detectedCountry))
+      ? await normalizeCountryCode(detectedCountry)
+      : null;
+    const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
+    const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
+    const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
 
-    // Update last login
+    const now = new Date().toISOString();
+    const loginUpdates: Record<string, any> = {
+      lastLogin: now,
+    };
+    if (normalizedCountry) {
+      loginUpdates.country = normalizedCountry;
+      loginUpdates.lastLoginCountry = normalizedCountry;
+    }
+    if (clientCity) loginUpdates.lastLoginCity = clientCity;
+    if (clientTimezone) {
+      loginUpdates.lastLoginTimezone = clientTimezone;
+      if (!user.timezone) loginUpdates.timezone = clientTimezone;
+    }
+    if (clientIp) loginUpdates.lastLoginIp = clientIp;
+
     await db.collection("users").updateOne(
       { _id: user._id },
-      { $set: { lastLogin: new Date().toISOString() } }
+      { $set: loginUpdates }
     );
+
+    const activeCountry = normalizedCountry || user.country || "";
 
     return NextResponse.json(
       {
@@ -258,6 +282,7 @@ export async function POST(req: NextRequest) {
           avatar: user.avatar || "",
           appId: user.appId,
           churchName: user.churchName || "",
+          country: activeCountry,
           createdAt: user.createdAt,
           role: user.role,
           plan: user.plan || "free",

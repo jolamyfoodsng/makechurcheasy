@@ -48,6 +48,18 @@ export async function getTrialForUser(userId: string): Promise<TrialRecord | nul
     .findOne({ userId }, { sort: { createdAt: -1 } });
 }
 
+/** Days remaining on the user's active trial, rounded up like the dashboard. */
+export async function getActiveTrialDaysRemaining(
+  userId: string,
+  nowMs = Date.now(),
+): Promise<number> {
+  const trial = await getTrialForUser(userId);
+  if (trial?.status !== "active") return 0;
+  const endsAtMs = new Date(trial.endsAt).getTime();
+  if (!Number.isFinite(endsAtMs) || endsAtMs <= nowMs) return 0;
+  return Math.ceil((endsAtMs - nowMs) / (24 * 60 * 60 * 1000));
+}
+
 /**
  * Get a trial record by its _id.
  */

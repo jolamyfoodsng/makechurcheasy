@@ -1,7 +1,7 @@
 /**
  * GET /api/cron/ambassador-expiry
  *
- * Vercel Cron job — runs daily to auto-expire ambassador access.
+ * Cloudflare Workers Cron Trigger — runs daily to auto-expire ambassador access.
  *
  * Finds all users with `ambassador.active: true` and `ambassador.expiresAt`
  * in the past, then for each user:
@@ -11,7 +11,7 @@
  *   4. Inserts audit log
  *   5. Syncs subscription collection
  *
- * Protected by CRON_SECRET — only Vercel cron or the secret bearer token can call this.
+ * Protected by CRON_SECRET — only the Cloudflare dispatcher or a secret bearer token can call this.
  */
 
 import { NextRequest, NextResponse } from "next/server";

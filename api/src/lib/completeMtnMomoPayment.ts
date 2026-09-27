@@ -12,6 +12,7 @@ import { discountFromPaymentMetadata, recordDiscountRedemption } from "@/lib/dis
 import { markReferralPaidForUser } from "@/lib/referrals";
 import { stopActiveTrialForPaidPlan } from "@/lib/trialRecords";
 import { recordActivationEvent } from "@/lib/activation";
+import { resetMonthlyIncludedSeconds } from "@/lib/transcriptionCredits";
 import { CreditTransactionType, type BillingCycle, type PlanTier } from "@/types/schemas";
 
 const VALID_PLANS: PlanTier[] = ["free", "basic", "growth"];
@@ -55,6 +56,7 @@ function buildResult(input: {
   price: number;
   pricingVersion: number;
   expiresAt: string;
+  trialDaysCarried: number;
   billingTransaction: Record<string, unknown>;
   subscription: unknown;
   duplicate?: boolean;
@@ -72,6 +74,7 @@ function buildResult(input: {
     lockedPrice: input.price,
     pricingVersion: input.pricingVersion,
     expiresAt: input.expiresAt,
+    trialDaysCarried: input.trialDaysCarried,
     subscription: input.subscription,
     billingTransaction: input.billingTransaction,
     reference: input.billingTransaction.reference,
@@ -137,6 +140,7 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
       price,
       pricingVersion,
       expiresAt: String(existingBilling.expiresAt || ""),
+      trialDaysCarried: Math.max(0, Math.floor(Number(existingBilling.trialDaysCarried) || 0)),
       subscription,
       billingTransaction: {
         _id: existingBilling._id,
@@ -151,9 +155,13 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
   }
 
   const now = new Date();
+  const trialDaysCarried = purchaseKind === "subscription"
+    ? Math.max(0, Math.floor(Number(metadata.trialDaysCarried) || 0))
+    : 0;
+  const paidPeriodDays = billingCycle === "yearly" ? 365 : 30;
   const expiresAt = billingCycle === "lifetime"
     ? "9999-12-31T23:59:59.999Z"
-    : new Date(now.getTime() + (billingCycle === "yearly" ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString();
+    : new Date(now.getTime() + (paidPeriodDays + trialDaysCarried) * 24 * 60 * 60 * 1000).toISOString();
 
   const billingTransaction = await insertBillingTransaction({
     userId: input.userId,
@@ -178,6 +186,7 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
     offerOriginalPrice,
     offerAppliedPrice,
     expiresAt,
+    trialDaysCarried,
     paidAt: now.toISOString(),
     createdAt: now.toISOString(),
   });
@@ -255,6 +264,7 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
       billingCycle,
       purchaseKind,
       providerReference: input.providerReference,
+      trialDaysCarried,
       billingTransactionId: billingTransaction._id?.toString(),
       discountCode: appliedDiscount?.code,
       discountPercent: appliedDiscount?.percentOff,
@@ -262,6 +272,13 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
     },
     createdAt: now.toISOString(),
   });
+
+  // Reset monthly included transcription seconds (preserves purchasedSeconds)
+  try {
+    await resetMonthlyIncludedSeconds(input.userId, plan);
+  } catch (resetErr) {
+    console.warn("[completeMtnMomoPayment] Failed to reset transcription balance:", resetErr);
+  }
 
   const subscription = await upsertSubscription(input.userId, {
     plan,
@@ -363,6 +380,7 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
     price,
     pricingVersion,
     expiresAt,
+    trialDaysCarried,
     subscription,
     billingTransaction: {
       _id: billingTransaction._id,
@@ -376,6 +394,7 @@ export async function completeMtnMomoPayment(input: CompleteMtnMomoPaymentInput)
       purchaseKind,
       paidAt: now.toISOString(),
       expiresAt,
+      trialDaysCarried,
     },
   });
 }

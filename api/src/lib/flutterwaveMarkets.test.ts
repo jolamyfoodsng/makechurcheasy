@@ -9,17 +9,48 @@ import {
 
 test("keeps only explicitly configured Flutterwave local markets", () => {
   assert.deepEqual(Object.keys(FLUTTERWAVE_LOCAL_MARKETS).sort(), [
+    "AT",
+    "BE",
+    "CA",
+    "CI",
+    "CM",
+    "CY",
+    "DE",
+    "EE",
+    "EG",
+    "ES",
+    "ET",
+    "FI",
+    "FR",
+    "GB",
     "GH",
+    "GR",
+    "HR",
+    "IE",
+    "IT",
     "KE",
+    "LT",
+    "LU",
+    "LV",
+    "MT",
+    "MW",
     "NG",
+    "NL",
+    "PT",
     "RW",
+    "SI",
+    "SK",
+    "SL",
+    "SN",
     "TZ",
     "UG",
+    "US",
     "ZA",
     "ZM",
   ]);
   assert.equal(getFlutterwaveLocalMarket("gh")?.currency, "GHS");
-  assert.equal(getFlutterwaveLocalMarket("ET"), undefined);
+  assert.equal(getFlutterwaveLocalMarket("et")?.currency, "ETB");
+  assert.equal(getFlutterwaveLocalMarket("IN"), undefined);
 });
 
 test("supports USD fallback plus mapped local currencies", () => {
@@ -27,5 +58,7 @@ test("supports USD fallback plus mapped local currencies", () => {
   assert.equal(supported.has("USD"), true);
   assert.equal(supported.has("NGN"), true);
   assert.equal(supported.has("GHS"), true);
-  assert.equal(supported.has("ETB"), false);
+  assert.equal(supported.has("ETB"), true);
+  assert.equal(supported.has("EUR"), true);
+  assert.equal(supported.has("INR"), false);
 });

@@ -8,9 +8,10 @@ import { verifyDeviceSecret } from "@/lib/deviceAuth";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import {
-  getFreeSpeechToScriptureLimitMinutes,
+  getFreeSpeechToScriptureAllowance,
   getFreeSpeechToScriptureUsage,
 } from "@/lib/speechToScriptureUsage";
+import { checkTranscriptionAccess } from "@/lib/transcriptionCredits";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -154,20 +155,31 @@ export async function POST(req: NextRequest) {
     }
 
     const transcriptionCost = planConfig.creditCosts.find((cost) => cost.name === "Speech-to-Scripture")?.cost || 1;
-    let dailySpeechAllowance: { limitMinutes: number; usedMinutes: number; remainingMinutes: number } | null = null;
+    let freeSpeechAllowance: {
+      dailyLimitMinutes: number;
+      dailyUsedMinutes: number;
+      dailyRemainingSeconds: number;
+      weeklyLimitMinutes: number;
+      weeklyUsedMinutes: number;
+      weeklyRemainingSeconds: number;
+    } | null = null;
     if (effectivePlan === "free" && user.role !== "admin") {
-      const limitMinutes = getFreeSpeechToScriptureLimitMinutes();
+      const allowance = await getFreeSpeechToScriptureAllowance();
       const usage = await getFreeSpeechToScriptureUsage(db, user._id.toString(), transcriptionCost);
-      const remainingMinutes = Math.max(0, limitMinutes - usage.usedMinutes);
-      dailySpeechAllowance = { limitMinutes, usedMinutes: usage.usedMinutes, remainingMinutes };
-      if (remainingMinutes <= 0) {
+      freeSpeechAllowance = {
+        dailyLimitMinutes: allowance.dailyLimitMinutes,
+        dailyUsedMinutes: usage.dailyUsedMinutes,
+        dailyRemainingSeconds: usage.dailyRemainingSeconds,
+        weeklyLimitMinutes: allowance.weeklyLimitMinutes,
+        weeklyUsedMinutes: usage.weeklyUsedMinutes,
+        weeklyRemainingSeconds: usage.weeklyRemainingSeconds,
+      };
+      if (usage.dailyRemainingSeconds <= 0 || usage.weeklyRemainingSeconds <= 0) {
         return NextResponse.json(
           {
             allowed: false,
-            reason: "daily_speech_limit",
-            dailyLimitMinutes: limitMinutes,
-            dailyUsedMinutes: usage.usedMinutes,
-            dailyRemainingSeconds: 0,
+            reason: usage.dailyRemainingSeconds <= 0 ? "daily_speech_limit" : "weekly_speech_limit",
+            ...freeSpeechAllowance,
           },
           { headers: CORS_HEADERS },
         );
@@ -176,16 +188,31 @@ export async function POST(req: NextRequest) {
 
     // 9. Credits check — admin (-1) is unlimited
     const credits = await calculateUserCredits(user._id.toString(), user);
+    const transcriptionAccess = await checkTranscriptionAccess(user._id.toString(), user);
 
-    if (!credits.unlimited && !credits.isAdmin && credits.credits <= 0) {
-      return NextResponse.json(
-        {
-          allowed: false,
-          reason: "insufficient_credits",
-          credits: credits.credits,
-        },
-        { headers: CORS_HEADERS }
-      );
+    if (!credits.unlimited && !credits.isAdmin) {
+      if (credits.credits <= 0) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            reason: "insufficient_credits",
+            credits: credits.credits,
+          },
+          { headers: CORS_HEADERS }
+        );
+      }
+
+      if (!transcriptionAccess.allowed && effectivePlan !== "free") {
+        return NextResponse.json(
+          {
+            allowed: false,
+            reason: "TRANSCRIPTION_CREDITS_EXHAUSTED",
+            credits: transcriptionAccess.balance.totalAvailableCredits,
+            transcriptionBalance: transcriptionAccess.balance,
+          },
+          { headers: CORS_HEADERS }
+        );
+      }
     }
 
     // 10. All checks passed
@@ -196,9 +223,13 @@ export async function POST(req: NextRequest) {
         plan: effectivePlan,
         trialActive: exposeTrial && trialActive,
         trialEndsAt: exposeTrial ? user.trial?.endsAt || null : null,
-        dailyLimitMinutes: dailySpeechAllowance?.limitMinutes ?? null,
-        dailyUsedMinutes: dailySpeechAllowance?.usedMinutes ?? null,
-        dailyRemainingSeconds: dailySpeechAllowance ? Math.floor(dailySpeechAllowance.remainingMinutes * 60) : null,
+        dailyLimitMinutes: freeSpeechAllowance?.dailyLimitMinutes ?? null,
+        dailyUsedMinutes: freeSpeechAllowance?.dailyUsedMinutes ?? null,
+        dailyRemainingSeconds: freeSpeechAllowance?.dailyRemainingSeconds ?? null,
+        weeklyLimitMinutes: freeSpeechAllowance?.weeklyLimitMinutes ?? null,
+        weeklyUsedMinutes: freeSpeechAllowance?.weeklyUsedMinutes ?? null,
+        weeklyRemainingSeconds: freeSpeechAllowance?.weeklyRemainingSeconds ?? null,
+        transcriptionBalance: transcriptionAccess.balance,
       },
       { headers: CORS_HEADERS }
     );

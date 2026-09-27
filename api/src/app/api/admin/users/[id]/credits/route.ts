@@ -1,20 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
-import { insertCreditTransaction } from "@/lib/db";
 import { calculateUserCredits } from "@/lib/credits";
 import { logAuditEvent } from "@/lib/auditLog";
-import { CreditTransactionType } from "@/types/schemas";
+import {
+  adminAdjustTranscriptionBalance,
+  getTranscriptionBalanceSummary,
+} from "@/lib/transcriptionCredits";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
+
+/**
+ * GET /api/admin/users/[id]/credits
+ *
+ * Returns current credit balance, separate transcription balance (included vs purchased hours),
+ * and recent transaction history for this user.
+ */
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authResult = await requireAdmin(req);
+    if (!authResult.ok) return authResult.response;
+
+    const { id } = await params;
+
+    const client = await clientPromise;
+    const db = client.db();
+
+    let targetUser = null;
+    try {
+      targetUser = await db.collection("users").findOne({ _id: new ObjectId(id) });
+    } catch {
+      targetUser = await db.collection("users").findOne({ _id: id as any });
+    }
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const [legacyCredits, transcriptionBalance, recentTransactions] = await Promise.all([
+      calculateUserCredits(id, targetUser),
+      getTranscriptionBalanceSummary(id, targetUser),
+      db
+        .collection("transcription_transactions")
+        .find({ userId: id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray(),
+    ]);
+
+    return NextResponse.json({
+      credits: legacyCredits.credits,
+      transcriptionBalance,
+      recentTransactions,
+    });
+  } catch (error) {
+    console.error("[api/admin/users/[id]/credits GET] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
 
 /**
  * POST /api/admin/users/[id]/credits
  *
- * Grants credits to a user by inserting an admin_grant transaction.
- * The user's balance is then dynamically recalculated from all transactions.
- * No $inc on the user document — transaction history is the source of truth.
+ * Admin can INCREASE (+), DECREASE (-), or SET (=) a user's transcription & AI credits.
+ * Supports specifying in hours, credits, or seconds, and targeting either top-up balance
+ * (purchased hours, never expires) or included plan allowance.
  *
- * Auth: Admin only (requireAdmin).
- *
- * Body: { amount, reason? }
+ * Body:
+ * {
+ *   amount: number,            // positive or negative
+ *   unit?: "hours" | "credits" | "seconds", // default: "credits"
+ *   action?: "increase" | "decrease" | "set", // default: inferred from amount sign
+ *   target?: "purchased" | "included" | "auto", // default: "auto"
+ *   reason?: string
+ * }
  */
 export async function POST(
   req: NextRequest,
@@ -25,67 +86,86 @@ export async function POST(
     if (!authResult.ok) return authResult.response;
 
     const { id } = await params;
-    const body = await req.json() as { amount: number; reason?: string };
-    const { amount, reason } = body;
+    const body = (await req.json().catch(() => ({}))) as {
+      amount?: number;
+      unit?: "hours" | "credits" | "seconds";
+      action?: "increase" | "decrease" | "set";
+      target?: "purchased" | "included" | "auto";
+      reason?: string;
+    };
 
-    if (typeof amount !== "number" || amount <= 0 || !Number.isFinite(amount)) {
+    const {
+      amount = 0,
+      unit = "credits",
+      action = amount >= 0 ? "increase" : "decrease",
+      target = "auto",
+      reason = "",
+    } = body;
+
+    if (typeof amount !== "number" || !Number.isFinite(amount)) {
       return NextResponse.json(
-        { error: "amount must be a positive number" },
+        { error: "amount must be a valid number" },
         { status: 400 },
       );
     }
 
-    // Get current balance before grant
-    const { calculateUserCredits: calcBefore } = await import("@/lib/credits");
-
-    // Fetch target user for credit calculation
-    const client = await (await import("@/lib/mongodb")).default;
+    const client = await clientPromise;
     const db = client.db();
-    const { ObjectId } = await import("mongodb");
-    const targetUser = await db.collection("users").findOne({ _id: new ObjectId(id) });
+
+    let targetUser = null;
+    try {
+      targetUser = await db.collection("users").findOne({ _id: new ObjectId(id) });
+    } catch {
+      targetUser = await db.collection("users").findOne({ _id: id as any });
+    }
+
     if (!targetUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const beforeResult = await calcBefore(id, targetUser);
+    const beforeBalance = await getTranscriptionBalanceSummary(id, targetUser);
 
-    // Insert admin_grant transaction (positive amount)
-    await insertCreditTransaction({
+    const adjustmentResult = await adminAdjustTranscriptionBalance({
       userId: id,
-      type: CreditTransactionType.ADMIN_GRANT,
-      source: "admin_adjustment",
       amount,
-      description: reason || `Admin granted ${amount} credits`,
-      metadata: {
-        adminId: authResult.adminUserId,
-        createdBy: `admin:${authResult.adminUserId}`,
-        reason: reason || `Admin granted ${amount} credits`,
-      },
-      createdAt: new Date().toISOString(),
+      unit,
+      action,
+      target,
+      adminId: authResult.adminUserId,
+      reason: reason || `Admin adjusted user balance (${action} ${Math.abs(amount)} ${unit})`,
     });
 
-    // Recalculate after grant
     const afterResult = await calculateUserCredits(id, targetUser);
 
     await logAuditEvent({
       adminId: authResult.adminUserId,
-      action: "credit_grant",
+      action: action === "decrease" ? "credit_deduct" : "credit_grant",
       targetUserId: id,
       details: {
+        action,
+        unit,
         amount,
-        previousCredits: beforeResult.credits,
-        newCredits: afterResult.credits,
+        target,
+        reason,
+        previousTotalHours: beforeBalance.totalAvailableHours,
+        newTotalHours: adjustmentResult.balance.totalAvailableHours,
+        previousCredits: beforeBalance.totalAvailableCredits,
+        newCredits: adjustmentResult.balance.totalAvailableCredits,
       },
       timestamp: new Date(),
     });
 
     return NextResponse.json({
+      success: true,
       credits: afterResult.credits,
-      added: amount,
-      message: `Added ${amount} credits`,
+      transcriptionBalance: adjustmentResult.balance,
+      adjustedHours: adjustmentResult.adjustedHours,
+      adjustedCredits: adjustmentResult.adjustedCredits,
+      action: adjustmentResult.action,
+      message: `${action === "decrease" ? "Decreased" : "Increased"} user balance by ${Math.abs(adjustmentResult.adjustedHours)} hrs (${Math.abs(adjustmentResult.adjustedCredits)} credits)`,
     });
   } catch (error) {
-    console.error("Admin add credits error:", error);
+    console.error("[api/admin/users/[id]/credits POST] Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -155,7 +155,11 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${clientOrigin}/login?error=account_unavailable`);
       }
 
-      // Existing user — update avatar and mark email as verified
+      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
+      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
+      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+
+      // Existing user — update avatar, location, and mark email as verified
       const updateFields: Record<string, any> = {
         lastLogin: now,
         emailVerified: true,
@@ -169,9 +173,16 @@ export async function GET(req: NextRequest) {
       if (googleUser.name && !user.name) {
         updateFields.name = googleUser.name;
       }
-      if (!user.country && normalizedCountry) {
+      if (normalizedCountry) {
         updateFields.country = normalizedCountry;
+        updateFields.lastLoginCountry = normalizedCountry;
       }
+      if (clientCity) updateFields.lastLoginCity = clientCity;
+      if (clientTimezone) {
+        updateFields.lastLoginTimezone = clientTimezone;
+        if (!user.timezone) updateFields.timezone = clientTimezone;
+      }
+      if (clientIp) updateFields.lastLoginIp = clientIp;
       if (!user.language) {
         updateFields.language = signupLanguage;
       }
@@ -191,6 +202,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${clientOrigin}/login?error=registrations_disabled`);
       }
 
+      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
+      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
+      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+
       // New user — create account
       const planConfig = await getPlanConfig();
 
@@ -204,6 +219,14 @@ export async function GET(req: NextRequest) {
         appId: `VC-${nanoid(6).toUpperCase()}`,
         churchName: "",
         country: normalizedCountry,
+        city: clientCity,
+        timezone: clientTimezone,
+        signupCountry: normalizedCountry,
+        signupCity: clientCity,
+        signupIp: clientIp,
+        lastLoginCountry: normalizedCountry,
+        lastLoginCity: clientCity,
+        lastLoginIp: clientIp,
         language: signupLanguage,
         phone: "",
         role: "user",
