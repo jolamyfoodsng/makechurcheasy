@@ -45,5 +45,9 @@ pattern = "api.makechurcheazy.com/*"
 zone_name = "makechurcheazy.com"
 
 [[routes]]
+pattern = "api.creatorstudioslabs.stream/*"
+zone_name = "creatorstudioslabs.stream"
+
+[[routes]]
 pattern = "makechurcheazy.com/api/*"
 zone_name = "makechurcheazy.com"
