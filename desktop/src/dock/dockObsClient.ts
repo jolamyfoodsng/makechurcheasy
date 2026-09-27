@@ -209,17 +209,29 @@ const DOCK_WORSHIP_SOURCE = FULLSCREEN_SOURCE_NAMES.WORSHIP;
 const DOCK_NOTES_SOURCE = FULLSCREEN_SOURCE_NAMES.NOTES;
 const DOCK_TICKER_SOURCE = "Ticker - MCE Presentation";
 /** Media player source for playing uploaded/library media */
-const DOCK_MEDIA_VIDEO_SOURCE = "Video - MCE Presentation";
-const DOCK_MEDIA_IMAGE_SOURCE = "Image - MCE Presentation";
-const DOCK_MEDIA_AUDIO_SOURCE = "Audio - MCE Presentation";
-const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "Audio - MCE Presentation";
-const DOCK_MEDIA_PATTERN_SOURCE = "Pattern - MCE Presentation";
-const DOCK_MEDIA_TEXT_SOURCE = "Text - MCE Presentation";
-const DOCK_MEDIA_TEMPLATE_SOURCE = "Template - MCE Presentation";
-const DOCK_MEDIA_REMOTE_SOURCE = "Remote - MCE Presentation";
+export const DOCK_MEDIA_VIDEO_SOURCE = "Video - MCE Presentation";
+export const DOCK_MEDIA_IMAGE_SOURCE = "Image - MCE Presentation";
+export const DOCK_MEDIA_AUDIO_SOURCE = "Audio - MCE Presentation";
+export const DOCK_MEDIA_IMAGE_AUDIO_SOURCE = "Audio - MCE Presentation";
+export const DOCK_MEDIA_PATTERN_SOURCE = "Pattern - MCE Presentation";
+export const DOCK_MEDIA_TEXT_SOURCE = "Text - MCE Presentation";
+export const DOCK_MEDIA_TEMPLATE_SOURCE = "Template - MCE Presentation";
+export const DOCK_MEDIA_REMOTE_SOURCE = "Remote - MCE Presentation";
 const DOCK_LIVE_TOOL_SOURCE = "Live Tools - MCE Presentation";
 const DOCK_LIVE_TOOL_MEDIA_VIDEO_SOURCE = "Video - MCE Presentation";
 const DOCK_LIVE_TOOL_MEDIA_IMAGE_SOURCE = "Image - MCE Presentation";
+
+export function isMediaNativeManagedSource(sourceName: string): boolean {
+  const norm = sourceName.trim();
+  return (
+    norm === DOCK_MEDIA_VIDEO_SOURCE ||
+    norm === DOCK_MEDIA_IMAGE_SOURCE ||
+    norm === DOCK_MEDIA_AUDIO_SOURCE ||
+    norm === "Video - MCE Media" ||
+    norm === "Image - MCE Media" ||
+    norm === "Audio - MCE Media"
+  );
+}
 /** Background source placed BEHIND fullscreen overlays to prevent flash/twitch between slides */
 const DOCK_FS_BG_SOURCE = "Fullscreen BG - MCE Presentation";
 /** Scene-local fullscreen background source prefix used in target scenes */
@@ -1622,7 +1634,7 @@ export class DockObsClient {
     }
   }
 
-  private async getCanvasSize(): Promise<{ width: number; height: number }> {
+  async getCanvasSize(): Promise<{ width: number; height: number }> {
     const now = Date.now();
     if (this._canvasCache && now < this._canvasCache.expiresAt) {
       return this._canvasCache.size;
@@ -1637,7 +1649,7 @@ export class DockObsClient {
         width: Number(video.baseWidth) || fallback.width,
         height: Number(video.baseHeight) || fallback.height,
       };
-      this._canvasCache = { size, expiresAt: now + 60_000 };
+      this._canvasCache = { size, expiresAt: now + 5_000 };
       return size;
     } catch {
       return getDefaultCanvasSize();
@@ -1692,7 +1704,8 @@ export class DockObsClient {
     const item = await this.getSceneItemBySource(sceneName, sourceName);
     if (!item) return;
     const { width, height } = await this.getCanvasSize();
-    const visibleHeight = Math.min(height, Math.max(360, Math.round(height * 0.42)));
+    const visibleRatio = 0.42;
+    const visibleHeight = Math.min(height, Math.round(height * visibleRatio));
     const cropTop = Math.max(0, height - visibleHeight);
     const sceneItemTransform: Record<string, unknown> = {
       positionX: 0,
@@ -1709,6 +1722,13 @@ export class DockObsClient {
       cropRight: 0,
       cropBottom: 0,
     };
+
+    try {
+      await this.call("SetInputSettings", {
+        inputName: sourceName,
+        inputSettings: { width, height },
+      });
+    } catch { /* best effort */ }
 
     await this.call("SetSceneItemTransform", {
       sceneName,
@@ -2528,12 +2548,16 @@ export class DockObsClient {
     const primaryPresItem = presentationItems.find((i) => i.sourceName === primary)
       ?? (primaryFamily ? presentationItems.find((i) => getMcePresentationSourceFamily(i.sourceName) === primaryFamily && !isLegacyBibleName(i.sourceName)) : undefined);
 
-    // If the primary source is missing from OBS, create it and ensure it is ready at the top
-    if (!primaryTargetItem && isMcePresentationManagedSource(primary)) {
-      await this.ensureOverlaySource(targetScene, primary, undefined, undefined, true).catch(() => { });
-    }
-    if (targetScene !== PRESENTATION_SCENE_NAME && !primaryPresItem && isMcePresentationManagedSource(primary)) {
-      await this.ensureOverlaySource(PRESENTATION_SCENE_NAME, primary, undefined, undefined, true).catch(() => { });
+    // If the primary source is missing from OBS, create it and ensure it is ready at the top.
+    // Native media sources (Video, Image, Audio) are created natively on demand with their file paths
+    // and must NOT be created as browser sources by ensureOverlaySource.
+    if (!isMediaNativeManagedSource(primary)) {
+      if (!primaryTargetItem && isMcePresentationManagedSource(primary)) {
+        await this.ensureOverlaySource(targetScene, primary, undefined, undefined, true).catch(() => { });
+      }
+      if (targetScene !== PRESENTATION_SCENE_NAME && !primaryPresItem && isMcePresentationManagedSource(primary)) {
+        await this.ensureOverlaySource(PRESENTATION_SCENE_NAME, primary, undefined, undefined, true).catch(() => { });
+      }
     }
 
     const isPrimaryDisabled = (primaryTargetItem && primaryTargetItem.sceneItemEnabled === false)
@@ -10865,7 +10889,7 @@ export class DockObsClient {
       return;
     }
 
-    await this.focusMcePresentationModule("media").catch(() => { });
+    await this.focusMcePresentationModule("media", sourceName).catch(() => { });
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
@@ -10988,8 +11012,11 @@ export class DockObsClient {
     }
     await Promise.allSettled(hidePromises);
 
-    if (this.isRemotePresentationSession() || options.transition === "fade" || options.document) {
-      if (options.transition !== "fade" && !isDocument) {
+    // Only documents (PDF/DOCX) or true remote OBS sessions where OBS cannot access local files
+    // use the browser overlay (remoteMediaSource). All local image and video media must use
+    // native OBS sources (image_source and ffmpeg_source).
+    if (this.isRemotePresentationSession() || options.document) {
+      if (!isDocument) {
         await this.hideMediaSourceWithAnimation(sceneName, mediaVideoSource).catch(() => { });
         await this.hideMediaSourceWithAnimation(sceneName, mediaImageSource).catch(() => { });
         await this.hideOverlaySource(sceneName, mediaImageAudioSource).catch(() => { });
@@ -11735,13 +11762,22 @@ export class DockObsClient {
       throw new Error(`Failed to add or find ${sourceName} in ${sceneName}`);
     };
 
-    // Step 1: Check if the global input already exists anywhere
+    // Step 1: Check if the global input already exists anywhere and matches expected inputKind
     let inputExists = false;
     try {
       const inputList = await this.call("GetInputList", {}) as {
-        inputs: Array<{ inputName: string }>;
+        inputs: Array<{ inputName: string; inputKind?: string }>;
       };
-      inputExists = inputList.inputs.some((i) => i.inputName === sourceName);
+      const foundInput = inputList.inputs.find((i) => i.inputName === sourceName);
+      if (foundInput) {
+        if (foundInput.inputKind && foundInput.inputKind !== inputKind) {
+          // Input exists under the same name but wrong kind (e.g. old browser_source instead of native)
+          try { await this.call("RemoveInput", { inputName: sourceName }); } catch { /* ignore */ }
+          inputExists = false;
+        } else {
+          inputExists = true;
+        }
+      }
     } catch { /* ignore */ }
 
     // Step 2: Check if a scene item for this input exists in the target scene
@@ -12088,27 +12124,25 @@ export class DockObsClient {
         return { sceneName: DOCK_PRESENTATION_SCENE, browserItemId };
       }
       try {
-        if (createdSceneItem) {
-          await this.call("SetSceneItemTransform", {
-            sceneName: DOCK_PRESENTATION_SCENE,
-            sceneItemId: browserItemId,
-            sceneItemTransform: {
-              positionX: 0,
-              positionY: 0,
-              scaleX: 1,
-              scaleY: 1,
-        boundsType: "OBS_BOUNDS_SCALE_OUTER",
-              boundsWidth: canvas.width,
-              boundsHeight: canvas.height,
-              boundsAlignment: 0,
-              rotation: 0,
-              cropLeft: 0,
-              cropTop: 0,
-              cropRight: 0,
-              cropBottom: 0,
-            },
-          });
-        }
+        await this.call("SetSceneItemTransform", {
+          sceneName: DOCK_PRESENTATION_SCENE,
+          sceneItemId: browserItemId,
+          sceneItemTransform: {
+            positionX: 0,
+            positionY: 0,
+            scaleX: 1,
+            scaleY: 1,
+            boundsType: "OBS_BOUNDS_SCALE_OUTER",
+            boundsWidth: canvas.width,
+            boundsHeight: canvas.height,
+            boundsAlignment: 0,
+            rotation: 0,
+            cropLeft: 0,
+            cropTop: 0,
+            cropRight: 0,
+            cropBottom: 0,
+          },
+        });
         await this.ensureTickerAboveSource(DOCK_PRESENTATION_SCENE, def.browserSourceName).catch(() => { });
         if (enable) {
           await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: true });

@@ -24,7 +24,6 @@ function fmt(ref: ReturnType<typeof parseScriptureReference>): string | null {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Nigerian speech patterns", () => {
-  describe("Romans variants", () => {
     it("romance 8 28 → Romans 8:28", () => {
       expect(fmt(parseScriptureReference("romance 8 28"))).toBe("Romans 8:28");
     });
@@ -269,7 +268,6 @@ describe("Nigerian speech patterns", () => {
       expect(fmt(parseScriptureReference("prover 3 5"))).toBe("Proverbs 3:5");
     });
   });
-});
 
 describe("Speech context resolver", () => {
   it("keeps book-only and chapter-only references without guessing verse 1", () => {
@@ -394,7 +392,7 @@ describe("Speech command matrix", () => {
     expect(parseScriptureIntent("previous vase")).toMatchObject({ type: "prev-verse", count: 1 });
   });
 
-  it("recognizes STT phonetic misrecognitions of Deuteronomy (Ditatonomy, The theonomy)", () => {
+  it("recognizes STT phonetic misrecognitions of Deuteronomy (Ditatonomy, The theonomy, Due to ronomy)", () => {
     expect(parseScriptureReference("Ditatonomy four five.")).toMatchObject({
       book: "Deuteronomy",
       chapter: 4,
@@ -409,6 +407,45 @@ describe("Speech command matrix", () => {
       book: "Deuteronomy",
       chapter: 6,
       verse: 4,
+    });
+    expect(parseScriptureReference("due to ronomy 28 1")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 28,
+      verse: 1,
+    });
+    expect(parseScriptureReference("open due to ronomy chapter 28 verse 1")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 28,
+      verse: 1,
+    });
+    expect(parseScriptureReference("dew teronomy 6 4")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 6,
+      verse: 4,
+    });
+    expect(parseScriptureReference("duty ronomy 31 6")).toMatchObject({
+      book: "Deuteronomy",
+      chapter: 31,
+      verse: 6,
+    });
+  });
+
+  it("recognizes translation switching voice commands", () => {
+    expect(parseScriptureIntent("switch to NLT")).toMatchObject({
+      type: "use-translation",
+      translation: "NLT",
+    });
+    expect(parseScriptureIntent("switch to NIV version")).toMatchObject({
+      type: "use-translation",
+      translation: "NIV",
+    });
+    expect(parseScriptureIntent("give me the message version")).toMatchObject({
+      type: "use-translation",
+      translation: "MSG",
+    });
+    expect(parseScriptureIntent("use KJV")).toMatchObject({
+      type: "use-translation",
+      translation: "KJV",
     });
   });
 

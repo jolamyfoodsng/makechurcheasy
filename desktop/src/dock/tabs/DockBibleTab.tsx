@@ -118,7 +118,10 @@ import {
   buildBibleVerseClipboardText,
   copyTextToClipboard,
 } from "../bibleClipboard";
-import { getDockBibleKeywordMatchOutputOptions } from "../dockKeywordMatch";
+import {
+  getDockBibleKeywordMatchOutputOptions,
+  splitTextByKeywordTerms,
+} from "../dockKeywordMatch";
 import { formatBibleOutputText } from "../bibleVerseText";
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
@@ -1394,40 +1397,19 @@ function pushRecentBibleSearch(label: string): string[] {
   return next;
 }
 
-function getKeywordSearchTerms(query: string): string[] {
-  return Array.from(
-    new Set(
-      query
-        .toLowerCase()
-        .split(/[^a-z0-9']+/i)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 2),
-    ),
-  );
-}
-
 function renderHighlightedKeywordText(text: string, query: string): React.ReactNode {
-  const terms = getKeywordSearchTerms(query);
-  if (terms.length === 0) return text;
+  const parts = splitTextByKeywordTerms(text, query);
+  if (parts.length === 1 && !parts[0].isMatch) return text;
 
-  const escapedTerms = terms
-    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .filter(Boolean);
-  if (escapedTerms.length === 0) return text;
-
-  const splitPattern = new RegExp(`(${escapedTerms.join("|")})`, "ig");
-  const exactPattern = new RegExp(`^(?:${escapedTerms.join("|")})$`, "i");
-  const segments = text.split(splitPattern);
-
-  return segments.map((segment, index) => (
-    exactPattern.test(segment) ? (
-      <mark key={`${segment}-${index}`} className="dock-search-dropdown__highlight">
-        {segment}
+  return parts.map((part, index) =>
+    part.isMatch ? (
+      <mark key={`${part.text}-${index}`} className="dock-search-dropdown__highlight">
+        {part.text}
       </mark>
     ) : (
-      <span key={`${segment}-${index}`}>{segment}</span>
-    )
-  ));
+      <span key={`${part.text}-${index}`}>{part.text}</span>
+    ),
+  );
 }
 
 function formatCompactBibleReference(text: string): string {
@@ -2707,14 +2689,24 @@ function DockBibleTab({
     try {
       const { getVerse } = await import("../../bible/bibleData");
       const result = await getVerse(book, chapter, verse, trans);
-      if (!result?.text) {
-        console.warn(`[DockBibleTab] getVerse returned no text for ${book} ${chapter}:${verse} (${trans})`);
+      if (result?.text && result.text.trim()) {
+        return result.text.trim();
       }
-      return result?.text || `${book} ${chapter}:${verse}`;
+      console.warn(`[DockBibleTab] getVerse returned no text for ${book} ${chapter}:${verse} (${trans})`);
     } catch (err) {
-      console.error(`[DockBibleTab] fetchVerseText failed for ${book} ${chapter}:${verse}:`, err);
-      return `${book} ${chapter}:${verse}`;
+      console.error(`[DockBibleTab] fetchVerseText failed for ${book} ${chapter}:${verse} (${trans}):`, err);
     }
+    // Fallback: If requested translation failed to provide text, try fallback to KJV
+    try {
+      const { getVerse } = await import("../../bible/bibleData");
+      const fallbackResult = await getVerse(book, chapter, verse, "KJV");
+      if (fallbackResult?.text && fallbackResult.text.trim()) {
+        return fallbackResult.text.trim();
+      }
+    } catch {
+      // Ignore fallback failure
+    }
+    return "";
   }, []);
 
   const focusReference = useCallback((
@@ -2837,12 +2829,21 @@ function DockBibleTab({
     (async () => {
       try {
         const { getChapter } = await import("../../bible/bibleData");
-        const [passageA, passageB] = await Promise.all([
+        const [resA, resB] = await Promise.allSettled([
           getChapter(selectedBook, selectedChapter, translationA),
           getChapter(selectedBook, selectedChapter, translationB),
         ]);
         if (cancelled) return;
+        const passageA = resA.status === "fulfilled" ? resA.value : null;
+        let passageB = resB.status === "fulfilled" ? resB.value : null;
+        if (!passageB && passageA) {
+          passageB = passageA;
+        }
         setComparePassages({ translationA: passageA, translationB: passageB });
+        setCompareChapterErrors([
+          resA.status === "rejected" ? (resA.reason instanceof Error ? resA.reason.message : t("bible.unableToLoad")) : "",
+          resB.status === "rejected" ? (resB.reason instanceof Error ? resB.reason.message : t("bible.unableToLoad")) : "",
+        ]);
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : t("bible.unableToLoad");
@@ -2882,6 +2883,15 @@ function DockBibleTab({
         }
       }
 
+      if (!passage || !passage.verses || passage.verses.length === 0) {
+        try {
+          const { getChapter } = await import("../../bible/bibleData");
+          passage = await getChapter(book, chapter, "KJV");
+        } catch {
+          passage = null;
+        }
+      }
+
       const verses = passage?.verses ?? [];
       let targetVerse = verse;
       let startIndex = verses.findIndex((entry) => entry.verse === targetVerse);
@@ -2894,7 +2904,7 @@ function DockBibleTab({
       if (startIndex === -1) {
         const text = await fetchVerseText(book, chapter, targetVerse, translation);
         return {
-          text: formatBibleOutputText([], text, targetVerse),
+          text: text ? formatBibleOutputText([{ verse: targetVerse, text }], text, targetVerse) : "",
           verseRange: String(targetVerse),
           verseEnd: targetVerse,
         };
@@ -2909,7 +2919,7 @@ function DockBibleTab({
           ? verses.slice(startIndex, explicitEndIndex + 1)
           : verses.slice(startIndex, startIndex + safeLineCount);
       const verseEnd = selection[selection.length - 1]?.verse ?? targetVerse;
-      const text = formatBibleOutputText(selection, `${book} ${chapter}:${targetVerse}`, targetVerse);
+      const text = formatBibleOutputText(selection, "", targetVerse);
       const verseRange = verseEnd === targetVerse ? String(targetVerse) : `${targetVerse}-${verseEnd}`;
       return { text, verseRange, verseEnd };
     },
@@ -7086,6 +7096,7 @@ function DockBibleTab({
       searchPlacement={searchPlacement}
       activeTranslation={activeTranslation}
       compareEnabled={compareEnabled}
+      onToggleCompare={handleCompareEnabledChange}
       availableTranslations={availableTranslations}
       onVersionChange={(version) => handleQuickVersionChange(activeColumnIndex, version)}
       toolbarCollapsed={toolbarCollapsed}

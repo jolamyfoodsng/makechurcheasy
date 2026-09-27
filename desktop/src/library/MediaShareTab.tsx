@@ -54,12 +54,15 @@ export function MediaShareTab({ initialMode = "send", onMediaChanged }: MediaSha
   const [status, setStatus] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [progress, setProgress] = useState<LocalShareProgress | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isRefreshingRef = useRef(false);
 
   const refreshDevices = useCallback(async () => {
     if (!isTauriRuntime()) {
       setStatus({ tone: "error", message: t("library.share.desktopOnly") });
       return;
     }
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
 
     setDiscovering(true);
     try {
@@ -78,13 +81,14 @@ export function MediaShareTab({ initialMode = "send", onMediaChanged }: MediaSha
         message: error instanceof Error ? error.message : t("library.share.discoveryFailed"),
       });
     } finally {
+      isRefreshingRef.current = false;
       setDiscovering(false);
     }
   }, [t]);
 
   useEffect(() => {
     void refreshDevices();
-    const timer = window.setInterval(() => void refreshDevices(), 7000);
+    const timer = window.setInterval(() => void refreshDevices(), 15000);
     return () => window.clearInterval(timer);
   }, [refreshDevices]);
 

@@ -10,7 +10,14 @@
  */
 
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { dockObsClient, type DockDocumentMediaOptions, type DockMediaSendOptions } from "../dockObsClient";
+import {
+  dockObsClient,
+  type DockDocumentMediaOptions,
+  type DockMediaSendOptions,
+  DOCK_MEDIA_VIDEO_SOURCE,
+  DOCK_MEDIA_IMAGE_SOURCE,
+  DOCK_MEDIA_AUDIO_SOURCE,
+} from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { dockClient } from "../../services/dockBridge";
 import type { DockStagedItem } from "../dockTypes";
@@ -619,12 +626,11 @@ function getClosestTextSizePreset(value: number, presets: readonly DockTextSizeP
 }
 
 function buildSceneMediaSourceName(entry: DockMediaEntry): string {
-  const baseName = entry.name.replace(/\.[^.]+$/, "");
-  const defaultLabel = entry.kind === "video" ? "Video" : entry.kind === "audio" ? "Audio" : "Image";
-  const sanitizedBase = baseName.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 40) || defaultLabel;
-  const suffix = entry.prefKey.replace(/[^a-z0-9]+/gi, "").slice(-10) || "media";
-  const sourceType = entry.kind === "video" ? "Video" : entry.kind === "audio" ? "Audio" : "Image";
-  return `MCE Scene ${sourceType} - ${sanitizedBase} - ${suffix}`;
+  return entry.kind === "audio"
+    ? DOCK_MEDIA_AUDIO_SOURCE
+    : entry.kind === "video"
+      ? DOCK_MEDIA_VIDEO_SOURCE
+      : DOCK_MEDIA_IMAGE_SOURCE;
 }
 
 function canSendEntryToScene(entry: DockMediaEntry): boolean {
@@ -1017,6 +1023,25 @@ function DockMediaTab({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [mediaContextMenu]);
+
+  useEffect(() => {
+    const handleMediaSearchTrigger = () => {
+      setSearchOpen(true);
+      requestAnimationFrame(() => {
+        const input = document.querySelector<HTMLInputElement>(".dock-media-search__input");
+        if (input) {
+          input.focus();
+          try {
+            input.select();
+          } catch {
+            // ignore
+          }
+        }
+      });
+    };
+    window.addEventListener("dock-trigger-media-search", handleMediaSearchTrigger);
+    return () => window.removeEventListener("dock-trigger-media-search", handleMediaSearchTrigger);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1747,10 +1772,17 @@ function DockMediaTab({
         }
       }
 
-      // Focus the Media family immediately on the card action. The native
+      const uploadKind = getUploadMediaKind(fileName);
+      const targetSource = uploadKind === "audio"
+        ? DOCK_MEDIA_AUDIO_SOURCE
+        : uploadKind === "image"
+          ? DOCK_MEDIA_IMAGE_SOURCE
+          : DOCK_MEDIA_VIDEO_SOURCE;
+
+      // Focus the specific Media source immediately on the card action. The native
       // media push can take a moment to resolve a local file, so waiting for
       // the push would leave the previously selected MCE source visible.
-      void dockObsClient.focusMcePresentationModule("media").catch((err) => {
+      void dockObsClient.focusMcePresentationModule("media", targetSource).catch((err) => {
         console.warn("[DockMediaTab] Failed to focus Media presentation source:", err);
       });
 
@@ -1818,7 +1850,13 @@ function DockMediaTab({
         }
       }
 
-      void dockObsClient.focusMcePresentationModule("media").catch((err) => {
+      const targetSource = item.type === "audio"
+        ? DOCK_MEDIA_AUDIO_SOURCE
+        : item.type === "image"
+          ? DOCK_MEDIA_IMAGE_SOURCE
+          : DOCK_MEDIA_VIDEO_SOURCE;
+
+      void dockObsClient.focusMcePresentationModule("media", targetSource).catch((err) => {
         console.warn("[DockMediaTab] Failed to focus Media presentation source:", err);
       });
 
@@ -6172,13 +6210,22 @@ function DockMediaTab({
                     </>
                   )}
                 </div>
+              ) : entry.kind === "audio" && entry.previewUrl ? (
+                <div className="dock-media-inspector__preview" style={{ padding: 16, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                  <Icon name="music_note" size={40} style={{ color: "var(--dock-accent, #3b82f6)" }} />
+                  <audio
+                    src={entry.previewUrl}
+                    controls
+                    style={{ width: "100%", maxHeight: 36, outline: "none" }}
+                  />
+                </div>
               ) : thumbUrl ? (
                 <div className="dock-media-inspector__preview">
                   <img className="dock-media-inspector__preview-media" src={thumbUrl} alt={cleanName} />
                 </div>
               ) : (
                 <div className="dock-media-inspector__preview dock-media-inspector__preview--placeholder">
-                  <Icon name={entry.kind === "video" ? "movie" : "image"} size={32} />
+                  <Icon name={entry.kind === "video" ? "movie" : entry.kind === "audio" ? "music_note" : "image"} size={32} />
                 </div>
               )}
 
@@ -6593,6 +6640,61 @@ function DockMediaTab({
                     loop={getEntryPrefs(previewEntry).loop ?? true}
                     style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 4 }}
                   />
+                ) : previewEntry.kind === "audio" ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 20,
+                      padding: "32px 24px",
+                      width: "100%",
+                      minWidth: 320,
+                      maxWidth: 480,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 96,
+                        height: 96,
+                        borderRadius: "50%",
+                        background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.35) 100%)",
+                        border: "2px solid rgba(59, 130, 246, 0.4)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#60a5fa",
+                        boxShadow: "0 8px 24px rgba(37, 99, 235, 0.25)",
+                      }}
+                    >
+                      <Icon name="music_note" size={48} />
+                    </div>
+                    <div style={{ textAlign: "center", width: "100%" }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#f8fafc",
+                          marginBottom: 4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {previewEntry.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--dock-text-dim, #94a3b8)" }}>
+                        {t("media.audio", "Audio")}
+                      </div>
+                    </div>
+                    <audio
+                      src={previewEntry.previewUrl}
+                      controls
+                      autoPlay
+                      style={{ width: "100%", borderRadius: 8, outline: "none" }}
+                    />
+                  </div>
                 ) : (
                   <img
                     src={previewEntry.previewUrl || previewEntry.thumbnailUrl || ""}

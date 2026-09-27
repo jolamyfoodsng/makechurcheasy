@@ -57,7 +57,7 @@ export async function getTRANSLATION_WORDS_PER_CREDIT(): Promise<number> {
 
 const STORAGE_KEY = "ocs-credits-balance";
 const FETCHED_AT_KEY = "ocs-credits-fetched-at";
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Build headers with device auth for desktop app API calls. */
@@ -515,5 +515,110 @@ export async function refundTranslationCredits(reservationId: string): Promise<{
     return { refunded: Boolean(data.refunded), credits: data.credits, refundedAmount: data.refundedAmount };
   } catch {
     return null;
+  }
+}
+
+// ── Second-Accurate Transcription Deductions ────────────────────────────────
+
+export interface TranscriptionDeductionParams {
+  seconds: number;
+  requestId: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TranscriptionBalanceInfo {
+  userId: string;
+  includedSeconds: number;
+  purchasedSeconds: number;
+  totalAvailableSeconds: number;
+  includedCredits: number;
+  purchasedCredits: number;
+  totalAvailableCredits: number;
+  includedHours: number;
+  purchasedHours: number;
+  totalAvailableHours: number;
+  effectivePlan: string;
+  isAdmin: boolean;
+  unlimited: boolean;
+  lastResetAt: string;
+  nextResetAt?: string | null;
+  formattedRemaining: string;
+}
+
+export async function fetchTranscriptionBalance(): Promise<TranscriptionBalanceInfo | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/transcription/balance`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function deductTranscriptionDurationWithSync(
+  params: TranscriptionDeductionParams,
+): Promise<{
+  success: boolean;
+  remainingCredits?: number;
+  exhausted?: boolean;
+  reason?: string;
+  dailyRemainingSeconds?: number;
+  weeklyRemainingSeconds?: number;
+}> {
+  if (params.seconds <= 0) return { success: true };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/transcription/deduct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(params),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const credits = data.balance?.totalAvailableCredits;
+      if (typeof credits === "number") {
+        setCreditsBalance(credits);
+        emitCreditChange(credits);
+      }
+      return { success: true, remainingCredits: credits };
+    }
+
+    if (res.status === 402) {
+      const err = await res.json().catch(() => ({}));
+      const credits = err.balance?.totalAvailableCredits ?? 0;
+      setCreditsBalance(credits);
+      emitCreditChange(credits);
+      return {
+        success: false,
+        exhausted: err.reason === "TRANSCRIPTION_CREDITS_EXHAUSTED",
+        reason: typeof err.reason === "string" ? err.reason : undefined,
+        dailyRemainingSeconds: typeof err.dailyRemainingSeconds === "number" ? err.dailyRemainingSeconds : undefined,
+        weeklyRemainingSeconds: typeof err.weeklyRemainingSeconds === "number" ? err.weeklyRemainingSeconds : undefined,
+        remainingCredits: credits,
+      };
+    }
+
+    // Fall back to general credit deduction if route not available
+    if (res.status === 404) {
+      const creditsNeeded = Math.ceil(params.seconds / 60);
+      const ok = await deductCreditsWithSync(
+        "device",
+        creditsNeeded,
+        "transcription",
+        params.description || `Transcription: ${params.seconds}s`,
+        { ...params.metadata, durationSec: params.seconds, requestId: params.requestId },
+        { allowOffline: false },
+      );
+      return { success: ok, exhausted: !ok };
+    }
+
+    return { success: false };
+  } catch (err) {
+    console.warn("[Credits] deductTranscriptionDurationWithSync error:", err);
+    return { success: false };
   }
 }

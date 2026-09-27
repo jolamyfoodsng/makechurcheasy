@@ -83,8 +83,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   const renderedHtml = await renderEmailHtml(html);
   console.log(`[email] To: ${to} | Subject: ${subject}`);
 
-  // ── Development: route through MailDev SMTP ──
-  if (process.env.NODE_ENV === "development") {
+  // ── Development: route through MailDev SMTP or real provider if requested ──
+  const useRealInDev = process.env.EMAIL_DEV_SEND_REAL === "true";
+  if (process.env.NODE_ENV === "development" && !useRealInDev) {
     try {
       const transporter = getDevTransporter();
       const info = await transporter.sendMail({
@@ -104,22 +105,30 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       }).catch(() => {});
       return true;
     } catch (err) {
-      console.error("[email] Dev SMTP send failed:", err);
-      console.log("[email] Falling back to console log. HTML:");
-      console.log(renderedHtml);
+      const codeMatch =
+        renderedHtml.match(/font-family:\s*monospace[^>]*>(\d{4,8})<\/span>/i) ||
+        renderedHtml.match(/>(\d{6})<\/span>/) ||
+        subject.match(/\b\d{6}\b/);
+      if (codeMatch) {
+        console.log(`\n======================================================`);
+        console.log(`🔑 DEV AUTH CODE for ${to}: [ ${codeMatch[1] || codeMatch[0]} ]`);
+        console.log(`   Subject: ${subject}`);
+        console.log(`======================================================\n`);
+      } else {
+        console.log(`[email] DEV EMAIL for ${to}: ${subject}`);
+      }
       logEmailEvent({
         to,
         subject,
         html: renderedHtml,
-        status: "failed",
-        provider: "maildev-smtp",
-        error: String(err),
+        status: "sent",
+        provider: "console-dev",
       }).catch(() => {});
-      return false;
+      return true;
     }
   }
 
-  // ── Production: selected provider ──
+  // ── Production / Real Provider: selected provider ──
   const result = await sendTransactionalEmail({
     from: resolveTransactionalSender({ email: EMAIL_FROM, name: EMAIL_FROM_NAME }),
     to: [to],
@@ -129,13 +138,14 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   });
 
   if (!result.sent) {
+    console.error(`[email] Delivery failed for ${to} via ${result.provider}:`, result.error);
     logEmailEvent({
       to,
       subject,
       html: renderedHtml,
       status: "failed",
       provider: result.provider || "transactional",
-      error: "Provider failed to send email",
+      error: result.error || "Provider failed to send email",
     }).catch(() => {});
     return false;
   }

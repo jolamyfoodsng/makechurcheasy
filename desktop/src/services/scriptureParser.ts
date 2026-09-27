@@ -331,9 +331,14 @@ aliases("Exodus", ["exodus", "exo", "ex", "exod", "exxodus", "exodos", "exadus"]
 aliases("Leviticus", ["leviticus", "lev", "le", "lv", "leveticus", "levitcus", "laviticus"]);
 aliases("Numbers", ["numbers", "num", "nu", "nm", "nb", "nombers", "numburs", "number"]);
 aliases("Deuteronomy", [
-  "deuteronomy", "deut", "de", "dt", "deuteronmy", "deuternomy", "deuteronomy",
+  "deuteronomy", "deut", "de", "dt", "deuteronmy", "deuternomy",
   "ditatonomy", "the theonomy", "theonomy", "diteronomy", "titeronomy",
   "duteronomy", "dutaronomy", "dutronomy", "dueteronomy", "deuteronome", "deuteromy",
+  "deteronomy", "dootronomy", "dooteronomy", "dootyronomy", "dewteronomy",
+  "duteronimy", "deuteronimi", "deuteronomic", "deuto", "deutro", "deuter", "duto", "deuteron",
+  "due to ronomy", "due toronomy", "due to economy", "due autonomy", "due to autonomy",
+  "duty ronomy", "duty autonomy", "dew teronomy", "dew tronomy", "due to ronamy", "due to run me",
+  "deut dynamometer", "dynamometer",
 ]);
 aliases("Joshua", ["joshua", "josh", "jos", "jsh", "joshu", "josua", "joshwa"]);
 aliases("Judges", ["judges", "judg", "jdg", "jg", "jdgs", "juds", "judgess"]);
@@ -798,6 +803,7 @@ export function parseScriptureIntent(text: string): ScriptureIntent {
 function cleanTranscript(text: string): string {
   return normalizeSpokenNumbers(normalizeNumberedBookNames(text.toLowerCase()))
     .replace(/[’']/g, "'")
+    .replace(/\b(?:due\s+to\s+ron[oa]my|due\s+toron[oa]my|due\s+to\s+economy|due\s+to\s+autonomy|due\s+autonomy|duty\s+ron[oa]my|duty\s+autonomy|dew\s+teron[oa]my|dewteron[oa]my|dew\s+tronomy|due\s+to\s+run\s+me|due\s+to\s+run\s+my|ditatonomy|the\s+theonomy|theonomy|deut\s+dynamometer|dynamometer)\b/g, " deuteronomy ")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
     .replace(/\b(verse|verses|vs|vrs|vase|vas|vass|buzz|bah|bus|bas|worse)\b/g, " verse ")
     .replace(/[–—]/g, "-")

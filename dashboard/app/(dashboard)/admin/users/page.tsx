@@ -284,7 +284,8 @@ function formatCreatedDate(timestamp: string | null | undefined): { text: string
   const diffHr = Math.floor(diffMin / 60);
   const diffDays = Math.floor(diffHr / 24);
 
-  if (diffMin < 60) return { text: "Just now", full };
+  if (diffMin < 1) return { text: "Just now", full };
+  if (diffMin < 60) return { text: `${diffMin}m ago`, full };
   if (diffHr < 24) return { text: `${diffHr}h ago`, full };
   if (diffDays === 1) return { text: "Yesterday", full };
   if (diffDays <= 6) return { text: `${diffDays} days ago`, full };

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./authService", () => ({
-  getDeviceApiBaseCandidates: () => ["https://api.creatorstudioslabs.stream"],
+  getDeviceApiBaseCandidates: () => ["https://api.makechurcheazy.com"],
   getDeviceId: () => null,
   getDeviceSecret: () => null,
   getSession: () => null,

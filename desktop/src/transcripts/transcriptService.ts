@@ -20,7 +20,7 @@ import { trackTranscriptCreated } from "../services/tracking";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.creatorstudioslabs.stream";
+  "https://api.makechurcheazy.com";
 
 // ── UUID helper ──────────────────────────────────────────────────────────────
 function uid(): string {

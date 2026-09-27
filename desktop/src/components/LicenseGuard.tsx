@@ -34,7 +34,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import Icon from "./Icon";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 
 interface LicenseGuardProps {
   children: ReactNode;
@@ -118,8 +118,10 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
   useEffect(() => {
     if (unlocked && hasPendingDowngradeNotification()) {
       setShowDowngradeBanner(true);
+    } else {
+      setShowDowngradeBanner(false);
     }
-  }, [unlocked]);
+  }, [unlocked, payload]);
 
   const dismissDowngradeBanner = () => {
     markDowngradeNotified();

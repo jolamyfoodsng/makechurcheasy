@@ -128,6 +128,9 @@ const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 const MVSettings = safeLazy(() => import("./multiview/pages/MVSettings").then(({ MVSettings: Component }) => ({ default: Component })));
 const MVShell = safeLazy(() => import("./multiview/MVShell").then(({ MVShell: Component }) => ({ default: Component })));
 const DevDashboard = safeLazy(() => import("./pages/DevDashboard"));
+const DevModalsGalleryPage = import.meta.env.DEV
+  ? safeLazy(() => import("./pages/DevModalsGalleryPage"))
+  : null;
 const ResourcesPage = safeLazy(() => import("./pages/ResourcesPage"));
 const ProductionHomePage = safeLazy(() => import("./pages/ProductionHomePage"));
 const MultiViewGalleryPage = safeLazy(() => import("./pages/MultiViewGalleryPage"));
@@ -429,20 +432,107 @@ function App() {
     return () => automationRunner.stop();
   }, []);
 
-  // Intercept window close while update download is in progress
+  // Intercept window close while update download is in progress or Verse AI is active
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenClose: (() => void) | undefined;
+    let unlistenVerseAiClose: (() => void) | undefined;
+    let isPrompting = false;
+
+    const promptVerseAiCloseConfirmation = async () => {
+      if (isPrompting) return;
+      isPrompting = true;
+      try {
+        let confirmed = false;
+        try {
+          const { ask } = await import("@tauri-apps/plugin-dialog");
+          confirmed = await ask(
+            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?",
+            {
+              title: "Verse AI is Active",
+              kind: "warning",
+              okLabel: "Close App",
+              cancelLabel: "Cancel",
+            }
+          );
+        } catch {
+          confirmed = window.confirm(
+            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?"
+          );
+        }
+
+        if (confirmed) {
+          // Clean up Verse AI audio capture and WebSocket stream
+          try {
+            const { lmDockService } = await import("./services/lmDockService");
+            lmDockService.stopListening();
+          } catch (err) {
+            console.warn("[App] Error stopping Verse AI on exit:", err);
+          }
+
+          try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            await invoke("close_app_confirmed");
+          } catch {
+            try {
+              const { exit } = await import("@tauri-apps/plugin-process");
+              await exit(0);
+            } catch {
+              window.close();
+            }
+          }
+        }
+      } finally {
+        isPrompting = false;
+      }
+    };
+
+    const isVerseAiBusy = async (): Promise<boolean> => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const streaming = await invoke<boolean>("is_assemblyai_streaming");
+        if (streaming) return true;
+      } catch {
+        // Fallback to service status check
+      }
+
+      try {
+        const { lmDockService } = await import("./services/lmDockService");
+        const status = lmDockService.getSnapshot().status;
+        return status === "requesting-mic" || status === "connecting" || status === "listening";
+      } catch {
+        return false;
+      }
+    };
+
     try {
       const currentWindow = getCurrentWindow();
+
+      // Listen for Rust backend close prevention event when Verse AI is streaming
+      currentWindow
+        .listen("verse-ai-close-requested", () => {
+          void promptVerseAiCloseConfirmation();
+        })
+        .then((fn) => {
+          unlistenVerseAiClose = fn;
+        })
+        .catch(() => undefined);
+
       currentWindow
         .onCloseRequested(async (event) => {
           if (updateDownloadManager.isBusy()) {
             event.preventDefault();
             updateDownloadManager.showAppCloseWarning();
+            return;
+          }
+
+          const busy = await isVerseAiBusy();
+          if (busy) {
+            event.preventDefault();
+            void promptVerseAiCloseConfirmation();
           }
         })
         .then((fn) => {
-          unlisten = fn;
+          unlistenClose = fn;
         })
         .catch(() => undefined);
     } catch {
@@ -459,7 +549,8 @@ function App() {
     window.addEventListener("beforeunload", beforeUnloadHandler);
 
     return () => {
-      unlisten?.();
+      unlistenClose?.();
+      unlistenVerseAiClose?.();
       window.removeEventListener("beforeunload", beforeUnloadHandler);
     };
   }, []);
@@ -1176,7 +1267,7 @@ function App() {
     setShowTrialModal(false);
     if (user) {
       try {
-        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+        const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
         const deviceId = getDeviceId();
         await fetch(`${API_BASE}/api/auth/trial-welcome`, {
           method: "POST",
@@ -1410,6 +1501,9 @@ function App() {
 
                                       {/* Developer Tools */}
                                       <Route path="dev/db" element={<DevDashboard />} />
+                                      {import.meta.env.DEV && DevModalsGalleryPage && (
+                                        <Route path="dev/modals" element={<DevModalsGalleryPage />} />
+                                      )}
                                     </Route>
 
                                     <Route path="*" element={<Navigate to="/" replace />} />

@@ -295,15 +295,30 @@ html.mv-theme-light #dock-root,
   color: #0F172A;
 }
 
+:root.light .dock-search-dropdown__label {
+  color: #2563eb;
+}
+
+:root.light .dock-search-dropdown__item:hover .dock-search-dropdown__label,
+:root.light .dock-search-dropdown__item--active .dock-search-dropdown__label {
+  color: #1d4ed8;
+}
+
 :root.light .dock-search-dropdown__snippet {
-  color: #334155;
-  opacity: 0.95;
+  color: #0f172a;
+  opacity: 1;
+}
+
+:root.light .dock-search-dropdown__item:hover .dock-search-dropdown__snippet,
+:root.light .dock-search-dropdown__item--active .dock-search-dropdown__snippet {
+  color: #020617;
 }
 
 :root.light .dock-search-dropdown__highlight {
-  background: color-mix(in srgb, var(--dock-accent) 28%, #fef08a);
-  color: #0f172a;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dock-accent) 45%, transparent);
+  color: #854d0e;
+  background: rgba(250, 204, 21, 0.32);
+  border-bottom: 2px solid #ca8a04;
+  box-shadow: none;
 }
 
 :root.light .dock-search-dropdown__goto-btn {

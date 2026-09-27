@@ -8,8 +8,8 @@ import {
 
 describe("auth service device API base selection", () => {
   it("uses only production when the session was paired on production", () => {
-    expect(resolveDeviceApiBaseCandidates("https://api.creatorstudioslabs.stream")).toEqual([
-      "https://api.creatorstudioslabs.stream",
+    expect(resolveDeviceApiBaseCandidates("https://api.makechurcheazy.com")).toEqual([
+      "https://api.makechurcheazy.com",
     ]);
   });
 
@@ -20,8 +20,8 @@ describe("auth service device API base selection", () => {
   });
 
   it("normalizes trailing slashes before comparing API bases", () => {
-    expect(resolveDeviceApiBaseCandidates("https://api.creatorstudioslabs.stream/")).toEqual([
-      "https://api.creatorstudioslabs.stream",
+    expect(resolveDeviceApiBaseCandidates("https://api.makechurcheazy.com/")).toEqual([
+      "https://api.makechurcheazy.com",
     ]);
   });
 });
@@ -36,8 +36,8 @@ describe("pairing code normalization", () => {
   });
 
   it("tries the dashboard proxy only for pairing redemption", () => {
-    expect(resolvePairingApiBaseCandidates("https://api.creatorstudioslabs.stream")).toEqual([
-      "https://api.creatorstudioslabs.stream",
+    expect(resolvePairingApiBaseCandidates("https://api.makechurcheazy.com")).toEqual([
+      "https://api.makechurcheazy.com",
       "https://makechurcheazy.com",
     ]);
   });

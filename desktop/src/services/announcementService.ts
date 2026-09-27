@@ -1,6 +1,4 @@
-import { getDeviceId, getDeviceSecret } from "./authService";
-
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+import { getDeviceApiBaseCandidates, getDeviceId, getDeviceSecret } from "./authService";
 
 export type AnnouncementTone = "info" | "success" | "warning" | "offer" | "upgrade";
 export type DiscountBillingCycle = "monthly" | "yearly" | "lifetime";
@@ -48,12 +46,20 @@ export async function dismissDesktopAnnouncement(deliveryId: string, clicked = f
   const deviceId = getDeviceId();
   if (!deviceId || !deliveryId) return;
 
-  await fetch(`${API_BASE}/api/user/announcements`, {
-    method: "POST",
-    headers: {
-      ...authHeaders(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ deliveryId, clicked }),
-  }).catch(() => {});
+  const candidates = getDeviceApiBaseCandidates();
+  for (const apiBase of candidates) {
+    try {
+      const res = await fetch(`${apiBase}/api/user/announcements`, {
+        method: "POST",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ deliveryId, clicked }),
+      });
+      if (res.ok) return;
+    } catch {
+      // try next candidate
+    }
+  }
 }

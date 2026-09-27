@@ -315,6 +315,15 @@ class PresentationSceneManager {
           sceneItemId: existing.sceneItemId,
           sceneUuid: _state.sceneUuid ?? "",
         });
+        await obsService.setSceneItemTransform(sceneName, existing.sceneItemId, {
+          positionX: 0,
+          positionY: 0,
+          boundsType: "OBS_BOUNDS_STRETCH",
+          boundsWidth: canvas.width,
+          boundsHeight: canvas.height,
+          boundsAlignment: 0,
+          rotation: 0,
+        }).catch(() => { });
         await this.ensureBrowserSourceUrl(existing.sourceName, overlayUrl, canvas);
         return;
       }
@@ -365,6 +374,15 @@ class PresentationSceneManager {
             sceneItemId,
             sceneUuid: _state.sceneUuid ?? "",
           });
+          await obsService.setSceneItemTransform(sceneName, sceneItemId, {
+            positionX: 0,
+            positionY: 0,
+            boundsType: "OBS_BOUNDS_STRETCH",
+            boundsWidth: canvas.width,
+            boundsHeight: canvas.height,
+            boundsAlignment: 0,
+            rotation: 0,
+          }).catch(() => { });
           await this.ensureBrowserSourceUrl(sourceName, overlayUrl, canvas);
           await this.setSourceEnabled(sceneName, sceneItemId, false);
         } catch { /* ok */ }
@@ -463,10 +481,16 @@ class PresentationSceneManager {
   ): Promise<void> {
     try {
       const resp = await obsService.call("GetInputSettings", { inputName }) as {
-        inputSettings?: { url?: unknown };
+        inputSettings?: { url?: unknown; width?: unknown; height?: unknown };
       };
       const currentUrl = typeof resp.inputSettings?.url === "string" ? resp.inputSettings.url : "";
-      if (normalizeBrowserSourceDocumentUrl(currentUrl) === expectedUrl) return;
+      const currentWidth = Number(resp.inputSettings?.width);
+      const currentHeight = Number(resp.inputSettings?.height);
+      if (
+        normalizeBrowserSourceDocumentUrl(currentUrl) === expectedUrl &&
+        currentWidth === canvas.width &&
+        currentHeight === canvas.height
+      ) return;
 
       await obsService.call("SetInputSettings", {
         inputName,

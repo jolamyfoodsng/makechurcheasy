@@ -109,7 +109,7 @@ interface UsageDay {
   amount?: number;
 }
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};

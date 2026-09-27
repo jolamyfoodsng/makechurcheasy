@@ -16,7 +16,7 @@ import {
   type LocalDevPlanId,
 } from "./localDevPlanOverride";
 
-const PRODUCTION_API_BASE = "https://api.creatorstudioslabs.stream";
+const PRODUCTION_API_BASE = "https://api.makechurcheazy.com";
 const PRODUCTION_DASHBOARD_BASE = "https://makechurcheazy.com";
 const LOCAL_DASHBOARD_BASE = "http://localhost:4000";
 const DEFAULT_OVERLAY_PORT = 45678;
@@ -56,7 +56,9 @@ function isLocalApiBase(apiBase: string): boolean {
 
 function shouldTryNextApiBase(response?: Response): boolean {
   if (!response) return true;
-  return response.status === 404 || response.status >= 500;
+  // Vercel returns 402 when this legacy hostname points at a disabled deploy.
+  // Treat it as an unavailable origin and retry the active Cloudflare API.
+  return response.status === 402 || response.status === 404 || response.status >= 500;
 }
 
 function authApiCandidates(): string[] {

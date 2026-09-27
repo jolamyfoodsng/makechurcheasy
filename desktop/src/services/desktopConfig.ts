@@ -18,7 +18,7 @@ import type { DesktopAnnouncement, ActiveDiscountInfo } from "./announcementServ
 export type { DesktopConfig, ActiveDiscountInfo };
 export { DEFAULT_DESKTOP_CONFIG };
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 const CACHE_KEY = "mce_desktop_config";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 

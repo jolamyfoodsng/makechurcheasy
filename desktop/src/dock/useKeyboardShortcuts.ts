@@ -25,6 +25,7 @@ export interface ShortcutDefinition {
   category: ShortcutCategory;
   modifier?: ShortcutModifier;
   dangerous?: boolean;
+  allowInInputs?: boolean;
 }
 
 export type ShortcutCategory =
@@ -84,11 +85,13 @@ export function useKeyboardShortcuts(
     if (!enabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTypingInInput()) return;
-
       const key = event.key.toLowerCase();
+      const code = event.code;
       const defs = shortcutsRef.current;
-      const def = defs.find((d) => d.key.toLowerCase() === key);
+      const def = defs.find((d) => {
+        const dKey = d.key.toLowerCase();
+        return dKey === key || (dKey === "f" && code === "KeyF");
+      });
       if (!def) return;
 
       const modifier = def.modifier ?? "altShift";
@@ -97,6 +100,8 @@ export function useKeyboardShortcuts(
         ? hasPrimaryModifier && !event.altKey && !event.shiftKey
         : event.altKey && event.shiftKey && !hasPrimaryModifier;
       if (!modifierMatches) return;
+
+      if (isTypingInInput() && !def.allowInInputs) return;
 
       event.preventDefault();
       event.stopPropagation();

@@ -15,7 +15,7 @@ import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.creatorstudioslabs.stream";
+  "https://api.makechurcheazy.com";
 
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -50,6 +50,8 @@ export interface AccessCheckResult {
   requiredCredits?: number;
   trialActive?: boolean;
   trialEndsAt?: string | null;
+  isAdmin?: boolean;
+  unlimited?: boolean;
 }
 
 export interface AccessDeniedMessage {

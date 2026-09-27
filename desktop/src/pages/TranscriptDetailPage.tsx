@@ -460,19 +460,20 @@ interface TranslationModalProps {
   transcriptTitle: string;
   transcriptText: string;
   userId?: string;
+  isAdmin?: boolean;
 }
 
 const languageLookup = new Map(
   (languageData as { code: string; name: string }[]).map(l => [l.code, l.name]),
 );
 
-function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredits, savedTranslations, transcriptTitle, transcriptText, userId }: TranslationModalProps) {
+function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredits, savedTranslations, transcriptTitle, transcriptText, userId, isAdmin }: TranslationModalProps) {
   const [targetLanguage, setTargetLanguage] = useState('yo');
   const [transOption, setTransOption] = useState<'full' | 'detected'>('full');
   const [estimatedCredits, setEstimatedCredits] = useState(0);
   const [availableCredits, setAvailableCredits] = useState(0);
   const [verifyingAccess, setVerifyingAccess] = useState(false);
-  const fullAccess = isProUnlocked();
+  const fullAccess = isProUnlocked() || Boolean(isAdmin);
   const wordCount = countWords(transcriptText);
   useEffect(() => {
     calculateTranslationCredits(wordCount).then(setEstimatedCredits);
@@ -481,13 +482,14 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
   useEffect(() => {
     if (!userId || fullAccess) return;
     fetchCreditsFromBackend().then((credits) => {
-      if (credits !== null && credits >= 0) {
+      if (credits !== null && (credits === -1 || credits >= 0)) {
         setAvailableCredits(credits);
         applyCreditSnapshotFromServer(credits);
       }
     });
   }, [userId, fullAccess]);
-  const canAfford = fullAccess || availableCredits >= estimatedCredits;
+  const isUnlimitedCredits = fullAccess || availableCredits === -1;
+  const canAfford = isUnlimitedCredits || availableCredits >= estimatedCredits;
   return (
     <div className={`modal-overlay ${isOpen ? 'open' : ''}`}>
       <div className="modal-panel">
@@ -562,10 +564,10 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
               <span style={{ color: 'var(--text-muted)' }}>Estimated Cost</span>
               <span style={{ fontWeight: 600, color: 'var(--gold)' }}>
                 <Zap size={12} style={{ verticalAlign: -1, marginRight: 3 }} />
-                {fullAccess ? 'Included' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
+                {isUnlimitedCredits ? 'Included (Unlimited)' : `${estimatedCredits} credit${estimatedCredits !== 1 ? 's' : ''}`}
               </span>
             </div>
-            {!fullAccess && (
+            {!isUnlimitedCredits && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Available Credits</span>
                 <span style={{ fontWeight: 600, color: availableCredits >= estimatedCredits ? 'var(--green)' : 'var(--error)' }}>
@@ -616,7 +618,7 @@ function TranslationModal({ isOpen, onClose, onStart, onBeforeStart, onBuyCredit
             )}
           </button>
 
-          {!fullAccess && (
+          {!isUnlimitedCredits && (
             <button
               className="btn btn-outline btn-block"
               style={{ marginTop: 8 }}
@@ -976,7 +978,8 @@ interface TranscriptDetailProps {
 }
 
 export default function TranscriptDetailPage({ transcriptId, onBack }: TranscriptDetailProps) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isAdminUser = Boolean(isAdmin || user?.role === 'admin');
   const { t } = useTranslation();
   const upgradePromoText = t("common.upgradePlansStartToday", {
     amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
@@ -999,14 +1002,14 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
   const navigate = useNavigate();
 
   // ── Translation monetization state ────────────────────────────────────
-  const [userPlan, setUserPlan] = useState<string>('free');
-  const [userCredits, setUserCredits] = useState<number>(0);
+  const [userPlan, setUserPlan] = useState<string>(isAdminUser ? 'admin' : 'free');
+  const [userCredits, setUserCredits] = useState<number>(isAdminUser ? -1 : 0);
   const [creditReservationId, setCreditReservationId] = useState<string | null>(null);
   const [translationStatus, setTranslationStatus] = useState<'idle' | 'reserving' | 'translating' | 'committing' | 'success' | 'error'>('idle');
   const [translationError, setTranslationError] = useState<string | null>(null);
 
   // Derived plan flags
-  const canTranslate = ['basic', 'growth'].includes(userPlan);
+  const canTranslate = isAdminUser || ['basic', 'growth', 'admin', 'unlimited'].includes(userPlan);
 
   // Runtime license change: cancel in-progress work if license revoked
   const isTranslatingRef = useRef(isTranslating);
@@ -1032,15 +1035,18 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
     (async () => {
       const access = await checkPremiumAccess('translation');
       if (access.allowed) {
-        setUserPlan(access.plan ?? 'free');
-        setUserCredits(access.credits ?? 0);
+        setUserPlan(access.plan ?? (isAdminUser ? 'admin' : 'free'));
+        setUserCredits(isAdminUser || access.unlimited || access.isAdmin ? -1 : (access.credits ?? 0));
       } else if (access.plan) {
         // Blocked but we still got plan info
         setUserPlan(access.plan);
-        setUserCredits(access.credits ?? 0);
+        setUserCredits(isAdminUser || access.unlimited || access.isAdmin ? -1 : (access.credits ?? 0));
+      } else if (isAdminUser) {
+        setUserPlan('admin');
+        setUserCredits(-1);
       }
     })();
-  }, []);
+  }, [isAdminUser]);
 
   const parsedLines = useMemo(
     () => transcript ? parseTranscriptLines(transcript.transcriptText) : [],
@@ -1502,7 +1508,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
               {canTranslate && (
                 <>
                   {/* Critical credits banner */}
-                  {translationStatus === 'idle' && userCredits >= 0 && userCredits <= 5 && (
+                  {translationStatus === 'idle' && !isAdminUser && userCredits >= 0 && userCredits <= 5 && (
                     <div className="credit-warning-banner" style={{
                       padding: '10px 12px', marginBottom: 12, borderRadius: 8,
                       background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -1624,7 +1630,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                   {/* Translate button + credits info */}
                   {translationStatus === 'idle' && (
                     <div style={{ padding: '8px 0' }}>
-                      {userCredits >= 0 && userCredits <= 20 && userCredits > 5 && (
+                      {!isAdminUser && userCredits >= 0 && userCredits <= 20 && userCredits > 5 && (
                         <p style={{ fontSize: 12, color: '#f59e0b', marginBottom: 8 }}>
                           <AlertCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                           Low credits ({userCredits} remaining)
@@ -1636,14 +1642,20 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
                           setTranslationError(null);
                           setIsTranslateOpen(true);
                         }}
-                        disabled={userCredits === 0}
+                        disabled={!isAdminUser && userCredits === 0}
                         title="Add Translation"
-                        style={userCredits === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                        style={!isAdminUser && userCredits === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                       >
                         <Languages size={14} /> Add Translation
-                        {userCredits > 0 && <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>{userCredits} credits</span>}
+                        {isAdminUser ? (
+                          <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Unlimited (Admin)</span>
+                        ) : userCredits === -1 ? (
+                          <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Unlimited</span>
+                        ) : userCredits > 0 ? (
+                          <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>{userCredits} credits</span>
+                        ) : null}
                       </button>
-                      {userCredits === 0 && (
+                      {!isAdminUser && userCredits === 0 && (
                         <p style={{ fontSize: 12, color: '#ef4444', marginTop: 8 }}>
                           No credits remaining. <button
                             style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
@@ -1684,6 +1696,9 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
           setTranslationStatus('translating');
         }}
         onBeforeStart={async () => {
+          if (isAdminUser) {
+            return true;
+          }
           const wordCount = countWords(transcript?.transcriptText ?? '');
           const credits = await calculateTranslationCredits(wordCount);
           const access = await checkPremiumAccess('translation', { requiredCredits: credits });
@@ -1716,6 +1731,7 @@ export default function TranscriptDetailPage({ transcriptId, onBack }: Transcrip
         transcriptTitle={transcript?.title ?? ''}
         transcriptText={transcript?.transcriptText ?? ''}
         userId={user?.id}
+        isAdmin={isAdminUser}
       />
 
       <AccessDeniedDialog

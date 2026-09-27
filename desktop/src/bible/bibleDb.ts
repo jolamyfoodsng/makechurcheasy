@@ -24,7 +24,7 @@ const CUSTOM_THEMES_STORAGE_KEY = "ocs-bible-custom-themes";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.creatorstudioslabs.stream";
+  "https://api.makechurcheazy.com";
 
 function getCustomThemesStorageKey(): string {
   const uid = getCurrentUserId();
@@ -269,14 +269,17 @@ async function readInstalledTranslationFromDockData(
   const entries = metadata ?? await readInstalledTranslationMetadataFromDockData();
   const key = getTranslationKey(typeof abbrOrEntry === "string" ? abbrOrEntry : abbrOrEntry.abbr);
   const entry = entries.find((candidate) => getTranslationKey(candidate.abbr) === key);
-  if (!entry) return undefined;
 
   const data = await loadDockDataJson<RawBibleData>(`dock-bible-translation-${key.toLowerCase()}`);
   if (!data || !isCompleteBibleData(data)) return undefined;
 
   return {
-    ...entry,
+    id: entry?.id || key,
     abbr: key,
+    name: entry?.name || key,
+    language: entry?.language || "English",
+    downloadedAt: entry?.downloadedAt || new Date().toISOString(),
+    filesize: entry?.filesize || 0,
     data,
   };
 }

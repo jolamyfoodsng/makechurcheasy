@@ -24,7 +24,7 @@ function parseTab(value: string | null): ResourceTab | null {
 
 export default function ResourcesPage() {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = parseTab(searchParams.get("tab"));
   const focusMediaId = searchParams.get("mediaId") ?? undefined;
   const openReceiver = searchParams.get("receiver") === "1";
@@ -49,6 +49,67 @@ export default function ResourcesPage() {
             <p className="app-page__eyebrow">{t("resources.pageEyebrow")}</p>
             <h1 className="app-page__title">{copy.title}</h1>
             <p className="app-page__subtitle">{copy.subtitle}</p>
+          </div>
+
+          {/* Direct Tab Switcher without emojis */}
+          <div className="lib-tab-switcher" style={{ marginTop: "12px", borderBottom: "1px solid var(--border-subtle, rgba(255,255,255,0.1))" }}>
+            <button
+              type="button"
+              className={`lib-tab-btn${tab === "bible" ? " lib-tab-btn--active" : ""}`}
+              onClick={() => setSearchParams({ tab: "bible" })}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                fontSize: "0.85rem",
+                fontWeight: tab === "bible" ? 600 : 500,
+                color: tab === "bible" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
+                borderBottom: tab === "bible" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            >
+              Bible Library & Downloads
+            </button>
+            <button
+              type="button"
+              className={`lib-tab-btn${tab === "worship" ? " lib-tab-btn--active" : ""}`}
+              onClick={() => setSearchParams({ tab: "worship" })}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                fontSize: "0.85rem",
+                fontWeight: tab === "worship" ? 600 : 500,
+                color: tab === "worship" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
+                borderBottom: tab === "worship" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            >
+              Worship Songs
+            </button>
+            <button
+              type="button"
+              className={`lib-tab-btn${tab === "media" ? " lib-tab-btn--active" : ""}`}
+              onClick={() => setSearchParams({ tab: "media" })}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                fontSize: "0.85rem",
+                fontWeight: tab === "media" ? 600 : 500,
+                color: tab === "media" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
+                borderBottom: tab === "media" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            >
+              Media Library
+            </button>
           </div>
         </header>
 

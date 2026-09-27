@@ -20,6 +20,7 @@ interface BibleSearchRowProps {
   availableTranslations: Array<{ value: string; label: string; language?: string }>;
   onVersionChange: (version: string) => void;
   compareEnabled: boolean;
+  onToggleCompare?: (enabled: boolean) => void;
   isCompact: boolean;
   isNarrowWidth?: boolean;
   compactActions?: BibleContextualActions;
@@ -36,6 +37,7 @@ export function BibleSearchRow({
   availableTranslations,
   onVersionChange,
   compareEnabled,
+  onToggleCompare,
   isCompact,
   isNarrowWidth = false,
   compactActions,
@@ -61,12 +63,29 @@ export function BibleSearchRow({
         {searchSection}
       </div>
       <div className="dock-bible-search-row__translation">
-        <BibleVersionLibrary
-          activeTranslation={activeTranslation}
-          availableTranslations={availableTranslations}
-          onVersionChange={onVersionChange}
-          disabled={compareEnabled}
-        />
+        {compareEnabled ? (
+          <button
+            type="button"
+            className="bible-version-library__trigger dock-bible-compare-on-btn"
+            onClick={() => onToggleCompare?.(false)}
+            title={t("dock.compare.turnOffTooltip", "Compare mode is active. Click to turn off.")}
+            aria-label={t("dock.compare.turnOffAria", "Compare mode is active. Click to turn off.")}
+          >
+            <Icon name="compare_arrows" size={11} className="dock-bible-compare-on-btn__icon-on" />
+            <Icon name="close" size={11} className="dock-bible-compare-on-btn__icon-off" />
+            <span className="dock-bible-compare-on-btn__label">CMP</span>
+            <span className="dock-bible-compare-on-btn__badge">
+              <span className="dock-bible-compare-on-btn__badge-text-on">ON</span>
+              <span className="dock-bible-compare-on-btn__badge-text-off">OFF</span>
+            </span>
+          </button>
+        ) : (
+          <BibleVersionLibrary
+            activeTranslation={activeTranslation}
+            availableTranslations={availableTranslations}
+            onVersionChange={onVersionChange}
+          />
+        )}
         {shouldUseNarrowOverflowActions ? (
           <div className="dock-bible-compact-actions dock-bible-compact-actions--narrow">
             {renderedCompactActions}
@@ -100,6 +119,7 @@ interface BibleDockContainerProps {
   activeTranslation: string;
   availableTranslations: Array<{ value: string; label: string; language?: string }>;
   compareEnabled?: boolean;
+  onToggleCompare?: (enabled: boolean) => void;
   onVersionChange: (version: string) => void;
   searchSection: React.ReactNode;
   searchPlacement?: DockSearchPlacement;
@@ -116,6 +136,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   activeTranslation,
   availableTranslations,
   compareEnabled = false,
+  onToggleCompare,
   onVersionChange,
   searchSection,
   headerActions,
@@ -141,6 +162,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       availableTranslations={availableTranslations}
       onVersionChange={onVersionChange}
       compareEnabled={compareEnabled}
+      onToggleCompare={onToggleCompare}
       isCompact={isCompact}
       isNarrowWidth={isNarrowWidth}
       compactActions={compactActions}

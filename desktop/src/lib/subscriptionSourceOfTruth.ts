@@ -436,13 +436,14 @@ export function getEffectivePlan(
 ): CanonicalPlanId {
   if (!user) return "free";
   if (String(user.role || "").toLowerCase() === "admin") return "growth";
+  if (normalizeBooleanFlag(user.ambassador?.active)) return "growth";
+  if (isActiveTrial(user, nowMs)) return "growth";
+
   if (isExpiredAdminTemporaryPlan(user, nowMs)) return "free";
   if (isExpiredAdminManagedSubscription(user, nowMs)) return "free";
-  if (normalizeBooleanFlag(user.ambassador?.active)) return "growth";
   if (isExpiredStoredPaidSubscription(user, nowMs)) return "free";
   const storedPlan = normalizePlanId(user.plan);
   if (storedPlan !== "free") return storedPlan;
-  if (isActiveTrial(user, nowMs)) return "growth";
   return "free";
 }
 

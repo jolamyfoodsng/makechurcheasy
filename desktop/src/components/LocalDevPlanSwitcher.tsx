@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, FlaskConical, RotateCcw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Check, FlaskConical, Layers, RotateCcw } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getSession } from "../services/authService";
@@ -22,6 +23,7 @@ function resolveDisplayedPlan(plan: string | null | undefined): LocalDevPlanId {
 }
 /** Local-only plan simulation for the designated development admin account. */
 export function LocalDevPlanSwitcher() {
+  const navigate = useNavigate();
   const { user, setUser } = useAuth();
   const enabled = isLocalDevAdmin(user);
   const [override, setOverride] = useState<LocalDevPlanId | null>(() => getLocalDevPlanOverride(user));
@@ -104,6 +106,15 @@ export function LocalDevPlanSwitcher() {
             Reset
           </button>
         )}
+        <button
+          type="button"
+          className="local-dev-plan-switcher__gallery-btn"
+          onClick={() => navigate("/dev/modals")}
+          title="Open Modals & Announcements Gallery (Local Dev Admin Only)"
+        >
+          <Layers size={14} aria-hidden="true" />
+          Preview All Modals
+        </button>
       </div>
     </section>
   );

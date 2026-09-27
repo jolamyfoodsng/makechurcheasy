@@ -19,7 +19,10 @@ import {
   Clock,
   Copy,
   Download,
+  ExternalLink,
+  Eye,
   FileText,
+  HelpCircle,
   Lock,
   Mic,
   Radio,
@@ -36,8 +39,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
-import { bibleObsService } from "../bible/bibleObsService";
-import type { BibleSlide } from "../bible/types";
 import CreditsDisplay from "../components/CreditsDisplay";
 import MacSelect from "../components/MacSelect";
 import { useAuth } from "../contexts/AuthContext";
@@ -57,19 +58,20 @@ import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService } from "../services/obsService";
 import { loadData } from "../services/store";
 import { getUserScopedKey } from "../services/userScopedStorage";
-import { trackStsPushToLive, trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
+import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
-import { MATCH_SOURCE_LABEL } from "../services/voiceBibleTypes";
 import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
 import { loadLmSettings } from "../services/lmSettings";
 import { resolveScriptureProjection } from "../services/scriptureProjection";
 import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import { isConfirmedAppClose } from "../services/appCloseGuard";
+import { getDockBaseUrl } from "../services/overlayUrl";
+import { getDesktopConfig } from "../services/desktopConfig";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
-  "https://api.creatorstudioslabs.stream";
+  "https://api.makechurcheazy.com";
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
 const FREE_SPEECH_TO_SCRIPTURE_MINUTES = 15;
 const FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES = 20;
@@ -140,6 +142,73 @@ function savePreferredMicId(micId: string): void {
     else localStorage.removeItem(key);
   } catch {
     // Ignore storage failures in restricted browser contexts.
+  }
+}
+
+export async function copyToClipboardRobust(text: string): Promise<boolean> {
+  if (!text) return false;
+
+  // 1. Native Tauri clipboard command (runs pbcopy on macOS, clip on Windows)
+  try {
+    const isTauri =
+      typeof window !== "undefined" &&
+      ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+    if (isTauri) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("copy_to_clipboard", { text });
+      return true;
+    }
+  } catch (err) {
+    console.warn("[Clipboard] Tauri native copy failed:", err);
+  }
+
+  // 2. Modern Clipboard API
+  try {
+    if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[Clipboard] navigator.clipboard.writeText failed:", err);
+  }
+
+  // 3. Fallback textarea execCommand (in-viewport positioning and selectable for WebKit)
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.width = "2em";
+    textArea.style.height = "2em";
+    textArea.style.padding = "0";
+    textArea.style.border = "none";
+    textArea.style.outline = "none";
+    textArea.style.boxShadow = "none";
+    textArea.style.background = "transparent";
+    textArea.style.opacity = "0.01";
+    textArea.setAttribute("aria-hidden", "true");
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, text.length);
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    if (successful) return true;
+  } catch (err) {
+    console.warn("[Clipboard] execCommand fallback failed:", err);
+  }
+
+  return false;
+}
+
+async function openExternal(url?: string): Promise<void> {
+  if (!url) return;
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -221,11 +290,11 @@ export default function SpeechToScripturePage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyLine = useCallback(async (id: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboardRobust(text);
+    if (ok) {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1500);
-    } catch { /* ignore */ }
+    }
   }, []);
 
   const selectMic = useCallback((micId: string) => {
@@ -681,42 +750,32 @@ export default function SpeechToScripturePage() {
 
   // ── Selected candidate (overrides auto top-match when set) ──
   const [selectedCandidate, setSelectedCandidate] = useState<VoiceBibleCandidate | null>(null);
+  const [copiedVerseRef, setCopiedVerseRef] = useState<string | null>(null);
+  const [resolvedPreviewText, setResolvedPreviewText] = useState<string>("");
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [copiedDockLink, setCopiedDockLink] = useState(false);
+  const [showObsGuideModal, setShowObsGuideModal] = useState(false);
+  const [tutorialVideoUrl, setTutorialVideoUrl] = useState("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ");
 
-  // ── Push verse to OBS ──
-  const [pushing, setPushing] = useState(false);
-  const [pushSuccess, setPushSuccess] = useState<string | null>(null);
-  const [pushError, setPushError] = useState<string | null>(null);
+  useEffect(() => {
+    getDesktopConfig().then((cfg) => {
+      if (cfg.obs?.tutorialVideoUrl) {
+        setTutorialVideoUrl(cfg.obs.tutorialVideoUrl);
+      }
+    }).catch(() => { /* keep default */ });
+  }, []);
 
-  const handlePushVerse = useCallback(async (candidate: VoiceBibleCandidate) => {
-    if (!obsConnected) {
-      setPushError(t("verseAi.notConnectedToBroadcast"));
-      return;
+  const lmDockUrl = useMemo(() => {
+    return `${getDockBaseUrl()}/lm-dock`;
+  }, []);
+
+  const handleCopyDockUrl = useCallback(async () => {
+    const ok = await copyToClipboardRobust(lmDockUrl);
+    if (ok) {
+      setCopiedDockLink(true);
+      setTimeout(() => setCopiedDockLink(false), 2000);
     }
-    setPushing(true);
-    setPushError(null);
-    setPushSuccess(null);
-    try {
-      const settings = loadLmSettings();
-      candidate = await resolveScriptureProjection(candidate, settings.translation);
-      const slide: BibleSlide = {
-        id: `speech-${candidate.book}-${candidate.chapter}-${candidate.verse}`,
-        text: candidate.snippet || `${candidate.book} ${candidate.chapter}:${candidate.verse}`,
-        reference: `${candidate.label} (${candidate.translation})`,
-        verseRange: candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse),
-        index: 0,
-        total: 1,
-      };
-      await bibleObsService.pushSlide(slide, null, true, false, settings.overlayMode);
-      track("sts_push_to_live", { reference: candidate.label, confidence: candidate.confidence });
-      trackStsPushToLive();
-      setPushSuccess(t("verseAi.pushedToBroadcast", { reference: candidate.label }));
-      setTimeout(() => setPushSuccess(null), 3000);
-    } catch (err) {
-      setPushError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPushing(false);
-    }
-  }, [obsConnected]);
+  }, [lmDockUrl]);
 
   // ── Transcript search ──
   const [transcriptSearch, setTranscriptSearch] = useState("");
@@ -780,11 +839,13 @@ export default function SpeechToScripturePage() {
   const fullTranscript = useMemo(() => finalizedEntries.map((e) => e.text).join("\n"), [finalizedEntries]);
   const [copyToast, setCopyToast] = useState(false);
 
-  const handleCopyTranscript = useCallback(() => {
+  const handleCopyTranscript = useCallback(async () => {
     if (!fullTranscript) return;
-    void navigator.clipboard.writeText(fullTranscript);
-    setCopyToast(true);
-    setTimeout(() => setCopyToast(false), 2000);
+    const ok = await copyToClipboardRobust(fullTranscript);
+    if (ok) {
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
+    }
   }, [fullTranscript]);
 
   // ── Download workflow ──
@@ -871,40 +932,100 @@ export default function SpeechToScripturePage() {
     setSelectedCandidate(null);
   }, [snapshot.latestMatch]);
 
-  // ── Candidate matches: ONLY suggestions (quote search results) ──
-  const candidateMatches = useMemo(() => {
-    // CRITICAL: This must ONLY use suggestions, not queue.
-    // Queue contains detected references (Hebrews 2:7, John 7:5, etc.)
-    // that persist across searches. Mixing them into candidateMatches
-    // causes stale references to appear after a new quote search.
-    //
-    // Suggestions are fully replaced on each quote search — this is
-    // the intended behavior for a stateless live search panel.
+  // ── Detected references list (top match + queue + suggestions, deduplicated) ──
+  const detectedList = useMemo<VoiceBibleCandidate[]>(() => {
+    const seen = new Set<string>();
+    const list: VoiceBibleCandidate[] = [];
 
-    const results = [...snapshot.suggestions];
+    const add = (item: VoiceBibleCandidate | null | undefined) => {
+      if (!item) return;
+      const key = `${item.book}-${item.chapter}-${item.verse}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(item);
+      }
+    };
 
-    return results;
-  }, [snapshot.suggestions]);
+    if (topMatch) {
+      add(topMatch);
+    }
+    for (const c of snapshot.queue) {
+      add(c);
+    }
+    for (const c of snapshot.suggestions) {
+      add(c);
+    }
+    return list;
+  }, [topMatch, snapshot.queue, snapshot.suggestions]);
 
-  // ── Copy verse ──
-  const [verseCopied, setVerseCopied] = useState(false);
+  // ── Active verse for preview panel ──
+  const activePreview = useMemo(() => {
+    return selectedCandidate || topMatch || detectedList[0] || null;
+  }, [selectedCandidate, topMatch, detectedList]);
 
-  const handleCopyVerse = useCallback(() => {
-    if (!topMatch) return;
-    const text = `${topMatch.label}\n${topMatch.snippet}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setVerseCopied(true);
-      setTimeout(() => setVerseCopied(false), 2000);
-    });
-  }, [topMatch]);
+  // ── Resolve full scripture passage for active preview ──
+  useEffect(() => {
+    if (!activePreview) {
+      setResolvedPreviewText("");
+      setLoadingPreview(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPreview(true);
+    resolveScriptureProjection(activePreview, activePreview.translation || "KJV")
+      .then((res) => {
+        if (!cancelled) {
+          setResolvedPreviewText(res.snippet || activePreview.snippet || "");
+          setLoadingPreview(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolvedPreviewText(activePreview.snippet || "");
+          setLoadingPreview(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePreview?.book, activePreview?.chapter, activePreview?.verse, activePreview?.endVerse, activePreview?.translation]);
 
-  // ── Detected references: only direct references (queue items) ──
-  const detectedRefs = useMemo(() => {
-    return snapshot.queue.map((c) => ({
-      label: c.label,
-      candidate: c,
-    }));
-  }, [snapshot.queue]);
+  // ── Copy verse to clipboard with full text resolution and robust OS fallback ──
+  const handleCopyVerse = useCallback(async (candidate?: VoiceBibleCandidate | null) => {
+    const target = candidate || activePreview || topMatch;
+    if (!target) return;
+
+    let textToCopy = `${target.label} (${target.translation || "KJV"})\n${target.snippet || ""}`.trim();
+    try {
+      const settings = loadLmSettings();
+      const resolved = await resolveScriptureProjection(target, target.translation || settings.translation);
+      if (resolved?.snippet) {
+        textToCopy = `${resolved.label} (${resolved.translation || "KJV"})\n${resolved.snippet}`.trim();
+      }
+    } catch {
+      // Fallback
+    }
+
+    const ok = await copyToClipboardRobust(textToCopy);
+    if (ok) {
+      setCopiedVerseRef(target.label);
+      setTimeout(() => {
+        setCopiedVerseRef((cur) => (cur === target.label ? null : cur));
+      }, 2000);
+    }
+  }, [activePreview, topMatch]);
+
+  const handleCopyReferenceOnly = useCallback(async (candidate?: VoiceBibleCandidate | null) => {
+    const target = candidate || activePreview || topMatch;
+    if (!target) return;
+    const ok = await copyToClipboardRobust(target.label);
+    if (ok) {
+      setCopiedVerseRef(`ref-${target.label}`);
+      setTimeout(() => {
+        setCopiedVerseRef((cur) => (cur === `ref-${target.label}` ? null : cur));
+      }, 2000);
+    }
+  }, [activePreview, topMatch]);
 
   // ── Filter transcript entries by search ──
   const filteredEntries = useMemo(() => {
@@ -974,7 +1095,7 @@ export default function SpeechToScripturePage() {
 
           <CreditsDisplay userId={user?.id} />
           <button
-            className={`sts3-btn ${canStopListening ? "sts3-btn--red" : "sts3-btn--primary"}`}
+            className={`sts3-btn sts3-btn-hero ${canStopListening ? "sts3-btn--red" : "sts3-btn--primary"}`}
             onClick={canStopListening ? handleStop : handleStart}
             disabled={checkingAccess || (!canStopListening && !hasCredits)}
             title={isConnecting ? `${t("verseAi.connecting")} (${t("verseAi.cancel")})` : !canStopListening && !hasCredits ? t("verseAi.noCredits") : canStopListening ? t("verseAi.stopListening") : t("verseAi.startListening")}>
@@ -982,14 +1103,14 @@ export default function SpeechToScripturePage() {
               isConnecting ? (
                 <><span className="sts3-spinner" /> {t("verseAi.connecting")}</>
               ) : (
-                <><StopCircle size={15} /> {t("verseAi.stopListening")}</>
+                <><StopCircle size={18} /> {t("verseAi.stopListening")}</>
               )
             ) : checkingAccess ? (
               <><span className="sts3-spinner" /> {t("verseAi.checkingAccess")}</>
             ) : !hasCredits ? (
-              <><Lock size={15} /> {t("verseAi.noCredits")}</>
+              <><Lock size={18} /> {t("verseAi.noCredits")}</>
             ) : (
-              <><Mic size={15} /> {t("verseAi.showInObs", "Start Listening")}</>
+              <><Mic size={18} /> {t("verseAi.showInObs", "Start Listening")}</>
             )}
           </button>
         </div>
@@ -1309,124 +1430,217 @@ export default function SpeechToScripturePage() {
             </div>
           </aside>
 
-          {/* ── Center: Current Verse (Top Match) ── */}
-          <div className="sts3-main-card">
-            <div className="sts3-card-title">
-              <span>{t("verseAi.topMatch")}</span>
-              {topMatch && (
-                <div className="sts3-card-title-actions">
-                  <button
-                    className={`sts3-header-icon-btn${pushing ? " sts3-header-icon-btn--active" : ""}`}
-                    onClick={() => void handlePushVerse(topMatch)}
-                    disabled={pushing || !obsConnected}
-                    title={t("verseAi.pushToLive")}
-                  >
-                    <Radio size={14} />
-                  </button>
-                  <button
-                    className={`sts3-header-icon-btn${verseCopied ? " sts3-header-icon-btn--active" : ""}`}
-                    onClick={handleCopyVerse}
-                    title={t("verseAi.copyVerse")}
-                  >
-                    {verseCopied ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-              )}
-            </div>
-            {topMatch ? (
-              <>
-                <div className="sts3-verse-display">
-
-                  <div className="sts3-verse-content">
-                    <h1 className="sts3-verse-ref">{topMatch.label}</h1>
-                    <p className="sts3-verse-text">&ldquo;{topMatch.snippet}&rdquo;</p>
-                    <div className="sts3-verse-version">{topMatch.translation || "KJV"} {t("verseAi.version")}</div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="sts3-verse-empty">
-
-                <p className="sts3-verse-empty-text">
-                  {isListening
-                    ? t("verseAi.listeningForScripture")
-                    : t("verseAi.startToDetect")}
-                </p>
+          {/* ── Center: Detected Scriptures (Enlarged Cards) ── */}
+          <section className="sts3-detected-panel" aria-label="Detected Scriptures">
+            <div className="sts3-detected-header">
+              <div className="sts3-detected-header-left">
+                <BookOpen size={16} />
+                <span>{t("verseAi.detectedScriptures", "Detected Scriptures")}</span>
+                {detectedList.length > 0 && (
+                  <span className="sts3-detected-count">{detectedList.length}</span>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* ── Right: Detected References ── */}
-          <aside className="sts3-right-panel">
-            <div className="sts3-right-title">
-              <BookOpen size={14} /> {t("verseAi.detectedReferences")}
+              <div className="sts3-detected-header-actions">
+                <button
+                  type="button"
+                  className="sts3-dock-btn"
+                  onClick={() => setShowObsGuideModal(true)}
+                  title="How to display on OBS Studio"
+                >
+                  <ExternalLink size={13} />
+                  <span>OBS Setup Guide</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sts3-dock-btn ${copiedDockLink ? "sts3-dock-btn--active" : ""}`}
+                  onClick={handleCopyDockUrl}
+                  title="Copy the OBS Browser Dock URL to clipboard"
+                >
+                  {copiedDockLink ? <Check size={13} /> : <Copy size={13} />}
+                  <span>{copiedDockLink ? "Copied Dock URL" : "Copy Dock Link"}</span>
+                </button>
+              </div>
             </div>
-            <div className="sts3-ref-list">
-              {detectedRefs.length === 0 ? (
-                <div className="sts3-ref-empty">
-                  <p className="sts3-ref-empty-text">
-                    {t("verseAi.refsEmpty")}
-                  </p>
-                </div>
-              ) : (
-                detectedRefs.map((ref, i) => (
-                  <div
-                    key={`ref-${ref.candidate.book}-${ref.candidate.chapter}-${ref.candidate.verse}-${i}`}
-                    className={`sts3-ref-item ${i === 0 ? "sts3-ref-item--active" : ""}`}
-                  >
-                    <span className="sts3-ref-label">{ref.label}</span>
-                    {i === 0 && <span className="sts3-live-badge">{t("verseAi.live")}</span>}
+
+            <div className="sts3-detected-list">
+              {detectedList.length === 0 ? (
+                <div className="sts3-detected-empty">
+                  <div className="sts3-detected-empty-icon">
+                    <BookOpen size={24} />
                   </div>
-                ))
-              )}
-            </div>
-          </aside>
-        </div>
-
-        {/* ── Row 2: Full-width section ── */}
-        <div className="sts3-main-row2">
-          {/* Candidate Matches */}
-          <div className="sts3-candidate-card">
-            <div className="sts3-candidate-header">
-              <span className="sts3-candidate-title">{t("verseAi.candidateMatches")}</span>
-              {candidateMatches.length > 0 && (
-                <span className="sts3-candidate-count">{candidateMatches.length}</span>
-              )}
-            </div>
-            <div className="sts3-candidate-list">
-              {candidateMatches.length === 0 ? (
-                <div className="sts3-candidate-empty">
-                  <p>{t("verseAi.candidateEmpty")}</p>
-                  <p className="sts3-candidate-empty-hint">{t("verseAi.candidateEmptyHint")}</p>
+                  <h4 className="sts3-detected-empty-title">
+                    {isListening
+                      ? t("verseAi.listeningForScripture", "Listening for Scripture...")
+                      : t("verseAi.startToDetect", "No Scriptures Detected Yet")}
+                  </h4>
+                  <p className="sts3-detected-empty-desc">
+                    {isListening
+                      ? "Speak or quote scripture into your microphone. Detected verses will appear here automatically."
+                      : "Start listening to detect Bible verses in real-time speech."}
+                  </p>
+                  {!isListening && (
+                    <button
+                      type="button"
+                      className="sts3-btn sts3-btn-hero sts3-btn--primary"
+                      onClick={handleStart}
+                      disabled={checkingAccess || !hasCredits}
+                      style={{ marginTop: "16px", gap: "10px" }}
+                    >
+                      <Mic size={18} />
+                      <span>{t("verseAi.showInObs", "Start Listening")}</span>
+                    </button>
+                  )}
                 </div>
               ) : (
-                candidateMatches.map((c, i) => {
-                  const sourceLabel = MATCH_SOURCE_LABEL[c.source ?? "fuzzy"];
+                detectedList.map((candidate, i) => {
+                  const isTop = topMatch?.book === candidate.book && topMatch?.chapter === candidate.chapter && topMatch?.verse === candidate.verse;
+                  const isSelected = activePreview?.book === candidate.book && activePreview?.chapter === candidate.chapter && activePreview?.verse === candidate.verse;
+                  const isCopied = copiedVerseRef === candidate.label;
+
                   return (
                     <div
-                      key={`cand-${c.book}-${c.chapter}-${c.verse}-${i}`}
-                      className="sts3-candidate-item"
+                      key={`card-${candidate.book}-${candidate.chapter}-${candidate.verse}-${i}`}
+                      className={`sts3-detected-card ${isTop ? "sts3-detected-card--top" : ""} ${isSelected ? "sts3-detected-card--selected" : ""}`}
+                      onClick={() => setSelectedCandidate(candidate)}
                     >
-                      <BookOpen size={16} className="sts3-cand-icon" />
-                      <div className="sts3-cand-ref">{c.label}</div>
-                      <div className="sts3-cand-match" style={{ color: sourceLabel.color }}>
-                        {Math.round(c.confidence * 100)}%
+                      <div className="sts3-card-top-row">
+                        <div className="sts3-card-ref-group">
+                          <span className="sts3-card-ref-title">{candidate.label}</span>
+                          {isTop && (
+                            <span className="sts3-card-badge-top">
+                              {t("verseAi.topMatch", "Top Match")}
+                            </span>
+                          )}
+                          {isSelected && (
+                            <span className="sts3-card-badge-preview">
+                              Previewing
+                            </span>
+                          )}
+                          <span className="sts3-card-version-tag">
+                            {candidate.translation || "KJV"}
+                          </span>
+                        </div>
+
+                        <div className="sts3-card-actions">
+                          <button
+                            type="button"
+                            className={`sts3-card-action-btn ${isCopied ? "sts3-card-action-btn--copied" : ""}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCopyVerse(candidate);
+                            }}
+                            title="Copy scripture to clipboard"
+                          >
+                            {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="sts3-cand-text">{c.snippet}</div>
-                      <button
-                        className="sts3-cand-push"
-                        onClick={() => { setSelectedCandidate(c); void handlePushVerse(c); }}
-                        disabled={pushing || !obsConnected}
-                        title={t("verseAi.pushToBroadcast")}
-                      >
-                        <Radio size={12} />
-                      </button>
+
+                      <p className="sts3-card-snippet">
+                        &ldquo;{candidate.snippet}&rdquo;
+                      </p>
+
+                      <div className="sts3-card-footer">
+                        <span>{Math.round(candidate.confidence * 100)}% match</span>
+                        <span className="sts3-card-click-hint">Click to preview →</span>
+                      </div>
                     </div>
                   );
                 })
               )}
             </div>
-          </div>
+          </section>
+
+          {/* ── Right: Scripture Preview Panel ── */}
+          <aside className="sts3-preview-panel" aria-label="Scripture Preview">
+            <div className="sts3-preview-header">
+              <div className="sts3-preview-header-left">
+                <Eye size={15} />
+                <span>Scripture Preview</span>
+              </div>
+              {activePreview && (
+                <div className="sts3-preview-header-actions">
+                  <button
+                    type="button"
+                    className={`sts3-preview-copy-btn ${copiedVerseRef === activePreview.label ? "sts3-preview-copy-btn--copied" : ""}`}
+                    onClick={() => void handleCopyVerse(activePreview)}
+                    title="Copy full passage"
+                  >
+                    {copiedVerseRef === activePreview.label ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{copiedVerseRef === activePreview.label ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="sts3-preview-body">
+              {!activePreview ? (
+                <div className="sts3-preview-empty">
+                  <div className="sts3-preview-empty-icon">
+                    <BookOpen size={22} />
+                  </div>
+                  <div className="sts3-preview-empty-title">No Verse Selected</div>
+                  <div className="sts3-preview-empty-desc">
+                    Click any detected verse in the center column to preview the complete scripture passage and copy it.
+                  </div>
+                </div>
+              ) : (
+                <div className="sts3-preview-content">
+                  <div className="sts3-preview-meta-row">
+                    <div className="sts3-preview-title-wrap">
+                      <h3 className="sts3-preview-title">{activePreview.label}</h3>
+                      <span className="sts3-card-version-tag">
+                        {activePreview.translation || "KJV"}
+                      </span>
+                      <span className="sts3-preview-confidence-tag">
+                        {Math.round(activePreview.confidence * 100)}% match
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sts3-preview-text-box">
+                    {loadingPreview ? (
+                      <div className="sts3-preview-loading">
+                        <span className="sts3-preview-spinner" />
+                        <span>Loading passage...</span>
+                      </div>
+                    ) : (
+                      <blockquote className="sts3-preview-passage">
+                        &ldquo;{resolvedPreviewText || activePreview.snippet || ""}&rdquo;
+                      </blockquote>
+                    )}
+                  </div>
+
+                  <div className="sts3-preview-actions-row">
+                    <button
+                      type="button"
+                      className={`sts3-preview-main-copy-btn ${copiedVerseRef === activePreview.label ? "sts3-preview-main-copy-btn--copied" : ""}`}
+                      onClick={() => void handleCopyVerse(activePreview)}
+                    >
+                      {copiedVerseRef === activePreview.label ? <Check size={15} /> : <Copy size={15} />}
+                      <span>
+                        {copiedVerseRef === activePreview.label
+                          ? "Passage Copied to Clipboard"
+                          : "Copy Full Passage"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`sts3-preview-sub-copy-btn ${copiedVerseRef === `ref-${activePreview.label}` ? "sts3-preview-sub-copy-btn--copied" : ""}`}
+                      onClick={() => void handleCopyReferenceOnly(activePreview)}
+                    >
+                      {copiedVerseRef === `ref-${activePreview.label}` ? <Check size={13} /> : <BookOpen size={13} />}
+                      <span>
+                        {copiedVerseRef === `ref-${activePreview.label}`
+                          ? "Reference Copied!"
+                          : "Copy Reference Only"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
 
@@ -1465,16 +1679,6 @@ export default function SpeechToScripturePage() {
       )}
 
       {/* ── Toasts ── */}
-      {pushSuccess && (
-        <div className="sts3-toast sts3-toast--success">
-          <Check size={14} /> {pushSuccess}
-        </div>
-      )}
-      {pushError && (
-        <div className="sts3-toast sts3-toast--error">
-          <span>⚠</span> {pushError}
-        </div>
-      )}
       {downloadToast && (
         <div className="sts3-toast sts3-toast--success">
           <Check size={14} /> {downloadToast}
@@ -1828,6 +2032,105 @@ export default function SpeechToScripturePage() {
                 }}
                 title={t("verseAi.stopListening", "Stop Listening")}>
                 <StopCircle size={15} /> {t("verseAi.stopListening", "Stop")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── OBS Guide Modal ── */}
+      {showObsGuideModal && (
+        <div className="sts3-lock-overlay" onClick={() => setShowObsGuideModal(false)}>
+          <div className="sts3-modal sts3-modal--guide" onClick={(e) => e.stopPropagation()}>
+            <div className="sts3-modal-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, fontSize: "16px" }}>
+                <Radio size={18} style={{ color: "var(--primary)" }} />
+                <span>OBS Live Projection Setup</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowObsGuideModal(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="sts3-guide-body">
+              <div className="sts3-guide-intro">
+                <HelpCircle size={18} className="sts3-guide-intro-icon" />
+                <div>
+                  To project detected scriptures on your OBS stream or projector, add the <strong>Live Scripture Dock</strong> inside OBS as a Custom Browser Dock.
+                </div>
+              </div>
+
+              {tutorialVideoUrl && (
+                <div
+                  className="sts3-guide-video-card"
+                  onClick={() => void openExternal(tutorialVideoUrl)}
+                >
+                  <div className="sts3-guide-video-left">
+                    <div className="sts3-guide-video-icon">
+                      <Radio size={16} />
+                    </div>
+                    <div>
+                      <div className="sts3-guide-video-title">Watch Video Tutorial</div>
+                      <div className="sts3-guide-video-sub">Learn how to configure the OBS Custom Browser Dock</div>
+                    </div>
+                  </div>
+                  <ExternalLink size={16} style={{ color: "var(--text-muted)" }} />
+                </div>
+              )}
+
+              <div className="sts3-guide-steps">
+                <div className="sts3-guide-step">
+                  <div className="sts3-guide-step-num">1</div>
+                  <div className="sts3-guide-step-content">
+                    <div className="sts3-guide-step-title">Open OBS Studio</div>
+                    <div className="sts3-guide-step-desc">
+                      In OBS Studio, navigate to the top menu and select <strong>Docks &gt; Custom Browser Docks...</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sts3-guide-step">
+                  <div className="sts3-guide-step-num">2</div>
+                  <div className="sts3-guide-step-content">
+                    <div className="sts3-guide-step-title">Add the Custom Dock</div>
+                    <div className="sts3-guide-step-desc">
+                      Name the dock <strong>Live Scripture</strong> and paste your dedicated dock URL below:
+                    </div>
+                    <div className="sts3-guide-copy-row">
+                      <span className="sts3-guide-url-text">{lmDockUrl}</span>
+                      <button
+                        type="button"
+                        className={`sts3-guide-copy-btn ${copiedDockLink ? "sts3-guide-copy-btn--copied" : ""}`}
+                        onClick={handleCopyDockUrl}
+                      >
+                        {copiedDockLink ? <Check size={13} /> : <Copy size={13} />}
+                        <span>{copiedDockLink ? "Copied!" : "Copy URL"}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sts3-guide-step">
+                  <div className="sts3-guide-step-num">3</div>
+                  <div className="sts3-guide-step-content">
+                    <div className="sts3-guide-step-title">Apply and Dock Window</div>
+                    <div className="sts3-guide-step-desc">
+                      Click <strong>Apply</strong>. The Live Scripture dock will open directly in OBS with full projection controls, lower-thirds casting, and live preview.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="sts3-modal-footer" style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="sts3-btn sts3-btn--primary"
+                onClick={() => setShowObsGuideModal(false)}
+              >
+                Got It
               </button>
             </div>
           </div>

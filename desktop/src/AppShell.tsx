@@ -33,6 +33,7 @@ import EasyWorshipAnnouncementBanner from "./components/EasyWorshipAnnouncementB
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
 import { safeTauriListen } from "./services/tauriSafe";
+import { isSearchKeyboardShortcut, triggerTabSearchInput } from "./utils/searchShortcut";
 import type { ConnectionStatus } from "./services/obsService";
 
 
@@ -95,6 +96,25 @@ export function AppShell() {
     window.addEventListener("keydown", handleSettingsShortcut);
     return () => window.removeEventListener("keydown", handleSettingsShortcut);
   }, [navigate]);
+
+  // Focus Search in the current tab/page from the conventional app shortcut:
+  // Cmd+F on macOS and Ctrl+F on Windows/Linux.
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (!isSearchKeyboardShortcut(event)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const found = triggerTabSearchInput();
+      if (!found) {
+        setShowCommandPalette(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleSearchShortcut, true);
+    return () => window.removeEventListener("keydown", handleSearchShortcut, true);
+  }, []);
 
   // The native tray menu uses the same navigation path as the keyboard
   // shortcut. This listener is a no-op in browser/dock contexts.

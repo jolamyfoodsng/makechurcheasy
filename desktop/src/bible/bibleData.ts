@@ -114,16 +114,41 @@ async function loadTranslation(t: BibleTranslation): Promise<RawBibleData> {
   }
 
   if (key !== "KJV") {
+    // 1. Try Tauri dock data directly if running inside Tauri
     try {
-      const remoteUrl = `${import.meta.env.BASE_URL}uploads/dock-bible-translation-${key.toLowerCase()}.json`;
-      const remoteRes = await fetch(remoteUrl);
-      if (remoteRes.ok) {
-        const remoteData: RawBibleData = await remoteRes.json();
-        translationCache.set(key, remoteData);
-        return remoteData;
+      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const raw = await invoke<string>("load_dock_data", {
+          name: `dock-bible-translation-${key.toLowerCase()}`,
+        });
+        if (raw) {
+          const parsed = JSON.parse(raw) as RawBibleData;
+          if (parsed && typeof parsed === "object") {
+            translationCache.set(key, parsed);
+            return parsed;
+          }
+        }
       }
     } catch {
-      // Ignore remote fallback failure — continue to bundled KJV fallback.
+      // Fall through to remote fetch
+    }
+
+    // 2. Try remote upload endpoints (OBS browser dock, CEF, web)
+    const candidateUrls = [
+      `/uploads/dock-bible-translation-${key.toLowerCase()}.json`,
+      `${import.meta.env.BASE_URL}uploads/dock-bible-translation-${key.toLowerCase()}.json`,
+    ];
+    for (const remoteUrl of candidateUrls) {
+      try {
+        const remoteRes = await fetch(remoteUrl);
+        if (remoteRes.ok) {
+          const remoteData: RawBibleData = await remoteRes.json();
+          translationCache.set(key, remoteData);
+          return remoteData;
+        }
+      } catch {
+        // Try next candidate
+      }
     }
   }
 

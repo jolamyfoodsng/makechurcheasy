@@ -158,8 +158,8 @@ describe("DockLmTab settings helpers", () => {
   });
 
   it("keeps queue previews compact while preserving the verse reference", () => {
-    expect(dockLmTabSource).toContain("WebkitLineClamp: 2");
-    expect(dockLmTabSource).toContain("fontSize: 12");
+    expect(dockLmTabSource).toContain("WebkitLineClamp: 3");
+    expect(dockLmTabSource).toContain("verseText:");
   });
 
   it("makes queue and suggestion cards send to OBS when clicked", () => {

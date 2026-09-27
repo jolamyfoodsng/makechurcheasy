@@ -3,20 +3,21 @@ main = "cloudflare-container-worker.ts"
 compatibility_date = "2026-06-10"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+preview_urls = true
 
 [observability]
 enabled = true
 
 [triggers]
 crons = [
-  "*/15 * * * *",
   "0 2 * * *",
+  "0 22 * * *",
   "0 3 * * *",
+  "*/15 * * * *",
   "15 3 * * *",
+  "15 4 * * *",
   "30 3 * * *",
   "45 3 * * *",
-  "15 4 * * *",
-  "0 22 * * *",
 ]
 
 [vars]
@@ -45,9 +46,15 @@ pattern = "api.makechurcheazy.com/*"
 zone_name = "makechurcheazy.com"
 
 [[routes]]
+pattern = "makechurcheazy.com/api/*"
+zone_name = "makechurcheazy.com"
+
+[[routes]]
 pattern = "api.creatorstudioslabs.stream/*"
 zone_name = "creatorstudioslabs.stream"
 
 [[routes]]
-pattern = "makechurcheazy.com/api/*"
-zone_name = "makechurcheazy.com"
+pattern = "api.creatorstudioslabs.stream"
+custom_domain = true
+enabled = true
+previews_enabled = true

@@ -11,7 +11,7 @@ import { isConfirmedAppClose } from "../services/appCloseGuard";
 import "./CountryPicker.css";
 import "./ProfileCompletionModal.css";
 
-const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.creatorstudioslabs.stream";
+const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 
 /** List of required profile fields. Add more fields here in the future. */
 const requiredProfileFields = ["country"];

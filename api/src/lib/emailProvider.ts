@@ -1,12 +1,12 @@
 /**
- * emailProvider.ts — Provider-agnostic transactional email delivery.
+ * emailProvider.ts — Dedicated Cloudflare transactional email delivery.
  *
- * Select the primary provider with EMAIL_PROVIDER=cloudflare|mailtrap|console.
- * Optionally set EMAIL_FALLBACK_PROVIDER to a different provider. A fallback
- * is only attempted when the primary provider returns a confirmed failure.
+ * Cloudflare Email Service is the sole transactional email provider.
+ * Falls back to console in local environments where Cloudflare credentials
+ * are not present.
  */
 
-export type EmailProviderName = "cloudflare" | "mailtrap" | "console";
+export type EmailProviderName = "cloudflare" | "console";
 
 export interface TransactionalEmailMessage {
   from: {
@@ -27,40 +27,18 @@ export interface EmailDeliveryResult {
   error?: string;
 }
 
-function normalizeProvider(value: unknown): EmailProviderName | null {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "cloudflare" || normalized === "cloudflare-email") return "cloudflare";
-  if (normalized === "mailtrap" || normalized === "console") {
-    return normalized;
-  }
-  return null;
-}
-
 export function getEmailProviderChain(env: NodeJS.ProcessEnv = process.env): EmailProviderName[] {
-  const explicitPrimary = normalizeProvider(env.EMAIL_PROVIDER);
-  const detectedPrimary = env.CLOUDFLARE_EMAIL_ACCOUNT_ID && env.CLOUDFLARE_EMAIL_API_TOKEN
-    ? "cloudflare"
-    : env.MAILTRAP_API_TOKEN || env.MAILTRAP_TOKEN
-      ? "mailtrap"
-      : "console";
-  const primary = explicitPrimary || detectedPrimary;
-  const fallback = normalizeProvider(env.EMAIL_FALLBACK_PROVIDER);
-
-  return [primary, fallback]
-    .filter((provider): provider is EmailProviderName => Boolean(provider))
-    .filter((provider, index, providers) => providers.indexOf(provider) === index);
+  if (env.CLOUDFLARE_EMAIL_ACCOUNT_ID && env.CLOUDFLARE_EMAIL_API_TOKEN) {
+    return ["cloudflare"];
+  }
+  return ["console"];
 }
 
 export function resolveTransactionalSender(
   sender: TransactionalEmailMessage["from"],
-  env: NodeJS.ProcessEnv = process.env,
+  _env: NodeJS.ProcessEnv = process.env,
 ): TransactionalEmailMessage["from"] {
-  if (getEmailProviderChain(env)[0] !== "mailtrap") return sender;
-
-  return {
-    email: env.MAILTRAP_FROM_EMAIL?.trim() || sender.email,
-    name: env.MAILTRAP_FROM_NAME?.trim() || sender.name,
-  };
+  return sender;
 }
 
 function failure(provider: EmailProviderName, error: unknown): EmailDeliveryResult {
@@ -71,41 +49,6 @@ function failure(provider: EmailProviderName, error: unknown): EmailDeliveryResu
   };
 }
 
-async function sendWithMailtrap(message: TransactionalEmailMessage): Promise<EmailDeliveryResult> {
-  const token = process.env.MAILTRAP_API_TOKEN || process.env.MAILTRAP_TOKEN;
-  if (!token) return failure("mailtrap", "MAILTRAP_API_TOKEN is not configured");
-
-  try {
-    const response = await fetch("https://send.api.mailtrap.io/api/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: message.from,
-        to: message.to.map((email) => ({ email })),
-        subject: message.subject,
-        html: message.html,
-        ...(message.text ? { text: message.text } : {}),
-        ...(message.category ? { category: message.category } : {}),
-      }),
-    });
-    if (!response.ok) {
-      return failure("mailtrap", `Mailtrap returned HTTP ${response.status}`);
-    }
-
-    const body = await response.json().catch(() => null) as { message_ids?: unknown } | null;
-    const messageId = Array.isArray(body?.message_ids)
-      ? String(body.message_ids[0] || "")
-      : undefined;
-
-    return { sent: true, provider: "mailtrap", messageId };
-  } catch (error) {
-    return failure("mailtrap", error);
-  }
-}
-
 async function sendWithCloudflare(message: TransactionalEmailMessage): Promise<EmailDeliveryResult> {
   const accountId = process.env.CLOUDFLARE_EMAIL_ACCOUNT_ID?.trim();
   const apiToken = process.env.CLOUDFLARE_EMAIL_API_TOKEN?.trim();
@@ -113,6 +56,16 @@ async function sendWithCloudflare(message: TransactionalEmailMessage): Promise<E
   if (!apiToken) return failure("cloudflare", "CLOUDFLARE_EMAIL_API_TOKEN is not configured");
 
   try {
+    const payload = {
+      from: message.from.name
+        ? { address: message.from.email, name: message.from.name }
+        : message.from.email,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      ...(message.text ? { text: message.text } : {}),
+    };
+
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/email/sending/send`,
       {
@@ -121,46 +74,49 @@ async function sendWithCloudflare(message: TransactionalEmailMessage): Promise<E
           Authorization: `Bearer ${apiToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          from: message.from.name
-            ? { address: message.from.email, name: message.from.name }
-            : message.from.email,
-          to: message.to,
-          subject: message.subject,
-          html: message.html,
-          ...(message.text ? { text: message.text } : {}),
-        }),
+        body: JSON.stringify(payload),
       },
     );
 
     const body = await response.json().catch(() => null) as {
       success?: boolean;
       errors?: Array<{ code?: number; message?: string }>;
+      messages?: Array<{ code?: number; message?: string }>;
       result?: {
         delivered?: string[];
         queued?: string[];
         message_id?: string;
+        permanent_bounces?: string[];
+        suppressed_recipients?: string[];
       } | null;
     } | null;
 
     if (!response.ok || body?.success !== true) {
-      const providerMessage = body?.errors
+      const errorDetails = body?.errors
         ?.map((entry) => entry.message || (entry.code ? `Cloudflare error ${entry.code}` : ""))
         .filter(Boolean)
         .join("; ");
-      return failure("cloudflare", providerMessage || `Cloudflare Email Service returned HTTP ${response.status}`);
+      const msg = errorDetails || `Cloudflare Email Service returned HTTP ${response.status}`;
+      console.error(`[email] Cloudflare send rejected (HTTP ${response.status}):`, msg, JSON.stringify(body));
+      return failure("cloudflare", msg);
     }
 
     const accepted = new Set([
       ...(body.result?.delivered || []),
       ...(body.result?.queued || []),
     ].map((email) => email.toLowerCase()));
+
     if (message.to.some((email) => !accepted.has(email.toLowerCase()))) {
-      return failure("cloudflare", "Cloudflare did not accept all recipients");
+      const details = [
+        body.result?.permanent_bounces?.length ? `Bounced: ${body.result.permanent_bounces.join(", ")}` : "",
+        body.result?.suppressed_recipients?.length ? `Suppressed: ${body.result.suppressed_recipients.join(", ")}` : "",
+      ].filter(Boolean).join("; ");
+      return failure("cloudflare", `Cloudflare did not accept all recipients. ${details}`.trim());
     }
 
     return { sent: true, provider: "cloudflare", messageId: body.result?.message_id };
   } catch (error) {
+    console.error("[email] Cloudflare network error:", error);
     return failure("cloudflare", error);
   }
 }
@@ -170,24 +126,19 @@ async function sendWithProvider(
   message: TransactionalEmailMessage,
 ): Promise<EmailDeliveryResult> {
   if (provider === "cloudflare") return sendWithCloudflare(message);
-  if (provider === "mailtrap") return sendWithMailtrap(message);
 
-  console.warn("[email] No transactional email provider is configured; email was not sent.");
-  return failure("console", "No provider is configured");
+  console.warn("[email] Cloudflare email credentials not configured; email logged to console.");
+  return failure("console", "Cloudflare email credentials not configured");
 }
 
 export async function sendTransactionalEmail(
   message: TransactionalEmailMessage,
 ): Promise<EmailDeliveryResult> {
-  let lastResult: EmailDeliveryResult | null = null;
-
-  for (const provider of getEmailProviderChain()) {
-    const result = await sendWithProvider(provider, message);
-    if (result.sent) return result;
-
-    lastResult = result;
-    console.error(`[email] ${provider} delivery failed: ${result.error}`);
+  const providers = getEmailProviderChain();
+  const primaryProvider = providers[0] || "console";
+  const result = await sendWithProvider(primaryProvider, message);
+  if (!result.sent) {
+    console.error(`[email] ${primaryProvider} delivery failed: ${result.error}`);
   }
-
-  return lastResult || failure("console", "No provider is configured");
+  return result;
 }

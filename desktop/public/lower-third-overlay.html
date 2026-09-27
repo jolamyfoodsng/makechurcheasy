@@ -1281,6 +1281,9 @@
       var requestedScale = visualScale * sizeScale;
       var rootWidth = root.clientWidth || window.innerWidth || 1920;
       var rootHeight = root.clientHeight || window.innerHeight || 1080;
+      var autoCanvasScale = Math.min(rootWidth / 1920, rootHeight / 1080);
+      if (!isFinite(autoCanvasScale) || autoCanvasScale <= 0) autoCanvasScale = 1;
+      requestedScale *= autoCanvasScale;
       var frameRect = frame.getBoundingClientRect();
       var contentNode = frame.firstElementChild || frame;
       var contentRect = contentNode.getBoundingClientRect();

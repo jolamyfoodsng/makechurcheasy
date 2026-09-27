@@ -2984,39 +2984,55 @@ export function MVSettings() {
     </div>
 
       {/* Language Change Confirmation Modal */}
-      {
-        showLanguageModal && pendingLanguage && (
-          <div className="mv-modal-backdrop" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-            <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-              <h3 className="mv-modal-title">{t("mvSettings.modal.language.changeLanguage")}</h3>
-              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", lineHeight: 1.5, margin: "0 0 4px" }}>
-                {t("mvSettings.modal.language.switchLanguagePrompt", {
-                  language: getInterfaceLanguageLabel(pendingLanguage),
-                })}
-              </p>
-              <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.8rem", lineHeight: 1.5 }}>
-                {t("mvSettings.modal.language.interfaceUpdateImmediately")}
-              </p>
-              <div className="mv-modal-actions" style={{ marginTop: 12 }}>
-                <button className="mv-btn mv-btn--ghost" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-                  {t("mvSettings.modal.language.cancel")}
-                </button>
-                <button
-                  className="mv-btn mv-btn--primary"
-                  onClick={() => {
-                    const code = pendingLanguage!;
-                    void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
-                    setShowLanguageModal(false);
-                    setPendingLanguage(null);
-                  }}
-                >
-                  {t("mvSettings.modal.language.change")}
-                </button>
-              </div>
+      {showLanguageModal && pendingLanguage && (
+        <div
+          className="mv-modal-backdrop"
+          onClick={() => {
+            setShowLanguageModal(false);
+            setPendingLanguage(null);
+          }}
+        >
+          <div className="mv-modal mv-modal--language" onClick={(e) => e.stopPropagation()}>
+            <div className="mv-modal-icon-badge mv-modal-icon-badge--indigo">
+              <Globe size={28} />
+            </div>
+            <h3 className="mv-modal-title">{t("mvSettings.modal.language.changeLanguage", "Change Language")}</h3>
+            <p className="mv-modal-prompt">
+              {t("mvSettings.modal.language.switchLanguagePrompt", {
+                language: getInterfaceLanguageLabel(pendingLanguage),
+                defaultValue: `Switch interface language to ${getInterfaceLanguageLabel(pendingLanguage)}?`,
+              })}
+            </p>
+            <p className="mv-modal-hint">
+              {t("mvSettings.modal.language.interfaceUpdateImmediately", "The interface will update immediately.")}
+            </p>
+            <div className="mv-modal-actions mv-modal-actions--modern">
+              <button
+                type="button"
+                className="mv-modal-btn mv-modal-btn--ghost"
+                onClick={() => {
+                  setShowLanguageModal(false);
+                  setPendingLanguage(null);
+                }}
+              >
+                {t("mvSettings.modal.language.cancel", "Cancel")}
+              </button>
+              <button
+                type="button"
+                className="mv-modal-btn mv-modal-btn--primary"
+                onClick={() => {
+                  const code = pendingLanguage!;
+                  void applyInterfaceLanguagePreference(code, { broadcast: true }).then(setInterfaceLanguage);
+                  setShowLanguageModal(false);
+                  setPendingLanguage(null);
+                }}
+              >
+                {t("mvSettings.modal.language.change", "Change Language")}
+              </button>
             </div>
           </div>
-        )
-      }
+        </div>
+      )}
 
       {/* Mobile Remote upgrade modal */}
       <UpgradeModal

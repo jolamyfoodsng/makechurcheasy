@@ -23,7 +23,7 @@ vi.stubGlobal("window", {
 });
 
 vi.mock("./authService", () => ({
-  getDeviceApiBaseCandidates: () => ["https://api.creatorstudioslabs.stream"],
+  getDeviceApiBaseCandidates: () => ["https://api.makechurcheazy.com"],
   getDeviceId: () => "device-123",
   getDeviceSecret: () => "secret-abc",
   getSession: () => ({ user: { id: "user-123", email: "test@example.com" } }),

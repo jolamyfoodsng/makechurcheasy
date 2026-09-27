@@ -306,6 +306,22 @@ export function normalizeLicensePayload(payload: LicensePayload): LicensePayload
   // Already free — nothing to normalize
   if (plan === "free") return payload;
 
+  // Active trial users must NOT be downgraded to free
+  const hasActiveTrial = Boolean(
+    payload.trialActive &&
+    payload.trialEndsAt &&
+    new Date(payload.trialEndsAt).getTime() > now
+  );
+  if (hasActiveTrial) {
+    try {
+      localStorage.removeItem(getUserScopedKey(DOWNGRADE_NOTIFIED_KEY));
+    } catch { /* ignore */ }
+    return {
+      ...payload,
+      lockReason: null,
+    };
+  }
+
   const isBillingExpiry =
     payload.lockReason === "subscription_expired" ||
     payload.lockReason === "trial_expired" ||
@@ -517,7 +533,25 @@ export function canUseFeature(feature: string): boolean {
  */
 export function hasPendingDowngradeNotification(): boolean {
   try {
-    return localStorage.getItem(getUserScopedKey(DOWNGRADE_NOTIFIED_KEY)) === "pending";
+    const key = getUserScopedKey(DOWNGRADE_NOTIFIED_KEY);
+    const isPending = localStorage.getItem(key) === "pending";
+    if (!isPending) return false;
+
+    // Guard: If current cached license has an active trial or paid plan, clear the notice
+    const payload = _cache?.payload;
+    if (payload) {
+      const now = payload.serverTime ? new Date(payload.serverTime).getTime() : Date.now();
+      const hasActiveTrial = Boolean(
+        payload.trialActive &&
+        payload.trialEndsAt &&
+        new Date(payload.trialEndsAt).getTime() > now
+      );
+      if (hasActiveTrial || (payload.plan && payload.plan !== "free")) {
+        localStorage.removeItem(key);
+        return false;
+      }
+    }
+    return true;
   } catch {
     return false;
   }

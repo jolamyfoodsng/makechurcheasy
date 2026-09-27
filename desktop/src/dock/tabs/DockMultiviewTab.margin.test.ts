@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_MULTIVIEW_MARGIN,
+  DEFAULT_MULTIVIEW_SLOT_GAP,
   calculateMultiviewBackgroundRect,
   calculateMultiviewMarginSlotRect,
 } from "./DockMultiviewTab";
@@ -60,6 +62,26 @@ describe("DockMultiviewTab margin calculations", () => {
 
     // The gap between left and right slots is exactly 20px (970 - 950 = 20)
     expect(rightResult.x - (leftResult.x + leftResult.width)).toBe(20);
+  });
+
+  it("applies default 5px margin and 5px gap correctly to 2-up layout", () => {
+    expect(DEFAULT_MULTIVIEW_MARGIN).toBe(5);
+    expect(DEFAULT_MULTIVIEW_SLOT_GAP).toBe(5);
+
+    const leftSlot = { x: 0, y: 0, width: 960, height: 1080 };
+    const rightSlot = { x: 960, y: 0, width: 960, height: 1080 };
+
+    const left = calculateMultiviewMarginSlotRect(leftSlot, DEFAULT_MULTIVIEW_MARGIN, DEFAULT_MULTIVIEW_SLOT_GAP);
+    const right = calculateMultiviewMarginSlotRect(rightSlot, DEFAULT_MULTIVIEW_MARGIN, DEFAULT_MULTIVIEW_SLOT_GAP);
+
+    // Left outer margin is 5px
+    expect(left.x).toBe(5);
+    expect(left.y).toBe(5);
+    // Right outer margin: canvas width (1920) - right edge
+    expect(1920 - (right.x + right.width)).toBe(5);
+    expect(1080 - (left.y + left.height)).toBe(5);
+    // Gap between them is 5px
+    expect(right.x - (left.x + left.width)).toBe(5);
   });
 });
 

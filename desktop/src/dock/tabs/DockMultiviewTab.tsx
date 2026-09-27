@@ -117,15 +117,19 @@ interface SavedMultiView {
   frameColor: string;
   /** Per-slot frame override: "inherit" = use layoutFrameId, "none" = no frame, {frameId} = custom */
   slotFrames: Record<string, string>;
-  /** Outer margin around layout/frame in pixels (0-80, default 0) */
+  /** Outer margin around layout/frame in pixels (0-80, default 5) */
   margin: number;
   /** Whether the margin affects the background (true = margin surrounds whole background & lightbox; false = margin only around scenes) */
   affectBackground: boolean;
-  /** Inner spacing/gap between adjacent layout slots in pixels (0-60, default 0) */
+  /** Inner spacing/gap between adjacent layout slots in pixels (0-60, default 5) */
   slotGap: number;
+  customSpacing?: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+export const DEFAULT_MULTIVIEW_MARGIN = 5;
+export const DEFAULT_MULTIVIEW_SLOT_GAP = 5;
 
 // ── Frame Definitions ──────────────────────────────────────────────────────
 
@@ -487,14 +491,19 @@ function normalizeLoadedMultiView(item: SavedMultiView): SavedMultiView {
     }
   }
 
-  const margin = typeof item.margin === "number" ? item.margin : 0;
+  const customSpacing = Boolean(item.customSpacing);
+  const margin = customSpacing
+    ? (typeof item.margin === "number" ? item.margin : DEFAULT_MULTIVIEW_MARGIN)
+    : (typeof item.margin === "number" && item.margin > 0 ? item.margin : DEFAULT_MULTIVIEW_MARGIN);
   const affectBackground = Boolean(item.affectBackground);
-  const slotGap = typeof item.slotGap === "number" ? item.slotGap : 0;
-  if (typeof item.margin !== "number" || typeof item.affectBackground !== "boolean" || typeof item.slotGap !== "number") {
+  const slotGap = customSpacing
+    ? (typeof item.slotGap === "number" ? item.slotGap : DEFAULT_MULTIVIEW_SLOT_GAP)
+    : (typeof item.slotGap === "number" && item.slotGap > 0 ? item.slotGap : DEFAULT_MULTIVIEW_SLOT_GAP);
+  if (typeof item.margin !== "number" || typeof item.affectBackground !== "boolean" || typeof item.slotGap !== "number" || item.margin !== margin || item.slotGap !== slotGap) {
     changed = true;
   }
 
-  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails, margin, affectBackground, slotGap } : item;
+  return changed ? { ...item, assignments, slotModes, slotFraming, slotThumbnails, margin, affectBackground, slotGap, customSpacing: customSpacing || undefined } : item;
 }
 
 // ---------------------------------------------------------------------------
@@ -894,11 +903,19 @@ export async function updateMultiviewBackgroundSource(
     }
   }
 
+  const canvas = typeof dockObsClient.getCanvasSize === "function"
+    ? await dockObsClient.getCanvasSize()
+    : { width: CANVAS_W, height: CANVAS_H };
+  const currentW = canvas.width || CANVAS_W;
+  const currentH = canvas.height || CANVAS_H;
+  const scaleX = currentW / CANVAS_W;
+  const scaleY = currentH / CANVAS_H;
+
   const m = (affectBackground && margin > 0) ? Math.min(margin, 200) : 0;
-  const bgX = m;
-  const bgY = m;
-  const bgW = m > 0 ? CANVAS_W - 2 * m : CANVAS_W;
-  const bgH = m > 0 ? CANVAS_H - 2 * m : CANVAS_H;
+  const bgX = (affectBackground && m > 0) ? Math.round(m * scaleX) : 0;
+  const bgY = (affectBackground && m > 0) ? Math.round(m * scaleY) : 0;
+  const bgW = m > 0 ? (currentW - 2 * bgX) : currentW;
+  const bgH = m > 0 ? (currentH - 2 * bgY) : currentH;
 
   await dockObsClient.call("SetSceneItemTransform", {
     sceneName,
@@ -1301,11 +1318,23 @@ export function calculateMultiviewMarginSlotRect(
     }
   }
 
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  let rw = Math.round(w);
+  let rh = Math.round(h);
+
+  if (slot.x + slot.width >= canvasW - 1) {
+    rw = Math.max(10, (canvasW - m) - rx);
+  }
+  if (slot.y + slot.height >= canvasH - 1) {
+    rh = Math.max(10, (canvasH - m) - ry);
+  }
+
   return {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: Math.max(10, Math.round(w)),
-    height: Math.max(10, Math.round(h)),
+    x: rx,
+    y: ry,
+    width: Math.max(10, rw),
+    height: Math.max(10, rh),
   };
 }
 
@@ -2718,7 +2747,7 @@ function NumberStepper({
   value,
   min = 0,
   max = 80,
-  step = 2,
+  step = 1,
   unit = "px",
   onChange,
   label,
@@ -2786,8 +2815,8 @@ function SpacingModal({
   const { t } = useTranslation();
   if (!open) return null;
 
-  const marginPresets = [0, 16, 24, 40];
-  const gapPresets = [0, 8, 16, 24];
+  const marginPresets = [0, 5, 12, 20, 40];
+  const gapPresets = [0, 5, 10, 16, 24];
 
   return (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
@@ -2815,7 +2844,7 @@ function SpacingModal({
                 value={margin}
                 min={0}
                 max={80}
-                step={2}
+                step={1}
                 onChange={onChangeMargin}
               />
             </div>
@@ -2824,7 +2853,7 @@ function SpacingModal({
                 type="range"
                 min={0}
                 max={80}
-                step={2}
+                step={1}
                 value={margin}
                 onChange={(e) => onChangeMargin(parseInt(e.target.value, 10) || 0)}
                 className="dock-mv-margin-slider"
@@ -2857,7 +2886,7 @@ function SpacingModal({
                 value={slotGap}
                 min={0}
                 max={48}
-                step={2}
+                step={1}
                 onChange={onChangeSlotGap}
               />
             </div>
@@ -2866,7 +2895,7 @@ function SpacingModal({
                 type="range"
                 min={0}
                 max={48}
-                step={2}
+                step={1}
                 value={slotGap}
                 onChange={(e) => onChangeSlotGap(parseInt(e.target.value, 10) || 0)}
                 className="dock-mv-margin-slider"
@@ -2920,13 +2949,13 @@ function SpacingModal({
         </div>
 
         <div className="dock-mv-spacing-footer">
-          {(margin > 0 || slotGap > 0) && (
+          {(margin !== DEFAULT_MULTIVIEW_MARGIN || slotGap !== DEFAULT_MULTIVIEW_SLOT_GAP) && (
             <button
               type="button"
               className="dock-btn dock-btn--sm"
               onClick={() => {
-                onChangeMargin(0);
-                onChangeSlotGap(0);
+                onChangeMargin(DEFAULT_MULTIVIEW_MARGIN);
+                onChangeSlotGap(DEFAULT_MULTIVIEW_SLOT_GAP);
               }}
               style={{ background: "transparent", border: "1px solid var(--dock-border)" }}
             >
@@ -3516,9 +3545,9 @@ const MVCard = memo(function MVCard({
           frameCornerRadius={mv.frameCornerRadius}
           frameOpacity={mv.frameOpacity}
           frameColor={mv.frameColor}
-          margin={mv.margin ?? 0}
+          margin={mv.margin ?? DEFAULT_MULTIVIEW_MARGIN}
           affectBackground={Boolean(mv.affectBackground)}
-          slotGap={mv.slotGap ?? 0}
+          slotGap={mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP}
           background={getMvBg(mv)}
         />
       )}
@@ -3540,7 +3569,7 @@ const MVCard = memo(function MVCard({
               <span className="dock-mv-properties-group__summary">
                 {mv.layoutFrameId ? (resolveFrame(mv.layoutFrameId)?.name ?? "Frame") : t('multiview.noFrame', 'No frame')}
                 {" · "}
-                {mv.margin || mv.slotGap ? `${mv.margin ?? 0}px margin · ${mv.slotGap ?? 0}px gap` : "0px"}
+                {`${mv.margin ?? DEFAULT_MULTIVIEW_MARGIN}px margin · ${mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP}px gap`}
               </span>
             )}
           </div>
@@ -3640,9 +3669,7 @@ const MVCard = memo(function MVCard({
               <span className="dock-mv-property__label">{t('multiview.spacing', 'Spacing')}</span>
               <div className="dock-mv-property__row">
                 <span className="dock-mv-property__value">
-                  {mv.margin || mv.slotGap
-                    ? `${mv.margin ?? 0}px margin · ${mv.slotGap ?? 0}px gap`
-                    : t('common.none', 'None')}
+                  {`${mv.margin ?? DEFAULT_MULTIVIEW_MARGIN}px margin · ${mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP}px gap`}
                 </span>
                 <button
                   type="button"
@@ -3661,8 +3688,8 @@ const MVCard = memo(function MVCard({
 
       <SpacingModal
         open={showSpacingModal}
-        margin={mv.margin ?? 0}
-        slotGap={mv.slotGap ?? 0}
+        margin={mv.margin ?? DEFAULT_MULTIVIEW_MARGIN}
+        slotGap={mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP}
         affectBackground={Boolean(mv.affectBackground)}
         onChangeMargin={(val) => onUpdateMargin(mv.id, val)}
         onChangeSlotGap={(val) => onUpdateSlotGap(mv.id, val)}
@@ -3917,8 +3944,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             frameOpacity: (m as any).frameOpacity ?? 100,
             frameColor: (m as any).frameColor ?? "",
             background: { ...DEFAULT_MV_BG, ...(m.background ?? {}) },
-            margin: typeof m.margin === "number" ? m.margin : 0,
+            margin: typeof m.margin === "number" ? m.margin : DEFAULT_MULTIVIEW_MARGIN,
             affectBackground: Boolean(m.affectBackground),
+            slotGap: typeof m.slotGap === "number" ? m.slotGap : DEFAULT_MULTIVIEW_SLOT_GAP,
           };
         }
         return m;
@@ -3948,9 +3976,9 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           frameOpacity: 100,
           frameColor: "",
           background: { ...DEFAULT_MV_BG },
-          margin: 0,
+          margin: DEFAULT_MULTIVIEW_MARGIN,
           affectBackground: false,
-          slotGap: 0,
+          slotGap: DEFAULT_MULTIVIEW_SLOT_GAP,
           createdAt: now,
           updatedAt: now,
         });
@@ -4250,13 +4278,13 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
 
   const handleUpdateMargin = useCallback((id: string, margin: number) => {
     const current = savedListRef.current;
-    const next = current.map(m => m.id === id ? { ...m, margin, updatedAt: new Date().toISOString() } : m);
+    const next = current.map(m => m.id === id ? { ...m, margin, customSpacing: true, updatedAt: new Date().toISOString() } : m);
     commitSavedList(next);
   }, [commitSavedList]);
 
   const handleUpdateSlotGap = useCallback((id: string, slotGap: number) => {
     const current = savedListRef.current;
-    const next = current.map(m => m.id === id ? { ...m, slotGap, updatedAt: new Date().toISOString() } : m);
+    const next = current.map(m => m.id === id ? { ...m, slotGap, customSpacing: true, updatedAt: new Date().toISOString() } : m);
     commitSavedList(next);
   }, [commitSavedList]);
 
@@ -4312,9 +4340,10 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
       obsSceneName: nextObsSceneName(current),
       assignments: { ...src.assignments },
       background: { ...(src.background ?? DEFAULT_MV_BG) },
-      margin: src.margin ?? 0,
+      margin: src.margin ?? DEFAULT_MULTIVIEW_MARGIN,
       affectBackground: Boolean(src.affectBackground),
-      slotGap: src.slotGap ?? 0,
+      slotGap: src.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP,
+      customSpacing: src.customSpacing,
       createdAt: now,
       updatedAt: now,
     };
@@ -4540,8 +4569,8 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
         mv.frameCornerRadius ?? 0,
         mv.frameOpacity ?? 100,
         mv.frameColor ?? "",
-        mv.margin ?? 0,
-        mv.slotGap ?? 0,
+        mv.margin ?? DEFAULT_MULTIVIEW_MARGIN,
+        mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP,
       );
       if (pngBytes) {
         const framePath = await saveFramePngToDisk(pngBytes);
@@ -4565,14 +4594,22 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
       try { await dockObsClient.call("SetCurrentPreviewScene", { sceneName }); } catch { }
 
       // ── Phase 2: Apply transforms ──────────────────────────────────────
-      const m = (mv.margin ?? 0) > 0 ? Math.min(mv.margin, 200) : 0;
+      const canvas = typeof dockObsClient.getCanvasSize === "function"
+        ? await dockObsClient.getCanvasSize()
+        : { width: CANVAS_W, height: CANVAS_H };
+      const currentW = canvas.width || CANVAS_W;
+      const currentH = canvas.height || CANVAS_H;
+      const scaleX = currentW / CANVAS_W;
+      const scaleY = currentH / CANVAS_H;
+
+      const m = (mv.margin ?? DEFAULT_MULTIVIEW_MARGIN) > 0 ? Math.min(mv.margin ?? DEFAULT_MULTIVIEW_MARGIN, 200) : 0;
 
       for (const entry of entries) {
         if (entry.slotId === "bg") {
-          const bgX = (mv.affectBackground && m > 0) ? m : 0;
-          const bgY = (mv.affectBackground && m > 0) ? m : 0;
-          const bgW = (mv.affectBackground && m > 0) ? (CANVAS_W - 2 * m) : CANVAS_W;
-          const bgH = (mv.affectBackground && m > 0) ? (CANVAS_H - 2 * m) : CANVAS_H;
+          const bgX = (mv.affectBackground && m > 0) ? Math.round(m * scaleX) : 0;
+          const bgY = (mv.affectBackground && m > 0) ? Math.round(m * scaleY) : 0;
+          const bgW = (mv.affectBackground && m > 0) ? (currentW - 2 * bgX) : currentW;
+          const bgH = (mv.affectBackground && m > 0) ? (currentH - 2 * bgY) : currentH;
           await dockObsClient.call("SetSceneItemTransform", {
             sceneName,
             sceneItemId: entry.sceneItemId,
@@ -4589,7 +4626,7 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
             sceneItemId: entry.sceneItemId,
             sceneItemTransform: {
               positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0,
-              boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: CANVAS_W, boundsHeight: CANVAS_H,
+              boundsType: "OBS_BOUNDS_STRETCH", boundsWidth: currentW, boundsHeight: currentH,
               boundsAlignment: 0, cropLeft: 0, cropTop: 0, cropRight: 0, cropBottom: 0,
             },
           });
@@ -4598,11 +4635,11 @@ function DockMultiviewTab({ isActive = true }: { isActive?: boolean }) {
           if (!slot) continue;
           const framing = mv.slotFraming?.[entry.slotId] ?? DEFAULT_SLOT_FRAMING;
           const sourceSize = entry.sourceSize ?? normalizeSourceSize();
-          const eff = calculateMultiviewMarginSlotRect(slot, mv.margin ?? 0, mv.slotGap ?? 0, CANVAS_W, CANVAS_H);
-          const effX = eff.x;
-          const effY = eff.y;
-          const effW = eff.width;
-          const effH = eff.height;
+          const eff = calculateMultiviewMarginSlotRect(slot, mv.margin ?? DEFAULT_MULTIVIEW_MARGIN, mv.slotGap ?? DEFAULT_MULTIVIEW_SLOT_GAP, CANVAS_W, CANVAS_H);
+          const effX = Math.round(eff.x * scaleX);
+          const effY = Math.round(eff.y * scaleY);
+          const effW = Math.round(eff.width * scaleX);
+          const effH = Math.round(eff.height * scaleY);
           const tx = calculateSlotTransform(
             sourceSize.width, sourceSize.height,
             { x: effX, y: effY, width: effW, height: effH },

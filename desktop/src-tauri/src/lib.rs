@@ -1397,6 +1397,43 @@ fn respond_overlay_file_request(request: tiny_http::Request, file_path: &Path, c
     let _ = request.respond(response);
 }
 
+/// Copy text directly to the system clipboard using native OS utilities (pbcopy on macOS, clip on Windows)
+#[tauri::command]
+fn copy_to_clipboard(text: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("pbcopy")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn pbcopy: {}", e))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("clip")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn clip: {}", e))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(())
+    }
+}
+
 /// Save a background image to ~/Documents/MakeChurchEasy/backgrounds/
 /// Accepts raw image bytes and a hash-based filename.
 /// Returns the absolute path to the saved file.
@@ -1512,15 +1549,11 @@ fn get_local_share_file_metadata(
 }
 
 fn probe_local_share_device(
+    client: &reqwest::blocking::Client,
     host: &str,
     port: u16,
     local_fingerprint: &str,
 ) -> Option<LocalShareDeviceInfo> {
-    let client = reqwest::blocking::Client::builder()
-        .connect_timeout(Duration::from_millis(240))
-        .timeout(Duration::from_millis(420))
-        .build()
-        .ok()?;
     let base_url = format!("http://{}:{}", host, port);
     let response = client
         .get(format!("{base_url}/api/localsend/v2/info"))
@@ -1541,56 +1574,71 @@ fn probe_local_share_device(
 }
 
 /// Find other MakeChurchEasy desktop instances on the current /24 LAN.
-/// Discovery stays native so the webview never needs broad network access.
+/// Discovery stays native and asynchronous so the UI never hangs.
 #[tauri::command]
-fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, String> {
-    let local_ip = get_local_ip()
-        .ok_or_else(|| "Could not determine this computer's LAN address".to_string())?;
-    let subnet = subnet_prefix_from_ip(&local_ip)
-        .ok_or_else(|| format!("Unsupported LAN address: {local_ip}"))?;
-    let local_suffix = local_ip
-        .split('.')
-        .last()
-        .and_then(|value| value.parse::<u8>().ok());
-    let local_fingerprint = local_share_device_info(Some(local_ip.clone()))?.fingerprint;
-    let port = {
-        let current = OVERLAY_PORT.load(Ordering::Relaxed);
-        if current == 0 { 45678 } else { current }
-    };
+async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, String> {
+    tokio::task::spawn_blocking(move || {
+        let local_ip = get_local_ip()
+            .ok_or_else(|| "Could not determine this computer's LAN address".to_string())?;
+        let subnet = subnet_prefix_from_ip(&local_ip)
+            .ok_or_else(|| format!("Unsupported LAN address: {local_ip}"))?;
+        let local_suffix = local_ip
+            .split('.')
+            .last()
+            .and_then(|value| value.parse::<u8>().ok());
+        let local_fingerprint = local_share_device_info(Some(local_ip.clone()))?.fingerprint;
+        let port = {
+            let current = OVERLAY_PORT.load(Ordering::Relaxed);
+            if current == 0 { 45678 } else { current }
+        };
 
-    let (tx, rx) = mpsc::channel::<LocalShareDeviceInfo>();
-    let mut handles = Vec::new();
-    let chunk_size = 24usize;
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_millis(150))
+            .timeout(Duration::from_millis(300))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let client = std::sync::Arc::new(client);
 
-    for chunk_start in (1u16..=254u16).step_by(chunk_size) {
-        let tx = tx.clone();
-        let subnet = subnet.clone();
-        let local_fingerprint = local_fingerprint.clone();
-        let local_suffix = local_suffix;
-        let chunk_end = (chunk_start + chunk_size as u16 - 1).min(254);
+        let (tx, rx) = mpsc::channel::<LocalShareDeviceInfo>();
+        let mut handles = Vec::new();
+        let chunk_size = 8usize;
 
-        handles.push(std::thread::spawn(move || {
-            for suffix in chunk_start..=chunk_end {
-                if Some(suffix as u8) == local_suffix {
-                    continue;
+        for chunk_start in (1u16..=254u16).step_by(chunk_size) {
+            let tx = tx.clone();
+            let subnet = subnet.clone();
+            let local_fingerprint = local_fingerprint.clone();
+            let local_suffix = local_suffix;
+            let client = std::sync::Arc::clone(&client);
+            let chunk_end = (chunk_start + chunk_size as u16 - 1).min(254);
+
+            handles.push(std::thread::spawn(move || {
+                for suffix in chunk_start..=chunk_end {
+                    if Some(suffix as u8) == local_suffix {
+                        continue;
+                    }
+                    let host = format!("{}.{}", subnet, suffix);
+                    // Fast TCP pre-check (35ms) before firing HTTP
+                    if host_is_reachable(&host, port, 35) {
+                        if let Some(device) = probe_local_share_device(&client, &host, port, &local_fingerprint) {
+                            let _ = tx.send(device);
+                        }
+                    }
                 }
-                let host = format!("{}.{}", subnet, suffix);
-                if let Some(device) = probe_local_share_device(&host, port, &local_fingerprint) {
-                    let _ = tx.send(device);
-                }
-            }
-        }));
-    }
+            }));
+        }
 
-    drop(tx);
-    for handle in handles {
-        let _ = handle.join();
-    }
+        drop(tx);
+        for handle in handles {
+            let _ = handle.join();
+        }
 
-    let mut devices = rx.try_iter().collect::<Vec<_>>();
-    devices.sort_by(|left, right| left.alias.to_lowercase().cmp(&right.alias.to_lowercase()));
-    devices.dedup_by(|left, right| left.fingerprint == right.fingerprint);
-    Ok(devices)
+        let mut devices = rx.try_iter().collect::<Vec<_>>();
+        devices.sort_by(|left, right| left.alias.to_lowercase().cmp(&right.alias.to_lowercase()));
+        devices.dedup_by(|left, right| left.fingerprint == right.fingerprint);
+        Ok(devices)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn share_request_error(status: reqwest::StatusCode, body: &str) -> String {
@@ -2070,8 +2118,12 @@ fn get_overlay_port() -> u16 {
 
 /// Return this desktop's LAN identity for the Media sharing surface.
 #[tauri::command]
-fn get_local_share_info() -> Result<LocalShareDeviceInfo, String> {
-    local_share_device_info(None)
+async fn get_local_share_info() -> Result<LocalShareDeviceInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        local_share_device_info(None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn get_local_ip_for_target(target_host: Option<&str>) -> Option<String> {
@@ -7922,15 +7974,24 @@ mod app_icon {
 
         // Bundled production path
         if let Ok(resource_dir) = app.path().resource_dir() {
-            for icon_name in &icon_names {
-                let path = resource_dir.join("app_icons").join(icon_name);
-                println!(
-                    "[AppIcon] Checking bundled path: {:?} exists={}",
-                    path,
-                    path.exists()
-                );
-                if path.exists() {
-                    return Some(path);
+            let candidate_dirs = [
+                resource_dir.join("app_icons"),
+                resource_dir.join("resources").join("app_icons"),
+                resource_dir.join("dist").join("app_icons"),
+                resource_dir.join("_up_").join("dist").join("app_icons"),
+            ];
+
+            for dir in &candidate_dirs {
+                for icon_name in &icon_names {
+                    let path = dir.join(icon_name);
+                    println!(
+                        "[AppIcon] Checking bundled path: {:?} exists={}",
+                        path,
+                        path.exists()
+                    );
+                    if path.exists() {
+                        return Some(path);
+                    }
                 }
             }
         }
@@ -8244,6 +8305,11 @@ async fn discover_remote_obs_hosts(port: Option<u16>) -> Result<RemoteObsDiscove
     })
 }
 
+#[tauri::command]
+fn close_app_confirmed(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
@@ -8448,7 +8514,22 @@ pub fn run() {
                         }
                         let _ = app.emit("open-settings", ());
                     }
-                    "quit-makechurcheasy" => app.exit(0),
+                    "quit-makechurcheasy" => {
+                        let is_streaming = app
+                            .try_state::<assemblyai_stream::AssemblyAiStreamState>()
+                            .map(|s| s.is_streaming())
+                            .unwrap_or(false);
+                        if is_streaming {
+                            if let Some(main_win) = app.get_webview_window("main") {
+                                let _ = main_win.unminimize();
+                                let _ = main_win.show();
+                                let _ = main_win.set_focus();
+                                let _ = main_win.emit("verse-ai-close-requested", ());
+                                return;
+                            }
+                        }
+                        app.exit(0);
+                    }
                     _ => {}
                 })
                 .build(app)?;
@@ -8456,8 +8537,20 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
+                    let is_streaming = window
+                        .app_handle()
+                        .try_state::<assemblyai_stream::AssemblyAiStreamState>()
+                        .map(|s| s.is_streaming())
+                        .unwrap_or(false);
+
+                    if is_streaming {
+                        api.prevent_close();
+                        let _ = window.emit("verse-ai-close-requested", ());
+                        return;
+                    }
+
                     // When the user clicks the close button on the main window,
                     // quit the entire app (including tray). Without this handler
                     // Tauri 2 just hides the window when a system tray is present.
@@ -8466,6 +8559,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            copy_to_clipboard,
             save_bg_image,
             save_upload_file,
             delete_upload_file,
@@ -8513,8 +8607,10 @@ pub fn run() {
             audio_capture::stop_audio_capture,
             assemblyai_stream::start_assemblyai_stream,
             assemblyai_stream::stop_assemblyai_stream,
+            assemblyai_stream::is_assemblyai_streaming,
             assemblyai_stream::set_microphone_gain,
             assemblyai_stream::set_assemblyai_stream_speed,
+            close_app_confirmed,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,
