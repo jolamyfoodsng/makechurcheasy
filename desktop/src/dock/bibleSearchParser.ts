@@ -259,7 +259,7 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
   // Split into book text and number portion
   // Match: optional leading digit, then letters (book name), then numbers/separators
   const splitMatch = normalized.match(
-    /^(\d?[a-z]+)\s*(\d.*)?$/
+    /^(\d?[a-z]+)[:\s]*(\d.*)?$/
   );
 
   if (!splitMatch) {
@@ -732,6 +732,33 @@ function recoverInvalidReference(
 function parseSingleChapterVerseCandidates(numPart: string): ChapterVerseCandidate[] {
   if (!numPart) return [];
 
+  // Check for explicit verse range with hyphen: e.g. "1-4" or "1:1-4"
+  const dashMatch = numPart.match(/^(.+?)\s*[-–—]\s*(\d+)$/);
+  if (dashMatch) {
+    const leftRaw = dashMatch[1].trim();
+    const endVs = parseInt(dashMatch[2], 10);
+    if (Number.isFinite(endVs) && endVs >= 1 && endVs <= MAX_BIBLE_VERSE_NUMBER) {
+      const leftParts = leftRaw
+        .replace(/vs/gi, ":")
+        .replace(/v/gi, ":")
+        .replace(/\./g, ":")
+        .replace(/\s+/g, ":")
+        .split(":")
+        .filter(Boolean);
+      if (leftParts.length >= 2) {
+        const vs = parseInt(leftParts[1], 10);
+        if (Number.isFinite(vs) && vs >= 1 && endVs >= vs) {
+          return [{ chapter: 1, verse: vs, endVerse: endVs, confidence: 32 }];
+        }
+      } else if (leftParts.length === 1) {
+        const vs = parseInt(leftParts[0], 10);
+        if (Number.isFinite(vs) && vs >= 1 && endVs >= vs) {
+          return [{ chapter: 1, verse: vs, endVerse: endVs, confidence: 30 }];
+        }
+      }
+    }
+  }
+
   const cleaned = numPart
     .replace(/vs/gi, ":")
     .replace(/v/gi, ":")
@@ -773,12 +800,77 @@ function parseSingleChapterVerseCandidates(numPart: string): ChapterVerseCandida
  * Parse a number portion into one or more chapter:verse candidates.
  *
  * For explicit separators ("3:16", "3vs16", "3.16") → single result.
- * For jammed numbers ("316") → try all split points:
+ * For explicit ranges ("3:1-6", "3 1-6", "31-2", "31-6") → range result with endVerse.
+ * For jammed numbers ("316") → try all split points ("3:16", "31:6") without synthesizing ranges.
  *   "316" → 3:16 (conf 25), 31:6 (conf 20)
  *   "11"  → 1:1 (conf 15), chapter 11 (conf 10)
  */
 function parseChapterVerseCandidates(numPart: string, hasWhitespace = false): ChapterVerseCandidate[] {
   if (!numPart) return [];
+
+  // Check for explicit verse range or hyphenated input: e.g. "3:1-6", "3 1-6", "31-2", "31-6", "3-16"
+  const dashMatch = numPart.match(/^(.+?)\s*[-–—]\s*(\d+)$/);
+  if (dashMatch) {
+    const leftRaw = dashMatch[1].trim();
+    const endVs = parseInt(dashMatch[2], 10);
+
+    if (Number.isFinite(endVs) && endVs >= 1 && endVs <= MAX_BIBLE_VERSE_NUMBER) {
+      const leftCleaned = leftRaw
+        .replace(/vs/gi, ":")
+        .replace(/v/gi, ":")
+        .replace(/\./g, ":")
+        .replace(/\s+/g, ":");
+      const leftParts = leftCleaned.split(":").filter(Boolean);
+
+      if (leftParts.length >= 2) {
+        const ch = parseInt(leftParts[0], 10);
+        const vs = parseInt(leftParts[1], 10);
+        if (!isNaN(ch) && !isNaN(vs) && ch >= 1 && vs >= 1 && endVs >= vs) {
+          return [{
+            chapter: ch,
+            verse: vs,
+            endVerse: endVs,
+            confidence: 32,
+          }];
+        }
+      } else if (leftParts.length === 1) {
+        const leftDigits = leftParts[0];
+        // If left part is jammed digits: e.g. "31" in "31-2" or "31-6"
+        if (leftDigits.length >= 2) {
+          const rangeCandidates: ChapterVerseCandidate[] = [];
+          for (let i = 1; i < leftDigits.length; i++) {
+            const chStr = leftDigits.substring(0, i);
+            const vsStr = leftDigits.substring(i);
+            if (vsStr.length > 1 && vsStr[0] === "0") continue;
+            const ch = parseInt(chStr, 10);
+            const vs = parseInt(vsStr, 10);
+            if (ch >= 1 && vs >= 1 && vs <= MAX_BIBLE_VERSE_NUMBER && endVs >= vs) {
+              rangeCandidates.push({
+                chapter: ch,
+                verse: vs,
+                endVerse: endVs,
+                confidence: 30 - (i - 1) * 7,
+              });
+            }
+          }
+          if (rangeCandidates.length > 0) {
+            return rangeCandidates;
+          }
+        } else {
+          // Single digit left part: e.g. "3-16" -> chapter 3, verse 16
+          const ch = parseInt(leftDigits, 10);
+          if (!isNaN(ch) && ch >= 1) {
+            return [{
+              chapter: ch,
+              verse: endVs,
+              endVerse: null,
+              confidence: 25,
+            }];
+          }
+        }
+      }
+    }
+  }
 
   // Clean separators: "vs", "v", ".", ":"  all become ":"
   const cleaned = numPart
@@ -854,34 +946,6 @@ function parseChapterVerseCandidates(numPart: string, hasWhitespace = false): Ch
     // but lower than ch:vs split when jammed without whitespace ("gen22" -> 14).
     const chapterConf = digits.length <= 2 ? (hasWhitespace ? 20 : 14) : 5;
     candidates.push({ chapter: num, verse: null, endVerse: null, confidence: chapterConf });
-  }
-
-  // Smart ambiguous shorthand:
-  // "334" -> 3:34 OR 3:3-4
-  // "316" -> 3:16 OR 3:1-6
-  if (digits.length >= 3) {
-    const chapterDigits = digits.slice(0, -2);
-    const startDigit = digits.charAt(digits.length - 2);
-    const endDigit = digits.charAt(digits.length - 1);
-    if (chapterDigits && startDigit && endDigit) {
-      const chapter = parseInt(chapterDigits, 10);
-      const verse = parseInt(startDigit, 10);
-      const endVerse = parseInt(endDigit, 10);
-      if (
-        Number.isFinite(chapter) &&
-        chapter >= 1 &&
-        verse >= 1 &&
-        endVerse >= 1 &&
-        endVerse > verse
-      ) {
-        candidates.push({
-          chapter,
-          verse,
-          endVerse,
-          confidence: 22,
-        });
-      }
-    }
   }
 
   return candidates;

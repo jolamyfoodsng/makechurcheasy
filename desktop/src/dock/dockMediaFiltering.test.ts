@@ -58,4 +58,11 @@ describe("Dock Media Gallery & Template Separation", () => {
     expect(list[1].id).toBe("older-video");
     expect(list[2].id).toBe("untimestamped-1");
   });
+
+  it("does not close or collapse search when typing space in search input", () => {
+    // Container must only toggle search when not already open, and input must stop propagation
+    expect(dockMediaTabSource).toContain("if (!searchOpen && (e.key === \"Enter\" || e.key === \" \"))");
+    expect(dockMediaTabSource).toContain("onKeyDown={(e) => {\n                    e.stopPropagation();");
+  });
 });
+

@@ -47,10 +47,26 @@ describe("Bible reference search parser", () => {
     expect(labels[0]).toBe("Psalms 33:1");
   });
 
-  it("keeps valid compact references", () => {
-    const labels = parseBibleSearch("j316").map((result) => result.label);
+  it("keeps valid compact references and excludes unprompted ranges", () => {
+    const j316Labels = parseBibleSearch("j316").map((result) => result.label);
+    expect(j316Labels).toContain("John 3:16");
+    expect(j316Labels).not.toContain("John 3:1-6");
 
-    expect(labels).toContain("John 3:16");
+    const jColon316Labels = parseBibleSearch("j:316").map((result) => result.label);
+    expect(jColon316Labels).toContain("John 3:16");
+    expect(jColon316Labels).not.toContain("John 3:1-6");
+
+    const john316Labels = parseBibleSearch("john316").map((result) => result.label);
+    expect(john316Labels).toContain("John 3:16");
+    expect(john316Labels).not.toContain("John 3:1-6");
+  });
+
+  it("parses explicit verse ranges only when range delimiters are typed", () => {
+    expect(parseBibleSearch("j31-2")[0]?.label).toBe("John 3:1-2");
+    expect(parseBibleSearch("j:31-2")[0]?.label).toBe("John 3:1-2");
+    expect(parseBibleSearch("j31-6")[0]?.label).toBe("John 3:1-6");
+    expect(parseBibleSearch("john3:1-6")[0]?.label).toBe("John 3:1-6");
+    expect(parseBibleSearch("john 3:1-6")[0]?.label).toBe("John 3:1-6");
   });
 
   it.each([

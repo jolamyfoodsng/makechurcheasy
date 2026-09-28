@@ -827,6 +827,7 @@ function DockMediaTab({
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
   const [assetSearch, setAssetSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [templateVideoOnlyModal, setTemplateVideoOnlyModal] = useState(false);
   const [addMediaTab, setAddMediaTab] = useState<DockAddMediaTab>("background");
@@ -1028,7 +1029,7 @@ function DockMediaTab({
     const handleMediaSearchTrigger = () => {
       setSearchOpen(true);
       requestAnimationFrame(() => {
-        const input = document.querySelector<HTMLInputElement>(".dock-media-search__input");
+        const input = searchInputRef.current || document.querySelector<HTMLInputElement>(".dock-media-search__input");
         if (input) {
           input.focus();
           try {
@@ -4578,23 +4579,57 @@ function DockMediaTab({
       {browserTab !== "text" && (
         <div className={`dock-media-search-row${isCompactHeight ? " dock-media-search-row--compact" : ""}`}>
           <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setSearchOpen((prev) => !prev)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSearchOpen((prev) => !prev); } }}
+            role={searchOpen ? undefined : "button"}
+            tabIndex={searchOpen ? undefined : 0}
+            onClick={() => {
+              if (!searchOpen) {
+                setSearchOpen(true);
+              } else {
+                searchInputRef.current?.focus();
+              }
+            }}
+            onKeyDown={(e) => {
+              if (!searchOpen && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                setSearchOpen(true);
+              }
+            }}
             className="dock-media-search"
-            style={{ cursor: "pointer", userSelect: "none" }}
-            title={searchOpen ? "Collapse search" : "Expand search"}
+            style={{ cursor: searchOpen ? "text" : "pointer", userSelect: searchOpen ? "auto" : "none" }}
+            title={searchOpen ? undefined : "Expand search"}
           >
-            <Icon name={searchOpen ? "search" : "search"} size={12} className="dock-media-search__icon" />
+            {searchOpen ? (
+              <button
+                type="button"
+                style={{ background: "none", border: "none", padding: 0, margin: 0, display: "inline-flex", alignItems: "center", cursor: "pointer", color: "inherit" }}
+                onClick={(e) => { e.stopPropagation(); setSearchOpen(false); }}
+                aria-label="Collapse search"
+                title="Collapse search"
+              >
+                <Icon name="search" size={12} className="dock-media-search__icon" />
+              </button>
+            ) : (
+              <Icon name="search" size={12} className="dock-media-search__icon" />
+            )}
             {searchOpen && (
               <>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   className="dock-media-search__input"
                   value={assetSearch}
                   onChange={(event) => { event.stopPropagation(); setAssetSearch(event.target.value); }}
                   onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Escape") {
+                      if (assetSearch) {
+                        setAssetSearch("");
+                      } else {
+                        setSearchOpen(false);
+                      }
+                    }
+                  }}
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
                   autoFocus
