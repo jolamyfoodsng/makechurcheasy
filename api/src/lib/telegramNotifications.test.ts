@@ -74,6 +74,52 @@ test("formats daily and month-end signup reports", () => {
   assert.doesNotMatch(monthEndMessage, /Month to date/);
 });
 
+test("formats highly descriptive daily executive report with active users, countries, and plans", () => {
+  const descriptiveMessage = buildTelegramSignupReportMessage({
+    dateLabel: "Tuesday, September 29, 2026",
+    monthLabel: "September 2026",
+    timezone: "Africa/Lagos",
+    dailySignups: 5,
+    weeklySignups: 32,
+    monthlySignups: 89,
+    totalUsers: 1250,
+    activeUsersToday: 142,
+    activeUsersWeek: 420,
+    isMonthEnd: false,
+    planBreakdown: [
+      { plan: "free", count: 1140, percentage: 91.2 },
+      { plan: "basic", count: 75, percentage: 6.0 },
+      { plan: "growth", count: 35, percentage: 2.8 },
+    ],
+    countryBreakdown: [
+      { countryCode: "NG", countryName: "Nigeria", flag: "🇳🇬", count: 980, percentage: 78.4 },
+      { countryCode: "US", countryName: "United States", flag: "🇺🇸", count: 115, percentage: 9.2 },
+      { countryCode: "GH", countryName: "Ghana", flag: "🇬🇭", count: 65, percentage: 5.2 },
+    ],
+    todaySignupsList: [
+      { name: "Pastor David", country: "NG", plan: "free" },
+      { name: "Grace Chapel", country: "US", plan: "basic" },
+    ],
+  });
+
+  assert.match(descriptiveMessage, /Daily Executive Report/);
+  assert.match(descriptiveMessage, /Total Users:<\/b> 1,250/);
+  assert.match(descriptiveMessage, /Today:<\/b> 5 signups/);
+  assert.match(descriptiveMessage, /Past 7 Days:<\/b> 32 signups/);
+  assert.match(descriptiveMessage, /ACTIVE USERS/);
+  assert.match(descriptiveMessage, /Active Today \(DAU\):<\/b> 142 users/);
+  assert.match(descriptiveMessage, /Active This Week \(WAU\):<\/b> 420 users/);
+  assert.match(descriptiveMessage, /PLAN BREAKDOWN/);
+  assert.match(descriptiveMessage, /Free:<\/b> 1,140 \(91\.2%\)/);
+  assert.match(descriptiveMessage, /Basic:<\/b> 75 \(6%\)/);
+  assert.match(descriptiveMessage, /TOP COUNTRIES/);
+  assert.match(descriptiveMessage, /🇳🇬 <b>Nigeria:<\/b> 980 \(78\.4%\)/);
+  assert.match(descriptiveMessage, /🇺🇸 <b>United States:<\/b> 115 \(9\.2%\)/);
+  assert.match(descriptiveMessage, /Today's New Signups:/);
+  assert.match(descriptiveMessage, /Pastor David — 🇳🇬 Nigeria \(Free\)/);
+  assert.match(descriptiveMessage, /Grace Chapel — 🇺🇸 United States \(Basic\)/);
+});
+
 test("does not call Telegram when notification credentials are missing", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;

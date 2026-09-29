@@ -140,8 +140,11 @@ export async function GET(req: NextRequest) {
         sent: true,
         reportKey: report.reportKey,
         dailySignups: report.dailySignups,
+        weeklySignups: report.weeklySignups,
         monthlySignups: report.monthlySignups,
         totalUsers: report.totalUsers,
+        activeUsersToday: report.activeUsersToday,
+        activeUsersWeek: report.activeUsersWeek,
         isMonthEnd: report.isMonthEnd,
       });
     }
