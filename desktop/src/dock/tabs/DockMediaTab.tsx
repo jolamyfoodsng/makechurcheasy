@@ -6838,15 +6838,20 @@ function DockMediaTab({
               role="menuitem"
               className="dock-media-context-menu__item"
               onClick={() => {
-                const thumb = contextEntry.thumbnailUrl || (contextEntry.kind === "image" ? contextEntry.previewUrl : undefined);
+                const thumb =
+                  contextEntry.thumbnailUrl ||
+                  contextEntry.previewUrl ||
+                  contextEntry.libraryItem?.thumbnailUrl ||
+                  contextEntry.libraryItem?.url ||
+                  contextEntry.libraryItem?.filePath;
                 addMediaToActiveSchedule({
                   id: contextEntry.libraryItem?.id || contextEntry.key,
                   name: contextDisplayName,
-                  filePath: contextEntry.libraryItem?.filePath || contextEntry.previewUrl || "",
+                  filePath: contextEntry.libraryItem?.filePath || contextEntry.previewUrl || contextEntry.libraryItem?.url || "",
                   fileName: contextEntry.libraryItem?.diskFileName || contextEntry.libraryItem?.name || contextEntry.name,
                   mediaType: contextEntry.kind === "video" ? "video" : "image",
                   thumbnailUrl: thumb,
-                  previewUrl: contextEntry.previewUrl,
+                  previewUrl: contextEntry.previewUrl || contextEntry.libraryItem?.url,
                 });
                 setMediaContextMenu(null);
               }}

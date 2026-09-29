@@ -45,15 +45,17 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockIconSource).not.toContain("push_pin: { component: CheckSquare },");
   });
 
-  it("renders each schedule item as a compact card with media thumbnail, and dedicated Project and Go-to buttons", () => {
+  it("renders each schedule item as a compact card with media thumbnail, clean Project button, and no icon by the right", () => {
     expect(dockScheduleDrawerSource).toContain("className={`dock-schedule-card");
-    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__btn--project");
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__project-btn");
     expect(dockScheduleDrawerSource).toContain("handlePresentItem(item)");
-    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__btn--goto");
+    expect(dockScheduleDrawerSource).not.toContain("dock-schedule-card__btn--goto");
     expect(dockScheduleDrawerSource).toContain("handleGoToItem(item)");
     expect(dockScheduleDrawerSource).toContain("renderCardLeading(item)");
+    expect(dockScheduleDrawerSource).toContain("getMediaThumbnailSrc");
     expect(dockScheduleDrawerSource).toContain("handleRemoveItem(e, item.id)");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__thumb-box");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card__project-btn");
   });
 
   it("sets line-height 1.5 on schedule card titles and preview snippets", () => {

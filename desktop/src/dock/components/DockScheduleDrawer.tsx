@@ -27,6 +27,8 @@ import {
   setActiveScheduleId,
   type ScheduleToastPayload,
 } from "../dockScheduleService";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import "./dock-schedule.css";
 
 const PIN_STORAGE_KEY = "__mce_dock_schedule_pinned_v1";
@@ -39,38 +41,87 @@ interface Props {
   isNarrow?: boolean;
 }
 
+function getMediaThumbnailSrc(payload: Record<string, unknown>): string {
+  // 1. Direct thumbnail URL or data/blob URI
+  const directThumb = typeof payload.thumbnailUrl === "string" ? payload.thumbnailUrl.trim() : "";
+  if (directThumb) return directThumb;
+
+  const preview = typeof payload.previewUrl === "string" ? payload.previewUrl.trim() : "";
+  if (preview) return preview;
+
+  const directUrl = typeof payload.url === "string" ? payload.url.trim() : "";
+  if (directUrl) return directUrl;
+
+  const rawPath = (typeof payload.filePath === "string" ? payload.filePath : "") ||
+                  (typeof payload.fileName === "string" ? payload.fileName : "");
+  if (!rawPath) return "";
+
+  if (rawPath.startsWith("http://") || rawPath.startsWith("https://") || rawPath.startsWith("data:") || rawPath.startsWith("blob:")) {
+    return rawPath;
+  }
+
+  // If in Tauri desktop app, use convertFileSrc for absolute disk paths
+  if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || window.location.protocol === "tauri:")) {
+    try {
+      if (rawPath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawPath)) {
+        return convertFileSrc(rawPath);
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  // Resolve via local MCE overlay HTTP server (e.g. /uploads/fileName)
+  try {
+    return resolveOverlayAssetUrl(rawPath);
+  } catch {
+    return rawPath;
+  }
+}
+
 function renderCardLeading(item: ServicePlanItem) {
   if (item.type === "media") {
     const payload = (item.payloadSnapshot || {}) as Record<string, unknown>;
     const isVideo = payload.mediaType === "video" || (typeof item.subtitle === "string" && item.subtitle.toLowerCase().includes("video"));
-    const thumbUrl = (payload.thumbnailUrl as string) || (payload.previewUrl as string) || (typeof payload.filePath === "string" && (payload.filePath.startsWith("http") || payload.filePath.startsWith("data:") || payload.filePath.startsWith("blob:")) ? (payload.filePath as string) : "");
+    const src = getMediaThumbnailSrc(payload);
 
-    if (thumbUrl && !isVideo) {
-      return (
-        <div className="dock-schedule-card__thumb-box">
-          <img src={thumbUrl} alt="" className="dock-schedule-card__thumb-img" loading="lazy" />
-        </div>
-      );
-    }
+    if (src) {
+      if (isVideo) {
+        const isImgThumb = /\.(png|jpe?g|webp|gif|avif)($|\?)/i.test(src) || Boolean(payload.thumbnailUrl);
+        return (
+          <div className="dock-schedule-card__thumb-box dock-schedule-card__thumb-box--video" title={item.label}>
+            {isImgThumb ? (
+              <img src={src} alt={item.label} className="dock-schedule-card__thumb-img" loading="lazy" />
+            ) : (
+              <video src={src} className="dock-schedule-card__thumb-img" muted playsInline preload="metadata" />
+            )}
+            <span className="dock-schedule-card__thumb-badge">
+              <Icon name="play_arrow" size={10} />
+            </span>
+          </div>
+        );
+      }
 
-    if (thumbUrl && isVideo) {
       return (
-        <div className="dock-schedule-card__thumb-box dock-schedule-card__thumb-box--video">
-          <img src={thumbUrl} alt="" className="dock-schedule-card__thumb-img" loading="lazy" />
-          <span className="dock-schedule-card__thumb-badge">
-            <Icon name="play_arrow" size={10} />
-          </span>
-        </div>
-      );
-    }
-
-    if (isVideo && typeof payload.previewUrl === "string") {
-      return (
-        <div className="dock-schedule-card__thumb-box dock-schedule-card__thumb-box--video">
-          <video src={payload.previewUrl} className="dock-schedule-card__thumb-img" muted playsInline preload="metadata" />
-          <span className="dock-schedule-card__thumb-badge">
-            <Icon name="play_arrow" size={10} />
-          </span>
+        <div className="dock-schedule-card__thumb-box" title={item.label}>
+          <img
+            src={src}
+            alt={item.label}
+            className="dock-schedule-card__thumb-img"
+            loading="lazy"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const raw = (payload.fileName as string) || (payload.filePath as string) || "";
+              if (raw) {
+                const fallback = resolveOverlayAssetUrl(raw);
+                if (fallback && target.src !== fallback) {
+                  target.src = fallback;
+                  return;
+                }
+              }
+              target.style.display = "none";
+            }}
+          />
         </div>
       );
     }
@@ -511,24 +562,11 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       </div>
                     </div>
 
-                    {/* Action buttons: Go-to stuff itself, Project to OBS, Remove */}
+                    {/* Action buttons on the right: Clean Project pill + Close button, NO icon clutter */}
                     <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        className="dock-schedule-card__btn dock-schedule-card__btn--goto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGoToItem(item);
-                        }}
-                        title={t("schedule.goToStuff", "Go to this in Dock")}
-                        aria-label={t("schedule.goToStuff", "Go to this in Dock")}
-                      >
-                        <Icon name="open_in_new" size={12} />
-                      </button>
-
-                      <button
-                        type="button"
-                        className={`dock-schedule-card__btn dock-schedule-card__btn--project ${isLive ? "dock-schedule-card__btn--project-live" : ""}`}
+                        className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           void handlePresentItem(item);
@@ -536,20 +574,17 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         title={isLive ? t("schedule.liveNow", "Currently Live on Output") : t("schedule.project", "Project to OBS")}
                         aria-label={t("schedule.project", "Project to OBS")}
                       >
-                        <Icon name={isLive ? "cast" : "play_arrow"} size={13} />
-                        <span className="dock-schedule-card__project-label">
-                          {isLive ? "LIVE" : t("schedule.projectShort", "Project")}
-                        </span>
+                        {isLive ? "LIVE" : t("schedule.projectShort", "Project")}
                       </button>
 
                       <button
                         type="button"
-                        className="dock-schedule-card__btn dock-schedule-card__btn--remove"
+                        className="dock-schedule-card__remove-btn"
                         onClick={(e) => handleRemoveItem(e, item.id)}
                         title={t("common.remove", "Remove from schedule")}
                         aria-label={t("common.remove", "Remove from schedule")}
                       >
-                        <Icon name="close" size={12} />
+                        &times;
                       </button>
                     </div>
                   </div>

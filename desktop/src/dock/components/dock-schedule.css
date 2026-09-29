@@ -504,20 +504,79 @@
   50% { opacity: 0.4; transform: scale(0.8); }
 }
 
-/* ── Card Action Buttons (Go-To, Project, Remove) ── */
+/* ── Card Action Buttons on the Right (No icon clutter) ── */
 .dock-schedule-card__actions {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.dock-schedule-card__project-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #93c5fd;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dock-schedule-card__project-btn:hover {
+  background: rgba(59, 130, 246, 0.4);
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.dock-schedule-card__project-btn--live {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  font-weight: 700;
+}
+
+.dock-schedule-card__remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--dock-text-muted, #94a3b8);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  font-family: inherit;
+  transition: all 0.15s;
   flex-shrink: 0;
 }
 
+.dock-schedule-card__remove-btn:hover {
+  background: rgba(239, 68, 68, 0.45);
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+/* Backward-compatibility aliases */
 .dock-schedule-card__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
   padding: 0 5px;
   border: 1px solid transparent;
@@ -529,83 +588,16 @@
   color: var(--dock-text-secondary, #cbd5e1);
 }
 
-.dock-schedule-card__btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #ffffff;
-}
-
-.dock-schedule-card__btn--goto {
-  width: 24px;
-  padding: 0;
-}
-
-.dock-schedule-card__btn--goto:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #60a5fa;
-}
-
 .dock-schedule-card__btn--project {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.45);
   color: #93c5fd;
-}
-
-.dock-schedule-card__btn--project:hover {
-  background: rgba(59, 130, 246, 0.38);
-  border-color: #3b82f6;
-  color: #ffffff;
 }
 
 .dock-schedule-card__btn--project-live {
   background: #ef4444 !important;
   border-color: #ef4444 !important;
   color: #ffffff !important;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-}
-
-.dock-schedule-card__project-label {
-  font-size: 9.5px;
-  line-height: 1;
-}
-
-.dock-schedule-card__btn--remove {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-}
-
-.dock-schedule-card__btn--remove:hover {
-  background: rgba(239, 68, 68, 0.45);
-  border-color: #ef4444;
-  color: #ffffff;
-}
-
-/* Also alias .dock-schedule-card__remove-btn for backward compatibility */
-.dock-schedule-card__remove-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-.dock-schedule-card__remove-btn:hover {
-  background: rgba(239, 68, 68, 0.45);
-  border-color: #ef4444;
-  color: #ffffff;
 }
 
 /* ── Compact scaling when dragged down to ~20% width (<= 270px) ── */
@@ -632,19 +624,16 @@
   font-size: 9px;
 }
 
+.dock-schedule-panel--compact .dock-schedule-card__project-btn {
+  height: 20px;
+  font-size: 9px;
+  padding: 0 5px;
+}
+
 .dock-schedule-panel--compact .dock-schedule-card__btn {
   height: 20px;
   font-size: 9px;
   padding: 0 3px;
-}
-
-.dock-schedule-panel--compact .dock-schedule-card__btn--goto {
-  width: 20px;
-  padding: 0;
-}
-
-.dock-schedule-panel--compact .dock-schedule-card__project-label {
-  display: none;
 }
 
 .dock-schedule-panel--compact .dock-schedule-card__btn--project {
