@@ -377,6 +377,116 @@
   opacity: 1;
 }
 
+/* ── Text Card (Bible, Worship, Notes): Full horizontal space, no left icons ── */
+.dock-schedule-card--text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 3px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  padding: 6px 8px;
+}
+
+.dock-schedule-card__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ── Media Card: Thumbnail on TOP, minimal caption emphasis below ── */
+.dock-schedule-card--media {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  min-height: 98px;
+  max-height: 112px;
+  padding: 6px;
+  gap: 5px;
+}
+
+.dock-schedule-card__media-thumb-wrap {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #090d16;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dock-schedule-card__media-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dock-schedule-card__media-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dock-text-muted, #94a3b8);
+}
+
+.dock-schedule-card__media-video-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fbbf24;
+}
+
+.dock-schedule-card__media-live-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 7.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.dock-schedule-card__media-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.dock-schedule-card__media-caption {
+  font-size: 10px;
+  color: var(--dock-text-secondary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
 /* ── Card Leading Element (Media Thumbnail or Uniform Type Icon) ── */
 .dock-schedule-card__thumb-box,
 .dock-schedule-card__leading-icon {
@@ -552,7 +662,7 @@
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: var(--dock-text-muted, #94a3b8);
   cursor: pointer;
@@ -607,6 +717,21 @@
   max-height: 44px;
   padding: 4px 6px;
   gap: 5px;
+}
+
+.dock-schedule-panel--compact .dock-schedule-card--media {
+  min-height: 82px;
+  max-height: 94px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.dock-schedule-panel--compact .dock-schedule-card__media-thumb-wrap {
+  height: 50px;
+}
+
+.dock-schedule-panel--compact .dock-schedule-card__media-caption {
+  font-size: 9px;
 }
 
 .dock-schedule-panel--compact .dock-schedule-card__thumb-box,

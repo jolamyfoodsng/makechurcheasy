@@ -79,76 +79,6 @@ function getMediaThumbnailSrc(payload: Record<string, unknown>): string {
   }
 }
 
-function renderCardLeading(item: ServicePlanItem) {
-  if (item.type === "media") {
-    const payload = (item.payloadSnapshot || {}) as Record<string, unknown>;
-    const isVideo = payload.mediaType === "video" || (typeof item.subtitle === "string" && item.subtitle.toLowerCase().includes("video"));
-    const src = getMediaThumbnailSrc(payload);
-
-    if (src) {
-      if (isVideo) {
-        const isImgThumb = /\.(png|jpe?g|webp|gif|avif)($|\?)/i.test(src) || Boolean(payload.thumbnailUrl);
-        return (
-          <div className="dock-schedule-card__thumb-box dock-schedule-card__thumb-box--video" title={item.label}>
-            {isImgThumb ? (
-              <img src={src} alt={item.label} className="dock-schedule-card__thumb-img" loading="lazy" />
-            ) : (
-              <video src={src} className="dock-schedule-card__thumb-img" muted playsInline preload="metadata" />
-            )}
-            <span className="dock-schedule-card__thumb-badge">
-              <Icon name="play_arrow" size={10} />
-            </span>
-          </div>
-        );
-      }
-
-      return (
-        <div className="dock-schedule-card__thumb-box" title={item.label}>
-          <img
-            src={src}
-            alt={item.label}
-            className="dock-schedule-card__thumb-img"
-            loading="lazy"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const raw = (payload.fileName as string) || (payload.filePath as string) || "";
-              if (raw) {
-                const fallback = resolveOverlayAssetUrl(raw);
-                if (fallback && target.src !== fallback) {
-                  target.src = fallback;
-                  return;
-                }
-              }
-              target.style.display = "none";
-            }}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div className={`dock-schedule-card__thumb-box dock-schedule-card__thumb-box--placeholder dock-schedule-card__thumb-box--${isVideo ? "video" : "image"}`}>
-        <Icon name={isVideo ? "movie" : "image"} size={16} />
-      </div>
-    );
-  }
-
-  let iconName = "menu_book";
-  let typeClass = "bible";
-  if (item.type === "worship") {
-    iconName = "music_note";
-    typeClass = "worship";
-  } else if (item.type === "sermon") {
-    iconName = "format_quote";
-    typeClass = "sermon";
-  }
-
-  return (
-    <div className={`dock-schedule-card__leading-icon dock-schedule-card__leading-icon--${typeClass}`}>
-      <Icon name={iconName} size={15} />
-    </div>
-  );
-}
 
 export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Props) {
   const { t } = useTranslation();
@@ -526,11 +456,116 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               scheduleItems.map((item, index) => {
                 const isLive = activeCueId === item.id;
                 const isCompleted = activePlan?.completedItemIds?.includes(item.id);
+                const isMedia = item.type === "media";
+                const payload = (item.payloadSnapshot || {}) as Record<string, unknown>;
+                const isVideo = isMedia && (payload.mediaType === "video" || (typeof item.subtitle === "string" && item.subtitle.toLowerCase().includes("video")));
+                const mediaSrc = isMedia ? getMediaThumbnailSrc(payload) : "";
 
+                // ── Picture & Video Card (Thumbnail on top, minimal text emphasis) ──
+                if (isMedia) {
+                  const isImgThumb = mediaSrc && (/\.(png|jpe?g|webp|gif|avif)($|\?)/i.test(mediaSrc) || Boolean(payload.thumbnailUrl));
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`dock-schedule-card dock-schedule-card--media ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
+                      onClick={() => handleGoToItem(item)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleGoToItem(item);
+                        }
+                      }}
+                      title={`${index + 1}. ${item.label}`}
+                      aria-label={`${index + 1}. ${item.label}`}
+                    >
+                      {/* Thumbnail on TOP */}
+                      <div className="dock-schedule-card__media-thumb-wrap">
+                        {mediaSrc ? (
+                          isVideo && !isImgThumb ? (
+                            <video src={mediaSrc} className="dock-schedule-card__media-thumb" muted playsInline preload="metadata" />
+                          ) : (
+                            <img
+                              src={mediaSrc}
+                              alt={item.label}
+                              className="dock-schedule-card__media-thumb"
+                              loading="lazy"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                const raw = (payload.fileName as string) || (payload.filePath as string) || "";
+                                if (raw) {
+                                  const fallback = resolveOverlayAssetUrl(raw);
+                                  if (fallback && target.src !== fallback) {
+                                    target.src = fallback;
+                                    return;
+                                  }
+                                }
+                                target.style.display = "none";
+                              }}
+                            />
+                          )
+                        ) : (
+                          <div className="dock-schedule-card__media-thumb dock-schedule-card__media-thumb--placeholder">
+                            <Icon name={isVideo ? "movie" : "image"} size={20} />
+                          </div>
+                        )}
+
+                        {isVideo && (
+                          <span className="dock-schedule-card__media-video-badge">
+                            <Icon name="play_arrow" size={10} />
+                          </span>
+                        )}
+
+                        {isLive && (
+                          <span className="dock-schedule-card__media-live-badge">
+                            <span className="dock-schedule-card__live-dot" />
+                            LIVE
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Footer with minimal text emphasis & actions */}
+                      <div className="dock-schedule-card__media-footer">
+                        <span className="dock-schedule-card__media-caption" title={item.label}>
+                          {item.label}
+                        </span>
+
+                        <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handlePresentItem(item);
+                            }}
+                            title={isLive ? t("schedule.liveNow", "Currently Live on Output") : t("schedule.project", "Project to OBS")}
+                            aria-label={t("schedule.project", "Project to OBS")}
+                          >
+                            {isLive ? "LIVE" : t("schedule.projectShort", "Project")}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="dock-schedule-card__remove-btn"
+                            onClick={(e) => handleRemoveItem(e, item.id)}
+                            title={t("common.remove", "Remove from schedule")}
+                            aria-label={t("common.remove", "Remove from schedule")}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Bible / Worship / Notes Card (NO left icons, full horizontal space) ──
                 return (
                   <div
                     key={item.id}
-                    className={`dock-schedule-card ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
+                    className={`dock-schedule-card dock-schedule-card--text ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
                     onClick={() => handleGoToItem(item)}
                     role="button"
                     tabIndex={0}
@@ -543,11 +578,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     title={`${index + 1}. ${item.label}`}
                     aria-label={`${index + 1}. ${item.label}`}
                   >
-                    {/* Thumbnail / Leading Icon beside card content */}
-                    {renderCardLeading(item)}
-
-                    {/* Middle: Chapter & Verse / Title above, ellipsized snippet below */}
-                    <div className="dock-schedule-card__content">
+                    {/* Top Row: Title on left, Project & Remove on right */}
+                    <div className="dock-schedule-card__header-row">
                       <div className="dock-schedule-card__title">
                         <span className="dock-schedule-card__title-text">{item.label}</span>
                         {isLive && (
@@ -557,36 +589,39 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           </span>
                         )}
                       </div>
-                      <div className="dock-schedule-card__snippet" title={item.subtitle || ""}>
-                        {item.subtitle || (item.type === "bible" ? t("schedule.bibleScripture", "Bible Scripture") : "")}
+
+                      <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handlePresentItem(item);
+                          }}
+                          title={isLive ? t("schedule.liveNow", "Currently Live on Output") : t("schedule.project", "Project to OBS")}
+                          aria-label={t("schedule.project", "Project to OBS")}
+                        >
+                          {isLive ? "LIVE" : t("schedule.projectShort", "Project")}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="dock-schedule-card__remove-btn"
+                          onClick={(e) => handleRemoveItem(e, item.id)}
+                          title={t("common.remove", "Remove from schedule")}
+                          aria-label={t("common.remove", "Remove from schedule")}
+                        >
+                          &times;
+                        </button>
                       </div>
                     </div>
 
-                    {/* Action buttons on the right: Clean Project pill + Close button, NO icon clutter */}
-                    <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handlePresentItem(item);
-                        }}
-                        title={isLive ? t("schedule.liveNow", "Currently Live on Output") : t("schedule.project", "Project to OBS")}
-                        aria-label={t("schedule.project", "Project to OBS")}
-                      >
-                        {isLive ? "LIVE" : t("schedule.projectShort", "Project")}
-                      </button>
-
-                      <button
-                        type="button"
-                        className="dock-schedule-card__remove-btn"
-                        onClick={(e) => handleRemoveItem(e, item.id)}
-                        title={t("common.remove", "Remove from schedule")}
-                        aria-label={t("common.remove", "Remove from schedule")}
-                      >
-                        &times;
-                      </button>
-                    </div>
+                    {/* Bottom Row: Full width scripture / lyrics snippet */}
+                    {item.subtitle && (
+                      <div className="dock-schedule-card__snippet" title={item.subtitle}>
+                        {item.subtitle}
+                      </div>
+                    )}
                   </div>
                 );
               })
