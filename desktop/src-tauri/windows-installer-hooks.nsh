@@ -6,12 +6,20 @@
   ; Copy whisper DLLs to app directory
   CopyFiles /SILENT "$INSTDIR\\resources\\windows-runtime\\*.dll" "$INSTDIR"
   ; Clean up bootstrapper — not needed at runtime
-  Delete "$INSTDIR\\resources\\windows-runtime\\WebView2Bootstrapper.exe"
+  ; Register makechurcheasy and mce URL protocols
+  WriteRegStr HKCR "makechurcheasy" "" "URL:MakeChurchEasy Protocol"
+  WriteRegStr HKCR "makechurcheasy" "URL Protocol" ""
+  WriteRegStr HKCR "makechurcheasy\shell\open\command" "" '"$INSTDIR\MakeChurchEasy.exe" "%1"'
+  WriteRegStr HKCR "mce" "" "URL:MakeChurchEasy Protocol"
+  WriteRegStr HKCR "mce" "URL Protocol" ""
+  WriteRegStr HKCR "mce\shell\open\command" "" '"$INSTDIR\MakeChurchEasy.exe" "%1"'
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-  Delete "$INSTDIR\\ggml-base.dll"
-  Delete "$INSTDIR\\ggml-cpu.dll"
-  Delete "$INSTDIR\\ggml.dll"
-  Delete "$INSTDIR\\llama.dll"
+  DeleteRegKey HKCR "makechurcheasy"
+  DeleteRegKey HKCR "mce"
+  Delete "$INSTDIR\ggml-base.dll"
+  Delete "$INSTDIR\ggml-cpu.dll"
+  Delete "$INSTDIR\ggml.dll"
+  Delete "$INSTDIR\llama.dll"
 !macroend

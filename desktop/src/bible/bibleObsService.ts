@@ -965,8 +965,14 @@ class BibleObsService {
       this.currentTemplateType = templateType;
     }
 
-    // Push to overlay broadcaster (for same-origin windows / BroadcastChannel)
-    overlayBroadcaster.pushSlide(slide, effectiveTheme, live, blanked);
+    // Push to overlay broadcaster (for same-origin windows / BroadcastChannel and WebSocket relay)
+    overlayBroadcaster.pushSlide(
+      slide,
+      effectiveTheme,
+      live,
+      blanked,
+      (templateType ?? this.currentTemplateType) as "fullscreen" | "lower-third" | undefined
+    );
 
     // If OBS is connected, update the browser source content without forcing
     // a page reload on every verse change.

@@ -1,9 +1,10 @@
 /**
- * BibleVersionLibrary.tsx — App-store style Bible version selector
+ * BibleVersionLibrary.tsx — App-store style Bible version selector & in-dock downloader
  *
- * Combines installed version selection and search into a single workflow.
- * Supports search and installed versions.
- * Enforces plan-based bible version limits for free/basic users.
+ * Combines installed version selection, catalog search, and in-dock Bible downloading
+ * into a single fast workflow for basic, growth, and premium operators.
+ * Enforces plan-based bible version limits for free users while unlocking downloads
+ * directly inside the dock.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,6 +12,11 @@ import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import { getDockPlan, showUpgradeModal } from "../dockEntitlement";
 import { checkEntitlementSync } from "../../services/entitlementClient";
+import {
+  searchDockBibleCatalog,
+  downloadBibleInDock,
+  type CatalogBibleItem,
+} from "../dockBibleCatalog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +29,8 @@ interface BibleVersionLibraryProps {
   availableTranslations: Array<{ value: string; label: string; language?: string }>;
   /** Called when user selects a different installed translation */
   onVersionChange: (version: string) => void;
+  /** Callback to refresh translations after download */
+  onTranslationsReload?: () => Promise<void> | void;
   /** Disable the selector when compare mode is active */
   disabled?: boolean;
 }
@@ -42,7 +50,7 @@ const LANGUAGE_TAGS: Record<string, string> = {
   yoruba: "YOR",
 };
 
-const VERSION_PANEL_WIDTH = 140;
+const VERSION_PANEL_WIDTH = 260;
 
 function normalizeLanguageText(value: string): string {
   return value
@@ -52,14 +60,17 @@ function normalizeLanguageText(value: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function getLanguageTag(translation: { value: string; label: string; language?: string }): string {
+function getLanguageTag(translation: { value?: string; label?: string; abbr?: string; name?: string; language?: string }): string {
   const language = normalizeLanguageText(translation.language || "");
   if (language && Object.prototype.hasOwnProperty.call(LANGUAGE_TAGS, language)) {
     return LANGUAGE_TAGS[language];
   }
 
-  const label = normalizeLanguageText(`${translation.value} ${translation.label}`);
-  if (label.includes("yoruba") || translation.value === "1B" || translation.value === "2B") return "YOR";
+  const code = translation.value || translation.abbr || "";
+  const name = translation.label || translation.name || "";
+  const label = normalizeLanguageText(`${code} ${name}`);
+
+  if (label.includes("yoruba") || code === "1B" || code === "2B") return "YOR";
   if (label.includes("french") || label.includes("francais")) return "FRA";
   if (label.includes("portuguese") || label.includes("portugues")) return "POR";
   if (label.includes("spanish") || label.includes("espanol")) return "SPA";
@@ -70,6 +81,12 @@ function getLanguageTag(translation: { value: string; label: string; language?: 
   return "";
 }
 
+interface DownloadStatus {
+  progress: number;
+  status: "downloading" | "parsing" | "done" | "error";
+  error?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -78,12 +95,17 @@ export default function BibleVersionLibrary({
   activeTranslation,
   availableTranslations,
   onVersionChange,
+  onTranslationsReload,
   disabled = false,
 }: BibleVersionLibraryProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [panelAlign, setPanelAlign] = useState<"left" | "right">("left");
   const [searchQuery, setSearchQuery] = useState("");
+  const [downloadableBibles, setDownloadableBibles] = useState<CatalogBibleItem[]>([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [downloadStates, setDownloadStates] = useState<Record<string, DownloadStatus>>({});
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +159,39 @@ export default function BibleVersionLibrary({
     }
   }, [disabled]);
 
+  // ── Load downloadable catalog Bibles when panel opens or query changes ──
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      setIsCatalogLoading(true);
+      try {
+        const { downloadable } = await searchDockBibleCatalog(
+          searchQuery,
+          availableTranslations,
+          plan,
+        );
+        if (!cancelled) {
+          setDownloadableBibles(downloadable);
+        }
+      } catch {
+        if (!cancelled) {
+          setDownloadableBibles([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCatalogLoading(false);
+        }
+      }
+    }, searchQuery.trim() ? 200 : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, searchQuery, availableTranslations, plan]);
+
   // ── Filter translations by search and sort (allowed first, locked after) ──
   const filteredTranslations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -147,7 +202,7 @@ export default function BibleVersionLibrary({
           tr.value.toLowerCase().includes(query) ||
           tr.label.toLowerCase().includes(query) ||
           (tr.language ?? "").toLowerCase().includes(query) ||
-          getLanguageTag(tr).toLowerCase().includes(query)
+          getLanguageTag({ value: tr.value, label: tr.label, language: tr.language }).toLowerCase().includes(query)
       );
     }
     if (!hasExceededLimit || isUnlimited) return list;
@@ -182,6 +237,67 @@ export default function BibleVersionLibrary({
       setIsOpen(false);
     },
     [onVersionChange, bibleVersionLimit]
+  );
+
+  // ── Handle In-Dock Download ──
+  const handleDownloadVersion = useCallback(
+    async (item: CatalogBibleItem) => {
+      const { limit: limitCount } = checkEntitlementSync("bibleVersions", plan);
+      const unlimited = limitCount === -1;
+      const count = availableTranslations.length;
+
+      if (!unlimited && count >= limitCount) {
+        showUpgradeModal(
+          `You've reached your Bible version limit (${limitCount}). Upgrade to Basic or Growth to download more versions.`
+        );
+        return;
+      }
+
+      setDownloadStates((prev) => ({
+        ...prev,
+        [item.id]: { progress: 0.05, status: "downloading" },
+      }));
+
+      try {
+        await downloadBibleInDock(
+          item,
+          availableTranslations.length,
+          (progress, status) => {
+            setDownloadStates((prev) => ({
+              ...prev,
+              [item.id]: { progress, status },
+            }));
+          },
+        );
+
+        setDownloadStates((prev) => ({
+          ...prev,
+          [item.id]: { progress: 1, status: "done" },
+        }));
+
+        await onTranslationsReload?.();
+        onVersionChange(item.abbr);
+
+        setTimeout(() => {
+          setIsOpen(false);
+          setDownloadStates((prev) => {
+            const next = { ...prev };
+            delete next[item.id];
+            return next;
+          });
+        }, 800);
+      } catch (err: any) {
+        setDownloadStates((prev) => ({
+          ...prev,
+          [item.id]: {
+            progress: 0,
+            status: "error",
+            error: err?.message || "Download failed",
+          },
+        }));
+      }
+    },
+    [plan, availableTranslations.length, onTranslationsReload, onVersionChange],
   );
 
   return (
@@ -236,7 +352,7 @@ export default function BibleVersionLibrary({
             {filteredTranslations.length > 0 && (
               <div className="bible-version-library__section">
                 <div className="bible-version-library__section-header">
-                  <span>{t("bible.installed")}</span>
+                  <span>{t("bible.installed", "Installed")}</span>
                   {!isUnlimited && (
                     <span className="bible-version-library__usage">
                       <span className="bible-version-library__usage-count">
@@ -261,11 +377,16 @@ export default function BibleVersionLibrary({
                       translation.label.trim() && translation.label !== translation.value
                         ? translation.label
                         : t("bible.installedVersion", "Installed version");
-                    const languageTag = getLanguageTag(translation);
+                    const languageTag = getLanguageTag({
+                      value: translation.value,
+                      label: translation.label,
+                      language: translation.language,
+                    });
 
                     return (
                       <button
                         key={translation.value}
+                        type="button"
                         className={[
                           "bible-version-library__row",
                           "bible-version-library__row--installed",
@@ -278,8 +399,8 @@ export default function BibleVersionLibrary({
                           handleSelectVersion(translation.value, locked)
                         }
                         aria-label={`${translation.value}${languageTag ? ` ${languageTag}` : ""}${displayName ? `, ${displayName}` : ""}`}
-                        title={locked ? "Upgrade to unlock" : undefined}>
-                        <div className="bible-version-library__row-info">
+                        title={locked ? "Upgrade to unlock" : displayName}>
+                        <div className="bible-version-library__row-info" style={{ overflow: "hidden", display: "flex", alignItems: "center", gap: 6 }}>
                           <span className="bible-version-library__row-code">
                             {translation.value}
                           </span>
@@ -288,6 +409,18 @@ export default function BibleVersionLibrary({
                               {languageTag}
                             </span>
                           )}
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--dock-text-dim)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              maxWidth: 120,
+                            }}
+                          >
+                            {displayName}
+                          </span>
                         </div>
                         {locked ? (
                           <span className="bible-version-library__row-premium">
@@ -307,11 +440,115 @@ export default function BibleVersionLibrary({
               </div>
             )}
 
+            {/* Downloadable / Cloud Section */}
+            {downloadableBibles.length > 0 && (
+              <div className="bible-version-library__section">
+                <div className="bible-version-library__section-header">
+                  <span>{t("bible.availableToDownload", "Available to Download")}</span>
+                  <span style={{ fontSize: "10px", color: "var(--dock-accent)", fontWeight: 700 }}>
+                    {isUnlimited ? "UNLIMITED" : `${Math.max(0, bibleVersionLimit - installedCount)} AVAILABLE`}
+                  </span>
+                </div>
+                <div className="bible-version-library__list">
+                  {downloadableBibles.map((item) => {
+                    const downloadState = downloadStates[item.id];
+                    const isDownloading =
+                      downloadState &&
+                      (downloadState.status === "downloading" ||
+                        downloadState.status === "parsing");
+                    const isDone = downloadState?.status === "done";
+                    const languageTag = getLanguageTag({
+                      abbr: item.abbr,
+                      name: item.name,
+                      language: item.language,
+                    });
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="bible-version-library__row"
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px" }}
+                      >
+                        <div
+                          className="bible-version-library__row-info"
+                          style={{ overflow: "hidden", display: "flex", alignItems: "center", gap: 6, flex: 1 }}
+                        >
+                          <span className="bible-version-library__row-code">
+                            {item.abbr}
+                          </span>
+                          {languageTag && (
+                            <span className="bible-version-library__row-lang">
+                              {languageTag}
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--dock-text-dim)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              maxWidth: 110,
+                            }}
+                            title={item.name}
+                          >
+                            {item.name}
+                          </span>
+                        </div>
+
+                        <div className="bible-version-library__row-action" style={{ flexShrink: 0, marginLeft: 6 }}>
+                          {isDownloading ? (
+                            <div className="bible-version-library__progress">
+                              <div className="bible-version-library__progress-bar">
+                                <div
+                                  className="bible-version-library__progress-fill"
+                                  style={{
+                                    width: `${Math.max(10, Math.round((downloadState?.progress || 0) * 100))}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="bible-version-library__progress-text">
+                                {Math.round((downloadState?.progress || 0) * 100)}%
+                              </span>
+                            </div>
+                          ) : isDone ? (
+                            <span className="bible-version-library__status bible-version-library__status--done">
+                              <Icon name="check_circle" size={16} />
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="bible-version-library__download-btn"
+                              title={t("bible.downloadVersion", "Download {{version}}", { version: item.abbr })}
+                              aria-label={t("bible.downloadVersion", "Download {{version}}", { version: item.abbr })}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDownloadVersion(item);
+                              }}
+                            >
+                              <Icon name="download" size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {isCatalogLoading && (
+              <div className="bible-version-library__loading">
+                <Icon name="sync" size={14} className="dock-spin" />
+                <span>{t("bible.searchingCatalog", "Searching Bible catalog...")}</span>
+              </div>
+            )}
+
             {/* Empty State */}
-            {filteredTranslations.length === 0 && (
+            {filteredTranslations.length === 0 && downloadableBibles.length === 0 && !isCatalogLoading && (
               <div className="bible-version-library__empty">
                 <Icon name="search_off" size={20} />
-                <span>{t("bible.noVersionsFound")}</span>
+                <span>{t("bible.noVersionsFound", "No versions found")}</span>
               </div>
             )}
           </div>

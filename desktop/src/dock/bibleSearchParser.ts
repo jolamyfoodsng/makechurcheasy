@@ -23,6 +23,7 @@ import {
 } from "./dockTypes";
 import { normalizeRomanNumberedBookPrefix } from "../bible/bookAliasGenerator";
 import { damerauLevenshteinDistance } from "../services/fuzzySearch";
+import { findMatchingBibleMacros } from "./bibleMacros";
 
 const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
 
@@ -41,12 +42,12 @@ const ROMAN_NUMERAL_PREFIX: Record<"1" | "2" | "3", string> = {
 // Abbreviation map — multiple short forms per book
 // ---------------------------------------------------------------------------
 
-interface BookAlias {
+export interface BookAlias {
   book: string;
   aliases: string[];
 }
 
-const BOOK_ALIASES: BookAlias[] = [
+export const BOOK_ALIASES: BookAlias[] = [
   { book: "Genesis", aliases: ["gen", "ge", "gn", "gs"] },
   { book: "Exodus", aliases: ["exo", "ex", "exod"] },
   { book: "Leviticus", aliases: ["lev", "le", "lv"] },
@@ -163,6 +164,111 @@ export interface BibleSearchResult {
   label: string;
   /** Confidence 0-100 */
   score: number;
+  /** Translation override requested via ~msg, @amp, /esv */
+  translationOverride?: string;
+  /** Output mode override requested via !lt, !full, !f */
+  modeOverride?: "lower-third" | "fullscreen";
+  /** If this result is a compare trigger */
+  compareTranslations?: { translationA: string; translationB: string };
+  /** If this result is a special action (e.g. clear overlay) */
+  action?: "clear";
+  /** If this result comes from a macro/shortcode */
+  isMacro?: boolean;
+  macroKeyword?: string;
+}
+
+export interface BibleSearchContext {
+  currentBook?: string | null;
+  currentChapter?: number | null;
+  currentVerse?: number | null;
+}
+
+export interface BibleSearchDirectives {
+  cleanedQuery: string;
+  translationOverride?: string;
+  modeOverride?: "lower-third" | "fullscreen";
+  action?: "clear";
+  isCompare?: boolean;
+  compareTranslationA?: string;
+  compareTranslationB?: string;
+  compareRightQuery?: string;
+}
+
+export function extractSearchDirectives(raw: string): BibleSearchDirectives {
+  let query = raw.trim();
+  let action: "clear" | undefined;
+  let modeOverride: "lower-third" | "fullscreen" | undefined;
+  let translationOverride: string | undefined;
+  let isCompare = false;
+  let compareTranslationA: string | undefined;
+  let compareTranslationB: string | undefined;
+  let compareRightQuery: string | undefined;
+
+  // 1. Quick clear triggers: single dot "." or "!clear" or "!blank" or "#clear" or "#blank"
+  if (query === "." || /^[!#](?:clear|blank)$/i.test(query)) {
+    return {
+      cleanedQuery: "",
+      action: "clear",
+    };
+  }
+
+  // 2. Output mode directives: !lt, !lower, !lower-third, !full, !fullscreen, !f, #lt, #full
+  const modeMatch = query.match(/(?:^|\s)[!#](lt|lower-third|lower|full|fullscreen|f|clear|blank)(?:\s|$)/i);
+  if (modeMatch) {
+    const token = modeMatch[1].toLowerCase();
+    if (token === "clear" || token === "blank") {
+      action = "clear";
+    } else if (token === "lt" || token === "lower" || token === "lower-third") {
+      modeOverride = "lower-third";
+    } else if (token === "full" || token === "fullscreen" || token === "f") {
+      modeOverride = "fullscreen";
+    }
+    query = query.replace(/(?:^|\s)[!#](?:lt|lower-third|lower|full|fullscreen|f|clear|blank)(?:\s|$)/i, " ").trim();
+  }
+
+  // 3. Quick Compare Triggers: "//" or "||"
+  const compareDelimiterMatch = query.match(/(\/\/|\|\|)/);
+  if (compareDelimiterMatch && compareDelimiterMatch.index !== undefined) {
+    isCompare = true;
+    const leftSide = query.slice(0, compareDelimiterMatch.index).trim();
+    const rightSide = query.slice(compareDelimiterMatch.index + compareDelimiterMatch[0].length).trim();
+    query = leftSide;
+
+    // Check if rightSide has two translations: e.g. "kjv + niv", "kjv & niv", "kjv / niv", "kjv || niv"
+    const dualTransMatch = rightSide.match(/^([a-zA-Z]{2,6})\s*(?:\+|\&|\||\/|and)\s*([a-zA-Z]{2,6})$/i);
+    if (dualTransMatch) {
+      compareTranslationA = dualTransMatch[1].toUpperCase();
+      compareTranslationB = dualTransMatch[2].toUpperCase();
+    } else {
+      const singleTransMatch = rightSide.match(/^([a-zA-Z]{2,6})$/i);
+      if (singleTransMatch) {
+        compareTranslationB = singleTransMatch[1].toUpperCase();
+      } else {
+        compareRightQuery = rightSide;
+      }
+    }
+  } else {
+    // 4. Translation hot-swapping: ~msg, @amp, /esv, ~nlt, etc.
+    const transMatch = query.match(/(?:^|[\s\d:.-])([~@/])([a-zA-Z]{2,6})(?:\s|$)/i);
+    if (transMatch) {
+      translationOverride = transMatch[2].toUpperCase();
+      query = query.replace(/(?:^|[\s\d:.-])[~@/][a-zA-Z]{2,6}(?:\s|$)/i, (matched) => {
+        const first = matched[0];
+        return /[\d:.-]/.test(first) ? first : " ";
+      }).trim();
+    }
+  }
+
+  return {
+    cleanedQuery: query,
+    translationOverride,
+    modeOverride,
+    action,
+    isCompare,
+    compareTranslationA,
+    compareTranslationB,
+    compareRightQuery,
+  };
 }
 
 export interface BibleComparisonSearchResult {
@@ -170,11 +276,60 @@ export interface BibleComparisonSearchResult {
   rightQuery: string;
   left: BibleSearchResult | null;
   right: BibleSearchResult | null;
+  translationA?: string;
+  translationB?: string;
 }
 
 export function parseBibleComparisonSearchOptions(query: string): BibleComparisonSearchResult[] {
   const raw = query.trim();
   if (!raw) return [];
+
+  // Check "//" or "||" first
+  const compareMatch = raw.match(/(\/\/|\|\|)/);
+  if (compareMatch && compareMatch.index !== undefined) {
+    const leftQuery = raw.slice(0, compareMatch.index).trim();
+    const rightQuery = raw.slice(compareMatch.index + compareMatch[0].length).trim();
+    if (leftQuery) {
+      const dualTransMatch = rightQuery.match(/^([a-zA-Z]{2,6})\s*(?:\+|\&|\||\/|and)\s*([a-zA-Z]{2,6})$/i);
+      const singleTransMatch = !dualTransMatch ? rightQuery.match(/^([a-zA-Z]{2,6})$/i) : null;
+      const leftMatches = parseBibleSearch(leftQuery).filter((r) => r.chapter !== null);
+      const left = leftMatches[0] ?? null;
+
+      if (dualTransMatch && left) {
+        return [{
+          leftQuery,
+          rightQuery,
+          left,
+          right: null,
+          translationA: dualTransMatch[1].toUpperCase(),
+          translationB: dualTransMatch[2].toUpperCase(),
+        }];
+      }
+
+      if (singleTransMatch && left) {
+        return [{
+          leftQuery,
+          rightQuery,
+          left,
+          right: null,
+          translationB: singleTransMatch[1].toUpperCase(),
+        }];
+      }
+
+      if (rightQuery) {
+        const rightMatches = parseBibleSearch(rightQuery).filter((r) => r.chapter !== null);
+        const right = rightMatches[0] ?? null;
+        if (left || right) {
+          return [{
+            leftQuery,
+            rightQuery,
+            left,
+            right,
+          }];
+        }
+      }
+    }
+  }
 
   const delimiterIndexes: number[] = [];
   for (let index = 0; index < raw.length; index += 1) {
@@ -237,47 +392,172 @@ export function parseBibleComparisonSearchOptions(query: string): BibleCompariso
  *   "j316" → John 3:16 AND John 31:6
  *   "jn316" → John 3:16 AND John 31:6
  */
-export function parseBibleSearch(query: string): BibleSearchResult[] {
+export function parseBibleSearch(
+  query: string,
+  options?: { context?: BibleSearchContext },
+): BibleSearchResult[] {
   const raw = query.trim();
   if (!raw) return [];
 
+  // Extract directives: translation overrides (~msg, @amp, /esv), output mode (!lt, !full, !f), actions (!clear, .), comparisons (//, ||)
+  const directives = extractSearchDirectives(raw);
+
+  // 1. Quick clear triggers: single dot "." or "!clear" or "!blank"
+  if (directives.action === "clear") {
+    return [{
+      book: "",
+      chapter: null,
+      verse: null,
+      label: "Clear OBS Overlay (Blank)",
+      score: 150,
+      action: "clear",
+    }];
+  }
+
+  // 2. Contextual verse navigation when active book and chapter are known
+  if (options?.context?.currentBook && options?.context?.currentChapter) {
+    const curBook = options.context.currentBook;
+    const curChapter = options.context.currentChapter;
+    const curVerse = options.context.currentVerse ?? 1;
+    const maxV = getCanonicalVerseCount(curBook, curChapter) ?? 150;
+
+    // Relative step: +1, -1, +2, -2, +, -
+    const stepMatch = directives.cleanedQuery.match(/^([+-])(\d+)?$/);
+    if (stepMatch) {
+      const sign = stepMatch[1];
+      const delta = stepMatch[2] ? parseInt(stepMatch[2], 10) : 1;
+      const targetVerse = sign === "+" ? Math.min(curVerse + delta, maxV) : Math.max(curVerse - delta, 1);
+      const label = `${curBook} ${curChapter}:${targetVerse} (${sign}${delta} Verse)`;
+      return [{
+        book: curBook,
+        chapter: curChapter,
+        verse: targetVerse,
+        label: directives.translationOverride ? `${label} — ${directives.translationOverride}` : label,
+        score: 130,
+        translationOverride: directives.translationOverride,
+        modeOverride: directives.modeOverride,
+      }];
+    }
+
+    // Direct verse jump: .18, v18, 18, .18-20, v18-20, 18-20
+    const jumpMatch = directives.cleanedQuery.match(/^\.?v?(\d+)(?:[-–—](\d+))?$/i);
+    if (jumpMatch) {
+      const targetV = parseInt(jumpMatch[1], 10);
+      const endV = jumpMatch[2] ? parseInt(jumpMatch[2], 10) : null;
+      if (targetV >= 1 && targetV <= maxV) {
+        const rangeStr = endV && endV >= targetV && endV <= maxV ? `${targetV}-${endV}` : `${targetV}`;
+        const baseLabel = `${curBook} ${curChapter}:${rangeStr}`;
+        const label = directives.translationOverride ? `${baseLabel} — ${directives.translationOverride}` : baseLabel;
+        return [{
+          book: curBook,
+          chapter: curChapter,
+          verse: targetV,
+          endVerse: endV && endV >= targetV && endV <= maxV ? endV : null,
+          label,
+          score: 135,
+          translationOverride: directives.translationOverride,
+          modeOverride: directives.modeOverride,
+        }];
+      }
+    }
+  }
+
+  // 3. Quick Compare Trigger (// or ||)
+  if (directives.isCompare && directives.cleanedQuery) {
+    const leftResults = parseBibleSearch(directives.cleanedQuery, options);
+    const leftMatch = leftResults.find((r) => r.chapter !== null) ?? leftResults[0];
+    if (leftMatch && leftMatch.book && leftMatch.chapter !== null) {
+      const transA = directives.compareTranslationA;
+      const transB = directives.compareTranslationB;
+      let label = leftMatch.label;
+      if (transA && transB) {
+        label = `${leftMatch.label} [Compare: ${transA} || ${transB}]`;
+      } else if (transB) {
+        label = `${leftMatch.label} [Compare with ${transB}]`;
+      }
+      return [{
+        ...leftMatch,
+        label,
+        score: 125,
+        compareTranslations: transB ? { translationA: transA || "", translationB: transB } : undefined,
+        modeOverride: directives.modeOverride,
+      }];
+    }
+  }
+
+  // 4. Custom Shortcodes / Scripture Macros (e.g. "benediction", "welcome", "#job")
+  const macroMatches = findMatchingBibleMacros(directives.cleanedQuery);
+  const macroResults: BibleSearchResult[] = [];
+  for (const match of macroMatches) {
+    const parsedRef = parseBibleSearch(match.macro.reference)[0];
+    if (parsedRef) {
+      const trans = directives.translationOverride || match.macro.translation;
+      const label = `⚡ ${match.macro.label || match.macro.keyword}: ${parsedRef.label}${trans ? ` — ${trans}` : ""}`;
+      const score = match.isExplicitMacroPrefix ? 140 : match.hasCanonicalCollision ? 55 : 120;
+      macroResults.push({
+        ...parsedRef,
+        label,
+        score,
+        isMacro: true,
+        macroKeyword: match.macro.keyword,
+        translationOverride: trans,
+        modeOverride: directives.modeOverride,
+      });
+    }
+  }
+
+  // If explicit macro prefix was typed (e.g. "#job", "#welcome"), return macro results immediately
+  if (directives.cleanedQuery.startsWith("#") || directives.cleanedQuery.startsWith("*")) {
+    if (macroResults.length > 0) return macroResults;
+  }
+
+  // 5. Standard Scripture Reference Parsing on cleaned query
   // Normalize: lowercase, collapse whitespace
-  const q = normalizeRomanNumberedBookPrefix(raw.toLowerCase().replace(/\s+/g, " "));
+  const q = normalizeRomanNumberedBookPrefix(directives.cleanedQuery.toLowerCase().replace(/\s+/g, " "));
+  if (!q) {
+    return macroResults;
+  }
 
   // ── Strategy 1: Split into book-part and numbers ──
-  // Try to extract a leading book identifier and trailing numbers
-  // Patterns:
-  //   "genesis 1:1"  → book="genesis", nums="1:1"
-  //   "gen1vs1"      → book="gen", nums="1vs1"
-  //   "g11"          → book="g", nums="11"
-  //   "1cor13:4"     → book="1cor", nums="13:4"
-  //   "1 john 3:16"  → book="1john", nums="3:16"
-
-  // Handle numbered books: "1 samuel" → "1samuel", "2 kings" → "2kings"
+  // Handle numbered books: "1 samuel" → "1samuel", "2 kings" → "2kings", "ii cor" → "iicor"
   const normalized = q.replace(/^((?:\d|iii|ii|i))\s+/, "$1");
 
   // Split into book text and number portion
-  // Match: optional leading digit, then letters (book name), then numbers/separators
+  // Support no-shift dot notation between book and numbers: "j3.16", "jn.3.16", "2cor.5.17", "ps.23.1-4"
   const splitMatch = normalized.match(
-    /^(\d?[a-z]+)[:\s]*(\d.*)?$/
+    /^(\d?[a-z]+)[.\s:]*(\d.*)?$/
   );
 
   if (!splitMatch) {
     // Try plain text match against book names
-    return matchBooksByName(q);
+    const bookMatches = matchBooksByName(q);
+    const combined = [...macroResults, ...bookMatches];
+    if (directives.translationOverride || directives.modeOverride) {
+      return combined.map((res) => ({
+        ...res,
+        label: directives.translationOverride && !res.label.includes("—")
+          ? `${res.label} — ${directives.translationOverride}`
+          : res.label,
+        translationOverride: directives.translationOverride,
+        modeOverride: directives.modeOverride,
+      }));
+    }
+    return combined;
   }
 
   const bookPart = splitMatch[1]; // e.g. "gen", "1cor", "g", "j", "jn"
-  const numPart = splitMatch[2] ?? ""; // e.g. "1:1", "1vs1", "11", "316"
+  const numPart = splitMatch[2] ?? ""; // e.g. "1:1", "1vs1", "11", "316", "23.1-4"
 
   // Find matching books
   const matchedBooks = findBooks(bookPart);
 
-  if (matchedBooks.length === 0) return [];
+  if (matchedBooks.length === 0) {
+    return macroResults;
+  }
 
   // Parse chapter:verse candidates from number part
-  const hasWhitespace = /\s/.test(raw);
-  const candidates = parseChapterVerseCandidates(numPart, hasWhitespace);
+  const hasSeparator = /[\s.:]/.test(directives.cleanedQuery) || /[\s.:/~@]/.test(raw);
+  const candidates = parseChapterVerseCandidates(numPart, hasSeparator);
 
   // Build results
   const results: BibleSearchResult[] = [];
@@ -433,9 +713,23 @@ export function parseBibleSearch(query: string): BibleSearchResult[] {
     }
   }
 
+  // Apply translation / mode directives to results
+  const finalizedResults = (directives.translationOverride || directives.modeOverride)
+    ? results.map((r) => ({
+      ...r,
+      label: directives.translationOverride && !r.label.includes("—")
+        ? `${r.label} — ${directives.translationOverride}`
+        : r.label,
+      translationOverride: directives.translationOverride,
+      modeOverride: directives.modeOverride,
+    }))
+    : results;
+
+  const allCandidates = [...macroResults, ...finalizedResults];
+
   // Deduplicate by label
   const seen = new Set<string>();
-  const deduped = results.filter((r) => {
+  const deduped = allCandidates.filter((r) => {
     if (seen.has(r.label)) return false;
     seen.add(r.label);
     return true;

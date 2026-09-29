@@ -119,4 +119,158 @@ describe("Bible reference search parser", () => {
       expect(results[0]?.label).toBe(expectedLabel);
     });
   });
+
+  describe("translation hot-swapping directives (~, @, /)", () => {
+    it.each([
+      ["jn3:16 ~msg", "John 3:16 — MSG", "MSG"],
+      ["jn3:16 @amp", "John 3:16 — AMP", "AMP"],
+      ["jn 3 16 /esv", "John 3:16 — ESV", "ESV"],
+      ["rom 8:28 ~nlt", "Romans 8:28 — NLT", "NLT"],
+      ["j3.16@amp", "John 3:16 — AMP", "AMP"],
+      ["ps23/kjv", "Psalms 23 — KJV", "KJV"],
+    ])("correctly parses %s with translation %s", (query, expectedLabel, expectedTrans) => {
+      const results = parseBibleSearch(query);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toBe(expectedLabel);
+      expect(results[0]?.translationOverride).toBe(expectedTrans);
+    });
+  });
+
+  describe("no-shift dot notation and verse ranges", () => {
+    it.each([
+      ["j3.16", "John 3:16", 3, 16, null],
+      ["jn.3.16", "John 3:16", 3, 16, null],
+      ["2cor.5.17", "2 Corinthians 5:17", 5, 17, null],
+      ["ps.23.1-4", "Psalms 23:1-4", 23, 1, 4],
+      ["ps.23.1.4", "Psalms 23:1-4", 23, 1, 4],
+      ["ps.23", "Psalms 23", 23, null, null],
+      ["1jn.1.9", "1 John 1:9", 1, 9, null],
+    ])("correctly parses dot-notation %s -> %s", (query, expectedLabel, chapter, verse, endVerse) => {
+      const results = parseBibleSearch(query);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toBe(expectedLabel);
+      expect(results[0]?.chapter).toBe(chapter);
+      expect(results[0]?.verse).toBe(verse);
+      if (endVerse !== null) {
+        expect(results[0]?.endVerse).toBe(endVerse);
+      }
+    });
+  });
+
+  describe("contextual verse jumping and relative navigation", () => {
+    const context = { currentBook: "John", currentChapter: 3, currentVerse: 16 };
+
+    it("jumps to verse using dot notation .18", () => {
+      const results = parseBibleSearch(".18", { context });
+      expect(results[0]?.label).toBe("John 3:18");
+      expect(results[0]?.verse).toBe(18);
+    });
+
+    it("jumps to verse using v notation v18", () => {
+      const results = parseBibleSearch("v18", { context });
+      expect(results[0]?.label).toBe("John 3:18");
+      expect(results[0]?.verse).toBe(18);
+    });
+
+    it("jumps to verse using bare number 18 in active chapter", () => {
+      const results = parseBibleSearch("18", { context });
+      expect(results[0]?.label).toBe("John 3:18");
+      expect(results[0]?.verse).toBe(18);
+    });
+
+    it("steps forward with +1", () => {
+      const results = parseBibleSearch("+1", { context });
+      expect(results[0]?.label).toBe("John 3:17 (+1 Verse)");
+      expect(results[0]?.verse).toBe(17);
+    });
+
+    it("steps backward with -1", () => {
+      const results = parseBibleSearch("-1", { context });
+      expect(results[0]?.label).toBe("John 3:15 (-1 Verse)");
+      expect(results[0]?.verse).toBe(15);
+    });
+  });
+
+  describe("quick compare triggers (// and ||)", () => {
+    it("parses single translation comparison (jn 3:16 // msg)", () => {
+      const results = parseBibleSearch("jn 3:16 // msg");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toContain("John 3:16 [Compare with MSG]");
+      expect(results[0]?.compareTranslations?.translationB).toBe("MSG");
+    });
+
+    it("parses dual translation comparison (ps 23:1 // kjv + niv)", () => {
+      const results = parseBibleSearch("ps 23:1 // kjv + niv");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toContain("Psalms 23:1 [Compare: KJV || NIV]");
+      expect(results[0]?.compareTranslations?.translationA).toBe("KJV");
+      expect(results[0]?.compareTranslations?.translationB).toBe("NIV");
+    });
+
+    it("parses dual translation comparison with || delimiter (ps 23:1 || kjv + niv)", () => {
+      const results = parseBibleSearch("ps 23:1 || kjv + niv");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.label).toContain("Psalms 23:1 [Compare: KJV || NIV]");
+    });
+  });
+
+  describe("inline output mode directives (! and #)", () => {
+    it("forces lower-third overlay mode with !lt", () => {
+      const results = parseBibleSearch("heb 11:1 !lt");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.modeOverride).toBe("lower-third");
+      expect(results[0]?.book).toBe("Hebrews");
+      expect(results[0]?.chapter).toBe(11);
+      expect(results[0]?.verse).toBe(1);
+    });
+
+    it("forces fullscreen overlay mode with !full or !f", () => {
+      const results = parseBibleSearch("heb 11:1 !full");
+      expect(results[0]?.modeOverride).toBe("fullscreen");
+
+      const fResults = parseBibleSearch("heb 11:1 !f");
+      expect(fResults[0]?.modeOverride).toBe("fullscreen");
+    });
+
+    it("handles clear overlay directive !clear, !blank, or .", () => {
+      const clearResults = parseBibleSearch("!clear");
+      expect(clearResults[0]?.action).toBe("clear");
+
+      const dotResults = parseBibleSearch(".");
+      expect(dotResults[0]?.action).toBe("clear");
+    });
+  });
+
+  describe("operator custom shortcodes and macros", () => {
+    it("resolves benediction to Numbers 6:24-26", () => {
+      const results = parseBibleSearch("benediction");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.isMacro).toBe(true);
+      expect(results[0]?.book).toBe("Numbers");
+      expect(results[0]?.chapter).toBe(6);
+      expect(results[0]?.verse).toBe(24);
+      expect(results[0]?.endVerse).toBe(26);
+    });
+
+    it("resolves welcome to Psalms 100:4", () => {
+      const results = parseBibleSearch("welcome");
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.isMacro).toBe(true);
+      expect(results[0]?.book).toBe("Psalms");
+      expect(results[0]?.chapter).toBe(100);
+      expect(results[0]?.verse).toBe(4);
+    });
+
+    it("preserves canonical book priority for collisions like 'job' but allows explicit #job", () => {
+      // Plain "job" should prioritize book Job
+      const plainResults = parseBibleSearch("job 1:1");
+      expect(plainResults[0]?.book).toBe("Job");
+      expect(plainResults[0]?.isMacro).toBeUndefined();
+
+      // Explicit "#welcome" triggers macro
+      const macroResults = parseBibleSearch("#welcome");
+      expect(macroResults[0]?.isMacro).toBe(true);
+      expect(macroResults[0]?.book).toBe("Psalms");
+    });
+  });
 });

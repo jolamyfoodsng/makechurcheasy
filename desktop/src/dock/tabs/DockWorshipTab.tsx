@@ -56,6 +56,7 @@ import {
 import { fuzzyMatch, fuzzyScore } from "../../services/fuzzySearch";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
+import { addWorshipToActiveSchedule } from "../dockScheduleService";
 import Icon from "../DockIcon";
 import LoadingScreen from "../../components/LoadingScreen";
 import DockBottomToolbar from "../components/DockBottomToolbar";
@@ -1634,6 +1635,15 @@ function DockWorshipTab({
   const [worshipTranslation, setWorshipTranslation] = useState<DockTranslationValue | null>(null);
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [slideContextMenu, setSlideContextMenu] = useState<{ x: number; y: number; sectionIdx: number } | null>(null);
+
+  useEffect(() => {
+    if (!slideContextMenu) return;
+    const handleCloseMenu = () => setSlideContextMenu(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, [slideContextMenu]);
+
   const [worshipOverlayVisible, setWorshipOverlayVisible] = useState(true);
   const [visibilityActionPending, setVisibilityActionPending] = useState(false);
   const [autoAdvanceActive, setAutoAdvanceActive] = useState(false);
@@ -2664,6 +2674,31 @@ function DockWorshipTab({
       effectiveWorshipTranslation,
     ],
   );
+
+  const handleAddSlideToSchedule = useCallback((sectionIdx: number) => {
+    const section = selectedSongSections[sectionIdx];
+    if (!section || !selectedSong) return;
+
+    const payload = buildSectionPayload(sectionIdx);
+    if (!payload) return;
+
+    const obs = payload.obsData;
+    const stage = payload.stageItem.data;
+
+    addWorshipToActiveSchedule({
+      songTitle: selectedSongDisplayTitle || selectedSong.title,
+      sectionLabel: section.label.trim() || `Slide ${sectionIdx + 1}`,
+      sectionText: section.text,
+      artist: selectedSong.artist,
+      songId: selectedSong.id,
+      sectionIdx,
+      overlayMode: obs.overlayMode,
+      theme: stage.theme,
+      bibleThemeSettings: (obs.bibleThemeSettings || stage.bibleThemeSettings) as Record<string, unknown> | null,
+      linesPerSlide: stage.linesPerSlide,
+      autoSplit: stage.autoSplit,
+    });
+  }, [buildSectionPayload, selectedSong, selectedSongDisplayTitle, selectedSongSections]);
 
   const pushSection = useCallback(
     async (idx: number, options?: { showPresentationMeta?: boolean }) => {
@@ -4242,6 +4277,15 @@ function DockWorshipTab({
                         <div
                           key={section.id}
                           draggable={!savingSong}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setSlideContextMenu({
+                              x: Math.min(event.clientX, window.innerWidth - 220),
+                              y: Math.min(event.clientY, window.innerHeight - 150),
+                              sectionIdx: idx,
+                            });
+                          }}
                           onDragStart={(event) => {
                             event.dataTransfer.setData("text/plain", String(idx));
                             event.dataTransfer.effectAllowed = "move";
@@ -4343,6 +4387,18 @@ function DockWorshipTab({
                               className="dock-worship-slide-card__action"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                handleAddSlideToSchedule(idx);
+                              }}
+                              title={t("schedule.addToSchedule", "Add slide to Schedule")}
+                              aria-label={t("schedule.addToSchedule", "Add slide to Schedule")}
+                            >
+                              <Icon name="playlist_add" size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="dock-worship-slide-card__action"
+                              onClick={(event) => {
+                                event.stopPropagation();
                                 openSlideEditor(idx);
                               }}
                               title={t('worship.quickEdit')}
@@ -4366,6 +4422,53 @@ function DockWorshipTab({
                         </div>
                       );
                     })}
+                  </div>
+                )}
+                {slideContextMenu && (
+                  <div
+                    className="dock-bible-context-menu"
+                    style={{
+                      position: "fixed",
+                      top: `${slideContextMenu.y}px`,
+                      left: `${slideContextMenu.x}px`,
+                      zIndex: 1000,
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        handleAddSlideToSchedule(slideContextMenu.sectionIdx);
+                        setSlideContextMenu(null);
+                      }}
+                    >
+                      <Icon name="playlist_add" size={16} />
+                      <span>{t("schedule.addToSchedule", "Add slide to Schedule")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        void goLiveSection(slideContextMenu.sectionIdx);
+                        setSlideContextMenu(null);
+                      }}
+                    >
+                      <Icon name="play_arrow" size={16} />
+                      <span>{t("common.present", "Present Live")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        openSlideEditor(slideContextMenu.sectionIdx);
+                        setSlideContextMenu(null);
+                      }}
+                    >
+                      <Icon name="edit" size={16} />
+                      <span>{t("worship.quickEdit", "Edit Slide")}</span>
+                    </button>
                   </div>
                 )}
                 <DockOutputQuickActions

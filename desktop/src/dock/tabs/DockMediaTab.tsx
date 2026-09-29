@@ -17,6 +17,7 @@ import {
   DOCK_MEDIA_VIDEO_SOURCE,
   DOCK_MEDIA_IMAGE_SOURCE,
   DOCK_MEDIA_AUDIO_SOURCE,
+  getSceneMediaSourceName,
 } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { dockClient } from "../../services/dockBridge";
@@ -56,6 +57,7 @@ import {
 } from "../documentConversion";
 import { checkEntitlementSync, getFeatureLimit } from "../../services/entitlementClient";
 import Icon from "../DockIcon";
+import { addMediaToActiveSchedule } from "../dockScheduleService";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { isUserSelectableObsScene } from "../../services/dockSceneNames";
@@ -625,12 +627,8 @@ function getClosestTextSizePreset(value: number, presets: readonly DockTextSizeP
   }, presets[0]);
 }
 
-function buildSceneMediaSourceName(entry: DockMediaEntry): string {
-  return entry.kind === "audio"
-    ? DOCK_MEDIA_AUDIO_SOURCE
-    : entry.kind === "video"
-      ? DOCK_MEDIA_VIDEO_SOURCE
-      : DOCK_MEDIA_IMAGE_SOURCE;
+function buildSceneMediaSourceName(entry: DockMediaEntry, targetScene?: string): string {
+  return getSceneMediaSourceName(entry.kind, entry.name, targetScene, entry.prefKey);
 }
 
 function canSendEntryToScene(entry: DockMediaEntry): boolean {
@@ -2016,7 +2014,7 @@ function DockMediaTab({
       if (entry.kind === "video") {
         await dockObsClient.addVideoSourceToScene({
           sceneName: sceneSendSelection,
-          sourceName: buildSceneMediaSourceName(entry),
+          sourceName: buildSceneMediaSourceName(entry, sceneSendSelection),
           filePath,
           fitMode: entryPrefs.fitMode ?? "cover",
           muted: entryPrefs.videoMuted ?? true,
@@ -2029,14 +2027,14 @@ function DockMediaTab({
       } else if (entry.kind === "image") {
         await dockObsClient.addImageSourceToScene({
           sceneName: sceneSendSelection,
-          sourceName: buildSceneMediaSourceName(entry),
+          sourceName: buildSceneMediaSourceName(entry, sceneSendSelection),
           filePath,
           fitMode: entryPrefs.fitMode ?? "cover",
         });
       } else {
         await dockObsClient.addAudioSourceToScene({
           sceneName: sceneSendSelection,
-          sourceName: buildSceneMediaSourceName(entry),
+          sourceName: buildSceneMediaSourceName(entry, sceneSendSelection),
           filePath,
           looping: entryPrefs.loop ?? false,
           muted: false,
@@ -6835,6 +6833,27 @@ function DockMediaTab({
               <Icon name={getFileIcon(contextEntry.kind)} size={16} />
               <span title={contextDisplayName}>{contextDisplayName}</span>
             </div>
+            <button
+              type="button"
+              role="menuitem"
+              className="dock-media-context-menu__item"
+              onClick={() => {
+                const thumb = contextEntry.thumbnailUrl || (contextEntry.kind === "image" ? contextEntry.previewUrl : undefined);
+                addMediaToActiveSchedule({
+                  id: contextEntry.libraryItem?.id || contextEntry.key,
+                  name: contextDisplayName,
+                  filePath: contextEntry.libraryItem?.filePath || contextEntry.previewUrl || "",
+                  fileName: contextEntry.libraryItem?.diskFileName || contextEntry.libraryItem?.name || contextEntry.name,
+                  mediaType: contextEntry.kind === "video" ? "video" : "image",
+                  thumbnailUrl: thumb,
+                  previewUrl: contextEntry.previewUrl,
+                });
+                setMediaContextMenu(null);
+              }}
+            >
+              <Icon name="playlist_add" size={16} />
+              <span className="dock-media-context-menu__label">{t('schedule.addToSchedule', 'Add to Schedule')}</span>
+            </button>
             <button
               type="button"
               role="menuitem"

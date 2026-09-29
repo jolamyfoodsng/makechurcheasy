@@ -1619,8 +1619,8 @@ export function MVSettings() {
                           <span className="switch-title">Local Whisper Offline Engine</span>
                           <span className="switch-subtitle">High-speed on-device speech processing fallback when internet connectivity drops.</span>
                         </div>
-                        <span className="badge" style={{ padding: "4px 10px", fontSize: "12px", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderRadius: "999px", fontWeight: 500 }}>
-                          Ready & Available
+                        <span className="badge" style={{ padding: "4px 10px", fontSize: "12px", background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", borderRadius: "999px", fontWeight: 600 }}>
+                          Coming Soon
                         </span>
                       </div>
                     </div>

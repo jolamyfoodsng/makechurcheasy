@@ -17301,7 +17301,7 @@ body.dock-modal-open {
   top: calc(100% + 4px);
   left: 0;
   right: auto;
-  width: min(140px, calc(100vw - 18px));
+  width: min(260px, calc(100vw - 18px));
   max-height: min(430px, calc(100vh - 92px));
   background: color-mix(in srgb, var(--dock-surface) 92%, #020617);
   border: 1px solid color-mix(in srgb, var(--dock-border) 82%, transparent);

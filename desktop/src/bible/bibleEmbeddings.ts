@@ -53,17 +53,20 @@ function getQueryExtractor(): Promise<FeatureExtractionPipeline> {
 
 function isLowMemoryDevice(): boolean {
   try {
-    if (typeof navigator !== "undefined" && (navigator as any).deviceMemory && (navigator as any).deviceMemory < 8) {
-      return true;
+    if (typeof navigator !== "undefined" && typeof (navigator as any).deviceMemory === "number") {
+      if ((navigator as any).deviceMemory <= 8) return true;
     }
     const cached = localStorage.getItem("ocs-perf-profile-v1");
     if (cached) {
       const parsed = JSON.parse(cached);
       const ram = parsed?.hardware?.totalRAMMB;
-      if (typeof ram === "number" && ram > 0 && ram < 8192) return true;
+      if (typeof ram === "number" && ram > 0) {
+        return ram <= 8192;
+      }
     }
   } catch {}
-  return false;
+  // Default to true when RAM is unconfirmed to prevent downloading/parsing 245MB asset
+  return true;
 }
 
 let embeddingsAttempted = false;

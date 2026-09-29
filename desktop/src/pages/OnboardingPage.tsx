@@ -15,20 +15,14 @@ import {
   ExternalLink,
   Copy,
   Check,
-  Info,
   ChevronRight,
   CheckCircle,
   Loader2,
   AlertTriangle,
-  ArrowDown,
-  ArrowUpRight,
   Maximize2,
   Minimize2,
   Play,
   LayoutDashboard,
-  Library,
-  ListMusic,
-  Users,
   LogOut,
   Sparkles,
   BookOpen,
@@ -43,7 +37,6 @@ import { track } from "../services/analytics";
 import {
   trackEvent as trackProductEvent,
   trackObsConnected as trackObsConnectedBackend,
-  trackFirstUseStarted,
 } from "../services/tracking";
 import { getDefaultOBSPort } from "../services/desktopConfig";
 import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
@@ -139,6 +132,12 @@ function completeOnboarding() {
   localStorage.setItem(STORAGE_KEY, "true");
   localStorage.removeItem(STORAGE_KEY + "-theme-id");
 
+  // Guard: ensure backend complete endpoint is called only once
+  if (localStorage.getItem(STORAGE_KEY + "-api-reported") === "true") {
+    return;
+  }
+  localStorage.setItem(STORAGE_KEY + "-api-reported", "true");
+
   try {
     const deviceId = getDeviceId();
     fetch(`${API_BASE}/api/onboarding/complete`, {
@@ -158,6 +157,13 @@ function completeOnboarding() {
 }
 
 function fireMilestone(milestone: string) {
+  // Guard: ensure each milestone is only fired once per install
+  const milestoneKey = `mce-milestone-${milestone}`;
+  if (localStorage.getItem(milestoneKey) === "true") {
+    return;
+  }
+  localStorage.setItem(milestoneKey, "true");
+
   try {
     const deviceId = getDeviceId();
     fetch(`${API_BASE}/api/onboarding/milestone`, {
@@ -238,12 +244,8 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
     <aside className="ob-tutorial-panel" aria-label={`Step ${step} tutorial`}>
       <div className="ob-tutorial-header">
         <div className="ob-tutorial-heading">
-          <span className="ob-tutorial-kicker">
-            <ArrowUpRight size={13} />
-            Step {step} tutorial
-          </span>
+          <span className="ob-tutorial-kicker">Video Guide</span>
           <h2>{tutorial.title}</h2>
-          <p>{tutorial.description}</p>
         </div>
         <button
           className="ob-tutorial-icon-btn"
@@ -252,14 +254,8 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
           title={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
           aria-label={isFullscreen ? "Exit full screen" : "Maximize tutorial"}
         >
-          {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
         </button>
-      </div>
-
-      <div className="ob-tutorial-guide" aria-label="Watch tutorial for this step">
-        <ArrowDown size={16} aria-hidden="true" />
-        <span>Watch tutorial for this step</span>
-        <ArrowDown size={16} aria-hidden="true" />
       </div>
 
       <div className="ob-tutorial-video-shell">
@@ -277,9 +273,9 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
 
       {embedFailed && (
         <p className="ob-tutorial-embed-fallback" role="status">
-          The embedded tutorial could not load here.{" "}
+          Video failed to load here.{" "}
           <button type="button" onClick={openTutorial}>
-            Open it on YouTube <ExternalLink size={12} />
+            Open on YouTube <ExternalLink size={12} />
           </button>
         </p>
       )}
@@ -287,7 +283,7 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
       <div className="ob-tutorial-footer">
         <span className="ob-tutorial-playing">
           <span className="ob-tutorial-live-dot" />
-          Playing for this step
+          Step {step} Walkthrough
         </span>
         <button
           className="ob-tutorial-watch-btn"
@@ -295,11 +291,10 @@ function OnboardingTutorialPanel({ step }: { step: number }) {
           onClick={openTutorial}
           title="Watch tutorial on YouTube"
         >
-          Watch tutorial
-          <ExternalLink size={13} />
+          <span>Watch on YouTube</span>
+          <ExternalLink size={12} />
         </button>
       </div>
-      <p className="ob-tutorial-note">Autoplay starts muted. Turn sound on in the player.</p>
     </aside>
   );
 }
@@ -357,83 +352,98 @@ export default function OnboardingPage() {
     }
   }, [step]);
 
+  const hasFinishedRef = useRef(false);
+
   const finish = useCallback(() => {
-    fireMilestone("desktopOnboardingCompletedAt");
-    track("onboarding_completed");
-    trackProductEvent("onboarding_completed");
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+
+    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    if (!alreadyReported) {
+      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      fireMilestone("desktopOnboardingCompletedAt");
+      track("onboarding_completed");
+      trackProductEvent("onboarding_completed");
+    }
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
   const skip = useCallback(() => {
-    track("onboarding_skipped");
-    trackProductEvent("onboarding_skipped");
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+
+    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    if (!alreadyReported) {
+      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      track("onboarding_skipped");
+      trackProductEvent("onboarding_skipped");
+    }
     completeOnboarding();
     window.location.href = "/";
   }, []);
 
   useEffect(() => {
-    track("onboarding_started");
-    trackProductEvent("onboarding_started");
-    fireMilestone("desktopOnboardingStartedAt");
+    const startedKey = "mce-onboarding-started-reported";
+    if (!sessionStorage.getItem(startedKey) && !localStorage.getItem(STORAGE_KEY)) {
+      sessionStorage.setItem(startedKey, "true");
+      track("onboarding_started");
+      trackProductEvent("onboarding_started");
+      fireMilestone("desktopOnboardingStartedAt");
+    }
   }, []);
 
   return (
     <div className="ob-root">
-      <div className="ob-account-actions">
-        <button
-          type="button"
-          className="ob-logout-btn"
-          onClick={logout}
-          title="Log out"
-          aria-label="Log out"
-        >
-          <LogOut size={15} aria-hidden="true" />
-          <span>Log out</span>
-        </button>
-      </div>
+      {/* Integrated Header Bar */}
+      <header className="ob-navbar">
+        <div className="ob-navbar-brand">
+          <div className="ob-brand-badge">
+            <Sparkles size={14} />
+          </div>
+          <div className="ob-brand-info">
+            <span className="ob-brand-name">MakeChurchEasy</span>
+            <span className="ob-brand-sub">Setup Guide</span>
+          </div>
+        </div>
 
-      {/* Progress dots */}
-      {/* <div className="ob-progress">
-        {STEP_NAMES.map((_, i) => {
-          const s = i + 1;
-          const isDone = s < step;
-          const isActive = s === step;
-          return (
-            <div className="ob-step-dot-wrap" key={i}>
-              {i > 0 && (
-                <div
-                  className={`ob-step-line${isDone ? " is-done" : ""}`}
-                />
-              )}
+        <nav className="ob-step-nav" aria-label="Setup steps">
+          {STEP_NAMES.map((name, i) => {
+            const s = i + 1;
+            const isDone = s < step;
+            const isActive = s === step;
+            return (
               <div
-                className={`ob-step-dot${isActive ? " is-active" : ""}${isDone ? " is-done" : ""}`}
-              />
-            </div>
-          );
-        })}
-      </div> */}
+                key={i}
+                className={`ob-nav-item${isActive ? " is-active" : ""}${isDone ? " is-done" : ""}`}
+              >
+                <span className="ob-nav-num">
+                  {isDone ? <Check size={11} strokeWidth={3} /> : s}
+                </span>
+                <span className="ob-nav-label">{name}</span>
+                {i < STEP_NAMES.length - 1 && <span className="ob-nav-divider" />}
+              </div>
+            );
+          })}
+        </nav>
 
-      {/* Step labels */}
-      <div className="ob-step-labels">
-        {STEP_NAMES.map((name, i) => {
-          const s = i + 1;
-          const isDone = s < step;
-          const isActive = s === step;
-          return (
-            <span
-              key={i}
-              className={`ob-step-label${isActive ? " is-active" : ""}${isDone ? " is-done" : ""}`}
-            >
-              {name}
-            </span>
-          );
-        })}
-      </div>
+        <div className="ob-navbar-actions">
+          <button
+            type="button"
+            className="ob-logout-btn"
+            onClick={logout}
+            title="Log out"
+            aria-label="Log out"
+          >
+            <LogOut size={13} aria-hidden="true" />
+            <span>Log out</span>
+          </button>
+        </div>
+      </header>
 
       {/* Content */}
       <div className="ob-content">
-        <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}`}>
+        <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}${step === 3 ? " ob-layout--dock-step" : ""}`}>
           <main className="ob-step-stage">
             {step === 1 && <StepWelcome onNext={goNext} />}
             {step === 2 && (
@@ -489,55 +499,55 @@ function StepWelcome({
 }) {
   return (
     <div className="ob-welcome-split">
-      {/* Left Column: Copy & Actions */}
+      {/* Left Column: Concise Copy & Action */}
       <div className="ob-welcome-left">
         <div className="ob-welcome-pill">
-          <Sparkles size={13} className="ob-welcome-pill-icon" />
-          <span>CHURCH PRESENTATION FOR OBS</span>
+          <Sparkles size={12} className="ob-welcome-pill-icon" />
+          <span>OBS Studio Integration</span>
         </div>
 
         <h1 className="ob-welcome-title">
-          Present Scriptures & Worship Without the Panic
+          Present Scriptures & Worship Native in OBS
         </h1>
 
         <p className="ob-welcome-subtitle">
-          MakeChurchEasy docks directly into OBS Studio. Control live Bible verses, lower thirds, worship lyrics, and AI speech-to-scripture in real time — without switching apps or scrambling on Sunday morning.
+          Control live Bible verses, lower thirds, and worship lyrics directly from your OBS workspace.
         </p>
 
-        {/* Key highlights list */}
+        {/* Highlights */}
         <div className="ob-welcome-highlights">
           <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon ob-highlight-icon--blue">
+            <div className="ob-highlight-icon">
               <BookOpen size={16} />
             </div>
-            <div>
-              <strong>Scriptures at Light Speed</strong>
-              <p>Search any verse in 200ms with broadcast lower thirds & fullscreen slides.</p>
+            <div className="ob-highlight-content">
+              <strong>Instant Scripture Search</strong>
+              <p>Find any chapter and verse in milliseconds with broadcast lower thirds.</p>
             </div>
           </div>
 
           <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon ob-highlight-icon--amber">
+            <div className="ob-highlight-icon">
               <Zap size={16} />
             </div>
-            <div>
-              <strong>Verse AI (Speech-to-Scripture)</strong>
-              <p>Listens to preaching and automatically queues unannounced verses.</p>
+            <div className="ob-highlight-content">
+              <strong>Verse AI Assistant</strong>
+              <p>Live speech-to-scripture detects and cues verses while preaching.</p>
             </div>
           </div>
 
           <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon ob-highlight-icon--purple">
+            <div className="ob-highlight-icon">
               <Tv size={16} />
             </div>
-            <div>
-              <strong>100% Native Inside OBS</strong>
-              <p>Control everything from your OBS dock. Zero app juggling, zero lag.</p>
+            <div className="ob-highlight-content">
+              <strong>Seamless OBS Dock</strong>
+              <p>Integrated inside OBS Studio. Zero window juggling, zero latency.</p>
             </div>
           </div>
         </div>
 
-        {/* CTA Button - Clear, Prominent, Next */}
+        {/* CTA */}
         <div className="ob-welcome-actions">
           <button
             className="ob-btn ob-btn--primary ob-btn--welcome-next"
@@ -545,10 +555,10 @@ function StepWelcome({
             title="Next: Connect OBS"
           >
             <span>Next: Connect OBS</span>
-            <ArrowRight size={17} />
+            <ArrowRight size={16} />
           </button>
           <span className="ob-welcome-quick-note">
-            ✓ Quick 2-min setup &nbsp;•&nbsp; 100% offline capable
+            Quick 2-min setup • 100% offline capable
           </span>
         </div>
       </div>
@@ -557,36 +567,31 @@ function StepWelcome({
       <div className="ob-welcome-right">
         <div className="ob-welcome-preview-card">
           <div className="ob-preview-card-header">
-            <div className="ob-showcase-dots">
-              <span className="ob-showcase-dot ob-showcase-dot--red" />
-              <span className="ob-showcase-dot ob-showcase-dot--yellow" />
-              <span className="ob-showcase-dot ob-showcase-dot--green" />
+            <div className="ob-preview-card-label">
+              <Tv size={13} />
+              <span>OBS Studio • MakeChurchEasy</span>
             </div>
-            <span className="ob-preview-card-title">OBS Studio • MakeChurchEasy</span>
-            <span className="ob-showcase-tag">Live Preview</span>
+            <span className="ob-showcase-tag">Live Output</span>
           </div>
 
           <div className="ob-preview-card-body">
             <img
               src="/obs-studio-preview.png"
-              alt="MakeChurchEasy inside OBS Studio with Bible dock, Lower Third preview, and Fullscreen program"
+              alt="MakeChurchEasy inside OBS Studio"
               className="ob-preview-card-img"
             />
-            <div className="ob-preview-card-badges">
-              <span className="ob-preview-mini-badge">
-                <Check size={11} /> Control Dock
-              </span>
-              <span className="ob-preview-mini-badge">
-                <Check size={11} /> Live Lower Third
-              </span>
-              <span className="ob-preview-mini-badge">
-                <Check size={11} /> Sanctuary Program
-              </span>
-            </div>
           </div>
 
-          <div className="ob-preview-card-footer">
-            <p>One-click overlays and scene routing directly in your OBS workspace.</p>
+          <div className="ob-preview-card-badges">
+            <span className="ob-preview-mini-badge">
+              <Check size={11} /> Control Dock
+            </span>
+            <span className="ob-preview-mini-badge">
+              <Check size={11} /> Lower Third
+            </span>
+            <span className="ob-preview-mini-badge">
+              <Check size={11} /> Sanctuary Program
+            </span>
           </div>
         </div>
       </div>
@@ -639,42 +644,37 @@ function StepConnectOBS({
 
   return (
     <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left", position: "relative" }}>
-        <h1>Connect OBS</h1>
-        <p>
-          Verify that OBS Studio is running with WebSocket support enabled.
-        </p>
+      <div className="ob-card-header">
+        <div>
+          <h1 className="ob-card-title">Connect OBS Studio</h1>
+          <p className="ob-card-subtitle">
+            Verify that OBS Studio is running on your computer.
+          </p>
+        </div>
 
-        {/* Status — top right */}
-        <div className="ob-obs-status" style={{ position: "absolute", top: 0, right: 0 }}>
-          <div
-            className={`ob-obs-dot${status === "connected" ? " ob-obs-dot--connected" : ""}${status === "error" ? " ob-obs-dot--disconnected" : ""}${status === "checking" ? " ob-obs-dot--checking" : ""}${status === "idle" ? " ob-obs-dot--disconnected" : ""}`}
-          />
-          <span className="ob-obs-status-text">
+        <div className={`ob-status-pill ob-status-pill--${status}`}>
+          <span className="ob-status-dot" />
+          <span>
             {status === "connected"
               ? "Connected"
               : status === "checking"
-                ? "Checking..."
+                ? "Connecting..."
                 : "Not Connected"}
           </span>
-          {status === "error" && (
-            <span className="ob-obs-status-sub">{errorMsg}</span>
-          )}
         </div>
       </div>
 
-      {/* Instructions */}
-      <div className="ob-instructions">
-        <h4>If OBS is not connected</h4>
-        <ol style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", padding: 0, margin: 0, listStyle: "none", counterReset: "step" }}>
-          <li style={{ counterIncrement: "step" }}><strong>1.</strong> Open OBS Studio</li>
-          <li style={{ counterIncrement: "step" }}><strong>2.</strong> Go to <strong>Tools → WebSocket Server Settings</strong></li>
-          <li style={{ counterIncrement: "step" }}><strong>3.</strong> Enable WebSocket Server</li>
-          <li style={{ counterIncrement: "step" }}><strong>4.</strong> Note the <strong>Port</strong> (default: <code>4455</code>)</li>
-        </ol>
+      {status === "error" && errorMsg && (
+        <div className="ob-status-error-banner">
+          <AlertTriangle size={14} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      <div className="ob-obs-tip">
+        <strong>In OBS Studio:</strong> Tools → WebSocket Server Settings → Enable WebSocket Server (Port 4455).
       </div>
 
-      {/* Connection form */}
       <div className="ob-form">
         <div className="ob-form-row">
           <div className="ob-field">
@@ -700,20 +700,21 @@ function StepConnectOBS({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter OBS WebSocket password"
+            placeholder="Enter OBS WebSocket password if configured"
           />
         </div>
       </div>
 
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-            Back
-          </button>
+      <div className="ob-card-footer">
+        <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
+          Back
+        </button>
+        <div className="ob-footer-actions">
           <button
             className="ob-btn ob-btn--secondary"
             onClick={testConnection}
-            title="Play">
+            title="Test Connection"
+          >
             {status === "checking" ? (
               <Loader2
                 size={14}
@@ -722,17 +723,18 @@ function StepConnectOBS({
             ) : (
               <Play size={14} />
             )}
-            Test Connection
+            <span>Test Connection</span>
+          </button>
+          <button
+            className="ob-btn ob-btn--primary"
+            disabled={status !== "connected"}
+            onClick={onNext}
+            title="Continue"
+          >
+            <span>Continue</span>
+            <ArrowRight size={15} />
           </button>
         </div>
-        <button
-          className="ob-btn ob-btn--primary"
-          disabled={status !== "connected"}
-          onClick={onNext}
-          title="Continue">
-          Continue
-          <ArrowRight size={16} />
-        </button>
       </div>
     </div>
   );
@@ -760,29 +762,32 @@ function StepInstallDock({
       setCopied(which);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      // Fallback: select input
+      // Fallback
     }
   };
 
   return (
     <div className="ob-card">
-      <div className="ob-hero" style={{ alignItems: "flex-start", textAlign: "left" }}>
-        <h1>Install MakeChurchEasy Dock</h1>
-        <p>
-          Copy these URLs — you'll paste them into OBS as Custom Browser
-          Docks.
-        </p>
+      <div className="ob-card-header">
+        <div>
+          <h1 className="ob-card-title">Install OBS Docks</h1>
+          <p className="ob-card-subtitle">
+            Add these custom browser docks inside OBS to control presentations.
+          </p>
+        </div>
       </div>
 
-      <p className="ob-section-title">OBS Custom Browser Docks</p>
+      <div className="ob-obs-tip">
+        <strong>In OBS Studio:</strong> Go to <strong>Docks → Custom Browser Docks</strong> and paste each URL.
+      </div>
 
       <div className="ob-url-cards-row">
         {/* Bible Overlay Dock */}
         <div className="ob-url-card">
           <div className="ob-url-card-header">
-            <span className="ob-url-card-title">Bible Overlay Dock</span>
+            <span className="ob-url-card-title">Bible Control Dock</span>
             {copied === "dock" && (
-              <Check size={14} style={{ color: "var(--success)" }} />
+              <span className="ob-copied-badge"><Check size={11} /> Copied</span>
             )}
           </div>
           <div className="ob-url-input-row">
@@ -790,24 +795,23 @@ function StepInstallDock({
             <button
               className="ob-btn ob-btn--primary ob-url-copy-btn"
               onClick={() => copyUrl(dockUrl, "dock")}
-              title="Copy">
-              <Copy size={14} />
-              {copied === "dock" ? "Copied" : "Copy"}
+              title="Copy"
+            >
+              <Copy size={13} />
+              <span>{copied === "dock" ? "Copied" : "Copy"}</span>
             </button>
           </div>
           <p className="ob-url-desc">
-            Scripture presentation and Bible controls inside OBS.
+            Search scriptures and control live lower thirds.
           </p>
         </div>
 
-        {/* MakeChurchEasy Control Dock */}
+        {/* Scripture Assistant */}
         <div className="ob-url-card">
           <div className="ob-url-card-header">
-            <span className="ob-url-card-title">
-              Scripture Assistant
-            </span>
+            <span className="ob-url-card-title">Scripture Assistant</span>
             {copied === "ai" && (
-              <Check size={14} style={{ color: "var(--success)" }} />
+              <span className="ob-copied-badge"><Check size={11} /> Copied</span>
             )}
           </div>
           <div className="ob-url-input-row">
@@ -815,35 +819,26 @@ function StepInstallDock({
             <button
               className="ob-btn ob-btn--primary ob-url-copy-btn"
               onClick={() => copyUrl(aiUrl, "ai")}
-              title="Copy">
-              <Copy size={14} />
-              {copied === "ai" ? "Copied" : "Copy"}
+              title="Copy"
+            >
+              <Copy size={13} />
+              <span>{copied === "ai" ? "Copied" : "Copy"}</span>
             </button>
           </div>
           <p className="ob-url-desc">
-            Automatically detects and displays Bible references as the preacher speaks.
+            Detects spoken Bible verses live during preaching.
           </p>
         </div>
       </div>
 
-      <div className="ob-info-banner">
-        <Info size={16} />
-        <span>
-          These are OBS Dock URLs, not Browser Sources. Add them under Docks
-          → Custom Browser Docks.
-        </span>
-      </div>
-
-      <div className="ob-actions">
-        <div className="ob-actions-row">
-          <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-            Back
-          </button>
-          <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
-            Continue
-            <ArrowRight size={16} />
-          </button>
-        </div>
+      <div className="ob-card-footer">
+        <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
+          Back
+        </button>
+        <button className="ob-btn ob-btn--primary" onClick={onNext} title="Continue">
+          <span>Continue</span>
+          <ArrowRight size={15} />
+        </button>
       </div>
     </div>
   );
@@ -855,111 +850,51 @@ function StepInstallDock({
 
 function StepReady({
   onFinish,
-  onBack,
 }: {
   onFinish: () => void;
   onBack?: () => void;
 }) {
-  const openFirstWin = useCallback(() => {
-    trackFirstUseStarted();
-    completeOnboarding();
-    window.location.href = "/resources?tab=bible";
-  }, []);
-
   return (
-    <div className="ob-card">
-      <div className="ob-success-hero">
-        <div className="ob-success-icon">
-          <CheckCircle size={32} />
+    <div className="ob-card ob-card--ready">
+      <div className="ob-ready-hero">
+        <div className="ob-ready-icon">
+          <CheckCircle size={36} />
         </div>
-        <h1>MakeChurchEasy Is Ready</h1>
-        <p>Everything is set up and ready to use.</p>
+        <h1 className="ob-card-title">Setup Complete</h1>
+        <p className="ob-card-subtitle">
+          MakeChurchEasy is configured and ready for live presentation.
+        </p>
       </div>
 
-      <div className="ob-summary">
+      <div className="ob-summary-grid">
         <div className="ob-summary-item">
-          <CheckCircle size={16} className="ob-summary-check" />
-          OBS Connected
+          <Check size={14} className="ob-summary-check" />
+          <span>OBS Connected</span>
         </div>
         <div className="ob-summary-item">
-          <CheckCircle size={16} className="ob-summary-check" />
-          Bible Resources Ready
+          <Check size={14} className="ob-summary-check" />
+          <span>Bible Resources Ready</span>
         </div>
         <div className="ob-summary-item">
-          <CheckCircle size={16} className="ob-summary-check" />
-          Dock Installed
+          <Check size={14} className="ob-summary-check" />
+          <span>Custom Docks Available</span>
         </div>
         <div className="ob-summary-item">
-          <CheckCircle size={16} className="ob-summary-check" />
-          Speech to Scripture Ready
+          <Check size={14} className="ob-summary-check" />
+          <span>Verse AI Active</span>
         </div>
       </div>
 
-      <p className="ob-section-title">Quick Actions</p>
-
-      <div className="ob-info-banner" style={{ alignItems: "flex-start" }}>
-        <Play size={16} />
-        <span>
-          <strong>Get started now:</strong> open Bible, choose a verse, and
-          push it to OBS. This confirms your live presentation output in real time.
-          <button
-            className="ob-btn ob-btn--primary"
-            onClick={openFirstWin}
-            title="Try your first Bible presentation"
-            style={{ marginTop: 10 }}
-          >
-            Try a Bible presentation
-            <ArrowRight size={16} />
-          </button>
-        </span>
-      </div>
-
-      <div className="ob-quick-actions">
-        <button className="ob-quick-btn" onClick={onFinish} title="Open Dashboard">
+      <div className="ob-ready-actions">
+        <button
+          className="ob-btn ob-btn--primary ob-ready-btn"
+          onClick={onFinish}
+          title="Go to Dashboard"
+        >
           <LayoutDashboard size={16} />
-          Open Dashboard
+          <span>Go to Dashboard</span>
+          <ArrowRight size={16} />
         </button>
-        <button
-          className="ob-quick-btn"
-          onClick={() => {
-            completeOnboarding();
-            window.location.href = "/resources?tab=bible";
-          }}
-          title="Open Bible">
-          <Library size={16} />
-          Open Bible
-        </button>
-        <button
-          className="ob-quick-btn"
-          onClick={() => {
-            completeOnboarding();
-            window.location.href = "/resources?tab=worship";
-          }}
-          title="Open Worship">
-          <ListMusic size={16} />
-          Open Worship
-        </button>
-        <button
-          className="ob-quick-btn"
-          onClick={() => openUrl("https://discord.gg/makechurcheasy")}
-          title="Join Community">
-          <Users size={16} />
-          Join Community
-        </button>
-      </div>
-
-      <div className="ob-actions" style={{ marginTop: 24 }}>
-        <div className="ob-actions-row">
-          {onBack && (
-            <button className="ob-btn ob-btn--ghost" onClick={onBack} title="Go back">
-              Back
-            </button>
-          )}
-          <button className="ob-btn ob-btn--primary" onClick={onFinish} title="Go to Dashboard">
-            <span>Go to Dashboard</span>
-            <ArrowRight size={16} />
-          </button>
-        </div>
       </div>
     </div>
   );

@@ -35,6 +35,17 @@ function versionHeaders(): Record<string, string> {
   return { "X-App-Version": APP_VERSION };
 }
 
+async function apiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    try {
+      return await tauriFetch(input, init);
+    } catch {
+      // Fallback to window.fetch
+    }
+  }
+  return await fetch(input, init);
+}
+
 /**
  * Unwrap the v2 API envelope: { data: <payload>, apiVersion: 2 } → <payload>
  * Old clients (v4.28) crash because they receive the envelope instead of raw data.
@@ -130,7 +141,7 @@ export async function searchCatalog(
 
   let res: Response;
   try {
-    res = await tauriFetch(url.toString(), { headers: versionHeaders() });
+    res = await apiFetch(url.toString(), { headers: versionHeaders() });
   } catch (err) {
     throw new Error(
       "Unable to reach the Bible catalog server. Please check your internet connection and try again."
@@ -202,7 +213,7 @@ export async function fetchAllLanguages(): Promise<string[]> {
 export async function getCatalogBible(id: string): Promise<CatalogBible> {
   let res: Response;
   try {
-    res = await tauriFetch(`${API_BASE}/bibles/${id}`, { headers: versionHeaders() });
+    res = await apiFetch(`${API_BASE}/bibles/${id}`, { headers: versionHeaders() });
   } catch (err) {
     throw new Error(
       "Unable to reach the Bible catalog server. Please check your internet connection and try again."
@@ -219,7 +230,7 @@ export async function getCatalogBible(id: string): Promise<CatalogBible> {
 async function getDownloadUrl(id: string): Promise<string> {
   let res: Response;
   try {
-    res = await tauriFetch(`${API_BASE}/bibles/${id}/download`, { headers: versionHeaders() });
+    res = await apiFetch(`${API_BASE}/bibles/${id}/download`, { headers: versionHeaders() });
   } catch (err) {
     throw new Error(
       "Unable to reach the download server. Please check your internet connection and try again."
@@ -265,7 +276,7 @@ async function fetchWithProgress(
 ): Promise<string> {
   let res: Response;
   try {
-    res = await tauriFetch(url, { headers: versionHeaders() });
+    res = await apiFetch(url, { headers: versionHeaders() });
   } catch (err) {
     throw new Error(`Download network error: ${err instanceof Error ? err.message : String(err)}`);
   }

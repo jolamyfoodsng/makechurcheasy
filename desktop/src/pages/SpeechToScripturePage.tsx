@@ -356,7 +356,7 @@ export default function SpeechToScripturePage() {
   // ── Connectivity & service states ──
   const isOnline = useOnlineStatus();
   const isOffline = !isOnline;
-  const performanceMonitor = usePerformanceMonitor(true);
+  const performanceMonitor = usePerformanceMonitor(showDiagnostics);
   const performanceSnapshotRef = useRef(performanceMonitor.current);
   const lmDiagnostics = lmDockService.getDiagnostics();
   const lmDiagnosticsRef = useRef(lmDiagnostics);
@@ -1149,7 +1149,7 @@ export default function SpeechToScripturePage() {
       {/* ── Offline Banner ── */}
       {isOffline && !connectionLostBanner && (
         <div className="sts3-offline-banner">
-          <span>📡</span>
+          <Radio size={16} />
           <span>{t("verseAi.offlineDesc")}</span>
           {whisperStatus === "loading" && <span className="sts3-banner-status">{t("verseAi.loadingModel")}</span>}
           {whisperStatus === "ready" && <span className="sts3-banner-status sts3-banner-status--ready">{t("verseAi.ready")}</span>}

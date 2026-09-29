@@ -153,6 +153,21 @@ export default function LoginPage() {
       onAuthorized(user) {
         console.log("[LoginPage] onAuthorized called, setting user:", user.name);
         cleanupRef.current = null;
+
+        // Bring desktop app to front immediately
+        try {
+          import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+            const win = getCurrentWindow();
+            win.unminimize().then(() => {
+              win.show().then(() => {
+                win.setFocus().catch(() => {});
+              }).catch(() => {});
+            }).catch(() => {
+              win.setFocus().catch(() => {});
+            });
+          }).catch(() => {});
+        } catch {}
+
         // Stop countdown immediately — code is redeemed, expiration is irrelevant
         setCountdown(0);
         setCode("");
@@ -209,6 +224,14 @@ export default function LoginPage() {
 
       if (result.success) {
         console.log("[LoginPage] handleManualSubmit success, setting user:", result.user.name);
+        // Bring desktop app to front immediately
+        try {
+          import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+            const win = getCurrentWindow();
+            win.unminimize().then(() => win.show()).then(() => win.setFocus()).catch(() => {});
+          }).catch(() => {});
+        } catch {}
+
         trackLogin("pairing");
         trackDevicePaired();
         const hasVisited = localStorage.getItem("mce_has_visited");

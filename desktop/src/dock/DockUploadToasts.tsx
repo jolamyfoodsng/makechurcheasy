@@ -17,6 +17,7 @@ interface Props {
 
 export default function DockUploadToasts({ toasts, uploading, progress, onDismiss }: Props) {
   const { t } = useTranslation();
+  if (!uploading && toasts.length === 0) return null;
   return (
     <div className="dock-upload-toast-stack" aria-live="polite">
       {uploading && progress && (

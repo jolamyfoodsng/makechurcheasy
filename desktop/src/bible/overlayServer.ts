@@ -19,6 +19,7 @@
 import type { BibleSlide, BibleThemeSettings } from "./types";
 import { getOverlayBaseUrlSync } from "../services/overlayUrl";
 import { buildVersionedOverlayUrl } from "../services/overlayVersion";
+import { overlayBridge } from "../dock/dockOverlayBridge";
 
 // ---------------------------------------------------------------------------
 // Overlay data packet (what gets sent to overlay HTML)
@@ -29,6 +30,7 @@ export interface OverlayPacket {
   theme: BibleThemeSettings | null;
   live: boolean;
   blanked: boolean;
+  mode?: "fullscreen" | "lower-third";
   timestamp: number;
 }
 
@@ -83,6 +85,21 @@ class OverlayBroadcaster {
       // Storage might be full
     }
 
+    // Broadcast over local WebSocket relay bridge (ws://127.0.0.1:17891)
+    // so OBS browser sources receive updates in real time even across separate processes
+    try {
+      overlayBridge.publish({
+        channel: "bible",
+        type: "overlay-update",
+        revision: Date.now(),
+        targetSource: "Bible - MCE Presentation",
+        ...(this.currentPacket.mode ? { mode: this.currentPacket.mode } : {}),
+        data: { ...this.currentPacket, revision: Date.now() },
+      });
+    } catch {
+      // Relay bridge might be offline
+    }
+
     // Notify internal listeners
     for (const listener of this.listeners) {
       try {
@@ -100,9 +117,10 @@ class OverlayBroadcaster {
     slide: BibleSlide | null,
     theme: BibleThemeSettings | null,
     live: boolean,
-    blanked: boolean
+    blanked: boolean,
+    mode?: "fullscreen" | "lower-third"
   ) {
-    this.send({ slide, theme, live, blanked });
+    this.send({ slide, theme, live, blanked, ...(mode ? { mode } : {}) });
   }
 
   /**

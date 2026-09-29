@@ -6,5 +6,17 @@
     <string>MakeChurchEasy needs microphone access for speech-to-scripture voice recognition.</string>
     <key>NSCameraUsageDescription</key>
     <string>MakeChurchEasy needs camera access for video features.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.makechurcheasy.desktop</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>makechurcheasy</string>
+                <string>mce</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

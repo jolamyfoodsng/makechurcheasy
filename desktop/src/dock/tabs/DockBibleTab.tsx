@@ -49,9 +49,18 @@ import DockThemeSettingsModal, {
 } from "../components/DockThemeSettingsModal";
 import BibleHistoryScreen from "./BibleHistoryScreen";
 import DockBibleFavoritesModal from "../components/DockBibleFavoritesModal";
+import DockBibleMacrosModal from "../components/DockBibleMacrosModal";
+import {
+  detectActiveTranslationPrompt,
+  getTranslationDirectiveSuggestions,
+  downloadBibleInDock,
+  POPULAR_CATALOG_BIBLES,
+  type TranslationDirectiveSuggestion,
+} from "../dockBibleCatalog";
 import { addToBibleHistory, loadBibleHistory } from "./bibleHistoryTypes";
 import type { BibleHistoryItem } from "./bibleHistoryTypes";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
+import { addBibleToActiveSchedule } from "../dockScheduleService";
 import {
   buildDockBackgroundPresetOverrides,
   type DockBackgroundPreset
@@ -1336,6 +1345,7 @@ function isNumericOnlyBibleQuery(query: string): boolean {
 
 type DockBibleSearchOption =
   | ({ kind: "reference" } & BibleSearchResult)
+  | ({ kind: "translation-directive" } & TranslationDirectiveSuggestion & Partial<BibleSearchResult>)
   | {
     kind: "keyword";
     book: string;
@@ -1346,6 +1356,11 @@ type DockBibleSearchOption =
     snippet: string;
     text: string;
     query: string;
+    action?: string;
+    isMacro?: boolean;
+    compareTranslations?: { translationA?: string; translationB: string };
+    modeOverride?: "lower-third" | "fullscreen";
+    translationOverride?: string;
   }
   | {
     kind: "concept";
@@ -1357,6 +1372,11 @@ type DockBibleSearchOption =
     snippet: string;
     text: string;
     query: string;
+    action?: string;
+    isMacro?: boolean;
+    compareTranslations?: { translationA?: string; translationB: string };
+    modeOverride?: "lower-third" | "fullscreen";
+    translationOverride?: string;
   };
 
 function emptyVoiceBibleSnapshot(): VoiceBibleSnapshot {
@@ -1806,6 +1826,7 @@ function DockBibleTab({
   const [activeSceneProfileId, setActiveSceneProfileId] = useState(GENERAL_SCENE_PROFILE_ID);
   const [showBibleHistory, setShowBibleHistory] = useState(false);
   const [showBibleActionsMenu, setShowBibleActionsMenu] = useState(false);
+  const [showBibleMacrosModal, setShowBibleMacrosModal] = useState(false);
 
   useEffect(() => {
     if (showBibleHistory) {
@@ -5207,10 +5228,16 @@ function DockBibleTab({
     const raw = searchQuery.trim();
     if (!raw) return [];
 
+    const searchContext = {
+      currentBook: selectedBook,
+      currentChapter: selectedChapter,
+      currentVerse: selectedVerse,
+    };
+
     // 1. Prefer the typed-reference parser. It understands compact input such
-    // as "john55" → "John 5:5" and must run before fuzzy STT matching, which
-    // can otherwise misclassify an unspaced "john" as "2 John".
-    const typedResults = parseBibleSearch(raw);
+    // as "john55" → "John 5:5", contextual jumps like ".18" or "+1", translation
+    // tags like "~msg", mode directives like "!lt", and shortcodes/macros.
+    const typedResults = parseBibleSearch(raw, { context: searchContext });
     if (typedResults.length > 0) {
       return typedResults.map((result) => ({
         ...result,
@@ -5223,11 +5250,36 @@ function DockBibleTab({
     const normalized = normalizeScriptureReference(raw);
     if (!normalized) return [];
 
-    return parseBibleSearch(normalized).map((result) => ({
+    return parseBibleSearch(normalized, { context: searchContext }).map((result) => ({
       ...result,
       kind: "reference" as const,
     }));
-  }, [searchQuery]);
+  }, [searchQuery, selectedBook, selectedChapter, selectedVerse]);
+
+  // ── Active Translation Directive Prompt (Instant detection on @, ~, /, //) ──
+  const activeTranslationPrompt = useMemo(() => {
+    return detectActiveTranslationPrompt(searchQuery, {
+      context: {
+        currentBook: selectedBook,
+        currentChapter: selectedChapter,
+        currentVerse: selectedVerse,
+      },
+    });
+  }, [searchQuery, selectedBook, selectedChapter, selectedVerse]);
+
+  const translationDirectiveSuggestions = useMemo<DockBibleSearchOption[]>(() => {
+    if (!activeTranslationPrompt) return [];
+    const suggestions = getTranslationDirectiveSuggestions(
+      activeTranslationPrompt,
+      availableTranslations,
+      8,
+    );
+    return suggestions.map((s) => ({
+      ...s,
+      kind: "translation-directive" as const,
+      confidence: 100,
+    }));
+  }, [activeTranslationPrompt, availableTranslations]);
 
   // ── Concept-based search (e.g., "love", "faith", "hope") ──
   const conceptResults = useMemo(() => {
@@ -5366,6 +5418,14 @@ function DockBibleTab({
   }, [activeBibleSearchTranslation, debouncedSearchQuery, referenceResults.length]);
 
   const searchResults = useMemo<DockBibleSearchOption[]>(() => {
+    // ── Translation Directive Prompt Suggestions (@, ~, /, //) ──
+    if (translationDirectiveSuggestions.length > 0) {
+      return translationDirectiveSuggestions;
+    }
+    if (activeTranslationPrompt) {
+      return [];
+    }
+
     const currentQuery = searchQuery.trim();
     const keywordMatches = keywordResultsQuery === currentQuery
       ? keywordResults.map((result) => ({
@@ -5412,7 +5472,17 @@ function DockBibleTab({
     const starred = combinedResults.filter(isStarred);
     const nonStarred = combinedResults.filter((r) => !isStarred(r));
     return [...starred, ...nonStarred];
-  }, [activeBibleSearchTranslation, searchQuery, keywordResults, keywordResultsQuery, referenceResults, conceptResults, favoriteRefs]);
+  }, [
+    translationDirectiveSuggestions,
+    activeTranslationPrompt,
+    activeBibleSearchTranslation,
+    searchQuery,
+    keywordResults,
+    keywordResultsQuery,
+    referenceResults,
+    conceptResults,
+    favoriteRefs,
+  ]);
 
   // Reference and concept results are instant (<0.001s).
   // Keyword results appear as soon as the indexed match resolves.
@@ -5441,6 +5511,21 @@ function DockBibleTab({
     setActiveIdx(-1);
   }, [ensureSearchIndexPreloaded, hasSavedSearches]);
 
+  // ── Keyboard navigation ──
+  const handleClearVerse = useCallback(() => {
+    visibilityEpochRef.current += 1;
+    setSelectedVerse(null);
+    setVerseText(null);
+    setActionError("");
+    pendingScrollVerseRef.current = null;
+    onStage(null);
+    setBibleOverlayVisible(false);
+    if (presentationLinkMode) return;
+    ensureObsConnected().then(() => clearBibleFromConfiguredOutput()).catch((err) =>
+      console.warn("[DockBibleTab] clearBible failed:", err)
+    );
+  }, [clearBibleFromConfiguredOutput, onStage, presentationLinkMode]);
+
   // ── Pick a search result ──
   const handlePickResult = useCallback(
     async (result: DockBibleSearchOption) => {
@@ -5450,6 +5535,111 @@ function DockBibleTab({
       setShowDropdown(false);
       setShowRecentSearches(false);
       setActiveIdx(-1);
+
+      // Handle Quick Clear Overlay Directive (!clear, !blank, .)
+      if (result.kind === "reference" && result.action === "clear") {
+        handleClearVerse();
+        return;
+      }
+
+      // Handle Inline Output Mode Override (!lt, !full, !f)
+      if (result.kind === "reference" && result.modeOverride) {
+        setOverlayMode(result.modeOverride);
+        overlayModeRef.current = result.modeOverride;
+      }
+
+      // Handle Quick Compare Triggers (// or ||)
+      if (result.kind === "reference" && result.compareTranslations) {
+        const transA = result.compareTranslations.translationA || activeTranslation;
+        const transB = result.compareTranslations.translationB;
+        setTranslationA(transA);
+        setTranslationB(transB);
+        setCompareEnabled(true);
+        setCompareMode("translations");
+        if (result.book && result.chapter !== null && result.verse !== null) {
+          focusReference(result.book, result.chapter, result.verse);
+          await goLiveVerse(result.book, result.chapter, result.verse, {
+            lineCount: 1,
+            compareTranslationsOverride: { translationA: transA, translationB: transB },
+            overlayMode: result.modeOverride,
+          });
+          return;
+        }
+      }
+
+      // Helper to hot-swap the active translation for the current column
+      const applyActiveTranslation = (trans: string) => {
+        const nextVal = trans.toUpperCase();
+        setColumnTranslations((current) => {
+          const next = [...current];
+          next[activeColumnIndex] = nextVal;
+          return next;
+        });
+      };
+
+      // Handle Translation Directive Suggestions (@, ~, /, //)
+      if (result.kind === "translation-directive") {
+        const targetAbbr = result.abbr.toUpperCase();
+        if (!result.isInstalled && result.isDownloadable) {
+          const catalogItem = POPULAR_CATALOG_BIBLES.find((b) => b.abbr.toUpperCase() === targetAbbr);
+          if (catalogItem) {
+            try {
+              await downloadBibleInDock(catalogItem, availableTranslations.length);
+              await loadTranslations();
+            } catch (err) {
+              console.warn("[DockBibleTab] In-dock download error:", err);
+            }
+          }
+        }
+
+        if (result.trigger === "//" || result.trigger === "||") {
+          const transA = activeTranslation;
+          const transB = targetAbbr;
+          setTranslationA(transA);
+          setTranslationB(transB);
+          setCompareEnabled(true);
+          setCompareMode("translations");
+          if (result.baseReference && result.baseReference.book && result.baseReference.chapter !== null && result.baseReference.verse !== null) {
+            focusReference(result.baseReference.book, result.baseReference.chapter, result.baseReference.verse);
+            await goLiveVerse(result.baseReference.book, result.baseReference.chapter, result.baseReference.verse, {
+              lineCount: 1,
+              compareTranslationsOverride: { translationA: transA, translationB: transB },
+            });
+            return;
+          }
+          return;
+        }
+
+        // Hot-swap active translation
+        applyActiveTranslation(targetAbbr);
+
+        if (result.baseReference && result.baseReference.book && result.baseReference.chapter !== null && result.baseReference.verse !== null) {
+          const impliedLineCount = clampVerseLineCount(
+            result.baseReference.endVerse && result.baseReference.endVerse > result.baseReference.verse
+              ? result.baseReference.endVerse - result.baseReference.verse + 1
+              : 1,
+          );
+          setVerseLineCount(impliedLineCount);
+          focusReference(result.baseReference.book, result.baseReference.chapter, result.baseReference.verse);
+          await goLiveVerse(result.baseReference.book, result.baseReference.chapter, result.baseReference.verse, {
+            lineCount: impliedLineCount,
+            rangeEndVerse: result.baseReference.endVerse ?? null,
+            translation: targetAbbr,
+            columnIndex: activeColumnIndex,
+          });
+          return;
+        } else if (result.baseReference && result.baseReference.book && result.baseReference.chapter !== null) {
+          focusReference(result.baseReference.book, result.baseReference.chapter, 1);
+          return;
+        } else if (result.baseReference && result.baseReference.book) {
+          setSelectedBook(result.baseReference.book);
+          setSelectedChapter(1);
+          setSelectedVerse(null);
+          pendingScrollVerseRef.current = null;
+          return;
+        }
+        return;
+      }
 
       if (result.kind === "keyword" || result.kind === "concept") {
         const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(result, MAX_VERSE_LINES);
@@ -5476,18 +5666,48 @@ function DockBibleTab({
         );
         setVerseLineCount(impliedLineCount);
         focusReference(result.book, result.chapter, result.verse);
+        const effectiveTranslation = (result.kind === "reference" && result.translationOverride)
+          ? result.translationOverride
+          : activeBibleSearchTranslation;
+        if (result.kind === "reference" && result.translationOverride) {
+          const targetOverride = result.translationOverride.toUpperCase();
+          const isInstalled = availableTranslations.some(
+            (t) => t.value.toUpperCase() === targetOverride,
+          );
+          if (!isInstalled) {
+            const catalogItem = POPULAR_CATALOG_BIBLES.find(
+              (b) => b.abbr.toUpperCase() === targetOverride,
+            );
+            if (catalogItem) {
+              try {
+                await downloadBibleInDock(catalogItem, availableTranslations.length);
+                await loadTranslations();
+              } catch (err) {
+                console.warn("[DockBibleTab] Auto-download error for reference:", err);
+              }
+            }
+          }
+          applyActiveTranslation(result.translationOverride);
+        }
         // A concrete Bible search result is an output action, not only a
         // navigation action. Open the matching chapter/verse and send the
         // selected passage through the same OBS path as a verse-row click.
         await goLiveVerse(result.book, result.chapter, result.verse, {
           lineCount: impliedLineCount,
           rangeEndVerse: result.endVerse ?? null,
-          translation: activeBibleSearchTranslation,
+          translation: effectiveTranslation,
           columnIndex: activeColumnIndex,
+          overlayMode: result.kind === "reference" ? result.modeOverride : undefined,
         });
       } else if (result.chapter !== null) {
+        if (result.kind === "reference" && result.translationOverride) {
+          applyActiveTranslation(result.translationOverride);
+        }
         focusReference(result.book, result.chapter, 1);
       } else {
+        if (result.kind === "reference" && result.translationOverride) {
+          applyActiveTranslation(result.translationOverride);
+        }
         setSelectedBook(result.book);
         setSelectedChapter(1);
         setSelectedVerse(null);
@@ -5497,9 +5717,14 @@ function DockBibleTab({
     [
       activeColumnIndex,
       activeBibleSearchTranslation,
+      activeTranslation,
+      availableTranslations,
       focusReference,
       goLiveVerse,
+      handleClearVerse,
       keywordMatchPushDirectlyToObs,
+      loadTranslations,
+      setColumnTranslations,
       stageVerse,
     ]
   );
@@ -5512,7 +5737,7 @@ function DockBibleTab({
       setShowRecentSearches(false);
       setActiveIdx(-1);
 
-      if (result.book && result.chapter !== null) {
+      if (result.book && result.chapter !== null && result.chapter !== undefined) {
         focusReference(result.book, result.chapter, result.verse ?? 1);
         if (result.verse !== null) {
           window.setTimeout(() => {
@@ -5591,19 +5816,6 @@ function DockBibleTab({
   }, []);
 
   // ── Keyboard navigation ──
-  const handleClearVerse = useCallback(() => {
-    visibilityEpochRef.current += 1;
-    setSelectedVerse(null);
-    setVerseText(null);
-    setActionError("");
-    pendingScrollVerseRef.current = null;
-    onStage(null);
-    setBibleOverlayVisible(false);
-    if (presentationLinkMode) return;
-    ensureObsConnected().then(() => clearBibleFromConfiguredOutput()).catch((err) =>
-      console.warn("[DockBibleTab] clearBible failed:", err)
-    );
-  }, [clearBibleFromConfiguredOutput, onStage, presentationLinkMode]);
 
   const handleToggleBibleVisibility = useCallback(async () => {
     if (visibilityActionInFlightRef.current) return;
@@ -6185,6 +6397,41 @@ function DockBibleTab({
         return;
       }
 
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const picked = (showDropdown && displayedSearchResults.length > 0)
+          ? displayedSearchResults[activeIdx >= 0 ? activeIdx : 0]
+          : null;
+        if (picked) {
+          void handlePickResult(picked);
+          return;
+        }
+
+        const raw = searchQuery.trim();
+        if (raw) {
+          const searchContext = {
+            currentBook: selectedBook,
+            currentChapter: selectedChapter,
+            currentVerse: selectedVerse,
+          };
+          const immediateResults = parseBibleSearch(raw, { context: searchContext });
+          if (immediateResults.length > 0) {
+            void handlePickResult({ ...immediateResults[0], kind: "reference" });
+          }
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (showDropdown) {
+          setShowDropdown(false);
+          return;
+        }
+        handleClearVerse();
+        return;
+      }
+
       if (!showDropdown || displayedSearchResults.length === 0) return;
 
       if (e.key === "ArrowDown") {
@@ -6193,22 +6440,19 @@ function DockBibleTab({
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIdx((prev) => (prev > 0 ? prev - 1 : displayedSearchResults.length - 1));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const picked = displayedSearchResults[activeIdx >= 0 ? activeIdx : 0];
-        if (picked) {
-          void handlePickResult(picked);
-        }
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        if (showDropdown) {
-          setShowDropdown(false);
-          return;
-        }
-        handleClearVerse();
       }
     },
-    [showDropdown, displayedSearchResults, activeIdx, handleClearVerse, handlePickResult]
+    [
+      showDropdown,
+      displayedSearchResults,
+      activeIdx,
+      handleClearVerse,
+      handlePickResult,
+      searchQuery,
+      selectedBook,
+      selectedChapter,
+      selectedVerse,
+    ]
   );
 
   const handleSearchKeyUp = useCallback(
@@ -7099,6 +7343,7 @@ function DockBibleTab({
       onToggleCompare={handleCompareEnabledChange}
       availableTranslations={availableTranslations}
       onVersionChange={(version) => handleQuickVersionChange(activeColumnIndex, version)}
+      onTranslationsReload={loadTranslations}
       toolbarCollapsed={toolbarCollapsed}
       onToolbarCollapseToggle={() => setToolbarCollapsed((prev) => !prev)}
       compactActions={
@@ -7160,6 +7405,18 @@ function DockBibleTab({
                       <span>{t("dock.bottomToolbar.expandTooltip", "Expand toolbar")}</span>
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item-entry"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBibleActionsMenu(false);
+                      setShowBibleMacrosModal(true);
+                    }}
+                  >
+                    <Icon name="bolt" size={16} />
+                    <span>{t("bible.smartShortcodes", "Scripture Shortcodes (Macros)")}</span>
+                  </button>
                   <button
                     type="button"
                     className="dock-bible-actions__menu-item-entry"
@@ -7262,6 +7519,18 @@ function DockBibleTab({
                     <span>{t("dock.bottomToolbar.expandTooltip", "Expand toolbar")}</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item-entry"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowBibleActionsMenu(false);
+                    setShowBibleMacrosModal(true);
+                  }}
+                >
+                  <Icon name="bolt" size={16} />
+                  <span>{t("bible.smartShortcodes", "Scripture Shortcodes (Macros)")}</span>
+                </button>
                 <button
                   type="button"
                   className="dock-bible-actions__menu-item-entry"
@@ -7389,26 +7658,68 @@ function DockBibleTab({
                       title={t("common.search")}>
                       <Icon
                         name={
-                          result.kind === "keyword"
-                            ? "search"
-                            : result.verse !== null
-                              ? "format_quote"
-                              : result.chapter !== null
-                                ? "menu_book"
-                                : "auto_stories"
+                          result.action === "clear"
+                            ? "close"
+                            : result.isMacro
+                              ? "bolt"
+                              : result.kind === "translation-directive"
+                                ? (result.isInstalled ? "translate" : "cloud_download")
+                                : result.compareTranslations
+                                  ? "swap_horiz"
+                                  : result.kind === "keyword"
+                                    ? "search"
+                                    : result.verse !== null
+                                      ? "format_quote"
+                                      : result.chapter !== null
+                                        ? "menu_book"
+                                        : "auto_stories"
                         }
                         size={14}
                         className="dock-search-dropdown__item-icon"
                       />
                       <span className="dock-search-dropdown__content">
-                        <span className="dock-search-dropdown__label">{result.label}</span>
+                        <span className="dock-search-dropdown__label" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span>{result.label}</span>
+                          {result.kind === "translation-directive" && (
+                            <>
+                              <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: result.isInstalled ? "rgba(34, 197, 94, 0.2)" : "rgba(168, 85, 247, 0.2)", color: result.isInstalled ? "#4ade80" : "#c084fc", fontWeight: 700 }}>
+                                {result.isInstalled ? "INSTALLED" : "DOWNLOAD"}
+                              </span>
+                              {result.trigger === "//" || result.trigger === "||" ? (
+                                <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontWeight: 700 }}>
+                                  COMPARE
+                                </span>
+                              ) : null}
+                            </>
+                          )}
+                          {result.isMacro && (
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(234, 179, 8, 0.2)", color: "#eab308", fontWeight: 700, letterSpacing: "0.5px" }}>
+                              MACRO
+                            </span>
+                          )}
+                          {result.modeOverride && (
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontWeight: 700 }}>
+                              {result.modeOverride === "lower-third" ? "LOWER-3RD" : "FULLSCREEN"}
+                            </span>
+                          )}
+                          {result.compareTranslations && (
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(168, 85, 247, 0.2)", color: "#c084fc", fontWeight: 700 }}>
+                              COMPARE
+                            </span>
+                          )}
+                        </span>
+                        {result.kind === "translation-directive" && (
+                          <span className="dock-search-dropdown__snippet" style={{ color: "var(--dock-text-muted, #94a3b8)" }}>
+                            {result.fullTitle || result.name}{result.language ? ` (${result.language})` : ""}
+                          </span>
+                        )}
                         {result.kind === "keyword" && result.snippet ? (
                           <span className="dock-search-dropdown__snippet">
                             {renderHighlightedKeywordText(result.text, result.query)}
                           </span>
                         ) : null}
                       </span>
-                      {result.book && result.chapter !== null && (
+                      {result.kind !== "translation-directive" && result.book && result.chapter !== null && (
                         <button
                           type="button"
                           className="dock-search-dropdown__goto-btn"
@@ -7555,6 +7866,38 @@ function DockBibleTab({
                     <span className="dock-bible-reader__ref-header-translation">{activeTranslation}</span>
                   )}
                   <div className="dock-bible-reader__ref-header-actions">
+                    <button
+                      type="button"
+                      className="dock-bible-reader__ref-header-fav"
+                      onClick={() => {
+                        if (selectedBook && selectedChapter) {
+                          const currentScheduleBibleTheme = overlayMode === "fullscreen" ? selectedBibleTheme.id : selectedLowerThirdTheme.id;
+                          const currentScheduleThemeSettings = overlayMode === "fullscreen"
+                            ? fullscreenQuickThemeSettings
+                            : lowerThirdQuickThemeSettings;
+
+                          const targetVerseNum = selectedVerse ?? 1;
+                          const verseObj = activeChapterPassage?.verses.find((v) => v.verse === targetVerseNum) ?? activeChapterPassage?.verses[0];
+                          const targetVerse = verseObj?.verse ?? targetVerseNum;
+
+                          addBibleToActiveSchedule({
+                            reference: `${selectedBook} ${selectedChapter}:${targetVerse}`,
+                            text: verseObj?.text || "",
+                            translation: activeTranslation,
+                            book: selectedBook,
+                            chapter: selectedChapter,
+                            verse: targetVerse,
+                            overlayMode,
+                            theme: currentScheduleBibleTheme,
+                            bibleThemeSettings: currentScheduleThemeSettings as unknown as Record<string, unknown> | null,
+                          });
+                        }
+                      }}
+                      title={t("schedule.addToSchedule", "Add to Schedule")}
+                      aria-label={t("schedule.addToSchedule", "Add to Schedule")}
+                    >
+                      <Icon name="playlist_add" size={13} />
+                    </button>
                     <button
                       type="button"
                       className={`dock-favorites dock-bible-reader__ref-header-fav${isCurrentPassageFavorite ? " dock-bible-reader__ref-header-fav--active" : ""}`}
@@ -7849,6 +8192,34 @@ function DockBibleTab({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
+                <button
+                  type="button"
+                  className="dock-bible-context-menu__item"
+                  onClick={() => {
+                    if (selectedBook && selectedChapter) {
+                      const currentScheduleBibleTheme = overlayMode === "fullscreen" ? selectedBibleTheme.id : selectedLowerThirdTheme.id;
+                      const currentScheduleThemeSettings = overlayMode === "fullscreen"
+                        ? fullscreenQuickThemeSettings
+                        : lowerThirdQuickThemeSettings;
+
+                      addBibleToActiveSchedule({
+                        reference: `${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`,
+                        text: verseContextMenu.text,
+                        translation: activeTranslation,
+                        book: selectedBook,
+                        chapter: selectedChapter,
+                        verse: verseContextMenu.verse,
+                        overlayMode,
+                        theme: currentScheduleBibleTheme,
+                        bibleThemeSettings: currentScheduleThemeSettings as unknown as Record<string, unknown> | null,
+                      });
+                    }
+                    setVerseContextMenu(null);
+                  }}
+                >
+                  <Icon name="playlist_add" size={16} />
+                  <span>{t("schedule.addToSchedule", "Add to Schedule")}</span>
+                </button>
                 <button
                   type="button"
                   className="dock-bible-context-menu__item"
@@ -8305,6 +8676,24 @@ function DockBibleTab({
               }}
               onRemoveFavorite={(reference) => {
                 void handleRemoveFavorite(reference);
+              }}
+            />
+          )}
+
+          {showBibleMacrosModal && (
+            <DockBibleMacrosModal
+              isOpen={showBibleMacrosModal}
+              onClose={() => setShowBibleMacrosModal(false)}
+              onSelectMacro={(macro) => {
+                const searchContext = {
+                  currentBook: selectedBook,
+                  currentChapter: selectedChapter,
+                  currentVerse: selectedVerse,
+                };
+                const res = parseBibleSearch(macro.keyword, { context: searchContext })[0];
+                if (res) {
+                  void handlePickResult({ ...res, kind: "reference" });
+                }
               }}
             />
           )}

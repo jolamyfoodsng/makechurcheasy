@@ -441,7 +441,17 @@ export async function init(): Promise<DevicePerformanceProfile> {
  * For fast synchronous access — does not re-fetch from Rust.
  */
 export function getDeviceProfile(): DevicePerformanceProfile | null {
-  return currentProfile ? { ...currentProfile } : null;
+  if (currentProfile) return { ...currentProfile };
+  try {
+    const cached = localStorage.getItem("ocs-perf-profile-v1");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed?.hardware && parsed?.tier) {
+        return parsed as DevicePerformanceProfile;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 /**
@@ -663,6 +673,20 @@ async function fetchHardwareProfile(): Promise<HardwareProfile> {
     };
   } catch (e) {
     console.warn("[PERF] Failed to fetch hardware info, using conservative defaults:", e);
+    let totalRAMMB = 0;
+    if (typeof navigator !== "undefined" && typeof (navigator as any).deviceMemory === "number") {
+      totalRAMMB = (navigator as any).deviceMemory * 1024;
+    }
+    try {
+      const cached = localStorage.getItem("ocs-perf-profile-v1");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.hardware?.totalRAMMB) {
+          totalRAMMB = Number(parsed.hardware.totalRAMMB);
+        }
+      }
+    } catch { /* ignore */ }
+
     return {
       hostname: "Unknown",
       os: "unknown",
@@ -670,7 +694,7 @@ async function fetchHardwareProfile(): Promise<HardwareProfile> {
       arch: "unknown",
       cpuModel: "Unknown CPU",
       cpuCores: 2,
-      totalRAMMB: 0,
+      totalRAMMB,
       availableRAMMB: 0,
       gpuName: "Unknown GPU",
     };

@@ -172,23 +172,27 @@ function AppRouteFallback() {
  */
 function MakeChurchEasyPetLauncher() {
   const nativeWindowAvailable = hasTauriInvoke();
+  const hideFloating = getMVSettings().hideFloatingIcon ?? true;
 
   useEffect(() => {
     if (!nativeWindowAvailable) return;
 
-    // Respect user's preference to permanently hide the floating icon
-    if (getMVSettings().hideFloatingIcon) return;
+    // Respect user's preference to permanently hide the floating icon (default hidden)
+    if (hideFloating) {
+      void import("./services/makeChatGptWindow").then((m) => m.hideMakeChatGptWindow()).catch(() => {});
+      return;
+    }
 
     void showMakeChatGptWindow().catch((error) => {
       console.warn("[MakeChurchEasy] Could not show floating pet:", error);
     });
 
     return undefined;
-  }, [nativeWindowAvailable]);
+  }, [nativeWindowAvailable, hideFloating]);
 
   if (!nativeWindowAvailable) {
-    // In dev mode, also respect the setting
-    if (getMVSettings().hideFloatingIcon) return null;
+    // In dev mode, also respect the setting (default hidden)
+    if (hideFloating) return null;
 
     return (
       <div className="makechatgpt-inline-dev">

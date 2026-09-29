@@ -67,6 +67,7 @@ class FrameTracker {
     this.running = false;
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
+      clearTimeout(this.rafId);
       this.rafId = 0;
     }
   }
@@ -85,6 +86,10 @@ class FrameTracker {
 
   private tick = (): void => {
     if (!this.running) return;
+    if (typeof document !== "undefined" && document.hidden) {
+      this.rafId = window.setTimeout(this.tick, 1000) as unknown as number;
+      return;
+    }
     const now = performance.now();
     const delta = now - this.lastFrameTime;
     this.lastFrameTime = now;
@@ -128,19 +133,12 @@ function countDomNodes(): number {
 
 function countReactRoots(): number {
   try {
-    // React 18+ stores root on __reactContainer$ or __reactFiber$
-    const all = document.querySelectorAll("[id]");
-    let count = 0;
-    for (const el of all) {
-      const keys = Object.keys(el);
-      for (const key of keys) {
-        if (key.startsWith("__reactFiber$") || key.startsWith("__reactContainer$")) {
-          count++;
-          break;
-        }
-      }
-    }
-    return count;
+    const rootEl = document.getElementById("root") ?? document.getElementById("app");
+    if (!rootEl) return 0;
+    const hasFiber = Object.keys(rootEl).some(
+      (key) => key.startsWith("__reactFiber$") || key.startsWith("__reactContainer$"),
+    );
+    return hasFiber ? 1 : 0;
   } catch {
     return 0;
   }

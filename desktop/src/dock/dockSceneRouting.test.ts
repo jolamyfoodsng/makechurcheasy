@@ -86,8 +86,7 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain("event_data: {\n                tab: tabType,");
     for (const overlaySource of [bibleOverlaySource, worshipOverlaySource, notesOverlaySource]) {
       expect(overlaySource).toContain("const _routeSource");
-      expect(overlaySource).toContain("const _routeSuffix = _routeSource");
-      expect(overlaySource).toContain("if (_routeSource && targetSource !== _routeSource) return false;");
+      expect(overlaySource).toMatch(/if \(_routeSource && (?:targetSource && )?targetSource !== _routeSource\) return false;/);
     }
     expect(lowerThirdOverlaySource).toContain("const routeSource");
     expect(lowerThirdOverlaySource).toContain("const lowerThirdChannel");

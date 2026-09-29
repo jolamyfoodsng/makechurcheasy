@@ -14,12 +14,14 @@
     "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "MakeChurchEasy",
         "width": 1280,
         "height": 820,
         "minWidth": 800,
         "minHeight": 600,
-        "center": true
+        "center": true,
+        "visible": true
       }
     ],
     "security": {

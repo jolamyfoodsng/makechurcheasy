@@ -137,8 +137,8 @@ describe("dock typing responsiveness and tab switching architecture", () => {
     // No artificial setTimeout(..., 0) deferral on tab switch
     expect(dockPageSource).not.toContain("window.setTimeout(() => {\n      startTransition");
     expect(dockPageSource).toContain("setRenderedTab(activeTab);");
-    // Visited tabs retain up to 6 tabs so Bible, Worship, Media are never unmounted
-    expect(dockPageSource).toContain("const maxTabs = lowMemoryMode ? 3 : 6;");
+    // Visited tabs retain only active tab (1) on <=8GB / lowMemoryMode, or 2 tabs on high-memory systems
+    expect(dockPageSource).toContain("const maxTabs = lowMemoryMode ? 1 : 2;");
     // Passes isActive to DockWorshipTab
     expect(dockPageSource).toContain('isActive={renderedTab === "worship"}');
   });

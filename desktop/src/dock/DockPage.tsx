@@ -96,6 +96,7 @@ import {
 import "./dock.css";
 import "./dock-theme.css";
 import "../accessibility.css";
+import DockScheduleDrawer from "./components/DockScheduleDrawer";
 import { Globe } from "lucide-react";
 import Icon from "./DockIcon";
 import {
@@ -155,10 +156,30 @@ function preloadDockTab(tab: DockTab): void {
 }
 
 function isSubEightGbDevice(totalRAMMB?: number): boolean {
-  // If RAM is unknown, assume standard modern hardware.
-  // Only enable low-memory mode on confirmed low-spec systems (< 4GB RAM).
-  if (!totalRAMMB || totalRAMMB <= 0) return false;
-  return totalRAMMB < 4 * 1024;
+  // 1. Check navigator.deviceMemory if available in browser / CEF (reported in GB)
+  if (typeof navigator !== "undefined" && typeof (navigator as any).deviceMemory === "number") {
+    if ((navigator as any).deviceMemory <= 8) return true;
+  }
+  // 2. Check cached hardware profile from main app in localStorage
+  try {
+    const cached = localStorage.getItem("ocs-perf-profile-v1");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const ram = parsed?.hardware?.totalRAMMB;
+      if (typeof ram === "number" && ram > 0) {
+        return ram <= 8 * 1024;
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 3. If totalRAMMB is provided, devices <= 8GB (8192 MB) run in low-memory mode
+  if (typeof totalRAMMB === "number" && totalRAMMB > 0) {
+    return totalRAMMB <= 8 * 1024;
+  }
+
+  // 4. Default to true in embedded/OBS dock environment where RAM is unknown,
+  // preventing runaway memory growth on budget laptops (e.g. 6GB RAM).
+  return true;
 }
 
 function normalizeDockVersion(version?: string): string | null {
@@ -355,8 +376,9 @@ function DockPageContent({
     setRenderedTab(activeTab);
   }, [activeTab]);
 
-  // Pre-warm the Bible and Worship tab chunks during idle time so they open instantly on first click
+  // Pre-warm the Bible and Worship tab chunks during idle time only on higher-spec machines
   useEffect(() => {
+    if (lowMemoryMode) return;
     const run = () => {
       preloadDockTab("bible");
       preloadDockTab("worship");
@@ -373,7 +395,7 @@ function DockPageContent({
       const handle = setTimeout(run, 1500);
       return () => clearTimeout(handle);
     }
-  }, []);
+  }, [lowMemoryMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -629,7 +651,7 @@ function DockPageContent({
   // and Media is instant without re-initialization lag.
   useEffect(() => {
     setVisitedTabs((current) => {
-      const maxTabs = lowMemoryMode ? 3 : 6;
+      const maxTabs = lowMemoryMode ? 1 : 2;
       if (current.has(activeTab) && current.size <= maxTabs) return current;
       const next = new Set(current);
       next.delete(activeTab);
@@ -1938,7 +1960,15 @@ function DockPageContent({
           {isFreePlan && presentationLinkMode && (
             <DockPresentationLinkCard onOpenHelp={() => setShowPresentationLinkModal(true)} />
           )}
-          <div className="dock-content-main">
+          <div className="dock-content-layout" style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
+            <DockScheduleDrawer
+              initialSnapshot={servicePlanner}
+              onSelectTab={(tab) => {
+                setActiveTab(tab);
+                setRenderedTab(tab);
+              }}
+            />
+            <div className="dock-content-main">
             <Suspense fallback={<LoadingScreen variant="dock" label={t('common.loading', 'Loading…')} className="dock-tab-loading" />}>
               {mountedDockTabs.has("planner") && (
                 <div className="dock-tab-panel" hidden={renderedTab !== "planner"}>
@@ -2037,7 +2067,8 @@ function DockPageContent({
               )}
             </Suspense>
           </div>
-        </main>
+        </div>
+      </main>
       </div>
 
       {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}

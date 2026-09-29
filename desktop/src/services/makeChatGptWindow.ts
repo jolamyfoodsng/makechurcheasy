@@ -117,7 +117,9 @@ export async function openMainMakeChurchEasyWindow(): Promise<void> {
 export async function hideMakeChatGptWindow(): Promise<void> {
   if (!hasTauriInvoke()) return;
   const windowRef = await WebviewWindow.getByLabel(MAKE_CHATGPT_WINDOW_LABEL);
-  await windowRef?.hide();
+  if (windowRef) {
+    await windowRef.close().catch(() => windowRef.hide());
+  }
 }
 
 /** Resize the native pet window so its HTML context menu is not clipped. */

@@ -544,7 +544,7 @@ export const DEFAULT_SETTINGS: MVSettings = {
   inputGain: 100,
 
   // ── Floating Icon ──
-  hideFloatingIcon: false,
+  hideFloatingIcon: true,
 
   // ── Mobile Remote ──
   mobileRemoteEnabled: false,

@@ -3487,7 +3487,7 @@
           // Keep accepting targeted packets for those sources so they can
           // receive one update and migrate to the routed URL without being
           // stuck on their last verse.
-          if (_routeSource && targetSource !== _routeSource) return false;
+          if (_routeSource && targetSource && targetSource !== _routeSource) return false;
           const packet = data.packet || data.overlayData || data.data;
           if (!packet || typeof packet !== 'object') return false;
           if (targetSource) lastTargetSource = targetSource;
@@ -3505,7 +3505,7 @@
         try {
           if (!packet || typeof packet !== 'object') return false;
           const targetSource = typeof packet.targetSource === 'string' ? packet.targetSource : '';
-          if (_routeSource && targetSource !== _routeSource) return false;
+          if (_routeSource && targetSource && targetSource !== _routeSource) return false;
           if (packet.channel && packet.channel !== _tabParam) return false;
           if (targetSource) lastTargetSource = targetSource;
           const data = packet.data || packet.packet || packet.overlayData;

@@ -355,7 +355,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   fontWeight: "black",
   fontStyle: "normal",
   fontColor: "#FFFFFF",
-  lineHeight: 1.6,
+  lineHeight: 1.5,
   letterSpacing: 0,
   wordSpacing: 0,
   textAlign: "center",

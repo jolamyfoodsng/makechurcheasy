@@ -229,15 +229,47 @@ export function isMediaNativeManagedSource(sourceName: string): boolean {
     norm === DOCK_MEDIA_AUDIO_SOURCE ||
     norm === "Video - MCE Media" ||
     norm === "Image - MCE Media" ||
-    norm === "Audio - MCE Media"
+    norm === "Audio - MCE Media" ||
+    norm.startsWith("MCE Audio - ") ||
+    norm.startsWith("MCE Video - ") ||
+    norm.startsWith("MCE Image - ") ||
+    norm.startsWith("MCE Scene ") ||
+    norm.startsWith("MCE Mobile ")
   );
 }
+
+/**
+ * Returns a stable, isolated native media source name for an OBS scene.
+ * If the target scene is the canonical MCE Presentation scene, returns standard presentation sources.
+ * For any other scene, returns an isolated scene-specific source name to prevent overwriting presentation audio/video.
+ */
+export function getSceneMediaSourceName(
+  kind: "audio" | "video" | "image",
+  name: string,
+  targetScene?: string,
+  key?: string,
+): string {
+  if (targetScene && (targetScene === DOCK_PRESENTATION_SCENE || targetScene === "MCE Presentation")) {
+    return kind === "audio"
+      ? DOCK_MEDIA_AUDIO_SOURCE
+      : kind === "video"
+        ? DOCK_MEDIA_VIDEO_SOURCE
+        : DOCK_MEDIA_IMAGE_SOURCE;
+  }
+  const baseName = name.replace(/\.[^.]+$/, "");
+  const defaultLabel = kind === "video" ? "Video" : kind === "audio" ? "Audio" : "Image";
+  const sanitizedBase = baseName.replace(/[^a-z0-9 _-]+/gi, " ").trim().replace(/\s+/g, " ").slice(0, 36) || defaultLabel;
+  const suffix = (key || name).replace(/[^a-z0-9]+/gi, "").slice(-8) || "media";
+  const sourceType = kind === "video" ? "Video" : kind === "audio" ? "Audio" : "Image";
+  return `MCE Scene ${sourceType} - ${sanitizedBase} - ${suffix}`;
+}
+
 /** Background source placed BEHIND fullscreen overlays to prevent flash/twitch between slides */
 const DOCK_FS_BG_SOURCE = "Fullscreen BG - MCE Presentation";
 /** Scene-local fullscreen background source prefix used in target scenes */
 const DOCK_FS_TARGET_BG_PREFIX = "Scene BG - MCE Fullscreen";
 /** Single presentation scene holding all module sources */
-const DOCK_PRESENTATION_SCENE = "MCE Presentation";
+export const DOCK_PRESENTATION_SCENE = "MCE Presentation";
 const DOCK_BIBLE_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_WORSHIP_SCENE = DOCK_PRESENTATION_SCENE;
 const DOCK_MEDIA_SCENE = DOCK_PRESENTATION_SCENE;
@@ -1649,7 +1681,7 @@ export class DockObsClient {
         width: Number(video.baseWidth) || fallback.width,
         height: Number(video.baseHeight) || fallback.height,
       };
-      this._canvasCache = { size, expiresAt: now + 5_000 };
+      this._canvasCache = { size, expiresAt: now + 60_000 };
       return size;
     } catch {
       return getDefaultCanvasSize();

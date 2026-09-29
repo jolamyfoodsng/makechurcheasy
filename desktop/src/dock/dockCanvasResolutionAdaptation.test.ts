@@ -7,12 +7,12 @@ describe("Dynamic Canvas Resolution Adaptation (720p / 1080p)", () => {
   });
 
   it("queries OBS GetVideoSettings and caches canvas size dynamically", async () => {
-    const callSpy = vi.spyOn(dockObsClient as any, "call").mockImplementation(async (method: any) => {
+    const callSpy = vi.spyOn(dockObsClient as any, "call").mockImplementation((async (method: string) => {
       if (method === "GetVideoSettings") {
         return { baseWidth: 1280, baseHeight: 720 };
       }
       return {};
-    });
+    }) as any);
 
     // Clear cache
     (dockObsClient as any)._canvasCache = null;

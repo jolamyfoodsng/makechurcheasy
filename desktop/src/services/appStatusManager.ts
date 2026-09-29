@@ -50,9 +50,11 @@ function updateIcon(): void {
   if (icon === currentIcon) return;
   currentIcon = icon;
 
-  invoke<boolean>("set_app_icon", { iconName: icon }).catch((err) => {
-    console.warn("[AppStatusManager] Failed to set app icon:", err);
-  });
+  if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
+    invoke<boolean>("set_app_icon", { iconName: icon }).catch(() => {
+      // Non-critical: command not registered or not supported in this runtime
+    });
+  }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────

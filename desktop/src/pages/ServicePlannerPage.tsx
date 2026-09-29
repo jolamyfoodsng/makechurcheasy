@@ -178,11 +178,48 @@ export default function ServicePlannerPage() {
   const [plans, setPlans] = useState<ServicePlan[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaSearch, setMediaSearch] = useState("");
   const [activePlanId, setActivePlanId] = useState("");
   const [cueDraft, setCueDraft] = useState<CueDraft>(emptyCueDraft);
   const [editingItemId, setEditingItemId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  // Auto-fetch verse text when reference or translation is entered
+  useEffect(() => {
+    if (cueDraft.type !== "bible" || !cueDraft.bibleReference.trim()) return;
+    const match = cueDraft.bibleReference.match(/^(.+?)\s+(\d+):(\d+)(?:[-–](\d+))?$/);
+    if (!match) return;
+
+    let cancelled = false;
+    const bookInput = match[1].trim();
+    const chapter = Number(match[2]);
+    const startVerse = Number(match[3]);
+    const endVerse = match[4] ? Number(match[4]) : undefined;
+    const translation = (cueDraft.bibleTranslation.trim().toUpperCase() || "KJV") as "KJV";
+
+    import("../bible/bibleData").then(async ({ resolveBookName, getVerse, getPassage }) => {
+      const canonicalBook = resolveBookName(bookInput);
+      if (!canonicalBook || cancelled) return;
+
+      if (endVerse && endVerse > startVerse) {
+        const passage = await getPassage(canonicalBook, chapter, startVerse, endVerse, translation);
+        if (!cancelled && passage.verses.length > 0) {
+          const combined = passage.verses.map((v) => `${v.verse}. ${v.text}`).join(" ");
+          setCueDraft((current) => ({ ...current, bibleText: combined }));
+        }
+      } else {
+        const verseObj = await getVerse(canonicalBook, chapter, startVerse, translation);
+        if (!cancelled && verseObj) {
+          setCueDraft((current) => ({ ...current, bibleText: verseObj.text }));
+        }
+      }
+    }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cueDraft.bibleReference, cueDraft.bibleTranslation, cueDraft.type]);
 
   const activePlan = useMemo(
     () => plans.find((plan) => plan.id === activePlanId) ?? plans[0] ?? null,
@@ -604,18 +641,34 @@ export default function ServicePlannerPage() {
                     )}
 
                     {cueDraft.type === "media" && (
-                      <label>
-                        <span>Media item</span>
-                        <select
-                          value={cueDraft.mediaId}
-                          onChange={(event) => setCueDraft({ ...cueDraft, mediaId: event.target.value })}
-                        >
-                          <option value="">Select media</option>
-                          {media.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="service-planner-media-box">
+                        <label>
+                          <span>Search media</span>
+                          <input
+                            placeholder="Search images or videos..."
+                            value={mediaSearch}
+                            onChange={(e) => setMediaSearch(e.target.value)}
+                          />
+                        </label>
+                        <div className="service-planner-media-tiles">
+                          {media
+                            .filter((item) => !mediaSearch || item.name.toLowerCase().includes(mediaSearch.toLowerCase()))
+                            .map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`service-planner-media-tile ${cueDraft.mediaId === item.id ? "service-planner-media-tile--selected" : ""}`}
+                                onClick={() => setCueDraft({ ...cueDraft, mediaId: item.id })}
+                                title={item.name}
+                              >
+                                <div className="service-planner-media-tile__icon">
+                                  <Icon name={item.type === "video" ? "movie" : "image"} size={20} />
+                                </div>
+                                <span className="service-planner-media-tile__title">{item.name}</span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
                     )}
 
                     <label>

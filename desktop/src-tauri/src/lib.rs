@@ -8401,6 +8401,18 @@ pub fn run() {
                 if let Some(icon) = dev_window_icon() {
                     let _ = window.set_icon(icon);
                 }
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+                println!("[Tauri] Main window 'main' found and shown.");
+            } else {
+                eprintln!("[Tauri] Main window 'main' not found via get_webview_window, checking all windows...");
+                for (lbl, win) in app.webview_windows() {
+                    println!("[Tauri] Showing window: {}", lbl);
+                    let _ = win.unminimize();
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
             }
 
             #[cfg(all(target_os = "macos", debug_assertions))]

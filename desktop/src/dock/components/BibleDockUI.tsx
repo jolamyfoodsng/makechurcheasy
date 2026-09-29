@@ -19,6 +19,7 @@ interface BibleSearchRowProps {
   activeTranslation: string;
   availableTranslations: Array<{ value: string; label: string; language?: string }>;
   onVersionChange: (version: string) => void;
+  onTranslationsReload?: () => Promise<void> | void;
   compareEnabled: boolean;
   onToggleCompare?: (enabled: boolean) => void;
   isCompact: boolean;
@@ -36,6 +37,7 @@ export function BibleSearchRow({
   activeTranslation,
   availableTranslations,
   onVersionChange,
+  onTranslationsReload,
   compareEnabled,
   onToggleCompare,
   isCompact,
@@ -84,6 +86,7 @@ export function BibleSearchRow({
             activeTranslation={activeTranslation}
             availableTranslations={availableTranslations}
             onVersionChange={onVersionChange}
+            onTranslationsReload={onTranslationsReload}
           />
         )}
         {shouldUseNarrowOverflowActions ? (
@@ -121,6 +124,7 @@ interface BibleDockContainerProps {
   compareEnabled?: boolean;
   onToggleCompare?: (enabled: boolean) => void;
   onVersionChange: (version: string) => void;
+  onTranslationsReload?: () => Promise<void> | void;
   searchSection: React.ReactNode;
   searchPlacement?: DockSearchPlacement;
   headerActions?: BibleContextualActions;
@@ -138,6 +142,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
   compareEnabled = false,
   onToggleCompare,
   onVersionChange,
+  onTranslationsReload,
   searchSection,
   headerActions,
   compactActions,
@@ -161,6 +166,7 @@ export const BibleDockContainer = forwardRef<HTMLDivElement, BibleDockContainerP
       activeTranslation={activeTranslation}
       availableTranslations={availableTranslations}
       onVersionChange={onVersionChange}
+      onTranslationsReload={onTranslationsReload}
       compareEnabled={compareEnabled}
       onToggleCompare={onToggleCompare}
       isCompact={isCompact}

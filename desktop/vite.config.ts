@@ -244,6 +244,18 @@ function authSessionPlugin(): Plugin {
   return {
     name: "auth-session",
     configureServer(server) {
+      server.middlewares.use("/uploads/dock-branding.json", (_req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.end("{}");
+      });
+
+      server.middlewares.use("/uploads/dock-speakers.json", (_req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.end("[]");
+      });
+
       server.middlewares.use("/api/auth/status", (_req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Access-Control-Allow-Origin", "*");

@@ -22,6 +22,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { BibleThemeSettings, BibleSlide } from "../bible/types";
 import { fullscreenSceneManager, FULLSCREEN_SCENES } from "../services/FullscreenSceneManager";
 import { presentationSceneManager, SOURCE_NAMES, BG_SOURCE_NAMES, PRESENTATION_SCENE_NAME } from "../services/PresentationSceneManager";
+import { overlayBridge } from "../dock/dockOverlayBridge";
 
 const WORSHIP_SOURCE_NAME = SOURCE_NAMES.WORSHIP; // "MCE Browser - Worship"
 const WORSHIP_BG_SOURCE_NAME = BG_SOURCE_NAMES.WORSHIP; // "MCE BG - Worship"
@@ -762,6 +763,33 @@ class WorshipObsService {
     this._isLive = live;
     this._isBlanked = blanked;
 
+    // Convert to BibleSlide format (shared overlay)
+    const slide: BibleSlide | null = text
+      ? { id: "worship-live", text, reference, verseRange: "", index: 0, total: 1 }
+      : null;
+
+    const { themeForHash, customCss } = this.buildThemePayload(theme);
+    const packet = { slide, theme: themeForHash, live, blanked, timestamp: Date.now() };
+
+    // Broadcast over BroadcastChannel for same-origin windows
+    try {
+      const bc = new BroadcastChannel("obs-church-studio-worship-overlay");
+      bc.postMessage(packet);
+      bc.close();
+    } catch { }
+
+    // Broadcast over local WebSocket relay bridge (ws://127.0.0.1:17891)
+    // so OBS browser sources receive updates in real time even across separate processes
+    try {
+      overlayBridge.publish({
+        channel: "worship",
+        type: "overlay-update",
+        revision: Date.now(),
+        data: { ...packet, revision: Date.now() },
+        css: customCss || "",
+      });
+    } catch { }
+
     if (!obsService.isConnected) return;
 
     if (this.sceneItemId === null) {
@@ -773,15 +801,7 @@ class WorshipObsService {
       }
     }
 
-    // Convert to BibleSlide format (shared overlay)
-    const slide: BibleSlide | null = text
-      ? { id: "worship-live", text, reference, verseRange: "", index: 0, total: 1 }
-      : null;
-
     try {
-      const { themeForHash, customCss } = this.buildThemePayload(theme);
-
-      const packet = { slide, theme: themeForHash, live, blanked, timestamp: Date.now() };
       const base = getOverlayBaseUrlSync();
       const baseUrl = buildVersionedOverlayUrl(base, "mce-worship-overlay.html");
       const overlayCss = this.buildOverlayDataCss(
@@ -908,6 +928,21 @@ class WorshipObsService {
     this._liveRef = null;
     this._isLive = false;
     this._isBlanked = false;
+
+    const clearPacket = { slide: null, theme: liveTheme, live: false, blanked: false, timestamp: Date.now() };
+    try {
+      const bc = new BroadcastChannel("obs-church-studio-worship-overlay");
+      bc.postMessage(clearPacket);
+      bc.close();
+    } catch { }
+    try {
+      overlayBridge.publish({
+        channel: "worship",
+        type: "overlay-update",
+        revision: Date.now(),
+        data: { ...clearPacket, revision: Date.now() },
+      });
+    } catch { }
 
     if (!obsService.isConnected) return;
 
