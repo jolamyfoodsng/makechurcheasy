@@ -60,6 +60,10 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockScheduleCssSource).toContain(".dock-schedule-card--text");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__media-thumb-wrap");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__project-btn");
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-row");
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__inscribed-passage");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-row");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card__inscribed-passage");
   });
 
   it("sets line-height 1.5 on schedule card titles and preview snippets", () => {

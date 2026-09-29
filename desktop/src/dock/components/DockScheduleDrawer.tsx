@@ -561,7 +561,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   );
                 }
 
-                // ── Bible / Worship / Notes Card (NO left icons, full horizontal space) ──
+                // ── Bible / Worship / Notes Card (Top: Chapter-verse, Middle: Inscribed passage, Bottom: Buttons) ──
                 return (
                   <div
                     key={item.id}
@@ -578,8 +578,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     title={`${index + 1}. ${item.label}`}
                     aria-label={`${index + 1}. ${item.label}`}
                   >
-                    {/* Top Row: Title on left, Project & Remove on right */}
-                    <div className="dock-schedule-card__header-row">
+                    {/* Top Row: Bible chapter-verse / Song title (Full width, no buttons crowding it) */}
+                    <div className="dock-schedule-card__header-row dock-schedule-card__title-row">
                       <div className="dock-schedule-card__title">
                         <span className="dock-schedule-card__title-text">{item.label}</span>
                         {isLive && (
@@ -589,8 +589,21 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           </span>
                         )}
                       </div>
+                    </div>
 
-                      <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
+                    {/* Middle Row: The passage being read (inscribed presentation) */}
+                    {item.subtitle && (
+                      <div
+                        className="dock-schedule-card__snippet dock-schedule-card__inscribed-passage"
+                        title={item.subtitle}
+                      >
+                        {item.subtitle}
+                      </div>
+                    )}
+
+                    {/* Bottom Row: Actions (Buttons at the bottom) */}
+                    <div className="dock-schedule-card__bottom-row" onClick={(e) => e.stopPropagation()}>
+                      <div className="dock-schedule-card__actions">
                         <button
                           type="button"
                           className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
@@ -615,13 +628,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         </button>
                       </div>
                     </div>
-
-                    {/* Bottom Row: Full width scripture / lyrics snippet */}
-                    {item.subtitle && (
-                      <div className="dock-schedule-card__snippet" title={item.subtitle}>
-                        {item.subtitle}
-                      </div>
-                    )}
                   </div>
                 );
               })
