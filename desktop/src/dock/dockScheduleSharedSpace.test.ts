@@ -124,7 +124,7 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockScheduleCssSource).toContain(".dock-schedule-panel--compact .dock-schedule-card__snippet");
   });
 
-  it("closes the schedule when dragged to the left end and provides bottom close buttons on cards and panel", () => {
+  it("closes the schedule when dragged to the left end, provides bottom close on panel, removes card close button and FULL/LT/Rename options, and increases schedule icon size", () => {
     // Panel drag to left end to close
     expect(dockScheduleDrawerSource).toContain("handleCollapse");
     expect(dockScheduleDrawerSource).toContain("rawCalculated < 95 || moveEvent.clientX < 85");
@@ -135,11 +135,17 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockScheduleDrawerSource).toContain("handleCardPointerUp");
     expect(dockScheduleDrawerSource).toContain("handleRemoveItem(e, item.id)");
 
-    // Card bottom close button
-    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-bar");
-    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-close-btn");
-    expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-bar");
-    expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-close-btn");
+    // No close button on each card in schedule
+    expect(dockScheduleDrawerSource).not.toContain("dock-schedule-card__bottom-close-btn");
+
+    // No FULL / LT / Rename in context menu options
+    expect(dockScheduleDrawerSource).not.toContain("Switch to FULL (Fullscreen)");
+    expect(dockScheduleDrawerSource).not.toContain("Switch to LT (Lower Third)");
+    expect(dockScheduleDrawerSource).not.toContain("Rename Card");
+
+    // Bigger schedule icon
+    expect(dockScheduleDrawerSource).toContain('<Icon name="event_note" size={16} />');
+    expect(dockScheduleDrawerSource).toContain('<Icon name="playlist_play" size={21} />');
 
     // Bottom close button on schedule panel
     expect(dockScheduleDrawerSource).toContain("dock-schedule-panel__bottom-close-btn");

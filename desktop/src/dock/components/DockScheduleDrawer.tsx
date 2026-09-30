@@ -67,12 +67,6 @@ interface ContextMenuState {
   scope: "schedule" | "history";
 }
 
-interface RenameState {
-  item: ServicePlanItem;
-  label: string;
-  scope: "schedule" | "history";
-}
-
 function getMediaThumbnailSrc(payload: Record<string, unknown>): string {
   // 1. Direct thumbnail URL or data/blob URI
   const directThumb = typeof payload.thumbnailUrl === "string" ? payload.thumbnailUrl.trim() : "";
@@ -121,9 +115,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const [activeViewTab, setActiveViewTab] = useState<"schedule" | "history">("schedule");
   const [historyItems, setHistoryItems] = useState<ServicePlanItem[]>(() => getPresentationHistory());
 
-  // Context Menu, Header Menu & Rename states
+  // Context Menu & Header Menu states
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [renamingItem, setRenamingItem] = useState<RenameState | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
 
   // Default to false so user starts on Bible tab cleanly without schedule taking over
@@ -579,17 +572,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     }
   }, [refreshState]);
 
-  const handleSaveRename = useCallback(() => {
-    if (!renamingItem) return;
-    renameScheduleItem(renamingItem.item.id, renamingItem.label, renamingItem.scope);
-    if (renamingItem.scope === "history") {
-      setHistoryItems(getPresentationHistory());
-    } else {
-      refreshState();
-    }
-    setRenamingItem(null);
-  }, [renamingItem, refreshState]);
-
   const handleOpenContextMenu = useCallback((
     e: React.MouseEvent,
     item: ServicePlanItem,
@@ -662,7 +644,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             title={t("schedule.openSchedule", "Open Schedule (Shared Space)")}
             aria-label={t("schedule.openSchedule", "Open Schedule")}
           >
-            <Icon name="playlist_play" size={18} />
+            <Icon name="playlist_play" size={21} />
             {scheduleItems.length > 0 && (
               <span className="dock-schedule-rail__badge">{scheduleItems.length}</span>
             )}
@@ -711,7 +693,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   onClick={() => setActiveViewTab("schedule")}
                   title={t("schedule.title", "Schedule")}
                 >
-                  <Icon name="event_note" size={13} />
+                  <Icon name="event_note" size={16} />
                   {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("schedule.title", "Schedule")}</span>}
                   {scheduleItems.length > 0 && (
                     <span className="dock-schedule-tab-badge">{scheduleItems.length}</span>
@@ -725,7 +707,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   onClick={() => setActiveViewTab("history")}
                   title={t("common.history", "History")}
                 >
-                  <Icon name="history" size={13} />
+                  <Icon name="history" size={15} />
                   {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("common.history", "History")}</span>}
                   {historyItems.length > 0 && (
                     <span className="dock-schedule-tab-badge">{historyItems.length}</span>
@@ -1006,24 +988,11 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         </button>
                       </div>
 
-                      {/* Footer with clean caption & close button */}
+                      {/* Footer with clean caption */}
                       <div className="dock-schedule-card__media-footer">
                         <span className="dock-schedule-card__media-caption" title={item.label}>
                           {item.label}
                         </span>
-
-                        <div className="dock-schedule-card__bottom-bar" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="dock-schedule-card__bottom-close-btn dock-schedule-card__remove-btn"
-                            onClick={(e) => handleRemoveItem(e, item.id)}
-                            title={activeViewTab === "history" ? t("schedule.removeFromHistory", "Remove from History") : t("schedule.removeFromSchedule", "Remove from Schedule")}
-                            aria-label={t("common.close", "Close")}
-                          >
-                            <Icon name="close" size={11} />
-                            <span>{t("common.close", "Close")}</span>
-                          </button>
-                        </div>
 
                         {/* Preserved accessible / test suite actions */}
                         <div className="dock-schedule-card__actions dock-schedule-card__media-quick-actions" style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
@@ -1115,20 +1084,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         {item.subtitle}
                       </div>
                     )}
-
-                    {/* Bottom Row / Close button on card */}
-                    <div className="dock-schedule-card__bottom-bar" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="dock-schedule-card__bottom-close-btn dock-schedule-card__remove-btn"
-                        onClick={(e) => handleRemoveItem(e, item.id)}
-                        title={activeViewTab === "history" ? t("schedule.removeFromHistory", "Remove from History") : t("schedule.removeFromSchedule", "Remove from Schedule")}
-                        aria-label={t("common.close", "Close")}
-                      >
-                        <Icon name="close" size={11} />
-                        <span>{t("common.close", "Close")}</span>
-                      </button>
-                    </div>
 
                     {/* Kept hidden for test suite assertions & non-visual compatibility */}
                     <div className="dock-schedule-card__bottom-row" style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
@@ -1308,33 +1263,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               </button>
             )}
 
-            {/* Display Mode Switches */}
-            <button
-              type="button"
-              className="dock-schedule-context-menu__item"
-              onClick={() => {
-                const { item, scope } = contextMenu;
-                setContextMenu(null);
-                void handleSetOverlayMode(item, "fullscreen", scope);
-              }}
-            >
-              <Icon name="maximize" size={13} />
-              <span>Switch to FULL (Fullscreen)</span>
-            </button>
-
-            <button
-              type="button"
-              className="dock-schedule-context-menu__item"
-              onClick={() => {
-                const { item, scope } = contextMenu;
-                setContextMenu(null);
-                void handleSetOverlayMode(item, "lower-third", scope);
-              }}
-            >
-              <Icon name="minimize" size={13} />
-              <span>Switch to LT (Lower Third)</span>
-            </button>
-
             {/* Pin action */}
             <button
               type="button"
@@ -1347,20 +1275,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             >
               <Icon name="push_pin" size={13} />
               <span>{contextMenu.scope === "history" ? "Pin to Schedule" : "Pin to Top"}</span>
-            </button>
-
-            {/* Rename card */}
-            <button
-              type="button"
-              className="dock-schedule-context-menu__item"
-              onClick={() => {
-                const { item, scope } = contextMenu;
-                setContextMenu(null);
-                setRenamingItem({ item, label: item.label, scope });
-              }}
-            >
-              <Icon name="edit" size={13} />
-              <span>Rename Card</span>
             </button>
 
             <div className="dock-schedule-context-menu__divider" />
@@ -1380,57 +1294,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             </button>
           </div>
         </>
-      )}
-
-      {/* ── Inline Rename Modal ── */}
-      {renamingItem && (
-        <div className="dock-schedule-modal-backdrop" onClick={() => setRenamingItem(null)}>
-          <div className="dock-schedule-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="dock-schedule-modal__header">
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon name="edit" size={14} />
-                <span>Rename Card</span>
-              </div>
-              <button
-                type="button"
-                className="dock-schedule-modal__close-btn"
-                onClick={() => setRenamingItem(null)}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="dock-schedule-modal__body">
-              <label className="dock-schedule-modal__label">Card Label</label>
-              <input
-                type="text"
-                className="dock-schedule-modal__input"
-                value={renamingItem.label}
-                onChange={(e) => setRenamingItem({ ...renamingItem, label: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveRename();
-                  if (e.key === "Escape") setRenamingItem(null);
-                }}
-                autoFocus
-              />
-            </div>
-            <div className="dock-schedule-modal__footer">
-              <button
-                type="button"
-                className="dock-schedule-btn"
-                onClick={() => setRenamingItem(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="dock-schedule-btn dock-schedule-btn--primary"
-                onClick={handleSaveRename}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </aside>
   );
