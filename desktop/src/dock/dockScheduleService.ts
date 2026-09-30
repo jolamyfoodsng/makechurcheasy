@@ -286,6 +286,45 @@ export function addWorshipToActiveSchedule(params: {
 }
 
 /**
+ * Add an entire Worship song to the active schedule.
+ */
+export function addWholeWorshipSongToActiveSchedule(params: {
+  songTitle: string;
+  artist?: string;
+  lyrics: string;
+  songId?: string;
+  overlayMode?: "fullscreen" | "lower-third";
+  theme?: string;
+  bibleThemeSettings?: Record<string, unknown> | null;
+  linesPerSlide?: number;
+  autoSplit?: boolean;
+}): ServicePlanItem {
+  const cleanTitle = params.songTitle.trim();
+  const firstLines = params.lyrics.split("\n").map((l) => l.trim()).filter(Boolean);
+  const previewSubtitle = firstLines.slice(0, 2).join(" / ");
+  return addItemToActiveSchedule({
+    type: "worship",
+    sourceId: params.songId,
+    sourceKind: "worship-song-section",
+    label: cleanTitle,
+    subtitle: previewSubtitle || cleanTitle,
+    notes: params.artist,
+    payloadSnapshot: {
+      songTitle: cleanTitle,
+      sectionLabel: "Song",
+      sectionText: params.lyrics,
+      artist: params.artist,
+      sectionIdx: 0,
+      overlayMode: params.overlayMode || "lower-third",
+      theme: params.theme,
+      bibleThemeSettings: params.bibleThemeSettings,
+      linesPerSlide: params.linesPerSlide,
+      autoSplit: params.autoSplit,
+    },
+  });
+}
+
+/**
  * Add Notes slide to the active schedule.
  */
 export function addNoteToActiveSchedule(params: {
@@ -307,6 +346,38 @@ export function addNoteToActiveSchedule(params: {
       slideText: params.slideText,
       slideIndex: params.slideIndex,
       noteTitle: params.noteTitle,
+      overlayMode: params.overlayMode || "lower-third",
+      theme: params.theme,
+      bibleThemeSettings: params.bibleThemeSettings,
+    },
+  });
+}
+
+/**
+ * Add an entire Note document to the active schedule.
+ */
+export function addWholeNoteToActiveSchedule(params: {
+  noteTitle: string;
+  noteContent: string;
+  noteId?: string;
+  overlayMode?: "fullscreen" | "lower-third";
+  theme?: string;
+  bibleThemeSettings?: Record<string, unknown> | null;
+}): ServicePlanItem {
+  const cleanTitle = params.noteTitle.trim();
+  const firstLines = params.noteContent.split("\n").map((l) => l.trim()).filter(Boolean);
+  const previewSubtitle = firstLines.slice(0, 2).join(" / ");
+  return addItemToActiveSchedule({
+    type: "sermon",
+    sourceId: params.noteId,
+    sourceKind: "sermon-point",
+    label: cleanTitle,
+    subtitle: previewSubtitle || cleanTitle,
+    payloadSnapshot: {
+      isNoteSlide: true,
+      slideText: params.noteContent,
+      slideIndex: 0,
+      noteTitle: cleanTitle,
       overlayMode: params.overlayMode || "lower-third",
       theme: params.theme,
       bibleThemeSettings: params.bibleThemeSettings,

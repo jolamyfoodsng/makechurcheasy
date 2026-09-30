@@ -89,6 +89,7 @@ import {
 import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
+import { addNoteToActiveSchedule, addWholeNoteToActiveSchedule } from "../dockScheduleService";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -544,6 +545,24 @@ export default function DockNotesTab({
   const debouncedNoteSlidesSearchQuery = useDebouncedValue(noteSlidesSearchQuery, 160);
   const [selectedSlideIdx, setSelectedSlideIdx] = useState<number | null>(null);
   const [visibleSlideIdx, setVisibleSlideIdx] = useState<number | null>(null);
+  const [noteContextMenu, setNoteContextMenu] = useState<{ x: number; y: number; note: DockNote } | null>(null);
+  const [noteDeleteTarget, setNoteDeleteTarget] = useState<DockNote | null>(null);
+  const [slideContextMenu, setSlideContextMenu] = useState<{ x: number; y: number; slideIdx: number } | null>(null);
+
+  useEffect(() => {
+    if (!noteContextMenu) return;
+    const handleCloseMenu = () => setNoteContextMenu(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, [noteContextMenu]);
+
+  useEffect(() => {
+    if (!slideContextMenu) return;
+    const handleCloseMenu = () => setSlideContextMenu(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, [slideContextMenu]);
+
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [visibilityActionPending, setVisibilityActionPending] = useState(false);
   /** Invalidates in-flight note pushes when Hide Notes is pressed. */
@@ -1028,6 +1047,46 @@ export default function DockNotesTab({
 
     showToast(t("notes.slideReordered", "Slide reordered"), "info");
   }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
+
+  const handleAddWholeNoteToSchedule = useCallback((note: DockNote) => {
+    addWholeNoteToActiveSchedule({
+      noteTitle: getNoteDisplayTitle(note),
+      noteContent: note.content,
+      noteId: note.id,
+      overlayMode,
+      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
+      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+    });
+    showToast(t("schedule.addedNoteToSchedule", { defaultValue: `Added "${getNoteDisplayTitle(note)}" to Schedule` }), "success");
+  }, [overlayMode, selectedFSTheme, selectedLTTheme, showToast, t]);
+
+  const handleAddNoteSlideToSchedule = useCallback((slideIdx: number) => {
+    const slide = selectedNoteSlides[slideIdx];
+    if (!slide || !selectedNote) return;
+
+    addNoteToActiveSchedule({
+      noteTitle: selectedNoteDisplayTitle || selectedNote.title,
+      slideIndex: slideIdx,
+      slideText: stripLeadingVerseMarker(slide.text),
+      overlayMode,
+      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
+      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+    });
+    showToast(t("schedule.addedSlideToSchedule", { defaultValue: `Added slide to Schedule` }), "success");
+  }, [overlayMode, selectedFSTheme, selectedLTTheme, selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, showToast, t]);
+
+  const handleDeleteNote = useCallback((targetNote: DockNote) => {
+    const nextNotes = notes.filter((n) => n.id !== targetNote.id);
+    setNotes(nextNotes);
+    saveDockNotes(nextNotes);
+    if (selectedNote?.id === targetNote.id) {
+      setSelectedNote(null);
+      setSelectedSlideIdx(null);
+      setVisibleSlideIdx(null);
+    }
+    setNoteDeleteTarget(null);
+    showToast(t("notes.noteDeleted", { defaultValue: "Note deleted" }), "info");
+  }, [notes, selectedNote?.id, showToast, t]);
 
   const handleNotesTranslationChange = useCallback((next: DockTranslationValue | null) => {
     notesTranslationChangeRef.current = true;
@@ -1600,7 +1659,19 @@ export default function DockNotesTab({
                 onScroll={handleNotesListScroll}
               >
                 {renderedNotes.map((note) => (
-                  <div key={note.id} className="dock-card dock-card--console dock-song-card dock-notes-card">
+                  <div
+                    key={note.id}
+                    className="dock-card dock-card--console dock-song-card dock-notes-card"
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setNoteContextMenu({
+                        x: Math.min(event.clientX, window.innerWidth - 220),
+                        y: Math.min(event.clientY, window.innerHeight - 200),
+                        note,
+                      });
+                    }}
+                  >
                     <button
                       type="button"
                       className="dock-song-card__main"
@@ -1621,8 +1692,32 @@ export default function DockNotesTab({
                         {extractStructuredTextTitle(normalizeDockMultilineText(note.content)).body.split("\n")[0]?.substring(0, 80) || t("notes.noContent")}
                       </span>
                     </button>
+                    <button
+                      type="button"
+                      className="dock-song-card__schedule"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddWholeNoteToSchedule(note);
+                      }}
+                      aria-label={`${t("schedule.addToSchedule", "Add to Schedule")} ${getNoteDisplayTitle(note)}`}
+                      title={t("schedule.addToSchedule", "Add to Schedule")}
+                    >
+                      <Icon name="playlist_add" size={15} />
+                    </button>
                     <button type="button" className="dock-song-card__edit" onClick={() => openEditNote(note)} aria-label={t("common.edit")} title={t("common.edit")}>
-                      <Icon name="edit" size={12} />
+                      <Icon name="edit" size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-song-card__delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNoteDeleteTarget(note);
+                      }}
+                      aria-label={`${t("common.delete", "Delete")} ${getNoteDisplayTitle(note)}`}
+                      title={t("common.delete", "Delete")}
+                    >
+                      <Icon name="delete_outline" size={15} />
                     </button>
                   </div>
                 ))}
@@ -1635,6 +1730,88 @@ export default function DockNotesTab({
                     >
                       {t("common.loadMore", { defaultValue: "Load more..." })} ({filteredNotes.length - visibleNotesCount} remaining)
                     </button>
+                  </div>
+                )}
+                {noteContextMenu && (
+                  <div
+                    className="dock-bible-context-menu"
+                    style={{
+                      position: "fixed",
+                      top: `${noteContextMenu.y}px`,
+                      left: `${noteContextMenu.x}px`,
+                      zIndex: 10000,
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        handleAddWholeNoteToSchedule(noteContextMenu.note);
+                        setNoteContextMenu(null);
+                      }}
+                    >
+                      <Icon name="playlist_add" size={16} />
+                      <span>{t("schedule.addToSchedule", "Add to Schedule")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        setSelectedNote(noteContextMenu.note);
+                        setSelectedSlideIdx(0);
+                        setVisibleSlideIdx(null);
+                        setNoteContextMenu(null);
+                      }}
+                    >
+                      <Icon name="sticky_note_2" size={16} />
+                      <span>{t("notes.openNote", "Open Note")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        openEditNote(noteContextMenu.note);
+                        setNoteContextMenu(null);
+                      }}
+                    >
+                      <Icon name="edit" size={16} />
+                      <span>{t("common.edit", "Edit Note")}</span>
+                    </button>
+                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item dock-bible-context-menu__item--danger"
+                      style={{ color: "#FCA5A5" }}
+                      onClick={() => {
+                        setNoteDeleteTarget(noteContextMenu.note);
+                        setNoteContextMenu(null);
+                      }}
+                    >
+                      <Icon name="delete_outline" size={16} />
+                      <span>{t("common.delete", "Delete Note")}</span>
+                    </button>
+                  </div>
+                )}
+                {noteDeleteTarget && (
+                  <div className="dock-modal-backdrop" onClick={() => setNoteDeleteTarget(null)}>
+                    <div className="dock-modal dock-modal--confirm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+                      <div className="dock-modal__header">
+                        <div className="dock-modal__title">{t("notes.deleteNoteTitle", "Delete Note")}</div>
+                      </div>
+                      <div className="dock-modal__body">
+                        <p>{t("notes.confirmDelete", { title: getNoteDisplayTitle(noteDeleteTarget), defaultValue: `Are you sure you want to delete "${getNoteDisplayTitle(noteDeleteTarget)}"?` })}</p>
+                      </div>
+                      <div className="dock-modal__footer" style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                        <button type="button" className="dock-btn dock-btn--ghost" onClick={() => setNoteDeleteTarget(null)}>
+                          {t("common.cancel", "Cancel")}
+                        </button>
+                        <button type="button" className="dock-btn dock-btn--danger" onClick={() => handleDeleteNote(noteDeleteTarget)}>
+                          {t("common.delete", "Delete")}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1803,7 +1980,34 @@ export default function DockNotesTab({
                 <div className="dock-empty__text">{t("notes.noSlidesMatch", { query: noteSlidesSearchQuery })}</div>
               </div>
             ) : (
-              <div className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSlideIdx !== null ? " is-reordering" : ""}`}>
+              <div
+                className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSlideIdx !== null ? " is-reordering" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const container = event.currentTarget;
+                  const rect = container.getBoundingClientRect();
+                  const offsetY = event.clientY - rect.top;
+                  if (offsetY < 50) {
+                    container.scrollTop -= 14;
+                  } else if (rect.bottom - event.clientY < 50) {
+                    container.scrollTop += 14;
+                  }
+                }}
+                onDrop={(event) => {
+                  const sourceIdx = draggingSlideIdx ?? Number(event.dataTransfer.getData("text/plain"));
+                  if (Number.isFinite(sourceIdx) && sourceIdx >= 0) {
+                    const container = event.currentTarget;
+                    const rect = container.getBoundingClientRect();
+                    const offsetY = event.clientY - rect.top;
+                    const targetIdx = offsetY < rect.height / 2 ? 0 : selectedNoteSlides.length - 1;
+                    handleReorderNoteSlide(sourceIdx, targetIdx);
+                  }
+                  setDraggingSlideIdx(null);
+                  setDragOverSlideIdx(null);
+                  setDropPosition(null);
+                }}
+              >
                 {filteredNoteSlides.map(({ slide, idx }) => {
                   const isVisible = visibleSlideIdx === idx;
                   const isSelected = selectedSlideIdx === idx;
@@ -1815,6 +2019,15 @@ export default function DockNotesTab({
                     <div
                       key={slide.id}
                       draggable={true}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setSlideContextMenu({
+                          x: Math.min(event.clientX, window.innerWidth - 220),
+                          y: Math.min(event.clientY, window.innerHeight - 250),
+                          slideIdx: idx,
+                        });
+                      }}
                       onDragStart={(event) => {
                         event.dataTransfer.setData("text/plain", String(idx));
                         event.dataTransfer.effectAllowed = "move";
@@ -1840,9 +2053,12 @@ export default function DockNotesTab({
                       }}
                       onDrop={(event) => {
                         event.preventDefault();
+                        event.stopPropagation();
                         const sourceIdx = draggingSlideIdx ?? Number(event.dataTransfer.getData("text/plain"));
-                        if (Number.isFinite(sourceIdx) && dropPosition) {
-                          const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, dropPosition, selectedNoteSlides.length);
+                        if (Number.isFinite(sourceIdx) && sourceIdx >= 0) {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const pos = dropPosition || (event.clientY < rect.top + rect.height / 2 ? "above" : "below");
+                          const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, pos, selectedNoteSlides.length);
                           handleReorderNoteSlide(sourceIdx, targetIdx);
                         }
                         setDraggingSlideIdx(null);
@@ -1904,6 +2120,18 @@ export default function DockNotesTab({
                           className="dock-worship-slide-card__action"
                           onClick={(event) => {
                             event.stopPropagation();
+                            handleAddNoteSlideToSchedule(idx);
+                          }}
+                          title={t("schedule.addToSchedule", "Add slide to Schedule")}
+                          aria-label={t("schedule.addToSchedule", "Add slide to Schedule")}
+                        >
+                          <Icon name="playlist_add" size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="dock-worship-slide-card__action"
+                          onClick={(event) => {
+                            event.stopPropagation();
                             openNoteSlideEditor(idx);
                           }}
                           title={t("notes.quickEditSlide")}
@@ -1928,6 +2156,120 @@ export default function DockNotesTab({
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {slideContextMenu && (
+              <div
+                className="dock-bible-context-menu"
+                style={{
+                  position: "fixed",
+                  top: `${slideContextMenu.y}px`,
+                  left: `${slideContextMenu.x}px`,
+                  zIndex: 1000,
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="dock-bible-context-menu__item"
+                  onClick={() => {
+                    handleAddNoteSlideToSchedule(slideContextMenu.slideIdx);
+                    setSlideContextMenu(null);
+                  }}
+                >
+                  <Icon name="playlist_add" size={16} />
+                  <span>{t("schedule.addToSchedule", "Add slide to Schedule")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-bible-context-menu__item"
+                  onClick={() => {
+                    void pushNoteSlide(slideContextMenu.slideIdx);
+                    setSlideContextMenu(null);
+                  }}
+                >
+                  <Icon name="play_arrow" size={16} />
+                  <span>{t("common.present", "Present Live")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-bible-context-menu__item"
+                  onClick={() => {
+                    openNoteSlideEditor(slideContextMenu.slideIdx);
+                    setSlideContextMenu(null);
+                  }}
+                >
+                  <Icon name="edit" size={16} />
+                  <span>{t("notes.quickEditSlide", "Edit Slide")}</span>
+                </button>
+                <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                {slideContextMenu.slideIdx > 0 && (
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      handleReorderNoteSlide(slideContextMenu.slideIdx, 0);
+                      setSlideContextMenu(null);
+                    }}
+                  >
+                    <Icon name="vertical_align_top" size={16} />
+                    <span>{t("common.moveToTop", "Move to Top")}</span>
+                  </button>
+                )}
+                {slideContextMenu.slideIdx > 0 && (
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      handleReorderNoteSlide(slideContextMenu.slideIdx, slideContextMenu.slideIdx - 1);
+                      setSlideContextMenu(null);
+                    }}
+                  >
+                    <Icon name="arrow_upward" size={16} />
+                    <span>{t("common.moveUp", "Move Up")}</span>
+                  </button>
+                )}
+                {slideContextMenu.slideIdx < selectedNoteSlides.length - 1 && (
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      handleReorderNoteSlide(slideContextMenu.slideIdx, slideContextMenu.slideIdx + 1);
+                      setSlideContextMenu(null);
+                    }}
+                  >
+                    <Icon name="arrow_downward" size={16} />
+                    <span>{t("common.moveDown", "Move Down")}</span>
+                  </button>
+                )}
+                {slideContextMenu.slideIdx < selectedNoteSlides.length - 1 && (
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      handleReorderNoteSlide(slideContextMenu.slideIdx, selectedNoteSlides.length - 1);
+                      setSlideContextMenu(null);
+                    }}
+                  >
+                    <Icon name="vertical_align_bottom" size={16} />
+                    <span>{t("common.moveToBottom", "Move to Bottom")}</span>
+                  </button>
+                )}
+                <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                <button
+                  type="button"
+                  className="dock-bible-context-menu__item dock-bible-context-menu__item--danger"
+                  style={{ color: "#FCA5A5" }}
+                  disabled={selectedNoteSlides.length <= 1}
+                  onClick={() => {
+                    deleteNoteSlide(slideContextMenu.slideIdx);
+                    setSlideContextMenu(null);
+                  }}
+                >
+                  <Icon name="delete_outline" size={16} />
+                  <span>{t("notes.deleteSlide", "Delete Slide")}</span>
+                </button>
               </div>
             )}
             <DockOutputQuickActions

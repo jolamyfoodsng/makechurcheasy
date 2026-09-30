@@ -56,7 +56,7 @@ import {
 import { fuzzyMatch, fuzzyScore } from "../../services/fuzzySearch";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
-import { addWorshipToActiveSchedule } from "../dockScheduleService";
+import { addWorshipToActiveSchedule, addWholeWorshipSongToActiveSchedule } from "../dockScheduleService";
 import Icon from "../DockIcon";
 import LoadingScreen from "../../components/LoadingScreen";
 import DockBottomToolbar from "../components/DockBottomToolbar";
@@ -1636,6 +1636,7 @@ function DockWorshipTab({
   const [visibleIdx, setVisibleIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [slideContextMenu, setSlideContextMenu] = useState<{ x: number; y: number; sectionIdx: number } | null>(null);
+  const [songContextMenu, setSongContextMenu] = useState<{ x: number; y: number; song: DockSong } | null>(null);
 
   useEffect(() => {
     if (!slideContextMenu) return;
@@ -1643,6 +1644,13 @@ function DockWorshipTab({
     window.addEventListener("click", handleCloseMenu);
     return () => window.removeEventListener("click", handleCloseMenu);
   }, [slideContextMenu]);
+
+  useEffect(() => {
+    if (!songContextMenu) return;
+    const handleCloseMenu = () => setSongContextMenu(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, [songContextMenu]);
 
   const [worshipOverlayVisible, setWorshipOverlayVisible] = useState(true);
   const [visibilityActionPending, setVisibilityActionPending] = useState(false);
@@ -2699,6 +2707,21 @@ function DockWorshipTab({
       autoSplit: stage.autoSplit,
     });
   }, [buildSectionPayload, selectedSong, selectedSongDisplayTitle, selectedSongSections]);
+
+  const handleAddSongToSchedule = useCallback((song: DockSong) => {
+    addWholeWorshipSongToActiveSchedule({
+      songTitle: song.title,
+      artist: song.artist,
+      lyrics: song.lyrics,
+      songId: song.id,
+      overlayMode,
+      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
+      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+      linesPerSlide: song.linesPerSlide,
+      autoSplit: song.autoSplit,
+    });
+    showToast(t("schedule.addedSongToSchedule", { defaultValue: `Added "${song.title}" to Schedule` }), "success");
+  }, [overlayMode, selectedFSTheme, selectedLTTheme, showToast, t]);
 
   const pushSection = useCallback(
     async (idx: number, options?: { showPresentationMeta?: boolean }) => {
@@ -3993,6 +4016,16 @@ function DockWorshipTab({
                         <div
                           key={song.id}
                           className={`dock-card dock-card--console dock-song-card${isLocked ? " dock-song-card--locked" : ""}`}
+                          onContextMenu={(event) => {
+                            if (isLocked) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setSongContextMenu({
+                              x: Math.min(event.clientX, window.innerWidth - 220),
+                              y: Math.min(event.clientY, window.innerHeight - 200),
+                              song,
+                            });
+                          }}
                         >
                           <button
                             type="button"
@@ -4041,6 +4074,18 @@ function DockWorshipTab({
                             <>
                               <button
                                 type="button"
+                                className="dock-song-card__schedule"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleAddSongToSchedule(song);
+                                }}
+                                aria-label={`${t('schedule.addToSchedule', 'Add to Schedule')} ${song.title}`}
+                                title={t('schedule.addToSchedule', 'Add to Schedule')}
+                              >
+                                <Icon name="playlist_add" size={16} />
+                              </button>
+                              <button
+                                type="button"
                                 className="dock-song-card__edit"
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -4080,6 +4125,66 @@ function DockWorshipTab({
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+                {songContextMenu && (
+                  <div
+                    className="dock-bible-context-menu"
+                    style={{
+                      position: "fixed",
+                      top: `${songContextMenu.y}px`,
+                      left: `${songContextMenu.x}px`,
+                      zIndex: 10000,
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        handleAddSongToSchedule(songContextMenu.song);
+                        setSongContextMenu(null);
+                      }}
+                    >
+                      <Icon name="playlist_add" size={16} />
+                      <span>{t("schedule.addToSchedule", "Add to Schedule")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        handleSelectSong(songContextMenu.song);
+                        setSongContextMenu(null);
+                      }}
+                    >
+                      <Icon name="queue_music" size={16} />
+                      <span>{t("worship.openSong", "Open Song")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item"
+                      onClick={() => {
+                        openSongEditor(songContextMenu.song);
+                        setSongContextMenu(null);
+                      }}
+                    >
+                      <Icon name="edit" size={16} />
+                      <span>{t("common.edit", "Edit Song")}</span>
+                    </button>
+                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                    <button
+                      type="button"
+                      className="dock-bible-context-menu__item dock-bible-context-menu__item--danger"
+                      style={{ color: "#FCA5A5" }}
+                      onClick={() => {
+                        setSongDeleteTarget(songContextMenu.song);
+                        setSongContextMenu(null);
+                      }}
+                    >
+                      <Icon name="delete_outline" size={16} />
+                      <span>{t("common.delete", "Delete Song")}</span>
+                    </button>
                   </div>
                 )}
               </section>
@@ -4264,7 +4369,34 @@ function DockWorshipTab({
                     </div>
                   </div>
                 ) : (
-                  <div className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSectionIdx !== null ? " is-reordering" : ""}`}>
+                  <div
+                    className={`dock-console-list dock-worship-workspace__list dock-worship-slide-queue${draggingSectionIdx !== null ? " is-reordering" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      const container = event.currentTarget;
+                      const rect = container.getBoundingClientRect();
+                      const offsetY = event.clientY - rect.top;
+                      if (offsetY < 50) {
+                        container.scrollTop -= 14;
+                      } else if (rect.bottom - event.clientY < 50) {
+                        container.scrollTop += 14;
+                      }
+                    }}
+                    onDrop={(event) => {
+                      const sourceIdx = draggingSectionIdx ?? Number(event.dataTransfer.getData("text/plain"));
+                      if (Number.isFinite(sourceIdx) && sourceIdx >= 0) {
+                        const container = event.currentTarget;
+                        const rect = container.getBoundingClientRect();
+                        const offsetY = event.clientY - rect.top;
+                        const targetIdx = offsetY < rect.height / 2 ? 0 : selectedSongSections.length - 1;
+                        void handleReorderWorshipSection(sourceIdx, targetIdx);
+                      }
+                      setDraggingSectionIdx(null);
+                      setDragOverSectionIdx(null);
+                      setDropPosition(null);
+                    }}
+                  >
                     {lyricsFilteredSectionIndexes.map((idx) => {
                       const section = selectedSongSections[idx];
                       if (!section) return null;
@@ -4282,7 +4414,7 @@ function DockWorshipTab({
                             event.stopPropagation();
                             setSlideContextMenu({
                               x: Math.min(event.clientX, window.innerWidth - 220),
-                              y: Math.min(event.clientY, window.innerHeight - 150),
+                              y: Math.min(event.clientY, window.innerHeight - 250),
                               sectionIdx: idx,
                             });
                           }}
@@ -4311,9 +4443,12 @@ function DockWorshipTab({
                           }}
                           onDrop={(event) => {
                             event.preventDefault();
+                            event.stopPropagation();
                             const sourceIdx = draggingSectionIdx ?? Number(event.dataTransfer.getData("text/plain"));
-                            if (Number.isFinite(sourceIdx) && dropPosition) {
-                              const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, dropPosition, selectedSongSections.length);
+                            if (Number.isFinite(sourceIdx) && sourceIdx >= 0) {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const pos = dropPosition || (event.clientY < rect.top + rect.height / 2 ? "above" : "below");
+                              const targetIdx = calculateReorderTargetIndex(sourceIdx, idx, pos, selectedSongSections.length);
                               void handleReorderWorshipSection(sourceIdx, targetIdx);
                             }
                             setDraggingSectionIdx(null);
@@ -4469,6 +4604,59 @@ function DockWorshipTab({
                       <Icon name="edit" size={16} />
                       <span>{t("worship.quickEdit", "Edit Slide")}</span>
                     </button>
+                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                    {slideContextMenu.sectionIdx > 0 && (
+                      <button
+                        type="button"
+                        className="dock-bible-context-menu__item"
+                        onClick={() => {
+                          void handleReorderWorshipSection(slideContextMenu.sectionIdx, 0);
+                          setSlideContextMenu(null);
+                        }}
+                      >
+                        <Icon name="vertical_align_top" size={16} />
+                        <span>{t("common.moveToTop", "Move to Top")}</span>
+                      </button>
+                    )}
+                    {slideContextMenu.sectionIdx > 0 && (
+                      <button
+                        type="button"
+                        className="dock-bible-context-menu__item"
+                        onClick={() => {
+                          void handleReorderWorshipSection(slideContextMenu.sectionIdx, slideContextMenu.sectionIdx - 1);
+                          setSlideContextMenu(null);
+                        }}
+                      >
+                        <Icon name="arrow_upward" size={16} />
+                        <span>{t("common.moveUp", "Move Up")}</span>
+                      </button>
+                    )}
+                    {slideContextMenu.sectionIdx < selectedSongSections.length - 1 && (
+                      <button
+                        type="button"
+                        className="dock-bible-context-menu__item"
+                        onClick={() => {
+                          void handleReorderWorshipSection(slideContextMenu.sectionIdx, slideContextMenu.sectionIdx + 1);
+                          setSlideContextMenu(null);
+                        }}
+                      >
+                        <Icon name="arrow_downward" size={16} />
+                        <span>{t("common.moveDown", "Move Down")}</span>
+                      </button>
+                    )}
+                    {slideContextMenu.sectionIdx < selectedSongSections.length - 1 && (
+                      <button
+                        type="button"
+                        className="dock-bible-context-menu__item"
+                        onClick={() => {
+                          void handleReorderWorshipSection(slideContextMenu.sectionIdx, selectedSongSections.length - 1);
+                          setSlideContextMenu(null);
+                        }}
+                      >
+                        <Icon name="vertical_align_bottom" size={16} />
+                        <span>{t("common.moveToBottom", "Move to Bottom")}</span>
+                      </button>
+                    )}
                   </div>
                 )}
                 <DockOutputQuickActions
