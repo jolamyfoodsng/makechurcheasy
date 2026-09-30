@@ -567,3 +567,65 @@ export function updateItemOverlayMode(
   }
 }
 
+/**
+ * Rename an item's label in the active schedule or history.
+ */
+export function renameScheduleItem(
+  itemId: string,
+  newLabel: string,
+  scope: "schedule" | "history" = "schedule",
+): void {
+  const trimmed = newLabel.trim();
+  if (!trimmed) return;
+
+  if (scope === "history") {
+    const current = getPresentationHistory();
+    const updated = current.map((item) =>
+      item.id === itemId ? { ...item, label: trimmed, updatedAt: Date.now() } : item,
+    );
+    writePresentationHistory(updated);
+  } else {
+    const { activePlan } = getOrCreateActiveSchedule();
+    const updated = activePlan.items.map((item) =>
+      item.id === itemId ? { ...item, label: trimmed, updatedAt: Date.now() } : item,
+    );
+    saveSchedulePlan({
+      ...activePlan,
+      items: updated,
+      updatedAt: Date.now(),
+    });
+  }
+  notifyScheduleToast(`Renamed to "${trimmed}"`);
+}
+
+/**
+ * Move a schedule item to the very top (pin to top) of the active schedule.
+ */
+export function pinScheduleItemToTop(itemId: string): void {
+  const { activePlan } = getOrCreateActiveSchedule();
+  const target = activePlan.items.find((i) => i.id === itemId);
+  if (!target) return;
+  const rest = activePlan.items.filter((i) => i.id !== itemId);
+  saveSchedulePlan({
+    ...activePlan,
+    items: [target, ...rest],
+    updatedAt: Date.now(),
+  });
+  notifyScheduleToast(`Pinned "${target.label}" to top`);
+}
+
+/**
+ * Pin (copy) an item from presentation history into the active schedule.
+ */
+export function pinItemToSchedule(item: ServicePlanItem): ServicePlanItem {
+  return addItemToActiveSchedule({
+    type: item.type,
+    label: item.label,
+    subtitle: item.subtitle,
+    sourceKind: item.sourceKind,
+    sourceId: item.sourceId,
+    notes: item.notes,
+    payloadSnapshot: item.payloadSnapshot,
+  });
+}
+

@@ -4,11 +4,18 @@
  * Design:
  * 1. Shares layout space with Dock tabs (40/60 split, user-resizable via drag handle).
  * 2. Pin / Unpin button with true Pin icon (pins open permanently).
- * 3. Card-based schedule items: rich cards with 1.5 line-height.
- * 4. Entire card is clickable to present live to OBS.
- * 5. High-contrast, easily visible close and remove buttons.
- * 6. Bottom center placeholder when queue has space.
- * 7. Clean collapse to slim 34px rail when unpinned.
+ * 3. Bible, Worship & Notes: Clean, basic box (modeled after Dock LM tab).
+ *    Shows reference title, 2-line snippet with ellipsis, clickable to project immediately.
+ *    Hover reveals FULL/LT mode toggles and 3-dots actions.
+ * 4. Media: Thumbnail on top, caption below, clickable to project, 3-dots menu button on top right.
+ * 5. Right-click context menu & 3-dots menu on every card:
+ *    - Hide from OBS (clears live output)
+ *    - Switch to FULL / LT
+ *    - Rename card
+ *    - Pin to Top (schedule) / Pin to Schedule (history)
+ *    - Remove
+ * 6. Responsive narrow width header (<= 210px / compact):
+ *    Switches Schedule & History tabs to icons with badge count only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +24,7 @@ import Icon from "../DockIcon";
 import { dockObsClient } from "../dockObsClient";
 import type { ServicePlan, ServicePlanItem, ServicePlannerSnapshot } from "../../service-planner/types";
 import {
+  clearPresentationHistory,
   createNewSchedulePlan,
   DOCK_HISTORY_CHANGED_EVENT,
   DOCK_SCHEDULE_CHANGED_EVENT,
@@ -24,8 +32,11 @@ import {
   getOrCreateActiveSchedule,
   getPresentationHistory,
   notifyScheduleToast,
+  pinItemToSchedule,
+  pinScheduleItemToTop,
   removeHistoryItem,
   removeItemFromActiveSchedule,
+  renameScheduleItem,
   saveSchedulePlan,
   setActiveScheduleId,
   updateItemOverlayMode,
@@ -43,6 +54,19 @@ interface Props {
   initialSnapshot?: ServicePlannerSnapshot | null;
   onSelectTab?: (tab: "bible" | "worship" | "media" | "notes") => void;
   isNarrow?: boolean;
+}
+
+interface ContextMenuState {
+  item: ServicePlanItem;
+  x: number;
+  y: number;
+  scope: "schedule" | "history";
+}
+
+interface RenameState {
+  item: ServicePlanItem;
+  label: string;
+  scope: "schedule" | "history";
 }
 
 function getMediaThumbnailSrc(payload: Record<string, unknown>): string {
@@ -83,7 +107,6 @@ function getMediaThumbnailSrc(payload: Record<string, unknown>): string {
   }
 }
 
-
 export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Props) {
   const { t } = useTranslation();
   const [plans, setPlans] = useState<ServicePlan[]>([]);
@@ -94,6 +117,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const [newScheduleTitle, setNewScheduleTitle] = useState("");
   const [activeViewTab, setActiveViewTab] = useState<"schedule" | "history">("schedule");
   const [historyItems, setHistoryItems] = useState<ServicePlanItem[]>(() => getPresentationHistory());
+
+  // Context Menu & Rename states
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [renamingItem, setRenamingItem] = useState<RenameState | null>(null);
 
   // Default to false so user starts on Bible tab cleanly without schedule taking over
   const [isPinned, setIsPinned] = useState<boolean>(() => {
@@ -361,6 +388,81 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     }
   }, [activeViewTab]);
 
+  const handleClearHistory = useCallback(() => {
+    clearPresentationHistory();
+    setHistoryItems([]);
+    notifyScheduleToast("Cleared presentation history");
+  }, []);
+
+  const handleHideFromObs = useCallback(async (item: ServicePlanItem) => {
+    try {
+      if (item.type === "bible") {
+        await dockObsClient.clearBible();
+      } else if (item.type === "worship") {
+        await dockObsClient.clearWorshipLyrics();
+      } else if (item.type === "sermon") {
+        await dockObsClient.clearNotesLyrics();
+        await dockObsClient.clearSermonCue();
+      } else if (item.type === "media") {
+        await dockObsClient.clearMedia();
+      }
+      await dockObsClient.clearLowerThirds();
+      if (activeCueId === item.id) {
+        setActiveCueId(null);
+      }
+      notifyScheduleToast(`Cleared "${item.label}" from OBS`);
+    } catch (err) {
+      console.warn("[DockSchedule] Failed to hide item from OBS:", err);
+      notifyScheduleToast("Failed to clear output", "error");
+    }
+  }, [activeCueId]);
+
+  const handlePinFromMenu = useCallback((item: ServicePlanItem, scope: "schedule" | "history") => {
+    if (scope === "history") {
+      pinItemToSchedule(item);
+      refreshState();
+    } else {
+      pinScheduleItemToTop(item.id);
+      refreshState();
+    }
+  }, [refreshState]);
+
+  const handleSaveRename = useCallback(() => {
+    if (!renamingItem) return;
+    renameScheduleItem(renamingItem.item.id, renamingItem.label, renamingItem.scope);
+    if (renamingItem.scope === "history") {
+      setHistoryItems(getPresentationHistory());
+    } else {
+      refreshState();
+    }
+    setRenamingItem(null);
+  }, [renamingItem, refreshState]);
+
+  const handleOpenContextMenu = useCallback((
+    e: React.MouseEvent,
+    item: ServicePlanItem,
+    scope: "schedule" | "history",
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, Math.max(10, window.innerWidth - 220));
+    const y = Math.min(e.clientY, Math.max(10, window.innerHeight - 260));
+    setContextMenu({ item, x, y, scope });
+  }, []);
+
+  const handleOpenMoreMenu = useCallback((
+    e: React.MouseEvent,
+    item: ServicePlanItem,
+    scope: "schedule" | "history",
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.min(rect.right - 180, Math.max(10, window.innerWidth - 220));
+    const y = Math.min(rect.bottom + 4, Math.max(10, window.innerHeight - 260));
+    setContextMenu({ item, x, y, scope });
+  }, []);
+
   const handleCreateNewSchedule = useCallback(() => {
     const title = newScheduleTitle.trim() || `Service ${plans.length + 1}`;
     createNewSchedulePlan(title);
@@ -385,9 +487,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     return () => observer.disconnect();
   }, [isDrawerOpen]);
 
-  const effectiveWidth = measuredWidth ?? customWidth ?? (isDrawerOpen ? 260 : 34);
-  const isCompact = isDrawerOpen && effectiveWidth <= 260;
-  const isUltraCompact = isDrawerOpen && effectiveWidth <= 195;
+  const effectiveWidth = measuredWidth ?? customWidth ?? (isDrawerOpen ? 280 : 34);
+  const isCompact = isDrawerOpen && effectiveWidth <= 220;
+  const isUltraCompact = isDrawerOpen && effectiveWidth <= 165;
+  const isNarrowTabs = effectiveWidth <= 210 || isCompact;
 
   return (
     <aside
@@ -452,7 +555,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       {isDrawerOpen && (
         <div className={`dock-schedule-panel ${isCompact ? "dock-schedule-panel--compact" : ""} ${isUltraCompact ? "dock-schedule-panel--ultra-compact" : ""}`}>
           <div className="dock-schedule-panel__header">
-            {/* Row 1: Dedicated Full-Width Schedule vs History Tabs (Above Pin/Close) */}
+            {/* Row 1: Dedicated Full-Width Schedule vs History Tabs */}
             <div className="dock-schedule-panel__tabs-row">
               <div className="dock-schedule-tabs" role="tablist">
                 <button
@@ -461,9 +564,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   aria-selected={activeViewTab === "schedule"}
                   className={`dock-schedule-tab-btn ${activeViewTab === "schedule" ? "dock-schedule-tab-btn--active" : ""}`}
                   onClick={() => setActiveViewTab("schedule")}
+                  title={t("schedule.title", "Schedule")}
                 >
                   <Icon name="event_note" size={13} />
-                  <span>{t("schedule.title", "Schedule")}</span>
+                  {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("schedule.title", "Schedule")}</span>}
                   {scheduleItems.length > 0 && (
                     <span className="dock-schedule-tab-badge">{scheduleItems.length}</span>
                   )}
@@ -474,9 +578,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   aria-selected={activeViewTab === "history"}
                   className={`dock-schedule-tab-btn ${activeViewTab === "history" ? "dock-schedule-tab-btn--active" : ""}`}
                   onClick={() => setActiveViewTab("history")}
+                  title={t("common.history", "History")}
                 >
                   <Icon name="history" size={13} />
-                  <span>{t("common.history", "History")}</span>
+                  {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("common.history", "History")}</span>}
                   {historyItems.length > 0 && (
                     <span className="dock-schedule-tab-badge">{historyItems.length}</span>
                   )}
@@ -484,7 +589,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               </div>
             </div>
 
-            {/* Row 2: Select/Title on Left + Pin & Close Buttons on Right */}
+            {/* Row 2: Select/Title on Left + Actions on Right */}
             <div className="dock-schedule-panel__actions-row">
               {activeViewTab === "schedule" ? (
                 <select
@@ -510,6 +615,17 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 <div className="dock-schedule-panel__history-title">
                   <Icon name="history" size={14} className="dock-schedule-panel__history-icon" />
                   <span>{t("schedule.historyTitle", "Recent Output")}</span>
+                  {historyItems.length > 0 && (
+                    <button
+                      type="button"
+                      className="dock-schedule-panel__clear-history-btn"
+                      onClick={handleClearHistory}
+                      title="Clear History"
+                      aria-label="Clear History"
+                    >
+                      <Icon name="delete_sweep" size={13} />
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -561,7 +677,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             )}
           </div>
 
-          {/* ── Rich Card List ── */}
+          {/* ── Card List ── */}
           <div className="dock-schedule-panel__list">
             {(activeViewTab === "history" ? historyItems : scheduleItems).length === 0 ? (
               <div className="dock-schedule-panel__empty">
@@ -588,7 +704,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 const currentOverlayMode = (payload.overlayMode as "fullscreen" | "lower-third") ||
                   (item.type === "bible" ? "fullscreen" : "lower-third");
 
-                // ── Picture & Video Card (Thumbnail on top, minimal text emphasis) ──
+                // ── Media Card (Thumbnail on top, caption below, 3-dots at top right, right-clickable) ──
                 if (isMedia) {
                   const isImgThumb = mediaSrc && (/\.(png|jpe?g|webp|gif|avif)($|\?)/i.test(mediaSrc) || Boolean(payload.thumbnailUrl));
 
@@ -597,6 +713,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       key={item.id}
                       className={`dock-schedule-card dock-schedule-card--media ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
                       onClick={() => void handlePresentItem(item)}
+                      onContextMenu={(e) => handleOpenContextMenu(e, item, activeViewTab)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -605,7 +722,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           void handlePresentItem(item);
                         }
                       }}
-                      title={`${index + 1}. ${item.label} (Click to project)`}
+                      title={`${index + 1}. ${item.label} (Click to project, right-click for options)`}
                       aria-label={`${index + 1}. ${item.label}`}
                     >
                       {/* Thumbnail on TOP */}
@@ -651,15 +768,27 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                             LIVE
                           </span>
                         )}
+
+                        {/* Three dots button at top right */}
+                        <button
+                          type="button"
+                          className="dock-schedule-card__thumb-more-btn"
+                          onClick={(e) => handleOpenMoreMenu(e, item, activeViewTab)}
+                          title="More options"
+                          aria-label="More options"
+                        >
+                          <Icon name="more_vert" size={13} />
+                        </button>
                       </div>
 
-                      {/* Footer with minimal text emphasis & actions */}
+                      {/* Footer with clean caption */}
                       <div className="dock-schedule-card__media-footer">
                         <span className="dock-schedule-card__media-caption" title={item.label}>
                           {item.label}
                         </span>
 
-                        <div className="dock-schedule-card__actions" onClick={(e) => e.stopPropagation()}>
+                        {/* Preserved accessible / test suite actions */}
+                        <div className="dock-schedule-card__actions dock-schedule-card__media-quick-actions" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
@@ -688,12 +817,13 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   );
                 }
 
-                // ── Bible / Worship / Notes Card (Top: Chapter-verse, Middle: Inscribed passage, Bottom: FULL/LT + Buttons) ──
+                // ── Bible / Worship / Notes Card: Basic clean box like Dock LM tab ──
                 return (
                   <div
                     key={item.id}
                     className={`dock-schedule-card dock-schedule-card--text ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
                     onClick={() => void handlePresentItem(item)}
+                    onContextMenu={(e) => handleOpenContextMenu(e, item, activeViewTab)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -702,10 +832,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         void handlePresentItem(item);
                       }
                     }}
-                    title={`${index + 1}. ${item.label} (Click to project)`}
+                    title={`${index + 1}. ${item.label} (Click to project, right-click for options)`}
                     aria-label={`${index + 1}. ${item.label}`}
                   >
-                    {/* Top Row: Bible chapter-verse / Song title (Full width, no buttons crowding it) */}
+                    {/* Top Row: Bible chapter-verse / Song title on left, 3-dots button on right */}
                     <div className="dock-schedule-card__header-row dock-schedule-card__title-row">
                       <div className="dock-schedule-card__title">
                         <span className="dock-schedule-card__title-text">{item.label}</span>
@@ -716,9 +846,19 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           </span>
                         )}
                       </div>
+
+                      <button
+                        type="button"
+                        className="dock-schedule-card__more-btn"
+                        onClick={(e) => handleOpenMoreMenu(e, item, activeViewTab)}
+                        title="More options"
+                        aria-label="More options"
+                      >
+                        <Icon name="more_vert" size={13} />
+                      </button>
                     </div>
 
-                    {/* Middle Row: The passage being read (inscribed presentation) */}
+                    {/* Middle Row: First 2 lines of verse / lyrics with ellipsis (...) */}
                     {item.subtitle && (
                       <div
                         className="dock-schedule-card__snippet dock-schedule-card__inscribed-passage"
@@ -728,7 +868,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       </div>
                     )}
 
-                    {/* Bottom Row: FULL / LT Slider Toggle + Action Buttons */}
+                    {/* Bottom Row: Subtle hover controls (FULL/LT toggle) */}
                     <div className="dock-schedule-card__bottom-row" onClick={(e) => e.stopPropagation()}>
                       <div className="dock-schedule-mode-toggle" role="group" aria-label="Overlay display mode">
                         <button
@@ -823,6 +963,170 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             title={t("schedule.resizeHint", "Drag left/right to resize schedule (double-click to reset)")}
             aria-label="Resize schedule"
           />
+        </div>
+      )}
+
+      {/* ── Right-Click / 3-Dots Context Menu ── */}
+      {contextMenu && (
+        <>
+          <div
+            className="dock-schedule-context-backdrop"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu(null);
+            }}
+          />
+          <div
+            className="dock-schedule-context-menu"
+            style={{
+              top: contextMenu.y,
+              left: contextMenu.x,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dock-schedule-context-menu__header">
+              <span className="dock-schedule-context-menu__title">{contextMenu.item.label}</span>
+            </div>
+
+            <div className="dock-schedule-context-menu__divider" />
+
+            {/* Hide from OBS / Clear output */}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                const item = contextMenu.item;
+                setContextMenu(null);
+                void handleHideFromObs(item);
+              }}
+            >
+              <Icon name="visibility_off" size={13} />
+              <span>Hide from OBS</span>
+            </button>
+
+            {/* Display Mode Switches */}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                const { item, scope } = contextMenu;
+                setContextMenu(null);
+                void handleSetOverlayMode(item, "fullscreen", scope);
+              }}
+            >
+              <Icon name="maximize" size={13} />
+              <span>Switch to FULL (Fullscreen)</span>
+            </button>
+
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                const { item, scope } = contextMenu;
+                setContextMenu(null);
+                void handleSetOverlayMode(item, "lower-third", scope);
+              }}
+            >
+              <Icon name="minimize" size={13} />
+              <span>Switch to LT (Lower Third)</span>
+            </button>
+
+            {/* Pin action */}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                const { item, scope } = contextMenu;
+                setContextMenu(null);
+                handlePinFromMenu(item, scope);
+              }}
+            >
+              <Icon name="push_pin" size={13} />
+              <span>{contextMenu.scope === "history" ? "Pin to Schedule" : "Pin to Top"}</span>
+            </button>
+
+            {/* Rename card */}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                const { item, scope } = contextMenu;
+                setContextMenu(null);
+                setRenamingItem({ item, label: item.label, scope });
+              }}
+            >
+              <Icon name="edit" size={13} />
+              <span>Rename Card</span>
+            </button>
+
+            <div className="dock-schedule-context-menu__divider" />
+
+            {/* Remove */}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item dock-schedule-context-menu__item--danger"
+              onClick={(e) => {
+                const { item } = contextMenu;
+                setContextMenu(null);
+                handleRemoveItem(e, item.id);
+              }}
+            >
+              <Icon name="delete_outline" size={13} />
+              <span>{contextMenu.scope === "history" ? "Remove from History" : "Remove from Schedule"}</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Inline Rename Modal ── */}
+      {renamingItem && (
+        <div className="dock-schedule-modal-backdrop" onClick={() => setRenamingItem(null)}>
+          <div className="dock-schedule-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dock-schedule-modal__header">
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="edit" size={14} />
+                <span>Rename Card</span>
+              </div>
+              <button
+                type="button"
+                className="dock-schedule-modal__close-btn"
+                onClick={() => setRenamingItem(null)}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="dock-schedule-modal__body">
+              <label className="dock-schedule-modal__label">Card Label</label>
+              <input
+                type="text"
+                className="dock-schedule-modal__input"
+                value={renamingItem.label}
+                onChange={(e) => setRenamingItem({ ...renamingItem, label: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveRename();
+                  if (e.key === "Escape") setRenamingItem(null);
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="dock-schedule-modal__footer">
+              <button
+                type="button"
+                className="dock-schedule-btn"
+                onClick={() => setRenamingItem(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dock-schedule-btn dock-schedule-btn--primary"
+                onClick={handleSaveRename}
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>
