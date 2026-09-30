@@ -7327,6 +7327,24 @@ export class DockObsClient {
       const referenceText = backgroundOnly
         ? ""
         : this.formatBibleReferenceDisplayText(reference, data.translation, data.displayReferenceLabel);
+      try {
+        const refLabel = referenceText || reference;
+        const translation = data.translation ? ` (${data.translation})` : "";
+        recordPresentationHistory({
+          type: "bible",
+          sourceKind: "bible-reference",
+          label: `${refLabel}${translation}`,
+          subtitle: (text || refLabel).slice(0, 200),
+          notes: data.translation,
+          payloadSnapshot: {
+            ...data,
+            overlayMode: mode,
+          },
+          overlayMode: mode,
+        });
+      } catch {
+        // Ignore history recording failures
+      }
       const compareEnabled = Boolean(data.compareEnabled || data.compare?.enabled);
       const compareMode = data.compare?.mode ?? data.compareMode ?? "translations";
       const compareLayout = data.compare?.layout ?? data.compareLayout ?? "line-by-line";
@@ -7405,6 +7423,50 @@ export class DockObsClient {
     sceneName: string,
   ): Promise<void> {
     const mode = data.overlayMode ?? "lower-third";
+    try {
+      const vals = (data.values || {}) as Record<string, unknown>;
+      if (tab === "worship") {
+        const songTitle = (vals.title as string) || (vals.songTitle as string) || "Worship";
+        const sectionLabel = (vals.sectionLabel as string) || (vals.header as string) || "";
+        const label = sectionLabel ? `${songTitle} · ${sectionLabel}` : String(songTitle);
+        const text = (vals.lyrics as string) || (vals.text as string) || "";
+        const snippet = String(text).split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+        recordPresentationHistory({
+          type: "worship",
+          sourceKind: "worship-song-section",
+          label,
+          subtitle: snippet,
+          payloadSnapshot: {
+            ...vals,
+            sectionText: text,
+            sectionLabel,
+            songTitle,
+            overlayMode: mode,
+          },
+          overlayMode: mode,
+        });
+      } else if (tab === "notes") {
+        const noteTitle = (vals.title as string) || "Note";
+        const text = (vals.text as string) || (vals.notes as string) || "";
+        const snippet = String(text).split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+        recordPresentationHistory({
+          type: "sermon",
+          sourceKind: "sermon-point",
+          label: String(noteTitle),
+          subtitle: snippet,
+          payloadSnapshot: {
+            ...vals,
+            isNoteSlide: true,
+            slideText: text,
+            noteTitle,
+            overlayMode: mode,
+          },
+          overlayMode: mode,
+        });
+      }
+    } catch {
+      // Ignore
+    }
     const sourceName = this.getSceneRouteSourceName(tab, sceneName);
     if (mode === "lower-third" && data.ltTheme) {
       await this.pushSceneRouteBrowserSource({
@@ -8322,6 +8384,23 @@ export class DockObsClient {
     // out of order and briefly repaint an older pattern after the new one.
     return this.runSerializedBibleMutation(async () => {
       this._lastBibleMode = mode;
+      try {
+        const refLabel = data.referenceText || (data.verseRange ? `Verse ${data.verseRange}` : "Bible");
+        recordPresentationHistory({
+          type: "bible",
+          sourceKind: "bible-reference",
+          label: refLabel,
+          subtitle: (data.verseText || refLabel).slice(0, 200),
+          notes: data.translationA || "Bible",
+          payloadSnapshot: {
+            ...data,
+            overlayMode: mode,
+          },
+          overlayMode: mode,
+        });
+      } catch {
+        // Ignore history recording failures
+      }
       let themeSettingsForClean: Record<string, unknown>;
       if (mode === "lower-third") {
         const { overlayTheme } = this.prepareDedicatedLowerThirdTheme(effectiveThemeSettings);
@@ -8424,6 +8503,26 @@ export class DockObsClient {
     }
 
     this._lastOverlayMode[sourceName] = mode;
+    try {
+      const songTitle = data.songTitle || "Worship";
+      const sectionLabel = data.sectionLabel || "";
+      const label = sectionLabel ? `${songTitle} · ${sectionLabel}` : songTitle;
+      const snippet = (data.sectionText || "").split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+      recordPresentationHistory({
+        type: "worship",
+        sourceKind: "worship-song-section",
+        label,
+        subtitle: snippet,
+        notes: data.artist,
+        payloadSnapshot: {
+          ...data,
+          overlayMode: mode,
+        },
+        overlayMode: mode,
+      });
+    } catch {
+      // Ignore history recording failures
+    }
     const backgroundOnly = Boolean(data.backgroundOnly);
     const sectionText = backgroundOnly ? "" : data.sectionText;
     const translationText = backgroundOnly ? "" : (data.translationText ?? "");
@@ -8533,6 +8632,28 @@ export class DockObsClient {
     }
 
     this._lastOverlayMode[sourceName] = mode;
+    try {
+      const noteTitle = data.songTitle || "Note";
+      const sectionLabel = data.sectionLabel || "";
+      const label = sectionLabel ? `${noteTitle} · ${sectionLabel}` : noteTitle;
+      const snippet = (data.sectionText || "").split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+      recordPresentationHistory({
+        type: "sermon",
+        sourceKind: "sermon-point",
+        label,
+        subtitle: snippet,
+        payloadSnapshot: {
+          ...data,
+          isNoteSlide: true,
+          slideText: data.sectionText,
+          noteTitle,
+          overlayMode: mode,
+        },
+        overlayMode: mode,
+      });
+    } catch {
+      // Ignore history recording failures
+    }
     const backgroundOnly = Boolean(data.backgroundOnly);
     const sectionText = backgroundOnly ? "" : data.sectionText;
     const translationText = backgroundOnly ? "" : (data.translationText ?? "");
@@ -10984,6 +11105,25 @@ export class DockObsClient {
     _fileName: string,
     options: Pick<DockMediaSendOptions, "looping" | "muted"> = {},
   ): Promise<void> {
+    const fileName = _fileName || filePath.split(/[\/\\]/).pop() || "Audio";
+    try {
+      recordPresentationHistory({
+        type: "media",
+        sourceKind: "media-library-item",
+        label: fileName,
+        subtitle: "Audio track",
+        notes: fileName,
+        payloadSnapshot: {
+          filePath,
+          fileName,
+          mediaType: "audio",
+          looping: options.looping,
+          muted: options.muted,
+        },
+      });
+    } catch {
+      // Ignore history recording failures
+    }
     const sourceName = DOCK_MEDIA_AUDIO_SOURCE;
     if (this.isRemotePresentationSession()) {
       await this.pushVlcPlaylist({
@@ -11304,6 +11444,26 @@ export class DockObsClient {
     muted?: boolean;
   }): Promise<void> {
     const { sourceName, playlist, loop = true, shuffle = false, muted = true } = options;
+    try {
+      const playlistName = sourceName || "Media Playlist";
+      recordPresentationHistory({
+        type: "media",
+        sourceKind: "media-library-item",
+        label: playlistName,
+        subtitle: `${playlist.length} track(s)`,
+        notes: "VLC Playlist",
+        payloadSnapshot: {
+          sourceName,
+          playlist,
+          isPlaylist: true,
+          loop,
+          shuffle,
+          muted,
+        },
+      });
+    } catch {
+      // Ignore
+    }
 
     void this.focusMcePresentationModule("media", sourceName).catch(() => { });
 
@@ -11405,6 +11565,25 @@ export class DockObsClient {
   }): Promise<void> {
     const { sourceName, images, loop = true, slideTime = 3000 } = options;
     if (images.length === 0) return;
+    try {
+      const showName = sourceName || "Image Slideshow";
+      recordPresentationHistory({
+        type: "media",
+        sourceKind: "media-library-item",
+        label: showName,
+        subtitle: `${images.length} slide(s)`,
+        notes: "Image Slideshow",
+        payloadSnapshot: {
+          sourceName,
+          images,
+          isSlideshow: true,
+          loop,
+          slideTime,
+        },
+      });
+    } catch {
+      // Ignore
+    }
 
     void this.focusMcePresentationModule("media", sourceName).catch(() => { });
 
@@ -11685,6 +11864,22 @@ export class DockObsClient {
   }
 
   async pushPatternBackground(patternSrc: string, patternLabel: string): Promise<void> {
+    try {
+      recordPresentationHistory({
+        type: "media",
+        sourceKind: "media-library-item",
+        label: patternLabel || "Pattern Background",
+        subtitle: "Background pattern",
+        notes: "Pattern",
+        payloadSnapshot: {
+          patternSrc,
+          patternLabel,
+          mediaType: "pattern",
+        },
+      });
+    } catch {
+      // Ignore
+    }
     const mediaVideoSource = DOCK_MEDIA_VIDEO_SOURCE;
     const mediaImageSource = DOCK_MEDIA_IMAGE_SOURCE;
     const mediaPatternSource = DOCK_MEDIA_PATTERN_SOURCE;

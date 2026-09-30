@@ -277,8 +277,39 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       } else if (item.type === "media") {
         const filePath = (payload.filePath as string) || "";
         const fileName = (payload.fileName as string) || item.label;
-        if (filePath) {
-          await dockObsClient.pushMedia(filePath, fileName);
+        const mediaType = (payload.mediaType as string) || "";
+        if (payload.patternSrc) {
+          await dockObsClient.pushPatternBackground(
+            payload.patternSrc as string,
+            (payload.patternLabel as string) || item.label,
+          );
+          onSelectTab?.("media");
+        } else if (payload.isPlaylist && Array.isArray(payload.playlist)) {
+          await dockObsClient.pushVlcPlaylist({
+            sourceName: (payload.sourceName as string) || "MCE Media - Playlist",
+            playlist: payload.playlist as string[],
+            loop: payload.loop !== false,
+            shuffle: Boolean(payload.shuffle),
+            muted: Boolean(payload.muted),
+          });
+          onSelectTab?.("media");
+        } else if (payload.isSlideshow && Array.isArray(payload.images)) {
+          await dockObsClient.pushImageSlideshow({
+            sourceName: (payload.sourceName as string) || "MCE Media - Slideshow",
+            images: payload.images as string[],
+            loop: payload.loop !== false,
+            slideTime: (payload.slideTime as number) || 3000,
+          });
+          onSelectTab?.("media");
+        } else if (filePath) {
+          if (mediaType === "audio") {
+            await dockObsClient.pushAudio(filePath, fileName, {
+              looping: Boolean(payload.looping),
+              muted: Boolean(payload.muted),
+            });
+          } else {
+            await dockObsClient.pushMedia(filePath, fileName);
+          }
           onSelectTab?.("media");
         }
       }

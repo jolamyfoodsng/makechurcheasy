@@ -7002,13 +7002,24 @@ body.dock-modal-open {
   min-width: 0;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+}
+
+.dock-content-panels {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 4px;
-  background: transparent;
 }
 
 /* Visited dock pages stay mounted while inactive so in-progress edits survive

@@ -60,7 +60,7 @@ import {
 import { addToBibleHistory, loadBibleHistory } from "./bibleHistoryTypes";
 import type { BibleHistoryItem } from "./bibleHistoryTypes";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
-import { addBibleToActiveSchedule } from "../dockScheduleService";
+import { addBibleToActiveSchedule, recordPresentationHistory } from "../dockScheduleService";
 import {
   buildDockBackgroundPresetOverrides,
   type DockBackgroundPreset
@@ -3209,6 +3209,22 @@ function DockBibleTab({
         data: stageData,
       } as DockStagedItem;
       onStage(latestStagedRef.current);
+      try {
+        recordPresentationHistory({
+          type: "bible",
+          sourceKind: "bible-reference",
+          label: compareReferenceLabel,
+          subtitle: (first.verseText || "").slice(0, 200),
+          notes: "Compare Passages",
+          payloadSnapshot: {
+            ...stageData,
+            overlayMode: liveOverlayMode,
+          },
+          overlayMode: liveOverlayMode,
+        });
+      } catch {
+        // Ignore
+      }
 
       if (presentationLinkMode) {
         if (visibilityEpoch === visibilityEpochRef.current) setBibleOverlayVisible(true);
@@ -3856,6 +3872,25 @@ function DockBibleTab({
 
       latestStagedRef.current = nextStageItem;
       onStage(nextStageItem);
+
+      if (shouldRecordHistory && book && chapter && verse) {
+        try {
+          recordPresentationHistory({
+            type: "bible",
+            sourceKind: "bible-reference",
+            label: stageLabel,
+            subtitle: (stageSubtitle || selection.text || "").slice(0, 200),
+            notes: effectiveTranslation,
+            payloadSnapshot: {
+              ...stageData,
+              overlayMode: liveOverlayMode,
+            },
+            overlayMode: liveOverlayMode,
+          });
+        } catch {
+          // Ignore
+        }
+      }
 
       if (presentationLinkMode) {
         if (visibilityEpoch === visibilityEpochRef.current) setBibleOverlayVisible(true);

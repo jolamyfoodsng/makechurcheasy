@@ -1970,7 +1970,8 @@ function DockPageContent({
               }}
             />
             <div className="dock-content-main">
-            <Suspense fallback={<LoadingScreen variant="dock" label={t('common.loading', 'Loading…')} className="dock-tab-loading" />}>
+              <div className="dock-content-panels">
+                <Suspense fallback={<LoadingScreen variant="dock" label={t('common.loading', 'Loading…')} className="dock-tab-loading" />}>
               {mountedDockTabs.has("planner") && (
                 <div className="dock-tab-panel" hidden={renderedTab !== "planner"}>
                   <DockPlannerTab
@@ -2066,38 +2067,39 @@ function DockPageContent({
                   />
                 </div>
               )}
-            </Suspense>
-          </div>
-        </div>
-      </main>
-      </div>
+              </Suspense>
+              </div>
 
-      {/* ═══ HORIZONTAL TAB NAVIGATION (bottom, hidden when vertical) ═══ */}
-      {!verticalTabs && (
-        <nav className="dock-bottom-nav" aria-label={t('page.dockSections')}>
-          {navigableDockTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setRenderedTab(tab.id);
-              }}
-              onPointerEnter={() => preloadDockTab(tab.id)}
-              onPointerDown={() => preloadDockTab(tab.id)}
-              onFocus={() => preloadDockTab(tab.id)}
-              aria-label={tab.label}
-              title={tab.label}
-              data-label={tab.label}
-              data-summary={tab.summary}
-            >
-              <Icon name={tab.icon} size={14} className="dock-bottom-nav__icon" />
-              <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id, t)}</span>
-            </button>
-          ))}
-        </nav>
-      )}
+              {/* ═══ HORIZONTAL TAB NAVIGATION (bottom of main dock, hidden when vertical) ═══ */}
+              {!verticalTabs && (
+                <nav className="dock-bottom-nav" aria-label={t('page.dockSections')}>
+                  {navigableDockTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`dock-bottom-nav__item${activeTab === tab.id ? " dock-bottom-nav__item--active" : ""}`}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setRenderedTab(tab.id);
+                      }}
+                      onPointerEnter={() => preloadDockTab(tab.id)}
+                      onPointerDown={() => preloadDockTab(tab.id)}
+                      onFocus={() => preloadDockTab(tab.id)}
+                      aria-label={tab.label}
+                      title={tab.label}
+                      data-label={tab.label}
+                      data-summary={tab.summary}
+                    >
+                      <Icon name={tab.icon} size={14} className="dock-bottom-nav__icon" />
+                      <span className="dock-bottom-nav__label-short">{getCompactDockTabLabel(tab.id, t)}</span>
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
 
       {/* Keyboard shortcut toast feedback */}
       {toasts.length > 0 && (
