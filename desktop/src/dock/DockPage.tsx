@@ -504,8 +504,10 @@ function DockPageContent({
     });
     const handlePlanStorage = () => syncPlan();
     window.addEventListener("storage", handlePlanStorage);
-    window.addEventListener(LOCAL_DEV_PLAN_OVERRIDE_EVENT, handlePlanStorage);
-    const planRefreshTimer = window.setInterval(syncPlan, 60_000);
+    const planRefreshTimer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      syncPlan();
+    }, 60_000);
 
     // Initialize device performance detection for dock (non-blocking). On
     // sub-8 GB systems the tab cache is bounded below so hidden production
@@ -699,7 +701,8 @@ function DockPageContent({
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setDockHeight(entry.contentRect.height);
+        const nextH = Math.round(entry.contentRect.height);
+        setDockHeight((prev) => (Math.abs(prev - nextH) >= 8 ? nextH : prev));
       }
     });
     observer.observe(el);
@@ -840,6 +843,7 @@ function DockPageContent({
 
     const tryConnect = () => {
       if (disposed) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (dockObsClient.isConnected) {
         if (autoReconnectTimer) { clearInterval(autoReconnectTimer); autoReconnectTimer = null; }
         return;
@@ -961,6 +965,7 @@ function DockPageContent({
     });
 
     const pingInterval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       dockClient.sendCommand({ type: "ping", timestamp: Date.now() });
     }, 5000);
 

@@ -7795,7 +7795,7 @@ input[type="radio"] {
   align-items: center;
   justify-content: center;
   background: var(--bg-dark);
-  transition: opacity 0.5s ease;
+  transition: opacity 0.25s ease;
 }
 
 .splash-screen.splash-fade-out {

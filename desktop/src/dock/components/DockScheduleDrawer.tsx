@@ -35,7 +35,6 @@ import {
   pinScheduleItemToTop,
   removeHistoryItem,
   removeItemFromActiveSchedule,
-  renameScheduleItem,
   saveSchedulePlan,
   setActiveScheduleId,
   updateItemOverlayMode,

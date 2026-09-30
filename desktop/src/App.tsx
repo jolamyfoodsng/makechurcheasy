@@ -1024,9 +1024,8 @@ function App() {
       // Non-critical — will retry on next verification cycle
     });
 
-    const minSplashTime = new Promise((r) => setTimeout(r, 2000));
-
-    const updateCheck = checkForUpdate()
+    // Non-blocking background update check (never blocks UI)
+    checkForUpdate()
       .then((result) => {
         // Always process the result — even when no update is available,
         // we need the date for version age computation (forced update after 21 days)
@@ -1039,14 +1038,24 @@ function App() {
         // If update check fails (no internet, etc.), let the app proceed
       });
 
-    // Fetch server-driven forced update settings
-    const forcedUpdateCheck = fetchAppSettings()
+    // Non-blocking background forced update check (never blocks UI)
+    fetchAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
       })
       .catch(() => {
         // If fetch fails, proceed without server-driven forced update
       });
+
+    // Check whether this is a reload or active session
+    const isReload = typeof sessionStorage !== "undefined" && Boolean(sessionStorage.getItem("mce_session_active"));
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("mce_session_active", "1");
+    }
+
+    // On reload, don't hold the user back with an artificial delay.
+    // On fresh cold launch, keep a short 200ms transition to avoid jarring flicker.
+    const minSplashTime = isReload ? Promise.resolve() : new Promise((r) => setTimeout(r, 200));
 
 
     // Initialize the overlay URL (queries Tauri for the local server port)
@@ -1116,8 +1125,8 @@ function App() {
       img.onerror = () => resolve(); // proceed even if image fails
     });
 
-    // Wait for: minimum splash time + preload + update check + overlay init + forced update check
-    Promise.all([minSplashTime, preload, updateCheck, overlayInit, forcedUpdateCheck]).then(() => {
+    // Wait only for: minimum splash time + preload + local overlay init (network checks run asynchronously in background)
+    Promise.all([minSplashTime, preload, overlayInit]).then(() => {
       setResourcesReady(true);
     });
   }, []);

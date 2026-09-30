@@ -8,7 +8,6 @@
  * URL in OBS: http://127.0.0.1:<overlay-port>/dock.html
  */
 
-import React from "react";
 import ReactDOM from "react-dom/client";
 import "../i18n";
 import i18n from "../i18n";
@@ -55,11 +54,9 @@ function bootstrapDock() {
   if (!el) return;
 
   ReactDOM.createRoot(el).render(
-    <React.StrictMode>
-      <DockAuthGate>
-        <DockPage />
-      </DockAuthGate>
-    </React.StrictMode>
+    <DockAuthGate>
+      <DockPage />
+    </DockAuthGate>
   );
 }
 

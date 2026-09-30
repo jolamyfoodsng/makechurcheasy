@@ -111,105 +111,116 @@ const publicPresentationSessionId = getPublicPresentationSessionId();
 // Await auth store so the session is in memory before any component reads it.
 // initAuthStore no longer blocks on network (plan refresh is fire-and-forget),
 // so this resolves immediately from local storage.
-if (publicPresentationSessionId) {
-  void openPublicPresentationRoute(publicPresentationSessionId);
-} else {
-void Promise.all([initAuthStore(), overlayInitPromise]).then(async () => {
-  // Hydrate the native Dock database before any Dock page computes its
-  // synchronous initial state. This keeps defaults from briefly replacing
-  // the user's saved appearance or output settings.
-  try {
-    const { hydrateNativeDockSettings } = await import("./services/localDockSettings");
-    await hydrateNativeDockSettings();
-  } catch (error) {
-    console.warn("[Desktop] Native Dock settings hydration delayed:", error);
-  }
+// Detect /dock immediately to parallelize asset and data fetching
+const isDock = window.location.pathname === "/dock" || window.location.pathname === "/dock/";
 
-  // appAppearance is imported by the app shell before the async Tauri auth
-  // store has finished loading. Re-read it now that the user scope is known,
-  // so a saved palette is hydrated before MVSettings renders.
-  try {
-    const { refreshAppAppearance } = await import("./services/appAppearance");
-    refreshAppAppearance();
-    const { refreshAppThemePreference } = await import("./hooks/useAppTheme");
-    refreshAppThemePreference();
-  } catch { /* appearance hydration is best-effort */ }
+if (isDock) {
+  // 1. Kick off Dock bundle chunk downloads immediately in parallel with hydration
+  const dockBundlePromise = Promise.all([
+    import("./dock/DockPage"),
+    import("./dock/DockAuthGate"),
+    import("./dock/dock.css"),
+    import("./dock/dock-auth.css"),
+  ]);
 
-  // Sync church profile from web API on startup (ensures speakers, branding, etc. are in localStorage)
-  try {
-    const { syncChurchProfile } = await import("./services/churchProfileSync");
-    void syncChurchProfile();
-  } catch { /* sync is best-effort */ }
+  // 2. Initialize BroadcastChannel before React renders
+  import("./services/dockBridge").then(({ dockClient }) => dockClient.init()).catch(() => {});
 
-  // Start periodic usage sync to server (IndexedDB counts → /api/user/usage)
-  try {
-    const { startUsageSync } = await import("./services/usageSync");
-    startUsageSync();
-  } catch { /* usage sync is best-effort */ }
-
-  // Sync any pending offline credit transactions from previous sessions
-  try {
-    const { syncPendingTransactions } = await import("./services/credits");
-    void syncPendingTransactions();
-  } catch { /* credit sync is best-effort */ }
-
-  // Load desktop config from API (with cache/fallback) and apply theme overrides
-  try {
-    const { getDesktopConfig, refreshDesktopConfig } = await import("./services/desktopConfig");
-    await refreshDesktopConfig().catch(() => getDesktopConfig());
-
-    // Apply admin-configured theme overrides to DEFAULT_THEME_SETTINGS
-    const { applyThemeConfigOverrides } = await import("./bible/types");
-    applyThemeConfigOverrides();
-
-    const refreshDesktopSettings = () => {
-      void refreshDesktopConfig().then(() => {
-        applyThemeConfigOverrides();
-      });
-    };
-
-    // Background refresh every 5 minutes
-    setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      refreshDesktopSettings();
-    }, 5 * 60 * 1000);
-
-    // Refresh on window focus and connectivity change
-    window.addEventListener("focus", refreshDesktopSettings);
-    window.addEventListener("online", () => {
-      refreshDesktopSettings();
-      // Sync pending offline credit transactions when connectivity returns
-      import("./services/credits").then(({ syncPendingTransactions }) => {
-        void syncPendingTransactions();
-      }).catch(() => { /* credit sync is best-effort */ });
-    });
-  } catch { /* config loading is best-effort, falls back to defaults */ }
-
-  // MakeChurchEasy Dock uses a real pathname (/dock), not a hash route.
-  // Intercept before HashRouter mounts so the dock page works standalone.
-  if (window.location.pathname === "/dock" || window.location.pathname === "/dock/") {
-    // Initialize BroadcastChannel before React renders
-    import("./services/dockBridge").then(({ dockClient }) => dockClient.init());
-    Promise.all([
-      import("./dock/DockPage"),
-      import("./dock/DockAuthGate"),
-      import("./dock/dock.css"),
-      import("./dock/dock-auth.css"),
-    ]).then(([{ default: DockPage }, { default: DockAuthGate }]) => {
+  // 3. Hydrate local auth and native dock settings in parallel (all local, zero network wait)
+  Promise.all([
+    initAuthStore(),
+    overlayInitPromise,
+    import("./services/localDockSettings").then(({ hydrateNativeDockSettings }) => hydrateNativeDockSettings()).catch(() => {}),
+  ]).then(() => {
+    dockBundlePromise.then(([{ default: DockPage }, { default: DockAuthGate }]) => {
       root.render(
-        <React.StrictMode>
-          <DockAuthGate>
-            <DockPage />
-          </DockAuthGate>
-        </React.StrictMode>
+        <DockAuthGate>
+          <DockPage />
+        </DockAuthGate>
       );
     });
-  } else {
+  });
+
+  // 4. Run background non-critical syncs asynchronously without blocking dock UI
+  void (async () => {
+    try {
+      const { refreshAppAppearance } = await import("./services/appAppearance");
+      refreshAppAppearance();
+      const { refreshAppThemePreference } = await import("./hooks/useAppTheme");
+      refreshAppThemePreference();
+    } catch { /* best-effort */ }
+
+    try {
+      const { refreshDesktopConfig } = await import("./services/desktopConfig");
+      void refreshDesktopConfig();
+    } catch { /* best-effort */ }
+  })();
+} else if (publicPresentationSessionId) {
+  void openPublicPresentationRoute(publicPresentationSessionId);
+} else {
+  // Main Desktop App Bootstrap
+  void Promise.all([
+    initAuthStore(),
+    overlayInitPromise,
+    import("./services/localDockSettings").then(({ hydrateNativeDockSettings }) => hydrateNativeDockSettings()).catch(() => {}),
+  ]).then(async () => {
+    // Synchronously apply appearance & cached theme overrides so first paint is correct
+    try {
+      const { refreshAppAppearance } = await import("./services/appAppearance");
+      refreshAppAppearance();
+      const { refreshAppThemePreference } = await import("./hooks/useAppTheme");
+      refreshAppThemePreference();
+      const { applyThemeConfigOverrides } = await import("./bible/types");
+      applyThemeConfigOverrides();
+    } catch { /* best-effort */ }
+
+    // Mount main app immediately without StrictMode double-rendering
     root.render(
-      <React.StrictMode>
-        <RouterProvider router={appRouter} />
-      </React.StrictMode>
+      <RouterProvider router={appRouter} />
     );
-  }
-});
+
+    // Asynchronous background syncs (stale-while-revalidate, usage sync, profile sync)
+    void (async () => {
+      try {
+        const { syncChurchProfile } = await import("./services/churchProfileSync");
+        void syncChurchProfile();
+      } catch { /* best-effort */ }
+
+      try {
+        const { startUsageSync } = await import("./services/usageSync");
+        startUsageSync();
+      } catch { /* best-effort */ }
+
+      try {
+        const { syncPendingTransactions } = await import("./services/credits");
+        void syncPendingTransactions();
+      } catch { /* best-effort */ }
+
+      try {
+        const { refreshDesktopConfig } = await import("./services/desktopConfig");
+        const { applyThemeConfigOverrides } = await import("./bible/types");
+        await refreshDesktopConfig();
+        applyThemeConfigOverrides();
+
+        const refreshDesktopSettings = () => {
+          void refreshDesktopConfig().then(() => {
+            applyThemeConfigOverrides();
+          });
+        };
+
+        setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          refreshDesktopSettings();
+        }, 5 * 60 * 1000);
+
+        window.addEventListener("focus", refreshDesktopSettings);
+        window.addEventListener("online", () => {
+          refreshDesktopSettings();
+          import("./services/credits").then(({ syncPendingTransactions }) => {
+            void syncPendingTransactions();
+          }).catch(() => { /* best-effort */ });
+        });
+      } catch { /* best-effort */ }
+    })();
+  });
 }

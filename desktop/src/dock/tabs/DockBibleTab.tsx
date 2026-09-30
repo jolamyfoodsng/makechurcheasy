@@ -5178,6 +5178,7 @@ function DockBibleTab({
 
     const pollNavigationRelay = async () => {
       if (disposed || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       inFlight = true;
       try {
         const response = await fetch(

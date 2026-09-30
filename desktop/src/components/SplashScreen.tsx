@@ -26,7 +26,7 @@ export default function SplashScreen({ ready, onDone }: SplashScreenProps) {
     setFading(true);
 
     // Wait for CSS transition to finish, then unmount
-    const timer = setTimeout(onDone, 600);
+    const timer = setTimeout(onDone, 250);
     return () => clearTimeout(timer);
   }, [ready, onDone]);
 

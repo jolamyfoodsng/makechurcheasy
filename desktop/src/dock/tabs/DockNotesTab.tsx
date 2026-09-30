@@ -919,7 +919,8 @@ export default function DockNotesTab({
     let inFlight = false;
 
     const pollAppendCommands = async () => {
-      if (disposed || inFlight) return;
+      if (disposed || inFlight || !isActive) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       inFlight = true;
       try {
         const commands = await loadDockNotesAppendCommands();

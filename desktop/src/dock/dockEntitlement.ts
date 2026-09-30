@@ -266,6 +266,7 @@ export function startPlanRefresh(): void {
   void refreshPlanFromOverlayServer();
   // Poll every 60 seconds
   _refreshInterval = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     void refreshPlanFromOverlayServer();
   }, 60_000);
 }

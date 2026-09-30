@@ -5,7 +5,6 @@
  * URL in OBS: http://127.0.0.1:<overlay-port>/lm-dock.html
  */
 
-import React from "react";
 import ReactDOM from "react-dom/client";
 import "../i18n";
 import i18n from "../i18n";
@@ -36,10 +35,8 @@ dockClient.onState((msg) => {
 const el = document.getElementById("dock-root");
 if (el) {
   ReactDOM.createRoot(el).render(
-    <React.StrictMode>
-      <DockAuthGate>
-        <DockLmTab />
-      </DockAuthGate>
-    </React.StrictMode>,
+    <DockAuthGate>
+      <DockLmTab />
+    </DockAuthGate>,
   );
 }

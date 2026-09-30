@@ -963,6 +963,7 @@ export class DockObsClient {
     this.scheduleProgramBackgroundReconcile(undefined, true);
     this._programBackgroundWatchTimer = setInterval(() => {
       if (!this.isConnected) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (loadProjectionSettings().sceneMode !== "auto-duplicate") return;
       this.scheduleProgramBackgroundReconcile();
     }, PROGRAM_BACKGROUND_WATCH_INTERVAL_MS);
