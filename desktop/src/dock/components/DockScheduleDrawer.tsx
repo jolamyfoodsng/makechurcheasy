@@ -17,14 +17,19 @@ import Icon from "../DockIcon";
 import { dockObsClient } from "../dockObsClient";
 import type { ServicePlan, ServicePlanItem, ServicePlannerSnapshot } from "../../service-planner/types";
 import {
+  clearPresentationHistory,
   createNewSchedulePlan,
+  DOCK_HISTORY_CHANGED_EVENT,
   DOCK_SCHEDULE_CHANGED_EVENT,
   DOCK_SCHEDULE_TOAST_EVENT,
   getOrCreateActiveSchedule,
+  getPresentationHistory,
   notifyScheduleToast,
+  removeHistoryItem,
   removeItemFromActiveSchedule,
   saveSchedulePlan,
   setActiveScheduleId,
+  updateItemOverlayMode,
   type ScheduleToastPayload,
 } from "../dockScheduleService";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -88,12 +93,14 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showNewSchedulePrompt, setShowNewSchedulePrompt] = useState(false);
   const [newScheduleTitle, setNewScheduleTitle] = useState("");
+  const [activeViewTab, setActiveViewTab] = useState<"schedule" | "history">("schedule");
+  const [historyItems, setHistoryItems] = useState<ServicePlanItem[]>(() => getPresentationHistory());
 
-  // Default to true so user immediately sees the requested shared space
+  // Default to false so user starts on Bible tab cleanly without schedule taking over
   const [isPinned, setIsPinned] = useState<boolean>(() => {
-    if (typeof localStorage === "undefined") return true;
+    if (typeof localStorage === "undefined") return false;
     const stored = localStorage.getItem(PIN_STORAGE_KEY);
-    if (stored === null) return true;
+    if (stored === null) return false;
     return stored === "true";
   });
 
@@ -130,6 +137,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       refreshState();
     };
 
+    const handleHistoryChanged = () => {
+      setHistoryItems(getPresentationHistory());
+    };
+
     const handleToast = (e: Event) => {
       const custom = e as CustomEvent<ScheduleToastPayload>;
       if (custom.detail?.message) {
@@ -139,10 +150,12 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     };
 
     window.addEventListener(DOCK_SCHEDULE_CHANGED_EVENT, handleScheduleChanged);
+    window.addEventListener(DOCK_HISTORY_CHANGED_EVENT, handleHistoryChanged);
     window.addEventListener(DOCK_SCHEDULE_TOAST_EVENT, handleToast);
 
     return () => {
       window.removeEventListener(DOCK_SCHEDULE_CHANGED_EVENT, handleScheduleChanged);
+      window.removeEventListener(DOCK_HISTORY_CHANGED_EVENT, handleHistoryChanged);
       window.removeEventListener(DOCK_SCHEDULE_TOAST_EVENT, handleToast);
     };
   }, [refreshState]);
@@ -215,14 +228,19 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   }, []);
 
   const handlePresentItem = useCallback(async (item: ServicePlanItem) => {
-    if (!activePlan) return;
     setActiveCueId(item.id);
 
     try {
-      const payload = item.payloadSnapshot;
+      const payload = (item.payloadSnapshot || {}) as Record<string, unknown>;
+      const overlayMode = (payload.overlayMode as "fullscreen" | "lower-third") ||
+        (item.type === "bible" ? "fullscreen" : "lower-third");
 
       if (item.type === "bible") {
-        await dockObsClient.pushBible(payload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
+        const biblePayload = {
+          ...payload,
+          overlayMode,
+        };
+        await dockObsClient.pushBible(biblePayload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
         onSelectTab?.("bible");
       } else if (item.type === "worship") {
         const obsPayload = {
@@ -230,7 +248,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           sectionLabel: payload.sectionLabel,
           songTitle: payload.songTitle,
           artist: payload.artist,
-          overlayMode: payload.overlayMode || "lower-third",
+          overlayMode,
           theme: payload.theme,
           bibleThemeSettings: payload.bibleThemeSettings,
           liveOverrides: null,
@@ -243,7 +261,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             sectionText: payload.slideText,
             sectionLabel: payload.noteTitle || "Note",
             songTitle: payload.noteTitle || "Note",
-            overlayMode: payload.overlayMode || "lower-third",
+            overlayMode,
             theme: payload.theme,
             bibleThemeSettings: payload.bibleThemeSettings,
             liveOverrides: null,
@@ -251,7 +269,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           await dockObsClient.pushNotesLyrics(notesPayload as unknown as Parameters<typeof dockObsClient.pushNotesLyrics>[0]);
           onSelectTab?.("worship");
         } else {
-          await dockObsClient.pushSermonCue(payload as Parameters<typeof dockObsClient.pushSermonCue>[0]);
+          await dockObsClient.pushSermonCue({
+            ...payload,
+            overlayMode,
+          } as Parameters<typeof dockObsClient.pushSermonCue>[0]);
         }
       } else if (item.type === "media") {
         const filePath = (payload.filePath as string) || "";
@@ -262,12 +283,14 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
         }
       }
 
-      saveSchedulePlan({
-        ...activePlan,
-        selectedItemId: item.id,
-        completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), item.id])),
-        lastSentItemId: item.id,
-      });
+      if (activePlan && activePlan.items.some((i) => i.id === item.id)) {
+        saveSchedulePlan({
+          ...activePlan,
+          selectedItemId: item.id,
+          completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), item.id])),
+          lastSentItemId: item.id,
+        });
+      }
 
       notifyScheduleToast(`Live: ${item.label}`);
     } catch (err) {
@@ -276,29 +299,42 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     }
   }, [activePlan, onSelectTab]);
 
+  const handleSetOverlayMode = useCallback(async (
+    item: ServicePlanItem,
+    mode: "fullscreen" | "lower-third",
+    scope: "schedule" | "history",
+  ) => {
+    updateItemOverlayMode(item.id, mode, scope);
+    if (scope === "history") {
+      setHistoryItems(getPresentationHistory());
+    } else {
+      refreshState();
+    }
+    // "THE MOMENT THEY CLICK IT GOES ON"
+    const updatedItem: ServicePlanItem = {
+      ...item,
+      payloadSnapshot: {
+        ...(item.payloadSnapshot || {}),
+        overlayMode: mode,
+      },
+    };
+    await handlePresentItem(updatedItem);
+  }, [handlePresentItem, refreshState]);
+
   const handleRemoveItem = useCallback((e: React.MouseEvent, itemId: string) => {
     e.stopPropagation();
-    removeItemFromActiveSchedule(itemId);
-  }, []);
-
-  const handleGoToItem = useCallback((item: ServicePlanItem) => {
-    switch (item.type) {
-      case "bible":
-        onSelectTab?.("bible");
-        break;
-      case "worship":
-        onSelectTab?.("worship");
-        break;
-      case "media":
-        onSelectTab?.("media");
-        break;
-      case "sermon":
-        onSelectTab?.("notes");
-        break;
-      default:
-        break;
+    if (activeViewTab === "history") {
+      removeHistoryItem(itemId);
+      setHistoryItems(getPresentationHistory());
+    } else {
+      removeItemFromActiveSchedule(itemId);
     }
-  }, [onSelectTab]);
+  }, [activeViewTab]);
+
+  const handleClearHistory = useCallback(() => {
+    clearPresentationHistory();
+    setHistoryItems([]);
+  }, []);
 
   const handleCreateNewSchedule = useCallback(() => {
     const title = newScheduleTitle.trim() || `Service ${plans.length + 1}`;
@@ -373,31 +409,69 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       {isDrawerOpen && (
         <div className={`dock-schedule-panel ${isCompact ? "dock-schedule-panel--compact" : ""}`}>
           <div className="dock-schedule-panel__header">
-            <div className="dock-schedule-panel__title-row">
-              <Icon name="event_note" size={16} className="dock-schedule-panel__header-icon" />
+            {/* Row 1: Dedicated Full-Width Schedule vs History Tabs (Above Pin/Close) */}
+            <div className="dock-schedule-panel__tabs-row">
+              <div className="dock-schedule-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeViewTab === "schedule"}
+                  className={`dock-schedule-tab-btn ${activeViewTab === "schedule" ? "dock-schedule-tab-btn--active" : ""}`}
+                  onClick={() => setActiveViewTab("schedule")}
+                >
+                  <Icon name="event_note" size={13} />
+                  <span>{t("schedule.title", "Schedule")}</span>
+                  {scheduleItems.length > 0 && (
+                    <span className="dock-schedule-tab-badge">{scheduleItems.length}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeViewTab === "history"}
+                  className={`dock-schedule-tab-btn ${activeViewTab === "history" ? "dock-schedule-tab-btn--active" : ""}`}
+                  onClick={() => setActiveViewTab("history")}
+                >
+                  <Icon name="history" size={13} />
+                  <span>{t("common.history", "History")}</span>
+                  {historyItems.length > 0 && (
+                    <span className="dock-schedule-tab-badge">{historyItems.length}</span>
+                  )}
+                </button>
+              </div>
+            </div>
 
-              <select
-                className="dock-schedule-panel__select"
-                value={activePlan?.id || ""}
-                onChange={(e) => {
-                  if (e.target.value === "__new__") {
-                    setShowNewSchedulePrompt(true);
-                  } else {
-                    setActiveScheduleId(e.target.value);
-                  }
-                }}
-                aria-label={t("schedule.selectSchedule", "Select Schedule")}
-              >
-                {plans.map((p, idx) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title || `Schedule ${idx + 1}`}
-                  </option>
-                ))}
-                <option value="__new__">+ {t("schedule.createNew", "New Schedule...")}</option>
-              </select>
+            {/* Row 2: Select/Title on Left + Pin & Close Buttons on Right */}
+            <div className="dock-schedule-panel__actions-row">
+              {activeViewTab === "schedule" ? (
+                <select
+                  className="dock-schedule-panel__select"
+                  value={activePlan?.id || ""}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setShowNewSchedulePrompt(true);
+                    } else {
+                      setActiveScheduleId(e.target.value);
+                    }
+                  }}
+                  aria-label={t("schedule.selectSchedule", "Select Schedule")}
+                >
+                  {plans.map((p, idx) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title || `Schedule ${idx + 1}`}
+                    </option>
+                  ))}
+                  <option value="__new__">+ {t("schedule.createNew", "New Schedule...")}</option>
+                </select>
+              ) : (
+                <div className="dock-schedule-panel__history-title">
+                  <Icon name="history" size={14} className="dock-schedule-panel__history-icon" />
+                  <span>{t("schedule.historyTitle", "Recent Output")}</span>
+                </div>
+              )}
 
               <div className="dock-schedule-panel__header-actions">
-                {/* Pin button: always clean pin icon */}
+                {/* Pin button */}
                 <button
                   type="button"
                   className={`dock-schedule-panel__pin-btn ${isPinned ? "is-pinned" : ""}`}
@@ -421,7 +495,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               </div>
             </div>
 
-            {showNewSchedulePrompt && (
+            {showNewSchedulePrompt && activeViewTab === "schedule" && (
               <div className="dock-schedule-panel__new-prompt">
                 <input
                   type="text"
@@ -446,20 +520,30 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
           {/* ── Rich Card List ── */}
           <div className="dock-schedule-panel__list">
-            {scheduleItems.length === 0 ? (
+            {(activeViewTab === "history" ? historyItems : scheduleItems).length === 0 ? (
               <div className="dock-schedule-panel__empty">
-                <Icon name="playlist_add" size={32} />
-                <p>{t("schedule.emptyHint", "No items queued in this schedule.")}</p>
-                <small>{t("schedule.emptySubhint", "Right-click any scripture, worship song, or media file to queue it here.")}</small>
+                <Icon name={activeViewTab === "history" ? "history" : "playlist_add"} size={32} />
+                <p>
+                  {activeViewTab === "history"
+                    ? t("schedule.historyEmptyTitle", "No presentation history yet.")
+                    : t("schedule.emptyHint", "No items queued in this schedule.")}
+                </p>
+                <small>
+                  {activeViewTab === "history"
+                    ? t("schedule.historyEmptyHint", "Scriptures, worship songs, and media you project will appear here for instant replay.")
+                    : t("schedule.emptySubhint", "Right-click any scripture, worship song, or media file to queue it here.")}
+                </small>
               </div>
             ) : (
-              scheduleItems.map((item, index) => {
+              (activeViewTab === "history" ? historyItems : scheduleItems).map((item, index) => {
                 const isLive = activeCueId === item.id;
                 const isCompleted = activePlan?.completedItemIds?.includes(item.id);
                 const isMedia = item.type === "media";
                 const payload = (item.payloadSnapshot || {}) as Record<string, unknown>;
                 const isVideo = isMedia && (payload.mediaType === "video" || (typeof item.subtitle === "string" && item.subtitle.toLowerCase().includes("video")));
                 const mediaSrc = isMedia ? getMediaThumbnailSrc(payload) : "";
+                const currentOverlayMode = (payload.overlayMode as "fullscreen" | "lower-third") ||
+                  (item.type === "bible" ? "fullscreen" : "lower-third");
 
                 // ── Picture & Video Card (Thumbnail on top, minimal text emphasis) ──
                 if (isMedia) {
@@ -469,16 +553,16 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     <div
                       key={item.id}
                       className={`dock-schedule-card dock-schedule-card--media ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
-                      onClick={() => handleGoToItem(item)}
+                      onClick={() => void handlePresentItem(item)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          handleGoToItem(item);
+                          void handlePresentItem(item);
                         }
                       }}
-                      title={`${index + 1}. ${item.label}`}
+                      title={`${index + 1}. ${item.label} (Click to project)`}
                       aria-label={`${index + 1}. ${item.label}`}
                     >
                       {/* Thumbnail on TOP */}
@@ -550,8 +634,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                             type="button"
                             className="dock-schedule-card__remove-btn"
                             onClick={(e) => handleRemoveItem(e, item.id)}
-                            title={t("common.remove", "Remove from schedule")}
-                            aria-label={t("common.remove", "Remove from schedule")}
+                            title={t("common.remove", "Remove")}
+                            aria-label={t("common.remove", "Remove")}
                           >
                             &times;
                           </button>
@@ -561,21 +645,21 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   );
                 }
 
-                // ── Bible / Worship / Notes Card (Top: Chapter-verse, Middle: Inscribed passage, Bottom: Buttons) ──
+                // ── Bible / Worship / Notes Card (Top: Chapter-verse, Middle: Inscribed passage, Bottom: FULL/LT + Buttons) ──
                 return (
                   <div
                     key={item.id}
                     className={`dock-schedule-card dock-schedule-card--text ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
-                    onClick={() => handleGoToItem(item)}
+                    onClick={() => void handlePresentItem(item)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        handleGoToItem(item);
+                        void handlePresentItem(item);
                       }
                     }}
-                    title={`${index + 1}. ${item.label}`}
+                    title={`${index + 1}. ${item.label} (Click to project)`}
                     aria-label={`${index + 1}. ${item.label}`}
                   >
                     {/* Top Row: Bible chapter-verse / Song title (Full width, no buttons crowding it) */}
@@ -601,8 +685,35 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       </div>
                     )}
 
-                    {/* Bottom Row: Actions (Buttons at the bottom) */}
+                    {/* Bottom Row: FULL / LT Slider Toggle + Action Buttons */}
                     <div className="dock-schedule-card__bottom-row" onClick={(e) => e.stopPropagation()}>
+                      <div className="dock-schedule-mode-toggle" role="group" aria-label="Overlay display mode">
+                        <button
+                          type="button"
+                          className={`dock-schedule-mode-toggle__btn ${currentOverlayMode === "fullscreen" ? "dock-schedule-mode-toggle__btn--active" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleSetOverlayMode(item, "fullscreen", activeViewTab);
+                          }}
+                          title="Fullscreen presentation"
+                          aria-pressed={currentOverlayMode === "fullscreen"}
+                        >
+                          FULL
+                        </button>
+                        <button
+                          type="button"
+                          className={`dock-schedule-mode-toggle__btn ${currentOverlayMode === "lower-third" ? "dock-schedule-mode-toggle__btn--active" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleSetOverlayMode(item, "lower-third", activeViewTab);
+                          }}
+                          title="Lower-third overlay presentation"
+                          aria-pressed={currentOverlayMode === "lower-third"}
+                        >
+                          LT
+                        </button>
+                      </div>
+
                       <div className="dock-schedule-card__actions">
                         <button
                           type="button"
@@ -621,8 +732,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           type="button"
                           className="dock-schedule-card__remove-btn"
                           onClick={(e) => handleRemoveItem(e, item.id)}
-                          title={t("common.remove", "Remove from schedule")}
-                          aria-label={t("common.remove", "Remove from schedule")}
+                          title={t("common.remove", "Remove")}
+                          aria-label={t("common.remove", "Remove")}
                         >
                           &times;
                         </button>
@@ -635,22 +746,42 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
             {/* Bottom center placeholder text hint */}
             <div className="dock-schedule-panel__bottom-placeholder">
-              <Icon name="playlist_add" size={18} />
+              <Icon name={activeViewTab === "history" ? "history" : "playlist_add"} size={18} />
               <span className="dock-schedule-panel__placeholder-title">
-                {t("schedule.placeholderTitle", "Service Schedule")}
+                {activeViewTab === "history"
+                  ? t("schedule.historyPlaceholderTitle", "Presentation History")
+                  : t("schedule.placeholderTitle", "Service Schedule")}
               </span>
               <span className="dock-schedule-panel__placeholder-hint">
-                {t("schedule.placeholderHint", "Right-click any scripture, worship song, or media to queue it here.")}
+                {activeViewTab === "history"
+                  ? t("schedule.historyPlaceholderHint", "Every projected scripture, song, and slide is remembered here for instant replay.")
+                  : t("schedule.placeholderHint", "Right-click any scripture, worship song, or media to queue it here.")}
               </span>
             </div>
           </div>
 
-          {/* Footer without clear button */}
+          {/* Footer */}
           <div className="dock-schedule-panel__footer">
             <div className="dock-schedule-panel__count">
-              <Icon name="checklist" size={13} />
-              <span>{scheduleItems.length} {t("schedule.queued", "items queued")}</span>
+              <Icon name={activeViewTab === "history" ? "history" : "checklist"} size={13} />
+              <span>
+                {activeViewTab === "history"
+                  ? `${historyItems.length} ${t("schedule.historyItemsCount", "in history")}`
+                  : `${scheduleItems.length} ${t("schedule.queued", "items queued")}`}
+              </span>
             </div>
+
+            {activeViewTab === "history" && historyItems.length > 0 && (
+              <button
+                type="button"
+                className="dock-schedule-panel__clear-history-btn"
+                onClick={handleClearHistory}
+                title={t("schedule.clearHistory", "Clear all history")}
+              >
+                <Icon name="delete_sweep" size={13} />
+                <span>{t("common.clear", "Clear")}</span>
+              </button>
+            )}
           </div>
 
           {/* Draggable resizer handle */}

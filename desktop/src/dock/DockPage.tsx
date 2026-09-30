@@ -200,7 +200,8 @@ import { loadProjectionSettings, saveProjectionSettings, type ProjectionSettings
 
 function resolveDockTab(tab?: DockTab | "live" | null, isFreePlan = false): DockTab {
   if (tab === "notes") return "worship";
-  if (tab === "planner" || tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
+  if (tab === "planner") return "bible";
+  if (tab === "bible" || tab === "worship" || tab === "media" || tab === "multiview" || tab === "ministry") {
     return isDockTabAvailableForPlan(tab, isFreePlan) ? tab : "bible";
   }
   return "bible";

@@ -23,9 +23,18 @@ const dockBibleTabSource = readFileSync(
   "utf8",
 );
 
+const dockScheduleServiceSource = readFileSync(
+  fileURLToPath(new URL("./dockScheduleService.ts", import.meta.url)),
+  "utf8",
+);
+
 describe("Dock Schedule Shared Space & Card Redesign", () => {
   it("sets default theme line spacing to 1.5", () => {
     expect(DEFAULT_THEME_SETTINGS.lineHeight).toBe(1.5);
+  });
+
+  it("stacks new schedule entries on top (prepend)", () => {
+    expect(dockScheduleServiceSource).toContain("items: [fullItem, ...activePlan.items]");
   });
 
   it("shares in-flow layout space with draggable resizer instead of floating overlay", () => {
@@ -45,7 +54,7 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockIconSource).not.toContain("push_pin: { component: CheckSquare },");
   });
 
-  it("renders media items with thumbnail on top and text cards without generic left icons", () => {
+  it("renders media items with thumbnail on top, card click to project, and FULL/LT toggle on text cards", () => {
     expect(dockScheduleDrawerSource).toContain("className={`dock-schedule-card");
     expect(dockScheduleDrawerSource).toContain("dock-schedule-card--media");
     expect(dockScheduleDrawerSource).toContain("dock-schedule-card--text");
@@ -53,17 +62,33 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockScheduleDrawerSource).toContain("dock-schedule-card__project-btn");
     expect(dockScheduleDrawerSource).toContain("handlePresentItem(item)");
     expect(dockScheduleDrawerSource).not.toContain("dock-schedule-card__btn--goto");
-    expect(dockScheduleDrawerSource).toContain("handleGoToItem(item)");
+    expect(dockScheduleDrawerSource).toContain("onClick={() => void handlePresentItem(item)}");
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-mode-toggle");
+    expect(dockScheduleDrawerSource).toContain("handleSetOverlayMode");
     expect(dockScheduleDrawerSource).toContain("getMediaThumbnailSrc");
     expect(dockScheduleDrawerSource).toContain("handleRemoveItem(e, item.id)");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card--media");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card--text");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__media-thumb-wrap");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__project-btn");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-mode-toggle");
     expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-row");
     expect(dockScheduleDrawerSource).toContain("dock-schedule-card__inscribed-passage");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-row");
     expect(dockScheduleCssSource).toContain(".dock-schedule-card__inscribed-passage");
+    expect(dockScheduleCssSource).toContain("font-size: 13.5px;");
+  });
+
+  it("includes History tab alongside Schedule tab in the same container", () => {
+    expect(dockScheduleDrawerSource).toContain("className=\"dock-schedule-tabs\"");
+    expect(dockScheduleDrawerSource).toContain("activeViewTab === \"schedule\"");
+    expect(dockScheduleDrawerSource).toContain("activeViewTab === \"history\"");
+    expect(dockScheduleDrawerSource).toContain("handleClearHistory");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-tabs");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-tab-btn--active");
+    expect(dockScheduleServiceSource).toContain("getPresentationHistory");
+    expect(dockScheduleServiceSource).toContain("recordPresentationHistory");
+    expect(dockScheduleServiceSource).toContain("clearPresentationHistory");
   });
 
   it("sets line-height 1.5 on schedule card titles and preview snippets", () => {

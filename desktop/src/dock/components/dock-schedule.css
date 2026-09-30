@@ -150,6 +150,101 @@
   flex-shrink: 0;
 }
 
+.dock-schedule-panel__tabs-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* ── Segmented Tab Switcher (Schedule vs History) ── */
+.dock-schedule-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.dock-schedule-panel__actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dock-schedule-panel__history-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dock-text-primary, #f8fafc);
+  flex: 1;
+  min-width: 0;
+}
+
+.dock-schedule-panel__history-icon {
+  color: var(--dock-accent, #3b82f6);
+  flex-shrink: 0;
+}
+
+.dock-schedule-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--dock-text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dock-schedule-tab-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dock-schedule-tab-btn--active {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #93c5fd !important;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dock-schedule-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 4px;
+  height: 14px;
+  min-width: 14px;
+  line-height: 1;
+}
+
+.dock-schedule-tab-btn--active .dock-schedule-tab-badge {
+  background: var(--dock-accent, #3b82f6);
+  color: #fff;
+}
+
 .dock-schedule-panel__title-row {
   display: flex;
   align-items: center;
@@ -399,31 +494,69 @@
 }
 
 .dock-schedule-card__inscribed-passage {
-  font-size: 10.5px;
-  font-style: italic;
+  font-size: 13.5px;
+  font-style: normal;
+  font-weight: 500;
   line-height: 1.45;
-  color: #cbd5e1;
-  background: rgba(0, 0, 0, 0.24);
-  border-left: 2px solid var(--dock-accent, #3b82f6);
-  border-radius: 3px;
-  padding: 4px 6px;
+  color: #f8fafc;
+  background: rgba(0, 0, 0, 0.32);
+  border-left: 3px solid var(--dock-accent, #3b82f6);
+  border-radius: 4px;
+  padding: 6px 8px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .dock-schedule-card__bottom-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 6px;
   min-width: 0;
   width: 100%;
   margin-top: auto;
+}
+
+/* ── FULL / LT Slider Toggle ── */
+.dock-schedule-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 1px;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.dock-schedule-mode-toggle__btn {
+  border: none;
+  background: transparent;
+  color: var(--dock-text-muted, #94a3b8);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.dock-schedule-mode-toggle__btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dock-schedule-mode-toggle__btn--active {
+  background: var(--dock-accent, #3b82f6) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* ── Media Card: Thumbnail on TOP, minimal caption emphasis below ── */
@@ -753,9 +886,14 @@
 }
 
 .dock-schedule-panel--compact .dock-schedule-card__inscribed-passage {
-  font-size: 9.5px;
-  padding: 3px 5px;
+  font-size: 11.5px;
+  padding: 4px 6px;
   -webkit-line-clamp: 2;
+}
+
+.dock-schedule-panel--compact .dock-schedule-mode-toggle__btn {
+  font-size: 8.5px;
+  padding: 1px 4px;
 }
 
 .dock-schedule-panel--compact .dock-schedule-card--media {
@@ -876,6 +1014,28 @@
   gap: 5px;
   font-size: 11px;
   color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dock-schedule-panel__clear-history-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+}
+
+.dock-schedule-panel__clear-history-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: #ef4444;
+  color: #ffffff;
 }
 
 /* ── Draggable Resizer Handle ── */

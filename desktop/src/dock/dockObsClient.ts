@@ -69,6 +69,7 @@ import {
   assertDockObsMutationAllowed,
   isFreeDockPlan,
 } from "./dockMutationPolicy";
+import { recordPresentationHistory } from "./dockScheduleService";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -7574,9 +7575,25 @@ export class DockObsClient {
       let sceneName: string;
 
       // Detect mode switch early. Keep the active sources in place and only
-      // reset cached signatures so fullscreen/lower-third can morph without
-      // the hard preview/program tear-down that causes visible flashing.
       const mode = data.overlayMode ?? "fullscreen";
+      try {
+        const refLabel = data.rawReferenceLabel || `${data.book} ${data.chapter}:${data.verseRange || data.verse}`;
+        const translation = data.translation ? ` (${data.translation})` : "";
+        recordPresentationHistory({
+          type: "bible",
+          sourceKind: "bible-reference",
+          label: `${refLabel}${translation}`,
+          subtitle: (data.verseText || refLabel).slice(0, 200),
+          notes: data.translation,
+          payloadSnapshot: {
+            ...data,
+            overlayMode: mode,
+          },
+          overlayMode: mode,
+        });
+      } catch {
+        // Ignore history recording failures
+      }
       const bibleBrowserSourceName = this._fullscreenSceneDefs["bible"]?.browserSourceName;
       const isFirstLowerThirdBootstrap = mode === "lower-third"
         && (
@@ -9134,6 +9151,22 @@ export class DockObsClient {
     await this.ensureProgramSceneAsSourceInPresentation();
 
     const mode = data.overlayMode ?? "lower-third";
+    try {
+      const isQuote = data.itemType === "quote";
+      recordPresentationHistory({
+        type: "sermon",
+        sourceKind: isQuote ? "sermon-quote" : "sermon-point",
+        label: isQuote ? `“${data.text.slice(0, 80)}”` : data.text.slice(0, 80),
+        subtitle: data.label,
+        payloadSnapshot: {
+          ...data,
+          overlayMode: mode,
+        },
+        overlayMode: mode,
+      });
+    } catch {
+      // Ignore history recording failures
+    }
     const backgroundOnly = Boolean(data.backgroundOnly);
     const effectiveThemeSettings = this.mergeThemeSettingsWithLiveOverrides(
       data.bibleThemeSettings,
@@ -9435,6 +9468,47 @@ export class DockObsClient {
 
       // Detect mode switch early — delete old clone before getting new target
       const mode = data.overlayMode ?? "lower-third";
+      try {
+        if (isWorship) {
+          const songTitle = data.songTitle || "Worship";
+          const sectionLabel = data.sectionLabel || "";
+          const label = sectionLabel ? `${songTitle} · ${sectionLabel}` : songTitle;
+          const snippet = (data.sectionText || "").split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+          recordPresentationHistory({
+            type: "worship",
+            sourceKind: "worship-song-section",
+            label,
+            subtitle: snippet,
+            notes: data.artist,
+            payloadSnapshot: {
+              ...data,
+              overlayMode: mode,
+            },
+            overlayMode: mode,
+          });
+        } else if (isNotes) {
+          const noteTitle = (data as { noteTitle?: string }).noteTitle || data.songTitle || "Note";
+          const sectionLabel = data.sectionLabel || "";
+          const label = sectionLabel ? `${noteTitle} · ${sectionLabel}` : noteTitle;
+          const snippet = (data.sectionText || "").split("\n").filter((l) => l.trim()).slice(0, 2).join(" / ");
+          recordPresentationHistory({
+            type: "sermon",
+            sourceKind: "sermon-point",
+            label,
+            subtitle: snippet,
+            payloadSnapshot: {
+              ...data,
+              isNoteSlide: true,
+              slideText: data.sectionText,
+              noteTitle,
+              overlayMode: mode,
+            },
+            overlayMode: mode,
+          });
+        }
+      } catch {
+        // Ignore history recording failures
+      }
       const prevMode = this._lastOverlayMode[sourceName];
       const modeChanged = prevMode !== undefined && prevMode !== mode;
       const shouldRebuildSceneGraph = () => !getInitialized() || (!stableCssOverlayTab && modeChanged);
@@ -10984,6 +11058,23 @@ export class DockObsClient {
       if (isAudio) {
         await this.pushAudio(filePath, fileName, options);
         return;
+      }
+
+      try {
+        recordPresentationHistory({
+          type: "media",
+          sourceKind: "media-library-item",
+          label: fileName || filePath.split(/[\/\\]/).pop() || "Media",
+          subtitle: isImage ? "Picture media" : "Video media",
+          notes: fileName,
+          payloadSnapshot: {
+            filePath,
+            fileName,
+            mediaType: isImage ? "image" : "video",
+          },
+        });
+      } catch {
+        // Ignore history recording failures
       }
 
     const mediaVideoSource = DOCK_MEDIA_VIDEO_SOURCE;

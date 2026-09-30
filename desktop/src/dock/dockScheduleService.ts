@@ -17,9 +17,11 @@ import {
 
 const DOCK_SCHEDULE_CACHE_KEY = "__mce_dock_service_plans_v1";
 const DOCK_ACTIVE_PLAN_ID_KEY = "__mce_dock_active_plan_id_v1";
+export const DOCK_HISTORY_CACHE_KEY = "__mce_dock_presentation_history_v1";
 
 export const DOCK_SCHEDULE_CHANGED_EVENT = "dock:schedule-changed";
 export const DOCK_SCHEDULE_TOAST_EVENT = "dock:schedule-toast";
+export const DOCK_HISTORY_CHANGED_EVENT = "dock:history-changed";
 
 export interface ScheduleToastPayload {
   message: string;
@@ -27,6 +29,7 @@ export interface ScheduleToastPayload {
 }
 
 let inMemorySnapshot: ServicePlannerSnapshot | null = null;
+let inMemoryHistory: ServicePlanItem[] | null = null;
 
 export function notifyScheduleToast(message: string, type: "success" | "info" | "error" = "success"): void {
   if (typeof window === "undefined") return;
@@ -38,6 +41,11 @@ export function notifyScheduleToast(message: string, type: "success" | "info" | 
 export function notifyScheduleChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(DOCK_SCHEDULE_CHANGED_EVENT));
+}
+
+export function notifyHistoryChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(DOCK_HISTORY_CHANGED_EVENT));
 }
 
 export function readCachedScheduleSnapshot(): ServicePlannerSnapshot | null {
@@ -156,7 +164,7 @@ export function addItemToActiveSchedule(item: Omit<ServicePlanItem, "id" | "crea
   const fullItem = createServicePlanItem(item);
   const updatedPlan: ServicePlan = {
     ...activePlan,
-    items: [...activePlan.items, fullItem],
+    items: [fullItem, ...activePlan.items],
     updatedAt: Date.now(),
   };
 
@@ -391,3 +399,171 @@ export function createNewSchedulePlan(title = "New Schedule"): ServicePlan {
   notifyScheduleToast(`Created "${title}"`);
   return newPlan;
 }
+
+const MAX_HISTORY_ITEMS = 60;
+
+/**
+ * Reads presentation history from localStorage cache.
+ */
+export function getPresentationHistory(): ServicePlanItem[] {
+  if (inMemoryHistory) return inMemoryHistory;
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DOCK_HISTORY_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      inMemoryHistory = parsed;
+      return parsed;
+    }
+  } catch {
+    // Ignore cache parse error
+  }
+  return [];
+}
+
+/**
+ * Writes presentation history to cache and notifies listeners.
+ */
+export function writePresentationHistory(history: ServicePlanItem[]): void {
+  inMemoryHistory = history;
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(DOCK_HISTORY_CACHE_KEY, JSON.stringify(history));
+  } catch {
+    // Storage quota or restricted context
+  }
+  notifyHistoryChanged();
+}
+
+/**
+ * Records an item that was projected or clicked into presentation history.
+ * Deduplicates existing identical items, moving them to the top with the latest timestamp.
+ */
+export function recordPresentationHistory(item: {
+  type: ServicePlanItem["type"];
+  label: string;
+  subtitle?: string;
+  sourceKind?: ServicePlanItem["sourceKind"];
+  sourceId?: string;
+  notes?: string;
+  payloadSnapshot: Record<string, unknown>;
+  overlayMode?: "fullscreen" | "lower-third";
+}): ServicePlanItem {
+  const current = getPresentationHistory();
+  const overlayMode = item.overlayMode || (item.payloadSnapshot?.overlayMode as "fullscreen" | "lower-third") || (item.type === "bible" ? "fullscreen" : "lower-third");
+  const payloadSnapshot: Record<string, unknown> = {
+    ...item.payloadSnapshot,
+    overlayMode,
+  };
+
+  const existingIdx = current.findIndex((h) => {
+    if (h.type !== item.type) return false;
+    if (item.type === "media") {
+      const hFile = (h.payloadSnapshot?.filePath as string) || h.label;
+      const iFile = (payloadSnapshot.filePath as string) || item.label;
+      return hFile === iFile;
+    }
+    return h.label === item.label;
+  });
+
+  let historyItem: ServicePlanItem;
+  let nextHistory: ServicePlanItem[];
+
+  if (existingIdx >= 0) {
+    const existing = current[existingIdx];
+    historyItem = {
+      ...existing,
+      subtitle: item.subtitle ?? existing.subtitle,
+      notes: item.notes ?? existing.notes,
+      payloadSnapshot: {
+        ...existing.payloadSnapshot,
+        ...payloadSnapshot,
+      },
+      updatedAt: Date.now(),
+    };
+    nextHistory = [
+      historyItem,
+      ...current.filter((_, i) => i !== existingIdx),
+    ];
+  } else {
+    historyItem = createServicePlanItem({
+      type: item.type,
+      label: item.label,
+      subtitle: item.subtitle,
+      sourceKind: item.sourceKind,
+      sourceId: item.sourceId,
+      notes: item.notes,
+      payloadSnapshot,
+    });
+    nextHistory = [historyItem, ...current];
+  }
+
+  if (nextHistory.length > MAX_HISTORY_ITEMS) {
+    nextHistory = nextHistory.slice(0, MAX_HISTORY_ITEMS);
+  }
+
+  writePresentationHistory(nextHistory);
+  return historyItem;
+}
+
+/**
+ * Remove an item from presentation history.
+ */
+export function removeHistoryItem(itemId: string): void {
+  const current = getPresentationHistory();
+  const next = current.filter((h) => h.id !== itemId);
+  writePresentationHistory(next);
+}
+
+/**
+ * Clear all presentation history.
+ */
+export function clearPresentationHistory(): void {
+  writePresentationHistory([]);
+  notifyScheduleToast("Presentation history cleared", "info");
+}
+
+/**
+ * Update the overlayMode (FULL vs LT) on a schedule item or history item.
+ */
+export function updateItemOverlayMode(
+  itemId: string,
+  mode: "fullscreen" | "lower-third",
+  scope: "schedule" | "history" = "schedule",
+): void {
+  if (scope === "history") {
+    const current = getPresentationHistory();
+    const updated = current.map((item) => {
+      if (item.id !== itemId) return item;
+      return {
+        ...item,
+        payloadSnapshot: {
+          ...item.payloadSnapshot,
+          overlayMode: mode,
+        },
+        updatedAt: Date.now(),
+      };
+    });
+    writePresentationHistory(updated);
+  } else {
+    const { activePlan } = getOrCreateActiveSchedule();
+    const updatedItems = activePlan.items.map((item) => {
+      if (item.id !== itemId) return item;
+      return {
+        ...item,
+        payloadSnapshot: {
+          ...item.payloadSnapshot,
+          overlayMode: mode,
+        },
+        updatedAt: Date.now(),
+      };
+    });
+    saveSchedulePlan({
+      ...activePlan,
+      items: updatedItems,
+      updatedAt: Date.now(),
+    });
+  }
+}
+
