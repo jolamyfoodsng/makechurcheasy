@@ -17,7 +17,6 @@ import Icon from "../DockIcon";
 import { dockObsClient } from "../dockObsClient";
 import type { ServicePlan, ServicePlanItem, ServicePlannerSnapshot } from "../../service-planner/types";
 import {
-  clearPresentationHistory,
   createNewSchedulePlan,
   DOCK_HISTORY_CHANGED_EVENT,
   DOCK_SCHEDULE_CHANGED_EVENT,
@@ -362,11 +361,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     }
   }, [activeViewTab]);
 
-  const handleClearHistory = useCallback(() => {
-    clearPresentationHistory();
-    setHistoryItems([]);
-  }, []);
-
   const handleCreateNewSchedule = useCallback(() => {
     const title = newScheduleTitle.trim() || `Service ${plans.length + 1}`;
     createNewSchedulePlan(title);
@@ -376,10 +370,28 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
   const scheduleItems = useMemo(() => activePlan?.items ?? [], [activePlan]);
   const isDrawerOpen = expanded || isPinned;
-  const isCompact = Boolean(customWidth !== null && customWidth <= 270);
+
+  const containerRef = useRef<HTMLElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setMeasuredWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [isDrawerOpen]);
+
+  const effectiveWidth = measuredWidth ?? customWidth ?? (isDrawerOpen ? 260 : 34);
+  const isCompact = isDrawerOpen && effectiveWidth <= 260;
+  const isUltraCompact = isDrawerOpen && effectiveWidth <= 195;
 
   return (
     <aside
+      ref={containerRef}
       className={`dock-schedule-container ${isDrawerOpen ? "dock-schedule-container--expanded" : "dock-schedule-container--collapsed"}`}
       style={isDrawerOpen && customWidth !== null ? { width: customWidth, flex: `0 0 ${customWidth}px` } : undefined}
       aria-label={t("schedule.title", "Service Schedule")}
@@ -438,7 +450,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
       {/* ── In-Flow Schedule Panel (Shares Space With Dock) ── */}
       {isDrawerOpen && (
-        <div className={`dock-schedule-panel ${isCompact ? "dock-schedule-panel--compact" : ""}`}>
+        <div className={`dock-schedule-panel ${isCompact ? "dock-schedule-panel--compact" : ""} ${isUltraCompact ? "dock-schedule-panel--ultra-compact" : ""}`}>
           <div className="dock-schedule-panel__header">
             {/* Row 1: Dedicated Full-Width Schedule vs History Tabs (Above Pin/Close) */}
             <div className="dock-schedule-panel__tabs-row">
@@ -801,18 +813,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   : `${scheduleItems.length} ${t("schedule.queued", "items queued")}`}
               </span>
             </div>
-
-            {activeViewTab === "history" && historyItems.length > 0 && (
-              <button
-                type="button"
-                className="dock-schedule-panel__clear-history-btn"
-                onClick={handleClearHistory}
-                title={t("schedule.clearHistory", "Clear all history")}
-              >
-                <Icon name="delete_sweep" size={13} />
-                <span>{t("common.clear", "Clear")}</span>
-              </button>
-            )}
           </div>
 
           {/* Draggable resizer handle */}

@@ -1159,30 +1159,6 @@ function DockPageContent({
       <a className="mce-skip-link" href="#dock-main-content">
         {t('mvShell.skipToContent', 'Skip to main content')}
       </a>
-      {/* ═══ VERTICAL NAV (left side when dock is short) ═══ */}
-      {verticalTabs && (
-        <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
-          {navigableDockTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setRenderedTab(tab.id);
-              }}
-              onPointerEnter={() => preloadDockTab(tab.id)}
-              onPointerDown={() => preloadDockTab(tab.id)}
-              onFocus={() => preloadDockTab(tab.id)}
-              aria-label={tab.label}
-              title={tab.label}
-              data-label={tab.label}
-            >
-              <Icon name={tab.icon} size={16} />
-            </button>
-          ))}
-        </nav>
-      )}
 
       <div className="dock-main-column">
         <DockBrowserZoomWarning />
@@ -1969,6 +1945,30 @@ function DockPageContent({
                 setRenderedTab(tab);
               }}
             />
+            {/* ═══ VERTICAL NAV (between schedule & content when dock is short) ═══ */}
+            {verticalTabs && (
+              <nav className="dock-vertical-nav" aria-label={t('page.dockSections')}>
+                {navigableDockTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`dock-vertical-nav__item${activeTab === tab.id ? " dock-vertical-nav__item--active" : ""}`}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setRenderedTab(tab.id);
+                    }}
+                    onPointerEnter={() => preloadDockTab(tab.id)}
+                    onPointerDown={() => preloadDockTab(tab.id)}
+                    onFocus={() => preloadDockTab(tab.id)}
+                    aria-label={tab.label}
+                    title={tab.label}
+                    data-label={tab.label}
+                  >
+                    <Icon name={tab.icon} size={16} />
+                  </button>
+                ))}
+              </nav>
+            )}
             <div className="dock-content-main">
               <div className="dock-content-panels">
                 <Suspense fallback={<LoadingScreen variant="dock" label={t('common.loading', 'Loading…')} className="dock-tab-loading" />}>

@@ -13285,13 +13285,19 @@ body.dock-modal-open {
    ════════════════════════════════════════════════════════════════════════════ */
 
 .dock-root--vertical-tabs {
-  flex-direction: row;
+  /* vertical nav is now inside dock-content-layout, not a direct child */
 }
 
 
 .dock-root--vertical-tabs .dock-content {
   flex: 1;
   min-width: 0;
+}
+
+/* When in vertical-tabs mode, the nav sits between schedule & content panels */
+.dock-root--vertical-tabs .dock-vertical-nav {
+  border-right: none;
+  border-left: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
 }
 
 .dock-main-column {
