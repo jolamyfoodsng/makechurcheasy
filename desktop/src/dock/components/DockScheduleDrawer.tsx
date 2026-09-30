@@ -206,7 +206,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     setExpanded(true);
   }, []);
 
-  // Drag-to-resize handlers
+  // Drag-to-resize handlers: when dragged to the left end, collapse/close schedule
   const handleMouseDownResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -216,12 +216,32 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    let shouldCollapseOnRelease = false;
+
     const onMouseMove = (moveEvent: MouseEvent) => {
       if (!isDraggingRef.current) return;
       const delta = moveEvent.clientX - startXRef.current;
+      const rawCalculated = startWidthRef.current + delta;
+
+      // If dragged towards the left end (raw calculated width < 95px or clientX < 85px)
+      if (rawCalculated < 95 || moveEvent.clientX < 85) {
+        shouldCollapseOnRelease = true;
+        if (container) {
+          container.style.opacity = "0.5";
+          container.style.filter = "grayscale(60%)";
+        }
+        return;
+      }
+
+      shouldCollapseOnRelease = false;
+      if (container) {
+        container.style.opacity = "1";
+        container.style.filter = "none";
+      }
+
       const minAllowed = Math.max(MIN_SCHEDULE_WIDTH, Math.floor(window.innerWidth * 0.15));
       const maxAllowed = Math.max(minAllowed, Math.min(600, Math.floor(window.innerWidth * 0.45)));
-      const nextWidth = Math.round(Math.max(minAllowed, Math.min(maxAllowed, startWidthRef.current + delta)));
+      const nextWidth = Math.round(Math.max(minAllowed, Math.min(maxAllowed, rawCalculated)));
       setCustomWidth(nextWidth);
       if (typeof localStorage !== "undefined") {
         localStorage.setItem(SCHEDULE_WIDTH_KEY, String(nextWidth));
@@ -232,13 +252,21 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       isDraggingRef.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      if (container) {
+        container.style.opacity = "1";
+        container.style.filter = "none";
+      }
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+
+      if (shouldCollapseOnRelease) {
+        handleCollapse();
+      }
     };
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [customWidth]);
+  }, [customWidth, handleCollapse]);
 
   const handleDoubleClickResize = useCallback(() => {
     setCustomWidth(null);
@@ -247,7 +275,15 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     }
   }, []);
 
+  // Card swipe/drag to left end to close
+  const [swipingCardId, setSwipingCardId] = useState<string | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState<number>(0);
+  const swipeStartXRef = useRef<number>(0);
+  const swipeStartYRef = useRef<number>(0);
+  const isSwipingCardRef = useRef<boolean>(false);
+
   const handlePresentItem = useCallback(async (item: ServicePlanItem) => {
+    if (isSwipingCardRef.current) return;
     setActiveCueId(item.id);
 
     try {
@@ -456,6 +492,53 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       removeItemFromActiveSchedule(itemId);
     }
   }, [activeViewTab]);
+
+  const handleCardPointerDown = useCallback((e: React.PointerEvent, _itemId: string) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button, select, a, input")) return;
+    swipeStartXRef.current = e.clientX;
+    swipeStartYRef.current = e.clientY;
+    isSwipingCardRef.current = false;
+  }, []);
+
+  const handleCardPointerMove = useCallback((e: React.PointerEvent, itemId: string) => {
+    if (e.buttons !== 1) return;
+    const deltaX = e.clientX - swipeStartXRef.current;
+    const deltaY = e.clientY - swipeStartYRef.current;
+
+    // Only recognize horizontal drag to the left
+    if (!isSwipingCardRef.current) {
+      if (deltaX < -12 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+        isSwipingCardRef.current = true;
+        setSwipingCardId(itemId);
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (isSwipingCardRef.current && swipingCardId === itemId) {
+      const clamped = Math.max(-160, Math.min(0, deltaX));
+      setSwipeOffset(clamped);
+    }
+  }, [swipingCardId]);
+
+  const handleCardPointerUp = useCallback((e: React.PointerEvent, itemId: string) => {
+    if (isSwipingCardRef.current && swipingCardId === itemId) {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch { /* ignore */ }
+      const deltaX = e.clientX - swipeStartXRef.current;
+      isSwipingCardRef.current = false;
+      setSwipingCardId(null);
+      setSwipeOffset(0);
+
+      // If dragged to the left end (past 50px): close / remove it!
+      if (deltaX < -50) {
+        handleRemoveItem(e as unknown as React.MouseEvent, itemId);
+      }
+    }
+  }, [handleRemoveItem, swipingCardId]);
 
   const handleClearHistory = useCallback(() => {
     clearPresentationHistory();
@@ -846,6 +929,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       className={`dock-schedule-card dock-schedule-card--media ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
                       onClick={() => void handlePresentItem(item)}
                       onContextMenu={(e) => handleOpenContextMenu(e, item, activeViewTab)}
+                      onPointerDown={(e) => handleCardPointerDown(e, item.id)}
+                      onPointerMove={(e) => handleCardPointerMove(e, item.id)}
+                      onPointerUp={(e) => handleCardPointerUp(e, item.id)}
+                      onPointerCancel={(e) => handleCardPointerUp(e, item.id)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -854,7 +941,13 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                           void handlePresentItem(item);
                         }
                       }}
-                      title={`${index + 1}. ${item.label} (Click to project, right-click for options)`}
+                      style={{
+                        transform: swipingCardId === item.id ? `translateX(${swipeOffset}px)` : undefined,
+                        opacity: swipingCardId === item.id ? Math.max(0.2, 1 - Math.abs(swipeOffset) / 120) : undefined,
+                        transition: swipingCardId === item.id ? "none" : "transform 0.18s ease-out, opacity 0.18s ease-out",
+                        touchAction: "pan-y",
+                      }}
+                      title={`${index + 1}. ${item.label} (Click to project, drag left to close, right-click for options)`}
                       aria-label={`${index + 1}. ${item.label}`}
                     >
                       {/* Thumbnail on TOP */}
@@ -913,14 +1006,27 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         </button>
                       </div>
 
-                      {/* Footer with clean caption */}
+                      {/* Footer with clean caption & close button */}
                       <div className="dock-schedule-card__media-footer">
                         <span className="dock-schedule-card__media-caption" title={item.label}>
                           {item.label}
                         </span>
 
+                        <div className="dock-schedule-card__bottom-bar" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="dock-schedule-card__bottom-close-btn dock-schedule-card__remove-btn"
+                            onClick={(e) => handleRemoveItem(e, item.id)}
+                            title={activeViewTab === "history" ? t("schedule.removeFromHistory", "Remove from History") : t("schedule.removeFromSchedule", "Remove from Schedule")}
+                            aria-label={t("common.close", "Close")}
+                          >
+                            <Icon name="close" size={11} />
+                            <span>{t("common.close", "Close")}</span>
+                          </button>
+                        </div>
+
                         {/* Preserved accessible / test suite actions */}
-                        <div className="dock-schedule-card__actions dock-schedule-card__media-quick-actions" onClick={(e) => e.stopPropagation()}>
+                        <div className="dock-schedule-card__actions dock-schedule-card__media-quick-actions" style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}
@@ -956,6 +1062,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     className={`dock-schedule-card dock-schedule-card--text ${isLive ? "dock-schedule-card--live" : ""} ${isCompleted ? "dock-schedule-card--completed" : ""}`}
                     onClick={() => void handlePresentItem(item)}
                     onContextMenu={(e) => handleOpenContextMenu(e, item, activeViewTab)}
+                    onPointerDown={(e) => handleCardPointerDown(e, item.id)}
+                    onPointerMove={(e) => handleCardPointerMove(e, item.id)}
+                    onPointerUp={(e) => handleCardPointerUp(e, item.id)}
+                    onPointerCancel={(e) => handleCardPointerUp(e, item.id)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -964,7 +1074,13 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         void handlePresentItem(item);
                       }
                     }}
-                    title={`${index + 1}. ${item.label} (Click to project, right-click for options)`}
+                    style={{
+                      transform: swipingCardId === item.id ? `translateX(${swipeOffset}px)` : undefined,
+                      opacity: swipingCardId === item.id ? Math.max(0.2, 1 - Math.abs(swipeOffset) / 120) : undefined,
+                      transition: swipingCardId === item.id ? "none" : "transform 0.18s ease-out, opacity 0.18s ease-out",
+                      touchAction: "pan-y",
+                    }}
+                    title={`${index + 1}. ${item.label} (Click to project, drag left to close, right-click for options)`}
                     aria-label={`${index + 1}. ${item.label}`}
                   >
                     {/* Top Row: Bible chapter-verse / Song title on left, 3-dots button on right */}
@@ -999,6 +1115,20 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         {item.subtitle}
                       </div>
                     )}
+
+                    {/* Bottom Row / Close button on card */}
+                    <div className="dock-schedule-card__bottom-bar" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="dock-schedule-card__bottom-close-btn dock-schedule-card__remove-btn"
+                        onClick={(e) => handleRemoveItem(e, item.id)}
+                        title={activeViewTab === "history" ? t("schedule.removeFromHistory", "Remove from History") : t("schedule.removeFromSchedule", "Remove from Schedule")}
+                        aria-label={t("common.close", "Close")}
+                      >
+                        <Icon name="close" size={11} />
+                        <span>{t("common.close", "Close")}</span>
+                      </button>
+                    </div>
 
                     {/* Kept hidden for test suite assertions & non-visual compatibility */}
                     <div className="dock-schedule-card__bottom-row" style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
@@ -1085,6 +1215,17 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   : `${scheduleItems.length} ${t("schedule.queued", "items queued")}`}
               </span>
             </div>
+
+            <button
+              type="button"
+              className="dock-schedule-panel__bottom-close-btn"
+              onClick={handleCollapse}
+              title={t("schedule.closeSchedule", "Close Schedule")}
+              aria-label={t("schedule.closeSchedule", "Close Schedule")}
+            >
+              <Icon name="close" size={13} />
+              <span>{t("common.close", "Close Schedule")}</span>
+            </button>
           </div>
 
           {/* Draggable resizer handle */}

@@ -123,4 +123,26 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     expect(dockScheduleCssSource).toContain(".dock-schedule-panel--compact .dock-schedule-card__title");
     expect(dockScheduleCssSource).toContain(".dock-schedule-panel--compact .dock-schedule-card__snippet");
   });
+
+  it("closes the schedule when dragged to the left end and provides bottom close buttons on cards and panel", () => {
+    // Panel drag to left end to close
+    expect(dockScheduleDrawerSource).toContain("handleCollapse");
+    expect(dockScheduleDrawerSource).toContain("rawCalculated < 95 || moveEvent.clientX < 85");
+
+    // Card swipe / drag to left to close
+    expect(dockScheduleDrawerSource).toContain("handleCardPointerDown");
+    expect(dockScheduleDrawerSource).toContain("handleCardPointerMove");
+    expect(dockScheduleDrawerSource).toContain("handleCardPointerUp");
+    expect(dockScheduleDrawerSource).toContain("handleRemoveItem(e, item.id)");
+
+    // Card bottom close button
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-bar");
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-card__bottom-close-btn");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-bar");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card__bottom-close-btn");
+
+    // Bottom close button on schedule panel
+    expect(dockScheduleDrawerSource).toContain("dock-schedule-panel__bottom-close-btn");
+    expect(dockScheduleCssSource).toContain(".dock-schedule-panel__bottom-close-btn");
+  });
 });
