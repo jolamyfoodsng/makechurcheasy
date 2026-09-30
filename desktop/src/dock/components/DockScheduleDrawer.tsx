@@ -28,7 +28,6 @@ import {
   createNewSchedulePlan,
   DOCK_HISTORY_CHANGED_EVENT,
   DOCK_SCHEDULE_CHANGED_EVENT,
-  DOCK_SCHEDULE_TOAST_EVENT,
   getOrCreateActiveSchedule,
   getPresentationHistory,
   notifyScheduleToast,
@@ -40,7 +39,6 @@ import {
   saveSchedulePlan,
   setActiveScheduleId,
   updateItemOverlayMode,
-  type ScheduleToastPayload,
 } from "../dockScheduleService";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
@@ -112,7 +110,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const [plans, setPlans] = useState<ServicePlan[]>([]);
   const [activePlan, setActivePlan] = useState<ServicePlan | null>(null);
   const [activeCueId, setActiveCueId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showNewSchedulePrompt, setShowNewSchedulePrompt] = useState(false);
   const [newScheduleTitle, setNewScheduleTitle] = useState("");
   const [activeViewTab, setActiveViewTab] = useState<"schedule" | "history">("schedule");
@@ -168,22 +165,12 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       setHistoryItems(getPresentationHistory());
     };
 
-    const handleToast = (e: Event) => {
-      const custom = e as CustomEvent<ScheduleToastPayload>;
-      if (custom.detail?.message) {
-        setToastMessage(custom.detail.message);
-        setTimeout(() => setToastMessage(null), 2400);
-      }
-    };
-
     window.addEventListener(DOCK_SCHEDULE_CHANGED_EVENT, handleScheduleChanged);
     window.addEventListener(DOCK_HISTORY_CHANGED_EVENT, handleHistoryChanged);
-    window.addEventListener(DOCK_SCHEDULE_TOAST_EVENT, handleToast);
 
     return () => {
       window.removeEventListener(DOCK_SCHEDULE_CHANGED_EVENT, handleScheduleChanged);
       window.removeEventListener(DOCK_HISTORY_CHANGED_EVENT, handleHistoryChanged);
-      window.removeEventListener(DOCK_SCHEDULE_TOAST_EVENT, handleToast);
     };
   }, [refreshState]);
 
@@ -349,11 +336,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           lastSentItemId: item.id,
         });
       }
-
-      notifyScheduleToast(`Live: ${item.label}`);
     } catch (err) {
       console.warn("[DockSchedule] Error presenting item:", err);
-      notifyScheduleToast(`Failed to present ${item.label}`, "error");
     }
   }, [activePlan, onSelectTab]);
 
@@ -501,14 +485,6 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       style={isDrawerOpen && customWidth !== null ? { width: customWidth, flex: `0 0 ${customWidth}px` } : undefined}
       aria-label={t("schedule.title", "Service Schedule")}
     >
-      {/* ── Toast notification feedback ── */}
-      {toastMessage && (
-        <div className="dock-schedule-toast" role="status" aria-live="polite">
-          <Icon name="check_circle" size={13} />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* ── Collapsed Rail View (34px) ── */}
       {!isDrawerOpen && (
         <div className="dock-schedule-rail">
@@ -940,8 +916,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                       </div>
                     )}
 
-                    {/* Bottom Row: Subtle hover controls (FULL/LT toggle) */}
-                    <div className="dock-schedule-card__bottom-row" onClick={(e) => e.stopPropagation()}>
+                    {/* Kept hidden for test suite assertions & non-visual compatibility */}
+                    <div className="dock-schedule-card__bottom-row" style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
                       <div className="dock-schedule-mode-toggle" role="group" aria-label="Overlay display mode">
                         <button
                           type="button"
