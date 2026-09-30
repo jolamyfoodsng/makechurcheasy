@@ -53,6 +53,7 @@ import {
   MousePointerClick,
   Layers,
   Footprints,
+  Gift,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -236,8 +237,15 @@ export default function AdminUserDetailPage() {
   const router = useRouter();
   const t = useTranslations();
   const [user, setUser] = useState<UserDetail | null>(null);
-  const [activeTab, setActiveTab] = useState<"profile" | "activity" | "payments" | "logs" | "emails">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "activity" | "payments" | "referrals" | "logs" | "emails">("profile");
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
+
+  // User Referrals Tab State
+  const [userReferralsData, setUserReferralsData] = useState<any | null>(null);
+  const [userReferralsLoading, setUserReferralsLoading] = useState(false);
+  const [userReferralsFetched, setUserReferralsFetched] = useState(false);
+  const [userReferralsError, setUserReferralsError] = useState("");
+  const [userReferralCopied, setUserReferralCopied] = useState(false);
 
   // User Error Logs Tab State
   const [userErrorLogs, setUserErrorLogs] = useState<any[]>([]);
@@ -460,6 +468,29 @@ export default function AdminUserDetailPage() {
     }
   }, [params.id]);
 
+  const fetchUserReferrals = useCallback(async () => {
+    if (!params.id) return;
+    setUserReferralsLoading(true);
+    setUserReferralsError("");
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}/referrals`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserReferralsData(data);
+        setUserReferralsFetched(true);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setUserReferralsError(err.error || "Failed to load referrals");
+      }
+    } catch (e: any) {
+      setUserReferralsError(e?.message || "Failed to load referrals");
+    } finally {
+      setUserReferralsLoading(false);
+    }
+  }, [params.id]);
+
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -472,6 +503,9 @@ export default function AdminUserDetailPage() {
       if (activeTab === "emails" || userEmails.length > 0 || userEmailsTotal !== null) {
         promises.push(fetchUserEmails());
       }
+      if (activeTab === "referrals" || userReferralsFetched) {
+        promises.push(fetchUserReferrals());
+      }
       await Promise.all(promises);
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 2500);
@@ -480,15 +514,17 @@ export default function AdminUserDetailPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [refreshing, fetchUser, activeTab, userErrorLogs.length, userErrorLogsTotal, fetchUserErrorLogs, userEmails.length, userEmailsTotal, fetchUserEmails]);
+  }, [refreshing, fetchUser, activeTab, userErrorLogs.length, userErrorLogsTotal, fetchUserErrorLogs, userEmails.length, userEmailsTotal, fetchUserEmails, userReferralsFetched, fetchUserReferrals]);
 
   useEffect(() => {
     if (activeTab === "logs" && userErrorLogsTotal === null) {
       fetchUserErrorLogs();
     } else if (activeTab === "emails" && userEmailsTotal === null) {
       fetchUserEmails();
+    } else if (activeTab === "referrals" && !userReferralsFetched) {
+      fetchUserReferrals();
     }
-  }, [activeTab, userErrorLogsTotal, userEmailsTotal, fetchUserErrorLogs, fetchUserEmails]);
+  }, [activeTab, userErrorLogsTotal, userEmailsTotal, fetchUserErrorLogs, fetchUserEmails, userReferralsFetched, fetchUserReferrals]);
 
   const handleDiscountPresetChange = (newPreset: string) => {
     setDiscountPreset(newPreset);
@@ -610,7 +646,8 @@ export default function AdminUserDetailPage() {
     fetchUser();
     fetchUserErrorLogs();
     fetchUserEmails();
-  }, [fetchUser, fetchUserErrorLogs, fetchUserEmails]);
+    fetchUserReferrals();
+  }, [fetchUser, fetchUserErrorLogs, fetchUserEmails, fetchUserReferrals]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1504,6 +1541,7 @@ export default function AdminUserDetailPage() {
           ["profile", "User information"],
           ["activity", "Activity"],
           ["payments", "Payments"],
+          ["referrals", "Referrals"],
           ["logs", "Error Logs"],
           ["emails", "Emails Sent"],
         ] as const).map(([tab, label]) => (
@@ -1518,6 +1556,11 @@ export default function AdminUserDetailPage() {
             {tab === "activity" && activityScore && (
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${activityScore.badgeBg}`}>
                 {activityScore.score}%
+              </span>
+            )}
+            {tab === "referrals" && userReferralsData?.stats?.totalSignups != null && userReferralsData.stats.totalSignups > 0 && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                {userReferralsData.stats.totalSignups}
               </span>
             )}
             {tab === "logs" && userErrorLogsTotal !== null && userErrorLogsTotal > 0 && (
@@ -3131,6 +3174,253 @@ export default function AdminUserDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Referrals Section */}
+      <section aria-label="User referrals" hidden={activeTab !== "referrals"} className="space-y-4">
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+                <Gift className="w-5 h-5 text-indigo-400" />
+                Referral Attribution & Network
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Attribution origin, unique referral code, and accounts invited by this user.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => fetchUserReferrals()}
+              disabled={userReferralsLoading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition disabled:opacity-50 self-start sm:self-auto cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${userReferralsLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
+
+          {userReferralsLoading && !userReferralsData ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+            </div>
+          ) : userReferralsError ? (
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{userReferralsError}</span>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Attribution & User Link Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Referrer Attribution */}
+                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-400" />
+                    Attributed Referrer (Invited By)
+                  </div>
+                  {userReferralsData?.referredBy ? (
+                    <div className="space-y-2 mt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-slate-100">
+                          {userReferralsData.referredByDetails?.name || `User ${String(userReferralsData.referredBy.referrerUserId).slice(-6)}`}
+                        </span>
+                        <span className="text-[10px] font-mono uppercase bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 px-2 py-0.5 rounded-md font-semibold">
+                          Code: {userReferralsData.referredBy.code}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {userReferralsData.referredByDetails?.email || "No email available"}
+                        {userReferralsData.referredByDetails?.churchName ? ` • ${userReferralsData.referredByDetails.churchName}` : ""}
+                      </div>
+                      <div className="text-[11px] text-slate-500 pt-1">
+                        Applied: {formatDateTime(userReferralsData.referredBy.appliedAt)}
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          href={`/admin/users/${userReferralsData.referredBy.referrerUserId}`}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:underline"
+                        >
+                          View Referrer Account <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-3">
+                      <p className="text-xs text-slate-300 font-medium">Direct / Organic Signup</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">This user signed up directly without a referral code.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* This User's Code */}
+                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                    <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                    This User&apos;s Referral Code & Link
+                  </div>
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-base font-mono font-bold tracking-wider text-slate-100 bg-slate-900 border border-slate-700 px-3 py-1 rounded-lg">
+                        {userReferralsData?.code || "—"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (userReferralsData?.code) {
+                            navigator.clipboard.writeText(userReferralsData.code);
+                            setUserReferralCopied(true);
+                            setTimeout(() => setUserReferralCopied(false), 2000);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition cursor-pointer"
+                      >
+                        {userReferralCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {userReferralCopied ? "Copied" : "Copy Code"}
+                      </button>
+                    </div>
+                    <div className="text-xs text-slate-400 pt-1 flex items-center justify-between gap-2">
+                      <span className="truncate font-mono text-[11px] text-slate-400">
+                        {`https://makechurcheazy.com/login?ref=${userReferralsData?.code || ""}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (userReferralsData?.code) {
+                            navigator.clipboard.writeText(`https://makechurcheazy.com/login?ref=${userReferralsData.code}`);
+                            setUserReferralCopied(true);
+                            setTimeout(() => setUserReferralCopied(false), 2000);
+                          }
+                        }}
+                        className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:underline shrink-0 cursor-pointer"
+                      >
+                        Copy Link
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Counters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Total Referred</div>
+                  <div className="text-xl font-bold text-slate-100 mt-1">
+                    {userReferralsData?.stats?.totalSignups ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Accounts created</div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Paid Conversions</div>
+                  <div className="text-xl font-bold text-emerald-400 mt-1">
+                    {userReferralsData?.stats?.paidSignups ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Upgraded to paid</div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Pending (Free)</div>
+                  <div className="text-xl font-bold text-amber-400 mt-1">
+                    {userReferralsData?.stats?.pendingSignups ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Active or on trial</div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Conversion Rate</div>
+                  <div className="text-xl font-bold text-indigo-400 mt-1">
+                    {userReferralsData?.stats?.conversionRate ?? 0}%
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Paid conversion ratio</div>
+                </div>
+              </div>
+
+              {/* Referred Accounts Table */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Accounts Referred By This User ({userReferralsData?.referrals?.length || 0})
+                  </h3>
+                </div>
+
+                {!userReferralsData?.referrals || userReferralsData.referrals.length === 0 ? (
+                  <div className="text-center py-10 bg-slate-950/40 rounded-xl border border-slate-800 text-xs text-slate-400">
+                    No users have signed up with this referral code yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                        <tr>
+                          <th className="py-3 px-4">Referred Account</th>
+                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3">Plan / Value</th>
+                          <th className="py-3 px-3">Signed Up</th>
+                          <th className="py-3 px-3">Converted At</th>
+                          <th className="py-3 px-4 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                        {userReferralsData.referrals.map((item: any) => (
+                          <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-slate-100">
+                                {item.referredUser?.name || "Unknown"}
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                {item.referredUser?.email || "No email"}
+                                {item.referredUser?.churchName ? ` • ${item.referredUser.churchName}` : ""}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              {item.status === "paid" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  Paid
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800/60">
+                                  Free / Trial
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className="font-medium text-slate-200 uppercase text-[11px]">
+                                {item.paidPlan || item.referredUser?.plan || "free"}
+                              </span>
+                              {item.paidAmount != null && item.paidAmount > 0 && (
+                                <span className="text-[11px] text-emerald-400 block font-semibold">
+                                  {item.paidCurrency || "$"}{item.paidAmount}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap text-slate-400 text-[11px]">
+                              {formatDateTime(item.createdAt)}
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap text-slate-400 text-[11px]">
+                              {item.paidAt ? formatDateTime(item.paidAt) : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              {item.referredUser?.id ? (
+                                <Link
+                                  href={`/admin/users/${item.referredUser.id}`}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-800/60 transition"
+                                >
+                                  View User
+                                  <ExternalLink className="w-3 h-3" />
+                                </Link>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

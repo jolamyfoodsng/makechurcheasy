@@ -8,8 +8,7 @@
  * 2. ?region= query override (legacy manual selection)
  * 3. x-mce-geo-country header from the dashboard proxy
  * 4. CF-IPCountry header (Cloudflare)
- * 5. x-vercel-ip-country header (Vercel)
- * 6. Fallback to Global
+ * 5. Fallback to Global
  */
 
 import { NextRequest, NextResponse } from "next/server";

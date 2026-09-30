@@ -6,7 +6,7 @@ export function middleware(req: NextRequest) {
   }
 
   const requestHeaders = new Headers(req.headers);
-  const edgeCountry = (req.headers.get("cf-ipcountry") || req.headers.get("x-vercel-ip-country") || "")
+  const edgeCountry = (req.headers.get("cf-ipcountry") || "")
     .trim()
     .toUpperCase();
   if (/^[A-Z]{2}$/.test(edgeCountry) && edgeCountry !== "XX" && edgeCountry !== "T1") {

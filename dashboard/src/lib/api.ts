@@ -171,6 +171,10 @@ export async function getAdminReferrals(limit = 500): Promise<AdminReferralOverv
   return request(`/api/admin/referrals?limit=${limit}`);
 }
 
+export async function getAdminUserReferrals(userId: string): Promise<ReferralDashboardData & { referredByDetails?: ReferralListItem["referredUser"] | null }> {
+  return request(`/api/admin/users/${encodeURIComponent(userId)}/referrals`);
+}
+
 // ─── Devices ─────────────────────────────────────────────────────────────────
 
 export interface Device {

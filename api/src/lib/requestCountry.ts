@@ -1,6 +1,6 @@
 import { isKnownCountryCode, normalizeCountryCode } from "./countryNormalization";
 
-export type CountryResolutionSource = "profile" | "cloudflare" | "vercel" | "dashboard" | "fallback";
+export type CountryResolutionSource = "profile" | "cloudflare" | "dashboard" | "fallback";
 
 export interface RequestCountryResolution {
   countryCode: string;
@@ -39,7 +39,6 @@ export async function resolveRequestCountry(
     // the hosting platform's country, which may describe the proxy server.
     ["x-mce-geo-country", "dashboard"],
     ["cf-ipcountry", "cloudflare"],
-    ["x-vercel-ip-country", "vercel"],
   ];
 
   for (const [header, source] of headerCandidates) {

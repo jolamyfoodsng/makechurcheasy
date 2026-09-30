@@ -40,7 +40,7 @@ function normalizeCountryHeader(value: string | null | undefined): string | null
  * this value, so signup cannot rely on a user-editable country field.
  */
 export function detectRequestCountry(headers: Headers): string | null {
-  for (const header of ["x-mce-geo-country", "cf-ipcountry", "x-vercel-ip-country"]) {
+  for (const header of ["x-mce-geo-country", "cf-ipcountry"]) {
     const country = normalizeCountryHeader(headers.get(header));
     if (country) return country;
   }

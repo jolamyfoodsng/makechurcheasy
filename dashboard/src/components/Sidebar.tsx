@@ -29,7 +29,7 @@ import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
 import { AppLogo } from "./AppLogo";
 
 const SUBSCRIPTION_ROUTES = ["/subscription"];
-const SETTINGS_ROUTES = ["/settings", "/devices", "/security", "/church-profile"];
+const SETTINGS_ROUTES = ["/settings", "/security", "/church-profile"];
 const HELP_ROUTES = ["/community", "/support"];
 
 function isGroupActive(pathname: string, routes: string[]): boolean {
@@ -68,17 +68,17 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
 
   const navLinkClass = (active: boolean) =>
     cn(
-      "flex items-center gap-3 px-3 h-[44px] rounded-xl text-sm font-medium transition-colors",
+      "flex items-center gap-3 px-3 h-[42px] rounded-xl text-sm font-medium transition-all duration-150",
       active
-        ? "bg-blue-50 text-blue-700"
-        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+        ? "bg-blue-50 text-blue-700 font-semibold"
+        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
     );
 
   const subLinkClass = (active: boolean) =>
     cn(
       "flex items-center gap-3 pl-11 pr-3 h-[38px] rounded-xl text-[13px] font-medium transition-colors",
       active
-        ? "bg-blue-50 text-blue-700"
+        ? "bg-blue-50 text-blue-700 font-semibold"
         : "text-slate-500 hover:bg-slate-50 hover:text-slate-700",
     );
 
@@ -125,6 +125,26 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
             <span>{t("navigation.dashboard")}</span>
           </Link>
 
+          {/* Devices — Standalone Top-Level Page */}
+          <Link
+            href="/devices"
+            onClick={() => setIsOpen?.(false)}
+            className={navLinkClass(pathname.startsWith("/devices"))}
+          >
+            <Monitor className="w-[20px] h-[20px] shrink-0" />
+            <span>{t("navigation.devices") || "Devices"}</span>
+          </Link>
+
+          {/* Downloads */}
+          <Link
+            href="/downloads"
+            onClick={() => setIsOpen?.(false)}
+            className={navLinkClass(pathname.startsWith("/downloads"))}
+          >
+            <Download className="w-[20px] h-[20px] shrink-0" />
+            <span>{t("navigation.downloads")}</span>
+          </Link>
+
           {separator}
 
           {/* Subscription */}
@@ -147,16 +167,6 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
             <span>{t("navigation.credits")}</span>
           </Link>
 
-          {/* Downloads */}
-          <Link
-            href="/downloads"
-            onClick={() => setIsOpen?.(false)}
-            className={navLinkClass(pathname.startsWith("/downloads"))}
-          >
-            <Download className="w-[20px] h-[20px] shrink-0" />
-            <span>{t("navigation.downloads")}</span>
-          </Link>
-
           {/* Billing */}
           <Link
             href="/billing"
@@ -174,7 +184,7 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
             className={navLinkClass(pathname.startsWith("/referrals"))}
           >
             <Gift className="w-[20px] h-[20px] shrink-0" />
-            <span>Referrals</span>
+            <span>{t("navigation.referrals") || "Referrals"}</span>
           </Link>
 
           {separator}
@@ -197,7 +207,7 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
                   setSettingsOpen(!settingsOpen);
                 }}
                 className={cn(
-                  "h-[44px] w-9 flex items-center justify-center rounded-xl transition-colors -ml-1",
+                  "h-[42px] w-9 flex items-center justify-center rounded-xl transition-colors -ml-1",
                   settingsActive ? "text-blue-700" : "text-slate-400 hover:text-slate-600",
                 )}
               >
@@ -207,7 +217,7 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
               </button>
             </div>
             {showSettingsSub && (
-              <div className="mt-0.5">
+              <div className="mt-0.5 space-y-0.5">
                 <Link
                   href="/church-profile"
                   onClick={() => setIsOpen?.(false)}
@@ -215,14 +225,6 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
                 >
                   <Landmark className="w-[18px] h-[18px] shrink-0" />
                   <span>{t("navigation.churchProfile")}</span>
-                </Link>
-                <Link
-                  href="/devices"
-                  onClick={() => setIsOpen?.(false)}
-                  className={subLinkClass(pathname.startsWith("/devices"))}
-                >
-                  <Monitor className="w-[18px] h-[18px] shrink-0" />
-                  <span>{t("navigation.devices")}</span>
                 </Link>
                 <Link
                   href="/security"

@@ -21,6 +21,12 @@ name: Release — Build & Publish
 # Required secrets:
 #   TAURI_SIGNING_PRIVATE_KEY          — content of ~/.tauri/makechurcheasy.key
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the signing key
+#   APPLE_CERTIFICATE                  — base64 Developer ID Application .p12
+#   APPLE_CERTIFICATE_PASSWORD         — password used when exporting the .p12
+#   APPLE_KEYCHAIN_PASSWORD            — temporary CI keychain password
+#   APPLE_ID                           — Apple Developer account email
+#   APPLE_PASSWORD                     — Apple app-specific password (not account password)
+#   APPLE_TEAM_ID                      — Apple Developer Team ID
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -396,11 +402,53 @@ jobs:
           cmake -S /tmp/verify-openssl -B /tmp/verify-openssl/build -G Ninja
           cmake --build /tmp/verify-openssl/build
 
+      # ── Import Developer ID certificate for direct macOS distribution ──
+      - name: Import Apple Developer ID certificate
+        id: apple-certificate
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_CERTIFICATE" || { echo "Missing APPLE_CERTIFICATE GitHub secret"; exit 1; }
+          test -n "$APPLE_CERTIFICATE_PASSWORD" || { echo "Missing APPLE_CERTIFICATE_PASSWORD GitHub secret"; exit 1; }
+          test -n "$APPLE_KEYCHAIN_PASSWORD" || { echo "Missing APPLE_KEYCHAIN_PASSWORD GitHub secret"; exit 1; }
+          test -n "$APPLE_ID" || { echo "Missing APPLE_ID GitHub secret"; exit 1; }
+          test -n "$APPLE_PASSWORD" || { echo "Missing APPLE_PASSWORD GitHub secret"; exit 1; }
+          test -n "$APPLE_TEAM_ID" || { echo "Missing APPLE_TEAM_ID GitHub secret"; exit 1; }
+
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/mce-build.keychain-db"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application:/ {print $2; exit}')
+          test -n "$IDENTITY" || { echo "No Developer ID Application identity found in the imported certificate"; exit 1; }
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_OUTPUT"
+          echo "Imported Developer ID Application certificate."
+
       # ── Build + Release ──
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.apple-certificate.outputs.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}

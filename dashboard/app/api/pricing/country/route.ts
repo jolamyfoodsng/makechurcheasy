@@ -3,10 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 
 function getRequestCountry(req: NextRequest): string | null {
-  const country =
-    req.headers.get("cf-ipcountry") ||
-    req.headers.get("x-vercel-ip-country") ||
-    "";
+  const country = req.headers.get("cf-ipcountry") || "";
   const normalized = country.trim().toUpperCase();
   return /^[A-Z]{2}$/.test(normalized) && normalized !== "XX" ? normalized : null;
 }
@@ -36,7 +33,7 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": upstream.headers.get("content-type") || "application/json",
       "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
-      Vary: "Cookie, CF-IPCountry, X-Vercel-IP-Country, X-MCE-Geo-Country",
+      Vary: "Cookie, CF-IPCountry, X-MCE-Geo-Country",
     },
   });
 }

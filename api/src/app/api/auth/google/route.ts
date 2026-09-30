@@ -55,9 +55,11 @@ export async function GET(req: NextRequest) {
 
   // Preserve the redirect destination after login
   const returnUrl = sanitizeReturnUrl(req.nextUrl.searchParams.get("returnUrl"), clientOrigin);
+  const rawRef = req.nextUrl.searchParams.get("referralCode") || req.nextUrl.searchParams.get("ref");
+  const ref = rawRef ? rawRef.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : undefined;
 
-  // Encode both origin and returnUrl in state so callback can reconstruct redirectUri
-  const statePayload = JSON.stringify({ o: clientOrigin, r: returnUrl });
+  // Encode origin, returnUrl, and referral code in state so callback can reconstruct redirectUri and attribute referrals
+  const statePayload = JSON.stringify({ o: clientOrigin, r: returnUrl, ref: ref || undefined });
 
   const params = new URLSearchParams({
     client_id: clientId,

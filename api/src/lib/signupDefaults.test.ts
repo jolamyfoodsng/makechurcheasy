@@ -6,7 +6,6 @@ import { detectRequestCountry, resolveSignupLanguage } from "./signupDefaults";
 test("detects the country supplied by the hosting edge", () => {
   const headers = new Headers({
     "cf-ipcountry": "gh",
-    "x-vercel-ip-country": "US",
   });
 
   assert.equal(detectRequestCountry(headers), "GH");
@@ -16,7 +15,6 @@ test("prefers the dashboard country over hosting proxy headers", () => {
   const headers = new Headers({
     "x-mce-geo-country": "GH",
     "cf-ipcountry": "US",
-    "x-vercel-ip-country": "US",
   });
 
   assert.equal(detectRequestCountry(headers), "GH");

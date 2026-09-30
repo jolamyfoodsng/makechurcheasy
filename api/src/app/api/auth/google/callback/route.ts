@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
 import { notifyTelegramNewSignup } from "@/lib/telegramNotifications";
+import { applyReferralCode } from "@/lib/referrals";
 
 function appOrigin(appUrl: string): string {
   try {
@@ -53,9 +54,10 @@ export async function GET(req: NextRequest) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com";
 
-  // Decode state: { o: clientOrigin, r: returnUrl } — or fall back to legacy plain string
+  // Decode state: { o: clientOrigin, r: returnUrl, ref?: string } — or fall back to legacy plain string
   let clientOrigin = appUrl;
   let returnUrl = appUrl;
+  let referralCodeFromState: string | undefined = undefined;
   if (state) {
     try {
       const parsed = JSON.parse(state);
@@ -64,6 +66,9 @@ export async function GET(req: NextRequest) {
         ? new URL(parsedOrigin).origin
         : appOrigin(appUrl);
       returnUrl = sanitizeReturnUrl(typeof parsed.r === "string" ? parsed.r : null, clientOrigin);
+      if (typeof parsed.ref === "string" && parsed.ref.trim()) {
+        referralCodeFromState = parsed.ref.trim();
+      }
     } catch {
       // Legacy plain-string state (just the return URL)
       const decoded = decodeURIComponent(state);
@@ -249,6 +254,14 @@ export async function GET(req: NextRequest) {
         createdAt: now,
         source: "Google signup",
       });
+
+      if (referralCodeFromState) {
+        try {
+          await applyReferralCode(result.insertedId.toString(), referralCodeFromState);
+        } catch (err: any) {
+          console.warn("[google/callback] Referral code was not applied:", err?.message || err);
+        }
+      }
 
       // Create trial only if the claim is eligible.
       try {

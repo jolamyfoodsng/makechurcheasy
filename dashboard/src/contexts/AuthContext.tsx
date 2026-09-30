@@ -304,7 +304,12 @@ export function AuthProvider({
       returnUrl.startsWith("/") && !returnUrl.startsWith("//")
         ? returnUrl
         : "/dashboard";
-    window.location.href = `/api/auth/google?origin=${encodeURIComponent(origin)}&returnUrl=${encodeURIComponent(origin + safeReturnUrl)}`;
+    let pendingRef = "";
+    try {
+      pendingRef = localStorage.getItem("mce_pending_referral_code") || "";
+    } catch { }
+    const refParam = pendingRef ? `&referralCode=${encodeURIComponent(pendingRef)}` : "";
+    window.location.href = `/api/auth/google?origin=${encodeURIComponent(origin)}&returnUrl=${encodeURIComponent(origin + safeReturnUrl)}${refParam}`;
     return false;
   }
 
