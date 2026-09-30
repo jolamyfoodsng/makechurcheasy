@@ -138,14 +138,14 @@ export default function Overview() {
           </div>
           <p className="text-xs sm:text-sm text-slate-500">
             {churchName && churchName !== "Your Church" ? `${churchName} · ` : ""}
-            Sanctuary Presentation & Media Hub
+            Presentation & Media Hub
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
           <Link href="/devices">
             <Button size="sm" icon={<Monitor className="w-3.5 h-3.5" />}>
-              Pair Sanctuary Device
+              Pair Device
             </Button>
           </Link>
           <Link href="/downloads">
@@ -293,7 +293,7 @@ export default function Overview() {
         <Card padding="md" className="flex flex-col justify-between hover:border-slate-300 transition-colors shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-              <Monitor className="w-4 h-4 text-emerald-600" /> Sanctuary Devices
+              <Monitor className="w-4 h-4 text-emerald-600" /> Devices
             </div>
             <Badge variant={totalDevices > 0 ? "success" : "default"} size="sm" dot={totalDevices > 0}>
               {totalDevices > 0 ? `${totalDevices} Paired` : "Not Setup"}
@@ -329,7 +329,7 @@ export default function Overview() {
                   Step 1: Download MakeChurchEasy Studio
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  Install our desktop app on your sanctuary Mac or Windows computer to project scriptures, lyric lower-thirds, and sermon AI.
+                  Install our desktop app on your Mac or Windows computer to project scriptures, lyric lower-thirds, and sermon AI.
                 </p>
               </div>
             </div>
@@ -360,7 +360,7 @@ export default function Overview() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-slate-900 truncate">Pair Device</p>
-              <p className="text-xs text-slate-400 truncate">Sync sanctuary PC / Mac</p>
+              <p className="text-xs text-slate-400 truncate">Sync PC / Mac</p>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
           </Link>
@@ -414,7 +414,7 @@ export default function Overview() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-              Connected Sanctuary Devices
+              Connected Devices
             </h2>
           </div>
           <Link href="/devices" className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1">
@@ -426,12 +426,12 @@ export default function Overview() {
         {devices.length === 0 ? (
           <Card padding="md" className="text-center py-8">
             <Monitor className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-900">No sanctuary computer linked yet</p>
+            <p className="text-sm font-bold text-slate-900">No computer linked yet</p>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
               Open MakeChurchEasy Studio on your AV desktop and enter a 6-digit code to pair.
             </p>
             <Link href="/devices">
-              <Button size="sm" icon={<Monitor className="w-3.5 h-3.5" />}>Pair Sanctuary Computer</Button>
+              <Button size="sm" icon={<Monitor className="w-3.5 h-3.5" />}>Pair Computer</Button>
             </Link>
           </Card>
         ) : (
@@ -450,7 +450,7 @@ export default function Overview() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-900">{dev.deviceName || "Sanctuary Device"}</span>
+                        <span className="text-sm font-bold text-slate-900">{dev.deviceName || "Device"}</span>
                         <Badge variant={isOnline ? "success" : "default"} size="sm" dot>
                           {isOnline ? "Online" : "Offline"}
                         </Badge>

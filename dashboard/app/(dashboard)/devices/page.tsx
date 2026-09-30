@@ -168,7 +168,7 @@ export default function DevicesPage() {
               </Badge>
             </div>
             <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
-              {t("devices.pageDescription") || "Manage sanctuary computers running MakeChurchEasy Studio and remote stage controllers."}
+              {t("devices.pageDescription") || "Manage computers running MakeChurchEasy Studio and remote stage controllers."}
             </p>
           </div>
         </div>
@@ -200,7 +200,7 @@ export default function DevicesPage() {
           <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
           <div>
             <p className="text-sm font-bold text-green-900">
-              {t("devices.devicePairedSuccess") || "Sanctuary Device Paired Successfully!"}
+              {t("devices.devicePairedSuccess") || "Device Paired Successfully!"}
             </p>
             <p className="text-xs text-green-700 mt-0.5">
               Your presentation library, offline Bibles, and sermon AI credentials have synced to the device.
@@ -236,7 +236,7 @@ export default function DevicesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-600">
                 <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-xl border border-blue-100">
                   <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-[11px]">1</span>
-                  <span>Open MakeChurchEasy Studio on your sanctuary computer</span>
+                  <span>Open MakeChurchEasy Studio on your computer</span>
                 </div>
                 <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-xl border border-blue-100">
                   <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-[11px]">2</span>
@@ -276,13 +276,13 @@ export default function DevicesPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Sanctuary Computers & Companions */}
+          {/* Computers & Companions */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <Wifi className="w-5 h-5 text-blue-600" />
-                  <span>Sanctuary Presentation Devices</span>
+                  <span>Presentation Devices</span>
                   <span className="text-sm font-semibold text-slate-400">
                     ({devices.length})
                   </span>
@@ -312,7 +312,7 @@ export default function DevicesPage() {
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
                   {t("devices.noDevicesConnectedDescription") ||
-                    "Pair MakeChurchEasy Studio on your sanctuary laptop to unlock automated OBS sync, unlimited offline Bibles, and sermon speech-to-scripture."}
+                    "Pair MakeChurchEasy Studio on your laptop to unlock automated OBS sync, unlimited offline Bibles, and sermon speech-to-scripture."}
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button
@@ -349,7 +349,7 @@ export default function DevicesPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="text-sm font-bold text-slate-900 truncate max-w-[180px] sm:max-w-[220px]">
-                                  {device.deviceName || t("devices.unknownDevice") || "Sanctuary Device"}
+                                  {device.deviceName || t("devices.unknownDevice") || "Device"}
                                 </h3>
                               </div>
                               <p className="text-xs text-slate-500">
@@ -449,7 +449,7 @@ export default function DevicesPage() {
       {/* Confirmation Dialog for Unpairing */}
       <ConfirmDialog
         open={!!deviceToDelete}
-        title="Unpair Sanctuary Device?"
+        title="Unpair Device?"
         description={`Are you sure you want to disconnect "${deviceToDelete?.deviceName || "this device"}"? It will lose access to offline Bible synchronization and sermon AI until paired again.`}
         confirmLabel="Unpair Device"
         cancelLabel="Keep Device"
