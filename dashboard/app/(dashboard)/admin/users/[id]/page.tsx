@@ -3282,13 +3282,13 @@ export default function AdminUserDetailPage() {
                     </div>
                     <div className="text-xs text-slate-400 pt-1 flex items-center justify-between gap-2">
                       <span className="truncate font-mono text-[11px] text-slate-400">
-                        {`https://makechurcheazy.com/login?ref=${userReferralsData?.code || ""}`}
+                        {`https://makechurcheazy.com/signup?ref=${userReferralsData?.code || ""}`}
                       </span>
                       <button
                         type="button"
                         onClick={() => {
                           if (userReferralsData?.code) {
-                            navigator.clipboard.writeText(`https://makechurcheazy.com/login?ref=${userReferralsData.code}`);
+                            navigator.clipboard.writeText(`https://makechurcheazy.com/signup?ref=${userReferralsData.code}`);
                             setUserReferralCopied(true);
                             setTimeout(() => setUserReferralCopied(false), 2000);
                           }
