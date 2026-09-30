@@ -7329,11 +7329,12 @@ export class DockObsClient {
         : this.formatBibleReferenceDisplayText(reference, data.translation, data.displayReferenceLabel);
       try {
         const refLabel = referenceText || reference;
-        const translation = data.translation ? ` (${data.translation})` : "";
+        const hasTranslation = Boolean(data.translation && new RegExp(`\\(${data.translation}\\)$`, "i").test(refLabel.trim()));
+        const label = hasTranslation || !data.translation ? refLabel : `${refLabel} (${data.translation})`;
         recordPresentationHistory({
           type: "bible",
           sourceKind: "bible-reference",
-          label: `${refLabel}${translation}`,
+          label: label.replace(/(\([A-Za-z0-9_/-]+\))(?:\s*\1)+/gi, "$1").trim(),
           subtitle: (text || refLabel).slice(0, 200),
           notes: data.translation,
           payloadSnapshot: {
@@ -7640,11 +7641,12 @@ export class DockObsClient {
       const mode = data.overlayMode ?? "fullscreen";
       try {
         const refLabel = data.rawReferenceLabel || `${data.book} ${data.chapter}:${data.verseRange || data.verse}`;
-        const translation = data.translation ? ` (${data.translation})` : "";
+        const hasTranslation = Boolean(data.translation && new RegExp(`\\(${data.translation}\\)$`, "i").test(refLabel.trim()));
+        const label = hasTranslation || !data.translation ? refLabel : `${refLabel} (${data.translation})`;
         recordPresentationHistory({
           type: "bible",
           sourceKind: "bible-reference",
-          label: `${refLabel}${translation}`,
+          label: label.replace(/(\([A-Za-z0-9_/-]+\))(?:\s*\1)+/gi, "$1").trim(),
           subtitle: (data.verseText || refLabel).slice(0, 200),
           notes: data.translation,
           payloadSnapshot: {

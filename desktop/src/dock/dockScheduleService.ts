@@ -79,6 +79,18 @@ export function notifyHistoryChanged(): void {
   window.dispatchEvent(new CustomEvent(DOCK_HISTORY_CHANGED_EVENT));
 }
 
+/**
+ * Normalizes a Bible reference display label by deduplicating parenthesized version suffixes
+ * like "(KJV) (KJV)" -> "(KJV)".
+ */
+export function normalizeBibleReferenceLabel(label: string): string {
+  if (!label) return "";
+  return label
+    .replace(/(\([A-Za-z0-9_/-]+\))(?:\s*\1)+/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function readCachedScheduleSnapshot(): ServicePlannerSnapshot | null {
   if (inMemorySnapshot) return inMemorySnapshot;
   if (typeof localStorage === "undefined") return null;
@@ -87,8 +99,21 @@ export function readCachedScheduleSnapshot(): ServicePlannerSnapshot | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (isServicePlannerSnapshot(parsed)) {
-      inMemorySnapshot = parsed;
-      return parsed;
+      const sanitized: ServicePlannerSnapshot = {
+        ...parsed,
+        plans: parsed.plans.map((p) => ({
+          ...p,
+          items: p.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it)),
+        })),
+        activePlan: parsed.activePlan
+          ? {
+              ...parsed.activePlan,
+              items: parsed.activePlan.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it)),
+            }
+          : parsed.activePlan,
+      };
+      inMemorySnapshot = sanitized;
+      return sanitized;
     }
   } catch {
     // Ignore cache parse errors
@@ -224,7 +249,13 @@ export function addBibleToActiveSchedule(params: {
     ? `${params.verse}-${params.verseEnd}`
     : String(params.verse));
 
-  const displayRef = `${params.reference} (${params.translation})`;
+  const rawRef = (params.reference || "").trim();
+  const cleanRef = params.translation
+    ? rawRef.replace(new RegExp(`\\s*\\(${params.translation}\\)\\s*$`, "i"), "").trim()
+    : rawRef;
+  const displayRef = normalizeBibleReferenceLabel(
+    params.translation ? `${cleanRef} (${params.translation})` : cleanRef
+  );
 
   return addItemToActiveSchedule({
     type: "bible",
@@ -519,8 +550,13 @@ export function getPresentationHistory(): ServicePlanItem[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      inMemoryHistory = parsed;
-      return parsed;
+      const sanitized = parsed.map((it: ServicePlanItem) => (
+        it?.type === "bible" && typeof it.label === "string"
+          ? { ...it, label: normalizeBibleReferenceLabel(it.label) }
+          : it
+      ));
+      inMemoryHistory = sanitized;
+      return sanitized;
     }
   } catch {
     // Ignore cache parse error
@@ -562,15 +598,18 @@ export function recordPresentationHistory(item: {
     ...item.payloadSnapshot,
     overlayMode,
   };
+  const cleanedLabel = item.type === "bible"
+    ? normalizeBibleReferenceLabel(item.label)
+    : item.label;
 
   const existingIdx = current.findIndex((h) => {
     if (h.type !== item.type) return false;
     if (item.type === "media") {
       const hFile = (h.payloadSnapshot?.filePath as string) || h.label;
-      const iFile = (payloadSnapshot.filePath as string) || item.label;
+      const iFile = (payloadSnapshot.filePath as string) || cleanedLabel;
       return hFile === iFile;
     }
-    return h.label === item.label;
+    return h.label === cleanedLabel;
   });
 
   let historyItem: ServicePlanItem;
@@ -580,6 +619,7 @@ export function recordPresentationHistory(item: {
     const existing = current[existingIdx];
     historyItem = {
       ...existing,
+      label: cleanedLabel,
       subtitle: item.subtitle ?? existing.subtitle,
       notes: item.notes ?? existing.notes,
       payloadSnapshot: {
@@ -595,7 +635,7 @@ export function recordPresentationHistory(item: {
   } else {
     historyItem = createServicePlanItem({
       type: item.type,
-      label: item.label,
+      label: cleanedLabel,
       subtitle: item.subtitle,
       sourceKind: item.sourceKind,
       sourceId: item.sourceId,

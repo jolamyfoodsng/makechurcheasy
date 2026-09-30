@@ -900,6 +900,9 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 const mediaSrc = isMedia ? getMediaThumbnailSrc(payload) : "";
                 const currentOverlayMode = (payload.overlayMode as "fullscreen" | "lower-third") ||
                   (item.type === "bible" ? "fullscreen" : "lower-third");
+                const cardLabel = item.type === "bible"
+                  ? item.label.replace(/(\([A-Za-z0-9_/-]+\))(?:\s*\1)+/gi, "$1").trim()
+                  : item.label;
 
                 // ── Media Card (Thumbnail on top, caption below, 3-dots at top right, right-clickable) ──
                 if (isMedia) {
@@ -990,8 +993,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
                       {/* Footer with clean caption */}
                       <div className="dock-schedule-card__media-footer">
-                        <span className="dock-schedule-card__media-caption" title={item.label}>
-                          {item.label}
+                        <span className="dock-schedule-card__media-caption" title={cardLabel}>
+                          {cardLabel}
                         </span>
 
                         {/* Preserved accessible / test suite actions */}
@@ -1055,7 +1058,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     {/* Top Row: Bible chapter-verse / Song title on left, 3-dots button on right */}
                     <div className="dock-schedule-card__header-row dock-schedule-card__title-row">
                       <div className="dock-schedule-card__title">
-                        <span className="dock-schedule-card__title-text" title={item.label}>{item.label}</span>
+                        <span className="dock-schedule-card__title-text" title={cardLabel}>{cardLabel}</span>
                         {isLive && (
                           <span className="dock-schedule-card__live-pill">
                             <span className="dock-schedule-card__live-dot" />
@@ -1214,7 +1217,11 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dock-schedule-context-menu__header">
-              <span className="dock-schedule-context-menu__title">{contextMenu.item.label}</span>
+              <span className="dock-schedule-context-menu__title">
+                {contextMenu.item.type === "bible"
+                  ? contextMenu.item.label.replace(/(\([A-Za-z0-9_/-]+\))(?:\s*\1)+/gi, "$1").trim()
+                  : contextMenu.item.label}
+              </span>
             </div>
 
             <div className="dock-schedule-context-menu__divider" />

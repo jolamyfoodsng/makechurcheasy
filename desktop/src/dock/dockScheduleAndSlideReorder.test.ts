@@ -4,6 +4,9 @@ import {
   addWholeWorshipSongToActiveSchedule,
   addNoteToActiveSchedule,
   addWholeNoteToActiveSchedule,
+  addBibleToActiveSchedule,
+  recordPresentationHistory,
+  normalizeBibleReferenceLabel,
   getPendingWorshipSongSelection,
   setPendingWorshipSongSelection,
   getPendingNoteSelection,
@@ -154,4 +157,52 @@ describe("Dock Schedule and Slide Reordering", () => {
     expect(noteItem.payloadSnapshot.isNoteSlide).toBe(true);
     expect(noteItem.payloadSnapshot.noteId).toBe("note-fg");
   });
+
+  it("normalizes Bible reference labels and removes duplicated translation suffixes", () => {
+    expect(normalizeBibleReferenceLabel("James 1:3 (KJV) (KJV)")).toBe("James 1:3 (KJV)");
+    expect(normalizeBibleReferenceLabel("Isaiah 66:8 (KJV) (KJV) (KJV)")).toBe("Isaiah 66:8 (KJV)");
+    expect(normalizeBibleReferenceLabel("Hosea 13:13 (NIV) (NIV)")).toBe("Hosea 13:13 (NIV)");
+    expect(normalizeBibleReferenceLabel("John 3:16 (NKJV)")).toBe("John 3:16 (NKJV)");
+    expect(normalizeBibleReferenceLabel("Psalm 23:1")).toBe("Psalm 23:1");
+  });
+
+  it("does not duplicate translation suffix when adding Bible to active schedule", () => {
+    const bibleWithTranslationInRef = addBibleToActiveSchedule({
+      book: "James",
+      chapter: 1,
+      verse: 3,
+      reference: "James 1:3 (KJV)",
+      translation: "KJV",
+      text: "Knowing this, that the trying of your faith worketh patience.",
+    });
+    expect(bibleWithTranslationInRef.label).toBe("James 1:3 (KJV)");
+
+    const bibleWithoutTranslationInRef = addBibleToActiveSchedule({
+      book: "James",
+      chapter: 1,
+      verse: 4,
+      reference: "James 1:4",
+      translation: "KJV",
+      text: "But let patience have her perfect work.",
+    });
+    expect(bibleWithoutTranslationInRef.label).toBe("James 1:4 (KJV)");
+  });
+
+  it("normalizes duplicated translation suffix when recording presentation history", () => {
+    const historyItem = recordPresentationHistory({
+      type: "bible",
+      sourceKind: "bible-reference",
+      label: "James 1:3 (KJV) (KJV)",
+      subtitle: "Knowing this, that the trying of your faith worketh patience.",
+      notes: "KJV",
+      payloadSnapshot: {
+        book: "James",
+        chapter: 1,
+        verse: 3,
+        translation: "KJV",
+      },
+    });
+    expect(historyItem.label).toBe("James 1:3 (KJV)");
+  });
 });
+
