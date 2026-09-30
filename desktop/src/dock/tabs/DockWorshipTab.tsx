@@ -56,7 +56,14 @@ import {
 import { fuzzyMatch, fuzzyScore } from "../../services/fuzzySearch";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
-import { addWorshipToActiveSchedule, addWholeWorshipSongToActiveSchedule } from "../dockScheduleService";
+import {
+  addWorshipToActiveSchedule,
+  addWholeWorshipSongToActiveSchedule,
+  DOCK_SELECT_WORSHIP_SONG_EVENT,
+  DOCK_SELECT_NOTE_EVENT,
+  getPendingWorshipSongSelection,
+  setPendingWorshipSongSelection,
+} from "../dockScheduleService";
 import Icon from "../DockIcon";
 import LoadingScreen from "../../components/LoadingScreen";
 import DockBottomToolbar from "../components/DockBottomToolbar";
@@ -2709,19 +2716,25 @@ function DockWorshipTab({
   }, [buildSectionPayload, selectedSong, selectedSongDisplayTitle, selectedSongSections]);
 
   const handleAddSongToSchedule = useCallback((song: DockSong) => {
+    const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
+    const currentTheme = liveOverlayMode === "fullscreen" ? effectiveSelectedFSTheme : effectiveSelectedLTTheme;
+    const currentSettings = liveOverlayMode === "fullscreen"
+      ? liveFullscreenThemeSettingsRef.current ?? currentTheme.settings
+      : liveLowerThirdThemeSettingsRef.current ?? currentTheme.settings;
+
     addWholeWorshipSongToActiveSchedule({
       songTitle: song.title,
       artist: song.artist,
       lyrics: song.lyrics,
       songId: song.id,
-      overlayMode,
-      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
-      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+      overlayMode: liveOverlayMode,
+      theme: currentTheme.id,
+      bibleThemeSettings: currentSettings as unknown as Record<string, unknown> | null,
       linesPerSlide: song.linesPerSlide,
       autoSplit: song.autoSplit,
     });
     showToast(t("schedule.addedSongToSchedule", { defaultValue: `Added "${song.title}" to Schedule` }), "success");
-  }, [overlayMode, selectedFSTheme, selectedLTTheme, showToast, t]);
+  }, [effectiveSelectedFSTheme, effectiveSelectedLTTheme, fullscreenOnlyMode, overlayMode, showToast, t]);
 
   const pushSection = useCallback(
     async (idx: number, options?: { showPresentationMeta?: boolean }) => {
@@ -3198,6 +3211,72 @@ function DockWorshipTab({
     setHiddenSectionIndexes(new Set());
     setActionError("");
   }, []);
+
+  useEffect(() => {
+    const checkAndApplyPendingSong = () => {
+      const pending = getPendingWorshipSongSelection();
+      if (!pending) return;
+      const { songId, songTitle } = pending;
+      const target =
+        songs.find(
+          (s) =>
+            (songId && s.id === songId) ||
+            (songTitle && s.title.trim().toLowerCase() === songTitle.trim().toLowerCase()),
+        ) ??
+        accessibleSongs.find(
+          (s) =>
+            (songId && s.id === songId) ||
+            (songTitle && s.title.trim().toLowerCase() === songTitle.trim().toLowerCase()),
+        );
+
+      if (target) {
+        setWorshipSubTab("worship");
+        handleSelectSong(target);
+        setPendingWorshipSongSelection(null);
+      }
+    };
+
+    checkAndApplyPendingSong();
+
+    const handleSelectWorshipSongEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ songId?: string; songTitle?: string }>;
+      const { songId, songTitle } = customEvent.detail || {};
+      setWorshipSubTab("worship");
+
+      const target =
+        songs.find(
+          (s) =>
+            (songId && s.id === songId) ||
+            (songTitle && s.title.trim().toLowerCase() === songTitle.trim().toLowerCase()),
+        ) ??
+        accessibleSongs.find(
+          (s) =>
+            (songId && s.id === songId) ||
+            (songTitle && s.title.trim().toLowerCase() === songTitle.trim().toLowerCase()),
+        );
+
+      if (target) {
+        handleSelectSong(target);
+        setPendingWorshipSongSelection(null);
+      }
+    };
+
+    const handleSelectNoteEvent = () => {
+      setVisitedSubTabs((prev) => {
+        const next = new Set(prev);
+        next.add("notes");
+        return next;
+      });
+      setWorshipSubTab("notes");
+    };
+
+    window.addEventListener(DOCK_SELECT_WORSHIP_SONG_EVENT, handleSelectWorshipSongEvent);
+    window.addEventListener(DOCK_SELECT_NOTE_EVENT, handleSelectNoteEvent);
+    return () => {
+      window.removeEventListener(DOCK_SELECT_WORSHIP_SONG_EVENT, handleSelectWorshipSongEvent);
+      window.removeEventListener(DOCK_SELECT_NOTE_EVENT, handleSelectNoteEvent);
+    };
+  }, [accessibleSongs, handleSelectSong, songs]);
 
   const selectedSongAutoAdvanceIndex = useMemo(
     () => (selectedSong ? 0 : -1),

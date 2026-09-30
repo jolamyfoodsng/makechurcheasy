@@ -89,7 +89,13 @@ import {
 import { paginateNoteSections, preserveNoteSections, splitNoteBodyIntoSections } from "../noteSlideParser";
 import { normalizeDockMultilineText } from "../textLineBreaks";
 import { useDockSceneRoute } from "../dockSceneRouting";
-import { addNoteToActiveSchedule, addWholeNoteToActiveSchedule } from "../dockScheduleService";
+import {
+  addNoteToActiveSchedule,
+  addWholeNoteToActiveSchedule,
+  DOCK_SELECT_NOTE_EVENT,
+  getPendingNoteSelection,
+  setPendingNoteSelection,
+} from "../dockScheduleService";
 
 interface Props {
   staged: DockStagedItem | null;
@@ -562,6 +568,55 @@ export default function DockNotesTab({
     window.addEventListener("click", handleCloseMenu);
     return () => window.removeEventListener("click", handleCloseMenu);
   }, [slideContextMenu]);
+
+  useEffect(() => {
+    const checkAndApplyPendingNote = () => {
+      const pending = getPendingNoteSelection();
+      if (!pending) return;
+      const { noteId, noteTitle } = pending;
+      const targetNote = notes.find(
+        (n) =>
+          (noteId && n.id === noteId) ||
+          (noteTitle &&
+            (n.title.trim().toLowerCase() === noteTitle.trim().toLowerCase() ||
+              getNoteDisplayTitle(n).trim().toLowerCase() === noteTitle.trim().toLowerCase())),
+      );
+
+      if (targetNote) {
+        setSelectedNote(targetNote);
+        setSelectedSlideIdx(0);
+        setVisibleSlideIdx(null);
+        setPendingNoteSelection(null);
+      }
+    };
+
+    checkAndApplyPendingNote();
+
+    const handleSelectNoteEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ noteId?: string; noteTitle?: string }>;
+      const { noteId, noteTitle } = customEvent.detail || {};
+
+      const targetNote = notes.find(
+        (n) =>
+          (noteId && n.id === noteId) ||
+          (noteTitle &&
+            (n.title.trim().toLowerCase() === noteTitle.trim().toLowerCase() ||
+              getNoteDisplayTitle(n).trim().toLowerCase() === noteTitle.trim().toLowerCase())),
+      );
+
+      if (targetNote) {
+        setSelectedNote(targetNote);
+        setSelectedSlideIdx(0);
+        setVisibleSlideIdx(null);
+        setPendingNoteSelection(null);
+      }
+    };
+
+    window.addEventListener(DOCK_SELECT_NOTE_EVENT, handleSelectNoteEvent);
+    return () => {
+      window.removeEventListener(DOCK_SELECT_NOTE_EVENT, handleSelectNoteEvent);
+    };
+  }, [notes]);
 
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [visibilityActionPending, setVisibilityActionPending] = useState(false);
@@ -1049,31 +1104,41 @@ export default function DockNotesTab({
   }, [notes, selectedNote, selectedNoteSlides, showToast, t]);
 
   const handleAddWholeNoteToSchedule = useCallback((note: DockNote) => {
+    const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
+    const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
+    const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+    const themeSettings = resolveNotesOutputThemeSettings(selectedTheme, overlayMode, quickSettings);
+
     addWholeNoteToActiveSchedule({
       noteTitle: getNoteDisplayTitle(note),
       noteContent: note.content,
       noteId: note.id,
       overlayMode,
-      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
-      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+      theme: theme.id,
+      bibleThemeSettings: themeSettings as unknown as Record<string, unknown> | null,
     });
     showToast(t("schedule.addedNoteToSchedule", { defaultValue: `Added "${getNoteDisplayTitle(note)}" to Schedule` }), "success");
-  }, [overlayMode, selectedFSTheme, selectedLTTheme, showToast, t]);
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme, showToast, t]);
 
   const handleAddNoteSlideToSchedule = useCallback((slideIdx: number) => {
     const slide = selectedNoteSlides[slideIdx];
     if (!slide || !selectedNote) return;
+
+    const selectedTheme = overlayMode === "fullscreen" ? selectedFSTheme : selectedLTTheme;
+    const theme = getDockNotesThemeForMode(selectedTheme, overlayMode);
+    const quickSettings = overlayMode === "fullscreen" ? fullscreenQuickSettings : lowerThirdQuickSettings;
+    const themeSettings = resolveNotesOutputThemeSettings(selectedTheme, overlayMode, quickSettings);
 
     addNoteToActiveSchedule({
       noteTitle: selectedNoteDisplayTitle || selectedNote.title,
       slideIndex: slideIdx,
       slideText: stripLeadingVerseMarker(slide.text),
       overlayMode,
-      theme: overlayMode === "fullscreen" ? selectedFSTheme?.id : selectedLTTheme?.id,
-      bibleThemeSettings: (overlayMode === "fullscreen" ? selectedFSTheme?.settings : selectedLTTheme?.settings) as unknown as Record<string, unknown> | null,
+      theme: theme.id,
+      bibleThemeSettings: themeSettings as unknown as Record<string, unknown> | null,
     });
     showToast(t("schedule.addedSlideToSchedule", { defaultValue: `Added slide to Schedule` }), "success");
-  }, [overlayMode, selectedFSTheme, selectedLTTheme, selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, showToast, t]);
+  }, [fullscreenQuickSettings, lowerThirdQuickSettings, overlayMode, selectedFSTheme, selectedLTTheme, selectedNote, selectedNoteDisplayTitle, selectedNoteSlides, showToast, t]);
 
   const handleDeleteNote = useCallback((targetNote: DockNote) => {
     const nextNotes = notes.filter((n) => n.id !== targetNote.id);

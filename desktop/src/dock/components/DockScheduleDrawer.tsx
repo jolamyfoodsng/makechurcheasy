@@ -39,7 +39,13 @@ import {
   saveSchedulePlan,
   setActiveScheduleId,
   updateItemOverlayMode,
+  setPendingWorshipSongSelection,
+  setPendingNoteSelection,
+  DOCK_SELECT_WORSHIP_SONG_EVENT,
+  DOCK_SELECT_NOTE_EVENT,
 } from "../dockScheduleService";
+import { resolveDockWorshipPresentationSettings } from "../dockWorshipThemeResolution";
+import { resolveDockNotesPresentationSettings } from "../dockNotesStorage";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import "./dock-schedule.css";
@@ -249,6 +255,63 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       const overlayMode = (payload.overlayMode as "fullscreen" | "lower-third") ||
         (item.type === "bible" ? "fullscreen" : "lower-third");
 
+      // Check if it's a full worship song or full note: navigate directly without pushing to OBS
+      const isFullWorshipSong =
+        item.type === "worship" &&
+        (payload.isWholeSong === true ||
+          (!payload.sectionIdx && payload.sectionLabel === "Song") ||
+          !payload.sectionText);
+
+      const isFullNote =
+        item.type === "sermon" &&
+        (payload.isWholeNote === true ||
+          (Boolean(payload.isNoteSlide) && payload.slideIndex === undefined && !payload.sectionText) ||
+          (Boolean(payload.isNoteSlide) && payload.slideIndex === 0 && payload.slideText === payload.noteContent));
+
+      if (isFullWorshipSong) {
+        onSelectTab?.("worship");
+        const songDetail = {
+          songId: (item.sourceId as string) || (payload.songId as string) || undefined,
+          songTitle: (payload.songTitle as string) || item.label,
+        };
+        setPendingWorshipSongSelection(songDetail);
+        window.dispatchEvent(
+          new CustomEvent(DOCK_SELECT_WORSHIP_SONG_EVENT, { detail: songDetail })
+        );
+
+        if (activePlan && activePlan.items.some((i) => i.id === item.id)) {
+          saveSchedulePlan({
+            ...activePlan,
+            selectedItemId: item.id,
+            completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), item.id])),
+            lastSentItemId: item.id,
+          });
+        }
+        return;
+      }
+
+      if (isFullNote) {
+        onSelectTab?.("worship");
+        const noteDetail = {
+          noteId: (item.sourceId as string) || (payload.noteId as string) || undefined,
+          noteTitle: (payload.noteTitle as string) || item.label,
+        };
+        setPendingNoteSelection(noteDetail);
+        window.dispatchEvent(
+          new CustomEvent(DOCK_SELECT_NOTE_EVENT, { detail: noteDetail })
+        );
+
+        if (activePlan && activePlan.items.some((i) => i.id === item.id)) {
+          saveSchedulePlan({
+            ...activePlan,
+            selectedItemId: item.id,
+            completedItemIds: Array.from(new Set([...(activePlan.completedItemIds ?? []), item.id])),
+            lastSentItemId: item.id,
+          });
+        }
+        return;
+      }
+
       if (item.type === "bible") {
         const biblePayload = {
           ...payload,
@@ -257,27 +320,29 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
         await dockObsClient.pushBible(biblePayload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
         onSelectTab?.("bible");
       } else if (item.type === "worship") {
+        const worshipSettings = await resolveDockWorshipPresentationSettings(overlayMode, { forceOverlayMode: true });
         const obsPayload = {
           sectionText: payload.sectionText,
           sectionLabel: payload.sectionLabel,
           songTitle: payload.songTitle,
           artist: payload.artist,
           overlayMode,
-          theme: payload.theme,
-          bibleThemeSettings: payload.bibleThemeSettings,
+          theme: worshipSettings.themeId || payload.theme,
+          bibleThemeSettings: worshipSettings.themeSettings || payload.bibleThemeSettings,
           liveOverrides: null,
         };
         await dockObsClient.pushWorshipLyrics(obsPayload as unknown as Parameters<typeof dockObsClient.pushWorshipLyrics>[0]);
         onSelectTab?.("worship");
       } else if (item.type === "sermon") {
         if (payload?.isNoteSlide) {
+          const notesSettings = await resolveDockNotesPresentationSettings(overlayMode, { forceOverlayMode: true });
           const notesPayload = {
             sectionText: payload.slideText,
             sectionLabel: payload.noteTitle || "Note",
             songTitle: payload.noteTitle || "Note",
             overlayMode,
-            theme: payload.theme,
-            bibleThemeSettings: payload.bibleThemeSettings,
+            theme: notesSettings.themeId || payload.theme,
+            bibleThemeSettings: notesSettings.themeSettings || payload.bibleThemeSettings,
             liveOverrides: null,
           };
           await dockObsClient.pushNotesLyrics(notesPayload as unknown as Parameters<typeof dockObsClient.pushNotesLyrics>[0]);
@@ -346,6 +411,23 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     mode: "fullscreen" | "lower-third",
     scope: "schedule" | "history",
   ) => {
+    let resolvedTheme = item.payloadSnapshot?.theme;
+    let resolvedThemeSettings = item.payloadSnapshot?.bibleThemeSettings;
+
+    if (item.type === "worship") {
+      try {
+        const worshipSettings = await resolveDockWorshipPresentationSettings(mode, { forceOverlayMode: true });
+        resolvedTheme = worshipSettings.themeId;
+        resolvedThemeSettings = worshipSettings.themeSettings;
+      } catch { /* keep existing */ }
+    } else if (item.type === "sermon" && (item.payloadSnapshot as Record<string, unknown> | undefined)?.isNoteSlide) {
+      try {
+        const notesSettings = await resolveDockNotesPresentationSettings(mode, { forceOverlayMode: true });
+        resolvedTheme = notesSettings.themeId;
+        resolvedThemeSettings = notesSettings.themeSettings;
+      } catch { /* keep existing */ }
+    }
+
     updateItemOverlayMode(item.id, mode, scope);
     if (scope === "history") {
       setHistoryItems(getPresentationHistory());
@@ -358,6 +440,8 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       payloadSnapshot: {
         ...(item.payloadSnapshot || {}),
         overlayMode: mode,
+        theme: resolvedTheme,
+        bibleThemeSettings: resolvedThemeSettings,
       },
     };
     await handlePresentItem(updatedItem);
@@ -1052,6 +1136,36 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               <Icon name="visibility_off" size={13} />
               <span>Hide from OBS</span>
             </button>
+
+            {/* Open Song / Note in editor if worship or notes */}
+            {contextMenu.item.type === "worship" && (
+              <button
+                type="button"
+                className="dock-schedule-context-menu__item"
+                onClick={() => {
+                  const item = contextMenu.item;
+                  setContextMenu(null);
+                  void handlePresentItem(item);
+                }}
+              >
+                <Icon name="queue_music" size={13} />
+                <span>Open Song in Worship</span>
+              </button>
+            )}
+            {contextMenu.item.type === "sermon" && Boolean((contextMenu.item.payloadSnapshot as Record<string, unknown> | undefined)?.isNoteSlide) && (
+              <button
+                type="button"
+                className="dock-schedule-context-menu__item"
+                onClick={() => {
+                  const item = contextMenu.item;
+                  setContextMenu(null);
+                  void handlePresentItem(item);
+                }}
+              >
+                <Icon name="description" size={13} />
+                <span>Open Note in Notes</span>
+              </button>
+            )}
 
             {/* Display Mode Switches */}
             <button

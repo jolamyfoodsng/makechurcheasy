@@ -22,6 +22,37 @@ export const DOCK_HISTORY_CACHE_KEY = "__mce_dock_presentation_history_v1";
 export const DOCK_SCHEDULE_CHANGED_EVENT = "dock:schedule-changed";
 export const DOCK_SCHEDULE_TOAST_EVENT = "dock:schedule-toast";
 export const DOCK_HISTORY_CHANGED_EVENT = "dock:history-changed";
+export const DOCK_SELECT_WORSHIP_SONG_EVENT = "dock:select-worship-song";
+export const DOCK_SELECT_NOTE_EVENT = "dock:select-note";
+
+export interface DockSelectWorshipSongDetail {
+  songId?: string;
+  songTitle?: string;
+}
+
+export interface DockSelectNoteDetail {
+  noteId?: string;
+  noteTitle?: string;
+}
+
+let pendingWorshipSongSelection: DockSelectWorshipSongDetail | null = null;
+let pendingNoteSelection: DockSelectNoteDetail | null = null;
+
+export function setPendingWorshipSongSelection(detail: DockSelectWorshipSongDetail | null): void {
+  pendingWorshipSongSelection = detail;
+}
+
+export function getPendingWorshipSongSelection(): DockSelectWorshipSongDetail | null {
+  return pendingWorshipSongSelection;
+}
+
+export function setPendingNoteSelection(detail: DockSelectNoteDetail | null): void {
+  pendingNoteSelection = detail;
+}
+
+export function getPendingNoteSelection(): DockSelectNoteDetail | null {
+  return pendingNoteSelection;
+}
 
 export interface ScheduleToastPayload {
   message: string;
@@ -310,6 +341,8 @@ export function addWholeWorshipSongToActiveSchedule(params: {
     subtitle: previewSubtitle || cleanTitle,
     notes: params.artist,
     payloadSnapshot: {
+      isWholeSong: true,
+      songId: params.songId,
       songTitle: cleanTitle,
       sectionLabel: "Song",
       sectionText: params.lyrics,
@@ -374,7 +407,9 @@ export function addWholeNoteToActiveSchedule(params: {
     label: cleanTitle,
     subtitle: previewSubtitle || cleanTitle,
     payloadSnapshot: {
+      isWholeNote: true,
       isNoteSlide: true,
+      noteId: params.noteId,
       slideText: params.noteContent,
       slideIndex: 0,
       noteTitle: cleanTitle,

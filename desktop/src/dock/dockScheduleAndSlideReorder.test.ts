@@ -4,7 +4,10 @@ import {
   addWholeWorshipSongToActiveSchedule,
   addNoteToActiveSchedule,
   addWholeNoteToActiveSchedule,
-  getOrCreateActiveSchedule,
+  getPendingWorshipSongSelection,
+  setPendingWorshipSongSelection,
+  getPendingNoteSelection,
+  setPendingNoteSelection,
 } from "./dockScheduleService";
 import {
   calculateReorderTargetIndex,
@@ -111,5 +114,44 @@ describe("Dock Schedule and Slide Reordering", () => {
     expect(calculateReorderTargetIndex(0, 2, "above", 4)).toBe(1);
     // Drop below index 1 when source is 3 -> target 2
     expect(calculateReorderTargetIndex(3, 1, "below", 4)).toBe(2);
+  });
+
+  it("sets and retrieves pending worship song selection", () => {
+    setPendingWorshipSongSelection({ songId: "song-123", songTitle: "Amazing Grace" });
+    expect(getPendingWorshipSongSelection()).toEqual({
+      songId: "song-123",
+      songTitle: "Amazing Grace",
+    });
+    setPendingWorshipSongSelection(null);
+    expect(getPendingWorshipSongSelection()).toBeNull();
+  });
+
+  it("sets and retrieves pending note selection", () => {
+    setPendingNoteSelection({ noteId: "note-456", noteTitle: "Sunday Sermon" });
+    expect(getPendingNoteSelection()).toEqual({
+      noteId: "note-456",
+      noteTitle: "Sunday Sermon",
+    });
+    setPendingNoteSelection(null);
+    expect(getPendingNoteSelection()).toBeNull();
+  });
+
+  it("identifies whole worship song and whole note in payload snapshot", () => {
+    const worshipItem = addWholeWorshipSongToActiveSchedule({
+      songTitle: "10,000 Reasons",
+      lyrics: "Bless the Lord, O my soul",
+      songId: "song-10k",
+    });
+    expect(worshipItem.payloadSnapshot.isWholeSong).toBe(true);
+    expect(worshipItem.payloadSnapshot.songId).toBe("song-10k");
+
+    const noteItem = addWholeNoteToActiveSchedule({
+      noteTitle: "Faith and Grace",
+      noteContent: "Point 1: Walk in love",
+      noteId: "note-fg",
+    });
+    expect(noteItem.payloadSnapshot.isWholeNote).toBe(true);
+    expect(noteItem.payloadSnapshot.isNoteSlide).toBe(true);
+    expect(noteItem.payloadSnapshot.noteId).toBe("note-fg");
   });
 });
