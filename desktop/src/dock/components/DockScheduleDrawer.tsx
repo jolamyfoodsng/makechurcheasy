@@ -118,9 +118,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const [activeViewTab, setActiveViewTab] = useState<"schedule" | "history">("schedule");
   const [historyItems, setHistoryItems] = useState<ServicePlanItem[]>(() => getPresentationHistory());
 
-  // Context Menu & Rename states
+  // Context Menu, Header Menu & Rename states
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingItem, setRenamingItem] = useState<RenameState | null>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
 
   // Default to false so user starts on Bible tab cleanly without schedule taking over
   const [isPinned, setIsPinned] = useState<boolean>(() => {
@@ -491,6 +492,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
   const isCompact = isDrawerOpen && effectiveWidth <= 220;
   const isUltraCompact = isDrawerOpen && effectiveWidth <= 165;
   const isNarrowTabs = effectiveWidth <= 210 || isCompact;
+  const isNarrowHeader = effectiveWidth <= 240 || isCompact;
 
   return (
     <aside
@@ -613,44 +615,114 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 </select>
               ) : (
                 <div className="dock-schedule-panel__history-title">
-                  <Icon name="history" size={14} className="dock-schedule-panel__history-icon" />
-                  <span>{t("schedule.historyTitle", "Recent Output")}</span>
-                  {historyItems.length > 0 && (
-                    <button
-                      type="button"
-                      className="dock-schedule-panel__clear-history-btn"
-                      onClick={handleClearHistory}
-                      title="Clear History"
-                      aria-label="Clear History"
-                    >
-                      <Icon name="delete_sweep" size={13} />
-                    </button>
+                  {!isNarrowHeader && (
+                    <>
+                      <Icon name="history" size={14} className="dock-schedule-panel__history-icon" />
+                      <span>{t("schedule.historyTitle", "Recent Output")}</span>
+                    </>
                   )}
                 </div>
               )}
 
               <div className="dock-schedule-panel__header-actions">
-                {/* Pin button */}
-                <button
-                  type="button"
-                  className={`dock-schedule-panel__pin-btn ${isPinned ? "is-pinned" : ""}`}
-                  onClick={handleTogglePin}
-                  title={isPinned ? t("schedule.pinnedHint", "Schedule is pinned open. Click to unpin.") : t("schedule.pinHint", "Pin open permanently")}
-                  aria-label={isPinned ? "Unpin schedule" : "Pin schedule open"}
-                >
-                  <Icon name="pin" size={14} />
-                </button>
+                {isNarrowHeader ? (
+                  <div className="dock-schedule-panel__header-menu-wrap">
+                    <button
+                      type="button"
+                      className="dock-schedule-panel__header-more-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHeaderMenuOpen((prev) => !prev);
+                      }}
+                      title="More options"
+                      aria-label="More options"
+                    >
+                      <Icon name="more_vert" size={14} />
+                    </button>
+                    {headerMenuOpen && (
+                      <>
+                        <div
+                          className="dock-schedule-context-backdrop"
+                          onClick={() => setHeaderMenuOpen(false)}
+                        />
+                        <div className="dock-schedule-header-dropdown" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="dock-schedule-header-dropdown__item"
+                            onClick={() => {
+                              setHeaderMenuOpen(false);
+                              handleTogglePin();
+                            }}
+                          >
+                            <Icon name="pin" size={13} />
+                            <span>{isPinned ? "Unpin Schedule" : "Pin Open Permanently"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="dock-schedule-header-dropdown__item dock-schedule-panel__close-btn"
+                            onClick={() => {
+                              setHeaderMenuOpen(false);
+                              handleCollapse();
+                            }}
+                          >
+                            <Icon name="close" size={13} />
+                            <span>Close Schedule</span>
+                          </button>
+                          {activeViewTab === "history" && historyItems.length > 0 && (
+                            <button
+                              type="button"
+                              className="dock-schedule-header-dropdown__item dock-schedule-header-dropdown__item--danger"
+                              onClick={() => {
+                                setHeaderMenuOpen(false);
+                                handleClearHistory();
+                              }}
+                            >
+                              <Icon name="delete_sweep" size={13} />
+                              <span>Clear History</span>
+                            </button>
+                          )}
+                          {activeViewTab === "schedule" && (
+                            <button
+                              type="button"
+                              className="dock-schedule-header-dropdown__item"
+                              onClick={() => {
+                                setHeaderMenuOpen(false);
+                                setShowNewSchedulePrompt(true);
+                              }}
+                            >
+                              <Icon name="add" size={13} />
+                              <span>New Schedule...</span>
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Pin button */}
+                    <button
+                      type="button"
+                      className={`dock-schedule-panel__pin-btn ${isPinned ? "is-pinned" : ""}`}
+                      onClick={handleTogglePin}
+                      title={isPinned ? t("schedule.pinnedHint", "Schedule is pinned open. Click to unpin.") : t("schedule.pinHint", "Pin open permanently")}
+                      aria-label={isPinned ? "Unpin schedule" : "Pin schedule open"}
+                    >
+                      <Icon name="pin" size={14} />
+                    </button>
 
-                {/* Highly visible close button */}
-                <button
-                  type="button"
-                  className="dock-schedule-panel__close-btn"
-                  onClick={handleCollapse}
-                  title={t("schedule.close", "Close Schedule")}
-                  aria-label={t("schedule.close", "Close Schedule")}
-                >
-                  <Icon name="close" size={14} />
-                </button>
+                    {/* Highly visible close button */}
+                    <button
+                      type="button"
+                      className="dock-schedule-panel__close-btn"
+                      onClick={handleCollapse}
+                      title={t("schedule.close", "Close Schedule")}
+                      aria-label={t("schedule.close", "Close Schedule")}
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -897,7 +969,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                         </button>
                       </div>
 
-                      <div className="dock-schedule-card__actions">
+                      <div className="dock-schedule-card__actions dock-schedule-card__actions--hidden">
                         <button
                           type="button"
                           className={`dock-schedule-card__project-btn ${isLive ? "dock-schedule-card__project-btn--live" : ""}`}

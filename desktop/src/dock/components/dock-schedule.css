@@ -340,6 +340,78 @@
   color: #ef4444;
 }
 
+/* ── Header 3-Dots Button (Narrow Header) ── */
+.dock-schedule-panel__header-menu-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dock-schedule-panel__header-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.dock-schedule-panel__header-more-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dock-schedule-header-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  z-index: 9999;
+  min-width: 175px;
+  background: #182030;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  animation: dock-ctx-fade 0.12s ease-out;
+}
+
+.dock-schedule-header-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--dock-text-primary, #f8fafc);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.dock-schedule-header-dropdown__item:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.dock-schedule-header-dropdown__item--danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
 .dock-schedule-panel__new-prompt {
   display: flex;
   flex-direction: column;
@@ -477,13 +549,14 @@
   flex-direction: column;
   justify-content: flex-start;
   align-items: stretch;
-  gap: 5px;
-  height: auto;
-  min-height: 56px;
-  padding: 8px 10px;
+  gap: 6px;
+  height: auto !important;
+  min-height: 82px;
+  padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
+  box-sizing: border-box;
 }
 
 .dock-schedule-card--text:hover {
@@ -499,13 +572,14 @@
   gap: 6px;
   min-width: 0;
   width: 100%;
+  flex-shrink: 0;
 }
 
 .dock-schedule-card__inscribed-passage {
   font-size: 13.5px;
   font-style: normal;
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #ffffff;
   background: transparent;
   border: none;
@@ -517,12 +591,13 @@
   text-overflow: ellipsis;
   word-break: break-word;
   box-shadow: none;
+  min-height: 42px;
 }
 
 .dock-schedule-card__bottom-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 6px;
   min-width: 0;
   width: 100%;
@@ -544,6 +619,10 @@
 .dock-schedule-card--text:focus-within .dock-schedule-card__bottom-row {
   opacity: 1;
   max-height: 36px;
+}
+
+.dock-schedule-card__actions--hidden {
+  display: none !important;
 }
 
 /* ── FULL / LT Slider Toggle ── */
@@ -1126,16 +1205,18 @@
 }
 
 .dock-schedule-panel--compact .dock-schedule-card--text {
-  min-height: 66px;
-  padding: 5px 6px;
-  gap: 3px;
+  min-height: 80px;
+  height: auto !important;
+  padding: 8px 10px;
+  gap: 5px;
 }
 
 .dock-schedule-panel--compact .dock-schedule-card__inscribed-passage {
   font-size: 13px;
   color: #ffffff;
   padding: 0;
-  line-height: 1.45;
+  line-height: 1.5;
+  min-height: 40px;
   -webkit-line-clamp: 2;
 }
 
@@ -1218,16 +1299,18 @@
 }
 
 .dock-schedule-panel--ultra-compact .dock-schedule-card--text {
-  min-height: 54px;
-  padding: 4px;
-  gap: 2px;
+  min-height: 76px;
+  height: auto !important;
+  padding: 8px 8px;
+  gap: 4px;
 }
 
 .dock-schedule-panel--ultra-compact .dock-schedule-card__inscribed-passage {
-  font-size: 12px;
+  font-size: 12.5px;
   color: #ffffff;
   padding: 0;
-  line-height: 1.4;
+  line-height: 1.45;
+  min-height: 38px;
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
