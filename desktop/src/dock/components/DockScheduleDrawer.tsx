@@ -1055,7 +1055,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                     {/* Top Row: Bible chapter-verse / Song title on left, 3-dots button on right */}
                     <div className="dock-schedule-card__header-row dock-schedule-card__title-row">
                       <div className="dock-schedule-card__title">
-                        <span className="dock-schedule-card__title-text">{item.label}</span>
+                        <span className="dock-schedule-card__title-text" title={item.label}>{item.label}</span>
                         {isLive && (
                           <span className="dock-schedule-card__live-pill">
                             <span className="dock-schedule-card__live-dot" />

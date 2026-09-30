@@ -150,5 +150,9 @@ describe("Dock Schedule Shared Space & Card Redesign", () => {
     // Bottom close button on schedule panel
     expect(dockScheduleDrawerSource).toContain("dock-schedule-panel__bottom-close-btn");
     expect(dockScheduleCssSource).toContain(".dock-schedule-panel__bottom-close-btn");
+
+    // Full Bible verse reference is always visible (never truncated with ellipsis)
+    expect(dockScheduleCssSource).toContain(".dock-schedule-card--text .dock-schedule-card__title-text");
+    expect(dockScheduleCssSource).toContain("word-break: break-word !important;");
   });
 });
