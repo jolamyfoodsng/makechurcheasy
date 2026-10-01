@@ -12679,13 +12679,13 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   height: 34px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  padding: 0 11px;
+  border-radius: 7px;
+  background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.12));
+  color: var(--dock-text, #f1f5f9);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -12694,9 +12694,14 @@ body.dock-modal-open {
 }
 
 .dock-bible-reader__quick-edit-toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--dock-accent, #3b82f6) 15%, var(--dock-surface-alt, rgba(255, 255, 255, 0.08)));
+  border-color: color-mix(in srgb, var(--dock-accent, #3b82f6) 45%, var(--dock-border, rgba(255, 255, 255, 0.2)));
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--dock-accent, #3b82f6) 20%, transparent);
+}
+
+.dock-bible-reader__quick-edit-toolbar-btn:active {
+  transform: translateY(1px);
 }
 
 @media (max-width: 320px) {
@@ -39087,6 +39092,102 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-modal--confirmation {
   width: 480px;
+}
+
+/* ── Language Confirmation Modal ── */
+.dock-language-modal {
+  width: min(340px, calc(100vw - 32px));
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--dock-surface, #111827);
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  animation: dock-modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.dock-language-modal__icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dock-accent, #3b82f6) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-accent, #3b82f6) 32%, transparent);
+  color: var(--dock-accent, #60a5fa);
+  margin-bottom: 14px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--dock-accent, #3b82f6) 20%, transparent);
+}
+
+.dock-language-modal__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.dock-language-modal__desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dock-text-secondary, #CBD5E1);
+  margin: 0 0 20px 0;
+}
+
+.dock-language-modal__actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.dock-language-modal__btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dock-language-modal__btn--cancel {
+  background: var(--dock-surface-alt, #1F2937);
+  border: 1px solid var(--dock-border, #334155);
+  color: var(--dock-text-secondary, #CBD5E1);
+}
+
+.dock-language-modal__btn--cancel:hover {
+  background: color-mix(in srgb, var(--dock-surface-alt, #1F2937) 80%, white 20%);
+  color: var(--dock-text, #F8FAFC);
+  border-color: var(--dock-text-dim, #94A3B8);
+}
+
+.dock-language-modal__btn--confirm {
+  background: var(--dock-accent, #2563EB);
+  border: 1px solid transparent;
+  color: #FFFFFF;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--dock-accent, #2563EB) 40%, transparent);
+}
+
+.dock-language-modal__btn--confirm:hover {
+  background: var(--dock-accent-hover, #1D4ED8);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--dock-accent, #2563EB) 55%, transparent);
+  transform: translateY(-1px);
+}
+
+.dock-language-modal__btn:active {
+  transform: translateY(1px);
 }
 
 @keyframes dock-modal-slide-up {

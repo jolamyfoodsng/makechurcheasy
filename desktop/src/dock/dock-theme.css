@@ -1273,4 +1273,43 @@ html.mv-theme-light #dock-root,
   flex-shrink: 0;
 }
 
+/* ── Language Confirmation Modal Theme Support ── */
+:root.light .dock-language-modal {
+  background: var(--dock-surface, #FFFDF9);
+  border-color: var(--dock-border, #D7C8BA);
+  box-shadow: 0 20px 48px rgba(36, 29, 24, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+:root.light .dock-language-modal__title {
+  color: var(--dock-text, #241D18);
+}
+
+:root.light .dock-language-modal__desc {
+  color: var(--dock-text-secondary, #5D4E44);
+}
+
+:root.light .dock-language-modal__btn--cancel {
+  background: var(--dock-surface-alt, #EEE7DE);
+  border-color: var(--dock-border, #D7C8BA);
+  color: var(--dock-text, #241D18);
+}
+
+:root.light .dock-language-modal__btn--cancel:hover {
+  background: var(--dock-surface-hover, #E5D9CE);
+  color: var(--dock-text, #241D18);
+}
+
+:root.light .dock-bible-reader__quick-edit-toolbar-btn {
+  background: var(--dock-surface-alt, #EEE7DE);
+  border-color: var(--dock-border, #D7C8BA);
+  color: var(--dock-text, #241D18);
+}
+
+:root.light .dock-bible-reader__quick-edit-toolbar-btn:hover {
+  background: var(--dock-accent-soft, rgba(169, 83, 53, 0.12));
+  border-color: var(--dock-accent, #A95335);
+  color: var(--dock-accent, #A95335);
+  box-shadow: 0 2px 8px rgba(169, 83, 53, 0.18);
+}
+
 

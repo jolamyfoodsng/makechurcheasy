@@ -323,7 +323,7 @@ function DockPageContent({
     isSubEightGbDevice(getDeviceProfile()?.hardware.totalRAMMB ?? 0),
   );
   const [visitedTabs, setVisitedTabs] = useState<Set<DockTab>>(() => new Set([initialActiveTab]));
-  const [disabledTabs, setDisabledTabs] = useState<DockTab[]>(() =>
+  const [disabledTabs] = useState<DockTab[]>(() =>
     (shellPreferences.disabledTabs ?? []).filter((tab) => tab !== "notes"),
   );
   const [dockHeight, setDockHeight] = useState(() => (
@@ -1084,7 +1084,6 @@ function DockPageContent({
     return () => window.removeEventListener("dock-open-menu", handler);
   }, []);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
-  const [showTabVisibility, setShowTabVisibility] = useState(false);
   const [showProjectionSettings, setShowProjectionSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const handleHistoryClose = useCallback(() => setShowHistory(false), []);
@@ -1526,60 +1525,6 @@ function DockPageContent({
                     ))}
                   </select>
                 </div>
-
-                {!isFreePlan && <div className="dock-sidebar__divider" />}
-
-                {!isFreePlan && <>
-                  {/* Tab Visibility */}
-                  <button
-                    type="button"
-                    className="dock-sidebar__item"
-                    onClick={() => setShowTabVisibility(!showTabVisibility)}
-                    title={t('page.tabVisibility')}>
-                    <Icon name="visibility" size={16} />
-                    <span>{t('page.tabVisibility')}</span>
-                    <Icon name={showTabVisibility ? "expand_less" : "expand_more"} size={14} />
-                  </button>
-                  {showTabVisibility && (() => {
-                  const toggleableTabs = ([
-                    { tab: "multiview", label: t('page.shortcutTabMultiview'), icon: "grid_view" },
-                    { tab: "ministry", label: t('page.shortcutTabMinistry'), icon: "campaign" },
-                  ] satisfies Array<{ tab: DockTab; label: string; icon: string }>).filter(({ tab }) => !hiddenTabIds.has(tab));
-                  return (
-                    <div className="dock-sidebar__subpanel">
-                      {toggleableTabs.map(({ tab, label, icon }) => {
-                        const isDisabled = disabledTabs.includes(tab);
-                        return (
-                          <label
-                            key={tab}
-                            className="dock-sidebar__check"
-                            style={{ cursor: "pointer" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={!isDisabled}
-                              onChange={() => {
-                                setDisabledTabs((prev) => {
-                                  const next = isDisabled
-                                    ? prev.filter((t) => t !== tab)
-                                    : [...prev, tab];
-                                  return next;
-                                });
-                                // If the user is on a tab that just got disabled, switch away
-                                if (!isDisabled && activeTab === tab) {
-                                  setActiveTab("bible");
-                                }
-                              }}
-                            />
-                            <Icon name={icon} size={13} />
-                            <span>{label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  );
-                  })()}
-                </>}
 
                 <div className="dock-sidebar__divider" />
 
@@ -2247,29 +2192,27 @@ function DockPageContent({
       {/* ── Language change confirmation modal ── */}
       {showLanguageModal && pendingLanguage && (
         <div className="dock-modal-overlay" onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}>
-          <div className="dock-modal dock-modal--language" role="dialog" aria-modal="true" aria-labelledby="dock-language-title" onClick={(e) => e.stopPropagation()}>
-            <div className="mv-modal-icon-badge mv-modal-icon-badge--indigo" style={{ margin: "0 auto 16px" }}>
-              <Globe size={28} />
+          <div className="dock-language-modal" role="dialog" aria-modal="true" aria-labelledby="dock-language-title" onClick={(e) => e.stopPropagation()}>
+            <div className="dock-language-modal__icon-badge">
+              <Globe size={24} />
             </div>
-            <div className="dock-modal__header" style={{ textAlign: "center" }}>
-              <h3 id="dock-language-title" style={{ fontSize: "1.15rem", fontWeight: 700, margin: "0 0 8px" }}>
-                {t('dock.changeLanguage') || 'Change Language'}
-              </h3>
-            </div>
-            <div className="dock-modal__body" style={{ textAlign: "center", color: "var(--text-secondary, #cbd5e1)", fontSize: "0.88rem", lineHeight: 1.5, margin: "0 0 16px" }}>
-              <p>{t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}</p>
-            </div>
-            <div className="dock-modal__footer" style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+            <h3 id="dock-language-title" className="dock-language-modal__title">
+              {t('dock.changeLanguage') || 'Change Language'}
+            </h3>
+            <p className="dock-language-modal__desc">
+              {t('dock.changeLanguageConfirm', { language: pendingLanguage }) || `Change interface language to ${pendingLanguage}?`}
+            </p>
+            <div className="dock-language-modal__actions">
               <button
                 type="button"
-                className="mv-modal-btn mv-modal-btn--ghost"
+                className="dock-language-modal__btn dock-language-modal__btn--cancel"
                 onClick={() => { setShowLanguageModal(false); setPendingLanguage(null); }}
               >
                 {t('common.cancel') || 'Cancel'}
               </button>
               <button
                 type="button"
-                className="mv-modal-btn mv-modal-btn--primary"
+                className="dock-language-modal__btn dock-language-modal__btn--confirm"
                 onClick={() => {
                   const lang = pendingLanguage!;
                   const langToCode: Record<string, string> = {
