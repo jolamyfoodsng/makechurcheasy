@@ -4,12 +4,36 @@
   position: relative;
   display: flex;
   height: 100%;
-  background: var(--dock-surface-panel, #0f172a);
-  border-right: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--dock-surface-panel, var(--dock-surface-0, var(--dock-bg, #0f172a)));
+  border-right: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
   user-select: none;
   flex-shrink: 0;
   overflow: hidden;
   z-index: 20;
+  font-family: var(--dock-font-body, inherit);
+  color: var(--dock-text, #f8fafc);
+}
+
+.dock-schedule-container button,
+.dock-schedule-container input,
+.dock-schedule-container select,
+.dock-schedule-container textarea,
+.dock-schedule-context-menu,
+.dock-schedule-context-menu button,
+.dock-schedule-modal,
+.dock-schedule-modal input,
+.dock-schedule-modal button {
+  font-family: var(--dock-font-body, inherit);
+}
+
+.dock-schedule-tab-label,
+.dock-schedule-panel__header-title,
+.dock-schedule-panel__history-title,
+.dock-schedule-card__title,
+.dock-schedule-card__title-text,
+.dock-schedule-context-menu__title,
+.dock-schedule-modal__header {
+  font-family: var(--dock-font-heading, var(--dock-font-body, inherit));
 }
 
 /* ── Collapsed 34px Rail ── */
@@ -36,7 +60,7 @@
   height: 100%;
   padding: 8px 0;
   gap: 6px;
-  background: var(--dock-surface-panel, #0f172a);
+  background: var(--dock-surface-panel, var(--dock-surface-0, var(--dock-bg, #0f172a)));
 }
 
 .dock-schedule-rail__trigger {
@@ -47,16 +71,16 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.1)));
   color: var(--dock-text-primary, #f8fafc);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .dock-schedule-rail__trigger:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--dock-surface-hover, rgba(255, 255, 255, 0.14));
+  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.22));
   color: var(--dock-accent, #3b82f6);
 }
 
@@ -130,14 +154,14 @@
   width: 100%;
   height: 100%;
   min-width: 0;
-  background: var(--dock-surface-panel, #0f172a);
+  background: var(--dock-surface-panel, var(--dock-surface-0, var(--dock-bg, #0f172a)));
 }
 
 /* ── Panel Header ── */
 .dock-schedule-panel__header {
   padding: 8px 10px;
-  border-bottom: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
-  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
+  background: var(--dock-surface, rgba(0, 0, 0, 0.25));
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -156,8 +180,8 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--dock-surface-alt, rgba(0, 0, 0, 0.4));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
   padding: 2px;
   border-radius: 6px;
   flex: 1;
@@ -170,9 +194,9 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #f8fafc;
+  background: var(--dock-surface-alt, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.2));
+  color: var(--dock-text, #f8fafc);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -250,7 +274,7 @@
   gap: 6px;
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--dock-text-primary, #f8fafc);
+  color: var(--dock-text, #f8fafc);
   flex: 1;
   min-width: 0;
 }
@@ -281,13 +305,13 @@
 }
 
 .dock-schedule-tab-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--dock-text, #fff);
+  background: var(--dock-surface-hover, rgba(255, 255, 255, 0.06));
 }
 
 .dock-schedule-tab-btn--active {
-  background: rgba(59, 130, 246, 0.25) !important;
-  color: #93c5fd !important;
+  background: var(--dock-accent-soft, rgba(59, 130, 246, 0.25)) !important;
+  color: var(--dock-accent, #93c5fd) !important;
   font-weight: 700;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -345,8 +369,8 @@
   font-size: 11.5px;
   font-weight: 600;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.12));
+  background: var(--dock-input-bg, var(--dock-surface-alt, rgba(255, 255, 255, 0.06)));
+  border: 1px solid var(--dock-input-border, var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.12))));
   color: var(--dock-text-primary, #f8fafc);
   outline: none;
   cursor: pointer;
@@ -356,12 +380,12 @@
 }
 
 .dock-schedule-panel__select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.22));
 }
 
 .dock-schedule-panel__select option {
-  background: #1e293b;
-  color: #f8fafc;
+  background: var(--dock-surface-alt, #1e293b);
+  color: var(--dock-text, #f8fafc);
 }
 
 .dock-schedule-panel__header-actions {
@@ -378,8 +402,8 @@
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.12));
   color: var(--dock-text-secondary, #94a3b8);
   cursor: pointer;
   padding: 0;
@@ -387,8 +411,8 @@
 }
 
 .dock-schedule-panel__pin-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--dock-surface-hover, rgba(255, 255, 255, 0.12));
+  color: var(--dock-text, #fff);
 }
 
 .dock-schedule-panel__pin-btn.is-pinned {
@@ -591,18 +615,19 @@
   min-height: 48px;
   height: auto;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--dock-card, var(--dock-surface-alt, rgba(255, 255, 255, 0.04)));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
   cursor: pointer;
   transition: all 0.16s ease;
   user-select: none;
   min-width: 0;
   box-sizing: border-box;
+  color: var(--dock-text, #ffffff);
 }
 
 .dock-schedule-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--dock-card-hover, var(--dock-surface-hover, rgba(255, 255, 255, 0.08)));
+  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.18));
 }
 
 .dock-schedule-card:active {
@@ -635,14 +660,15 @@
   max-height: none !important;
   padding: 9px 11px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--dock-card, var(--dock-surface-alt, rgba(255, 255, 255, 0.04)));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
   box-sizing: border-box;
+  color: var(--dock-text, #ffffff);
 }
 
 .dock-schedule-card--text:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--dock-card-hover, var(--dock-surface-hover, rgba(255, 255, 255, 0.07)));
+  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.16));
 }
 
 .dock-schedule-card__header-row,
@@ -665,7 +691,7 @@
   font-style: normal;
   font-weight: 400;
   line-height: 1.5;
-  color: #ffffff;
+  color: var(--dock-text-secondary, #ffffff);
   background: transparent;
   border: none;
   padding: 0;
@@ -884,7 +910,7 @@
   gap: 5px;
   font-size: 13.5px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--dock-text, #ffffff);
   line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
@@ -898,7 +924,7 @@
   min-width: 0;
   font-size: 13.5px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--dock-text, #ffffff);
 }
 
 /* For text cards (Bible, Worship, Notes): Reference must ALWAYS be fully visible, never truncated with ... */
@@ -920,7 +946,7 @@
 
 .dock-schedule-card__snippet {
   font-size: 13.5px;
-  color: #ffffff;
+  color: var(--dock-text-secondary, #cbd5e1);
   line-height: 1.5;
   font-weight: 400;
   word-break: break-word;
@@ -1120,13 +1146,15 @@
   position: fixed;
   z-index: 9999;
   min-width: 185px;
-  background: #182030;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--dock-surface-overlay, var(--dock-surface-alt, #182030));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.14));
   border-radius: 8px;
   padding: 4px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   animation: dock-ctx-fade 0.12s ease-out;
+  color: var(--dock-text, #f8fafc);
 }
 
 @keyframes dock-ctx-fade {
@@ -1147,7 +1175,7 @@
 
 .dock-schedule-context-menu__divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--dock-border-soft, rgba(255, 255, 255, 0.08));
   margin: 3px 0;
 }
 
@@ -1193,13 +1221,14 @@
 .dock-schedule-modal {
   width: 100%;
   max-width: 320px;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--dock-surface-overlay, var(--dock-surface-alt, #1e293b));
+  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.16));
   border-radius: 10px;
   box-shadow: 0 20px 30px rgba(0, 0, 0, 0.7);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  color: var(--dock-text, #fff);
 }
 
 .dock-schedule-modal__header {
@@ -1729,4 +1758,146 @@
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+/* ── Schedule Drawer in Light Mode ── */
+:root.light .dock-schedule-container,
+:root.light .dock-schedule-rail,
+:root.light .dock-schedule-panel {
+  background: var(--dock-surface, #ffffff);
+  border-color: var(--dock-border, #e2e8f0);
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-panel__header,
+:root.light .dock-schedule-panel__footer {
+  background: var(--dock-surface-alt, #f8fafc);
+  border-color: var(--dock-border, #e2e8f0);
+}
+
+:root.light .dock-schedule-tabs {
+  background: var(--dock-surface, #f1f5f9);
+  border-color: var(--dock-border, #cbd5e1);
+}
+
+:root.light .dock-schedule-tab-btn {
+  color: var(--dock-text-secondary, #64748b);
+}
+
+:root.light .dock-schedule-tab-btn:hover {
+  color: var(--dock-text, #0f172a);
+  background: var(--dock-surface-hover, #e2e8f0);
+}
+
+:root.light .dock-schedule-tab-btn--active {
+  background: var(--dock-accent, #3b82f6) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+}
+
+:root.light .dock-schedule-panel__select {
+  background: var(--dock-input-bg, #ffffff);
+  border-color: var(--dock-input-border, #cbd5e1);
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-panel__select option {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+:root.light .dock-schedule-card,
+:root.light .dock-schedule-card--text {
+  background: var(--dock-card, #ffffff);
+  border-color: var(--dock-border, #e2e8f0);
+  color: var(--dock-text, #0f172a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.light .dock-schedule-card:hover,
+:root.light .dock-schedule-card--text:hover {
+  background: var(--dock-card-hover, #f8fafc);
+  border-color: var(--dock-accent, #3b82f6);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+:root.light .dock-schedule-card__title,
+:root.light .dock-schedule-card__title-text {
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-card__inscribed-passage,
+:root.light .dock-schedule-card__snippet {
+  color: var(--dock-text-secondary, #475569);
+}
+
+:root.light .dock-schedule-panel__close-btn,
+:root.light .dock-schedule-panel__close-btn--header,
+:root.light .dock-schedule-panel__pin-btn,
+:root.light .dock-schedule-panel__header-more-btn {
+  background: var(--dock-surface-alt, #e2e8f0);
+  border-color: var(--dock-border, #cbd5e1);
+  color: var(--dock-text, #334155);
+}
+
+:root.light .dock-schedule-panel__close-btn:hover,
+:root.light .dock-schedule-panel__close-btn--header:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+:root.light .dock-schedule-context-menu {
+  background: var(--dock-surface, #ffffff);
+  border-color: var(--dock-border, #cbd5e1);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-context-menu__item {
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-context-menu__item:hover {
+  background: var(--dock-surface-hover, #f1f5f9);
+  color: var(--dock-accent, #2563eb);
+}
+
+:root.light .dock-schedule-modal {
+  background: var(--dock-surface, #ffffff);
+  border-color: var(--dock-border, #cbd5e1);
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
+  color: var(--dock-text, #0f172a);
+}
+
+:root.light .dock-schedule-modal__header {
+  color: var(--dock-text, #0f172a);
+  border-color: var(--dock-border, #e2e8f0);
+}
+
+:root.light .dock-schedule-modal__input {
+  background: var(--dock-input-bg, #ffffff);
+  border-color: var(--dock-input-border, #cbd5e1);
+  color: var(--dock-text, #0f172a);
+}
+
+/* ── Schedule Drawer Glass Surface ── */
+.dock-root--glass .dock-schedule-container {
+  background: color-mix(in srgb, var(--dock-surface-0, #0f172a) 75%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dock-root--glass .dock-schedule-panel__header,
+.dock-root--glass .dock-schedule-panel__footer {
+  background: color-mix(in srgb, var(--dock-surface, #151d2c) 70%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dock-root--glass .dock-schedule-card,
+.dock-root--glass .dock-schedule-card--text {
+  background: color-mix(in srgb, var(--dock-card, #1e293b) 60%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }

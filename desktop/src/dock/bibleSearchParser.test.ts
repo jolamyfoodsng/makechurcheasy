@@ -252,13 +252,13 @@ describe("Bible reference search parser", () => {
       expect(results[0]?.endVerse).toBe(26);
     });
 
-    it("resolves welcome to Psalms 100:4", () => {
-      const results = parseBibleSearch("welcome");
+    it("resolves grace to 2 Corinthians 13:14", () => {
+      const results = parseBibleSearch("grace");
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.isMacro).toBe(true);
-      expect(results[0]?.book).toBe("Psalms");
-      expect(results[0]?.chapter).toBe(100);
-      expect(results[0]?.verse).toBe(4);
+      expect(results[0]?.book).toBe("2 Corinthians");
+      expect(results[0]?.chapter).toBe(13);
+      expect(results[0]?.verse).toBe(14);
     });
 
     it("preserves canonical book priority for collisions like 'job' but allows explicit #job", () => {
@@ -267,10 +267,10 @@ describe("Bible reference search parser", () => {
       expect(plainResults[0]?.book).toBe("Job");
       expect(plainResults[0]?.isMacro).toBeUndefined();
 
-      // Explicit "#welcome" triggers macro
-      const macroResults = parseBibleSearch("#welcome");
+      // Explicit "#grace" triggers macro
+      const macroResults = parseBibleSearch("#grace");
       expect(macroResults[0]?.isMacro).toBe(true);
-      expect(macroResults[0]?.book).toBe("Psalms");
+      expect(macroResults[0]?.book).toBe("2 Corinthians");
     });
   });
 });
