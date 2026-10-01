@@ -4349,6 +4349,58 @@ function DockMediaTab({
 
   const hasVisibleDocumentDecks = (activeKind === "all" || activeKind === "document") && filteredDocumentDecks.length > 0;
   const hasVisibleMediaEntries = filteredUploadEntries.length > 0;
+  const activeKindSearchLabel = activeKind === "audio"
+    ? "audio"
+    : activeKind === "video"
+      ? "videos"
+      : activeKind === "image"
+        ? "images"
+        : activeKind === "document"
+          ? "documents"
+          : "media";
+
+  const renderSearchEmptyNotice = (
+    label: string,
+    onClear: () => void = () => setAssetSearch(""),
+    query = assetSearch,
+  ) => (
+    <div
+      className="dock-empty__search-notice"
+      style={{
+        display: "grid",
+        gap: "6px",
+        textAlign: "center",
+        padding: "14px 8px",
+        alignItems: "center",
+        justifyItems: "center",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: "12px", color: "var(--dock-text, #f8fafc)" }}>
+        No {label} match "{query.trim()}".
+      </div>
+      <div style={{ fontWeight: 700, fontSize: "11px", color: "var(--dock-text-dim, #94a3b8)", lineHeight: "1.4" }}>
+        This is because you searched for a term. Clear your search or search for something else.
+      </div>
+      <button
+        type="button"
+        className="dock-btn dock-btn--sm dock-btn--secondary"
+        onClick={onClear}
+        style={{
+          fontWeight: 700,
+          fontSize: "11px",
+          padding: "4px 12px",
+          marginTop: "4px",
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+        }}
+      >
+        <Icon name="close" size={12} />
+        Clear search
+      </button>
+    </div>
+  );
   const useCompactMediaTabs = isNarrowWidth || isCompactHeight;
   const renderCompactMediaActions = () => (
     <div className="dock-media-search-row__actions">
@@ -5142,17 +5194,21 @@ function DockMediaTab({
                     {/* Asset list */}
                     {!hasVisibleMediaEntries && !hasVisibleDocumentDecks ? (
                       <div className="dock-empty dock-empty--inline">
-                        <div className="dock-empty__text">
-                          {activeKind === "all"
-                            ? t('media.noUploads')
-                            : activeKind === "video"
-                              ? t('media.noVideos')
-                              : activeKind === "audio"
-                                ? "No audio imported"
-                              : activeKind === "document"
-                                ? "No documents yet"
-                                : t('media.noImages')}
-                        </div>
+                        {assetSearch.trim() ? (
+                          renderSearchEmptyNotice(activeKindSearchLabel)
+                        ) : (
+                          <div className="dock-empty__text">
+                            {activeKind === "all"
+                              ? t('media.noUploads')
+                              : activeKind === "video"
+                                ? t('media.noVideos')
+                                : activeKind === "audio"
+                                  ? "No audio imported"
+                                : activeKind === "document"
+                                  ? "No documents yet"
+                                  : t('media.noImages')}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div key={`${browserTab}-${activeKind}`} className="dock-media-list">
@@ -5230,9 +5286,13 @@ function DockMediaTab({
               <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">Loading saved templates…</div></div>
             ) : filteredSavedTemplateEntries.length === 0 ? (
               <div className="dock-empty dock-empty--inline">
-                <div className="dock-empty__text">
-                  {savedTemplateEntries.length > 0 ? "No saved templates match your search." : "Save an edited template in Templates to see its image here."}
-                </div>
+                {assetSearch.trim() ? (
+                  renderSearchEmptyNotice("templates")
+                ) : (
+                  <div className="dock-empty__text">
+                    {savedTemplateEntries.length > 0 ? "No saved templates match your search." : "Save an edited template in Templates to see its image here."}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="dock-media-list">{filteredSavedTemplateEntries.map(renderSavedTemplateCard)}</div>
@@ -5332,7 +5392,13 @@ function DockMediaTab({
                     ) : templateVideosLoading && filteredAnimationTemplateVideos.length === 0 ? (
                       <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.loadingTemplateVideos')}</div></div>
                     ) : filteredAnimationTemplateVideos.length === 0 ? (
-                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div></div>
+                      <div className="dock-empty dock-empty--inline">
+                        {assetSearch.trim() ? (
+                          renderSearchEmptyNotice("template videos")
+                        ) : (
+                          <div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div>
+                        )}
+                      </div>
                     ) : (
                       <div className="dock-animation-grid">{filteredAnimationTemplateVideos.map(renderTemplateVideoTile)}</div>
                     )
@@ -5342,7 +5408,13 @@ function DockMediaTab({
                     ) : templatePicturesLoading && filteredAnimationTemplatePictures.length === 0 ? (
                       <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.loadingTemplatePictures', 'Loading template pictures…')}</div></div>
                     ) : filteredAnimationTemplatePictures.length === 0 ? (
-                      <div className="dock-empty dock-empty--inline"><div className="dock-empty__text">{t('media.noTemplatePicturesMatch', 'No template pictures match your search.')}</div></div>
+                      <div className="dock-empty dock-empty--inline">
+                        {assetSearch.trim() ? (
+                          renderSearchEmptyNotice("template pictures")
+                        ) : (
+                          <div className="dock-empty__text">{t('media.noTemplatePicturesMatch', 'No template pictures match your search.')}</div>
+                        )}
+                      </div>
                     ) : (
                       <div className="dock-animation-grid">{filteredAnimationTemplatePictures.map(renderTemplatePictureTile)}</div>
                     )
@@ -5417,7 +5489,11 @@ function DockMediaTab({
           <>
             {filteredPatternEntries.length === 0 ? (
               <div className="dock-empty dock-empty--inline">
-                <div className="dock-empty__text">{t('media.noPatternsMatch')}</div>
+                {assetSearch.trim() ? (
+                  renderSearchEmptyNotice("patterns")
+                ) : (
+                  <div className="dock-empty__text">{t('media.noPatternsMatch')}</div>
+                )}
               </div>
             ) : (
               <div className="dock-media-list">
@@ -6115,7 +6191,11 @@ function DockMediaTab({
                     </div>
                   ) : filteredTemplateVideos.length === 0 ? (
                     <div className="dock-empty dock-empty--inline">
-                      <div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div>
+                      {templateVideoSearch.trim() ? (
+                        renderSearchEmptyNotice("template videos", () => setTemplateVideoSearch(""), templateVideoSearch)
+                      ) : (
+                        <div className="dock-empty__text">{t('media.noTemplateVideosMatch')}</div>
+                      )}
                     </div>
                   ) : (
                     <div className="dock-animation-grid">
