@@ -45,6 +45,7 @@ import {
 } from "../dockScheduleService";
 import { resolveDockWorshipPresentationSettings } from "../dockWorshipThemeResolution";
 import { resolveDockNotesPresentationSettings } from "../dockNotesStorage";
+import { isDockFreePlan, showUpgradeModal } from "../dockEntitlement";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import "./dock-schedule.css";
@@ -603,7 +604,22 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     setShowNewSchedulePrompt(false);
   }, [newScheduleTitle, plans.length]);
 
-  const scheduleItems = useMemo(() => activePlan?.items ?? [], [activePlan]);
+  const isFreePlan = isDockFreePlan();
+  const scheduleItems = useMemo(() => {
+    const items = activePlan?.items ?? [];
+    if (isFreePlan && items.length > 3) {
+      return items.slice(0, 3);
+    }
+    return items;
+  }, [activePlan, isFreePlan]);
+
+  const effectiveHistoryItems = useMemo(() => {
+    if (isFreePlan && historyItems.length > 1) {
+      return historyItems.slice(0, 1);
+    }
+    return historyItems;
+  }, [historyItems, isFreePlan]);
+
   const isDrawerOpen = expanded || isPinned;
 
   const containerRef = useRef<HTMLElement>(null);
@@ -645,7 +661,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           >
             <Icon name="playlist_play" size={21} />
             {scheduleItems.length > 0 && (
-              <span className="dock-schedule-rail__badge">{scheduleItems.length}</span>
+              <span className="dock-schedule-rail__badge" />
             )}
           </button>
 
@@ -681,7 +697,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       {isDrawerOpen && (
         <div className={`dock-schedule-panel ${isCompact ? "dock-schedule-panel--compact" : ""} ${isUltraCompact ? "dock-schedule-panel--ultra-compact" : ""}`}>
           <div className="dock-schedule-panel__header">
-            {/* Row 1: Dedicated Full-Width Schedule vs History Tabs */}
+            {/* Row 1: Dedicated Full-Width Schedule vs History Tabs + Clear Close Button */}
             <div className="dock-schedule-panel__tabs-row">
               <div className="dock-schedule-tabs" role="tablist">
                 <button
@@ -695,7 +711,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                   <Icon name="event_note" size={16} />
                   {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("schedule.title", "Schedule")}</span>}
                   {scheduleItems.length > 0 && (
-                    <span className="dock-schedule-tab-badge">{scheduleItems.length}</span>
+                    <span className="dock-schedule-tab-dot dock-schedule-tab-dot--schedule" />
                   )}
                 </button>
                 <button
@@ -708,11 +724,22 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 >
                   <Icon name="history" size={15} />
                   {!isNarrowTabs && <span className="dock-schedule-tab-label">{t("common.history", "History")}</span>}
-                  {historyItems.length > 0 && (
-                    <span className="dock-schedule-tab-badge">{historyItems.length}</span>
+                  {effectiveHistoryItems.length > 0 && (
+                    <span className="dock-schedule-tab-dot dock-schedule-tab-dot--history" />
                   )}
                 </button>
               </div>
+
+              {/* Clear, highly-visible Close Drawer Button */}
+              <button
+                type="button"
+                className="dock-schedule-panel__close-btn dock-schedule-panel__close-btn--header"
+                onClick={handleCollapse}
+                title={t("schedule.close", "Close Schedule / History")}
+                aria-label={t("schedule.close", "Close Schedule / History")}
+              >
+                <Icon name="close" size={16} />
+              </button>
             </div>
 
             {/* Row 2: Select/Title on Left + Actions on Right */}
@@ -792,7 +819,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                             <Icon name="close" size={13} />
                             <span>Close Schedule</span>
                           </button>
-                          {activeViewTab === "history" && historyItems.length > 0 && (
+                          {activeViewTab === "history" && effectiveHistoryItems.length > 0 && (
                             <button
                               type="button"
                               className="dock-schedule-header-dropdown__item dock-schedule-header-dropdown__item--danger"
@@ -873,9 +900,40 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
             )}
           </div>
 
+          {/* Free plan banner */}
+          {isFreePlan && activeViewTab === "history" && (
+            <div className="dock-schedule-free-banner">
+              <div className="dock-schedule-free-banner__label">
+                <Icon name="lock" size={12} />
+                <span>History holds 1 item on Free plan</span>
+              </div>
+              <button
+                type="button"
+                className="dock-schedule-free-banner__btn"
+                onClick={() => showUpgradeModal("Upgrade to keep up to 60 items in presentation history.")}
+              >
+                Upgrade
+              </button>
+            </div>
+          )}
+          {isFreePlan && activeViewTab === "schedule" && (
+            <div className="dock-schedule-free-banner dock-schedule-free-banner--schedule">
+              <div className="dock-schedule-free-banner__label">
+                <span>Free plan: 3 items max (rolling stack)</span>
+              </div>
+              <button
+                type="button"
+                className="dock-schedule-free-banner__btn"
+                onClick={() => showUpgradeModal("Upgrade to add unlimited items to your service schedule.")}
+              >
+                Upgrade
+              </button>
+            </div>
+          )}
+
           {/* ── Card List ── */}
           <div className="dock-schedule-panel__list">
-            {(activeViewTab === "history" ? historyItems : scheduleItems).length === 0 ? (
+            {(activeViewTab === "history" ? effectiveHistoryItems : scheduleItems).length === 0 ? (
               <div className="dock-schedule-panel__empty">
                 <Icon name={activeViewTab === "history" ? "history" : "playlist_add"} size={32} />
                 <p>
@@ -890,7 +948,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
                 </small>
               </div>
             ) : (
-              (activeViewTab === "history" ? historyItems : scheduleItems).map((item, index) => {
+              (activeViewTab === "history" ? effectiveHistoryItems : scheduleItems).map((item, index) => {
                 const isLive = activeCueId === item.id;
                 const isCompleted = activePlan?.completedItemIds?.includes(item.id);
                 const isMedia = item.type === "media";

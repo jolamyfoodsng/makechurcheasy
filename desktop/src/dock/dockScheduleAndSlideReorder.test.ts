@@ -11,6 +11,9 @@ import {
   setPendingWorshipSongSelection,
   getPendingNoteSelection,
   setPendingNoteSelection,
+  getOrCreateActiveSchedule,
+  getPresentationHistory,
+  clearPresentationHistory,
 } from "./dockScheduleService";
 import {
   calculateReorderTargetIndex,
@@ -203,6 +206,88 @@ describe("Dock Schedule and Slide Reordering", () => {
       },
     });
     expect(historyItem.label).toBe("James 1:3 (KJV)");
+  });
+
+  it("caps schedule at 3 items for free users, acting like a rolling stack that removes the oldest", () => {
+    // Add 1st item
+    addBibleToActiveSchedule({
+      book: "Genesis",
+      chapter: 1,
+      verse: 1,
+      reference: "Genesis 1:1",
+      translation: "KJV",
+      text: "In the beginning God created the heaven and the earth.",
+    });
+
+    // Add 2nd item
+    addBibleToActiveSchedule({
+      book: "Genesis",
+      chapter: 1,
+      verse: 2,
+      reference: "Genesis 1:2",
+      translation: "KJV",
+      text: "And the earth was without form, and void.",
+    });
+
+    // Add 3rd item
+    addBibleToActiveSchedule({
+      book: "Genesis",
+      chapter: 1,
+      verse: 3,
+      reference: "Genesis 1:3",
+      translation: "KJV",
+      text: "And God said, Let there be light: and there was light.",
+    });
+
+    const { activePlan: planWith3 } = getOrCreateActiveSchedule();
+    expect(planWith3.items.length).toBe(3);
+    expect(planWith3.items[0].label).toBe("Genesis 1:3 (KJV)");
+    expect(planWith3.items[2].label).toBe("Genesis 1:1 (KJV)");
+
+    // Add 4th item (should push to index 0 and drop the 1st item Genesis 1:1)
+    addBibleToActiveSchedule({
+      book: "Genesis",
+      chapter: 1,
+      verse: 4,
+      reference: "Genesis 1:4",
+      translation: "KJV",
+      text: "And God saw the light, that it was good.",
+    });
+
+    const { activePlan: planWith4 } = getOrCreateActiveSchedule();
+    expect(planWith4.items.length).toBe(3);
+    // Newly added item popped up first
+    expect(planWith4.items[0].label).toBe("Genesis 1:4 (KJV)");
+    expect(planWith4.items[1].label).toBe("Genesis 1:3 (KJV)");
+    expect(planWith4.items[2].label).toBe("Genesis 1:2 (KJV)");
+    // Oldest item Genesis 1:1 was removed from stack
+    expect(planWith4.items.find((i) => i.label === "Genesis 1:1 (KJV)")).toBeUndefined();
+  });
+
+  it("restricts history to 1 item for free users, changing to the latest presented item", () => {
+    clearPresentationHistory();
+
+    // 1st presentation
+    recordPresentationHistory({
+      type: "bible",
+      label: "John 3:16 (KJV)",
+      payloadSnapshot: { book: "John", chapter: 3, verse: 16 },
+    });
+
+    let history = getPresentationHistory();
+    expect(history.length).toBe(1);
+    expect(history[0].label).toBe("John 3:16 (KJV)");
+
+    // 2nd presentation (changes to this one type/item)
+    recordPresentationHistory({
+      type: "worship",
+      label: "Amazing Grace",
+      payloadSnapshot: { songTitle: "Amazing Grace" },
+    });
+
+    history = getPresentationHistory();
+    expect(history.length).toBe(1);
+    expect(history[0].label).toBe("Amazing Grace");
   });
 });
 

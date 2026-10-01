@@ -14,6 +14,7 @@ import {
   type ServicePlanItem,
   type ServicePlannerSnapshot,
 } from "../service-planner/types";
+import { isDockFreePlan } from "./dockEntitlement";
 
 const DOCK_SCHEDULE_CACHE_KEY = "__mce_dock_service_plans_v1";
 const DOCK_ACTIVE_PLAN_ID_KEY = "__mce_dock_active_plan_id_v1";
@@ -99,16 +100,23 @@ export function readCachedScheduleSnapshot(): ServicePlannerSnapshot | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (isServicePlannerSnapshot(parsed)) {
+      const isFree = isDockFreePlan();
       const sanitized: ServicePlannerSnapshot = {
         ...parsed,
-        plans: parsed.plans.map((p) => ({
-          ...p,
-          items: p.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it)),
-        })),
+        plans: parsed.plans.map((p) => {
+          const items = p.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it));
+          return {
+            ...p,
+            items: isFree && items.length > 3 ? items.slice(0, 3) : items,
+          };
+        }),
         activePlan: parsed.activePlan
           ? {
               ...parsed.activePlan,
-              items: parsed.activePlan.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it)),
+              items: (() => {
+                const items = parsed.activePlan.items.map((it) => (it.type === "bible" ? { ...it, label: normalizeBibleReferenceLabel(it.label) } : it));
+                return isFree && items.length > 3 ? items.slice(0, 3) : items;
+              })(),
             }
           : parsed.activePlan,
       };
@@ -185,7 +193,8 @@ export function getOrCreateActiveSchedule(): { snapshot: ServicePlannerSnapshot;
 export function saveSchedulePlan(plan: ServicePlan): void {
   const { snapshot } = getOrCreateActiveSchedule();
   const existingIdx = snapshot.plans.findIndex((p) => p.id === plan.id);
-  const updatedPlan: ServicePlan = { ...plan, updatedAt: Date.now() };
+  const items = isDockFreePlan() && plan.items.length > 3 ? plan.items.slice(0, 3) : plan.items;
+  const updatedPlan: ServicePlan = { ...plan, items, updatedAt: Date.now() };
 
   let nextPlans: ServicePlan[];
   if (existingIdx >= 0) {
@@ -218,9 +227,15 @@ export function saveSchedulePlan(plan: ServicePlan): void {
 export function addItemToActiveSchedule(item: Omit<ServicePlanItem, "id" | "createdAt" | "updatedAt">): ServicePlanItem {
   const { activePlan } = getOrCreateActiveSchedule();
   const fullItem = createServicePlanItem(item);
+  const prepended = [fullItem, ...activePlan.items];
+  const nextItems = isDockFreePlan() && prepended.length > 3
+    ? prepended.slice(0, 3)
+    : prepended;
+
   const updatedPlan: ServicePlan = {
     ...activePlan,
-    items: [fullItem, ...activePlan.items],
+    // Prepend new item to active schedule: items: [fullItem, ...activePlan.items]
+    items: nextItems,
     updatedAt: Date.now(),
   };
 
@@ -543,7 +558,12 @@ const MAX_HISTORY_ITEMS = 60;
  * Reads presentation history from localStorage cache.
  */
 export function getPresentationHistory(): ServicePlanItem[] {
-  if (inMemoryHistory) return inMemoryHistory;
+  if (inMemoryHistory) {
+    if (isDockFreePlan() && inMemoryHistory.length > 1) {
+      return inMemoryHistory.slice(0, 1);
+    }
+    return inMemoryHistory;
+  }
   if (typeof localStorage === "undefined") return [];
   try {
     const raw = localStorage.getItem(DOCK_HISTORY_CACHE_KEY);
@@ -555,8 +575,9 @@ export function getPresentationHistory(): ServicePlanItem[] {
           ? { ...it, label: normalizeBibleReferenceLabel(it.label) }
           : it
       ));
-      inMemoryHistory = sanitized;
-      return sanitized;
+      const finalItems = isDockFreePlan() && sanitized.length > 1 ? sanitized.slice(0, 1) : sanitized;
+      inMemoryHistory = finalItems;
+      return finalItems;
     }
   } catch {
     // Ignore cache parse error
@@ -568,10 +589,11 @@ export function getPresentationHistory(): ServicePlanItem[] {
  * Writes presentation history to cache and notifies listeners.
  */
 export function writePresentationHistory(history: ServicePlanItem[]): void {
-  inMemoryHistory = history;
+  const finalHistory = isDockFreePlan() && history.length > 1 ? history.slice(0, 1) : history;
+  inMemoryHistory = finalHistory;
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(DOCK_HISTORY_CACHE_KEY, JSON.stringify(history));
+    localStorage.setItem(DOCK_HISTORY_CACHE_KEY, JSON.stringify(finalHistory));
   } catch {
     // Storage quota or restricted context
   }
@@ -645,7 +667,10 @@ export function recordPresentationHistory(item: {
     nextHistory = [historyItem, ...current];
   }
 
-  if (nextHistory.length > MAX_HISTORY_ITEMS) {
+  if (isDockFreePlan()) {
+    // Free plan: History does not accumulate; it only retains 1 item (changes to the latest projected item)
+    nextHistory = [historyItem];
+  } else if (nextHistory.length > MAX_HISTORY_ITEMS) {
     nextHistory = nextHistory.slice(0, MAX_HISTORY_ITEMS);
   }
 
