@@ -8,6 +8,7 @@ import {
   saveBibleMacros,
   isCanonicalBookCollision,
 } from "../bibleMacros";
+import "./dock-bible-macros.css";
 
 interface Props {
   isOpen: boolean;
@@ -102,24 +103,15 @@ export default function DockBibleMacrosModal({
         aria-modal="true"
         aria-labelledby="dock-macros-modal-title"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "580px", maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+        style={{ display: "flex", flexDirection: "column" }}
       >
         <div className="dock-modal__header">
           <div className="dock-modal__title-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="bolt" size={18} style={{ color: "var(--dock-accent-color, #eab308)" }} />
+            <Icon name="bolt" size={18} style={{ color: "#eab308" }} />
             <h2 id="dock-macros-modal-title" className="dock-modal__title" style={{ margin: 0 }}>
               {t("bible.smartShortcodes", "Scripture Shortcodes & Macros")}
             </h2>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                padding: "2px 8px",
-                borderRadius: "10px",
-                background: "rgba(234, 179, 8, 0.15)",
-                color: "#eab308",
-              }}
-            >
+            <span className="dock-macro-badge-count">
               {macros.length}
             </span>
           </div>
@@ -134,14 +126,14 @@ export default function DockBibleMacrosModal({
         </div>
 
         <div className="dock-modal__body" style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
-          <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--text-secondary, #94a3b8)", lineHeight: "1.5" }}>
+          <p className="dock-macro-intro">
             {t(
               "bible.macroDescription",
-              "Type shortcuts directly in the smart search bar (e.g. 'benediction', 'welcome', 'grace'). Use '#' (e.g. '#welcome') to force a macro if it matches a Bible book name.",
+              "Type shortcuts directly in the Bible search bar (e.g. #grace, #offering, #benediction) to instantly display key service scriptures.",
             )}
           </p>
 
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div className="dock-macro-toolbar">
             <input
               type="text"
               className="dock-input"
@@ -278,52 +270,36 @@ export default function DockBibleMacrosModal({
             </form>
           )}
 
-          <div className="dock-bible-macros-list" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div className="dock-bible-macros-list">
             {filteredMacros.map((macro) => {
               const hasCollision = isCanonicalBookCollision(macro.keyword);
               return (
                 <div
                   key={macro.keyword}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "8px 12px",
-                    background: "var(--dock-surface-panel, rgba(30, 41, 59, 0.4))",
-                    borderRadius: "6px",
-                    border: "1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.05))",
-                    cursor: "pointer",
-                  }}
+                  className="dock-macro-card"
                   onClick={() => {
                     onSelectMacro(macro);
                     onClose();
                   }}
+                  title={t("bible.clickToProject", "Click to project passage")}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: "4px",
-                        background: "rgba(96, 165, 250, 0.15)",
-                        color: "var(--dock-accent-color, #60a5fa)",
-                      }}
-                    >
+                  <div className="dock-macro-card__left">
+                    <span className="dock-macro-card__pill">
+                      <span className="dock-macro-card__pill-hash">#</span>
                       {macro.keyword}
                     </span>
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 600 }}>
+                    <div className="dock-macro-card__info">
+                      <div className="dock-macro-card__title">
                         {macro.label || macro.keyword}
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-secondary, #94a3b8)" }}>
-                        {macro.reference} {macro.translation ? `(${macro.translation})` : ""}
+                      <div className="dock-macro-card__reference">
+                        <Icon name="book" size={13} className="dock-macro-card__reference-icon" />
+                        <span>{macro.reference} {macro.translation ? `(${macro.translation})` : ""}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                  <div className="dock-macro-card__actions" onClick={(e) => e.stopPropagation()}>
                     {hasCollision && (
                       <span
                         title="Keyword collides with Bible book. Use # prefix to force macro."
@@ -334,24 +310,24 @@ export default function DockBibleMacrosModal({
                     )}
                     <button
                       type="button"
-                      className="dock-icon-btn"
+                      className="dock-macro-card__project-btn"
                       onClick={() => {
                         onSelectMacro(macro);
                         onClose();
                       }}
                       title={t("bible.sendToObs", "Project this passage")}
-                      style={{ padding: "4px" }}
                     >
                       <Icon name="play_arrow" size={14} />
+                      <span>{t("dock.project", "Project")}</span>
                     </button>
                     <button
                       type="button"
-                      className="dock-icon-btn"
+                      className="dock-macro-card__delete-btn"
                       onClick={() => handleDeleteMacro(macro.keyword)}
                       title={t("common.delete", "Delete")}
-                      style={{ padding: "4px", color: "#ef4444" }}
+                      aria-label={t("common.delete", "Delete")}
                     >
-                      <Icon name="delete" size={14} />
+                      <Icon name="delete" size={15} />
                     </button>
                   </div>
                 </div>

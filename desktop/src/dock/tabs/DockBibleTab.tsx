@@ -7415,18 +7415,6 @@ function DockBibleTab({
                     <Icon name="swap_horiz" size={16} />
                     <span>{t("dock.compare.title", "Compare Translations & Passages")}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="dock-bible-actions__menu-item-entry"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowBibleActionsMenu(false);
-                      openThemeSettings("text");
-                    }}
-                  >
-                    <Icon name="edit" size={16} />
-                    <span>{t("bible.quickEdits", "Quick Edits")}</span>
-                  </button>
                   {toolbarCollapsed && (
                     <button
                       type="button"
@@ -7477,18 +7465,6 @@ function DockBibleTab({
                     <Icon name="refresh" size={16} />
                     <span>{t("dock.reloadDock", "Reload / Refresh Dock")}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="dock-bible-actions__menu-item-entry"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowBibleActionsMenu(false);
-                      setTheme(nextTheme);
-                    }}
-                  >
-                    <Icon name={effectiveTheme === "dark" ? "light_mode" : "dark_mode"} size={16} />
-                    <span>{effectiveTheme === "dark" ? t("dock.switchToLightMode", "Light Mode") : t("dock.switchToDarkMode", "Dark Mode")}</span>
-                  </button>
                 </div>
               )}
           </div>
@@ -7528,18 +7504,6 @@ function DockBibleTab({
                 >
                   <Icon name="swap_horiz" size={16} />
                   <span>{t("dock.compare.title", "Compare Translations & Passages")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-actions__menu-item-entry"
-                  role="menuitem"
-                  onClick={() => {
-                    setShowBibleActionsMenu(false);
-                    openThemeSettings("text");
-                  }}
-                >
-                  <Icon name="edit" size={16} />
-                  <span>{t("bible.quickEdits", "Quick Edits")}</span>
                 </button>
                 {toolbarCollapsed && (
                   <button
@@ -7590,18 +7554,6 @@ function DockBibleTab({
                 >
                   <Icon name="refresh" size={16} />
                   <span>{t("dock.reloadDock", "Reload / Refresh Dock")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-actions__menu-item-entry"
-                  role="menuitem"
-                  onClick={() => {
-                    setShowBibleActionsMenu(false);
-                    setTheme(nextTheme);
-                  }}
-                >
-                  <Icon name={effectiveTheme === "dark" ? "light_mode" : "dark_mode"} size={16} />
-                  <span>{effectiveTheme === "dark" ? t("dock.switchToLightMode", "Light Mode") : t("dock.switchToDarkMode", "Dark Mode")}</span>
                 </button>
               </div>
             )}
