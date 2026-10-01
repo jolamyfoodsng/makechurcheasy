@@ -59,9 +59,6 @@ import { initDockCommandHandler } from "./services/dockCommandHandler";
 import { initMobileRemoteCommandBridge } from "./services/mobileRemoteCommandBridge";
 import { automationRunner } from "./services/automationRunner";
 import { hasTauriInvoke, safeTauriInvoke } from "./services/tauriSafe";
-import { showMakeChatGptWindow } from "./services/makeChatGptWindow";
-import { getSettings as getMVSettings } from "./multiview/mvStore";
-import MakeChatGPTFloating from "./makechatgpt/MakeChatGPTFloating";
 import { getUserScopedKey } from "./services/userScopedStorage";
 import { obsService } from "./services/obsService";
 import { appStatusManager } from "./services/appStatusManager";
@@ -165,44 +162,7 @@ function AppRouteFallback() {
   );
 }
 
-/**
- * The pet belongs to the desktop application process, not to the in-app
- * navigation shell. This keeps it alive over the desktop while the main
- * MakeChurchEasy window is minimized or on another route.
- */
-function MakeChurchEasyPetLauncher() {
-  const nativeWindowAvailable = hasTauriInvoke();
-  const hideFloating = getMVSettings().hideFloatingIcon ?? true;
 
-  useEffect(() => {
-    if (!nativeWindowAvailable) return;
-
-    // Respect user's preference to permanently hide the floating icon (default hidden)
-    if (hideFloating) {
-      void import("./services/makeChatGptWindow").then((m) => m.hideMakeChatGptWindow()).catch(() => {});
-      return;
-    }
-
-    void showMakeChatGptWindow().catch((error) => {
-      console.warn("[MakeChurchEasy] Could not show floating pet:", error);
-    });
-
-    return undefined;
-  }, [nativeWindowAvailable, hideFloating]);
-
-  if (!nativeWindowAvailable) {
-    // In dev mode, also respect the setting (default hidden)
-    if (hideFloating) return null;
-
-    return (
-      <div className="makechatgpt-inline-dev">
-        <MakeChatGPTFloating />
-      </div>
-    );
-  }
-
-  return null;
-}
 
 async function saveWorshipSongFromDockPayload(payload: WorshipDockSongSavePayload): Promise<{
   song: Song;
@@ -1063,6 +1023,11 @@ function App() {
       // Fallback to window.location.origin if Tauri command fails
     });
 
+    // Ensure any previously opened floating pet window is closed
+    if (hasTauriInvoke()) {
+      void import("./services/makeChatGptWindow").then((m) => m.hideMakeChatGptWindow()).catch(() => {});
+    }
+
     // Initialize device performance detection (non-blocking)
     import("./services/performanceManager").then((m) =>
       m.init().catch((err) => {
@@ -1384,7 +1349,6 @@ function App() {
           }
         }}
       />
-      <MakeChurchEasyPetLauncher />
       {/* 1. Splash screen — shown until resources ready */}
       {splashVisible && (
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
