@@ -1156,7 +1156,7 @@ function ContentPicker({
   const normalizedQuery = query.trim().toLowerCase();
   const scenes = obsScenes.filter(s => (!normalizedQuery || s.toLowerCase().includes(normalizedQuery)) && !exclude.has(s));
 
-  return (
+  const modalContent = (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-content-picker" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-content-picker__header">
@@ -1217,6 +1217,8 @@ function ContentPicker({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -1582,7 +1584,7 @@ function FramingEditor({
 
   if (!open) return null;
 
-  return (
+  const modalContent = (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-framing-editor" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-framing-editor__header">
@@ -1730,6 +1732,8 @@ function FramingEditor({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -2264,7 +2268,7 @@ function DeleteModal({
   const { t } = useTranslation();
   const [deleteObs, setDeleteObs] = useState(false);
 
-  return (
+  const modalContent = (
     <div className="dock-mv-modal-overlay" onClick={onCancel}>
       <div className="dock-mv-modal" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-modal__header">
@@ -2299,6 +2303,8 @@ function DeleteModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -2494,7 +2500,7 @@ function BackgroundSection({
       </div>
 
       {/* Modal editor (same as before) */}
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div className="dock-mv-modal-overlay" onClick={() => setOpen(false)}>
           <div className="dock-mv-bg-editor" onClick={(e) => e.stopPropagation()}>
             <div className="dock-mv-bg-editor__header">
@@ -2733,7 +2739,8 @@ function BackgroundSection({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -2818,7 +2825,7 @@ function SpacingModal({
   const marginPresets = [0, 5, 12, 20, 40];
   const gapPresets = [0, 5, 10, 16, 24];
 
-  return (
+  const modalContent = (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-content-picker dock-mv-spacing-modal" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-content-picker__header">
@@ -2974,6 +2981,8 @@ function SpacingModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -3010,7 +3019,7 @@ function FramePicker({
 
   const filtered = cat === "all" ? FRAME_LIBRARY : FRAME_LIBRARY.filter(f => f.category === cat);
 
-  return (
+  const modalContent = (
     <div className="dock-mv-modal-overlay" onClick={onClose}>
       <div className="dock-mv-content-picker" onClick={(e) => e.stopPropagation()}>
         <div className="dock-mv-content-picker__header">
@@ -3065,6 +3074,8 @@ function FramePicker({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 }
 
 // ---------------------------------------------------------------------------

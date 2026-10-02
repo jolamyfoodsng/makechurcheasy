@@ -819,7 +819,13 @@ function DockMediaTab({
   const [isUltraCompactHeight, setIsUltraCompactHeight] = useState(false);
   const [isMicroHeight, setIsMicroHeight] = useState(false);
   const [mediaSession] = useState<DockMediaSessionState>(() => loadMediaSessionState());
-  const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab);
+  const [browserTab, setBrowserTab] = useState<DockMediaBrowserTab>(() => mediaSession.browserTab === "templates" ? "uploads" : mediaSession.browserTab);
+
+  useEffect(() => {
+    if (browserTab === "templates") {
+      setBrowserTab("uploads");
+    }
+  }, [browserTab]);
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
   const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
@@ -1504,16 +1510,21 @@ function DockMediaTab({
     };
   }, [browserTab, loadSavedTemplateImages]);
 
+let _cachedGlobalUploadsDir: string | null = null;
+
   // ── Play uploaded media via OBS — send to Preview or Send to OBS ──
 
   const resolveUploadFilePath = useCallback(async (fileName: string): Promise<string> => {
-    let dir = uploadsDir;
+    let dir = uploadsDir || _cachedGlobalUploadsDir;
     if (!dir) {
       const res = await fetch("/api/uploads-dir");
       if (res.ok) {
         const data = await res.json();
         dir = data.path || null;
-        if (dir) setUploadsDir(dir);
+        if (dir) {
+          _cachedGlobalUploadsDir = dir;
+          setUploadsDir(dir);
+        }
       }
     }
     if (!dir) {
@@ -1529,14 +1540,17 @@ function DockMediaTab({
       return item.filePath;
     }
 
-    let dir = uploadsDir;
+    let dir = uploadsDir || _cachedGlobalUploadsDir;
     if (!dir) {
       try {
         const res = await fetch("/api/uploads-dir");
         if (res.ok) {
           const data = await res.json();
           dir = data.path || null;
-          if (dir) setUploadsDir(dir);
+          if (dir) {
+            _cachedGlobalUploadsDir = dir;
+            setUploadsDir(dir);
+          }
         }
       } catch { /* ignore */ }
     }
@@ -4406,7 +4420,7 @@ function DockMediaTab({
     <div className="dock-media-search-row__actions">
       <button
         type="button"
-        className="dock-btn dock-btn--compact dock-btn--primary"
+        className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--icon-only"
         onClick={() => {
           if (browserTab === "animations") {
             openAddMediaModal("template-videos");
@@ -4430,12 +4444,12 @@ function DockMediaTab({
               : uploading ? t('media.preparing') : t('media.addMedia')
         }
       >
-        {t('common.add')}
+        <Icon name="add" size={14} />
       </button>
       {!isUltraCompactHeight && (
         <button
           type="button"
-          className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+          className={`dock-console-toggle dock-console-toggle--icon-only${selectionMode ? " dock-console-toggle--active" : ""}`}
           onClick={async () => {
             if (selectionMode) {
               toggleSelectionMode();
@@ -4452,7 +4466,7 @@ function DockMediaTab({
           title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
           aria-label={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
         >
-          <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+          <Icon name={selectionMode ? "close" : "slideshow"} size={14} />
         </button>
       )}
     </div>
@@ -4497,7 +4511,7 @@ function DockMediaTab({
           <div className="dock-media-header__actions">
             <button
               type="button"
-              className="dock-btn dock-btn--compact dock-btn--primary"
+              className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--icon-only"
               onClick={() => {
                 if (browserTab === "animations") {
                   openAddMediaModal("template-videos");
@@ -4513,17 +4527,13 @@ function DockMediaTab({
                     ? t('media.uploadRestricted')
                     : uploading ? t('media.preparing') : t('media.addMedia')
               }
+              aria-label={t('media.addMedia')}
             >
-              <Icon name="add" size={12} />
-              {uploading
-                ? t('media.preparing')
-                : browserTab === "animations"
-                  ? animationsLocked ? t('media.upgradeToAccess') : t('common.add')
-                  : t('media.addMedia')}
+              <Icon name="add" size={14} />
             </button>
             <button
               type="button"
-              className={`dock-btn dock-btn--compact${selectionMode ? " dock-btn--ghost" : " dock-btn--secondary"}`}
+              className={`dock-console-toggle dock-console-toggle--icon-only${selectionMode ? " dock-console-toggle--active" : ""}`}
               onClick={async () => {
                 // Allow cancelling selection mode without entitlement check
                 if (selectionMode) {
@@ -4539,8 +4549,9 @@ function DockMediaTab({
               }}
               disabled={browserTab !== "uploads"}
               title={browserTab !== "uploads" ? t('media.slideshowRestricted') : (selectionMode ? t('media.dismiss') : activeKind === "audio" ? "Create audio playlist" : t('media.createSlideshow'))}
+              aria-label={selectionMode ? t('media.dismiss') : t('media.createSlideshow')}
             >
-              <Icon name={selectionMode ? "close" : "slideshow"} size={12} />
+              <Icon name={selectionMode ? "close" : "slideshow"} size={14} />
             </button>
           </div>
         </div>
@@ -4572,53 +4583,49 @@ function DockMediaTab({
             type="button"
             role="tab"
             aria-selected={browserTab === "uploads"}
-            className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab dock-media-tab--icon ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("uploads")}
-            title={t('media.uploads')}>
-            {t('media.uploads')}
+            title={t('media.uploads')}
+            aria-label={t('media.uploads')}
+          >
+            <Icon name="perm_media" size={15} />
             <span className="dock-media-tab__count">{mediaEntries.length}</span>
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected={browserTab === "templates"}
-            className={`dock-media-tab ${browserTab === "templates" ? "dock-media-tab--active" : ""}`}
-            onClick={() => setBrowserTab("templates")}
-            title="Templates"
-          >
-            Templates
-            <span className="dock-media-tab__count">{savedTemplateEntries.length}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={browserTab === "animations"}
-            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
+            className={`dock-media-tab dock-media-tab--icon ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
             onClick={openAnimationsTab}
             disabled={animationsLocked}
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
+            aria-label={t('media.tabAnimations')}
           >
-            {t('media.tabAnimations')}
+            <Icon name="movie" size={15} />
             <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={browserTab === "patterns"}
-            className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab dock-media-tab--icon ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("patterns")}
-            title={t('media.gridView')}>
-            {t('media.patterns')}
+            title={t('media.patterns', 'Patterns')}
+            aria-label={t('media.patterns', 'Patterns')}
+          >
+            <Icon name="grid_view" size={15} />
             <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={browserTab === "text"}
-            className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab dock-media-tab--icon ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("text")}
-            title={t('media.tabText')}>
-            {t('media.tabText')}
+            title={t('media.tabText')}
+            aria-label={t('media.tabText')}
+          >
+            <Icon name="title" size={15} />
           </button>
         </div>
       </div>

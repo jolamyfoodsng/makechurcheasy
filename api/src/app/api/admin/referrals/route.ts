@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
-import { getAdminReferralOverview } from "@/lib/referrals";
+import { getAdminReferralOverview, adminAssignReferral } from "@/lib/referrals";
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,3 +20,38 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const authResult = await requireAdmin(req);
+    if (!authResult.ok) return authResult.response;
+
+    const body = (await req.json().catch(() => ({}))) as any;
+    const { referrerUserId, referredUserId } = body || {};
+
+    if (!referrerUserId || !referredUserId) {
+      return NextResponse.json(
+        { error: "Both referrerUserId and referredUserId are required" },
+        { status: 400 },
+      );
+    }
+
+    const result = await adminAssignReferral({
+      referrerUserId,
+      referredUserId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Referral assigned successfully",
+      ...result,
+    });
+  } catch (error: any) {
+    console.error("[admin/referrals] POST error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to assign referral" },
+      { status: 400 },
+    );
+  }
+}
+

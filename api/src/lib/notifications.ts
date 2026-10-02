@@ -146,6 +146,15 @@ export async function notifySubscriptionExpiring(userId: string, planName: strin
   });
 }
 
+export async function notifyGracePeriodActive(userId: string, planName: string, daysRemaining: number): Promise<void> {
+  await createNotification({
+    userId,
+    type: "subscription_expiring",
+    title: "7-Day grace period active",
+    message: `Your ${planName} subscription has expired, but you have ${daysRemaining} day${daysRemaining === 1 ? "" : "s"} left in your grace period. Renew now to avoid interruption.`,
+  });
+}
+
 export async function notifyLowCreditBalance(userId: string, remainingDesc: string): Promise<void> {
   await createNotification({
     userId,

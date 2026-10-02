@@ -657,6 +657,17 @@ export default function DockNotesTab({
   const [quickSettingsRefreshNonce, setQuickSettingsRefreshNonce] = useState(0);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [showCompactSummaryActions, setShowCompactSummaryActions] = useState(false);
+  const [showNotesBrowserMenu, setShowNotesBrowserMenu] = useState(false);
+  const notesBrowserMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isConstrained, setIsConstrained] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 400 || window.innerHeight < 450 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsConstrained(window.innerWidth <= 400 || window.innerHeight < 450);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [draggingSlideIdx, setDraggingSlideIdx] = useState<number | null>(null);
   const [dragOverSlideIdx, setDragOverSlideIdx] = useState<number | null>(null);
   const [dropPosition, setDropPosition] = useState<"above" | "below" | null>(null);
@@ -773,7 +784,7 @@ export default function DockNotesTab({
   }, [notesTranslationSourceSignature, selectedNote?.id]);
 
   useEffect(() => {
-    if (!showCompactSummaryActions) return;
+    if (!showCompactSummaryActions && !showNotesBrowserMenu) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -781,11 +792,14 @@ export default function DockNotesTab({
       if (compactSummaryActionsRef.current && target instanceof Node && !compactSummaryActionsRef.current.contains(target)) {
         setShowCompactSummaryActions(false);
       }
+      if (notesBrowserMenuRef.current && target instanceof Node && !notesBrowserMenuRef.current.contains(target)) {
+        setShowNotesBrowserMenu(false);
+      }
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [showCompactSummaryActions]);
+  }, [showCompactSummaryActions, showNotesBrowserMenu]);
 
   useEffect(() => {
     setShowCompactSummaryActions(false);
@@ -1587,6 +1601,11 @@ export default function DockNotesTab({
       const target = event.target;
       const targetElement = target instanceof Element ? target : null;
       if (event.key === "Escape") {
+        if (showNotesBrowserMenu) {
+          event.preventDefault();
+          setShowNotesBrowserMenu(false);
+          return;
+        }
         if (showNoteEditor) {
           event.preventDefault();
           setShowNoteEditor(false);
@@ -1655,23 +1674,62 @@ export default function DockNotesTab({
           )}
         </div>
         <div className="dock-console-actions dock-console-actions--song-browser">
-          <DockSceneRoutingControl
-            module="notes"
-            route={sceneRoute}
-            onRouteChange={updateSceneRoute}
-            disabled={presentationLinkMode}
-            title={t("notes.output")}
-          />
-          <button
-            type="button"
-            className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
-            onClick={openNewNote}
-            title={t("notes.addNote")}
-            aria-label={t("notes.addNote")}
-          >
-            <Icon name="add" size={13} />
-            <span className="dock-console-toggle__label">{t("common.add")}</span>
-          </button>
+          {isConstrained ? (
+            <div className="dock-notes-browser-overflow-wrap" ref={notesBrowserMenuRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="dock-console-toggle dock-console-toggle--icon-only"
+                onClick={() => setShowNotesBrowserMenu((prev) => !prev)}
+                title={t("common.moreActions", "More actions")}
+                aria-label={t("common.moreActions", "More actions")}
+                aria-expanded={showNotesBrowserMenu}
+                aria-haspopup="menu"
+              >
+                <Icon name="more_vert" size={14} />
+              </button>
+              {showNotesBrowserMenu && (
+                <div
+                  className="dock-bible-actions__menu dock-notes-actions__menu"
+                  role="menu"
+                  style={{ top: "calc(100% + 4px)", right: 0, width: "180px", minWidth: "160px", zIndex: 250 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item-entry"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowNotesBrowserMenu(false);
+                      openNewNote();
+                    }}
+                  >
+                    <Icon name="add" size={16} />
+                    <span>{t("notes.addNote", "Add Note")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <DockSceneRoutingControl
+                module="notes"
+                route={sceneRoute}
+                onRouteChange={updateSceneRoute}
+                disabled={presentationLinkMode}
+                title={t("notes.output")}
+              />
+              <button
+                type="button"
+                className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
+                onClick={openNewNote}
+                title={t("notes.addNote")}
+                aria-label={t("notes.addNote")}
+              >
+                <Icon name="add" size={13} />
+                <span className="dock-console-toggle__label">{t("common.add")}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </section>

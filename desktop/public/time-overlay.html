@@ -374,6 +374,12 @@
           timeValue.textContent = formattedTime;
         }
 
+        if (clock.color) {
+          timeValue.style.color = clock.color;
+        } else {
+          timeValue.style.color = "";
+        }
+
         dateValue.textContent = formatDate(now);
         dateValue.hidden = !clock.showDate;
 

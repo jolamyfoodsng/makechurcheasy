@@ -14,15 +14,16 @@ export type PresentationFeature = {
 export const presentationFeatures: PresentationFeature[] = [
   {
     id: "bible", label: "Bible", title: "The right verse.\nRight on time.",
-    copy: "Find and display scripture quickly with multiple Bible versions and translation tools. Keep the passage ready, then put it on screen when it matters.",
+    copy: "Search and present Bible verses inside OBS Studio. Explore 10,000+ Bible translations, compare passages and translations side by side, and update scripture on screen in real time without leaving the dock.",
     image: "bible", alt: "MakeChurchEazy Bible dock with John 3:16 selected", note: "Search a reference. Select a verse. Present it.",
-    highlights: ["Multiple Bible versions", "Translation comparison", "Full screen or lower third"],
+    highlights: ["10,000+ Bible translations", "Verse and translation comparison", "Real-time scripture updates", "Full screen or lower third"],
     steps: [
       { title: "Find the passage", copy: "Enter a Bible reference in the search field, or move through the chapter to choose your verse." },
       { title: "Choose how it appears", copy: "Select your Bible version, theme and text size. Use a full screen presentation or a lower third over your video." },
-      { title: "Follow the message", copy: "Present the selected verse, then use the navigation controls to move through the passage as the preacher continues." },
+      { title: "Follow the message", copy: "Present the selected verse and update it in real time as the preacher continues. On paid plans, MakeChurchEazy creates and updates the required OBS scenes and sources automatically." },
     ],
     questions: [
+      { q: "Can I compare different Bible passages?", a: "Yes. Use the Bible dock to compare passages as well as the same passage in different translations, without leaving OBS Studio." },
       { q: "Can I compare Bible translations?", a: "Yes. Use Compare Translations in the Bible output controls to prepare a comparison using the available versions." },
       { q: "Can scripture appear over our camera feed?", a: "Choose the lower-third output to place scripture over your video. Full screen is available when you want the passage to fill the presentation." },
       { q: "Can I use downloaded Bibles offline?", a: "Downloaded Bible content can be used for local presentation after setup. Sign-in, additional downloads and cloud services need an internet connection. Download limits vary by plan." },

@@ -33,7 +33,7 @@ export async function GET(
 
     let user: any = await db
       .collection("users")
-      .findOne({ _id: objectId }, { projection: { password: 0 } });
+      .findOne({ $or: [{ _id: objectId }, { _id: id as any }, { id }] }, { projection: { password: 0 } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -167,7 +167,19 @@ export async function GET(
       .filter((n) => Number.isFinite(n) && n > 0);
 
     const latestActiveMs = candidateTimestamps.length > 0 ? Math.max(...candidateTimestamps) : null;
-    const effectiveLastActive = latestActiveMs ? new Date(latestActiveMs).toISOString() : null;
+    const effectiveLastActive = latestActiveMs
+      ? new Date(latestActiveMs).toISOString()
+      : (user.lastActive?.toISOString?.() || user.lastActive || null);
+    const effectiveExpiresAt =
+      user.adminManagedSubscription?.active && user.adminManagedSubscription.expiresAt
+        ? user.adminManagedSubscription.expiresAt
+        : user.adminTemporaryPlan?.active && user.adminTemporaryPlan.expiresAt
+          ? user.adminTemporaryPlan.expiresAt
+          : hasEffectiveTrial && (trialResponse?.endsAt || trialResponse?.expiresAt)
+            ? (trialResponse.endsAt || trialResponse.expiresAt)
+            : (effectivePlan !== "free" && user.subscriptionExpiresAt)
+              ? user.subscriptionExpiresAt
+              : user.scheduledDowngradeAt || subscription?.currentPeriodEnd || null;
 
     return NextResponse.json({
       id: user._id.toString(),
@@ -208,7 +220,7 @@ export async function GET(
       ambassador: user.ambassador || null,
       adminTemporaryPlan: user.adminTemporaryPlan || null,
       adminManagedSubscription: user.adminManagedSubscription || null,
-      subscriptionExpiresAt: effectivePlan === "free" ? null : (user.subscriptionExpiresAt || null),
+      subscriptionExpiresAt: effectiveExpiresAt,
       scheduledDowngradeAt: user.scheduledDowngradeAt || null,
       subscription: subscription
         ? {

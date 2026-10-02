@@ -5,7 +5,7 @@ import { calculateBulkCredits } from "@/lib/credits";
 import { checkAllExpiredAdminTemporaryPlans } from "@/lib/adminTemporaryPlan";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { getEffectivePlan } from "@/lib/trial";
-import { calculateUserActivityScore } from "@/lib/userActivityScore";
+import { calculateUserActivityScore, calculateUserActivityMultiPeriod } from "@/lib/userActivityScore";
 import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 
 export async function GET(req: NextRequest) {
@@ -217,9 +217,41 @@ export async function GET(req: NextRequest) {
       console.warn("Could not query transcription_balances:", err);
     }
 
+    // Query subscriptions to get real billing cycles & statuses
+    const subscriptionMap = new Map<string, {
+      plan: string;
+      billingCycle: string;
+      status: string;
+      currentPeriodEnd: string | null;
+      gracePeriodEndsAt: string | null;
+    }>();
+    try {
+      const subs = await db
+        .collection("subscriptions")
+        .find({ userId: { $in: userIds } })
+        .sort({ createdAt: -1 })
+        .toArray();
+      for (const s of subs) {
+        const uid = String(s.userId);
+        if (!subscriptionMap.has(uid)) {
+          subscriptionMap.set(uid, {
+            plan: s.plan || "free",
+            billingCycle: s.billingCycle || "monthly",
+            status: s.status || "active",
+            currentPeriodEnd: s.currentPeriodEnd || null,
+            gracePeriodEndsAt: s.gracePeriodEndsAt || null,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not query subscriptions:", err);
+    }
+
     const formatted = users.map((u) => {
       const id = u._id.toString();
+      const userSub = subscriptionMap.get(id) || null;
       const effectivePlan = getEffectivePlan(u as any);
+      const billingCycle = userSub?.billingCycle || u.adminManagedSubscription?.billingCycle || (effectivePlan !== "free" ? "monthly" : null);
       const trial =
         effectivePlan === "trial"
           ? u.trial || null
@@ -242,7 +274,7 @@ export async function GET(req: NextRequest) {
 
       const userUsage = usageMap.get(id) || usageMap.get(u._id.toString()) || null;
       const deviceCount = deviceCountMap.get(id) ?? 0;
-      const activityBreakdown = calculateUserActivityScore({
+      const activityInput = {
         lastLogin: lastLoginRaw,
         lastActive: effectiveLastActive,
         plan: effectivePlan,
@@ -251,17 +283,34 @@ export async function GET(req: NextRequest) {
         deviceIds: deviceCount > 0 ? Array(deviceCount).fill("device") : [],
         activationMilestones: u.activationMilestones || null,
         usage: userUsage,
-      });
+      };
+      const activityBreakdown = calculateUserActivityScore(activityInput);
+      const multiPeriod = calculateUserActivityMultiPeriod(activityInput);
+
+      const effectiveExpiresAt =
+        u.adminManagedSubscription?.active && u.adminManagedSubscription.expiresAt
+          ? u.adminManagedSubscription.expiresAt
+          : u.adminTemporaryPlan?.active && u.adminTemporaryPlan.expiresAt
+            ? u.adminTemporaryPlan.expiresAt
+            : effectivePlan === "trial" && (trial?.expiresAt || trial?.endsAt)
+              ? (trial.expiresAt || trial.endsAt)
+              : (effectivePlan !== "free" && u.subscriptionExpiresAt)
+                ? u.subscriptionExpiresAt
+                : u.scheduledDowngradeAt || null;
 
       return {
         id,
         name: u.name || "",
         email: u.email || "",
+        phone: u.phone || u.phoneNumber || "",
         avatar: u.avatar || "",
         churchName: u.churchName || "",
+        churchRole: u.churchRole || u.roleInChurch || "",
         country: u.country || "",
         role: u.role || "user",
         accountStatus: u.isActive === false ? "suspended" : "active",
+        billingCycle,
+        subscriptionStatus: userSub?.status || null,
         credits: creditBalances.get(id) ?? 0,
         transcriptionBalance: transcriptionBalanceMap.get(id) || null,
         // Display the effective entitlement, not a stale stored paid plan.
@@ -279,7 +328,7 @@ export async function GET(req: NextRequest) {
         ambassador: u.ambassador || null,
         adminTemporaryPlan: u.adminTemporaryPlan || null,
         adminManagedSubscription: u.adminManagedSubscription || null,
-        subscriptionExpiresAt: effectivePlan === "free" ? null : (u.subscriptionExpiresAt || null),
+        subscriptionExpiresAt: effectiveExpiresAt,
         scheduledDowngradeAt: u.scheduledDowngradeAt || null,
         activationMilestones: u.activationMilestones || null,
         reactivationOffer: reactivationOfferMap.get(id) || null,
@@ -290,6 +339,9 @@ export async function GET(req: NextRequest) {
           color: activityBreakdown.color,
           badgeBg: activityBreakdown.badgeBg,
           barColor: activityBreakdown.barColor,
+          daily: multiPeriod.daily,
+          weekly: multiPeriod.weekly,
+          monthly: multiPeriod.monthly,
         },
       };
     });

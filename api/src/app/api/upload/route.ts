@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rateLimit";
 
 const uploadLimiter = rateLimit({ windowMs: 60_000, max: 10 });
-const ALLOWED_UPLOAD_TYPES = new Set(["logo", "favicon", "avatar", "announcements"]);
+const ALLOWED_UPLOAD_TYPES = new Set(["logo", "favicon", "avatar", "announcements", "blog"]);
 const EXTENSIONS_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -27,6 +27,7 @@ const r2 = new S3Client({
 function normalizeUploadType(value: string | null): string {
   const normalized = String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
   if (normalized === "announcement") return "announcements";
+  if (normalized === "blog-post" || normalized === "blog_post") return "blog";
   return ALLOWED_UPLOAD_TYPES.has(normalized) ? normalized : "uploads";
 }
 

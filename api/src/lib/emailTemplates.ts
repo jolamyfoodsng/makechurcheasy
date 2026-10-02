@@ -2,14 +2,11 @@
  * emailTemplates.ts — Shared email layout, components, and template functions.
  *
  * Provider:
- *   - Development: nodemailer via local MailDev SMTP (localhost:1025)
- *   - Production:  provider selected by EMAIL_PROVIDER (Cloudflare Email Service or Mailtrap)
+ *   - Development: nodemailer via local MailDev SMTP (localhost:1025) or console
+ *   - Production:  Cloudflare Email Service (sole transactional email provider)
  *
  * Configure via environment variables:
- *   EMAIL_PROVIDER  — cloudflare, mailtrap, or console
- *   EMAIL_FALLBACK_PROVIDER — optional fallback provider
- *   MAILTRAP_API_TOKEN — Mailtrap sending API token
- *   MAILTRAP_FROM_EMAIL / MAILTRAP_FROM_NAME — Mailtrap-specific sender identity
+ *   EMAIL_PROVIDER  — cloudflare (default) or console
  *   CLOUDFLARE_EMAIL_ACCOUNT_ID / CLOUDFLARE_EMAIL_API_TOKEN — Cloudflare sender credentials
  *   EMAIL_FROM      — sender address (default: noreply@notifications.makechurcheazy.com)
  */
@@ -773,6 +770,57 @@ export function paymentFailedEmail(
         : "Your paid access stays active for the grace period. If the payment is not completed in time, your account will move to the Free plan.")}
         ${paragraph("Please update your payment method or retry the payment. If the issue persists, contact your bank or payment provider.")}
         ${button(retryUrl || `${APP_URL}/billing`, "Fix Payment")}
+      `
+    ),
+  };
+}
+
+export function subscriptionGracePeriodReminderEmail(
+  params: {
+    userName: string;
+    userEmail: string;
+    planName: string;
+    gracePeriodEndsAt: string;
+    dayNumber: 1 | 2 | 5;
+    retryUrl?: string;
+  }
+): SendEmailOptions {
+  const { userName, userEmail, planName, gracePeriodEndsAt, dayNumber, retryUrl } = params;
+  const graceDate = new Date(gracePeriodEndsAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  let subject = "";
+  let title = "";
+  let message = "";
+
+  if (dayNumber === 1) {
+    subject = `Action Required: Your ${planName} subscription has expired (7-Day Grace Period Active) — MakeChurchEasy`;
+    title = `Your 7-day grace period is active`;
+    message = `Hi ${userName}, your <strong style="color:#0f172a;">${planName}</strong> subscription has passed its renewal date. To ensure your church presentations and services continue without interruption, we have placed your account in a <strong>7-day grace period</strong> until <strong style="color:#0f172a;">${graceDate}</strong>. All paid features remain active during this period. Please renew before this date to maintain uninterrupted access.`;
+  } else if (dayNumber === 2) {
+    subject = `Reminder: 5 days left in your ${planName} grace period — MakeChurchEasy`;
+    title = `5 days left in your grace period`;
+    message = `Hi ${userName}, this is a reminder that you have <strong>5 days remaining</strong> in your <strong style="color:#0f172a;">${planName}</strong> grace period. On <strong style="color:#0f172a;">${graceDate}</strong>, your subscription will be downgraded to the Free plan. Renew now to avoid any disruptions during your church services.`;
+  } else {
+    // Day 5
+    subject = `Urgent: 2 days left to keep your ${planName} subscription — MakeChurchEasy`;
+    title = `Final Notice: 2 days remaining`;
+    message = `Hi ${userName}, your 7-day grace period will end in <strong>2 days</strong> on <strong style="color:#0f172a;">${graceDate}</strong>. After this date, your account will return to the Free plan. Renew today to keep your offline projection, team access, and AI features active.`;
+  }
+
+  return {
+    to: userEmail,
+    subject,
+    html: wrap(
+      title,
+      `
+        ${heading(title)}
+        ${paragraph(message)}
+        ${button(retryUrl || `${APP_URL}/dashboard/billing`, "Renew Subscription Now")}
+        ${paragraph("If you have already renewed or need help, reply to this email or contact support.", { color: "#94a3b8", mt: 16 })}
       `
     ),
   };

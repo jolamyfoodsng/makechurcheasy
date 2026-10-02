@@ -26,11 +26,13 @@ import {
   paymentReceiptEmail,
   paymentFailedEmail,
   subscriptionRenewedEmail,
+  subscriptionGracePeriodReminderEmail,
 } from "@/lib/emailTemplates";
 import {
   notifySubscriptionCancelled,
   notifyPaymentFailed,
   notifySubscriptionRenewed,
+  notifyGracePeriodActive,
 } from "@/lib/notifications";
 import { CreditTransactionType, type PlanTier } from "@/types/schemas";
 import { ObjectId } from "mongodb";
@@ -839,6 +841,54 @@ export async function GET(req: NextRequest) {
       const lifecycleWindow = lifetime ? null : getSubscriptionLifecycleWindow(effectiveExpiry, now.getTime());
 
       if (lifecycleWindow === "expired" && expiryKey) {
+        if (sub.status !== "past_due") {
+          // Grant 1-week (7-day) grace period. DO NOT IMMEDIATELY CANCEL.
+          const gracePeriodEndsAt = new Date(now.getTime() + GRACE_PERIOD_DAYS * DAY_MS).toISOString();
+          await db.collection("subscriptions").updateOne(
+            { _id: sub._id },
+            {
+              $set: {
+                status: "past_due",
+                gracePeriodStartedAt: nowISO,
+                gracePeriodEndsAt,
+                "graceReminders.day1SentAt": nowISO,
+                updatedAt: nowISO,
+              },
+            },
+          );
+
+          await db.collection("users").updateOne(
+            { _id: userObjectId },
+            {
+              $set: {
+                previousPaidPlan: paidPlan,
+                subscriptionExpiresAt: gracePeriodEndsAt,
+              },
+            },
+          );
+
+          if (user.email) {
+            sendEmail(
+              subscriptionGracePeriodReminderEmail({
+                userName: user.name || "there",
+                userEmail: user.email,
+                planName: planName(paidPlan),
+                gracePeriodEndsAt,
+                dayNumber: 1,
+              })
+            ).catch((err) => console.error("[Subscription Lifecycle] Grace Day 1 email failed:", err));
+          }
+          notifyGracePeriodActive(userId, planName(paidPlan), GRACE_PERIOD_DAYS).catch(() => {});
+          continue;
+        }
+
+        // If status is past_due, only expire if grace period has actually ended
+        const graceEndMs = sub.gracePeriodEndsAt ? new Date(sub.gracePeriodEndsAt).getTime() : 0;
+        if (graceEndMs > now.getTime()) {
+          // Still within 7-day grace period!
+          continue;
+        }
+
         await expirePaidAccess({
           user,
           userId,
@@ -1005,6 +1055,98 @@ export async function GET(req: NextRequest) {
       remindersSent++;
     }
     results.expiryReminders = { processed: remindersSent };
+
+    // ── 5. Send Grace Period Reminders (Day 1, Day 2, Day 5) ─────────────────
+    const graceCandidates = await db
+      .collection("subscriptions")
+      .find({
+        plan: { $in: ["basic", "growth", "pro"] },
+        status: "past_due",
+        gracePeriodEndsAt: { $gt: nowISO },
+      })
+      .limit(1000)
+      .toArray();
+
+    let graceRemindersSent = 0;
+    for (const sub of graceCandidates) {
+      if (isLifetimeSubscription(sub)) continue;
+      const userId = String(sub.userId || "");
+      const userObjectId = objectIdFor(userId);
+      const paidPlan = normalizePaidPlan(sub.plan);
+      if (!userObjectId || !paidPlan || !sub.gracePeriodEndsAt) continue;
+
+      const user = await db.collection("users").findOne({ _id: userObjectId });
+      if (!user || !user.email || hasProtectedAccess(user, sub)) continue;
+
+      const graceEndMs = new Date(sub.gracePeriodEndsAt).getTime();
+      const daysRemaining = Math.max(1, Math.ceil((graceEndMs - now.getTime()) / DAY_MS));
+      const reminders = sub.graceReminders || {};
+
+      // Day 1: 6-7 days remaining
+      if (!reminders.day1SentAt && daysRemaining >= 6) {
+        const sent = await sendEmail(
+          subscriptionGracePeriodReminderEmail({
+            userName: user.name || "there",
+            userEmail: user.email,
+            planName: planName(paidPlan),
+            gracePeriodEndsAt: sub.gracePeriodEndsAt,
+            dayNumber: 1,
+          })
+        ).catch(() => false);
+
+        if (sent) {
+          await db.collection("subscriptions").updateOne(
+            { _id: sub._id },
+            { $set: { "graceReminders.day1SentAt": nowISO } }
+          );
+          notifyGracePeriodActive(userId, planName(paidPlan), daysRemaining).catch(() => {});
+          graceRemindersSent++;
+        }
+      }
+      // Day 2: 4-5 days remaining
+      else if (!reminders.day2SentAt && daysRemaining <= 5 && daysRemaining > 2) {
+        const sent = await sendEmail(
+          subscriptionGracePeriodReminderEmail({
+            userName: user.name || "there",
+            userEmail: user.email,
+            planName: planName(paidPlan),
+            gracePeriodEndsAt: sub.gracePeriodEndsAt,
+            dayNumber: 2,
+          })
+        ).catch(() => false);
+
+        if (sent) {
+          await db.collection("subscriptions").updateOne(
+            { _id: sub._id },
+            { $set: { "graceReminders.day2SentAt": nowISO } }
+          );
+          notifyGracePeriodActive(userId, planName(paidPlan), daysRemaining).catch(() => {});
+          graceRemindersSent++;
+        }
+      }
+      // Day 5: 1-2 days remaining
+      else if (!reminders.day5SentAt && daysRemaining <= 2) {
+        const sent = await sendEmail(
+          subscriptionGracePeriodReminderEmail({
+            userName: user.name || "there",
+            userEmail: user.email,
+            planName: planName(paidPlan),
+            gracePeriodEndsAt: sub.gracePeriodEndsAt,
+            dayNumber: 5,
+          })
+        ).catch(() => false);
+
+        if (sent) {
+          await db.collection("subscriptions").updateOne(
+            { _id: sub._id },
+            { $set: { "graceReminders.day5SentAt": nowISO } }
+          );
+          notifyGracePeriodActive(userId, planName(paidPlan), daysRemaining).catch(() => {});
+          graceRemindersSent++;
+        }
+      }
+    }
+    results.graceReminders = { processed: graceRemindersSent };
 
     return NextResponse.json({ ok: true, results });
   } catch (error) {

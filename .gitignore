@@ -36,3 +36,9 @@ next-env.d.ts
 **/next-env.d.ts
 *.log
 npm-debug.log*
+
+# Local exports, temp & media artifacts
+tmp/
+output/
+*.csv
+eazyworship/

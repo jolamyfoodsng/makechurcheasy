@@ -56,6 +56,7 @@ import LoadingScreen from "../components/LoadingScreen";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
 import DockPresentationLinkModal from "./components/DockPresentationLinkModal";
+import DockScheduleIntroModal from "./components/DockScheduleIntroModal";
 import { getDockPlan, isDockFreePlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { FREE_DOCK_OBS_MUTATION_MESSAGE } from "./dockMutationPolicy";
 import { LOCAL_DEV_PLAN_OVERRIDE_EVENT } from "../services/localDevPlanOverride";
@@ -262,10 +263,19 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
 }
 
 function formatDockObsError(message: string): string {
-  if (/No source was found.*MCE Presentation.*within the canvas/i.test(message)) {
-    return "Please refresh the dock, or check that MakeChurchEasy is running.";
+  if (!message) {
+    return "Failed to connect to OBS. Please check your OBS WebSocket settings (Tools → WebSocket Server Settings) and confirm port 4455 and password align with MakeChurchEasy.";
   }
-  return message;
+  if (/No source was found.*MCE Presentation.*within the canvas/i.test(message)) {
+    return "MCE Presentation scene was not found. Please refresh the dock, or check that MakeChurchEasy is running.";
+  }
+  if (/connection failed|failed to connect|websocket.*fail|timeout|timed out|refused/i.test(message)) {
+    return "Failed to connect to OBS. Please confirm OBS Studio is running, check OBS → Tools → WebSocket Server Settings is enabled on port 4455, and confirm your password aligns with MakeChurchEasy.";
+  }
+  if (/auth|authentication|password/i.test(message)) {
+    return "OBS WebSocket authentication failed. Please check your OBS WebSocket password in Tools → WebSocket Server Settings and re-enter it here.";
+  }
+  return `OBS Error: ${message}. Check OBS → Tools → WebSocket Server Settings and confirm port and password align with MakeChurchEasy.`;
 }
 
 interface DockPageProps {
@@ -2188,6 +2198,9 @@ function DockPageContent({
         open={showPresentationLinkModal}
         onClose={() => setShowPresentationLinkModal(false)}
       />
+
+      {/* ── Schedule & History Intro / Guide modal (Root Level) ── */}
+      <DockScheduleIntroModal />
 
       {/* ── Language change confirmation modal ── */}
       {showLanguageModal && pendingLanguage && (

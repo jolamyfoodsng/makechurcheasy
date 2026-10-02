@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
   Gift,
+  Loader2,
+  Plus,
   Search,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import { getAdminReferrals, type AdminReferralOverview, type ReferralListItem } from "@/lib/api";
 
@@ -40,25 +44,116 @@ export default function AdminReferralsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const result = await getAdminReferrals();
-        if (!cancelled) setData(result);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load referrals");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Assign Referral Modal State
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [referrerQuery, setReferrerQuery] = useState("");
+  const [referrerResults, setReferrerResults] = useState<any[]>([]);
+  const [searchingReferrer, setSearchingReferrer] = useState(false);
+  const [selectedReferrer, setSelectedReferrer] = useState<any | null>(null);
+
+  const [referredQuery, setReferredQuery] = useState("");
+  const [referredResults, setReferredResults] = useState<any[]>([]);
+  const [searchingReferred, setSearchingReferred] = useState(false);
+  const [selectedReferred, setSelectedReferred] = useState<any | null>(null);
+
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState("");
+  const [assignSuccess, setAssignSuccess] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const result = await getAdminReferrals();
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load referrals");
+    } finally {
+      setLoading(false);
     }
-    void load();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const searchUsers = async (query: string, type: "referrer" | "referred") => {
+    if (type === "referrer") {
+      setReferrerQuery(query);
+      if (!query.trim()) {
+        setReferrerResults([]);
+        return;
+      }
+      setSearchingReferrer(true);
+    } else {
+      setReferredQuery(query);
+      if (!query.trim()) {
+        setReferredResults([]);
+        return;
+      }
+      setSearchingReferred(true);
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query.trim())}`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const users = json.users || [];
+        if (type === "referrer") {
+          setReferrerResults(users.filter((u: any) => u.id !== selectedReferred?.id));
+        } else {
+          setReferredResults(users.filter((u: any) => u.id !== selectedReferrer?.id));
+        }
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      if (type === "referrer") setSearchingReferrer(false);
+      else setSearchingReferred(false);
+    }
+  };
+
+  const handleAssignSubmit = async () => {
+    if (!selectedReferrer || !selectedReferred) return;
+    setAssigning(true);
+    setAssignError("");
+    setAssignSuccess("");
+
+    try {
+      const res = await fetch("/api/admin/referrals", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referrerUserId: selectedReferrer.id,
+          referredUserId: selectedReferred.id,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to assign referral");
+      }
+
+      setAssignSuccess("Referral linked in database! No email was sent.");
+      setTimeout(() => {
+        setShowAssignModal(false);
+        setSelectedReferrer(null);
+        setSelectedReferred(null);
+        setReferrerQuery("");
+        setReferredQuery("");
+        setReferrerResults([]);
+        setReferredResults([]);
+        setAssignSuccess("");
+      }, 1500);
+
+      await load();
+    } catch (err: any) {
+      setAssignError(err.message || "Failed to assign referral");
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const rows = data?.referrals || [];
@@ -106,6 +201,26 @@ export default function AdminReferralsPage() {
           <p className="mt-1 text-sm text-slate-400">
             Track referral signups and which referrals became paid subscriptions.
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setShowAssignModal(true);
+              setReferrerQuery("");
+              setReferredQuery("");
+              setReferrerResults([]);
+              setReferredResults([]);
+              setSelectedReferrer(null);
+              setSelectedReferred(null);
+              setAssignError("");
+              setAssignSuccess("");
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-500 transition cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            Assign / Link Referral
+          </button>
         </div>
       </div>
 
@@ -261,6 +376,241 @@ export default function AdminReferralsPage() {
           </div>
         ) : null}
       </div>
+
+      {/* Assign Referral Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowAssignModal(false)}
+          />
+          <div className="relative w-full max-w-2xl rounded-2xl border border-slate-700 bg-gray-900 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/15 text-violet-400">
+                  <Gift className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-100">
+                    Assign / Link Referral
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Search the database to link a referrer and a referee (referred user)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="rounded-xl border border-violet-500/30 bg-violet-950/20 p-3.5 text-xs text-violet-200">
+                <span className="font-semibold">Database-only assignment:</span> This will directly record the referral attribution and update both users&apos; dashboards immediately. <strong>Zero emails will be sent.</strong>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* 1. Referrer Selection */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                    1. Referrer (Who invited)
+                  </label>
+                  {selectedReferrer ? (
+                    <div className="p-3.5 rounded-xl border border-violet-500/40 bg-violet-950/30 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-100 truncate">
+                          {selectedReferrer.name || "Unnamed user"}
+                        </p>
+                        <p className="text-[11px] text-slate-300 truncate">
+                          {selectedReferrer.email}
+                        </p>
+                        {selectedReferrer.churchName && (
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedReferrer.churchName}
+                          </p>
+                        )}
+                        <span className="mt-1 inline-block text-[10px] font-mono uppercase font-bold text-violet-300 bg-violet-900/60 px-1.5 py-0.5 rounded">
+                          Plan: {selectedReferrer.plan}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReferrer(null)}
+                        className="text-xs text-red-400 hover:text-red-300 hover:underline shrink-0"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                        <input
+                          type="text"
+                          value={referrerQuery}
+                          onChange={(e) => searchUsers(e.target.value, "referrer")}
+                          placeholder="Search name, email, church..."
+                          className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3 text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
+                        />
+                        {searchingReferrer && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
+                          </div>
+                        )}
+                      </div>
+
+                      {referrerResults.length > 0 && (
+                        <div className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 p-1">
+                          {referrerResults.map((u) => (
+                            <div
+                              key={u.id}
+                              onClick={() => {
+                                setSelectedReferrer(u);
+                                setReferrerResults([]);
+                              }}
+                              className="p-2 rounded-lg hover:bg-slate-800/60 flex items-center justify-between gap-2 cursor-pointer transition"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-200 truncate">
+                                  {u.name || "Unnamed user"}
+                                </p>
+                                <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                                {u.plan}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Referred User Selection */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                    2. Referred User (New account)
+                  </label>
+                  {selectedReferred ? (
+                    <div className="p-3.5 rounded-xl border border-green-500/40 bg-green-950/30 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-100 truncate">
+                          {selectedReferred.name || "Unnamed user"}
+                        </p>
+                        <p className="text-[11px] text-slate-300 truncate">
+                          {selectedReferred.email}
+                        </p>
+                        {selectedReferred.churchName && (
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedReferred.churchName}
+                          </p>
+                        )}
+                        <span className="mt-1 inline-block text-[10px] font-mono uppercase font-bold text-green-300 bg-green-900/60 px-1.5 py-0.5 rounded">
+                          Plan: {selectedReferred.plan}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReferred(null)}
+                        className="text-xs text-red-400 hover:text-red-300 hover:underline shrink-0"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                        <input
+                          type="text"
+                          value={referredQuery}
+                          onChange={(e) => searchUsers(e.target.value, "referred")}
+                          placeholder="Search name, email, church..."
+                          className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3 text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        />
+                        {searchingReferred && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-green-400" />
+                          </div>
+                        )}
+                      </div>
+
+                      {referredResults.length > 0 && (
+                        <div className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 p-1">
+                          {referredResults.map((u) => (
+                            <div
+                              key={u.id}
+                              onClick={() => {
+                                setSelectedReferred(u);
+                                setReferredResults([]);
+                              }}
+                              className="p-2 rounded-lg hover:bg-slate-800/60 flex items-center justify-between gap-2 cursor-pointer transition"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-200 truncate">
+                                  {u.name || "Unnamed user"}
+                                </p>
+                                <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                                {u.plan}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {assignError && (
+                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{assignError}</span>
+                </div>
+              )}
+
+              {assignSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-xs text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{assignSuccess}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-800 bg-slate-950/40 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAssignSubmit}
+                disabled={!selectedReferrer || !selectedReferred || assigning}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-violet-500 disabled:opacity-50 transition"
+              >
+                {assigning ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Linking...
+                  </>
+                ) : (
+                  "Confirm Link (No Email)"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

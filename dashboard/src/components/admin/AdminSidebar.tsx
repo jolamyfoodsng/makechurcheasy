@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Percent,
   AlertTriangle,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -46,6 +47,7 @@ const corePlatformItems: NavItem[] = [
 ];
 
 const broadcastReachItems: NavItem[] = [
+  { path: "/admin/blog", label: "Blog & Stories", icon: Newspaper },
   { path: "/admin/communications", label: "Communications", icon: Mail },
   { path: "/admin/email-previews", label: "Email Previews", icon: MailOpen },
   { path: "/admin/announcements", label: "Announcements", icon: Megaphone },

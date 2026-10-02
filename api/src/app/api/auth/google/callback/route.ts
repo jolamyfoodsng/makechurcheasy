@@ -5,6 +5,7 @@ import { getPlanConfig } from "@/lib/db";
 import { claimTrialForUserIfEligible } from "@/lib/trialAbuse";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail, welcomeEmail } from "@/lib/emailTemplates";
+import { sendVerifiedSignupWelcomeThroughZoho, type ZohoSignupWelcomeResult } from "@/lib/zohoCampaigns";
 import { nanoid } from "nanoid";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
@@ -248,6 +249,22 @@ export async function GET(req: NextRequest) {
       const result = await db.collection("users").insertOne(newUser);
       user = { ...newUser, _id: result.insertedId };
 
+      let zohoWelcomeResult: ZohoSignupWelcomeResult = "disabled";
+      if (platformSettings.notifications.welcomeEmail) {
+        zohoWelcomeResult = await sendVerifiedSignupWelcomeThroughZoho({
+          email: user.email,
+          firstName: user.name,
+        });
+        if (zohoWelcomeResult === "sent") {
+          await db.collection("users").updateOne(
+            { _id: result.insertedId },
+            { $set: { "lifecycleEmails.welcomeSent": true } }
+          );
+        } else if (zohoWelcomeResult === "confirmation-required") {
+          console.error("[google/callback] Zoho signup list requires another confirmation; welcome email was not duplicated.");
+        }
+      }
+
       await notifyTelegramNewSignup({
         name: newUser.name,
         country: normalizedCountry,
@@ -289,7 +306,11 @@ export async function GET(req: NextRequest) {
           );
           user.credits = planConfig.plans.trial.credits;
           user.trialId = record._id?.toString() || null;
-          if (platformSettings.notifications.welcomeEmail) {
+          if (
+            platformSettings.notifications.welcomeEmail &&
+            zohoWelcomeResult !== "sent" &&
+            zohoWelcomeResult !== "confirmation-required"
+          ) {
             sendEmail(
               welcomeEmail({
                 userName: user.name || "there",

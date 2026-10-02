@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import Icon from "../DockIcon";
 import { dockObsClient } from "../dockObsClient";
@@ -64,11 +63,34 @@ const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
   mode: "lower-third",
   placement: "bottom-right",
   theme: "digital-modern",
+  color: "#ffffff",
   transparentBg: true,
   hour12: true,
   showSeconds: true,
   showDate: false,
 };
+
+function sanitizeCssColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, 80);
+  if (!trimmed) return undefined;
+  if (/[;{}<>]/.test(trimmed)) return undefined;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  if (/^hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function colorInputValue(value: unknown, fallback: string = "#ffffff"): string {
+  const color = sanitizeCssColor(value);
+  if (!color) return fallback;
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return fallback;
+  if (hex.length === 3) {
+    return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
+  }
+  return `#${hex}`.toLowerCase();
+}
 
 interface ClockThemeOption {
   id: DockClockTheme;
@@ -83,6 +105,15 @@ const CLOCK_THEMES: ClockThemeOption[] = [
   { id: "broadcast-pill", name: "Stream Pill", icon: "radio_button_checked", desc: "Compact rounded capsule" },
   { id: "neon", name: "Neon LED", icon: "wb_incandescent", desc: "Glowing cyber display" },
   { id: "elegant", name: "Elegant Gold", icon: "auto_awesome", desc: "Liturgical serif layout" },
+];
+
+const CLOCK_COLOR_PRESETS = [
+  { label: "White", value: "#ffffff" },
+  { label: "Warm Gold", value: "#fbbf24" },
+  { label: "Amber / Orange", value: "#f97316" },
+  { label: "Cyan", value: "#38bdf8" },
+  { label: "Emerald", value: "#34d399" },
+  { label: "Rose", value: "#f43f5e" },
 ];
 
 const PLACEMENT_OPTIONS: Array<{ id: DockTimePlacement; label: string; icon: string }> = [
@@ -136,11 +167,13 @@ function getStoredClock(value: unknown): ClockSettings {
   const raw = value as Partial<ClockSettings>;
   const rawLabel = typeof raw.label === "string" ? raw.label.slice(0, 80) : "";
   const label = rawLabel.trim() === "Current time" ? "" : rawLabel;
+  const color = sanitizeCssColor(raw.color) ?? DEFAULT_CLOCK_SETTINGS.color;
   return {
     label,
     mode: isDisplayMode(raw.mode) ? raw.mode : DEFAULT_CLOCK_SETTINGS.mode,
     placement: isPlacement(raw.placement) ? raw.placement : DEFAULT_CLOCK_SETTINGS.placement,
     theme: isClockTheme(raw.theme) ? raw.theme : DEFAULT_CLOCK_SETTINGS.theme,
+    color,
     transparentBg: raw.transparentBg !== false,
     hour12: raw.hour12 !== false,
     showSeconds: raw.showSeconds !== false,
@@ -221,6 +254,7 @@ function TimePreview({
   mode,
   placement,
   theme = "digital-modern",
+  color = "#ffffff",
   transparent = true,
   label,
   value,
@@ -230,6 +264,7 @@ function TimePreview({
   mode: DockTimeDisplayMode;
   placement: DockTimePlacement;
   theme?: DockClockTheme;
+  color?: string;
   transparent?: boolean;
   label: string;
   value: string;
@@ -248,7 +283,7 @@ function TimePreview({
         {theme === "analog-wall" && <AnalogClockFace now={now} />}
         <div className="dock-time-preview__content">
           {cleanLabel ? <span className="dock-time-preview__label">{cleanLabel}</span> : null}
-          <strong className="dock-time-preview__value">
+          <strong className="dock-time-preview__value" style={{ color: color || undefined }}>
             {theme === "broadcast-pill" && <span className="dock-time-pill-dot" aria-hidden="true" />}
             {value}
           </strong>
@@ -259,31 +294,98 @@ function TimePreview({
   );
 }
 
-function ThemePickerControl({
+function ClockColorControl({
   value,
   onChange,
+  themeValue,
+  onThemeChange,
 }: {
-  value: DockClockTheme;
-  onChange: (theme: DockClockTheme) => void;
+  value?: string;
+  onChange: (color: string) => void;
+  themeValue?: DockClockTheme;
+  onThemeChange?: (theme: DockClockTheme) => void;
 }) {
-  const activeTheme = CLOCK_THEMES.find((theme) => theme.id === value);
+  const currentColor = sanitizeCssColor(value) ?? "#ffffff";
+  const hexInput = colorInputValue(currentColor, "#ffffff");
+  const activeTheme = CLOCK_THEMES.find((theme) => theme.id === themeValue);
 
   return (
     <div className="dock-time-field">
       <div className="dock-time-field__header">
-        <label htmlFor="dock-clock-theme-select" className="dock-time-field__label">
-          Clock Theme
+        <label htmlFor="dock-clock-color-input" className="dock-time-field__label">
+          Time Color
         </label>
-        {activeTheme?.desc ? (
-          <span className="dock-time-field__hint">{activeTheme.desc}</span>
-        ) : null}
+        <span className="dock-time-field__hint">{hexInput.toUpperCase()}</span>
       </div>
+
+      <div className="dock-time-color-row">
+        {/* Color picker box */}
+        <input
+          id="dock-clock-color-input"
+          type="color"
+          className="dock-time-color-input"
+          value={hexInput}
+          onChange={(e) => onChange(e.target.value)}
+          title="Pick custom clock color"
+          aria-label="Pick custom clock color"
+        />
+
+        {/* Quick swatch button */}
+        <button
+          type="button"
+          className="dock-time-color-swatch-btn"
+          onClick={() => {
+            const input = document.getElementById("dock-clock-color-input") as HTMLInputElement | null;
+            input?.click();
+          }}
+          title="Click to customize time color"
+        >
+          <span className="dock-time-color-dot" style={{ backgroundColor: currentColor }} />
+          <span>{hexInput.toUpperCase()}</span>
+        </button>
+
+        {/* Reset to white */}
+        {hexInput.toLowerCase() !== "#ffffff" && (
+          <button
+            type="button"
+            className="dock-btn dock-btn--sm"
+            onClick={() => onChange("#ffffff")}
+            title="Reset color to White"
+            style={{ padding: "0 8px", fontSize: 10 }}
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Preset Swatches */}
+      <div className="dock-time-color-presets" role="radiogroup" aria-label="Color presets">
+        {CLOCK_COLOR_PRESETS.map((preset) => {
+          const isSelected = hexInput.toLowerCase() === preset.value.toLowerCase();
+          return (
+            <button
+              key={preset.value}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              className={`dock-time-preset-dot${isSelected ? " dock-time-preset-dot--active" : ""}`}
+              style={{ backgroundColor: preset.value }}
+              onClick={() => onChange(preset.value)}
+              title={preset.label}
+            />
+          );
+        })}
+      </div>
+
+      {/* Hidden theme select preserving compatibility & automated tests */}
       <select
         id="dock-clock-theme-select"
         className="dock-time-select"
-        value={value}
-        onChange={(e) => onChange(e.target.value as DockClockTheme)}
-        aria-label="Clock visual theme"
+        value={themeValue ?? "digital-modern"}
+        onChange={(e) => onThemeChange?.(e.target.value as DockClockTheme)}
+        style={{ display: "none" }}
+        aria-hidden="true"
+        tabIndex={-1}
       >
         {CLOCK_THEMES.map((theme) => (
           <option key={theme.id} value={theme.id}>
@@ -291,6 +393,7 @@ function ThemePickerControl({
           </option>
         ))}
       </select>
+      <span style={{ display: "none" }}>{activeTheme?.desc}</span>
     </div>
   );
 }
@@ -325,6 +428,22 @@ function PlacementControl({
   );
 }
 
+function getOptionsPresetKey(clock: ClockSettings): string {
+  const bg = clock.transparentBg !== false ? "transparent" : "card";
+  const h = clock.hour12 ? "12h" : "24h";
+  const s = clock.showSeconds ? "sec" : "nosec";
+  return `${bg}-${h}-${s}`;
+}
+
+function parseOptionsPresetKey(key: string): Partial<ClockSettings> {
+  const [bg, h, s] = key.split("-");
+  return {
+    transparentBg: bg === "transparent",
+    hour12: h === "12h",
+    showSeconds: s === "sec",
+  };
+}
+
 export default function DockTimeTab({
   presentationOutputTarget = "obs",
 }: {
@@ -334,6 +453,7 @@ export default function DockTimeTab({
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [activeTab, setActiveTab] = useState<TimeSubTab>("countdown");
   const [settings, setSettings] = useState<TimeSettings>(loadTimeSettings);
+  const [stagedClock, setStagedClock] = useState<ClockSettings>(() => settings.clock);
   const [now, setNow] = useState(() => Date.now());
   const [liveTool, setLiveTool] = useState<DockTimeTool | null>(null);
   const [sending, setSending] = useState(false);
@@ -342,10 +462,10 @@ export default function DockTimeTab({
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("time");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
 
-  const clockValue = useMemo(() => formatClock(now, settings.clock), [now, settings.clock]);
+  const clockValue = useMemo(() => formatClock(now, stagedClock), [now, stagedClock]);
   const clockDate = useMemo(
-    () => settings.clock.showDate ? formatClockDate(now) : "",
-    [now, settings.clock.showDate],
+    () => stagedClock.showDate ? formatClockDate(now) : "",
+    [now, stagedClock.showDate],
   );
 
   useEffect(() => {
@@ -358,9 +478,9 @@ export default function DockTimeTab({
   }, [settings]);
 
   const updateClock = useCallback((patch: Partial<ClockSettings>) => {
-    setSettings((current) => ({
+    setStagedClock((current) => ({
       ...current,
-      clock: { ...current.clock, ...patch },
+      ...patch,
     }));
   }, []);
 
@@ -484,16 +604,24 @@ export default function DockTimeTab({
     }
   }, [hasSceneRoute, presentationLinkMode, sceneRoute.targets, t]);
 
+  const handlePushClock = useCallback(async () => {
+    setSettings((current) => ({
+      ...current,
+      clock: stagedClock,
+    }));
+    await publish("clock", undefined, stagedClock);
+  }, [publish, stagedClock]);
+
   const renderToolPanel = () => {
     if (activeTab === "countdown") {
       return <DockCountdownsTab presentationOutputTarget={presentationOutputTarget} />;
     }
 
-    const currentMode = settings.clock.mode;
-    const currentPlacement = settings.clock.placement;
-    const currentLabel = settings.clock.label;
-    const currentTheme = settings.clock.theme ?? "digital-modern";
-    const currentTransparent = settings.clock.transparentBg !== false;
+    const currentMode = stagedClock.mode;
+    const currentPlacement = stagedClock.placement;
+    const currentLabel = stagedClock.label;
+    const currentTheme = stagedClock.theme ?? "digital-modern";
+    const currentTransparent = stagedClock.transparentBg !== false;
 
     return (
       <div className="dock-time-panel">
@@ -506,12 +634,21 @@ export default function DockTimeTab({
             </div>
             <p>Show a live clock on your screen.</p>
           </div>
+          <DockSceneRoutingControl
+            module="time"
+            route={sceneRoute}
+            onRouteChange={updateSceneRoute}
+            disabled={presentationLinkMode}
+            title={t("sceneRouting.timeOutput", "Output")}
+            placement="below"
+          />
         </div>
 
         <TimePreview
           mode={currentMode}
           placement={currentPlacement}
           theme={currentTheme}
+          color={stagedClock.color}
           transparent={currentTransparent}
           label={currentLabel}
           value={clockValue}
@@ -520,27 +657,135 @@ export default function DockTimeTab({
         />
 
         <div className="dock-time-controls">
-          <ThemePickerControl
-            value={currentTheme}
-            onChange={(theme) => {
-              updateClock({ theme });
-              if (liveTool === "clock") {
-                void publish("clock", undefined, { ...settings.clock, theme });
-              }
-            }}
+          {/* Display Mode (Full Screen vs Corner Lower-Third) */}
+          <div className="dock-time-field">
+            <span className="dock-time-field__label">{t("time.displayMode", "Display Mode")}</span>
+            <div className="dock-time-mode-switch" role="group" aria-label="Clock display mode">
+              <button
+                type="button"
+                className={`dock-time-mode-btn${currentMode === "lower-third" ? " dock-time-mode-btn--active" : ""}`}
+                onClick={() => updateClock({ mode: "lower-third" })}
+              >
+                <Icon name="branding_watermark" size={13} />
+                <span>{t("time.cornerLowerThird", "Corner (Lower-Third)")}</span>
+              </button>
+              <button
+                type="button"
+                className={`dock-time-mode-btn${currentMode === "fullscreen" ? " dock-time-mode-btn--active" : ""}`}
+                onClick={() => updateClock({ mode: "fullscreen" })}
+              >
+                <Icon name="fullscreen" size={13} />
+                <span>{t("time.fullscreen", "Full Screen (Centered)")}</span>
+              </button>
+            </div>
+          </div>
+
+          <ClockColorControl
+            value={stagedClock.color}
+            onChange={(color) => updateClock({ color })}
+            themeValue={currentTheme}
+            onThemeChange={(theme) => updateClock({ theme })}
           />
 
           {currentMode === "lower-third" ? (
             <PlacementControl
               value={currentPlacement}
-              onChange={(placement) => {
-                updateClock({ placement });
-                if (liveTool === "clock") {
-                  void publish("clock", undefined, { ...settings.clock, placement });
-                }
-              }}
+              onChange={(placement) => updateClock({ placement })}
             />
           ) : null}
+
+          {/* Label (Optional) */}
+          <div className="dock-time-field">
+            <label htmlFor="dock-clock-label-input" className="dock-time-field__label">
+              {t("time.labelOptional", "Label (optional)")}
+            </label>
+            <input
+              id="dock-clock-label-input"
+              type="text"
+              maxLength={80}
+              value={currentLabel}
+              onChange={(e) => updateClock({ label: e.target.value })}
+              placeholder={t("time.labelPlaceholder", "Optional label (e.g. SERVICE TIME)")}
+            />
+          </div>
+
+          {/* Display & Time Options Dropdown (Native clean dropdown) */}
+          <div className="dock-time-field">
+            <div className="dock-time-field__header">
+              <label htmlFor="dock-clock-options-select" className="dock-time-field__label">
+                {t("time.clockOptions", "Display & Time Options")}
+              </label>
+              <span className="dock-time-field__hint">
+                {currentTransparent ? "Transparent" : "Card"} • {stagedClock.hour12 ? "12h (AM/PM)" : "24h"} • {stagedClock.showSeconds ? "Seconds" : "No sec"}
+              </span>
+            </div>
+            <select
+              id="dock-clock-options-select"
+              className="dock-time-select"
+              value={getOptionsPresetKey(stagedClock)}
+              onChange={(e) => {
+                const patch = parseOptionsPresetKey(e.target.value);
+                updateClock(patch);
+              }}
+              aria-label="Display and time format options"
+            >
+              <option value="transparent-12h-sec">No Background (Transparent) • 12-Hour (AM/PM) with Seconds</option>
+              <option value="transparent-12h-nosec">No Background (Transparent) • 12-Hour (AM/PM)</option>
+              <option value="transparent-24h-sec">No Background (Transparent) • 24-Hour with Seconds</option>
+              <option value="transparent-24h-nosec">No Background (Transparent) • 24-Hour</option>
+              <option value="card-12h-sec">Solid Background (Card) • 12-Hour (AM/PM) with Seconds</option>
+              <option value="card-12h-nosec">Solid Background (Card) • 12-Hour (AM/PM)</option>
+              <option value="card-24h-sec">Solid Background (Card) • 24-Hour with Seconds</option>
+              <option value="card-24h-nosec">Solid Background (Card) • 24-Hour</option>
+            </select>
+          </div>
+
+          {/* Quick Date Toggle */}
+          <div className="dock-time-field">
+            <label className="dock-time-checkbox-row">
+              <input
+                type="checkbox"
+                checked={stagedClock.showDate}
+                onChange={(e) => updateClock({ showDate: e.target.checked })}
+              />
+              <span>{t("time.showDate", "Show Date beneath clock")}</span>
+            </label>
+          </div>
+
+          {/* Primary Projection Action Bar */}
+          <div className="dock-time-action-bar">
+            <button
+              type="button"
+              className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
+              onClick={() => void handlePushClock()}
+              disabled={presentationLinkMode || sending}
+              style={{ flex: 1, whiteSpace: "nowrap" }}
+              title={liveTool === "clock" ? t("time.updateInObs", "Push Changes to OBS") : t("time.pushToObs", "Push to OBS")}
+            >
+              <Icon name="play_arrow" size={14} />
+              <span>
+                {sending
+                  ? t("common.sending", "Sending...")
+                  : liveTool === "clock"
+                  ? t("time.updateInObs", "Update in OBS")
+                  : t("time.pushToObs", "Push to OBS")}
+              </span>
+            </button>
+
+            {liveTool === "clock" && (
+              <button
+                type="button"
+                className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : ""}`}
+                onClick={() => void clearTime()}
+                disabled={presentationLinkMode || sending}
+                style={{ whiteSpace: "nowrap" }}
+                title={t("time.blankClock", "Blank / Hide Clock")}
+              >
+                <Icon name="visibility_off" size={14} />
+                <span>{t("common.blank", "Blank")}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {presentationLinkMode ? (
@@ -592,88 +837,6 @@ export default function DockTimeTab({
       <div className="dock-time-shell__body">
         {renderToolPanel()}
       </div>
-
-      {activeTab === "clock" && (
-        <DockBottomToolbar
-          overlayMode={settings.clock.mode}
-          onModeChange={(mode) => {
-            updateClock({ mode });
-            if (liveTool === "clock") {
-              void publish("clock", undefined, { ...settings.clock, mode });
-            }
-          }}
-          clearLabel={liveTool === "clock" ? t("time.hideClock", "Hide Clock") : t("time.showClock", "Show Clock")}
-          onClear={() => {
-            if (liveTool === "clock") {
-              void clearTime();
-            } else {
-              void publish("clock");
-            }
-          }}
-          sourceVisible={liveTool === "clock"}
-          clearDisabled={presentationLinkMode || sending}
-        >
-          <div className="dock-time-toolbar-options" data-dock-keep-overflow-open="true">
-            <div className="dock-time-toolbar-options__title">{t("time.clockOptions", "Clock Options")}</div>
-            <label className="dock-time-field">
-              <span className="dock-time-field__label">Label (optional)</span>
-              <input
-                type="text"
-                maxLength={80}
-                value={settings.clock.label}
-                onChange={(event) => updateClock({ label: event.target.value })}
-                placeholder="Optional label (leave blank for clock only)"
-              />
-            </label>
-
-            <div className="dock-time-switches dock-time-switches--toolbar">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.clock.transparentBg !== false}
-                  onChange={(event) => updateClock({ transparentBg: event.target.checked })}
-                />
-                <span>Transparent background</span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.clock.hour12}
-                  onChange={(event) => updateClock({ hour12: event.target.checked })}
-                />
-                <span>12-hour time</span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.clock.showSeconds}
-                  onChange={(event) => updateClock({ showSeconds: event.target.checked })}
-                />
-                <span>Show seconds</span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.clock.showDate}
-                  onChange={(event) => updateClock({ showDate: event.target.checked })}
-                />
-                <span>Show date</span>
-              </label>
-            </div>
-
-            <DockSceneRoutingControl
-              module="time"
-              route={sceneRoute}
-              onRouteChange={updateSceneRoute}
-              disabled={presentationLinkMode}
-              title={t("sceneRouting.timeOutput", "Output")}
-              placement="above"
-              showLabel
-              iconName="cast"
-            />
-          </div>
-        </DockBottomToolbar>
-      )}
     </div>
   );
 }

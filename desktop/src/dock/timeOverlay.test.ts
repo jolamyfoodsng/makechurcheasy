@@ -47,4 +47,9 @@ describe("Dock Time overlay helpers", () => {
     expect(timeOverlaySource).toContain("analog-sec-hand");
     expect(timeOverlaySource).toContain("updateAnalogHands");
   });
+
+  it("supports custom clock text color styling", () => {
+    expect(timeOverlaySource).toContain("if (clock.color)");
+    expect(timeOverlaySource).toContain("timeValue.style.color = clock.color");
+  });
 });

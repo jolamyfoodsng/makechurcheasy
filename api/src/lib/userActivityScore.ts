@@ -231,3 +231,155 @@ export function calculateUserActivityScore(user: UserActivityInput): ActivitySco
     breakdown,
   };
 }
+
+export interface PeriodScore {
+  score: number;
+  grade: "Champion" | "High Active" | "Moderate" | "Getting Started" | "Dormant";
+  color: string;
+  badgeBg: string;
+}
+
+export interface MultiPeriodActivityScore {
+  daily: PeriodScore;
+  weekly: PeriodScore;
+  monthly: PeriodScore;
+}
+
+function gradeFromScore(score: number): Omit<PeriodScore, "score"> {
+  if (score >= 75) {
+    return {
+      grade: "Champion",
+      color: "text-emerald-400",
+      badgeBg: "bg-emerald-950/60 text-emerald-300 border-emerald-700/60",
+    };
+  }
+  if (score >= 50) {
+    return {
+      grade: "High Active",
+      color: "text-indigo-400",
+      badgeBg: "bg-indigo-950/60 text-indigo-300 border-indigo-700/60",
+    };
+  }
+  if (score >= 25) {
+    return {
+      grade: "Moderate",
+      color: "text-amber-400",
+      badgeBg: "bg-amber-950/60 text-amber-300 border-amber-700/60",
+    };
+  }
+  if (score >= 10) {
+    return {
+      grade: "Getting Started",
+      color: "text-blue-400",
+      badgeBg: "bg-blue-950/60 text-blue-300 border-blue-700/60",
+    };
+  }
+  return {
+    grade: "Dormant",
+    color: "text-rose-400",
+    badgeBg: "bg-rose-950/50 text-rose-300 border-rose-800/60",
+  };
+}
+
+/**
+ * Calculates refined Daily, Weekly, and Monthly activity score percentages.
+ */
+export function calculateUserActivityMultiPeriod(user: UserActivityInput): MultiPeriodActivityScore {
+  const monthlyBreakdown = calculateUserActivityScore(user);
+  const monthlyScore = monthlyBreakdown.score;
+
+  const usageCount =
+    (user.usage?.bibleSearches || 0) +
+    (user.usage?.songsCreated || 0) +
+    (user.usage?.mediaUploaded || 0) +
+    (user.usage?.transcriptCount || 0);
+
+  const hasPresentation = Boolean(user.activationMilestones?.firstPresentation);
+  const hasObs = Boolean(user.activationMilestones?.obsConnected);
+  const hasScreenshot = Boolean(user.activationMilestones?.firstPresentationScreenshotUrl);
+  const deviceCount = user.devices?.length || user.deviceIds?.length || 0;
+  const isPaired = Boolean(user.activationMilestones?.devicePaired) || deviceCount > 0;
+  const hasPerformedActions = usageCount > 0 || hasPresentation || hasObs;
+
+  const plan = (user.plan || "").toLowerCase();
+  const isPaid =
+    plan === "growth" ||
+    plan === "pro" ||
+    plan === "basic" ||
+    plan === "managed" ||
+    user.subscription?.status === "active";
+
+  const activeTimestamp = user.lastActive || user.lastLogin;
+  const now = Date.now();
+  const activeTime = activeTimestamp ? new Date(activeTimestamp).getTime() : NaN;
+  const hasTime = Number.isFinite(activeTime) && activeTime > 0;
+  const diffHours = hasTime ? Math.max(0, (now - activeTime) / (1000 * 60 * 60)) : Infinity;
+  const diffDays = diffHours / 24;
+
+  // 1. Daily Score (past 24h)
+  let dailyScore = 0;
+  if (diffHours <= 24) {
+    let recencyPts = 20;
+    if (diffHours <= 2) recencyPts = 35;
+    else if (diffHours <= 6) recencyPts = 30;
+    else if (diffHours <= 12) recencyPts = 25;
+
+    let actionPts = 0;
+    if (hasPresentation) actionPts += 25;
+    if (hasScreenshot) actionPts += 5;
+    if (hasObs) actionPts += 15;
+    if (usageCount >= 10) actionPts += 15;
+    else if (usageCount >= 1) actionPts += 8;
+    if (deviceCount > 0 || isPaired) actionPts += 5;
+    if (isPaid || user.trial?.active) actionPts += 5;
+
+    dailyScore = hasPerformedActions ? recencyPts + actionPts : Math.min(8, recencyPts);
+    if (!hasPerformedActions) dailyScore = Math.min(dailyScore, 8);
+  } else {
+    dailyScore = 0;
+  }
+  const finalDaily = Math.min(100, Math.max(0, Math.round(dailyScore)));
+
+  // 2. Weekly Score (past 7 days)
+  let weeklyScore = 0;
+  if (diffDays <= 7) {
+    let recencyPts = 15;
+    if (diffDays <= 1) recencyPts = 25;
+    else if (diffDays <= 3) recencyPts = 20;
+
+    let actionPts = 0;
+    if (hasPresentation) actionPts += 25;
+    if (hasScreenshot) actionPts += 5;
+    if (hasObs) actionPts += 12;
+    if (usageCount >= 20) actionPts += 25;
+    else if (usageCount >= 10) actionPts += 18;
+    else if (usageCount >= 3) actionPts += 10;
+    else if (usageCount >= 1) actionPts += 5;
+    if (deviceCount > 0 || isPaired) actionPts += 8;
+    if (isPaid || user.trial?.active) actionPts += 5;
+
+    weeklyScore = hasPerformedActions ? recencyPts + actionPts : Math.min(8, recencyPts);
+    if (!hasPerformedActions) weeklyScore = Math.min(weeklyScore, 8);
+  } else if (diffDays <= 14) {
+    weeklyScore = hasPerformedActions ? Math.round(monthlyScore * 0.35) : 0;
+  } else {
+    weeklyScore = 0;
+  }
+  const finalWeekly = Math.min(100, Math.max(0, Math.round(weeklyScore)));
+
+  return {
+    daily: {
+      score: finalDaily,
+      ...gradeFromScore(finalDaily),
+    },
+    weekly: {
+      score: finalWeekly,
+      ...gradeFromScore(finalWeekly),
+    },
+    monthly: {
+      score: monthlyScore,
+      ...gradeFromScore(monthlyScore),
+    },
+  };
+}
+

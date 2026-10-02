@@ -54,10 +54,16 @@ import {
   Layers,
   Footprints,
   Gift,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { calculateUserActivityScore, type ActivityScoreBreakdown } from "@/lib/userActivityScore";
+import {
+  calculateUserActivityScore,
+  calculateUserActivityMultiPeriod,
+  type ActivityScoreBreakdown,
+  type MultiPeriodActivityScore,
+} from "@/lib/userActivityScore";
 import { getPlanConfig, type PlanConfig } from "@/lib/planConfigService";
 import {
   formatPlanCredits,
@@ -83,6 +89,90 @@ function getCountryDisplayName(countryCode?: string | null): string {
   } catch {
     return `${flag} ${code}`;
   }
+}
+
+function getSubscriptionExpiringInfo(user: UserDetail): {
+  isExpiringSoon: boolean;
+  isExpired: boolean;
+  daysLeft: number;
+  text: string;
+  badgeClass: string;
+} | null {
+  const expiresAt =
+    user.subscriptionExpiresAt ||
+    (user.adminManagedSubscription?.active ? user.adminManagedSubscription.expiresAt : null) ||
+    (user.adminTemporaryPlan?.active ? user.adminTemporaryPlan.expiresAt : null) ||
+    (user.plan === "free" && user.trial?.active ? user.trial.expiresAt : null) ||
+    user.scheduledDowngradeAt;
+
+  if (!expiresAt) return null;
+
+  const date = new Date(expiresAt);
+  const time = date.getTime();
+  if (Number.isNaN(time) || time <= 0) return null;
+
+  const now = Date.now();
+  const diffMs = time - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  const formattedDate = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  if (diffDays < 0) {
+    const absDays = Math.abs(diffDays);
+    return {
+      isExpiringSoon: false,
+      isExpired: true,
+      daysLeft: diffDays,
+      text: `Expired ${absDays === 1 ? "yesterday" : `${absDays}d ago`} (${formattedDate})`,
+      badgeClass: "text-red-400 bg-red-950/40 border-red-800/50",
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: 0,
+      text: `Expires today (${formattedDate})`,
+      badgeClass: "text-amber-300 bg-amber-950/60 border-amber-700/60 font-semibold animate-pulse",
+    };
+  }
+
+  if (diffDays === 1) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: 1,
+      text: `1 day left to expire (${formattedDate})`,
+      badgeClass: "text-amber-300 bg-amber-950/50 border-amber-700/50 font-medium",
+    };
+  }
+
+  if (diffDays <= 30) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: diffDays,
+      text: `${diffDays} days left to expire (${formattedDate})`,
+      badgeClass: diffDays <= 7 ? "text-amber-300 bg-amber-950/50 border-amber-700/60 font-medium" : "text-amber-200/90 bg-amber-950/30 border-amber-800/40",
+    };
+  }
+
+  const months = Math.floor(diffDays / 30);
+  const remDays = diffDays % 30;
+  const monthText = remDays > 0 ? `${months}m ${remDays}d left` : `${months} month${months > 1 ? "s" : ""} left`;
+
+  return {
+    isExpiringSoon: false,
+    isExpired: false,
+    daysLeft: diffDays,
+    text: `${monthText} to expire (${formattedDate})`,
+    badgeClass: "text-emerald-300 bg-emerald-950/30 border-emerald-800/40",
+  };
 }
 
 interface UserDetail {
@@ -274,6 +364,81 @@ export default function AdminUserDetailPage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "success" | "failed" | "cancelled" | "pending">("all");
 
   const activityScore = useMemo(() => user ? calculateUserActivityScore(user) : null, [user]);
+  const multiPeriodActivity = useMemo(() => user ? calculateUserActivityMultiPeriod(user) : null, [user]);
+  const expiringInfo = useMemo(() => user ? getSubscriptionExpiringInfo(user) : null, [user]);
+
+  // Referral Assignment Modal State
+  const [showAssignReferralModal, setShowAssignReferralModal] = useState(false);
+  const [assignReferralMode, setAssignReferralMode] = useState<"set_referrer" | "add_referee">("set_referrer");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [userSearching, setUserSearching] = useState(false);
+  const [selectedUserForReferral, setSelectedUserForReferral] = useState<any | null>(null);
+  const [assigningReferral, setAssigningReferral] = useState(false);
+  const [assignReferralError, setAssignReferralError] = useState("");
+  const [assignReferralSuccess, setAssignReferralSuccess] = useState("");
+
+  const handleSearchUsers = useCallback(async (query: string) => {
+    setUserSearchQuery(query);
+    const q = query.trim();
+    if (!q) {
+      setUserSearchResults([]);
+      return;
+    }
+    setUserSearching(true);
+    try {
+      const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(q)}`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserSearchResults((data.users || []).filter((u: any) => u.id !== user?.id));
+      }
+    } catch (e) {
+      console.error("Search users error:", e);
+    } finally {
+      setUserSearching(false);
+    }
+  }, [user?.id]);
+
+  const handleAssignReferralSubmit = async () => {
+    if (!user || !selectedUserForReferral) return;
+    setAssigningReferral(true);
+    setAssignReferralError("");
+    setAssignReferralSuccess("");
+
+    try {
+      const referrerUserId = assignReferralMode === "set_referrer" ? selectedUserForReferral.id : user.id;
+      const referredUserId = assignReferralMode === "set_referrer" ? user.id : selectedUserForReferral.id;
+
+      const res = await fetch("/api/admin/referrals", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referrerUserId, referredUserId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to assign referral");
+      }
+
+      setAssignReferralSuccess("Referral linked in database! No email sent.");
+      setTimeout(() => {
+        setShowAssignReferralModal(false);
+        setSelectedUserForReferral(null);
+        setUserSearchQuery("");
+        setUserSearchResults([]);
+        setAssignReferralSuccess("");
+      }, 1500);
+
+      fetchUserReferrals();
+    } catch (err: any) {
+      setAssignReferralError(err.message || "Failed to assign referral");
+    } finally {
+      setAssigningReferral(false);
+    }
+  };
 
   const filteredPayments = useMemo(() => {
     if (!user?.payments) return [];
@@ -414,7 +579,10 @@ export default function AdminUserDetailPage() {
       const res = await fetch(`/api/admin/users/${params.id}`, {
         credentials: "include",
       });
-      if (!res.ok) throw new Error(t('admin.userDetail.userNotFound'));
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || t('admin.userDetail.userNotFound'));
+      }
       const data = await res.json();
       setUser(data);
       setPaymentPage(data.paymentPage || 1);
@@ -1536,6 +1704,137 @@ export default function AdminUserDetailPage() {
         </p>
       )}
 
+      {/* Top Quick-Stat Ribbon: Signed Up, Last Active, Plan & Expiring Date, Activity Breakdown */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+        {/* 1. Date Signed Up */}
+        <div className="bg-gray-900 border border-slate-700/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Date Signed Up
+            </span>
+            {user.createdAt && (
+              <span className="text-[10px] text-slate-500 font-mono">
+                {formatRelativeTime(user.createdAt)}
+              </span>
+            )}
+          </div>
+          <div className="mt-1">
+            <p className="text-base font-bold text-slate-100">
+              {user.createdAt ? formatDateTime(user.createdAt) : "—"}
+            </p>
+            <p className="text-xs text-indigo-300/90 mt-0.5 font-medium">
+              {user.createdAt ? `Joined ${formatRelativeTime(user.createdAt)}` : "No registration date"}
+            </p>
+          </div>
+        </div>
+
+        {/* 2. Last Used / Last Active */}
+        <div className="bg-gray-900 border border-slate-700/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-emerald-400" /> Last Used / Active
+            </span>
+            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400">
+              <span className={`w-2 h-2 rounded-full ${
+                user.lastActive && (Date.now() - new Date(user.lastActive).getTime()) < 24 * 60 * 60 * 1000
+                  ? "bg-emerald-400 animate-pulse"
+                  : "bg-slate-500"
+              }`} />
+              {user.lastActive && (Date.now() - new Date(user.lastActive).getTime()) < 24 * 60 * 60 * 1000 ? "Recent" : "Offline"}
+            </span>
+          </div>
+          <div className="mt-1">
+            <p className="text-base font-bold text-slate-100">
+              {user.lastActive
+                ? formatRelativeTime(user.lastActive)
+                : user.lastLogin
+                ? formatRelativeTime(user.lastLogin)
+                : "Never active"}
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5 truncate">
+              {user.lastActive
+                ? formatDateTime(user.lastActive)
+                : user.lastLogin
+                ? `Login: ${formatDateTime(user.lastLogin)}`
+                : "No recorded events"}
+            </p>
+          </div>
+        </div>
+
+        {/* 3. Subscription & Expiring Date */}
+        <div className="bg-gray-900 border border-slate-700/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5 text-amber-400" /> Plan & Expiring Date
+            </span>
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${planBadgeClasses(user.plan)}`}>
+              {user.plan}
+            </span>
+          </div>
+          <div className="mt-1">
+            {expiringInfo ? (
+              <>
+                <p className="text-sm font-bold text-slate-100 truncate">
+                  {expiringInfo.text.split(" (")[0]}
+                </p>
+                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${expiringInfo.badgeClass}`}>
+                    {expiringInfo.text}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-base font-bold text-slate-200 capitalize">
+                  {user.plan === "free" ? "Free Forever" : `${user.plan} Active`}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {user.plan === "free" ? "No expiration date" : "Continuous subscription"}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 4. Activity: Daily, Weekly, Monthly */}
+        <div className="bg-gray-900 border border-slate-700/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-sky-400" /> Activity (D / W / M)
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">
+              {user.credits.toLocaleString()} credits
+            </span>
+          </div>
+          <div className="mt-1">
+            {multiPeriodActivity ? (
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <div className="flex-1 bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-1 text-center">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Daily</div>
+                  <div className={`text-xs font-mono font-bold ${multiPeriodActivity.daily.color}`}>
+                    {multiPeriodActivity.daily.score}%
+                  </div>
+                </div>
+                <div className="flex-1 bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-1 text-center">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Weekly</div>
+                  <div className={`text-xs font-mono font-bold ${multiPeriodActivity.weekly.color}`}>
+                    {multiPeriodActivity.weekly.score}%
+                  </div>
+                </div>
+                <div className="flex-1 bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-1 text-center">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Monthly</div>
+                  <div className={`text-xs font-mono font-bold ${multiPeriodActivity.monthly.color}`}>
+                    {multiPeriodActivity.monthly.score}%
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm font-semibold text-slate-400">No activity data</p>
+            )}
+          </div>
+        </div>
+      </div>
+
       <nav aria-label="User profile sections" className="mb-6 flex gap-1 border-b border-slate-700 overflow-x-auto">
         {([
           ["profile", "User information"],
@@ -1553,9 +1852,17 @@ export default function AdminUserDetailPage() {
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors inline-flex items-center gap-2 whitespace-nowrap ${activeTab === tab ? "border-indigo-400 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"}`}
           >
             {label}
-            {tab === "activity" && activityScore && (
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${activityScore.badgeBg}`}>
-                {activityScore.score}%
+            {tab === "activity" && multiPeriodActivity && (
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] font-bold">
+                <span className="px-1.5 py-0.5 rounded bg-sky-950/60 text-sky-300 border border-sky-800/50">
+                  D: {multiPeriodActivity.daily.score}%
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/50">
+                  W: {multiPeriodActivity.weekly.score}%
+                </span>
+                <span className={`px-1.5 py-0.5 rounded border ${multiPeriodActivity.monthly.badgeBg}`}>
+                  M: {multiPeriodActivity.monthly.score}%
+                </span>
               </span>
             )}
             {tab === "referrals" && userReferralsData?.stats?.totalSignups != null && userReferralsData.stats.totalSignups > 0 && (
@@ -1579,268 +1886,327 @@ export default function AdminUserDetailPage() {
 
       <section aria-label="User information" hidden={activeTab !== "profile"}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Plan Card */}
-        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
-              <CreditCard className="w-4 h-4 text-indigo-400" />
-            </div>
-            <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.planCard.title')}</h2>
-          </div>
-          <div className="flex items-center gap-2 mt-2">
-            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${planBadgeClasses(user.plan)}`}>
-              {user.plan}
-            </span>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[11px] text-slate-500 uppercase tracking-wide">
-                {t('common.credits')}
-              </p>
-              <p className="text-lg font-bold text-slate-50">
-                {user.credits.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 uppercase tracking-wide">
-                {t('common.role')}
-              </p>
-              <p className="text-sm font-medium text-slate-300 capitalize">
-                {user.role}
-              </p>
-            </div>
-          </div>
-          <details className="mt-5 border-t border-slate-700/50">
-            <summary className="cursor-pointer py-3 text-sm font-medium text-indigo-300 hover:text-indigo-200">
-              Manage subscription and billing
-            </summary>
-            <div className="pb-1 space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <InfoRow
-                label={t('admin.userDetail.managedSubscription.status')}
-                value={isAdminManagedSubscriptionActive ? t('common.active') : user.plan === "free" ? "Free" : (user.subscription?.status || "Active")}
-              />
-              <InfoRow
-                label={t('admin.userDetail.managedSubscription.billingCycle')}
-                value={user.adminManagedSubscription?.billingCycle || user.subscription?.billingCycle || "—"}
-              />
-              <InfoRow
-                label={t('admin.userDetail.managedSubscription.accessUntil')}
-                value={subscriptionExpiryDate ? subscriptionExpiryDate.toLocaleDateString() : "—"}
-              />
-              <InfoRow
-                label={t('admin.userDetail.managedSubscription.source')}
-                value={user.adminManagedSubscription?.active || user.subscription?.adminManaged ? t('admin.userDetail.managedSubscription.adminCollected') : (user.subscription?.paymentProvider || "—")}
-              />
-            </div>
-
-            {managedMsg && (
-              <div
-                className={`px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 ${managedMsg.type === "success"
-                  ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/50"
-                  : "bg-red-900/40 text-red-300 border border-red-700/50"
-                  }`}
-              >
-                {managedMsg.type === "success" ? <Play className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-                {managedMsg.text}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  {t('admin.userDetail.managedSubscription.plan')}
-                </label>
-                <select
-                  value={managedPlan}
-                  onChange={(e) => setManagedPlan(e.target.value)}
-                  className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                >
-                  <option value="free">Free</option>
-                  <option value="basic">Basic</option>
-                  <option value="growth">Growth</option>
-                </select>
-              </div>
-              {managedPlan !== "free" && (
+        {/* Combined Column 1: Account, Identity & Ministry Profile */}
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6 flex flex-col justify-between space-y-6">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    {t('admin.userDetail.managedSubscription.billingCycle')}
-                  </label>
-                  <select
-                    value={managedBillingCycle}
-                    onChange={(e) => setManagedBillingCycle(e.target.value)}
-                    className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                  >
-                    <option value="monthly">{t('admin.userDetail.managedSubscription.monthly')}</option>
-                    <option value="yearly">{t('admin.userDetail.managedSubscription.yearly')}</option>
-                  </select>
+                  <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.accountInfo')}</h2>
+                  <p className="text-[11px] text-slate-500">Contact & login authentication details</p>
+                </div>
+              </div>
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${user.accountStatus === "suspended" ? "bg-red-950/60 text-red-300 border border-red-800/60" : "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60"}`}>
+                {user.accountStatus === "suspended" ? "Suspended" : "Active"}
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-1">
+              <InfoRow label="Full name" value={user.name || "—"} />
+              <InfoRow label="Email address">
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="text-sm text-slate-300 font-medium truncate">{user.email}</span>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${user.emailVerified ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700/50" : "bg-amber-900/60 text-amber-300 border border-amber-700/50"}`}>
+                    {user.emailVerified ? "Verified" : "Unverified"}
+                  </span>
+                </div>
+              </InfoRow>
+              <InfoRow label="Phone number" value={user.phone || "—"} />
+              <InfoRow label="Country" value={getCountryDisplayName(user.country)} />
+              <InfoRow label="Location (City / State)" value={[user.city, user.state].filter(Boolean).join(", ") || "—"} />
+              <InfoRow label="Preferred language" value={user.language ? user.language.toUpperCase() : "English (EN)"} />
+              <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
+              <InfoRow label="Role" value={user.role} />
+              <InfoRow label="Two-Factor Auth (2FA)">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.twoFactorEnabled ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                  <Key className="w-3 h-3" /> {user.twoFactorEnabled ? "Enabled" : "Disabled"}
+                </span>
+              </InfoRow>
+              <InfoRow label="Auth provider" value={user.authProvider ? user.authProvider.toUpperCase() : "CREDENTIALS"} />
+            </div>
+          </div>
+
+          {/* Ministry Profile Section */}
+          <div className="pt-4 border-t border-slate-800">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center">
+                <Church className="w-4 h-4 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-100 uppercase tracking-wider">Church & Ministry Profile</h3>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <InfoRow label="Church name" value={user.churchName || "—"} />
+              <InfoRow label="Church role / Position" value={user.churchRole || "—"} />
+              <InfoRow label="Denomination" value={user.denomination || "—"} />
+              <InfoRow label="Congregation size" value={user.churchSize || "—"} />
+            </div>
+          </div>
+        </div>
+
+        {/* Combined Column 2: Plan, Billing & App Hardware */}
+        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6 flex flex-col justify-between space-y-6">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <CreditCard className="w-4 h-4 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.planCard.title')}</h2>
+                  <p className="text-[11px] text-slate-500">Subscription status, credits allowance & billing</p>
+                </div>
+              </div>
+              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${planBadgeClasses(user.plan)}`}>
+                {user.plan}
+              </span>
+            </div>
+
+            {/* Plan Metrics Overview */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  {t('common.credits')}
+                </p>
+                <p className="text-lg font-bold text-slate-100 mt-0.5">
+                  {user.credits.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  Billing Cycle
+                </p>
+                <p className="text-sm font-semibold text-slate-200 mt-1 capitalize">
+                  {user.adminManagedSubscription?.billingCycle || user.subscription?.billingCycle || (user.plan === "free" ? "Free" : "Monthly")}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 col-span-2 sm:col-span-1">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  Payment Source
+                </p>
+                <p className="text-xs font-semibold text-slate-200 mt-1 truncate">
+                  {user.adminManagedSubscription?.active || user.subscription?.adminManaged ? "Admin Collected" : (user.subscription?.paymentProvider || "System / Free")}
+                </p>
+              </div>
+            </div>
+
+            {/* Subscription Expiring Banner / Callout */}
+            <div className="mt-3">
+              {expiringInfo ? (
+                <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${expiringInfo.badgeClass}`}>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold leading-tight">
+                        {expiringInfo.text}
+                      </p>
+                      <p className="text-[11px] opacity-80 mt-0.5">
+                        Access period ends on {subscriptionExpiryDate ? subscriptionExpiryDate.toLocaleDateString() : "expiry date"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-black/20 shrink-0">
+                    {expiringInfo.daysLeft < 0 ? "Expired" : expiringInfo.daysLeft === 0 ? "Today" : `${expiringInfo.daysLeft}d left`}
+                  </span>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 text-xs text-slate-400 flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>{user.plan === "free" ? "Free plan account • No scheduled expiration" : "Subscription active with standard renewal cycle"}</span>
                 </div>
               )}
-              {managedPlan !== "free" && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      {t('admin.userDetail.managedSubscription.amount')}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={managedAmount}
-                      onChange={(e) => setManagedAmount(e.target.value)}
-                      placeholder={t('admin.userDetail.managedSubscription.amountPlaceholder')}
-                      className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      {t('admin.userDetail.managedSubscription.currency')}
-                    </label>
-                    <input
-                      value={managedCurrency}
-                      onChange={(e) => setManagedCurrency(e.target.value.toUpperCase())}
-                      className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      {t('common.credits')}
-                    </label>
-                    <input
-                      value={formatPlanCredits(selectedManagedCredits)}
-                      readOnly
-                      className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800/60 text-slate-100 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      {t('admin.userDetail.managedSubscription.reference')}
-                    </label>
-                    <input
-                      value={managedReference}
-                      onChange={(e) => setManagedReference(e.target.value)}
-                      placeholder={t('admin.userDetail.managedSubscription.referencePlaceholder')}
-                      className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      {t('admin.userDetail.managedSubscription.note')}
-                    </label>
-                    <input
-                      value={managedNote}
-                      onChange={(e) => setManagedNote(e.target.value)}
-                      placeholder={t('admin.userDetail.managedSubscription.notePlaceholder')}
-                      className="h-10 w-full px-3 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                </>
-              )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={managedNotifyUser}
-                  onChange={(e) => setManagedNotifyUser(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-600 bg-gray-800 text-indigo-600 focus:ring-indigo-500"
-                />
-                {t('admin.userDetail.managedSubscription.notifyUser')}
-              </label>
-              <button
-                disabled={managedAction}
-                onClick={saveManagedSubscription}
-                className="h-10 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                {managedAction ? t('admin.userDetail.managedSubscription.saving') : t('admin.userDetail.managedSubscription.button')}
-              </button>
-            </div>
-            </div>
-          </details>
-        </div>
 
-        {/* Account & Identity Card */}
-        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-indigo-400" />
-            </div>
-            <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.accountInfo')}</h2>
-          </div>
-          <div className="space-y-1">
-            <InfoRow label="Full name" value={user.name || "—"} />
-            <InfoRow label="Email address">
-              <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-sm text-slate-300 font-medium truncate">{user.email}</span>
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${user.emailVerified ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700/50" : "bg-amber-900/60 text-amber-300 border border-amber-700/50"}`}>
-                  {user.emailVerified ? "Verified" : "Unverified"}
-                </span>
+            {/* Manage Subscription & Billing form */}
+            <details className="mt-4 border-t border-slate-800 pt-2">
+              <summary className="cursor-pointer py-2 text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center justify-between">
+                <span>Manage Subscription & Billing Details</span>
+                <span className="text-[10px] text-slate-500 font-normal">Click to edit plan / currency</span>
+              </summary>
+              <div className="pt-2 pb-1 space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <InfoRow
+                    label={t('admin.userDetail.managedSubscription.status')}
+                    value={isAdminManagedSubscriptionActive ? t('common.active') : user.plan === "free" ? "Free" : (user.subscription?.status || "Active")}
+                  />
+                  <InfoRow
+                    label={t('admin.userDetail.managedSubscription.billingCycle')}
+                    value={user.adminManagedSubscription?.billingCycle || user.subscription?.billingCycle || "—"}
+                  />
+                  <InfoRow
+                    label={t('admin.userDetail.managedSubscription.accessUntil')}
+                    value={subscriptionExpiryDate ? subscriptionExpiryDate.toLocaleDateString() : "—"}
+                  />
+                  <InfoRow
+                    label={t('admin.userDetail.managedSubscription.source')}
+                    value={user.adminManagedSubscription?.active || user.subscription?.adminManaged ? t('admin.userDetail.managedSubscription.adminCollected') : (user.subscription?.paymentProvider || "—")}
+                  />
+                </div>
+
+                {managedMsg && (
+                  <div
+                    className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 ${managedMsg.type === "success"
+                      ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/50"
+                      : "bg-red-900/40 text-red-300 border border-red-700/50"
+                      }`}
+                  >
+                    {managedMsg.type === "success" ? <Play className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                    {managedMsg.text}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                      {t('admin.userDetail.managedSubscription.plan')}
+                    </label>
+                    <select
+                      value={managedPlan}
+                      onChange={(e) => setManagedPlan(e.target.value)}
+                      className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="free">Free</option>
+                      <option value="basic">Basic</option>
+                      <option value="growth">Growth</option>
+                    </select>
+                  </div>
+                  {managedPlan !== "free" && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                        {t('admin.userDetail.managedSubscription.billingCycle')}
+                      </label>
+                      <select
+                        value={managedBillingCycle}
+                        onChange={(e) => setManagedBillingCycle(e.target.value)}
+                        className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="monthly">{t('admin.userDetail.managedSubscription.monthly')}</option>
+                        <option value="yearly">{t('admin.userDetail.managedSubscription.yearly')}</option>
+                      </select>
+                    </div>
+                  )}
+                  {managedPlan !== "free" && (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                          {t('admin.userDetail.managedSubscription.amount')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={managedAmount}
+                          onChange={(e) => setManagedAmount(e.target.value)}
+                          placeholder={t('admin.userDetail.managedSubscription.amountPlaceholder')}
+                          className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                          {t('admin.userDetail.managedSubscription.currency')}
+                        </label>
+                        <input
+                          value={managedCurrency}
+                          onChange={(e) => setManagedCurrency(e.target.value.toUpperCase())}
+                          className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                          {t('common.credits')}
+                        </label>
+                        <input
+                          value={formatPlanCredits(selectedManagedCredits)}
+                          readOnly
+                          className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800/60 text-slate-100 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                          {t('admin.userDetail.managedSubscription.reference')}
+                        </label>
+                        <input
+                          value={managedReference}
+                          onChange={(e) => setManagedReference(e.target.value)}
+                          placeholder={t('admin.userDetail.managedSubscription.referencePlaceholder')}
+                          className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                          {t('admin.userDetail.managedSubscription.note')}
+                        </label>
+                        <input
+                          value={managedNote}
+                          onChange={(e) => setManagedNote(e.target.value)}
+                          placeholder={t('admin.userDetail.managedSubscription.notePlaceholder')}
+                          className="h-9 w-full px-2.5 text-xs border border-slate-700 rounded-lg bg-gray-800 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={managedNotifyUser}
+                      onChange={(e) => setManagedNotifyUser(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-600 bg-gray-800 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    {t('admin.userDetail.managedSubscription.notifyUser')}
+                  </label>
+                  <button
+                    disabled={managedAction}
+                    onClick={saveManagedSubscription}
+                    className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    {managedAction ? t('admin.userDetail.managedSubscription.saving') : t('admin.userDetail.managedSubscription.button')}
+                  </button>
+                </div>
               </div>
-            </InfoRow>
-            <InfoRow label="Phone number" value={user.phone || "—"} />
-            <InfoRow label="Country" value={getCountryDisplayName(user.country)} />
-            <InfoRow label="Location (City / State)" value={[user.city, user.state].filter(Boolean).join(", ") || "—"} />
-            <InfoRow label="Preferred language" value={user.language ? user.language.toUpperCase() : "English (EN)"} />
-            <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
-            <InfoRow label="Role" value={user.role} />
-            <InfoRow label="Account status" value={user.accountStatus === "suspended" ? "Blocked / Suspended" : "Active"} />
-            <InfoRow label="Two-Factor Auth (2FA)">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.twoFactorEnabled ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
-                <Key className="w-3 h-3" /> {user.twoFactorEnabled ? "Enabled" : "Disabled"}
-              </span>
-            </InfoRow>
-            <InfoRow label="Auth provider" value={user.authProvider ? user.authProvider.toUpperCase() : "CREDENTIALS"} />
+            </details>
           </div>
-        </div>
 
-        {/* Church & Ministry Profile Card */}
-        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/15 flex items-center justify-center">
-              <Church className="w-4 h-4 text-purple-400" />
+          {/* App & Hardware Details Section */}
+          <div className="pt-4 border-t border-slate-800">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg bg-sky-500/15 flex items-center justify-center">
+                <Monitor className="w-4 h-4 text-sky-400" />
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-100 uppercase tracking-wider">App, Hardware & Setup Status</h3>
+              </div>
             </div>
-            <h2 className="text-sm font-semibold text-slate-50">Church & Ministry Profile</h2>
-          </div>
-          <div className="space-y-1">
-            <InfoRow label="Church name" value={user.churchName || "—"} />
-            <InfoRow label="Church role / Position" value={user.churchRole || "—"} />
-            <InfoRow label="Denomination" value={user.denomination || "—"} />
-            <InfoRow label="Congregation size" value={user.churchSize || "—"} />
-          </div>
-        </div>
-
-        {/* Desktop App & Hardware Details Card */}
-        <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center">
-              <Monitor className="w-4 h-4 text-sky-400" />
+            <div className="space-y-1">
+              <InfoRow label="App version" value={user.appVersion ? `v${user.appVersion}` : "—"} />
+              <InfoRow label="Platform / OS" value={user.appPlatform || "—"} />
+              <InfoRow label="Connected devices" value={`${user.devices?.length ?? 0} active device${user.devices?.length === 1 ? "" : "s"}`} />
+              <InfoRow label="Hardware paired">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.devicePaired ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                  {user.activationMilestones?.devicePaired ? "Paired" : "Not paired"}
+                </span>
+              </InfoRow>
+              <InfoRow label="App downloaded">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.appDownloaded ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                  {user.activationMilestones?.appDownloaded ? "Downloaded" : "Pending"}
+                </span>
+              </InfoRow>
+              <InfoRow label="OBS connected">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.obsConnected ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                  {user.activationMilestones?.obsConnected ? "Connected" : "Not connected"}
+                </span>
+              </InfoRow>
+              <InfoRow label="First presentation">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.firstPresentation ? "bg-amber-950/60 text-amber-300 border border-amber-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
+                  {user.activationMilestones?.firstPresentation ? `Achieved (${user.activationMilestones?.firstPresentationType || "Live"})` : "Pending"}
+                </span>
+              </InfoRow>
             </div>
-            <h2 className="text-sm font-semibold text-slate-50">App & Hardware Details</h2>
-          </div>
-          <div className="space-y-1">
-            <InfoRow label="App version" value={user.appVersion ? `v${user.appVersion}` : "—"} />
-            <InfoRow label="Platform / OS" value={user.appPlatform || "—"} />
-            <InfoRow label="Connected devices" value={`${user.devices?.length ?? 0} active device${user.devices?.length === 1 ? "" : "s"}`} />
-            <InfoRow label="Hardware paired">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.devicePaired ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
-                {user.activationMilestones?.devicePaired ? "Paired" : "Not paired"}
-              </span>
-            </InfoRow>
-            <InfoRow label="App downloaded">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.appDownloaded ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
-                {user.activationMilestones?.appDownloaded ? "Downloaded" : "Pending"}
-              </span>
-            </InfoRow>
-            <InfoRow label="OBS connected">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.obsConnected ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
-                {user.activationMilestones?.obsConnected ? "Connected" : "Not connected"}
-              </span>
-            </InfoRow>
-            <InfoRow label="First presentation">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${user.activationMilestones?.firstPresentation ? "bg-amber-950/60 text-amber-300 border border-amber-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>
-                {user.activationMilestones?.firstPresentation ? `Achieved (${user.activationMilestones?.firstPresentationType || "Live"})` : "Pending"}
-              </span>
-            </InfoRow>
           </div>
         </div>
 
@@ -2394,41 +2760,121 @@ export default function AdminUserDetailPage() {
 
       <section aria-label="User activity" hidden={activeTab !== "activity"} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Signed up</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">{formatRelativeTime(user.createdAt)}</p>
-          <p className="mt-1 text-xs text-slate-500">{formatDateTime(user.createdAt)}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last active</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">{user.lastActive ? formatRelativeTime(user.lastActive) : (user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never")}</p>
-          <p className="mt-1 text-xs text-slate-500">{user.lastActive ? formatDateTime(user.lastActive) : (user.lastLogin ? formatDateTime(user.lastLogin) : "No activity recorded")}</p>
-          {user.lastLogin && user.lastActive && user.lastLogin !== user.lastActive && (
-            <p className="mt-1 text-[11px] text-slate-500">Signed in {formatRelativeTime(user.lastLogin)}</p>
-          )}
-        </div>
-        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Connected devices</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">{user.devices?.length ?? 0} active</p>
-          <p className="mt-1 text-xs text-slate-500">{user.activationMilestones?.devicePaired ? "Hardware paired" : "No devices"}</p>
-        </div>
-        {activityScore && (
-          <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5">
+        {/* 1. Daily Activity (Past 24h) */}
+        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5 flex flex-col justify-between">
+          <div>
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Activity Score</p>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${activityScore.badgeBg}`}>
-                {activityScore.grade}
+              <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">
+                Daily Activity (24h)
               </span>
+              {multiPeriodActivity && (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${multiPeriodActivity.daily.badgeBg}`}>
+                  {multiPeriodActivity.daily.grade}
+                </span>
+              )}
             </div>
-            <p className={`mt-2 text-2xl font-bold font-mono ${activityScore.color}`}>{activityScore.score}%</p>
-            <div className="mt-1.5 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+            <p className="mt-2 text-3xl font-bold font-mono text-sky-300">
+              {multiPeriodActivity ? `${multiPeriodActivity.daily.score}%` : "0%"}
+            </p>
+            <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${activityScore.barColor}`}
-                style={{ width: `${Math.max(4, activityScore.score)}%` }}
+                className="h-full rounded-full bg-sky-500 transition-all duration-300"
+                style={{ width: `${Math.max(4, multiPeriodActivity?.daily.score ?? 0)}%` }}
               />
             </div>
           </div>
-        )}
+          <p className="mt-3 text-xs text-slate-400">
+            {multiPeriodActivity && multiPeriodActivity.daily.score > 0
+              ? "Active interactions within the last 24 hours"
+              : "No actions recorded in the past 24 hours"}
+          </p>
+        </div>
+
+        {/* 2. Weekly Activity (Past 7d) */}
+        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                Weekly Activity (7d)
+              </span>
+              {multiPeriodActivity && (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${multiPeriodActivity.weekly.badgeBg}`}>
+                  {multiPeriodActivity.weekly.grade}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-3xl font-bold font-mono text-indigo-300">
+              {multiPeriodActivity ? `${multiPeriodActivity.weekly.score}%` : "0%"}
+            </p>
+            <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                style={{ width: `${Math.max(4, multiPeriodActivity?.weekly.score ?? 0)}%` }}
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            {multiPeriodActivity && multiPeriodActivity.weekly.score > 0
+              ? "Weekly services, presentations & device usage"
+              : "No activity recorded in the past 7 days"}
+          </p>
+        </div>
+
+        {/* 3. Monthly Activity (Past 30d) */}
+        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                Monthly Activity (30d)
+              </span>
+              {multiPeriodActivity && (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${multiPeriodActivity.monthly.badgeBg}`}>
+                  {multiPeriodActivity.monthly.grade}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-3xl font-bold font-mono text-emerald-300">
+              {multiPeriodActivity ? `${multiPeriodActivity.monthly.score}%` : "0%"}
+            </p>
+            <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                style={{ width: `${Math.max(4, multiPeriodActivity?.monthly.score ?? 0)}%` }}
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            Comprehensive 30-day platform health & adoption score
+          </p>
+        </div>
+
+        {/* 4. Connected Hardware & App Details */}
+        <div className="rounded-2xl border border-slate-700 bg-gray-900 p-5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Connected Hardware
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                user.activationMilestones?.obsConnected ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/60" : "bg-slate-800 text-slate-400 border border-slate-700"
+              }`}>
+                {user.activationMilestones?.obsConnected ? "OBS Live" : "OBS Offline"}
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-slate-100">
+              {user.devices?.length ?? 0} active device{user.devices?.length === 1 ? "" : "s"}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {user.appVersion ? `v${user.appVersion} (${user.appPlatform || "Desktop"})` : "No desktop client recorded"}
+            </p>
+          </div>
+          <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <span>Hardware paired:</span>
+            <span className={user.activationMilestones?.devicePaired ? "text-emerald-400 font-semibold" : "text-slate-500"}>
+              {user.activationMilestones?.devicePaired ? "Yes" : "No"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* First Presentation Milestone & OBS Screenshot Banner */}
@@ -3216,9 +3662,25 @@ export default function AdminUserDetailPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Referrer Attribution */}
                 <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/70">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-indigo-400" />
-                    Attributed Referrer (Invited By)
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                      Attributed Referrer (Invited By)
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignReferralMode("set_referrer");
+                        setSelectedUserForReferral(null);
+                        setUserSearchQuery("");
+                        setUserSearchResults([]);
+                        setAssignReferralError("");
+                        setShowAssignReferralModal(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/60 rounded-lg transition cursor-pointer"
+                    >
+                      {userReferralsData?.referredBy ? "Change Referrer" : "+ Assign Referrer"}
+                    </button>
                   </div>
                   {userReferralsData?.referredBy ? (
                     <div className="space-y-2 mt-2">
@@ -3340,6 +3802,21 @@ export default function AdminUserDetailPage() {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Accounts Referred By This User ({userReferralsData?.referrals?.length || 0})
                   </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignReferralMode("add_referee");
+                      setSelectedUserForReferral(null);
+                      setUserSearchQuery("");
+                      setUserSearchResults([]);
+                      setAssignReferralError("");
+                      setShowAssignReferralModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-700/60 rounded-lg transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Add Referred Account
+                  </button>
                 </div>
 
                 {!userReferralsData?.referrals || userReferralsData.referrals.length === 0 ? (
@@ -4749,6 +5226,139 @@ export default function AdminUserDetailPage() {
                 className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl disabled:opacity-50 transition-colors"
               >
                 {extendingTrial ? "Extending..." : "Extend Trial"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Assign Referral Modal */}
+      {showAssignReferralModal && (
+        <Modal
+          onClose={() => setShowAssignReferralModal(false)}
+          title={
+            assignReferralMode === "set_referrer"
+              ? `Assign Referrer to ${user.name || user.email}`
+              : `Add Account Referred by ${user.name || user.email}`
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-400">
+              {assignReferralMode === "set_referrer"
+                ? "Search the entire database by name or email to select who invited this user. No notification email will be sent; changes reflect instantly."
+                : "Search the entire database by name or email to link another user as having been referred by this user. No notification email will be sent; changes reflect instantly."}
+            </p>
+
+            {/* Search Input */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                {assignReferralMode === "set_referrer" ? "Search Referrer (by name or email)" : "Search Referred User (by name or email)"}
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={userSearchQuery}
+                  onChange={(e) => handleSearchUsers(e.target.value)}
+                  placeholder="Type name, email, or church..."
+                  className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-700 bg-slate-950 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                {userSearching && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Search Results List */}
+            {userSearchResults.length > 0 && (
+              <div className="max-h-48 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/80 p-1">
+                {userSearchResults.map((u) => {
+                  const isSelected = selectedUserForReferral?.id === u.id;
+                  return (
+                    <div
+                      key={u.id}
+                      onClick={() => setSelectedUserForReferral(u)}
+                      className={`p-2.5 rounded-lg flex items-center justify-between gap-3 cursor-pointer transition ${
+                        isSelected ? "bg-indigo-950/60 border border-indigo-700/60" : "hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-100 truncate">{u.name || "Unnamed user"}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+                        {u.churchName && <p className="text-[10px] text-slate-500 truncate">{u.churchName}</p>}
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                          {u.plan}
+                        </span>
+                        {isSelected ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <button
+                            type="button"
+                            className="px-2 py-1 text-[11px] font-medium text-indigo-400 hover:text-white"
+                          >
+                            Select
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {userSearchQuery && !userSearching && userSearchResults.length === 0 && (
+              <p className="text-xs text-slate-500 text-center py-2">No matching users found.</p>
+            )}
+
+            {/* Selected Target Preview */}
+            {selectedUserForReferral && (
+              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40">
+                <p className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider mb-1">
+                  Selected {assignReferralMode === "set_referrer" ? "Referrer" : "Referred User"}:
+                </p>
+                <p className="text-sm font-bold text-slate-100">{selectedUserForReferral.name || "Unnamed user"}</p>
+                <p className="text-xs text-slate-400">{selectedUserForReferral.email}</p>
+              </div>
+            )}
+
+            {assignReferralError && (
+              <p className="text-xs text-rose-400 bg-rose-950/40 border border-rose-800/60 p-2.5 rounded-lg">
+                {assignReferralError}
+              </p>
+            )}
+
+            {assignReferralSuccess && (
+              <p className="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 p-2.5 rounded-lg">
+                {assignReferralSuccess}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowAssignReferralModal(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-gray-800 rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAssignReferralSubmit}
+                disabled={!selectedUserForReferral || assigningReferral}
+                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition flex items-center gap-1.5"
+              >
+                {assigningReferral ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Linking in database...
+                  </>
+                ) : (
+                  "Link Referral (No Email)"
+                )}
               </button>
             </div>
           </div>

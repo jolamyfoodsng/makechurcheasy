@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { getPlanConfig } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail, welcomeEmail } from "@/lib/emailTemplates";
+import { sendVerifiedSignupWelcomeThroughZoho } from "@/lib/zohoCampaigns";
 import { getTrialForUser } from "@/lib/trialRecords";
 
 const limiter = rateLimit({ windowMs: 60_000, max: 10 });
@@ -198,19 +199,34 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    if (trialForWelcome) {
+    const platformSettings = await getPlatformSettings();
+    const welcomeEmailEnabled = platformSettings.notifications.welcomeEmail;
+    const zohoWelcomeResult = welcomeEmailEnabled
+      ? await sendVerifiedSignupWelcomeThroughZoho({
+          email: user.email,
+          firstName: user.name,
+        })
+      : "disabled";
+
+    if (zohoWelcomeResult === "sent") {
+      await db.collection("users").updateOne(
+        { _id: user._id },
+        { $set: { "lifecycleEmails.welcomeSent": true } }
+      );
+    }
+
+    if (zohoWelcomeResult === "confirmation-required") {
+      console.error("[verify-email] Zoho signup list requires another confirmation; welcome email was not duplicated.");
+    } else if (trialForWelcome && welcomeEmailEnabled && zohoWelcomeResult !== "sent") {
       try {
-        const platformSettings = await getPlatformSettings();
-        if (platformSettings.notifications.welcomeEmail) {
-          await sendEmail(
-            welcomeEmail({
-              userName: user.name || "there",
-              userEmail: user.email,
-              trialDays: trialForWelcome.durationDays,
-              trialEndsAt: trialForWelcome.endsAt,
-            })
-          );
-        }
+        await sendEmail(
+          welcomeEmail({
+            userName: user.name || "there",
+            userEmail: user.email,
+            trialDays: trialForWelcome.durationDays,
+            trialEndsAt: trialForWelcome.endsAt,
+          })
+        );
         await db.collection("users").updateOne(
           { _id: user._id },
           { $set: { "lifecycleEmails.welcomeSent": true } }

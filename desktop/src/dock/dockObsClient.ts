@@ -2872,16 +2872,6 @@ export class DockObsClient {
     sceneItemId: number,
     direction: "in" | "out"
   ): Promise<void> {
-    const canvas = await this.getCanvasSize();
-    const scales = direction === "in" ? [0.965, 0.985, 1] : [1, 0.985, 0.965];
-
-    for (let index = 0; index < scales.length; index += 1) {
-      await this.setMediaSceneItemScale(sceneName, sceneItemId, canvas, scales[index]);
-      if (index < scales.length - 1) {
-        await this.sleep(45);
-      }
-    }
-
     if (direction === "in") {
       await this.fitSceneItemToCanvas(sceneName, sceneItemId);
     }
@@ -2916,12 +2906,6 @@ export class DockObsClient {
   private async hideMediaSourceWithAnimation(sceneName: string, sourceName: string): Promise<void> {
     const item = await this.getSceneItemBySource(sceneName, sourceName);
     if (!item || !item.sceneItemEnabled) return;
-
-    try {
-      await this.animateMediaSceneItem(sceneName, item.sceneItemId, "out");
-    } catch {
-      // Fall through to disable even if the transform animation fails.
-    }
 
     try {
       await this.call("SetSceneItemEnabled", {
@@ -11043,37 +11027,70 @@ export class DockObsClient {
   ): Promise<number> {
     let inputExists = false;
     try {
-      const inputs = await this.call("GetInputList") as {
-        inputs: Array<{ inputName: string; inputKind: string }>;
+      const inputInfo = await this.call("GetInputSettings", { inputName: sourceName }) as {
+        inputKind?: string;
       };
-      const existing = inputs.inputs.find((input) => input.inputName === sourceName);
-      if (existing) {
+      if (inputInfo && (inputInfo.inputKind === inputKind || !inputInfo.inputKind)) {
         inputExists = true;
-        if (existing.inputKind === inputKind) {
-          await this.call("SetInputSettings", {
-            inputName: sourceName,
-            inputSettings,
-          });
-        } else {
-          try { await this.call("RemoveInput", { inputName: sourceName }); } catch { /* ignore */ }
-          inputExists = false;
-        }
+        await this.call("SetInputSettings", {
+          inputName: sourceName,
+          inputSettings,
+        });
+      } else if (inputInfo) {
+        try { await this.call("RemoveInput", { inputName: sourceName }); } catch { /* ignore */ }
+        inputExists = false;
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Input does not exist yet; check fallback or create below
+      try {
+        const inputs = await this.call("GetInputList") as {
+          inputs: Array<{ inputName: string; inputKind: string }>;
+        };
+        const existing = inputs?.inputs?.find((input) => input.inputName === sourceName);
+        if (existing) {
+          inputExists = true;
+          if (existing.inputKind === inputKind) {
+            await this.call("SetInputSettings", {
+              inputName: sourceName,
+              inputSettings,
+            });
+          } else {
+            try { await this.call("RemoveInput", { inputName: sourceName }); } catch { /* ignore */ }
+            inputExists = false;
+          }
+        }
+      } catch {
+        inputExists = false;
+      }
+    }
 
-    const resp = await this.call("GetSceneItemList", { sceneName }) as {
-      sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
-    };
-    let sceneItem = resp.sceneItems.find((item) => item.sourceName === sourceName);
+    let sceneItemId = -1;
+    try {
+      const itemResp = await this.call("GetSceneItemId", { sceneName, sourceName }) as { sceneItemId?: number };
+      if (typeof itemResp?.sceneItemId === "number" && itemResp.sceneItemId >= 0) {
+        sceneItemId = itemResp.sceneItemId;
+      }
+    } catch {
+      // Scene item not found yet; will search sceneItems or create below
+      try {
+        const resp = await this.call("GetSceneItemList", { sceneName }) as {
+          sceneItems: Array<{ sourceName: string; sceneItemId: number }>;
+        };
+        const found = resp?.sceneItems?.find((item) => item.sourceName === sourceName);
+        if (found) {
+          sceneItemId = found.sceneItemId;
+        }
+      } catch { /* ignore */ }
+    }
 
-    if (!sceneItem) {
+    if (sceneItemId < 0) {
       if (inputExists) {
         const created = await this.call("CreateSceneItem", {
           sceneName,
           sourceName,
           sceneItemEnabled: enable,
         }) as { sceneItemId: number };
-        sceneItem = { sourceName, sceneItemId: created.sceneItemId };
+        sceneItemId = created.sceneItemId;
       } else {
         const created = await this.call("CreateInput", {
           sceneName,
@@ -11082,19 +11099,19 @@ export class DockObsClient {
           inputSettings,
           sceneItemEnabled: enable,
         }) as { sceneItemId: number };
-        sceneItem = { sourceName, sceneItemId: created.sceneItemId };
+        sceneItemId = created.sceneItemId;
       }
     }
 
     try {
       await this.call("SetSceneItemEnabled", {
         sceneName,
-        sceneItemId: sceneItem.sceneItemId,
+        sceneItemId,
         sceneItemEnabled: enable,
       });
     } catch { /* ignore */ }
 
-    return sceneItem.sceneItemId;
+    return sceneItemId;
   }
 
   /**
@@ -11143,7 +11160,6 @@ export class DockObsClient {
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
 
-    await this.ensureProgramSceneAsSourceInPresentation();
     await this._ensureSceneInputSource(
       sceneName,
       sourceName,
@@ -11167,8 +11183,6 @@ export class DockObsClient {
         mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
       });
     } catch { /* source playback controls vary slightly by OBS version */ }
-
-    await this.ensureTickerAboveSource(sceneName, sourceName).catch(() => { });
   }
 
   /**

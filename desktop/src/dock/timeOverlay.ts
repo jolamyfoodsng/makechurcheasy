@@ -34,6 +34,7 @@ export interface DockTimerOverlayState {
 
 export interface DockClockOverlayState {
   theme?: DockClockTheme;
+  color?: string;
   transparentBg?: boolean;
   hour12: boolean;
   showSeconds: boolean;

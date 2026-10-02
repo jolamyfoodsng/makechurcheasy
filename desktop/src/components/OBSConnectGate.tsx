@@ -88,7 +88,12 @@ export function OBSConnectGate({ children }: Props) {
       });
       setShowConnectPanel(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection failed");
+      const rawMsg = err instanceof Error ? err.message : String(err || "");
+      if (/auth|password/i.test(rawMsg)) {
+        setError("OBS authentication failed. Check your password in OBS → Tools → WebSocket Server Settings and confirm it aligns with MakeChurchEasy.");
+      } else {
+        setError("Failed to connect to OBS. Please check that OBS is running, open Tools → WebSocket Server Settings to confirm it is enabled on port 4455, and ensure credentials align with MakeChurchEasy.");
+      }
     } finally {
       setConnecting(false);
     }

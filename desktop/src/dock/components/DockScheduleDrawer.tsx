@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
 import { dockObsClient } from "../dockObsClient";
@@ -48,6 +49,7 @@ import { resolveDockNotesPresentationSettings } from "../dockNotesStorage";
 import { isDockFreePlan, showUpgradeModal } from "../dockEntitlement";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+import { DOCK_OPEN_SCHEDULE_GUIDE_EVENT } from "./DockScheduleIntroModal";
 import "./dock-schedule.css";
 
 const PIN_STORAGE_KEY = "__mce_dock_schedule_pinned_v1";
@@ -117,7 +119,11 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
   // Context Menu & Header Menu states
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [headerMenuPos, setHeaderMenuPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handleOpenGuide = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(DOCK_OPEN_SCHEDULE_GUIDE_EVENT));
+  }, []);
 
   // Default to false so user starts on Bible tab cleanly without schedule taking over
   const [isPinned, setIsPinned] = useState<boolean>(() => {
@@ -597,6 +603,21 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
     setContextMenu({ item, x, y, scope });
   }, []);
 
+  const handleToggleHeaderMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement | null;
+    const rect = target?.getBoundingClientRect();
+    setHeaderMenuPos((current) => {
+      if (current) return null;
+      if (!rect) return null;
+      const menuWidth = 185;
+      const x = Math.min(Math.max(10, rect.right - menuWidth), Math.max(10, window.innerWidth - menuWidth - 10));
+      const y = Math.min(rect.bottom + 4, Math.max(10, window.innerHeight - 280));
+      return { x, y };
+    });
+  }, []);
+
   const handleCreateNewSchedule = useCallback(() => {
     const title = newScheduleTitle.trim() || `Service ${plans.length + 1}`;
     createNewSchedulePlan(title);
@@ -777,80 +798,39 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
 
               <div className="dock-schedule-panel__header-actions">
                 {isNarrowHeader ? (
-                  <div className="dock-schedule-panel__header-menu-wrap">
-                    <button
-                      type="button"
-                      className="dock-schedule-panel__header-more-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setHeaderMenuOpen((prev) => !prev);
-                      }}
-                      title="More options"
-                      aria-label="More options"
-                    >
-                      <Icon name="more_vert" size={14} />
-                    </button>
-                    {headerMenuOpen && (
-                      <>
-                        <div
-                          className="dock-schedule-context-backdrop"
-                          onClick={() => setHeaderMenuOpen(false)}
-                        />
-                        <div className="dock-schedule-header-dropdown" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="dock-schedule-header-dropdown__item"
-                            onClick={() => {
-                              setHeaderMenuOpen(false);
-                              handleTogglePin();
-                            }}
-                          >
-                            <Icon name="pin" size={13} />
-                            <span>{isPinned ? "Unpin Schedule" : "Pin Open Permanently"}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="dock-schedule-header-dropdown__item dock-schedule-panel__close-btn"
-                            onClick={() => {
-                              setHeaderMenuOpen(false);
-                              handleCollapse();
-                            }}
-                          >
-                            <Icon name="close" size={13} />
-                            <span>Close Schedule</span>
-                          </button>
-                          {activeViewTab === "history" && effectiveHistoryItems.length > 0 && (
-                            <button
-                              type="button"
-                              className="dock-schedule-header-dropdown__item dock-schedule-header-dropdown__item--danger"
-                              onClick={() => {
-                                setHeaderMenuOpen(false);
-                                handleClearHistory();
-                              }}
-                            >
-                              <Icon name="delete_sweep" size={13} />
-                              <span>Clear History</span>
-                            </button>
-                          )}
-                          {activeViewTab === "schedule" && (
-                            <button
-                              type="button"
-                              className="dock-schedule-header-dropdown__item"
-                              onClick={() => {
-                                setHeaderMenuOpen(false);
-                                setShowNewSchedulePrompt(true);
-                              }}
-                            >
-                              <Icon name="add" size={13} />
-                              <span>New Schedule...</span>
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    className="dock-schedule-panel__header-more-btn"
+                    onClick={handleToggleHeaderMenu}
+                    title="More options"
+                    aria-label="More options"
+                  >
+                    <Icon name="more_vert" size={14} />
+                  </button>
                 ) : (
                   <>
+                    {/* Refresh button */}
+                    <button
+                      type="button"
+                      className="dock-schedule-panel__pin-btn"
+                      onClick={() => window.location.reload()}
+                      title={t("common.refresh", "Refresh")}
+                      aria-label={t("common.refresh", "Refresh")}
+                    >
+                      <Icon name="refresh" size={14} />
+                    </button>
+
+                    {/* Help / Guide button */}
+                    <button
+                      type="button"
+                      className="dock-schedule-panel__pin-btn"
+                      onClick={handleOpenGuide}
+                      title={t("schedule.introHint", "Schedule & History Guide")}
+                      aria-label="Schedule & History Guide"
+                    >
+                      <Icon name="help_outline" size={14} />
+                    </button>
+
                     {/* Pin button */}
                     <button
                       type="button"
@@ -1255,10 +1235,16 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
       )}
 
       {/* ── Right-Click / 3-Dots Context Menu ── */}
-      {contextMenu && (
+      {contextMenu && typeof document !== "undefined" && createPortal(
         <>
           <div
             className="dock-schedule-context-backdrop"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 99998,
+              background: "transparent",
+            }}
             onClick={() => setContextMenu(null)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -1268,8 +1254,10 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           <div
             className="dock-schedule-context-menu"
             style={{
+              position: "fixed",
               top: contextMenu.y,
               left: contextMenu.x,
+              zIndex: 99999,
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1354,10 +1342,114 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
               }}
             >
               <Icon name="delete_outline" size={13} />
-              <span>{contextMenu.scope === "history" ? "Remove from History" : "Remove from Schedule"}</span>
+              <span>Remove</span>
             </button>
           </div>
-        </>
+        </>,
+        document.body,
+      )}
+
+      {/* ── Header 3-Dots Dropdown Menu (Portaled directly to body to guarantee visibility and prevent clipping) ── */}
+      {headerMenuPos && typeof document !== "undefined" && createPortal(
+        <>
+          <div
+            className="dock-schedule-context-backdrop"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 99998,
+              background: "transparent",
+            }}
+            onClick={() => setHeaderMenuPos(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setHeaderMenuPos(null);
+            }}
+          />
+          <div
+            className="dock-schedule-context-menu"
+            style={{
+              position: "fixed",
+              top: headerMenuPos.y,
+              left: headerMenuPos.x,
+              zIndex: 99999,
+              minWidth: 185,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                setHeaderMenuPos(null);
+                handleTogglePin();
+              }}
+            >
+              <Icon name="pin" size={13} />
+              <span>{isPinned ? "Unpin Schedule" : "Pin Open Permanently"}</span>
+            </button>
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                setHeaderMenuPos(null);
+                handleCollapse();
+              }}
+            >
+              <Icon name="close" size={13} />
+              <span>Close Schedule</span>
+            </button>
+            {activeViewTab === "history" && effectiveHistoryItems.length > 0 && (
+              <button
+                type="button"
+                className="dock-schedule-context-menu__item dock-schedule-context-menu__item--danger"
+                onClick={() => {
+                  setHeaderMenuPos(null);
+                  handleClearHistory();
+                }}
+              >
+                <Icon name="delete_sweep" size={13} />
+                <span>Clear History</span>
+              </button>
+            )}
+            {activeViewTab === "schedule" && (
+              <button
+                type="button"
+                className="dock-schedule-context-menu__item"
+                onClick={() => {
+                  setHeaderMenuPos(null);
+                  setShowNewSchedulePrompt(true);
+                }}
+              >
+                <Icon name="add" size={13} />
+                <span>New Schedule...</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                setHeaderMenuPos(null);
+                handleOpenGuide();
+              }}
+            >
+              <Icon name="help_outline" size={13} />
+              <span>Schedule Guide...</span>
+            </button>
+            <button
+              type="button"
+              className="dock-schedule-context-menu__item"
+              onClick={() => {
+                setHeaderMenuPos(null);
+                window.location.reload();
+              }}
+            >
+              <Icon name="refresh" size={13} />
+              <span>{t("common.refresh", "Refresh")}</span>
+            </button>
+          </div>
+        </>,
+        document.body,
       )}
     </aside>
   );

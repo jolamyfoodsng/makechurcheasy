@@ -1715,6 +1715,17 @@ function DockWorshipTab({
   const [deletedSections, setDeletedSections] = useState<DeletedWorshipSection[]>([]);
   const [showDeletedSectionsPopover, setShowDeletedSectionsPopover] = useState(false);
   const [showCompactSummaryActions, setShowCompactSummaryActions] = useState(false);
+  const [showBrowserMenu, setShowBrowserMenu] = useState(false);
+  const browserMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isConstrained, setIsConstrained] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 400 || window.innerHeight < 450 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsConstrained(window.innerWidth <= 400 || window.innerHeight < 450);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [showAutoAdvanceModal, setShowAutoAdvanceModal] = useState(false);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [onlineSearchOpen, setOnlineSearchOpen] = useState(false);
@@ -2226,10 +2237,18 @@ function DockWorshipTab({
       ) {
         setShowCompactSummaryActions(false);
       }
+      if (
+        showBrowserMenu &&
+        browserMenuRef.current &&
+        target instanceof Node &&
+        !browserMenuRef.current.contains(target)
+      ) {
+        setShowBrowserMenu(false);
+      }
     };
     document.addEventListener("pointerdown", handler);
     return () => document.removeEventListener("pointerdown", handler);
-  }, [showCompactSummaryActions, showDeletedSectionsPopover]);
+  }, [showBrowserMenu, showCompactSummaryActions, showDeletedSectionsPopover]);
 
   const handleToggleDeletedSectionsPopover = useCallback(() => {
     setShowDeletedSectionsPopover((current) => {
@@ -3837,6 +3856,11 @@ function DockWorshipTab({
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === "Escape") {
+        if (showBrowserMenu) {
+          event.preventDefault();
+          setShowBrowserMenu(false);
+          return;
+        }
         if (songEditor || slideEditor || isNewSongModalOpen || onlineSearchOpen || showCompactSummaryActions) {
           event.preventDefault();
           closeSongEditor();
@@ -3910,35 +3934,102 @@ function DockWorshipTab({
         </Suspense>, document.body)}
       <div className="dock-console-header dock-worship-song-browser__header">
         <div className="dock-console-actions dock-console-actions--song-browser">
-          <button type="button" className="dock-console-toggle dock-console-toggle--icon-only"
-            onClick={() => setDocumentImportOpen(true)} title="Import document" aria-label="Import document">
-            <Icon name="upload_file" size={14} />
-          </button>
-          <button
-            type="button"
-            className="dock-console-toggle dock-console-toggle--icon-only"
-            onClick={() => {
-              setOnlineSearchQuery(searchQuery.trim());
-              setOnlineSearchSubmittedQuery("");
-              setOnlineResults([]);
-              setOnlineSearchOpen(true);
-              setOnlineSearchError("");
-            }}
-            title={t('worship.searchOnline')}
-            aria-label={t('worship.searchOnline')}
-          >
-            <Icon name="travel_explore" size={14} />
-          </button>
-          <button
-            type="button"
-            className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
-            onClick={() => openNewSongModal()}
-            title={t('worship.addSong')}
-            aria-label={t('worship.addSong')}
-          >
-            <Icon name="add" size={14} />
-            <span className="dock-console-toggle__label">{t('common.add')}</span>
-          </button>
+          {isConstrained ? (
+            <div className="dock-worship-browser-overflow-wrap" ref={browserMenuRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="dock-console-toggle dock-console-toggle--icon-only"
+                onClick={() => setShowBrowserMenu((prev) => !prev)}
+                title={t("common.moreActions", "More actions")}
+                aria-label={t("common.moreActions", "More actions")}
+                aria-expanded={showBrowserMenu}
+                aria-haspopup="menu"
+              >
+                <Icon name="more_vert" size={14} />
+              </button>
+              {showBrowserMenu && (
+                <div
+                  className="dock-bible-actions__menu dock-worship-actions__menu"
+                  role="menu"
+                  style={{ top: "calc(100% + 4px)", right: 0, width: "190px", minWidth: "170px", zIndex: 250 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item-entry"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBrowserMenu(false);
+                      openNewSongModal();
+                    }}
+                  >
+                    <Icon name="add" size={16} />
+                    <span>{t("worship.addSong", "Add new song")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item-entry"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBrowserMenu(false);
+                      setOnlineSearchQuery(searchQuery.trim());
+                      setOnlineSearchSubmittedQuery("");
+                      setOnlineResults([]);
+                      setOnlineSearchOpen(true);
+                      setOnlineSearchError("");
+                    }}
+                  >
+                    <Icon name="travel_explore" size={16} />
+                    <span>{t("worship.searchOnline", "Search online")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-actions__menu-item-entry"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowBrowserMenu(false);
+                      setDocumentImportOpen(true);
+                    }}
+                  >
+                    <Icon name="upload_file" size={16} />
+                    <span>{t("worship.importDocument", "Import document")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <button type="button" className="dock-console-toggle dock-console-toggle--icon-only"
+                onClick={() => setDocumentImportOpen(true)} title="Import document" aria-label="Import document">
+                <Icon name="upload_file" size={14} />
+              </button>
+              <button
+                type="button"
+                className="dock-console-toggle dock-console-toggle--icon-only"
+                onClick={() => {
+                  setOnlineSearchQuery(searchQuery.trim());
+                  setOnlineSearchSubmittedQuery("");
+                  setOnlineResults([]);
+                  setOnlineSearchOpen(true);
+                  setOnlineSearchError("");
+                }}
+                title={t('worship.searchOnline')}
+                aria-label={t('worship.searchOnline')}
+              >
+                <Icon name="travel_explore" size={14} />
+              </button>
+              <button
+                type="button"
+                className="dock-console-toggle dock-console-toggle--primary dock-console-toggle--add"
+                onClick={() => openNewSongModal()}
+                title={t('worship.addSong')}
+                aria-label={t('worship.addSong')}
+              >
+                <Icon name="add" size={14} />
+                <span className="dock-console-toggle__label">{t('common.add')}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="dock-search dock-search--console dock-search--plain" style={{ marginBottom: 0 }} ref={searchRef}>
@@ -4821,14 +4912,19 @@ function DockWorshipTab({
                     >
                       <button
                         type="button"
-                        className="dock-btm-overflow__menu-item"
+                        ref={deletedSectionsTriggerRef}
+                        className={`dock-btm-overflow__menu-item${showDeletedSectionsPopover ? " dock-btm-overflow__menu-item--active" : ""}`}
                         data-dock-close-overflow="true"
                         onClick={handleToggleDeletedSectionsPopover}
                         title={t("worship.viewDeletedSlides")}
                         aria-label={t("worship.viewDeletedSlides")}
+                        aria-expanded={showDeletedSectionsPopover}
                       >
                         <Icon name="delete_sweep" size={14} />
                         <span>{t("worship.viewDeletedSlides")}</span>
+                        {deletedSections.length > 0 && (
+                          <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
+                        )}
                       </button>
                       <DockSceneRoutingControl
                         module="worship"
@@ -4840,30 +4936,17 @@ function DockWorshipTab({
                         iconName="cast"
                       />
 
-                      <button
-                        type="button"
-                        ref={deletedSectionsTriggerRef}
-                        className={`dock-btm-toolbar__icon-btn${showDeletedSectionsPopover ? " dock-btm-toolbar__icon-btn--active" : ""}`}
-                        onClick={handleToggleDeletedSectionsPopover}
-                        title={t("worship.viewDeletedSlides")}
-                        aria-label={t("worship.viewDeletedSlides")}
-                        aria-expanded={showDeletedSectionsPopover}
-                      >
-                        <Icon name="delete_sweep" size={14} />
-                        {deletedSections.length > 0 && (
-                          <span className="dock-worship-history__count">{Math.min(deletedSections.length, 9)}</span>
-                        )}
-                      </button>
-
                       {presentationLinkMode && (
                         <button
                           type="button"
-                          className={`dock-btm-toolbar__icon-btn${showPresentationMeta ? " dock-btm-toolbar__icon-btn--active" : ""}`}
+                          className={`dock-btm-overflow__menu-item${showPresentationMeta ? " dock-btm-overflow__menu-item--active" : ""}`}
+                          data-dock-close-overflow="true"
                           onClick={() => void handleTogglePresentationMeta()}
                           title={showPresentationMeta ? t("worship.hidePresentationMeta") : t("worship.showPresentationMeta")}
                           aria-label={showPresentationMeta ? t("worship.hidePresentationMeta") : t("worship.showPresentationMeta")}
                         >
                           <Icon name="title" size={14} />
+                          <span>{t("worship.presentationMeta", "Presentation Title & Subtitle")}</span>
                         </button>
                       )}
 

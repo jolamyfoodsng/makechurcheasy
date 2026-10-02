@@ -440,3 +440,116 @@ export async function getAdminReferralOverview(limit = 500) {
     referrals: referrals.map((referral) => referralItemFromDoc(referral, usersById, true)),
   };
 }
+
+export async function adminAssignReferral(params: {
+  referrerUserId: string;
+  referredUserId: string;
+}): Promise<{
+  referral: ReferralRecord;
+  referrer: ReferralUserSummary;
+  referred: ReferralUserSummary;
+  isNew: boolean;
+}> {
+  await ensureIndexes();
+  const { referrerUserId, referredUserId } = params;
+
+  if (!referrerUserId || !referredUserId) {
+    throw new Error("Both referrer and referred user are required");
+  }
+  if (referrerUserId === referredUserId) {
+    throw new Error("A user cannot refer themselves");
+  }
+
+  const referrerObjectId = toObjectId(referrerUserId);
+  const referredObjectId = toObjectId(referredUserId);
+  if (!referrerObjectId || !referredObjectId) {
+    throw new Error("Invalid user IDs");
+  }
+
+  const client = await clientPromise;
+  const db = client.db();
+  const users = db.collection("users");
+  const referralsCol = db.collection<ReferralRecord>(COLLECTIONS.REFERRALS);
+
+  const [referrerDoc, referredDoc] = await Promise.all([
+    users.findOne({ _id: referrerObjectId }),
+    users.findOne({ _id: referredObjectId }),
+  ]);
+
+  if (!referrerDoc) throw new Error("Referrer user not found");
+  if (!referredDoc) throw new Error("Referred user not found");
+
+  const code = await ensureReferralCodeForUser(referrerUserId);
+  const now = new Date().toISOString();
+
+  let existingReferral = await referralsCol.findOne({ referredUserId });
+  let isNew = false;
+  let referralRecord: ReferralRecord;
+
+  const isPaid = (referredDoc.plan && referredDoc.plan !== "free");
+
+  if (existingReferral) {
+    await referralsCol.updateOne(
+      { _id: existingReferral._id },
+      {
+        $set: {
+          code,
+          referrerUserId,
+          status: isPaid ? "paid" : existingReferral.status || "signed_up",
+          paidAt: isPaid ? (existingReferral.paidAt || now) : existingReferral.paidAt,
+          paidPlan: isPaid ? (existingReferral.paidPlan || referredDoc.plan) : existingReferral.paidPlan,
+          updatedAt: now,
+        },
+      }
+    );
+    referralRecord = {
+      ...existingReferral,
+      code,
+      referrerUserId,
+      status: isPaid ? "paid" : existingReferral.status || "signed_up",
+      updatedAt: now,
+    };
+  } else {
+    isNew = true;
+    const newRecord: ReferralRecord = {
+      code,
+      referrerUserId,
+      referredUserId,
+      status: isPaid ? "paid" : "signed_up",
+      paidAt: isPaid ? now : null,
+      paidPlan: isPaid ? referredDoc.plan : null,
+      paidAmount: null,
+      paidCurrency: null,
+      paidBillingReference: null,
+      paidBillingTransactionId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const insertRes = await referralsCol.insertOne(newRecord);
+    newRecord._id = insertRes.insertedId;
+    referralRecord = newRecord;
+  }
+
+  await users.updateOne(
+    { _id: referredObjectId },
+    {
+      $set: {
+        referredBy: {
+          code,
+          referrerUserId,
+          referralId: referralRecord._id?.toString() || "",
+          appliedAt: now,
+        },
+      },
+      $unset: { referralPromptSkippedAt: "" },
+    }
+  );
+
+  return {
+    referral: referralRecord,
+    referrer: userSummaryFromDoc(referrerDoc)!,
+    referred: userSummaryFromDoc(referredDoc)!,
+    isNew,
+  };
+}
+

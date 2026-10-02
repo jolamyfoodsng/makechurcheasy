@@ -3,15 +3,16 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Mic, ArrowRight, Check, Sparkles, Volume2, Globe, FileText, Share2, Layers } from "lucide-react";
+import styles from "./verse-ai-showcase.module.css";
 
 export default function VerseAiShowcase() {
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
 
   return (
-    <section className="w-full bg-white relative overflow-hidden border-b border-slate-100" id="verse-ai-showcase">
-      <div className="max-w-[1520px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-14 pt-12 sm:pt-16 pb-24 w-full">
+    <section className={`${styles.showcase} w-full bg-white relative overflow-hidden border-b border-slate-100`} id="verse-ai-showcase">
+      <div className={styles.container}>
         {/* Section Header */}
-        <header className="max-w-5xl mx-auto flex flex-col items-center text-center mb-12 sm:mb-16 font-['Open_Sans',var(--font-open-sans),sans-serif]">
+        <header className={styles.header}>
           <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
             <span className="block text-sm sm:text-base font-black tracking-widest text-[#0c66e4] uppercase">
               VERSE AI 101
@@ -20,19 +21,22 @@ export default function VerseAiShowcase() {
               REAL-TIME SPEECH-TO-SCRIPTURE IN OBS
             </span>
           </div>
-          <h2 className="text-3xl sm:text-5xl md:text-6xl font-black text-[#172b4d] leading-[1.1] tracking-tight mb-5 text-balance text-center">
+          <h2 className={styles.heading}>
             Turn live preaching into scriptures, sermon quotes, and transcripts in real time.
           </h2>
-          <p className="text-base sm:text-xl md:text-2xl text-[#44546f] leading-relaxed font-normal max-w-3xl sm:max-w-4xl text-center text-balance font-sans">
-            <strong className="text-[#172b4d] font-bold">Think PewBeam, but directly inside OBS.</strong> You don&apos;t need to juggle three different apps just to get things done on Sunday morning—never scramble to find unannounced Bible verses or missed quotes again. MakeChurchEazy listens to your pastor’s voice and stages broadcast-ready content the moment it&apos;s spoken, <span className="text-[#0c66e4] font-bold underline decoration-2 underline-offset-4">directly inside OBS.</span>
+          <p className={styles.lead}>
+            Zero scrambling. Zero app switching. OBS listens, detects, and prepares your graphics automatically.
+          </p>
+          <p className={styles.description}>
+            When your pastor calls out an unexpected passage or drops an unforgettable quote, your media team shouldn&apos;t have to panic-search through separate software. MakeChurchEazy hooks straight into your pulpit audio feed inside OBS, transcribes speech in real time, and stages broadcast-ready scripture slides, quote graphics, and multi-lingual subtitles the exact moment they are spoken.
           </p>
         </header>
 
         {/* Grid Container */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+        <div className={`${styles.featureGrid} grid grid-cols-1 lg:grid-cols-12 items-start`}>
 
-          {/* Left Navigation Tabs (Shortened, Clean Key Points, Large Fonts) */}
-          <nav aria-label="Feature Tabs" className="lg:col-span-4 flex flex-col space-y-4">
+          {/* Left Navigation Tabs */}
+          <nav aria-label="Feature Tabs" className={`${styles.featureNav} lg:col-span-4 flex flex-col space-y-4`}>
 
             {/* Tab 1: Speech-to-Scripture */}
             <button
@@ -48,24 +52,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#00c7e5] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Project Bible verses at the speed of light
+                Instant Bible verse detection
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Listens to your pastor in real time and detects quoted scriptures automatically.
+                Listens to your pastor&apos;s spoken words and automatically looks up every cited scripture in milliseconds.
               </p>
               {activeTab === 1 && (
-                <ul className="space-y-2 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 stroke-[3] shrink-0" />
-                    <span>1-Click push to OBS lower-thirds &amp; projector</span>
+                <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>1-Click push to OBS:</strong> Send ready-to-air lower thirds or full-screen sanctuary projector slides instantly.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 stroke-[3] shrink-0" />
-                    <span>Multi-translation side-by-side (ESV, NIV, KJV)</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Side-by-side translations:</strong> Instantly switch or compare ESV, NIV, KJV, NKJV, and NLT on air.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 stroke-[3] shrink-0" />
-                    <span>100% offline church sanctuary engine</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>100% offline church engine:</strong> Works reliably on local sanctuary hardware even when Sunday Wi-Fi drops.</span>
                   </li>
                 </ul>
               )}
@@ -85,24 +89,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#6554c0] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Capture &amp; edit sermon quotes on the fly
+                Auto-capture sermon quotes &amp; key points
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Turn standout sermon points into broadcast visuals and take-home notes instantly.
+                Identifies powerful punchlines and memorable sermon takeaways as they are spoken from the pulpit.
               </p>
               {activeTab === 2 && (
-                <ul className="space-y-2 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 stroke-[3] shrink-0" />
-                    <span>Auto-detects memorable sermon principles</span>
+                <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Live editing dock:</strong> Review, polish, or trim pastor quotes in real time before sending them to the stream.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 stroke-[3] shrink-0" />
-                    <span>Live editing dock before going to air</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Stream-ready lower thirds:</strong> Format quotes instantly into church-branded stream titles and overlay banners.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 stroke-[3] shrink-0" />
-                    <span>Social-ready 1:1 cards &amp; lower-thirds</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Social cards &amp; notes:</strong> Generate shareable square/vertical sermon cards and bulletin takeaways with 1 click.</span>
                   </li>
                 </ul>
               )}
@@ -122,24 +126,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#00875a] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Full transcripts &amp; instant translation
+                Full transcripts &amp; instant live subtitles
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Word-for-word message records with real-time multi-lingual subtitles.
+                Low-latency word-for-word voice transcription that feeds live captions directly into your broadcast.
               </p>
               {activeTab === 3 && (
-                <ul className="space-y-2 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 stroke-[3] shrink-0" />
-                    <span>0.4s low-latency word-for-word speech capture</span>
+                <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>0.4s low-latency captioning:</strong> Live subtitling rendered directly over your OBS camera feed for accessibility.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 stroke-[3] shrink-0" />
-                    <span>Real-time translation feeds (Spanish, Portuguese, French)</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Multi-lingual live translation:</strong> Stream simultaneous translated subtitles in Spanish, French, Portuguese, and more.</span>
                   </li>
-                  <li className="flex items-center text-slate-800">
-                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 stroke-[3] shrink-0" />
-                    <span>1-Click export to bulletin notes &amp; archive</span>
+                  <li className="flex items-start text-slate-800">
+                    <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
+                    <span><strong>Instant sermon archive export:</strong> Export searchable full-text sermon transcripts to PDF, Word, or church bulletin.</span>
                   </li>
                 </ul>
               )}

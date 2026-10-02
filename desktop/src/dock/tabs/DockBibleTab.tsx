@@ -1842,6 +1842,8 @@ function DockBibleTab({
   const copyFeedbackTimerRef = useRef<number | null>(null);
 
   // ── Height-responsive compact mode ──
+  const [containerHeight, setContainerHeight] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 600));
+  const [containerWidth, setContainerWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 800));
   const [isShortHeight, setIsShortHeight] = useState(() => {
     const el = containerRef.current;
     return el ? el.clientHeight <= 520 : false;
@@ -1850,6 +1852,10 @@ function DockBibleTab({
   const [isUltraNarrowWidth, setIsUltraNarrowWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 340 : false));
   const [isSub300Width, setIsSub300Width] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 300 : false));
   const [showAllFavoritesModal, setShowAllFavoritesModal] = useState(false);
+  const [showChapterBarMenu, setShowChapterBarMenu] = useState(false);
+  const chapterBarActionsRef = useRef<HTMLDivElement | null>(null);
+
+  const isConstrained = containerWidth <= 400 || containerHeight < 450 || (typeof window !== "undefined" && (window.innerWidth <= 400 || window.innerHeight < 450));
 
   const _fsThemeDepId = productionDefaults.fullscreenTheme?.id;
   const _ltThemeDepId = productionDefaults.lowerThirdTheme?.id;
@@ -1869,6 +1875,8 @@ function DockBibleTab({
 
     const syncLayout = (target: Element, height: number, width: number) => {
       if (target === element) {
+        setContainerHeight(height);
+        setContainerWidth(width);
         setIsShortHeight(height <= 520);
         setIsNarrowWidth(width < 400);
         setIsUltraNarrowWidth(width <= 340);
@@ -2087,6 +2095,9 @@ function DockBibleTab({
       if (!insideComparePopover) {
         setShowComparePopover(false);
         setShowBibleActionsMenu(false);
+      }
+      if (chapterBarActionsRef.current && !chapterBarActionsRef.current.contains(event.target as Node)) {
+        setShowChapterBarMenu(false);
       }
       if (browserFontSizePopoverRef.current && !browserFontSizePopoverRef.current.contains(event.target as Node)) {
         setShowBrowserFontSizePopover(false);
@@ -7264,25 +7275,75 @@ function DockBibleTab({
         </button>
       </div>
 
-      <div className="dock-bible-chapter-bar__actions">
-        <button
-          type="button"
-          className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__fav-btn"
-          onClick={() => setShowAllFavoritesModal(true)}
-          title={t("bible.favorites", "Favorite Passages")}
-          aria-label={t("bible.favorites", "Favorite Passages")}
-        >
-          <Icon name="star" size={15} />
-        </button>
-        <button
-          type="button"
-          className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__history-btn"
-          onClick={() => setShowBibleHistory(true)}
-          title={t("bibleHistory.title", "Bible History")}
-          aria-label={t("bibleHistory.title", "Bible History")}
-        >
-          <Icon name="history" size={15} />
-        </button>
+      <div className="dock-bible-chapter-bar__actions" ref={chapterBarActionsRef}>
+        {isConstrained ? (
+          <>
+            <button
+              type="button"
+              className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__more-btn"
+              onClick={() => setShowChapterBarMenu((prev) => !prev)}
+              title={t("common.moreActions", "More actions")}
+              aria-label={t("common.moreActions", "More actions")}
+              aria-expanded={showChapterBarMenu}
+              aria-haspopup="menu"
+            >
+              <Icon name="more_vert" size={15} />
+            </button>
+            {showChapterBarMenu && (
+              <div
+                className="dock-bible-actions__menu dock-bible-chapter-bar__menu"
+                role="menu"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item-entry"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowChapterBarMenu(false);
+                    setShowAllFavoritesModal(true);
+                  }}
+                >
+                  <Icon name="star" size={15} style={{ color: "#eab308" }} />
+                  <span>{t("bible.favorites", "Favorite Passages")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="dock-bible-actions__menu-item-entry"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowChapterBarMenu(false);
+                    setShowBibleHistory(true);
+                  }}
+                >
+                  <Icon name="history" size={15} />
+                  <span>{t("bibleHistory.title", "Bible History")}</span>
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__fav-btn"
+              onClick={() => setShowAllFavoritesModal(true)}
+              title={t("bible.favorites", "Favorite Passages")}
+              aria-label={t("bible.favorites", "Favorite Passages")}
+            >
+              <Icon name="star" size={15} />
+            </button>
+            <button
+              type="button"
+              className="dock-bible-chapter-bar__btn dock-bible-chapter-bar__history-btn"
+              onClick={() => setShowBibleHistory(true)}
+              title={t("bibleHistory.title", "Bible History")}
+              aria-label={t("bibleHistory.title", "Bible History")}
+            >
+              <Icon name="history" size={15} />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Floating Dropdown Panel */}
@@ -7473,6 +7534,15 @@ function DockBibleTab({
       headerActions={
         () => (
           <div className="dock-bible-header-actions dock-bible-compact-actions" ref={comparePopoverRef}>
+            <button
+              type="button"
+              className="dock-bible-actions__overflow"
+              onClick={() => window.location.reload()}
+              aria-label={t("common.refresh", "Refresh")}
+              title={t("common.refresh", "Refresh")}
+            >
+              <Icon name="refresh" size={15} />
+            </button>
             <button
               type="button"
               className="dock-bible-actions__overflow"
@@ -8123,11 +8193,6 @@ function DockBibleTab({
                           ? `${selectedBook} ${selectedChapter}:${verse.verse} ${translationA} ${verseA.text} ${translationB} ${verseB.text}`
                           : t("bible.verseAriaLabel", { verse: verse.verse, translation: activeTranslation, text: verse.text })
                       }
-                      title={
-                        compareEnabled
-                          ? `${selectedBook} ${selectedChapter}:${verse.verse} — ${translationA} / ${translationB}`
-                          : `${activeTranslation} ${selectedBook} ${selectedChapter}:${verse.verse} — ${presentationLinkMode ? "Click to show on presentation screen" : "Click to view in OBS"}`
-                      }
                     >
                       <div className="dock-bible-verse-row__num">
                         {verse.verse}
@@ -8170,92 +8235,111 @@ function DockBibleTab({
               )}
             </div>
 
-            {verseContextMenu && (
-              <div
-                className="dock-bible-context-menu"
-                style={{
-                  top: `${verseContextMenu.y}px`,
-                  left: `${verseContextMenu.x}px`,
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="dock-bible-context-menu__item"
-                  onClick={() => {
-                    if (selectedBook && selectedChapter) {
-                      const currentScheduleBibleTheme = overlayMode === "fullscreen" ? selectedBibleTheme.id : selectedLowerThirdTheme.id;
-                      const currentScheduleThemeSettings = overlayMode === "fullscreen"
-                        ? fullscreenQuickThemeSettings
-                        : lowerThirdQuickThemeSettings;
+            {verseContextMenu && typeof document !== "undefined" && createPortal(
+              <>
+                <div
+                  className="dock-schedule-backdrop"
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 99999,
+                    background: "transparent",
+                  }}
+                  onClick={() => setVerseContextMenu(null)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setVerseContextMenu(null);
+                  }}
+                />
+                <div
+                  className="dock-bible-context-menu"
+                  style={{
+                    position: "fixed",
+                    top: `${verseContextMenu.y}px`,
+                    left: `${verseContextMenu.x}px`,
+                    zIndex: 100000,
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      if (selectedBook && selectedChapter) {
+                        const currentScheduleBibleTheme = overlayMode === "fullscreen" ? selectedBibleTheme.id : selectedLowerThirdTheme.id;
+                        const currentScheduleThemeSettings = overlayMode === "fullscreen"
+                          ? fullscreenQuickThemeSettings
+                          : lowerThirdQuickThemeSettings;
 
-                      addBibleToActiveSchedule({
-                        reference: `${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`,
-                        text: verseContextMenu.text,
-                        translation: activeTranslation,
-                        book: selectedBook,
-                        chapter: selectedChapter,
-                        verse: verseContextMenu.verse,
-                        overlayMode,
-                        theme: currentScheduleBibleTheme,
-                        bibleThemeSettings: currentScheduleThemeSettings as unknown as Record<string, unknown> | null,
-                      });
-                    }
-                    setVerseContextMenu(null);
-                  }}
-                >
-                  <Icon name="playlist_add" size={16} />
-                  <span>{t("schedule.addToSchedule", "Add to Schedule")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-context-menu__item"
-                  onClick={() => {
-                    if (selectedBook && selectedChapter) {
-                      setCompareVersesModal({
-                        book: selectedBook,
-                        chapter: selectedChapter,
-                        verse: verseContextMenu.verse,
-                      });
-                    }
-                    setVerseContextMenu(null);
-                  }}
-                >
-                  <Icon name="compare_arrows" size={16} />
-                  <span>{t("bible.compareVerses", "Compare Verses")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-context-menu__item"
-                  onClick={() => {
-                    void handleToggleStarVerse(verseContextMenu.verse, verseContextMenu.text);
-                    setVerseContextMenu(null);
-                  }}
-                >
-                  <Icon
-                    name={favoriteRefs.has(`${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`) ? "star" : "star_border"}
-                    size={16}
-                  />
-                  <span>
-                    {favoriteRefs.has(`${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`)
-                      ? t("bible.unstarVerse", "Unstar Verse")
-                      : t("bible.starVerse", "Star Verse")}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="dock-bible-context-menu__item"
-                  onClick={() => {
-                    const textToCopy = `${selectedBook} ${selectedChapter}:${verseContextMenu.verse} (${activeTranslation})\n${verseContextMenu.text}`;
-                    void navigator.clipboard?.writeText(textToCopy);
-                    setVerseContextMenu(null);
-                  }}
-                >
-                  <Icon name="content_copy" size={16} />
-                  <span>{t("bible.copyVerse", "Copy Verse")}</span>
-                </button>
-              </div>
+                        addBibleToActiveSchedule({
+                          reference: `${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`,
+                          text: verseContextMenu.text,
+                          translation: activeTranslation,
+                          book: selectedBook,
+                          chapter: selectedChapter,
+                          verse: verseContextMenu.verse,
+                          overlayMode,
+                          theme: currentScheduleBibleTheme,
+                          bibleThemeSettings: currentScheduleThemeSettings as unknown as Record<string, unknown> | null,
+                        });
+                      }
+                      setVerseContextMenu(null);
+                    }}
+                  >
+                    <Icon name="playlist_add" size={16} />
+                    <span>{t("schedule.addToSchedule", "Add to Schedule")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      if (selectedBook && selectedChapter) {
+                        setCompareVersesModal({
+                          book: selectedBook,
+                          chapter: selectedChapter,
+                          verse: verseContextMenu.verse,
+                        });
+                      }
+                      setVerseContextMenu(null);
+                    }}
+                  >
+                    <Icon name="compare_arrows" size={16} />
+                    <span>{t("bible.compareVerses", "Compare Verses")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      void handleToggleStarVerse(verseContextMenu.verse, verseContextMenu.text);
+                      setVerseContextMenu(null);
+                    }}
+                  >
+                    <Icon
+                      name={favoriteRefs.has(`${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`) ? "star" : "star_border"}
+                      size={16}
+                    />
+                    <span>
+                      {favoriteRefs.has(`${selectedBook} ${selectedChapter}:${verseContextMenu.verse}`)
+                        ? t("bible.unstarVerse", "Unstar Verse")
+                        : t("bible.starVerse", "Star Verse")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dock-bible-context-menu__item"
+                    onClick={() => {
+                      const textToCopy = `${selectedBook} ${selectedChapter}:${verseContextMenu.verse} (${activeTranslation})\n${verseContextMenu.text}`;
+                      void navigator.clipboard?.writeText(textToCopy);
+                      setVerseContextMenu(null);
+                    }}
+                  >
+                    <Icon name="content_copy" size={16} />
+                    <span>{t("bible.copyVerse", "Copy Verse")}</span>
+                  </button>
+                </div>
+              </>,
+              document.body,
             )}
 
             <div
@@ -8363,6 +8447,7 @@ function DockBibleTab({
                     showLabel
                     iconName="cast"
                   />
+                  <div className="dock-btm-overflow__divider" role="separator" />
                   <button
                     type="button"
                     className="dock-btm-overflow__menu-item"
@@ -8386,6 +8471,7 @@ function DockBibleTab({
                     <Icon name="history" size={16} />
                     <span>{t("bible.viewHistory", "View Bible History")}</span>
                   </button>
+                  <div className="dock-btm-overflow__divider" role="separator" />
                   <button
                     type="button"
                     className="dock-btm-overflow__menu-item"

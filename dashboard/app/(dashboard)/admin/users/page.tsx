@@ -29,11 +29,20 @@ import {
   Check,
   ChevronDown,
   RefreshCw,
+  Download,
+  Phone,
+  FileSpreadsheet,
+  Filter,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { getPlanConfig, type PlanConfig } from "@/lib/planConfigService";
-import { calculateUserActivityScore, type ActivityScoreBreakdown } from "@/lib/userActivityScore";
+import {
+  calculateUserActivityScore,
+  calculateUserActivityMultiPeriod,
+  type ActivityScoreBreakdown,
+  type MultiPeriodActivityScore,
+} from "@/lib/userActivityScore";
 import {
   formatPlanCredits,
   getAdminManagedPlanAmount,
@@ -44,7 +53,9 @@ interface AdminUser {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   churchName: string;
+  churchRole?: string;
   country?: string;
   deviceId?: string;
   deviceIds?: string[];
@@ -52,6 +63,8 @@ interface AdminUser {
   accountStatus?: "active" | "suspended" | "deleted";
   credits: number;
   plan: string;
+  billingCycle?: string | null;
+  subscriptionStatus?: string | null;
   createdAt: string | null;
   lastLogin: string | null;
   lastActive: string | null;
@@ -110,11 +123,98 @@ interface AdminUser {
     color: string;
     badgeBg: string;
     barColor: string;
+    daily?: { score: number; grade: string; color: string; badgeBg: string };
+    weekly?: { score: number; grade: string; color: string; badgeBg: string };
+    monthly?: { score: number; grade: string; color: string; badgeBg: string };
+  };
+}
+
+function getSubscriptionExpiringInfo(user: AdminUser): {
+  isExpiringSoon: boolean;
+  isExpired: boolean;
+  daysLeft: number;
+  text: string;
+  badgeClass: string;
+} | null {
+  const expiresAt =
+    user.subscriptionExpiresAt ||
+    (user.adminManagedSubscription?.active ? user.adminManagedSubscription.expiresAt : null) ||
+    (user.adminTemporaryPlan?.active ? user.adminTemporaryPlan.expiresAt : null) ||
+    (user.plan === "free" && user.trial?.active ? user.trial.expiresAt : null) ||
+    user.scheduledDowngradeAt;
+
+  if (!expiresAt) return null;
+
+  const date = new Date(expiresAt);
+  const time = date.getTime();
+  if (Number.isNaN(time) || time <= 0) return null;
+
+  const now = Date.now();
+  const diffMs = time - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  const formattedDate = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  if (diffDays < 0) {
+    const absDays = Math.abs(diffDays);
+    return {
+      isExpiringSoon: false,
+      isExpired: true,
+      daysLeft: diffDays,
+      text: `Expired ${absDays === 1 ? "yesterday" : `${absDays}d ago`} (${formattedDate})`,
+      badgeClass: "text-red-400 bg-red-950/40 border-red-800/50",
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: 0,
+      text: `Expires today (${formattedDate})`,
+      badgeClass: "text-amber-300 bg-amber-950/60 border-amber-700/60 font-semibold animate-pulse",
+    };
+  }
+
+  if (diffDays === 1) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: 1,
+      text: `1 day left to expire (${formattedDate})`,
+      badgeClass: "text-amber-300 bg-amber-950/50 border-amber-700/50 font-medium",
+    };
+  }
+
+  if (diffDays <= 30) {
+    return {
+      isExpiringSoon: true,
+      isExpired: false,
+      daysLeft: diffDays,
+      text: `${diffDays} days left to expire (${formattedDate})`,
+      badgeClass: diffDays <= 7 ? "text-amber-300 bg-amber-950/50 border-amber-700/60 font-medium" : "text-amber-200/90 bg-amber-950/30 border-amber-800/40",
+    };
+  }
+
+  const months = Math.floor(diffDays / 30);
+  const remDays = diffDays % 30;
+  const monthText = remDays > 0 ? `${months}m ${remDays}d left` : `${months} month${months > 1 ? "s" : ""} left`;
+
+  return {
+    isExpiringSoon: false,
+    isExpired: false,
+    daysLeft: diffDays,
+    text: `${monthText} to expire (${formattedDate})`,
+    badgeClass: "text-emerald-300 bg-emerald-950/30 border-emerald-800/40",
   };
 }
 
 type SortField = "name" | "email" | "country" | "plan" | "credits" | "createdAt" | "lastLogin" | "lastActive" | "activityScore";
-type ActivityFilter = "all" | "1d" | "3d" | "7d" | "14d" | "30d" | "inactive";
+type ActivityFilter = "all" | "expiring" | "1d" | "3d" | "7d" | "14d" | "30d" | "inactive";
 type SortDir = "asc" | "desc";
 type AdminUserAction =
   | "suspend"
@@ -308,6 +408,10 @@ export default function AdminUsersPage() {
   const [countrySearchQuery, setCountrySearchQuery] = useState("");
   const countryDropdownRef = useRef<HTMLDivElement>(null);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [contactFilter, setContactFilter] = useState<"all" | "has_phone" | "phone_only" | "email_only" | "both">("all");
+  const [billingCycleFilter, setBillingCycleFilter] = useState<"all" | "monthly" | "yearly" | "lifetime">("all");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -489,6 +593,7 @@ export default function AdminUsersPage() {
   const activityCounts = useMemo(() => {
     const counts = {
       all: users.length,
+      expiring: 0,
       "1d": 0,
       "3d": 0,
       "7d": 0,
@@ -498,6 +603,11 @@ export default function AdminUsersPage() {
     };
     const now = Date.now();
     for (const u of users) {
+      const expInfo = getSubscriptionExpiringInfo(u);
+      if (expInfo && !expInfo.isExpired && expInfo.daysLeft <= 30) {
+        counts.expiring++;
+      }
+
       const ts = u.lastActive || u.lastLogin;
       const time = ts ? new Date(ts).getTime() : NaN;
       if (Number.isFinite(time) && time > 0) {
@@ -524,9 +634,12 @@ export default function AdminUsersPage() {
         (u) =>
           u.name.toLowerCase().includes(q) ||
           u.email.toLowerCase().includes(q) ||
+          (u.phone || "").toLowerCase().includes(q) ||
           u.churchName.toLowerCase().includes(q) ||
+          (u.churchRole || "").toLowerCase().includes(q) ||
           (u.country || "").toLowerCase().includes(q) ||
           (u.plan || "").toLowerCase().includes(q) ||
+          (u.billingCycle || "").toLowerCase().includes(q) ||
           (u.deviceId || "").toLowerCase().includes(q) ||
           (u.deviceIds || []).some((deviceId) => deviceId.toLowerCase().includes(q))
       );
@@ -539,11 +652,59 @@ export default function AdminUsersPage() {
       });
     }
 
+    // Contact info filter (e.g. phone only, email only, has phone, both)
+    if (contactFilter !== "all") {
+      result = result.filter((u) => {
+        const hasPhone = Boolean(u.phone && u.phone.trim().length >= 4);
+        const hasRealEmail = Boolean(
+          u.email &&
+          u.email.includes("@") &&
+          !u.email.endsWith("@placeholder.makechurcheazy.com") &&
+          !u.email.endsWith("@phone.makechurcheazy.com") &&
+          !u.email.endsWith("@placeholder.local")
+        );
+
+        if (contactFilter === "has_phone") return hasPhone;
+        if (contactFilter === "phone_only") return hasPhone && !hasRealEmail;
+        if (contactFilter === "email_only") return hasRealEmail && !hasPhone;
+        if (contactFilter === "both") return hasPhone && hasRealEmail;
+        return true;
+      });
+    }
+
+    // Billing cycle filter (e.g. monthly, yearly, lifetime)
+    if (billingCycleFilter !== "all") {
+      result = result.filter((u) => {
+        const cycle = (
+          u.billingCycle ||
+          u.adminManagedSubscription?.billingCycle ||
+          (u.plan !== "free" ? "monthly" : "")
+        ).toLowerCase();
+
+        if (billingCycleFilter === "monthly") return cycle === "monthly";
+        if (billingCycleFilter === "yearly") return cycle === "yearly";
+        if (billingCycleFilter === "lifetime") return cycle === "lifetime" || cycle === "one_time";
+        return true;
+      });
+    }
+
     if (filter === "active") result = result.filter((u) => u.isActive);
     else if (filter === "inactive") result = result.filter((u) => !u.isActive);
     else if (filter === "paid") result = result.filter((u) => u.plan !== "free");
     else if (filter === "free") result = result.filter((u) => u.plan === "free");
     else if (filter === "trial") result = result.filter((u) => u.plan === "free" && u.trial?.active);
+    else if (filter === "expiring") {
+      result = result.filter((u) => {
+        const exp = getSubscriptionExpiringInfo(u);
+        return Boolean(exp && !exp.isExpired && exp.daysLeft <= 30);
+      });
+    }
+    else if (filter === "expiring_7d") {
+      result = result.filter((u) => {
+        const exp = getSubscriptionExpiringInfo(u);
+        return Boolean(exp && !exp.isExpired && exp.daysLeft <= 7);
+      });
+    }
     else if (filter === "ambassador") result = result.filter((u) => u.ambassador?.active);
     else if (filter === "temporary") result = result.filter((u) => u.adminTemporaryPlan?.active);
     else if (filter === "admin") result = result.filter((u) => u.role === "admin");
@@ -553,6 +714,11 @@ export default function AdminUsersPage() {
     if (activityFilter !== "all") {
       const now = Date.now();
       result = result.filter((u) => {
+        if (activityFilter === "expiring") {
+          const exp = getSubscriptionExpiringInfo(u);
+          return Boolean(exp && !exp.isExpired && exp.daysLeft <= 30);
+        }
+
         const ts = u.lastActive || u.lastLogin;
         const time = ts ? new Date(ts).getTime() : NaN;
         const hasTime = Number.isFinite(time) && time > 0;
@@ -594,7 +760,123 @@ export default function AdminUsersPage() {
     });
 
     return result;
-  }, [users, search, filter, selectedCountries, activityFilter, sortField, sortDir]);
+  }, [users, search, filter, selectedCountries, contactFilter, billingCycleFilter, activityFilter, sortField, sortDir]);
+
+  function handleExportCsv() {
+    if (filtered.length === 0) {
+      setActionMsg({ type: "error", text: "No users to export with current filters." });
+      setTimeout(() => setActionMsg(null), 3000);
+      return;
+    }
+    setExportingCsv(true);
+    try {
+      const headers = [
+        "User ID",
+        "Name",
+        "Email",
+        "Phone Number",
+        "Church Name",
+        "Church Role",
+        "Country",
+        "Plan",
+        "Billing Cycle",
+        "Account Status",
+        "Activity Status (30d)",
+        "Daily Activity %",
+        "Weekly Activity %",
+        "Monthly Activity %",
+        "Overall Activity Score",
+        "Activity Grade",
+        "Subscription Expiry Date",
+        "Expiry / Grace Status",
+        "Bible Searches",
+        "Songs Created",
+        "Media Uploaded",
+        "Transcripts Created",
+        "Signup Date",
+        "Last Active At",
+        "Last Login At",
+      ];
+
+      const rows = filtered.map((u) => {
+        const expInfo = getSubscriptionExpiringInfo(u);
+        const expText = expInfo ? expInfo.text : (u.subscriptionExpiresAt ? new Date(u.subscriptionExpiresAt).toLocaleDateString() : "");
+        const dScore = u.activityScore?.daily?.score ?? 0;
+        const wScore = u.activityScore?.weekly?.score ?? 0;
+        const mScore = u.activityScore?.monthly?.score ?? 0;
+        const oScore = u.activityScore?.score ?? 0;
+        const oGrade = u.activityScore?.grade ?? "E";
+
+        return [
+          u.id,
+          u.name || "",
+          u.email || "",
+          u.phone || "",
+          u.churchName || "",
+          u.churchRole || "",
+          u.country || "",
+          u.plan || "free",
+          u.billingCycle || (u.plan !== "free" ? "monthly" : "none"),
+          u.accountStatus || "active",
+          u.isActive ? "Active" : "Inactive",
+          `${dScore}%`,
+          `${wScore}%`,
+          `${mScore}%`,
+          oScore,
+          oGrade,
+          u.subscriptionExpiresAt ? new Date(u.subscriptionExpiresAt).toISOString() : "",
+          expText,
+          u.usage?.bibleSearches || 0,
+          u.usage?.songsCreated || 0,
+          u.usage?.mediaUploaded || 0,
+          u.usage?.transcriptCount || 0,
+          u.createdAt || "",
+          u.lastActive || "",
+          u.lastLogin || "",
+        ];
+      });
+
+      const csvContent = [
+        headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
+        ...rows.map((row) =>
+          row
+            .map((val) => {
+              const str = String(val ?? "").replace(/"/g, '""');
+              return `"${str}"`;
+            })
+            .join(",")
+        ),
+      ].join("\r\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const filterSuffix = filter !== "all" ? `-${filter}` : "";
+      const contactSuffix = contactFilter !== "all" ? `-${contactFilter}` : "";
+      const cycleSuffix = billingCycleFilter !== "all" ? `-${billingCycleFilter}` : "";
+      link.href = url;
+      link.download = `makechurcheasy-users${filterSuffix}${contactSuffix}${cycleSuffix}-${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setActionMsg({
+        type: "success",
+        text: `Exported ${filtered.length} users to CSV successfully!`,
+      });
+      setTimeout(() => setActionMsg(null), 4000);
+    } catch (err: any) {
+      setActionMsg({
+        type: "error",
+        text: `Failed to export CSV: ${err?.message || "Unknown error"}`,
+      });
+      setTimeout(() => setActionMsg(null), 4000);
+    } finally {
+      setExportingCsv(false);
+    }
+  }
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paged = filtered.slice((page - 1) * perPage, page * perPage);
@@ -998,6 +1280,21 @@ export default function AdminUsersPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={handleExportCsv}
+            disabled={exportingCsv || filtered.length === 0}
+            title="Download filtered user list as CSV"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-xl border border-emerald-700/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-600 hover:text-emerald-100 transition shadow-sm disabled:opacity-50 cursor-pointer"
+          >
+            {exportingCsv ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-400" />
+            )}
+            <span>Export CSV ({filtered.length})</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => fetchUsers(true)}
             disabled={refreshing || loading}
             title="Refresh user list"
@@ -1035,6 +1332,7 @@ export default function AdminUsersPage() {
         <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
           {[
             { id: "all", label: "All Users", count: activityCounts.all },
+            { id: "expiring", label: "Expiring Subs (≤30d)", count: activityCounts.expiring, alert: true },
             { id: "1d", label: "Past 24h", count: activityCounts["1d"], live: true },
             { id: "3d", label: "Past 3 Days", count: activityCounts["3d"] },
             { id: "7d", label: "Past 7 Days", count: activityCounts["7d"] },
@@ -1050,8 +1348,12 @@ export default function AdminUsersPage() {
                 onClick={() => setActivityFilter(item.id as ActivityFilter)}
                 className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-1 ring-indigo-400/50"
-                    : "bg-gray-900 text-slate-300 hover:bg-gray-800 hover:text-slate-100 border border-slate-800"
+                    ? item.alert
+                      ? "bg-amber-600 text-white shadow-lg shadow-amber-600/25 ring-1 ring-amber-400/50"
+                      : "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-1 ring-indigo-400/50"
+                    : item.alert && item.count > 0
+                      ? "bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 border border-amber-800/60"
+                      : "bg-gray-900 text-slate-300 hover:bg-gray-800 hover:text-slate-100 border border-slate-800"
                 }`}
               >
                 {item.live && (
@@ -1060,6 +1362,7 @@ export default function AdminUsersPage() {
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                   </span>
                 )}
+                {item.alert && <Clock className="w-3 h-3 text-amber-400 shrink-0" />}
                 <span>{item.label}</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
@@ -1218,12 +1521,15 @@ export default function AdminUsersPage() {
           )}
         </div>
 
+        {/* Plan & Status Filter */}
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="h-11 px-3 rounded-xl border border-slate-700 text-sm bg-gray-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
         >
           <option value="all">{t('admin.users.filters.all')}</option>
+          <option value="expiring">⚡ Subscriptions Expiring (≤30d)</option>
+          <option value="expiring_7d">⚠️ Subscriptions Expiring (≤7d)</option>
           <option value="active">{t('admin.users.filters.active')}</option>
           <option value="inactive">{t('admin.users.filters.inactive')}</option>
           <option value="paid">{t('admin.users.filters.paid')}</option>
@@ -1233,6 +1539,41 @@ export default function AdminUsersPage() {
           <option value="temporary">{t('admin.users.filters.temporary')}</option>
           <option value="admin">{t('admin.users.filters.admins')}</option>
           <option value="suspended">Suspended</option>
+        </select>
+
+        {/* Contact Info Filter */}
+        <select
+          value={contactFilter}
+          onChange={(e) => setContactFilter(e.target.value as any)}
+          title="Filter by contact details"
+          className={`h-11 px-3 rounded-xl border text-sm bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
+            contactFilter !== "all"
+              ? "border-emerald-500/60 text-emerald-300 font-semibold bg-emerald-950/20"
+              : "border-slate-700 text-slate-100 focus:border-indigo-500"
+          }`}
+        >
+          <option value="all">📞 All Contacts</option>
+          <option value="has_phone">📞 Has Phone Number</option>
+          <option value="phone_only">📱 Phone Only (No Email)</option>
+          <option value="email_only">✉️ Email Only (No Phone)</option>
+          <option value="both">✨ Has Both Email & Phone</option>
+        </select>
+
+        {/* Billing Cycle Filter */}
+        <select
+          value={billingCycleFilter}
+          onChange={(e) => setBillingCycleFilter(e.target.value as any)}
+          title="Filter by billing cycle"
+          className={`h-11 px-3 rounded-xl border text-sm bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
+            billingCycleFilter !== "all"
+              ? "border-sky-500/60 text-sky-300 font-semibold bg-sky-950/20"
+              : "border-slate-700 text-slate-100 focus:border-indigo-500"
+          }`}
+        >
+          <option value="all">💳 All Billing Cycles</option>
+          <option value="monthly">📅 Monthly Billing</option>
+          <option value="yearly">📆 Yearly Billing</option>
+          <option value="lifetime">♾️ Lifetime / One-Time</option>
         </select>
       </div>
 
@@ -1328,7 +1669,15 @@ export default function AdminUsersPage() {
                           {user.role === "admin" && <Shield className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
                           {user.ambassador?.active && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                        <div className="flex items-center flex-wrap gap-x-2 text-xs text-slate-500">
+                          <span className="truncate">{user.email}</span>
+                          {user.phone && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-mono shrink-0">
+                              <Phone className="w-3 h-3 text-emerald-500/80" />
+                              {user.phone}
+                            </span>
+                          )}
+                        </div>
                         {/* Third line: Country, Church, and Plan */}
                         <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-400">
                           {user.country && (
@@ -1355,17 +1704,25 @@ export default function AdminUsersPage() {
                           <span className={`inline-flex px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase tracking-wider ${planBadge(user.plan)}`}>
                             {user.plan}
                           </span>
-                          {user.adminTemporaryPlan?.active && user.adminTemporaryPlan.expiresAt && (
-                            <span className="text-[10px] text-amber-300">
-                              (until {new Date(user.adminTemporaryPlan.expiresAt).toLocaleDateString()})
-                            </span>
-                          )}
-                          {!user.adminTemporaryPlan?.active && user.subscriptionExpiresAt && user.plan !== "free" && (
-                            <span className="text-[10px] text-emerald-300">
-                              (until {new Date(user.subscriptionExpiresAt).toLocaleDateString()})
+                          {user.billingCycle && user.plan !== "free" && (
+                            <span className="inline-flex px-1.5 py-0.2 rounded text-[10px] font-medium capitalize text-slate-300 bg-slate-800 border border-slate-700">
+                              {user.billingCycle}
                             </span>
                           )}
                         </div>
+                        {/* Subtitle text showing days, months left to expire */}
+                        {(() => {
+                          const expInfo = getSubscriptionExpiringInfo(user);
+                          if (!expInfo) return null;
+                          return (
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${expInfo.badgeClass}`}>
+                                <Clock className="w-3 h-3 shrink-0" />
+                                {expInfo.text}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </td>
@@ -1392,14 +1749,37 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
-                      const scoreData = user.activityScore || calculateUserActivityScore(user);
+                      const multi = user.activityScore?.daily && user.activityScore?.weekly && user.activityScore?.monthly
+                        ? {
+                            daily: user.activityScore.daily,
+                            weekly: user.activityScore.weekly,
+                            monthly: user.activityScore.monthly,
+                          }
+                        : calculateUserActivityMultiPeriod(user);
                       return (
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold font-mono border ${scoreData.badgeBg}`}>
-                            {scoreData.score}%
-                          </span>
-                          <span className={`text-[11px] font-medium hidden sm:inline ${scoreData.color}`}>
-                            {scoreData.grade}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${multi.daily.badgeBg}`}
+                              title={`Daily (Past 24h): ${multi.daily.score}% - ${multi.daily.grade}`}
+                            >
+                              D:{multi.daily.score}%
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${multi.weekly.badgeBg}`}
+                              title={`Weekly (Past 7d): ${multi.weekly.score}% - ${multi.weekly.grade}`}
+                            >
+                              W:{multi.weekly.score}%
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${multi.monthly.badgeBg}`}
+                              title={`Monthly (Past 30d): ${multi.monthly.score}% - ${multi.monthly.grade}`}
+                            >
+                              M:{multi.monthly.score}%
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-medium ${multi.monthly.color}`}>
+                            {multi.monthly.grade}
                           </span>
                         </div>
                       );

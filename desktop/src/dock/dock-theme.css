@@ -533,8 +533,8 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-bible-verse-row__num {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--dock-text-dim);
+  background: transparent !important;
+  color: var(--dock-accent);
 }
 
 :root.light .dock-bible-verse-row__text {

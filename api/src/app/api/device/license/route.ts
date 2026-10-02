@@ -111,10 +111,14 @@ export async function GET(req: NextRequest) {
         // Check if active subscription has actually expired
         if (subscription.currentPeriodEnd) {
           const periodEnd = new Date(subscription.currentPeriodEnd).getTime();
-          if (periodEnd < Date.now()) {
-            subscriptionStatus = "expired";
-          } else {
+          const graceEndMs = subscription.gracePeriodEndsAt
+            ? new Date(subscription.gracePeriodEndsAt).getTime()
+            : (periodEnd + 7 * 24 * 60 * 60 * 1000); // 7-day grace period
+
+          if (periodEnd >= Date.now() || Date.now() <= graceEndMs) {
             subscriptionStatus = "active";
+          } else {
+            subscriptionStatus = "expired";
           }
         } else {
           subscriptionStatus = "active";
@@ -122,8 +126,8 @@ export async function GET(req: NextRequest) {
       } else if (subscription.status === "cancelled") {
         subscriptionStatus = "cancelled";
       } else if (subscription.status === "past_due") {
-        // Past due keeps access only during the grace period.
-        const graceEnd = subscription.gracePeriodEndsAt || subscription.currentPeriodEnd;
+        // Past due keeps access throughout the 7-day grace period.
+        const graceEnd = subscription.gracePeriodEndsAt || (subscription.currentPeriodEnd ? new Date(new Date(subscription.currentPeriodEnd).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : null);
         if (graceEnd) {
           const graceEndMs = new Date(graceEnd).getTime();
           subscriptionStatus = graceEndMs >= Date.now() ? "active" : "expired";

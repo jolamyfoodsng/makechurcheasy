@@ -498,10 +498,36 @@
 }
 
 .setupSection {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 96px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  text-align: center;
+  gap: 32px;
+}
+
+.setupHeading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.setupHeading .eyebrow {
+  justify-content: center;
+}
+
+.setupHeading h2 {
+  margin-top: 20px;
+  font-size: clamp(36px, 4vw, 54px);
+  text-align: center;
+}
+
+.setupCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 760px;
 }
 
 .setupCopy h2 {
@@ -511,8 +537,20 @@
 
 .setupCopy>p:not(.eyebrow) {
   color: var(--muted);
+  margin-top: 16px;
+  max-width: 680px;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.setupPlanNote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-top: 24px;
-  max-width: 410px;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 100%;
 }
 
 .workflow {
@@ -578,7 +616,7 @@
 
 .featuresSection {
   background: var(--paper);
-  padding: 96px 48px 40px;
+  padding: 96px 0 40px;
 }
 
 .sectionHeading {
@@ -593,39 +631,6 @@
 .sectionHeading>p:last-child:not(.eyebrow) {
   color: var(--muted);
   margin-top: 20px;
-}
-
-.featureTabs {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  max-width: 1136px;
-  margin: 0 auto 32px;
-}
-
-.featureTabs button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 12px 18px;
-  min-height: 48px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-  white-space: nowrap;
-  transition: background 150ms;
-}
-
-.featureTabs button:hover {
-  background: #E3E9FB;
-}
-
-.featureTabs button[aria-selected="true"] {
-  color: var(--surface);
-  background: var(--ink);
 }
 
 .featurePanel {
@@ -2198,14 +2203,6 @@
     gap: 48px;
   }
 
-  .featureTabs {
-    gap: 0;
-  }
-
-  .featureTabs button {
-    padding: 12px;
-  }
-
   .featureText {
     padding-left: 24px;
   }
@@ -2265,7 +2262,6 @@
     padding: 72px 24px;
   }
 
-  .setupSection,
   .voiceSection,
   .volunteerSection,
   .demoSection,
@@ -2284,21 +2280,11 @@
   }
 
   .featuresSection {
-    padding: 72px 24px 32px;
+    padding: 72px 0 32px;
   }
 
   .sectionHeading {
     margin-bottom: 32px;
-  }
-
-  .featureTabs {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .featureTabs button {
-    min-height: 48px;
-    padding: 10px 16px;
   }
 
   .featurePanel {
@@ -2520,7 +2506,7 @@
   }
 
   .featuresSection {
-    padding: 64px 16px 24px;
+    padding: 64px 0 24px;
   }
 
   .sectionHeading {
@@ -2529,22 +2515,6 @@
 
   .sectionHeading>p:last-child:not(.eyebrow) {
     font-size: 14px;
-  }
-
-  .featureTabs {
-    gap: 6px;
-    justify-content: center;
-  }
-
-  .featureTabs button {
-    font-size: 12px;
-    padding: 10px 12px;
-    gap: 6px;
-    min-height: 48px;
-  }
-
-  .featureTabs button svg {
-    width: 16px;
   }
 
   .featureText {
@@ -2763,3 +2733,125 @@
     display: none;
   }
 }
+
+.featuresSection > .sectionHeading {
+  max-width: 860px;
+  padding: 0 24px;
+  margin-bottom: 16px;
+}
+
+.featuresSection > .availability {
+  padding: 0 20px;
+}
+
+/* Shared homepage typography and spacing. Feature pages retain their own scale. */
+.homePage {
+  --home-heading-size: 5rem;
+  --home-body-size: 1.25rem;
+  --home-page-width: 100rem;
+  --home-gutter: 2rem;
+  --home-section-space: 6.25rem;
+  --home-column-gap: 2rem;
+}
+
+.homePage .hero h1,
+.homePage main h2 {
+  font-size: var(--home-heading-size);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -.015em;
+}
+
+.homePage .hero { padding: var(--home-section-space) var(--home-gutter) 2.5rem; }
+.homePage .heroCopy { max-width: 88rem; }
+.homePage .hero h1 { max-width: 84rem; }
+.homePage .heroDescription { max-width: 68ch; font-size: var(--home-body-size); line-height: 1.65; }
+.homePage .section { max-width: var(--home-page-width); padding: var(--home-section-space) var(--home-gutter); }
+.homePage :is(.setupSection, .voiceSection, .volunteerSection, .demoSection, .faqSection) { gap: var(--home-column-gap); }
+.homePage :is(.setupCopy, .voiceCopy, .volunteerSection, .demoSection, .faqList, .plan, .startSteps, .obsHeading) p:not(.eyebrow) {
+  max-width: 62ch;
+  font-size: var(--home-body-size);
+  line-height: 1.65;
+}
+.homePage .voiceCopy .shortCopy { font-size: var(--home-body-size); }
+.homePage .sectionHeading > p:last-child:not(.eyebrow) {
+  max-width: 68ch;
+  margin: 1.5rem auto 0;
+  font-size: var(--home-body-size);
+  line-height: 1.65;
+}
+.homePage .featuresSection { padding: var(--home-section-space) 0 3.5rem; }
+.homePage .featuresSection > .sectionHeading { max-width: 88rem; padding: 0 var(--home-gutter); }
+.homePage :is(.startSection, .pricingSection, .obsSection) { padding: var(--home-section-space) var(--home-gutter); }
+.homePage .obsInner { max-width: var(--home-page-width); gap: var(--home-column-gap); }
+.homePage .startSteps { max-width: 88rem; gap: var(--home-column-gap); }
+.homePage .planGrid { max-width: 88rem; }
+.homePage :is(.startSteps, .plan, .workflow) h3 { font-size: 2rem; line-height: 1.25; letter-spacing: -.01em; }
+.homePage .workflow li p { font-size: 1.125rem; line-height: 1.6; }
+.homePage .faqList summary { font-size: 1.25rem; line-height: 1.5; }
+.homePage .volunteerActions a { font-size: 1.125rem; }
+.homePage .finalCta > p:not(.eyebrow) { font-size: var(--home-body-size); line-height: 1.65; }
+.homePage .eyebrow { font-size: .8125rem; letter-spacing: .1em; }
+.homePage .textLink { font-size: 1rem !important; }
+.homePage .availability { font-size: 1rem; line-height: 1.6; }
+
+@media (max-width: 1100px) {
+  .homePage { --home-heading-size: 4rem; --home-body-size: 1.125rem; --home-gutter: 1.5rem; --home-section-space: 5.25rem; }
+}
+
+@media (max-width: 800px) {
+  .homePage { --home-heading-size: clamp(2.5rem, 6.5vw, 3.5rem); --home-section-space: 4.5rem; --home-column-gap: 2rem; }
+  .homePage .hero h1 { font-size: var(--home-heading-size); }
+  .homePage .obsInner { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .homePage { --home-heading-size: 2.375rem; --home-body-size: 1.0625rem; --home-gutter: 1.125rem; --home-section-space: 3.75rem; }
+  .homePage :is(.startSteps, .plan, .workflow) h3 { font-size: 1.5rem; }
+  .homePage .faqList summary { font-size: 1.125rem; }
+}
+
+/* The setup advantage follows the centered heading and copy layout. */
+.homePage .setupSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-inline: auto;
+}
+.setupHeading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.setupHeading h2 {
+  margin-top: 20px;
+  text-align: center;
+}
+.setupHeading h2 span { color: var(--copper); }
+.homePage .setupCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-inline: auto;
+}
+.homePage .setupCopy > p {
+  text-align: center;
+  margin-inline: auto;
+}
+.homePage .setupCopy > p:first-child { margin-top: 0; }
+.homePage .setupPlanNote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  max-width: 62ch;
+  margin-inline: auto;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.homePage .workflowLabel { font-size: .8125rem; letter-spacing: .1em; }
+.homePage .workflowFooter { font-size: 1rem; line-height: 1.6; }
+.workflow li > svg { flex-shrink: 0; }

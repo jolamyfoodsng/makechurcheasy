@@ -20,6 +20,12 @@ export async function checkAndApplyScheduledDowngrade(userId: string, user: any)
   const scheduledMs = new Date(String(scheduledAt)).getTime();
   if (!Number.isFinite(scheduledMs) || scheduledMs > Date.now()) return user;
 
+  // 7-day grace period: keep paid plan privileges active during the week
+  const graceEndMs = scheduledMs + 7 * 24 * 60 * 60 * 1000;
+  if (Date.now() < graceEndMs) {
+    return user;
+  }
+
   const now = new Date().toISOString();
   const planName = PLAN_NAMES[user.plan] || user.plan || "Paid";
   const planConfig = await getPlanConfig();

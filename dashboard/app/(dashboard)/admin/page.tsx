@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { AdminPwaInstallButton } from "@/components/AdminPwaInstallButton";
 import {
   AreaChart,
   Area,
@@ -175,13 +176,16 @@ export default function AdminDashboardPage() {
   return (
     <div className="mce-admin-page p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
       {/* Page Header */}
-      <div className="mce-admin-page__header">
-        <h1 className="text-2xl font-bold text-slate-50">
-          {t("admin.dashboard.title")}
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          {t("admin.dashboard.description")}
-        </p>
+      <div className="mce-admin-page__header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-50">
+            {t("admin.dashboard.title")}
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            {t("admin.dashboard.description")}
+          </p>
+        </div>
+        <AdminPwaInstallButton />
       </div>
 
       {/* Admin Alerts */}

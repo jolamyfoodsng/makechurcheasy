@@ -81,6 +81,7 @@ export const COLLECTIONS = {
   REFERRALS: "referrals",
   NOWPAYMENTS_INTENTS: "nowpayments_payment_intents",
   FLUTTERWAVE_INTENTS: "flutterwave_payment_intents",
+  BLOG_POSTS: "blog_posts",
 } as const;
 
 // ─── Index Initialization ────────────────────────────────────────────────────
@@ -245,6 +246,12 @@ export async function ensureIndexes() {
     db.collection(COLLECTIONS.FLUTTERWAVE_INTENTS).createIndex({ reference: 1 }, { unique: true }),
     db.collection(COLLECTIONS.FLUTTERWAVE_INTENTS).createIndex({ userId: 1, createdAt: -1 }),
     db.collection(COLLECTIONS.FLUTTERWAVE_INTENTS).createIndex({ providerTransactionId: 1 }, { sparse: true }),
+
+    // blog_posts — unique slug and fast listing by status + publishedAt
+    db.collection(COLLECTIONS.BLOG_POSTS).createIndex({ slug: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.BLOG_POSTS).createIndex({ status: 1, publishedAt: -1 }),
+    db.collection(COLLECTIONS.BLOG_POSTS).createIndex({ tags: 1 }),
+    db.collection(COLLECTIONS.BLOG_POSTS).createIndex({ category: 1 }),
   ]);
 
   indexesInitialized = true;

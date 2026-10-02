@@ -417,21 +417,30 @@
 /* ── Overflow dropdown ── */
 .dock-btm-overflow__menu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   right: 0;
-  min-width: 140px;
+  min-width: 260px;
   width: max-content;
-  max-width: min(280px, calc(100vw - 16px));
-  padding: 4px;
-  border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
-  background: var(--dock-surface, #111827);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  max-width: min(340px, calc(100vw - 16px));
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: #181d28;
+  background: var(--dock-surface-elevated, var(--dock-surface, #181d28));
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   gap: 2px;
   z-index: 20050;
-  animation: dock-btm-overflow-open 0.15s ease;
+  animation: dock-btm-overflow-open 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root.light .dock-btm-overflow__menu {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes dock-btm-overflow-open {
@@ -576,9 +585,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: fit-content;
+  width: 100%;
   min-width: 0;
-  max-width: calc(100vw - 24px);
+  max-width: 100%;
 }
 
 /* Bible Browse/Compare share the toolbar's existing overflow menu. Keep the
@@ -630,6 +639,16 @@
   margin: 0;
 }
 
+.dock-btm-overflow__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:root.light .dock-btm-overflow__divider {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 .dock-btm-overflow__menu-item,
 .dock-scene-routing-control__trigger--labelled {
   display: flex;
@@ -641,7 +660,7 @@
   gap: 10px;
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -651,16 +670,46 @@
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.dock-btm-overflow__menu-item > span,
+.dock-scene-routing-control__trigger--labelled > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-btm-overflow__menu-item svg,
+.dock-scene-routing-control__trigger--labelled svg {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .dock-btm-overflow__menu-item:hover,
 .dock-btm-overflow__menu-item:focus-visible,
 .dock-scene-routing-control__trigger--labelled:hover,
 .dock-scene-routing-control__trigger--labelled:focus-visible {
-  border-color: var(--dock-accent-soft-border, rgba(37, 99, 235, 0.45));
-  background: var(--dock-surface-hover, #334155);
+  border-color: var(--dock-accent-soft-border, rgba(37, 99, 235, 0.3));
+  background: var(--dock-surface-hover, rgba(255, 255, 255, 0.08));
   color: var(--dock-text, #F8FAFC);
   outline: none;
+}
+
+.dock-btm-overflow__menu-item:hover svg,
+.dock-btm-overflow__menu-item:focus-visible svg,
+.dock-scene-routing-control__trigger--labelled:hover svg,
+.dock-scene-routing-control__trigger--labelled:focus-visible svg {
+  opacity: 1;
+}
+
+:root.light .dock-btm-overflow__menu-item:hover,
+:root.light .dock-btm-overflow__menu-item:focus-visible,
+:root.light .dock-scene-routing-control__trigger--labelled:hover,
+:root.light .dock-scene-routing-control__trigger--labelled:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .dock-scene-routing-control__toggle {
@@ -801,12 +850,29 @@
   text-align: left;
 }
 
-/* ── Make children inside overflow menu full-width icon buttons ── */
-.dock-btm-overflow__menu .dock-btm-toolbar__icon-btn,
+.dock-btm-overflow__menu .dock-btm-toolbar__icon-btn:not(.dock-scene-routing-control__trigger--labelled),
 .dock-btm-overflow__menu .dock-line-popover {
   width: 100%;
   min-width: 36px;
   height: 32px;
+}
+
+.dock-btm-overflow__menu .dock-scene-routing-control__trigger--labelled {
+  width: 100%;
+  min-height: 38px;
+  height: auto;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  justify-content: flex-start;
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-btm-overflow__menu .dock-scene-routing-control__trigger--labelled:hover,
+.dock-btm-overflow__menu .dock-scene-routing-control__trigger--labelled:focus-visible {
+  border-color: var(--dock-accent-soft-border, rgba(37, 99, 235, 0.3));
+  background: var(--dock-surface-hover, rgba(255, 255, 255, 0.08));
 }
 
 .dock-btm-overflow__menu .dock-line-popover {
@@ -849,6 +915,19 @@
 
 .dock-btm-overflow__children > * > button {
   gap: 0;
+}
+
+/* Ensure intentional menu items and scene routing control trigger retain their icons & proper gap */
+.dock-btm-overflow__children .dock-scene-routing-control__trigger--labelled svg,
+.dock-btm-overflow__children .dock-btm-overflow__menu-item svg {
+  display: inline-block !important;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.dock-btm-overflow__children .dock-scene-routing-control__trigger--labelled,
+.dock-btm-overflow__children .dock-btm-overflow__menu-item {
+  gap: 10px !important;
 }
 
 /* ══════════════════════════════════════════════════
