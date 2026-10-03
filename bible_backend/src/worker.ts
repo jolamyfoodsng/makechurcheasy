@@ -48,6 +48,7 @@ const catalogCache = {
 };
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 const PARTIAL_SOURCE_TRANSLATIONS = new Set(["KJ21", "CJB", "NABRE", "TPT", "TLV"]);
+const NEW_TESTAMENT_ONLY_SOURCE_TRANSLATIONS = new Set(["NMB", "RGT"]);
 
 // ─── Language Map ───────────────────────────────────────────
 const LANGUAGE_TO_COUNTRY: Record<string, string> = {
@@ -151,7 +152,9 @@ function parseBibleFilename(filename: string) {
     return {
       name: PARTIAL_SOURCE_TRANSLATIONS.has(translationMetadata.abbreviation)
         ? `${translationMetadata.name} (partial source text)`
-        : translationMetadata.name,
+        : NEW_TESTAMENT_ONLY_SOURCE_TRANSLATIONS.has(translationMetadata.abbreviation)
+          ? `${translationMetadata.name} (New Testament only in source)`
+          : translationMetadata.name,
       language: translationMetadata.language,
       country: getCountryForLanguage(translationMetadata.language),
       version: translationMetadata.abbreviation,
