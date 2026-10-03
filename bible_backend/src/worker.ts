@@ -43,8 +43,11 @@ const catalogCache = {
   byId: new Map<string, BibleRow>(),
   byKey: new Map<string, BibleRow>(),
   items: [] as BibleRow[],
+  loadedAt: 0,
   refreshPromise: null as Promise<{ added: number; updated: number; totalScanned: number }> | null,
 };
+const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const PARTIAL_SOURCE_TRANSLATIONS = new Set(["KJ21", "CJB", "NABRE", "TPT", "TLV"]);
 
 // ─── Language Map ───────────────────────────────────────────
 const LANGUAGE_TO_COUNTRY: Record<string, string> = {
@@ -146,7 +149,9 @@ function parseBibleFilename(filename: string) {
   const translationMetadata = getTranslationMetadata(filename);
   if (translationMetadata) {
     return {
-      name: translationMetadata.name,
+      name: PARTIAL_SOURCE_TRANSLATIONS.has(translationMetadata.abbreviation)
+        ? `${translationMetadata.name} (partial source text)`
+        : translationMetadata.name,
       language: translationMetadata.language,
       country: getCountryForLanguage(translationMetadata.language),
       version: translationMetadata.abbreviation,
@@ -310,12 +315,13 @@ async function rebuildCatalog(env: Env, prefix?: string) {
   catalogCache.byId = new Map(rows.map((r) => [r.id, r]));
   catalogCache.byKey = new Map(rows.map((r) => [r.r2Key, r]));
   catalogCache.items = rows;
+  catalogCache.loadedAt = Date.now();
 
   return { added, updated, totalScanned: objects.length };
 }
 
 async function ensureCatalogLoaded(env: Env, prefix?: string) {
-  if (catalogCache.items.length > 0) return;
+  if (catalogCache.items.length > 0 && Date.now() - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS) return;
   if (!catalogCache.refreshPromise) {
     catalogCache.refreshPromise = rebuildCatalog(env, prefix).finally(() => {
       catalogCache.refreshPromise = null;
@@ -509,6 +515,7 @@ app.post("/api/admin/bibles", async (c) => {
   catalogCache.byId = new Map(nextRows.map((r) => [r.id, r]));
   catalogCache.byKey = new Map(nextRows.map((r) => [r.r2Key, r]));
   catalogCache.items = nextRows;
+  catalogCache.loadedAt = Date.now();
 
   return c.json({
     id: row.id, name: row.name, language: row.language, country: row.country,
