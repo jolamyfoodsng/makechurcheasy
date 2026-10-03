@@ -28,6 +28,8 @@ const OVERLAY_HTML_FILES = [
   "countdown-overlay.html",
   "countdown-bg-overlay.html",
   "live-tool-overlay.html",
+  "time-overlay.html",
+  "mce-template-overlay.html",
   "bible-overlay-bg.html",
 ];
 

@@ -13,7 +13,6 @@ import {
   Image as ImageIcon,
   Images,
   Info,
-  Link,
   Mic,
   Monitor,
   MonitorSmartphone,
@@ -33,7 +32,7 @@ import { track } from "../services/analytics";
 import { getTrialDaysRemaining, getUserPlan, isInTrial } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService, type ConnectionStatus } from "../services/obsService";
-import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getOverlayBaseUrlSync, useDockBaseUrl, useLanDockBaseUrl } from "../services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "../services/voiceBiblePresentationGuard";
 import { getAllSongs } from "../worship/worshipDb";
 import { OnboardingResumeBanner } from "./OnboardingPage";
@@ -114,6 +113,20 @@ function DashboardHeader({
   }, []);
 
   const obsConnected = obsStatus === "connected";
+  const [showHowToConnect, setShowHowToConnect] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const base = useDockBaseUrl();
+  const lanBase = useLanDockBaseUrl();
+  const overlayUrl = `${base}/dock`;
+  const lmDockUrl = `${base}/lm-dock`;
+
+  const handleCopy = useCallback((id: string, url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }, []);
 
   return (
     <>
@@ -215,6 +228,130 @@ function DashboardHeader({
             </>
           )}
         </button>
+
+        <div className="status-panel__accordion-divider" />
+
+        <button
+          type="button"
+          className="status-panel__accordion-toggle"
+          onClick={() => setShowHowToConnect((prev) => !prev)}
+          aria-expanded={showHowToConnect}
+          title={t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}
+        >
+          <div className="status-panel__accordion-toggle-left">
+            {showHowToConnect ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <span>{t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}</span>
+          </div>
+          <span className="status-panel__accordion-hint">
+            {showHowToConnect ? t("common.hide", "Hide") : t("dashboard.urls.viewDockUrlAndSteps", "View Dock URL & Setup")}
+          </span>
+        </button>
+
+        {showHowToConnect && (
+          <div className="status-panel__accordion-body">
+            {/* Connection URLs: Bible Overlay Dock & Scripture Assistant */}
+            <div className="urls-row">
+              <div className="urls-group status-panel__url-block">
+                <div className="url-label-block">
+                  <span className="url-label-text text-indigo">
+                    {t("dashboard.urls.bibleOverlay", "Bible Overlay Dock")}
+                  </span>
+                  <p className="url-label-desc">
+                    {t("dashboard.urls.bibleOverlayDesc", "Scripture presentation and Bible controls inside OBS")}
+                  </p>
+                </div>
+                <div className="url-input-group">
+                  <input
+                    className="url-input input-indigo"
+                    readOnly
+                    value={overlayUrl}
+                  />
+                  <button
+                    className="url-btn btn-indigo"
+                    onClick={() => handleCopy("overlay", overlayUrl)}
+                    title={t("dashboard.urls.copy", "Copy URL")}
+                  >
+                    {copiedId === "overlay" ? (
+                      <Check className="url-btn-icon" />
+                    ) : (
+                      <Copy className="url-btn-icon" />
+                    )}
+                    {copiedId === "overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                  </button>
+                </div>
+              </div>
+
+              <div className="urls-group status-panel__url-block">
+                <div className="url-label-block">
+                  <span className="url-label-text text-green">
+                    {t("dashboard.urls.scriptureAssistant", "Scripture Assistant")}
+                  </span>
+                  <p className="url-label-desc">
+                    {t("dashboard.urls.scriptureAssistantDesc", "Automatically detects and displays Bible references as the preacher speaks")}
+                  </p>
+                </div>
+                <div className="url-input-group">
+                  <input
+                    className="url-input input-green"
+                    readOnly
+                    value={lmDockUrl}
+                  />
+                  <button
+                    className="url-btn btn-green"
+                    onClick={() => handleCopy("dock", lmDockUrl)}
+                    title={t("dashboard.urls.copy", "Copy URL")}
+                  >
+                    {copiedId === "dock" ? (
+                      <Check className="url-btn-icon" />
+                    ) : (
+                      <Copy className="url-btn-icon" />
+                    )}
+                    {copiedId === "dock" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Step-by-step instructions */}
+            <div className="urls-info-box">
+              <div className="urls-info-header">
+                <Info className="urls-info-icon" />
+                <span className="urls-info-title">
+                  {obsConnected
+                    ? t("dashboard.urls.obsConnectedInfo", "OBS is connected — this URL is ready to use")
+                    : t("dashboard.urls.obsNotConnectedInfo", "Connect to OBS first, then add as Custom Browser Dock")}
+                </span>
+              </div>
+              <ol className="urls-info-list">
+                <li>{t("dashboard.urls.step1", "Open OBS Studio.")}</li>
+                <li>{t("dashboard.urls.step2", "Go to Docks → Custom Browser Docks.")}</li>
+                <li>{t("dashboard.urls.step3", "Enter a name for the dock (e.g. \"MakeChurchEasy\").")}</li>
+                <li>{t("dashboard.urls.step4", "Paste the URL.")}</li>
+                <li>{t("dashboard.urls.step5", "Click Apply.")}</li>
+                <li>{t("dashboard.urls.step6", "The dock will appear inside OBS and can be moved, resized, or docked anywhere in the interface.")}</li>
+              </ol>
+              <div className="urls-info-footer">
+                <AlertCircle className="urls-info-footer-icon" />
+                <span>{t("dashboard.urls.warning", "These are OBS Dock URLs, not Browser Sources. Do not add them under Sources.")}</span>
+              </div>
+              {lanBase && (
+                <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(255, 255, 255, 0.04)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12, color: "#94a3b8" }}>
+                  <span>
+                    OBS on a <em>different laptop</em> on this Wi-Fi? Use: <strong style={{ color: "#e2e8f0" }}>{lanBase}/dock</strong>
+                  </span>
+                  <button
+                    type="button"
+                    style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, padding: "2px 8px", color: "#cbd5e1", fontSize: 11, cursor: "pointer" }}
+                    onClick={() => handleCopy("lan-overlay", `${lanBase}/dock`)}
+                    title={t("dashboard.urls.copy", "Copy URL")}
+                  >
+                    {copiedId === "lan-overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -509,135 +646,7 @@ function FeatureGrid({
   );
 }
 
-// ── Connection URLs ──────────────────────────────────────────────────────
 
-interface ConnectionUrlsProps {
-  obsStatus: ConnectionStatus;
-}
-
-function ConnectionUrls({ obsStatus }: ConnectionUrlsProps) {
-  const { t } = useTranslation();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-
-  const base = getDockBaseUrl();
-
-  const overlayUrl = `${base}/dock`;
-  const lmDockUrl = `${base}/lm-dock`;
-
-  const obsConnected = obsStatus === "connected";
-
-  const handleCopy = useCallback((id: string, url: string) => {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
-  }, []);
-
-  return (
-    <div className="urls-section">
-      <div className="urls-header">
-        <Link className="urls-header-icon" />
-        <div>
-          <h3 className="urls-title">{t("dashboard.urls.title")}</h3>
-          <p className="urls-subtitle">
-            {t("dashboard.urls.subtitle")}
-          </p>
-        </div>
-      </div>
-
-      <div className="urls-row">
-        <div className="urls-group">
-          <div className="url-label-block">
-            <span className="url-label-text text-indigo">{t("dashboard.urls.bibleOverlay")}</span>
-            <p className="url-label-desc">
-              {t("dashboard.urls.bibleOverlayDesc")}
-            </p>
-          </div>
-          <div className="url-input-group">
-            <input
-              className="url-input input-indigo"
-              readOnly
-              value={overlayUrl}
-            />
-            <button
-              className="url-btn btn-indigo"
-              onClick={() => handleCopy("overlay", overlayUrl)}
-              title={t("dashboard.urls.copy")}>
-              {copiedId === "overlay" ? (
-                <Check className="url-btn-icon" />
-              ) : (
-                <Copy className="url-btn-icon" />
-              )}
-              {copiedId === "overlay" ? t("dashboard.urls.copied") : t("dashboard.urls.copy")}
-            </button>
-          </div>
-        </div>
-
-        <div className="urls-group">
-          <div className="url-label-block">
-            <span className="url-label-text text-green">{t("dashboard.urls.scriptureAssistant")}</span>
-            <p className="url-label-desc">
-              {t("dashboard.urls.scriptureAssistantDesc")}
-            </p>
-          </div>
-          <div className="url-input-group">
-            <input
-              className="url-input input-green"
-              readOnly
-              value={lmDockUrl}
-            />
-            <button
-              className="url-btn btn-green"
-              onClick={() => handleCopy("dock", lmDockUrl)}
-              title={t("dashboard.urls.copy")}>
-              {copiedId === "dock" ? (
-                <Check className="url-btn-icon" />
-              ) : (
-                <Copy className="url-btn-icon" />
-              )}
-              {copiedId === "dock" ? t("dashboard.urls.copied") : t("dashboard.urls.copy")}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="urls-info-box">
-        <div className="urls-info-header">
-          <Info className="urls-info-icon" />
-          <span className="urls-info-title">
-            {obsConnected
-              ? t("dashboard.urls.obsConnectedInfo")
-              : t("dashboard.urls.obsNotConnectedInfo")}
-          </span>
-        </div>
-        <button
-          className="urls-info-toggle"
-          onClick={() => setShowInstructions(!showInstructions)}
-          title={t("dashboard.urls.howToAdd")}>
-          {showInstructions ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <span className="urls-info-subtitle">{t("dashboard.urls.howToAdd")}</span>
-        </button>
-        {showInstructions && (
-          <>
-            <ol className="urls-info-list">
-              <li>{t("dashboard.urls.step1")}</li>
-              <li>{t("dashboard.urls.step2")}</li>
-              <li>{t("dashboard.urls.step3")}</li>
-              <li>{t("dashboard.urls.step4")}</li>
-              <li>{t("dashboard.urls.step5")}</li>
-              <li>{t("dashboard.urls.step6")}</li>
-            </ol>
-            <div className="urls-info-footer">
-              <AlertCircle className="urls-info-footer-icon" />
-              <span>{t("dashboard.urls.warning")}</span>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Activity & Status ──────────────────────────────────────────────────────
 
@@ -996,7 +1005,6 @@ export default function ProductionHomePage() {
         recentMediaCount={recentMediaCount}
         onNavigate={handleNavigate}
       />
-      <ConnectionUrls obsStatus={obsStatus} />
       {/* <RemotePresentationStatus /> */}
       <ActivityAndStatus
         activities={activities}

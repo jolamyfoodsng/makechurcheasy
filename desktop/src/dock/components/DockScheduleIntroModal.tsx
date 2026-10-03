@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
+import { DOCK_ONBOARDING_KEY, DOCK_ONBOARDING_COMPLETED_EVENT } from "./DockOnboardingTour";
 import "./DockScheduleIntroModal.css";
 
 export const DOCK_SCHEDULE_INTRO_KEY = "__mce_dock_schedule_intro_v1";
@@ -33,13 +34,34 @@ export function DockScheduleIntroModal({ open: controlledOpen, onClose: controll
     try {
       if (typeof localStorage === "undefined") return;
       const seen = localStorage.getItem(DOCK_SCHEDULE_INTRO_KEY);
-      if (seen !== "true") {
-        // Small delay to let dock UI settle
+      if (seen === "true") return;
+
+      const hasCompletedTour = localStorage.getItem(DOCK_ONBOARDING_KEY) === "true";
+
+      if (hasCompletedTour) {
+        // Step-by-step dock guide was already finished: show schedule modal after brief settle delay
         const timer = setTimeout(() => {
           setInternalOpen(true);
         }, 900);
         return () => clearTimeout(timer);
       }
+
+      // Step-by-step dock guide is still pending: wait until it is finished or skipped first
+      let showTimer: ReturnType<typeof setTimeout> | null = null;
+      const handleTourCompleted = () => {
+        const stillSeen = localStorage.getItem(DOCK_SCHEDULE_INTRO_KEY);
+        if (stillSeen !== "true") {
+          showTimer = setTimeout(() => {
+            setInternalOpen(true);
+          }, 600);
+        }
+      };
+
+      window.addEventListener(DOCK_ONBOARDING_COMPLETED_EVENT, handleTourCompleted);
+      return () => {
+        window.removeEventListener(DOCK_ONBOARDING_COMPLETED_EVENT, handleTourCompleted);
+        if (showTimer) clearTimeout(showTimer);
+      };
     } catch {
       // Ignore localStorage errors
     }

@@ -35,4 +35,10 @@ describe("Dock Schedule & History Onboarding & OBS Error Enhancements", () => {
     expect(dockPageSource).toContain("MakeChurchEasy");
     expect(dockPageSource).toContain("port 4455");
   });
+
+  it("sequences onboarding so the step-by-step dock guide shows first before the schedule modal", () => {
+    expect(introModalSource).toContain("import { DOCK_ONBOARDING_KEY, DOCK_ONBOARDING_COMPLETED_EVENT } from \"./DockOnboardingTour\";");
+    expect(introModalSource).toContain("localStorage.getItem(DOCK_ONBOARDING_KEY) === \"true\"");
+    expect(introModalSource).toContain("window.addEventListener(DOCK_ONBOARDING_COMPLETED_EVENT");
+  });
 });

@@ -30,7 +30,7 @@ import {
   Tv,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
-import { getDockBaseUrl, getOverlayBaseUrlSync } from "../services/overlayUrl";
+import { getOverlayBaseUrlSync, useDockBaseUrl } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";
 import { useAuth } from "../contexts/AuthContext";
 import { track } from "../services/analytics";
@@ -752,7 +752,7 @@ function StepInstallDock({
   onBack: () => void;
 }) {
   const [copied, setCopied] = useState<"dock" | "ai" | null>(null);
-  const base = getDockBaseUrl();
+  const base = useDockBaseUrl();
   const dockUrl = `${base}/dock`;
   const aiUrl = `${base}/lm-dock`;
 

@@ -958,7 +958,10 @@ export function watchPairingStatus(
   let settled = false;
 
   es.onopen = () => console.log("[authService] EventSource onopen — readyState:", es.readyState);
-  es.onerror = (e) => console.log("[authService] EventSource onerror — readyState:", es.readyState, "event:", e.type);
+  // A native EventSource `error` means the connection dropped. EventSource
+  // retries automatically; closing it here would turn a recoverable blip into
+  // the login's misleading "Connection lost" message until the app is reloaded.
+  es.onerror = (e) => console.log("[authService] EventSource connection interrupted; retrying — readyState:", es.readyState, "event:", e.type);
 
   function finish(callback: () => void): void {
     if (settled) return;
@@ -1060,12 +1063,27 @@ export function watchPairingStatus(
     finish(() => callbacks.onError(data.message || "This device has already used its free trial. Please subscribe to continue."));
   });
 
-  es.addEventListener("error", (e: MessageEvent | Event) => {
+  // Use a distinct event name so it cannot be confused with EventSource's
+  // built-in `error` event, which signals transient transport failures.
+  es.addEventListener("pairing-error", (e: MessageEvent) => {
     if (settled) return;
-    const msg = "data" in e
-      ? JSON.parse(e.data).message || "Connection lost"
-      : "Connection lost";
-    console.log("[authService] SSE error:", msg);
+    const msg = JSON.parse(e.data).message || "Pairing failed. Please try again.";
+    console.log("[authService] SSE pairing error:", msg);
+    finish(() => callbacks.onError(msg));
+  });
+
+  // Older API deployments used the reserved SSE event name `error` for
+  // application failures. Keep those readable during rollout, but ignore
+  // native EventSource error events (which have no data and should reconnect).
+  es.addEventListener("error", (e: Event) => {
+    if (settled || !("data" in e) || typeof e.data !== "string") return;
+    let msg = "Pairing failed. Please try again.";
+    try {
+      msg = JSON.parse(e.data).message || msg;
+    } catch {
+      // Ignore malformed legacy event data and retain the fallback message.
+    }
+    console.log("[authService] Legacy SSE pairing error:", msg);
     finish(() => callbacks.onError(msg));
   });
 

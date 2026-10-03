@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Icon from "../DockIcon";
 
 export const DOCK_ONBOARDING_KEY = "mce_dock_onboarding_completed_v1";
+export const DOCK_ONBOARDING_COMPLETED_EVENT = "mce-dock-onboarding-completed";
 
 interface TourStep {
   targetSelector: string;
@@ -100,6 +101,11 @@ export const DockOnboardingTour: React.FC = () => {
       localStorage.setItem(DOCK_ONBOARDING_KEY, "true");
     } catch { /* ignore */ }
     setIsOpen(false);
+    try {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(DOCK_ONBOARDING_COMPLETED_EVENT));
+      }
+    } catch { /* ignore */ }
   }, []);
 
   const handleNext = useCallback(() => {

@@ -45,6 +45,8 @@
       "../dist/countdown-overlay.html",
       "../dist/countdown-bg-overlay.html",
       "../dist/live-tool-overlay.html",
+      "../dist/time-overlay.html",
+      "../dist/mce-template-overlay.html",
       "../dist/dock.html",
       "../dist/lm-dock.html",
       "resources/obs-move-transition/**/*",

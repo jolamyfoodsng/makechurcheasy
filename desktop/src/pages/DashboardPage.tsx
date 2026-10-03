@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { obsService } from "../services/obsService";
-import { getDockBaseUrl } from "../services/overlayUrl";
+import { useDockBaseUrl } from "../services/overlayUrl";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import Icon from "../components/Icon";
 import { useAuth } from "../contexts/AuthContext";
@@ -48,17 +48,17 @@ export default function DashboardPage() {
   const [dockCopied, setDockCopied] = useState(false);
   const [obsConnected, setObsConnected] = useState(() => obsService.isConnected);
 
+  const base = useDockBaseUrl();
+
   // Keep OBS dock URLs stable. The dock reads the active device session from
   // the local overlay server instead of requiring a deviceId query string.
   const dockUrl = useMemo(() => {
-    const base = getDockBaseUrl();
     return `${base}/dock`;
-  }, []);
+  }, [base]);
 
   const lmDockUrl = useMemo(() => {
-    const base = getDockBaseUrl();
     return `${base}/lm-dock`;
-  }, []);
+  }, [base]);
 
   const [lmDockCopied, setLmDockCopied] = useState(false);
 

@@ -4244,27 +4244,29 @@ let _cachedGlobalUploadsDir: string | null = null;
 
     return (
       <div className="dock-overlay-size-control">
-        <div className="dock-overlay-size-control__header">
+        <label className="dock-overlay-size-control__header" htmlFor={`dock-overlay-size-${key}`}>
           <span>{label}</span>
-        </div>
-        <div className="dock-overlay-size-control__presets" role="group" aria-label={label}>
-          {presets.map((preset, index) => {
-            const presetLabel = t(preset.labelKey);
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={`dock-overlay-size-control__preset${selectedPreset.id === preset.id ? " dock-overlay-size-control__preset--active" : ""}`}
-                onClick={() => updateOverlayFontSize(key, preset.value, min, max)}
-                aria-label={`${label}: ${presetLabel}`}
-                aria-pressed={selectedPreset.id === preset.id}
-                title={`${label}: ${presetLabel}`}
-              >
-                <span className={`dock-overlay-size-control__sample dock-overlay-size-control__sample--${index + 1}`} aria-hidden="true">A</span>
-                <span className="dock-overlay-size-control__preset-label">{presetLabel}</span>
-              </button>
-            );
-          })}
+        </label>
+        <div className="dock-overlay-size-control__select-wrap">
+          <select
+            id={`dock-overlay-size-${key}`}
+            className="dock-overlay-size-control__select"
+            value={selectedPreset.id}
+            onChange={(e) => {
+              const matched = presets.find((p) => p.id === e.target.value);
+              if (matched) {
+                updateOverlayFontSize(key, matched.value, min, max);
+              }
+            }}
+            aria-label={label}
+          >
+            {presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {t(preset.labelKey)}
+              </option>
+            ))}
+          </select>
+          <Icon name="expand_more" size={16} className="dock-overlay-size-control__select-arrow" />
         </div>
       </div>
     );
