@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialPreview, socialTitle, socialDescription } from "@/lib/social-preview";
 import Homepage from "./homepage";
 
 const title = "Church Presentation Software for OBS | MakeChurchEazy";
@@ -9,10 +10,10 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: "/" },
   openGraph: {
-    title, description, type: "website", url: "/", siteName: "MakeChurchEazy",
-    images: [{ url: "/logos/make_church_easy_logo.png", alt: "MakeChurchEazy church presentation software for OBS" }],
+    title: socialTitle, description: socialDescription, type: "website", url: "/", siteName: "MakeChurchEazy",
+    images: [socialPreview],
   },
-  twitter: { card: "summary_large_image", title, description, images: ["/logos/make_church_easy_logo.png"] },
+  twitter: { card: "summary_large_image", title: socialTitle, description: socialDescription, images: [socialPreview] },
 };
 
 export default function Page() {

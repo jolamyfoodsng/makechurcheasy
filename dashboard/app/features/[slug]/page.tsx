@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialPreview } from "@/lib/social-preview";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check, ChevronDown, Download } from "lucide-react";
@@ -20,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${feature.label} for your church presentation`,
     description: feature.copy,
     alternates: { canonical: `/features/${feature.id}` },
-    openGraph: { title: `${feature.label} | MakeChurchEazy`, description: feature.copy, url: `/features/${feature.id}` },
+    openGraph: { images: [socialPreview], title: `${feature.label} | MakeChurchEazy`, description: feature.copy, url: `/features/${feature.id}` },
   };
 }
 

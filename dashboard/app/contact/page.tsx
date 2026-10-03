@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialPreview } from "@/lib/social-preview";
 import Link from "next/link";
 import { ArrowRight, BookOpen, ChevronDown, Download, Mail, MessageCircle, Send } from "lucide-react";
 import { MarketingFooter, MarketingHeader } from "../marketing-shell";
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   title: "Contact us",
   description,
   alternates: { canonical: "/contact" },
-  openGraph: { title: "Contact the MakeChurchEazy team", description, url: "/contact" },
+  openGraph: { images: [socialPreview], title: "Contact the MakeChurchEazy team", description, url: "/contact" },
 };
 
 const channels = [

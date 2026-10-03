@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialPreview, socialTitle, socialDescription } from "@/lib/social-preview";
 import { Inter, Sora, Open_Sans } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
@@ -44,25 +45,16 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://makechurcheazy.com",
-    siteName: "MakeChurchEasy",
-    title: "MakeChurchEasy | Church Presentation Software for OBS",
-    description:
-      "MakeChurchEasy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
-    images: [
-      {
-        url: "/logos/make_church_easy_logo.png",
-        width: 1200,
-        height: 630,
-        alt: "MakeChurchEasy — Church Presentation Software for OBS Studio",
-      },
-    ],
+    siteName: "MakeChurchEazy",
+    title: socialTitle,
+    description: socialDescription,
+    images: [socialPreview],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MakeChurchEasy | Church Presentation Software for OBS",
-    description:
-      "All-in-one church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, AI tools, and livestream graphics.",
-    images: ["/logos/make_church_easy_logo.png"],
+    title: socialTitle,
+    description: socialDescription,
+    images: [socialPreview],
   },
   robots: {
     index: true,

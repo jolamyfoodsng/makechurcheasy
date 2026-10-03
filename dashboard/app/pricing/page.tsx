@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialPreview } from "@/lib/social-preview";
 import { MarketingFooter, MarketingHeader } from "../marketing-shell";
 import shared from "../homepage.module.css";
 import PricingContent from "./PricingContent";
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: "Pricing — plans for every church media team",
   description,
   alternates: { canonical: "/pricing" },
-  openGraph: { title: "MakeChurchEazy pricing", description, url: "/pricing" },
+  openGraph: { images: [socialPreview], title: "MakeChurchEazy pricing", description, url: "/pricing" },
 };
 
 export default function PricingPage() {
