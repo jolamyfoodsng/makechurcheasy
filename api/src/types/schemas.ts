@@ -355,6 +355,20 @@ export interface UserProfile {
   devices?: string[];
   creditTransactions?: string[];
   country: string;
+  signupCountry?: string;
+  signupCity?: string;
+  signupIp?: string;
+  lastLoginCountry?: string;
+  lastLoginCity?: string;
+  lastLoginIp?: string;
+  lastLoginTimezone?: string;
+  locationHistory?: Array<{
+    country: string;
+    city?: string;
+    timezone?: string;
+    ip?: string;
+    timestamp: string;
+  }>;
   phone: string;
   jobTitle: string;
   language: string;

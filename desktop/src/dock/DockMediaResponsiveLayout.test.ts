@@ -23,11 +23,15 @@ describe("Dock Media responsive layout", () => {
     expect(dockCssSource).toContain("@media (max-height: 400px)");
   });
 
-  it("uses icon-only tab navigation matching worship and notes tabs, with templates hidden from visible bar", () => {
+  it("shows tab text labels alongside icons when width is sufficient, with templates hidden from visible bar", () => {
     expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"upload\"");
     expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"collections\"");
     expect(dockMediaTabSource).not.toContain("{useCompactMediaTabs ? <Icon name=\"grid_view\"");
-    expect(dockMediaTabSource).toContain("dock-media-tab--icon");
+    expect(dockMediaTabSource).toContain("{t('media.uploads')}");
+    expect(dockMediaTabSource).toContain("{t('media.tabAnimations')}");
+    expect(dockMediaTabSource).toContain("{t('media.patterns', 'Patterns')}");
+    expect(dockMediaTabSource).toContain("{t('media.tabText')}");
+    expect(dockMediaTabSource).toContain("dock-media-tab__label");
     expect(dockMediaTabSource).toContain("name=\"perm_media\"");
     expect(dockMediaTabSource).toContain("name=\"movie\"");
     expect(dockMediaTabSource).toContain("name=\"grid_view\"");
@@ -35,6 +39,7 @@ describe("Dock Media responsive layout", () => {
     // Templates tab is preserved in the code logic/types but excluded from the visible tabs bar
     expect(dockMediaTabSource).not.toContain("setBrowserTab(\"templates\")");
     expect(dockCssSource).toContain(".dock-media-tabs {\n  display: flex;\n  gap: 0;\n  border-bottom: 1px solid var(--dock-border-soft);\n  overflow-x: auto;");
+    expect(dockCssSource).toContain(".dock-media-tabs--compact .dock-media-tab__label {\n  display: none;\n}");
   });
 });
 

@@ -3,7 +3,7 @@ import type { PresentationFeature } from "./feature-content";
 import styles from "./homepage.module.css";
 
 export default function FeatureVisual({ feature, priority = false }: { feature: PresentationFeature; priority?: boolean }) {
-  const dimensions: Record<string, [number, number]> = { bible: [1024, 640], worship: [1024, 640], "lower-thirds": [1280, 720], media: [1024, 640], multiview: [1198, 768] };
+  const dimensions: Record<string, [number, number]> = { bible: [1024, 640], worship: [1024, 640], "lower-thirds": [1280, 720], media: [1024, 640], countdowns: [1024, 640], multiview: [1024, 640] };
   const [width, height] = dimensions[feature.id] || [1280, 720];
   if (feature.image) return <img src={`/homepage/${feature.image}.webp`} alt={feature.alt} width={width} height={height} loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} />;
   if (feature.id === "voice-bible") return <div className={styles.voiceArtwork} role="img" aria-label={feature.alt}>

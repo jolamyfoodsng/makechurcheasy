@@ -705,7 +705,7 @@ export async function recordDownload(
 
 // ─── Two-Factor Authentication ──────────────────────────────────────────────
 
-export async function setup2FA(): Promise<{ secret: string; otpauthUrl: string }> {
+export async function setup2FA(): Promise<{ secret: string; otpauthUrl: string; qrCode?: string }> {
   return request("/api/auth/2fa/setup", { method: "POST" });
 }
 

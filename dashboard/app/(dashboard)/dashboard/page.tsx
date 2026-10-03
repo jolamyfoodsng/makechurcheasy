@@ -206,7 +206,7 @@ export default function Overview() {
                 Unlock Full Church Presentation Features
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Subscribe now to unlock automated OBS lower-thirds, unlimited offline Bibles, full sermon transcript exports, and multi-device sanctuary sync.
+                Subscribe now to unlock automated OBS lower-thirds, unlimited offline Bibles, full sermon transcript exports, and multi-device church sync.
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -253,7 +253,7 @@ export default function Overview() {
             ) : isOnTrial && trialEndsAt ? (
               <p className="text-xs text-slate-500 mt-1">Trial ends {new Date(trialEndsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
             ) : (
-              <p className="text-xs text-slate-500 mt-1">Sanctuary broadcast license</p>
+              <p className="text-xs text-slate-500 mt-1">Church broadcast license</p>
             )}
           </div>
 
@@ -289,7 +289,7 @@ export default function Overview() {
           </Link>
         </Card>
 
-        {/* Card 3: Sanctuary Devices */}
+        {/* Card 3: Church Devices */}
         <Card padding="md" className="flex flex-col justify-between hover:border-slate-300 transition-colors shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider">

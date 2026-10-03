@@ -21,7 +21,7 @@ interface AuthContextValue {
   refreshMongoUser: () => Promise<void>;
   verifyTwoFactor: (token: string) => Promise<void>;
   cancelTwoFactor: () => void;
-  signInWithEmail: (email: string, password: string) => Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; email?: string }>;
+  signInWithEmail: (email: string, password: string, twoFactorCode?: string) => Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; requiresTwoFactor?: boolean; email?: string }>;
   signUpWithEmail: (email: string, password: string, name: string, churchName: string, referralCode?: string) => Promise<{ needsEmailVerification?: boolean; email?: string; existingAccount?: boolean }>;
   signInWithGoogle: (returnUrl?: string) => Promise<boolean>;
   logOut: () => Promise<void>;
@@ -39,7 +39,15 @@ const AUTH_OPTIONAL_PATHS = new Set(["/", "/download", "/support", "/tutorials",
 
 function isAuthOptionalPath(pathname: string | null): boolean {
   const path = pathname || "/";
-  return AUTH_OPTIONAL_PATHS.has(path) || path === "/features" || path.startsWith("/features/");
+  return (
+    AUTH_OPTIONAL_PATHS.has(path) ||
+    path === "/features" ||
+    path.startsWith("/features/") ||
+    path === "/blog" ||
+    path.startsWith("/blog/") ||
+    path === "/docs" ||
+    path.startsWith("/docs/")
+  );
 }
 
 async function fetchMongoUser(): Promise<MongoUser | null> {
@@ -113,6 +121,7 @@ export function AuthProvider({
   const [mongoUser, setMongoUser] = useState<MongoUser | null>(initialMongoUser);
   const [loading, setLoading] = useState(() => !initialMongoUser && !authOptionalPath);
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | null>(null);
   const signingUpRef = useState(false)[0];
   const AUTH_REFRESH_INTERVAL_MS = 30_000;
 
@@ -211,13 +220,14 @@ export function AuthProvider({
 
   async function signInWithEmail(
     email: string,
-    password: string
-  ): Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; email?: string }> {
+    password: string,
+    twoFactorCode?: string
+  ): Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; requiresTwoFactor?: boolean; email?: string }> {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, twoFactorCode }),
     });
 
     const data = await res.json();
@@ -238,15 +248,11 @@ export function AuthProvider({
       return { emailNotVerified: true, email: data.email };
     }
 
-    // Check if 2FA is enabled
-    try {
-      const status = await get2FAStatus();
-      if (status.enabled) {
-        setRequiresTwoFactor(true);
-        return {};
-      }
-    } catch {
-      // If 2FA check fails, proceed without 2FA
+    // Two-factor authentication required
+    if (data.requiresTwoFactor) {
+      setPendingCredentials({ email, password });
+      setRequiresTwoFactor(true);
+      return { requiresTwoFactor: true, email: data.email };
     }
 
     const mongo = await fetchMongoUser();
@@ -254,6 +260,8 @@ export function AuthProvider({
     if (mongo?._id) {
       setUserId(mongo._id);
     }
+    setRequiresTwoFactor(false);
+    setPendingCredentials(null);
     return {};
   }
 
@@ -314,6 +322,33 @@ export function AuthProvider({
   }
 
   async function verifyTwoFactor(token: string) {
+    if (pendingCredentials) {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: pendingCredentials.email,
+          password: pendingCredentials.password,
+          twoFactorCode: token,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid two-factor authentication code");
+      }
+
+      const mongo = await fetchMongoUser();
+      setMongoUser(mongo);
+      if (mongo?._id) {
+        setUserId(mongo._id);
+      }
+      setRequiresTwoFactor(false);
+      setPendingCredentials(null);
+      return;
+    }
+
     const res = await verify2FA(token);
     if (!res.success) throw new Error("Invalid code");
 
@@ -327,7 +362,7 @@ export function AuthProvider({
 
   function cancelTwoFactor() {
     setRequiresTwoFactor(false);
-    // Clear session cookie by logging out
+    setPendingCredentials(null);
     fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => { });
   }
 
@@ -335,6 +370,7 @@ export function AuthProvider({
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => { });
     setMongoUser(null);
     setRequiresTwoFactor(false);
+    setPendingCredentials(null);
     clearUserId();
     localStorage.removeItem("mce_session_id");
   }

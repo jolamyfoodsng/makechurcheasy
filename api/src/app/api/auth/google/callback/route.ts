@@ -9,6 +9,7 @@ import { sendVerifiedSignupWelcomeThroughZoho, type ZohoSignupWelcomeResult } fr
 import { nanoid } from "nanoid";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
+import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 import { notifyTelegramNewSignup } from "@/lib/telegramNotifications";
 import { applyReferralCode } from "@/lib/referrals";
 
@@ -161,13 +162,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${clientOrigin}/login?error=account_unavailable`);
       }
 
-      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+      // Existing user — update avatar, login location, and mark email as verified
+      const location = await extractRequestLocation(req.headers);
+      const { set: loginLocationSet, push: loginLocationPush } = buildLoginLocationUpdates(user, location, now);
 
-      // Existing user — update avatar, location, and mark email as verified
       const updateFields: Record<string, any> = {
-        lastLogin: now,
+        ...loginLocationSet,
         emailVerified: true,
       };
       if (!user.emailVerifiedAt) {
@@ -179,16 +179,6 @@ export async function GET(req: NextRequest) {
       if (googleUser.name && !user.name) {
         updateFields.name = googleUser.name;
       }
-      if (normalizedCountry) {
-        updateFields.country = normalizedCountry;
-        updateFields.lastLoginCountry = normalizedCountry;
-      }
-      if (clientCity) updateFields.lastLoginCity = clientCity;
-      if (clientTimezone) {
-        updateFields.lastLoginTimezone = clientTimezone;
-        if (!user.timezone) updateFields.timezone = clientTimezone;
-      }
-      if (clientIp) updateFields.lastLoginIp = clientIp;
       if (!user.language) {
         updateFields.language = signupLanguage;
       }
@@ -197,9 +187,14 @@ export async function GET(req: NextRequest) {
         updateFields.provider = "google";
       }
 
+      const updateDoc: Record<string, any> = { $set: updateFields };
+      if (loginLocationPush) {
+        updateDoc.$push = loginLocationPush;
+      }
+
       await db.collection("users").updateOne(
         { _id: user._id },
-        { $set: updateFields }
+        updateDoc
       );
       user = { ...user, ...updateFields };
     } else {
@@ -208,9 +203,11 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${clientOrigin}/login?error=registrations_disabled`);
       }
 
-      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+      const location = await extractRequestLocation(req.headers);
+      const effectiveCountry = normalizedCountry || location.country;
+      const clientCity = location.city;
+      const clientTimezone = location.timezone;
+      const clientIp = location.ip;
 
       // New user — create account
       const planConfig = await getPlanConfig();
@@ -224,15 +221,24 @@ export async function GET(req: NextRequest) {
         emailVerifiedAt: now,
         appId: `VC-${nanoid(6).toUpperCase()}`,
         churchName: "",
-        country: normalizedCountry,
+        country: effectiveCountry,
         city: clientCity,
         timezone: clientTimezone,
-        signupCountry: normalizedCountry,
+        signupCountry: effectiveCountry,
         signupCity: clientCity,
         signupIp: clientIp,
-        lastLoginCountry: normalizedCountry,
+        lastLoginCountry: effectiveCountry,
         lastLoginCity: clientCity,
         lastLoginIp: clientIp,
+        locationHistory: [
+          {
+            country: effectiveCountry || "UNKNOWN",
+            ...(clientCity ? { city: clientCity } : {}),
+            ...(clientTimezone ? { timezone: clientTimezone } : {}),
+            ...(clientIp ? { ip: clientIp } : {}),
+            timestamp: now,
+          },
+        ],
         language: signupLanguage,
         phone: "",
         role: "user",

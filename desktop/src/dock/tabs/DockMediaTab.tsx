@@ -4244,27 +4244,29 @@ let _cachedGlobalUploadsDir: string | null = null;
 
     return (
       <div className="dock-overlay-size-control">
-        <div className="dock-overlay-size-control__header">
+        <label className="dock-overlay-size-control__header" htmlFor={`dock-overlay-size-${key}`}>
           <span>{label}</span>
-        </div>
-        <div className="dock-overlay-size-control__presets" role="group" aria-label={label}>
-          {presets.map((preset, index) => {
-            const presetLabel = t(preset.labelKey);
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={`dock-overlay-size-control__preset${selectedPreset.id === preset.id ? " dock-overlay-size-control__preset--active" : ""}`}
-                onClick={() => updateOverlayFontSize(key, preset.value, min, max)}
-                aria-label={`${label}: ${presetLabel}`}
-                aria-pressed={selectedPreset.id === preset.id}
-                title={`${label}: ${presetLabel}`}
-              >
-                <span className={`dock-overlay-size-control__sample dock-overlay-size-control__sample--${index + 1}`} aria-hidden="true">A</span>
-                <span className="dock-overlay-size-control__preset-label">{presetLabel}</span>
-              </button>
-            );
-          })}
+        </label>
+        <div className="dock-overlay-size-control__select-wrap">
+          <select
+            id={`dock-overlay-size-${key}`}
+            className="dock-overlay-size-control__select"
+            value={selectedPreset.id}
+            onChange={(e) => {
+              const matched = presets.find((p) => p.id === e.target.value);
+              if (matched) {
+                updateOverlayFontSize(key, matched.value, min, max);
+              }
+            }}
+            aria-label={label}
+          >
+            {presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {t(preset.labelKey)}
+              </option>
+            ))}
+          </select>
+          <Icon name="expand_more" size={16} className="dock-overlay-size-control__select-arrow" />
         </div>
       </div>
     );
@@ -4583,49 +4585,53 @@ let _cachedGlobalUploadsDir: string | null = null;
             type="button"
             role="tab"
             aria-selected={browserTab === "uploads"}
-            className={`dock-media-tab dock-media-tab--icon ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab ${browserTab === "uploads" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("uploads")}
             title={t('media.uploads')}
             aria-label={t('media.uploads')}
           >
-            <Icon name="perm_media" size={15} />
+            <Icon name="perm_media" size={14} />
+            <span className="dock-media-tab__label">{t('media.uploads')}</span>
             <span className="dock-media-tab__count">{mediaEntries.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={browserTab === "animations"}
-            className={`dock-media-tab dock-media-tab--icon ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
+            className={`dock-media-tab ${browserTab === "animations" ? "dock-media-tab--active" : ""}${animationsLocked ? " dock-media-tab--locked" : ""}`}
             onClick={openAnimationsTab}
             disabled={animationsLocked}
             title={animationsLocked ? t('media.upgradeToAccess') : t('media.tabAnimations')}
             aria-label={t('media.tabAnimations')}
           >
-            <Icon name="movie" size={15} />
+            <Icon name="movie" size={14} />
+            <span className="dock-media-tab__label">{t('media.tabAnimations')}</span>
             <span className="dock-media-tab__count">{animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={browserTab === "patterns"}
-            className={`dock-media-tab dock-media-tab--icon ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab ${browserTab === "patterns" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("patterns")}
             title={t('media.patterns', 'Patterns')}
             aria-label={t('media.patterns', 'Patterns')}
           >
-            <Icon name="grid_view" size={15} />
+            <Icon name="grid_view" size={14} />
+            <span className="dock-media-tab__label">{t('media.patterns', 'Patterns')}</span>
             <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={browserTab === "text"}
-            className={`dock-media-tab dock-media-tab--icon ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
+            className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
             onClick={() => setBrowserTab("text")}
             title={t('media.tabText')}
             aria-label={t('media.tabText')}
           >
-            <Icon name="title" size={15} />
+            <Icon name="title" size={14} />
+            <span className="dock-media-tab__label">{t('media.tabText')}</span>
           </button>
         </div>
       </div>

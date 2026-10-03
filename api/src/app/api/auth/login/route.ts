@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import * as OTPAuth from "otpauth";
 import clientPromise from "@/lib/mongodb";
 import { signSessionToken } from "@/lib/jwt";
 import { setAuthCookieOnResponse } from "@/lib/auth";
 import { sendEmail, verificationCodeEmail } from "@/lib/emailTemplates";
 import { rateLimit } from "@/lib/rateLimit";
-import { detectRequestCountry } from "@/lib/signupDefaults";
-import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
+import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { email, password } = await req.json();
+    const { email, password, twoFactorCode } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -91,6 +91,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Two-factor authentication check if enabled on account
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!twoFactorCode || typeof twoFactorCode !== "string" || !twoFactorCode.trim()) {
+        return NextResponse.json({
+          requiresTwoFactor: true,
+          email: user.email,
+          message: "Please enter your two-factor authentication code.",
+        });
+      }
+
+      const cleanToken = twoFactorCode.trim();
+      const totp = new OTPAuth.TOTP({
+        issuer: "MakeChurchEasy",
+        label: user.email || "user",
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret),
+      });
+
+      const delta = totp.validate({ token: cleanToken, window: 1 });
+      let isValid2FA = delta !== null;
+
+      // Check recovery codes if TOTP validation failed
+      if (!isValid2FA && Array.isArray(user.twoFactorRecoveryCodes)) {
+        const normalized = cleanToken.replace(/[\s-]/g, "").toUpperCase();
+        const codeIndex = user.twoFactorRecoveryCodes.findIndex(
+          (rc: string) => rc.replace(/[\s-]/g, "").toUpperCase() === normalized
+        );
+        if (codeIndex !== -1) {
+          isValid2FA = true;
+          // Consume the used recovery code
+          const updatedCodes = [...user.twoFactorRecoveryCodes];
+          updatedCodes.splice(codeIndex, 1);
+          await db.collection("users").updateOne(
+            { _id: user._id },
+            { $set: { twoFactorRecoveryCodes: updatedCodes } }
+          );
+        }
+      }
+
+      if (!isValid2FA) {
+        return NextResponse.json(
+          { error: "Invalid two-factor authentication code. Please try again." },
+          { status: 401 }
+        );
+      }
+    }
+
     // Email not verified — generate new PIN and redirect to verification
     if (!user.emailVerified) {
       const code = generateCode();
@@ -127,35 +176,21 @@ export async function POST(req: NextRequest) {
     const jwt = await signSessionToken(user._id.toString(), tokenVersion);
 
     // Detect edge location from Cloudflare
-    const detectedCountry = detectRequestCountry(req.headers);
-    const normalizedCountry = detectedCountry && (await isKnownCountryCode(detectedCountry))
-      ? await normalizeCountryCode(detectedCountry)
-      : null;
-    const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-    const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-    const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
-
+    const location = await extractRequestLocation(req.headers);
     const now = new Date().toISOString();
-    const loginUpdates: Record<string, any> = {
-      lastLogin: now,
-    };
-    if (normalizedCountry) {
-      loginUpdates.country = normalizedCountry;
-      loginUpdates.lastLoginCountry = normalizedCountry;
+    const { set: loginUpdates, push: loginPush } = buildLoginLocationUpdates(user, location, now);
+
+    const updateDoc: Record<string, any> = { $set: loginUpdates };
+    if (loginPush) {
+      updateDoc.$push = loginPush;
     }
-    if (clientCity) loginUpdates.lastLoginCity = clientCity;
-    if (clientTimezone) {
-      loginUpdates.lastLoginTimezone = clientTimezone;
-      if (!user.timezone) loginUpdates.timezone = clientTimezone;
-    }
-    if (clientIp) loginUpdates.lastLoginIp = clientIp;
 
     await db.collection("users").updateOne(
       { _id: user._id },
-      { $set: loginUpdates }
+      updateDoc
     );
 
-    const activeCountry = normalizedCountry || user.country || "";
+    const activeCountry = user.signupCountry || user.country || location.country || "";
 
     const response = NextResponse.json({
       user: {

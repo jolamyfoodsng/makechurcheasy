@@ -404,15 +404,37 @@ function getMcePresentationSourceFamily(sourceName: string): string | null {
   return null;
 }
 
+export function isMceAudioSource(sourceName: string): boolean {
+  const norm = sourceName.trim().toLowerCase();
+  if (!norm) return false;
+  return (
+    norm === DOCK_MEDIA_AUDIO_SOURCE.toLowerCase() ||
+    norm === DOCK_MEDIA_IMAGE_AUDIO_SOURCE.toLowerCase() ||
+    norm === "audio - mce presentation" ||
+    norm === "audio - mce media" ||
+    norm === "image audio - mce presentation" ||
+    norm === "audio - mce media image" ||
+    norm.startsWith("mce audio -") ||
+    norm.startsWith("mce scene audio -") ||
+    norm.startsWith("mce media - audio") ||
+    norm.startsWith("mce media - image audio") ||
+    (norm.startsWith("mce ") && norm.includes("audio")) ||
+    norm.includes("image audio")
+  );
+}
+
 /**
  * Build the MCE-owned sources that should remain visible for an active push.
  * The program-scene reference is structural, so it is intentionally preserved
  * but is not treated as a content source.
+ * When preserveAudio is true (default), background music and audio tracks stay
+ * on when switching between Bible, Worship, or Notes.
  */
 export function getMcePresentationVisibilityKeepSet(
   primarySourceName: string,
   items: ReadonlyArray<{ sourceName: string; sceneItemIndex?: number }>,
   lowerThirdSourceVisibility: "keep-first" | "active-only" = "active-only",
+  preserveAudio: boolean = true,
 ): Set<string> {
   const primary = primarySourceName.trim();
   const keepSet = new Set<string>([primary, PROGRAM_SCENE_SOURCE_NAME]);
@@ -421,11 +443,14 @@ export function getMcePresentationVisibilityKeepSet(
     if (isMceBackgroundOrAuxiliaryForPrimary(primary, item.sourceName)) {
       keepSet.add(item.sourceName);
     }
+    if (preserveAudio && isMceAudioSource(item.sourceName)) {
+      keepSet.add(item.sourceName);
+    }
   }
 
   if (lowerThirdSourceVisibility === "keep-first") {
     const firstMceSource = [...items]
-      .filter((item) => isMcePresentationManagedSource(item.sourceName) && item.sourceName !== primary)
+      .filter((item) => isMcePresentationManagedSource(item.sourceName) && item.sourceName !== primary && (!preserveAudio || !isMceAudioSource(item.sourceName)))
       .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
     if (firstMceSource) keepSet.add(firstMceSource.sourceName);
   }
@@ -2644,6 +2669,7 @@ export class DockObsClient {
       primary,
       presentationItems,
       isLowerThirdSource ? projectionSettings.lowerThirdSourceVisibility : "active-only",
+      projectionSettings.preserveAudioOnSourceSwitch !== false,
     );
     for (const item of presentationItems) {
       if (!isMcePresentationManagedSource(item.sourceName)) continue;

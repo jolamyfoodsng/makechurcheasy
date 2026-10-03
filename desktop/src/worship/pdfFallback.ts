@@ -6,13 +6,17 @@ let pdfWorkerUrlPromise: Promise<string> | null = null;
 async function ensurePdfWorker(): Promise<void> {
   if (pdfWorkerInitialized) return;
   if (typeof Worker === "undefined") return;
-  if (!pdfWorkerUrlPromise) {
-    // Vite resolves the worker asset at build time.
-    pdfWorkerUrlPromise = import("pdfjs-dist/legacy/build/pdf.worker.mjs?url").then((mod) => mod.default);
+  try {
+    if (!pdfWorkerUrlPromise) {
+      // Vite resolves the worker asset at build time.
+      pdfWorkerUrlPromise = import("pdfjs-dist/legacy/build/pdf.worker.mjs?url").then((mod) => mod.default);
+    }
+    const pdfWorkerUrl = await pdfWorkerUrlPromise;
+    pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
+    pdfWorkerInitialized = true;
+  } catch (error) {
+    console.warn("[PDF] Failed to initialize worker, falling back to main thread:", error);
   }
-  const pdfWorkerUrl = await pdfWorkerUrlPromise;
-  pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
-  pdfWorkerInitialized = true;
 }
 
 function decodeLatin1(bytes: Uint8Array): string {

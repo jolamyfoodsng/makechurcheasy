@@ -5,6 +5,7 @@
       "esnext"
     ],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -22,6 +23,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@payload-config": [
+        "./payload.config.ts"
       ]
     },
     "jsx": "react-jsx"
@@ -32,7 +36,8 @@
     "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    "payload.config.ts"
   ],
   "exclude": [
     "node_modules",

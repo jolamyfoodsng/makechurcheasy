@@ -131,7 +131,7 @@ export default function Credits() {
   const purchasedHours = transcriptionBalance ? transcriptionBalance.purchasedHours : 0;
   const purchasedCredits = transcriptionBalance ? transcriptionBalance.purchasedCredits : 0;
 
-  // Initial data loading + handle return from Paystack verification
+  // Initial data loading + handle return from Flutterwave verification
   useEffect(() => {
     const userId = getUserId();
     if (!userId) {
@@ -608,7 +608,7 @@ export default function Credits() {
           </div>
           {topupPricing && (
             <span className="text-xs font-medium text-slate-400">
-              Live Exchange Rate • Instant Paystack Checkout
+              Live Exchange Rate • Secure Flutterwave Checkout
             </span>
           )}
         </div>

@@ -89,7 +89,7 @@ export function TrialExpiredUpgradeModal() {
               <div>
                 <p className="font-semibold text-slate-950">Growth plan</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Upgrade opens the secure Paystack checkout. Your account stays
+                  Upgrade opens the secure Flutterwave checkout. Your account stays
                   usable on Free until you choose to upgrade.
                 </p>
               </div>

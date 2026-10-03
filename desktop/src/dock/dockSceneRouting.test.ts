@@ -213,6 +213,38 @@ describe("dock scene routing", () => {
     expect(activeOnly.has("MCE Ticker")).toBe(false);
   });
 
+  it("preserves audio sources when preserveAudio is true (default) upon switching presentation content", () => {
+    const items = [
+      { sourceName: "MCE Program Scene Reference", sceneItemIndex: 0 },
+      { sourceName: "MCE Browser - Bible", sceneItemIndex: 1 },
+      { sourceName: "MCE Browser - Worship", sceneItemIndex: 2 },
+      { sourceName: "Audio - MCE Presentation", sceneItemIndex: 3 },
+      { sourceName: "MCE Media - Audio", sceneItemIndex: 4 },
+      { sourceName: "MCE Scene Audio - Pad - media", sceneItemIndex: 5 },
+    ];
+
+    const keepSet = getMcePresentationVisibilityKeepSet("MCE Browser - Bible", items, "active-only", true);
+
+    expect(keepSet.has("MCE Browser - Bible")).toBe(true);
+    expect(keepSet.has("MCE Program Scene Reference")).toBe(true);
+    expect(keepSet.has("MCE Browser - Worship")).toBe(false);
+    expect(keepSet.has("Audio - MCE Presentation")).toBe(true);
+    expect(keepSet.has("MCE Media - Audio")).toBe(true);
+    expect(keepSet.has("MCE Scene Audio - Pad - media")).toBe(true);
+  });
+
+  it("hides audio sources when preserveAudio is explicitly set to false", () => {
+    const items = [
+      { sourceName: "MCE Browser - Bible", sceneItemIndex: 0 },
+      { sourceName: "Audio - MCE Presentation", sceneItemIndex: 1 },
+    ];
+
+    const keepSet = getMcePresentationVisibilityKeepSet("MCE Browser - Bible", items, "active-only", false);
+
+    expect(keepSet.has("MCE Browser - Bible")).toBe(true);
+    expect(keepSet.has("Audio - MCE Presentation")).toBe(false);
+  });
+
   it("exposes the same scene picker in every requested output area", () => {
     expect(routingControlSource).toContain("Send to another scene");
     expect(routingControlSource).toContain("Also update MCE Presentation");

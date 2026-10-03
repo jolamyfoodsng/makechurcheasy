@@ -66,7 +66,7 @@ import { loadLmSettings } from "../services/lmSettings";
 import { resolveScriptureProjection } from "../services/scriptureProjection";
 import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import { isConfirmedAppClose } from "../services/appCloseGuard";
-import { getDockBaseUrl } from "../services/overlayUrl";
+import { useDockBaseUrl } from "../services/overlayUrl";
 import { getDesktopConfig } from "../services/desktopConfig";
 
 const API_BASE =
@@ -765,9 +765,10 @@ export default function SpeechToScripturePage() {
     }).catch(() => { /* keep default */ });
   }, []);
 
+  const dockBase = useDockBaseUrl();
   const lmDockUrl = useMemo(() => {
-    return `${getDockBaseUrl()}/lm-dock`;
-  }, []);
+    return `${dockBase}/lm-dock`;
+  }, [dockBase]);
 
   const handleCopyDockUrl = useCallback(async () => {
     const ok = await copyToClipboardRobust(lmDockUrl);

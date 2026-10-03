@@ -1147,6 +1147,8 @@ fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
             | "pre-service-countdown.html"
             | "pre-service-media.html"
             | "live-tool-overlay.html"
+            | "time-overlay.html"
+            | "mce-template-overlay.html"
             | "presentation.html"
     )
 }
@@ -2164,7 +2166,7 @@ fn get_dev_dock_base_url() -> Result<String, String> {
         return Err("The development Dock URL is only available in debug builds".to_string());
     }
 
-    Ok("http://localhost:1420".to_string())
+    Ok("http://127.0.0.1:45678".to_string())
 }
 
 /// Prepare a local media file for remote OBS by ensuring it is served from the
@@ -5239,7 +5241,7 @@ fn kill_process_on_port(port: u16) {
     }
     #[cfg(windows)]
     {
-        let cmd = format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}", port);
+        let cmd = format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | Where-Object {{ $_.OwningProcess -ne {} }} | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}", port, current_pid);
         let _ = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &cmd])
             .output();
@@ -5295,8 +5297,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 break;
             }
             Err(e) => {
-                if attempt == 1 && !is_overlay_server_already_running(CANONICAL_OVERLAY_PORT) {
-                    // Reclaim port from any stale/zombie process
+                if attempt == 0 {
+                    // Reclaim port from any stale/zombie instance before retrying
                     kill_process_on_port(CANONICAL_OVERLAY_PORT);
                 }
                 if attempt < 4 {
@@ -7838,9 +7840,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             continue;
                         }
 
-                        // Redirect to Vite dev server (localhost:1420) so it handles
-                        // module transforms, HMR, etc.
-                        let redirect_url = format!("http://localhost:1420/{}", clean);
+                        // Redirect to Vite dev server so it handles
+                        // module transforms, HMR, etc. Always use 127.0.0.1 to stay static and avoid IPv6 ::1 rejection on macOS.
+                        let redirect_url = format!("http://127.0.0.1:1420/{}", clean);
                         let header = overlay_header("Location", redirect_url.as_str());
                         let cors = overlay_header("Access-Control-Allow-Origin", "*");
                         let resp =
@@ -8182,10 +8184,19 @@ async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::
 
 /// Get local IP addresses (first non-loopback IPv4).
 fn get_local_ip() -> Option<String> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    let addr = socket.local_addr().ok()?;
-    Some(addr.ip().to_string())
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        for target in ["8.8.8.8:80", "1.1.1.1:80", "192.168.1.1:80", "10.0.0.1:80", "172.16.0.1:80"] {
+            if socket.connect(target).is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    let ip = addr.ip();
+                    if !ip.is_loopback() && !ip.is_unspecified() {
+                        return Some(ip.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, Serialize)]

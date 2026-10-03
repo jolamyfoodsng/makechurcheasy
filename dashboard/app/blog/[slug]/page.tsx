@@ -2,15 +2,10 @@ import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  Clock,
-  Share2,
-  Calendar,
-  Sparkles,
-  Download,
-  BookOpen,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import home from "../../homepage.module.css";
+import styles from "../blog.module.css";
+import { ReadingProgress } from "./ReadingProgress";
 import { MarketingHeader, MarketingFooter } from "../../marketing-shell";
 import { MarkdownRenderer } from "@/components/blog/MarkdownRenderer";
 import { ShareBar } from "./ShareBar";
@@ -59,11 +54,11 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 
   if (!post) {
     return {
-      title: "Story Not Found | MakeChurchEasy Blog",
+      title: "Story Not Found | MakeChurchEazy Blog",
     };
   }
 
-  const title = `${post.title} | MakeChurchEasy`;
+  const title = `${post.title} | MakeChurchEazy`;
   const description = post.subtitle || post.excerpt;
   const url = `https://makechurcheazy.com/blog/${post.slug}`;
   const images = post.coverImage
@@ -80,7 +75,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
     : [];
 
   return {
-    title,
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
     openGraph: {
@@ -89,7 +84,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       url,
       type: "article",
       publishedTime: post.publishedAt || post.createdAt,
-      authors: [post.author?.name || "MakeChurchEasy Team"],
+      authors: [post.author?.name || "MakeChurchEazy Team"],
       images,
     },
     twitter: {
@@ -134,11 +129,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     dateModified: post.updatedAt || post.createdAt,
     author: {
       "@type": "Person",
-      name: post.author?.name || "MakeChurchEasy Editorial",
+      name: post.author?.name || "MakeChurchEazy Editorial",
     },
     publisher: {
       "@type": "Organization",
-      name: "MakeChurchEasy",
+      name: "MakeChurchEazy",
       logo: {
         "@type": "ImageObject",
         url: "https://makechurcheazy.com/logos/make_church_easy_logo.png",
@@ -150,188 +145,39 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     },
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Schema Markup */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-
-      <MarketingHeader />
-
-      <main className="flex-1 py-12 px-4 sm:px-6">
-        {/* Medium-style reading container: max-w-[740px] */}
-        <article className="mx-auto max-w-[740px]">
-          {/* Back link */}
-          <div className="mb-8">
-            <Link
-              href="/blog"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-indigo-400 transition"
-            >
-              <ArrowLeft size={14} />
-              <span>Back to all stories</span>
-            </Link>
+  return <div className={`${home.home} ${styles.journal}`}>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+    <a href="#article-main" className={home.skipLink}>Skip to article</a>
+    <ReadingProgress />
+    <MarketingHeader />
+    <main id="article-main" className={styles.articleMain}>
+      <article className={styles.article} id="story-content">
+        <Link href="/blog" className={styles.back}><ArrowLeft size={16}/> All stories</Link>
+        <header>
+          <p className={styles.eyebrow}>{post.category || "Church media"}</p>
+          <h1 className={styles.articleTitle}>{post.title}</h1>
+          {(post.subtitle || post.excerpt) && <p className={styles.subtitle}>{post.subtitle || post.excerpt}</p>}
+          <div className={styles.byline}>
+            <img className={styles.avatar} src={post.author?.avatar || "/assets/blog/authors/mce.svg"} alt="" width={44} height={44}/>
+            <div><p>{post.author?.name || "MakeChurchEazy Team"}</p><div className={styles.meta}><time dateTime={post.publishedAt || post.createdAt}>{formattedDate}</time><span>·</span><span>{Math.max(1, post.readingTimeMinutes || 1)} min read</span></div></div>
           </div>
-
-          {/* Category Pill */}
-          <div className="mb-4">
-            <span className="inline-block rounded-full bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-400 border border-indigo-800/50">
-              {post.category || "Church Tech"}
-            </span>
-          </div>
-
-          {/* Story Title */}
-          <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-100 leading-[1.18]">
-            {post.title}
-          </h1>
-
-          {/* Subtitle */}
-          {post.subtitle && (
-            <p className="mt-4 text-lg sm:text-xl text-slate-300 font-sans leading-relaxed font-light">
-              {post.subtitle}
-            </p>
-          )}
-
-          {/* Medium Author Row */}
-          <div className="my-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-y border-slate-800/80 py-4">
-            <div className="flex items-center gap-3.5">
-              <img
-                src={post.author?.avatar || "/assets/blog/authors/mce.svg"}
-                alt={post.author?.name || "Author"}
-                className="h-11 w-11 rounded-full border border-slate-700 object-cover bg-slate-800 shadow-sm"
-              />
-              <div>
-                <div className="text-sm font-semibold text-slate-200">
-                  {post.author?.name || "MakeChurchEasy Team"}
-                </div>
-                <div className="text-xs text-slate-400 flex items-center gap-2">
-                  <span>{post.author?.role || "Editorial Team"}</span>
-                  <span>·</span>
-                  <span>{formattedDate}</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1 text-indigo-400">
-                    <Clock size={11} /> {post.readingTimeMinutes} min read
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Share and Bookmark Bar */}
-            <ShareBar title={post.title} slug={post.slug} />
-          </div>
-
-          {/* Cover Image */}
-          {post.coverImage && (
-            <figure className="mb-10">
-              <img
-                src={post.coverImage}
-                alt={post.title}
-                className="w-full rounded-2xl border border-slate-800/80 object-cover max-h-[480px] shadow-2xl"
-              />
-            </figure>
-          )}
-
-          {/* Article Markdown Body */}
-          <div className="prose-container">
-            <MarkdownRenderer content={post.content || post.excerpt} />
-          </div>
-
-          {/* Tags */}
-          {post.tags && post.tags.length > 0 && (
-            <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-slate-800/80 pt-6">
-              <span className="text-xs font-semibold text-slate-400 mr-1">Tags:</span>
-              {post.tags.map((tag: string, i: number) => (
-                <span
-                  key={i}
-                  className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300 border border-slate-800 hover:border-slate-700 transition"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Author Bio Box (Medium Style) */}
-          <div className="mt-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 md:p-8 flex flex-col sm:flex-row items-start gap-5">
-            <img
-              src={post.author?.avatar || "/assets/blog/authors/mce.svg"}
-              alt={post.author?.name}
-              className="h-16 w-16 rounded-full border border-slate-700 object-cover bg-slate-800 shrink-0"
-            />
-            <div className="flex-1 space-y-2">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                WRITTEN BY
-              </div>
-              <h3 className="font-serif text-lg font-bold text-slate-200">
-                {post.author?.name || "MakeChurchEasy Team"}
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans">
-                {post.author?.role
-                  ? `${post.author.role} at MakeChurchEasy.`
-                  : "Part of the MakeChurchEasy team."}{" "}
-                Dedicated to helping church media directors and volunteers prepare and broadcast Sunday services with confidence.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href="/download"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300"
-                >
-                  <span>Explore MakeChurchEasy presentation dock</span>
-                  <span>→</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        {/* Related Stories */}
-        {relatedPosts.length > 0 && (
-          <section className="mx-auto max-w-5xl mt-20 border-t border-slate-800/80 pt-12">
-            <h3 className="font-serif text-2xl font-bold text-slate-200 mb-8">
-              More from MakeChurchEasy
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {relatedPosts.map((rel: any) => (
-                <Link
-                  key={rel._id}
-                  href={`/blog/${rel.slug}`}
-                  className="group rounded-xl border border-slate-800 bg-slate-900/30 p-5 hover:border-slate-700 hover:bg-slate-900/60 transition flex flex-col justify-between"
-                >
-                  <div>
-                    {rel.coverImage && (
-                      <div className="overflow-hidden rounded-lg mb-4 h-36">
-                        <img
-                          src={rel.coverImage}
-                          alt={rel.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                    )}
-                    <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider">
-                      {rel.category}
-                    </span>
-                    <h4 className="font-serif text-base font-semibold text-slate-200 group-hover:text-indigo-300 transition mt-1 line-clamp-2">
-                      {rel.title}
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-2 line-clamp-2">
-                      {rel.subtitle || rel.excerpt}
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500">
-                    <span>{rel.readingTimeMinutes} min read</span>
-                    <span className="font-medium text-slate-400 group-hover:text-slate-200">
-                      Read story →
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-      </main>
-
-      <MarketingFooter />
-    </div>
-  );
+          <ShareBar title={post.title} slug={post.slug}/>
+        </header>
+        {post.coverImage && <figure className={styles.articleCover}><img src={post.coverImage} alt={post.title}/></figure>}
+        <MarkdownRenderer content={post.content || post.excerpt} className={styles.body}/>
+        <footer className={styles.articleEnd}>
+          <div className={styles.tags}>{(post.tags || []).map((tag: string) => <Link key={tag} href={`/blog?topic=${encodeURIComponent(tag)}`} className={styles.tag}>{tag}</Link>)}</div>
+          <h2>Written by {post.author?.name || "MakeChurchEazy Team"}</h2>
+          {post.author?.role && <p>{post.author.role}</p>}
+          <p>More practical stories and guides for the people behind the service.</p>
+          <Link className={styles.primaryLink} href="/blog">Explore the journal <span aria-hidden="true">→</span></Link>
+        </footer>
+      </article>
+      {relatedPosts.length > 0 && <section className={styles.related} aria-labelledby="related-heading"><h2 id="related-heading">Keep reading</h2><div className={styles.relatedGrid}>{relatedPosts.map((rel: any) => <article key={rel._id}>
+        {rel.coverImage && <Link href={`/blog/${rel.slug}`} className={styles.cover} tabIndex={-1} aria-hidden="true"><img src={rel.coverImage} alt="" loading="lazy"/></Link>}
+        <span className={styles.eyebrow}>{rel.category}</span><h3><Link href={`/blog/${rel.slug}`}>{rel.title}</Link></h3><p>{rel.subtitle || rel.excerpt}</p><div className={styles.meta}>{Math.max(1,rel.readingTimeMinutes || 1)} min read</div>
+      </article>)}</div></section>}
+    </main>
+    <MarketingFooter />
+  </div>;
 }

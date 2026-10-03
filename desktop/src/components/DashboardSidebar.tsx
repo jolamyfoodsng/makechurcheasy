@@ -553,7 +553,7 @@ export default function DashboardSidebar({
 
               {/* Emergency Hotline / Phone */}
               <a
-                href="tel:+2348142740847"
+                href="tel:+2349054545286"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -582,7 +582,7 @@ export default function DashboardSidebar({
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Sunday Emergency Hotline</div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>+234 814 274 0847</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>+234 905 454 5286</div>
                 </div>
                 <ExternalLink size={16} style={{ color: "var(--text-muted, #94a3b8)" }} />
               </a>

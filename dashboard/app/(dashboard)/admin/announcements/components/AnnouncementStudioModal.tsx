@@ -586,7 +586,7 @@ export function AnnouncementStudioModal({
                         maxLength={60}
                         value={form.title}
                         onChange={(e) => onUpdateForm({ title: e.target.value })}
-                        placeholder="e.g. Special 25% Off Sanctuary Pro"
+                        placeholder="e.g. Special 25% Off Church Pro"
                         className="w-full bg-[#131B2E]/90 border border-[#1E293B] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition shadow-inner"
                       />
                     </div>

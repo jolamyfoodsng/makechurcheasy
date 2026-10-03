@@ -1,78 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
-import { Copy, Check, Twitter, Linkedin, Share2 } from "lucide-react";
+import { useState } from "react";
+import { Copy, Check, Twitter, Linkedin } from "lucide-react";
+import styles from "../blog.module.css";
 
-interface ShareBarProps {
-  title: string;
-  slug: string;
-}
-
-export function ShareBar({ title, slug }: ShareBarProps) {
-  const [copied, setCopied] = useState(false);
-
-  const getUrl = () => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/blog/${slug}`;
+export function ShareBar({ title, slug }: { title: string; slug: string }) {
+  const [status, setStatus] = useState("");
+  const url = `https://makechurcheazy.com/blog/${encodeURIComponent(slug)}`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("Link copied");
+    } catch {
+      setStatus("Could not copy the link. Copy the address from your browser instead.");
     }
-    return `https://makechurcheazy.com/blog/${slug}`;
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(getUrl());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleTwitter = () => {
-    const url = encodeURIComponent(getUrl());
-    const text = encodeURIComponent(`"${title}" via @makechurcheasy`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
-  };
-
-  const handleLinkedIn = () => {
-    const url = encodeURIComponent(getUrl());
-    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, "_blank");
-  };
-
-  return (
-    <div className="flex items-center gap-1.5 text-slate-400">
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-1.5 text-xs hover:border-slate-700 hover:text-white transition"
-        title="Copy article link"
-      >
-        {copied ? (
-          <>
-            <Check size={13} className="text-emerald-400" />
-            <span className="text-emerald-400">Copied</span>
-          </>
-        ) : (
-          <>
-            <Copy size={13} />
-            <span>Copy Link</span>
-          </>
-        )}
-      </button>
-
-      <button
-        type="button"
-        onClick={handleTwitter}
-        className="rounded-lg border border-slate-800 bg-slate-900/80 p-1.5 hover:border-slate-700 hover:text-white transition"
-        title="Share on X"
-      >
-        <Twitter size={13} />
-      </button>
-
-      <button
-        type="button"
-        onClick={handleLinkedIn}
-        className="rounded-lg border border-slate-800 bg-slate-900/80 p-1.5 hover:border-slate-700 hover:text-white transition"
-        title="Share on LinkedIn"
-      >
-        <Linkedin size={13} />
-      </button>
-    </div>
-  );
+  }
+  return <div className={styles.share}>
+    <button type="button" onClick={copy}>{status === "Link copied" ? <Check size={18}/> : <Copy size={18}/>} Copy link</button>
+    <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" aria-label="Share article on X (opens a new tab)"><Twitter size={18}/></a>
+    <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" aria-label="Share article on LinkedIn (opens a new tab)"><Linkedin size={18}/></a>
+    <span role="status" className={styles.shareStatus}>{status}</span>
+  </div>;
 }

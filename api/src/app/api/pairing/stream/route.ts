@@ -27,7 +27,7 @@ import {
  *   - connected: { message }
  *   - authorized: { user, deviceId }
  *   - expired
- *   - error: { message }
+ *   - pairing-error: { message }
  */
 
 const POLL_INTERVAL = 1000; // 1 second
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
           try {
             client = await clientPromise;
           } catch {
-            sendEvent(controller, "error", { message: "Database connection failed" });
+            sendEvent(controller, "pairing-error", { message: "Database connection failed" });
             break;
           }
 
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
             await db.collection("pairingCodes").deleteOne({ _id: pairing._id });
 
             if (!user) {
-              sendEvent(controller, "error", { message: "User not found" });
+              sendEvent(controller, "pairing-error", { message: "User not found" });
               break;
             }
             user = await checkAndExpireAdminTemporaryPlan(user._id.toString(), user);
@@ -185,7 +185,7 @@ export async function GET(req: NextRequest) {
               });
             } catch (deviceErr) {
               console.error("[pairing/stream] Device creation failed:", deviceErr);
-              sendEvent(controller, "error", { message: "Failed to register device. Please try again." });
+              sendEvent(controller, "pairing-error", { message: "Failed to register device. Please try again." });
               clearInterval(keepalive);
               try { controller.close(); } catch { /* already closed */ }
               return;

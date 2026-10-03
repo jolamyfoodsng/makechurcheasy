@@ -4,8 +4,7 @@ import { calculateUserCredits } from "@/lib/credits";
 import { getActiveSubscription, getPlanConfig } from "@/lib/db";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { checkAndExpireAmbassador } from "@/lib/ambassadorExpiration";
-import { detectRequestCountry } from "@/lib/signupDefaults";
-import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
+import { extractRequestLocation } from "@/lib/userLocation";
 import { getTrialForUser } from "@/lib/trialRecords";
 import clientPromise from "@/lib/mongodb";
 
@@ -22,16 +21,33 @@ export async function GET(req: NextRequest) {
   );
   mongoUser = (await checkAndExpireAmbassador(mongoUser._id.toString(), mongoUser)) as any;
 
-  if (!mongoUser.country) {
-    const detectedCountry = detectRequestCountry(req.headers);
-    if (detectedCountry && (await isKnownCountryCode(detectedCountry))) {
-      const normalized = await normalizeCountryCode(detectedCountry);
+  if (!mongoUser.country || !mongoUser.signupCountry) {
+    const location = await extractRequestLocation(req.headers);
+    const countryToPersist = mongoUser.country || mongoUser.signupCountry || location.country;
+    if (countryToPersist) {
       const client = await clientPromise;
+      const setDoc: Record<string, any> = {};
+      if (!mongoUser.country) {
+        setDoc.country = countryToPersist;
+        mongoUser.country = countryToPersist;
+      }
+      if (!mongoUser.signupCountry) {
+        setDoc.signupCountry = countryToPersist;
+        mongoUser.signupCountry = countryToPersist;
+      }
+      if (location.country) {
+        setDoc.lastLoginCountry = location.country;
+      }
+      if (location.city) {
+        setDoc.lastLoginCity = location.city;
+      }
+      if (location.ip) {
+        setDoc.lastLoginIp = location.ip;
+      }
       await client.db().collection("users").updateOne(
         { _id: mongoUser._id },
-        { $set: { country: normalized, lastLoginCountry: normalized } },
+        { $set: setDoc },
       );
-      mongoUser.country = normalized;
     }
   }
 

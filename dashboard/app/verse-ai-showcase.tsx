@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Mic, ArrowRight, Check, Sparkles, Volume2, Globe, FileText, Share2, Layers } from "lucide-react";
+import { Check } from "lucide-react";
 import styles from "./verse-ai-showcase.module.css";
 
 export default function VerseAiShowcase() {
@@ -22,14 +22,15 @@ export default function VerseAiShowcase() {
             </span>
           </div>
           <h2 className={styles.heading}>
-            Turn live preaching into scriptures, sermon quotes, and transcripts in real time.
+            Follow the sermon. Find the scripture. Capture the message.
           </h2>
           <p className={styles.lead}>
-            Zero scrambling. Zero app switching. OBS listens, detects, and prepares your graphics automatically.
+            Verse AI brings speech-to-scripture, sermon quote capture, and transcripts into your OBS workflow.
           </p>
           <p className={styles.description}>
-            When your pastor calls out an unexpected passage or drops an unforgettable quote, your media team shouldn&apos;t have to panic-search through separate software. MakeChurchEazy hooks straight into your pulpit audio feed inside OBS, transcribes speech in real time, and stages broadcast-ready scripture slides, quote graphics, and multi-lingual subtitles the exact moment they are spoken.
+            Connect a microphone or OBS audio input and Verse AI listens to the sermon. When it recognizes a spoken Bible reference, it suggests the passage so your operator can review it, choose a translation, and prepare it for presentation without leaving OBS. The speech tools also help your team follow the message, capture quotes, and work with transcripts.
           </p>
+          <p className={styles.serviceNote}>Speech recognition and AI features require an internet connection and depend on your plan and available credits.</p>
         </header>
 
         {/* Grid Container */}
@@ -52,24 +53,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#00c7e5] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Instant Bible verse detection
+                Find spoken Bible references
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Listens to your pastor&apos;s spoken words and automatically looks up every cited scripture in milliseconds.
+                When a preacher says a reference such as “John chapter three, verse sixteen,” Verse AI turns the spoken words into a scripture suggestion. Your operator checks the suggested passage before sending it to the screen.
               </p>
               {activeTab === 1 && (
                 <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>1-Click push to OBS:</strong> Send ready-to-air lower thirds or full-screen sanctuary projector slides instantly.</span>
+                    <span><strong>Review before presenting:</strong> Check the suggested reference and verse before choosing what appears on screen.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Side-by-side translations:</strong> Instantly switch or compare ESV, NIV, KJV, NKJV, and NLT on air.</span>
+                    <span><strong>Choose a translation:</strong> Prepare the verse using an available Bible translation.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00c7e5] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>100% offline church engine:</strong> Works reliably on local sanctuary hardware even when Sunday Wi-Fi drops.</span>
+                    <span><strong>Present from the OBS workflow:</strong> Send the reviewed verse to your presentation output.</span>
                   </li>
                 </ul>
               )}
@@ -89,24 +90,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#6554c0] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Auto-capture sermon quotes &amp; key points
+                Capture and prepare sermon quotes
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Identifies powerful punchlines and memorable sermon takeaways as they are spoken from the pulpit.
+                Capture meaningful lines from the message, then review and edit the wording before your team puts a quote on screen.
               </p>
               {activeTab === 2 && (
                 <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Live editing dock:</strong> Review, polish, or trim pastor quotes in real time before sending them to the stream.</span>
+                    <span><strong>Review and edit:</strong> Refine a captured quote in the dock before it is shown to viewers.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Stream-ready lower thirds:</strong> Format quotes instantly into church-branded stream titles and overlay banners.</span>
+                    <span><strong>Prepare a visual:</strong> Use a sermon quote in a lower third or other available presentation format.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#6554c0] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Social cards &amp; notes:</strong> Generate shareable square/vertical sermon cards and bulletin takeaways with 1 click.</span>
+                    <span><strong>Keep the key point:</strong> Capture a sermon takeaway for your team to reuse after the service.</span>
                   </li>
                 </ul>
               )}
@@ -126,24 +127,24 @@ export default function VerseAiShowcase() {
                 <div className="absolute left-0 top-0 bottom-0 w-[6px] bg-[#00875a] rounded-l-2xl" />
               )}
               <h3 className="text-lg sm:text-xl md:text-2xl font-black text-[#172b4d] mb-2 tracking-tight font-['Open_Sans',var(--font-open-sans),sans-serif]">
-                Full transcripts &amp; instant live subtitles
+                Follow the sermon with a transcript
               </h3>
               <p className="text-sm sm:text-base text-[#475569] leading-relaxed font-medium mb-3">
-                Low-latency word-for-word voice transcription that feeds live captions directly into your broadcast.
+                View the spoken message as text and use transcript tools to review what was said. Translation and export options help your team work with the transcript after it is captured.
               </p>
               {activeTab === 3 && (
                 <ul className="space-y-2.5 text-sm sm:text-[15px] text-[#0f172a] font-bold border-t border-slate-200/80 pt-3">
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>0.4s low-latency captioning:</strong> Live subtitling rendered directly over your OBS camera feed for accessibility.</span>
+                    <span><strong>Review the transcript:</strong> Return to the captured words to find a reference or sermon point.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Multi-lingual live translation:</strong> Stream simultaneous translated subtitles in Spanish, French, Portuguese, and more.</span>
+                    <span><strong>Translate the message:</strong> Use the available translation controls to create another language version.</span>
                   </li>
                   <li className="flex items-start text-slate-800">
                     <Check className="w-4 h-4 text-[#00875a] mr-2.5 mt-0.5 stroke-[3] shrink-0" />
-                    <span><strong>Instant sermon archive export:</strong> Export searchable full-text sermon transcripts to PDF, Word, or church bulletin.</span>
+                    <span><strong>Export a copy:</strong> Keep a transcript for your church’s records or later review.</span>
                   </li>
                 </ul>
               )}

@@ -642,6 +642,7 @@ export default function NewPlansPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    paymentMethod: 'flutterwave',
                     plan: plan.id,
                     billingCycle: cycle,
                     email,
@@ -659,6 +660,7 @@ export default function NewPlansPage() {
             try {
                 localStorage.setItem('mce_pending_payment', JSON.stringify({
                     reference: data.reference,
+                    paymentMethod: 'flutterwave',
                     planId: plan.id,
                     billingCycle: cycle,
                     discountCode: promoCode.trim() || undefined,

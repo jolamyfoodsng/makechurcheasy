@@ -10,10 +10,14 @@
     "cloudflare:build": "npm run build",
     "cloudflare:preview": "wrangler dev",
     "cloudflare:deploy:staging": "wrangler deploy",
-    "cloudflare:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cloudflare:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "payload:importmap": "payload generate:importmap"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1072.0",
+    "@payloadcms/db-mongodb": "^3.89.0",
+    "@payloadcms/next": "^3.89.0",
+    "@types/qrcode": "^1.5.6",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
     "mongodb": "^6.21.0",
@@ -21,7 +25,9 @@
     "next": "16.2.9",
     "nodemailer": "^9.0.1",
     "otpauth": "^9.5.1",
+    "payload": "^3.89.0",
     "posthog-node": "^5.38.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

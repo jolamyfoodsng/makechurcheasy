@@ -48,9 +48,6 @@ import { recordActivationEvent } from "@/lib/activation";
 import { notifyTelegramCheckoutStarted } from "@/lib/telegramNotifications";
 import crypto from "node:crypto";
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
-const PAYSTACK_API = "https://api.paystack.co";
-
 const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 
 function roundMoney(value: number): number {
@@ -68,16 +65,6 @@ interface InitializePaymentBody {
   offerId?: string;
   paymentMethod?: "paystack" | "mtn_momo" | "nowpayments" | "flutterwave";
   mtnPhone?: string;
-}
-
-interface PaystackInitializeResponse {
-  status: boolean;
-  message?: string;
-  data?: {
-    authorization_url: string;
-    access_code: string;
-    reference: string;
-  };
 }
 
 export async function POST(req: NextRequest) {
@@ -701,77 +688,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Initialize Paystack transaction ─────────────────────────────────────
-
-    // Paystack uses kobo (×100) for NGN, cents (×100) for USD, etc.
-    const amountInSmallestUnit = Math.round(numericAmount * 100);
-    const reference = `vc_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-
-    const res = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        amount: amountInSmallestUnit,
-        currency: paymentCurrency,
-        reference,
-        metadata: {
-          ...paymentMetadata,
-          custom_fields: [
-            {
-              display_name: "Plan",
-              variable_name: "plan",
-              value: purchasePlan,
-            },
-            {
-              display_name: "Country",
-              variable_name: "country",
-              value: userCountry,
-            },
-          ],
-        },
-        callback_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:4000"}/billing/success?reference=${reference}`,
-      }),
-    });
-
-    const result = (await res.json()) as PaystackInitializeResponse;
-
-    if (!result.status || !result.data) {
-      console.error("[Paystack Init]", result.message);
-      return NextResponse.json(
-        { error: result.message || "Failed to initialize payment" },
-        { status: 402 }
-      );
-    }
-
-    void recordActivationEvent(userId, "checkout_started", {
-      paymentMethod,
-      plan: purchasePlan,
-      billingCycle,
-      purchaseKind,
-    }).catch(() => { });
-
-    return NextResponse.json({
-      authorization_url: result.data.authorization_url,
-      paymentMethod: "paystack",
-      access_code: result.data.access_code,
-      reference: result.data.reference,
-      amount: amountInSmallestUnit,
-      currency: paymentCurrency,
-      currencySymbol: paymentCurrencySymbol,
-      country: userCountry,
-      price: numericAmount,
-      originalPrice: originalAmount,
-      discount: appliedDiscount,
-      offer: appliedOffer,
-      purchaseKind,
-      pricingVersion,
-      plan: purchasePlan,
-      billingCycle,
-    });
+    return NextResponse.json({ error: "Unsupported payment method" }, { status: 400 });
   } catch (error) {
     if (error instanceof DiscountCodeError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

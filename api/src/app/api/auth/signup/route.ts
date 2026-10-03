@@ -117,6 +117,15 @@ export async function POST(req: NextRequest) {
       lastLoginCountry: normalizedCountry,
       lastLoginCity: signupCity,
       lastLoginIp: signupIp,
+      locationHistory: [
+        {
+          country: normalizedCountry || "UNKNOWN",
+          ...(signupCity ? { city: signupCity } : {}),
+          ...(signupTimezone ? { timezone: signupTimezone } : {}),
+          ...(signupIp ? { ip: signupIp } : {}),
+          timestamp: now,
+        },
+      ],
       language: signupLanguage,
       phone: "",
       role: "user",

@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import mammoth from "mammoth";
 import { extractPdfTextWithPdfJs } from "./pdfFallback";
 import { normalizeNfc } from "./unicodeUtils";
+import { hasTauriInvoke } from "../services/tauriSafe";
 
 export interface ExtractedTextQuality {
   usable: boolean;
@@ -50,9 +51,11 @@ async function extractPdfText(file: File): Promise<string> {
   try {
     raw = await extractPdfTextWithPdfJs(file);
   } catch {
-    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
-    raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
-    if (!isBilingualHymnTable(raw)) raw = reorderTwoColumnText(raw);
+    if (hasTauriInvoke()) {
+      const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+      raw = await invoke<string>("extract_text_from_pdf", { fileData: data });
+      if (!isBilingualHymnTable(raw)) raw = reorderTwoColumnText(raw);
+    }
   }
   if (!raw.trim()) throw new Error("This PDF contains no readable text. Scanned pages need OCR first; export a searchable PDF or paste the lyrics.");
   // Bilingual tables must reach their parser with both columns still aligned.

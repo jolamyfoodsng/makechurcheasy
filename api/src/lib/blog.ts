@@ -1,6 +1,8 @@
 import { ObjectId } from "mongodb";
 import clientPromise from "./mongodb";
 import { COLLECTIONS, ensureIndexes } from "./db";
+import { getPayload } from "payload";
+import payloadConfig from "../../payload.config";
 
 export type BlogPostStatus = "draft" | "published" | "archived";
 
@@ -168,6 +170,21 @@ With a prepared workflow, OBS and vMix become the final delivery layer instead o
   },
 ];
 
+let payloadPromise: ReturnType<typeof getPayload> | null = null;
+
+async function getBlogPayload() {
+  payloadPromise ??= getPayload({ config: payloadConfig });
+  return payloadPromise;
+}
+
+function fromPayloadDocument(document: any): BlogPost {
+  return {
+    ...document,
+    _id: String(document.id ?? document._id),
+    tags: Array.isArray(document.tags) ? document.tags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
+  } as BlogPost;
+}
+
 async function seedIfEmpty(): Promise<void> {
   try {
     const client = await clientPromise;
@@ -184,20 +201,15 @@ async function seedIfEmpty(): Promise<void> {
 export async function listBlogPostsAdmin(limit = 100): Promise<BlogPost[]> {
   await ensureIndexes();
   await seedIfEmpty();
-  const client = await clientPromise;
-  const db = client.db();
-
-  const docs = await db
-    .collection(COLLECTIONS.BLOG_POSTS)
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .toArray();
-
-  return docs.map((doc) => ({
-    ...doc,
-    _id: doc._id.toString(),
-  })) as BlogPost[];
+  const payload = await getBlogPayload();
+  const { docs } = await payload.find({
+    collection: "blog-posts",
+    limit,
+    page: 1,
+    sort: "-createdAt",
+    overrideAccess: true,
+  });
+  return docs.map(fromPayloadDocument);
 }
 
 export async function listPublishedBlogPosts(options?: {
@@ -208,85 +220,65 @@ export async function listPublishedBlogPosts(options?: {
 }): Promise<{ posts: BlogPost[]; total: number }> {
   await ensureIndexes();
   await seedIfEmpty();
-  const client = await clientPromise;
-  const db = client.db();
-
-  const query: Record<string, any> = { status: "published" };
+  const where: Record<string, any> = { status: { equals: "published" } };
   if (options?.tag) {
-    query.tags = options.tag;
+    where.tags = { equals: options.tag };
   }
   if (options?.category) {
-    query.category = options.category;
+    where.category = { equals: options.category };
   }
 
   const limit = Math.min(50, options?.limit || 20);
   const skip = options?.skip || 0;
-
-  const [docs, total] = await Promise.all([
-    db
-      .collection(COLLECTIONS.BLOG_POSTS)
-      .find(query)
-      .sort({ publishedAt: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .toArray(),
-    db.collection(COLLECTIONS.BLOG_POSTS).countDocuments(query),
-  ]);
+  const payload = await getBlogPayload();
+  const result = await payload.find({
+    collection: "blog-posts",
+    where,
+    limit,
+    page: Math.floor(skip / limit) + 1,
+    sort: "-publishedAt -createdAt",
+    overrideAccess: true,
+  });
 
   return {
-    posts: docs.map((doc) => ({
-      ...doc,
-      _id: doc._id.toString(),
-    })) as BlogPost[],
-    total,
+    posts: result.docs.map(fromPayloadDocument),
+    total: result.totalDocs,
   };
 }
 
 export async function getBlogPostBySlug(slug: string, requirePublished = true): Promise<BlogPost | null> {
   await ensureIndexes();
   await seedIfEmpty();
-  const client = await clientPromise;
-  const db = client.db();
-
-  const query: Record<string, any> = { slug };
-  if (requirePublished) {
-    query.status = "published";
-  }
-
-  const doc = await db.collection(COLLECTIONS.BLOG_POSTS).findOne(query);
-  if (!doc) return null;
-
-  return {
-    ...doc,
-    _id: doc._id.toString(),
-  } as BlogPost;
+  const payload = await getBlogPayload();
+  const where: Record<string, any> = { slug: { equals: slug } };
+  if (requirePublished) where.status = { equals: "published" };
+  const { docs } = await payload.find({
+    collection: "blog-posts",
+    where,
+    limit: 1,
+    overrideAccess: true,
+  });
+  return docs[0] ? fromPayloadDocument(docs[0]) : null;
 }
 
 export async function getBlogPostById(id: string): Promise<BlogPost | null> {
   await ensureIndexes();
-  const client = await clientPromise;
-  const db = client.db();
-
-  let objectId: ObjectId;
   try {
-    objectId = new ObjectId(id);
+    const payload = await getBlogPayload();
+    const doc = await payload.findByID({
+      collection: "blog-posts",
+      id,
+      overrideAccess: true,
+    });
+    return fromPayloadDocument(doc);
   } catch {
     return null;
   }
-
-  const doc = await db.collection(COLLECTIONS.BLOG_POSTS).findOne({ _id: objectId });
-  if (!doc) return null;
-
-  return {
-    ...doc,
-    _id: doc._id.toString(),
-  } as BlogPost;
 }
 
 export async function createBlogPost(input: BlogPostInput, adminUserId: string): Promise<BlogPost> {
   await ensureIndexes();
-  const client = await clientPromise;
-  const db = client.db();
+  const payload = await getBlogPayload();
 
   const title = input.title.trim();
   if (!title) throw new Error("Title is required");
@@ -297,7 +289,12 @@ export async function createBlogPost(input: BlogPostInput, adminUserId: string):
   // Ensure unique slug
   let slug = baseSlug;
   let counter = 1;
-  while (await db.collection(COLLECTIONS.BLOG_POSTS).findOne({ slug })) {
+  while ((await payload.find({
+    collection: "blog-posts",
+    where: { slug: { equals: slug } },
+    limit: 1,
+    overrideAccess: true,
+  })).docs.length > 0) {
     slug = `${baseSlug}-${counter}`;
     counter++;
   }
@@ -332,24 +329,21 @@ export async function createBlogPost(input: BlogPostInput, adminUserId: string):
     createdBy: adminUserId,
   };
 
-  const result = await db.collection(COLLECTIONS.BLOG_POSTS).insertOne(doc as any);
-  return {
-    ...doc,
-    _id: result.insertedId.toString(),
-  };
+  const created = await payload.create({
+    collection: "blog-posts",
+    data: doc as any,
+    overrideAccess: true,
+  });
+  return fromPayloadDocument(created);
 }
 
 export async function updateBlogPost(id: string, input: Partial<BlogPostInput>): Promise<BlogPost> {
   await ensureIndexes();
-  const client = await clientPromise;
-  const db = client.db();
-
-  const objectId = new ObjectId(id);
-  const existing = await db.collection(COLLECTIONS.BLOG_POSTS).findOne({ _id: objectId });
+  const payload = await getBlogPayload();
+  const existing = await getBlogPostById(id);
   if (!existing) throw new Error("Blog post not found");
 
   const updates: Record<string, any> = {
-    updatedAt: new Date(),
   };
 
   if (input.title !== undefined) updates.title = input.title.trim();
@@ -374,8 +368,13 @@ export async function updateBlogPost(id: string, input: Partial<BlogPostInput>):
 
   if (input.slug && input.slug.trim() !== existing.slug) {
     const nextSlug = slugify(input.slug);
-    const slugConflict = await db.collection(COLLECTIONS.BLOG_POSTS).findOne({ slug: nextSlug, _id: { $ne: objectId } });
-    if (slugConflict) throw new Error(`Slug "${nextSlug}" is already in use`);
+    const slugConflict = await payload.find({
+      collection: "blog-posts",
+      where: { and: [{ slug: { equals: nextSlug } }, { id: { not_equals: id } }] },
+      limit: 1,
+      overrideAccess: true,
+    });
+    if (slugConflict.docs.length > 0) throw new Error(`Slug "${nextSlug}" is already in use`);
     updates.slug = nextSlug;
   }
 
@@ -390,21 +389,23 @@ export async function updateBlogPost(id: string, input: Partial<BlogPostInput>):
     updates.publishedAt = input.publishedAt ? new Date(input.publishedAt) : null;
   }
 
-  await db.collection(COLLECTIONS.BLOG_POSTS).updateOne({ _id: objectId }, { $set: updates });
-  const updated = await db.collection(COLLECTIONS.BLOG_POSTS).findOne({ _id: objectId });
-
-  return {
-    ...updated,
-    _id: updated!._id.toString(),
-  } as BlogPost;
+  const updated = await payload.update({
+    collection: "blog-posts",
+    id,
+    data: updates,
+    overrideAccess: true,
+  });
+  return fromPayloadDocument(updated);
 }
 
 export async function deleteBlogPost(id: string): Promise<boolean> {
   await ensureIndexes();
-  const client = await clientPromise;
-  const db = client.db();
-
-  const objectId = new ObjectId(id);
-  const result = await db.collection(COLLECTIONS.BLOG_POSTS).deleteOne({ _id: objectId });
-  return result.deletedCount > 0;
+  try {
+    const payload = await getBlogPayload();
+    await payload.delete({ collection: "blog-posts", id, overrideAccess: true });
+    return true;
+  } catch (error) {
+    if (error instanceof Error && /not found/i.test(error.message)) return false;
+    throw error;
+  }
 }

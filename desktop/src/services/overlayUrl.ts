@@ -10,20 +10,27 @@
  * since Vite already serves the public/ files.
  */
 
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 let _cachedBaseUrl: string | null = null;
 let _overrideBaseUrl: string | null = null;
 let _devDockBaseUrl: string | null = null;
+let _lanDockBaseUrl: string | null = null;
 let _lastInvokeAttempt = 0;
 const RETRY_COOLDOWN_MS = 2000;
-const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://localhost:45678";
+const DEFAULT_TAURI_OVERLAY_BASE_URL = "http://127.0.0.1:45678";
 const DEV_VITE_PORT = "1420";
 export const DEV_DOCK_BASE_URL_READY_EVENT = "mce-dev-dock-base-url-ready";
+export const DOCK_BASE_URL_READY_EVENT = "mce-dock-base-url-ready";
 
 function isLocalOverlayHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
-  return normalized === "127.0.0.1" || normalized === "localhost";
+  if (normalized === "127.0.0.1" || normalized === "localhost") return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(normalized)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(normalized)) return true;
+  return false;
 }
 
 function isTauriRuntime(): boolean {
@@ -201,11 +208,77 @@ export function getOverlayBaseUrlSync(): string {
   return DEFAULT_TAURI_OVERLAY_BASE_URL;
 }
 
+interface LanOverlayInfo {
+  ip: string;
+  port: number;
+  baseUrl: string;
+}
+
+export async function resolveLanOverlayBaseUrl(): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const info = await invoke<LanOverlayInfo>("get_lan_overlay_info", { targetHost: null });
+    if (info?.baseUrl && typeof info.baseUrl === "string") {
+      const trimmed = info.baseUrl.trim().replace(/\/+$/, "");
+      if (trimmed) {
+        _lanDockBaseUrl = trimmed;
+        _cachedBaseUrl = trimmed;
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(DOCK_BASE_URL_READY_EVENT, { detail: trimmed }));
+        }
+        return trimmed;
+      }
+    }
+  } catch (err) {
+    console.warn("[OverlayURL] Could not resolve host LAN IP from Tauri:", err);
+  }
+  return null;
+}
+
+/**
+ * Canonical static Dock base URL.
+ * Always 100% static: http://127.0.0.1:45678 in production.
+ * - Never changes when moving networks, routers, or connecting to hotspots.
+ * - Two laptops on the same Wi-Fi each use their own 127.0.0.1, so they never interfere.
+ * - Solves the macOS `localhost` IPv6 bug (ERR_CONNECTION_REFUSED).
+ */
 export function getDockBaseUrl(): string {
   if (_overrideBaseUrl) return _overrideBaseUrl;
-  if (_devDockBaseUrl) return _devDockBaseUrl;
-  if (import.meta.env.DEV) return "http://localhost:1420";
   return DEFAULT_TAURI_OVERLAY_BASE_URL;
+}
+
+export function useDockBaseUrl(): string {
+  return getDockBaseUrl();
+}
+
+/**
+ * Dynamic LAN base URL for when OBS is running on a secondary laptop on the same Wi-Fi.
+ */
+export function useLanDockBaseUrl(): string | null {
+  const [lanUrl, setLanUrl] = useState<string | null>(_lanDockBaseUrl);
+
+  useEffect(() => {
+    if (_lanDockBaseUrl) {
+      setLanUrl(_lanDockBaseUrl);
+    }
+    if (isTauriRuntime() && !_lanDockBaseUrl) {
+      void resolveLanOverlayBaseUrl().then((resolved) => {
+        if (resolved) setLanUrl(resolved);
+      });
+    }
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail) setLanUrl(detail);
+    };
+
+    window.addEventListener(DOCK_BASE_URL_READY_EVENT, handler);
+    return () => {
+      window.removeEventListener(DOCK_BASE_URL_READY_EVENT, handler);
+    };
+  }, []);
+
+  return lanUrl;
 }
 
 /**
@@ -216,9 +289,12 @@ export async function initOverlayUrl(): Promise<void> {
     try {
       _devDockBaseUrl = await invoke<string>("get_dev_dock_base_url");
       window.dispatchEvent(new Event(DEV_DOCK_BASE_URL_READY_EVENT));
+      window.dispatchEvent(new CustomEvent(DOCK_BASE_URL_READY_EVENT, { detail: _devDockBaseUrl }));
     } catch {
       // A pure browser Vite session does not have Tauri IPC; use its origin.
     }
+  } else if (isTauriRuntime()) {
+    await resolveLanOverlayBaseUrl();
   }
   await getOverlayBaseUrl();
 }

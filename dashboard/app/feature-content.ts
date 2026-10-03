@@ -80,7 +80,7 @@ export const presentationFeatures: PresentationFeature[] = [
   {
     id: "countdowns", label: "Tickers & countdowns", title: "Set the pace\nfor your service.",
     copy: "Handle announcements, information and service countdowns. Keep the team on time and the congregation informed.",
-    alt: "Illustrated service countdown and announcement ticker", note: "A clear start for every part of the service.",
+    image: "countdowns", alt: "MakeChurchEazy countdown timer dock inside OBS Studio with pre-service clock", note: "A clear start for every part of the service.",
     highlights: ["Service countdowns", "Timers and clocks", "Announcement tickers"],
     steps: [
       { title: "Choose your timing", copy: "Set up a countdown for the start of the service, or choose the timer or clock you need." },
@@ -96,7 +96,7 @@ export const presentationFeatures: PresentationFeature[] = [
   {
     id: "multiview", label: "Multi-view", title: "More on screen.\nAll working together.",
     copy: "Manage different presentation outputs more easily. Choose a layout and bring your OBS scenes, scripture, media, and overlays together.",
-    image: "multiview", alt: "MakeChurchEazy multiview layout library with split and picture-in-picture layouts", note: "Choose the arrangement. Add your content.",
+    image: "multiview", alt: "MakeChurchEazy multi-view split layout dock inside OBS Studio with scripture and camera presentation", note: "Choose the arrangement. Add your content.",
     highlights: ["Layout library", "Split screen", "Picture in picture"],
     steps: [
       { title: "Choose the arrangement", copy: "Browse the available layouts and choose how you want your content to share the screen." },
@@ -111,8 +111,8 @@ export const presentationFeatures: PresentationFeature[] = [
   },
   {
     id: "voice-bible", label: "Verse AI", title: "Speak it.\nShow it.",
-    copy: "A preacher calls a Bible reference. Use MakeChurchEazy’s speech and AI tools to find the scripture faster and prepare it for presentation.",
-    alt: "Illustration of a spoken Bible reference becoming a scripture suggestion", note: "Less typing. Less searching. Faster response.",
+    copy: "Connect a microphone or OBS audio input. Verse AI listens for spoken Bible references and suggests the passage so your operator can review it, choose a translation, and prepare it for presentation from inside OBS. Speech recognition and AI features require internet access and depend on your plan and credits.",
+    alt: "Illustration of a spoken Bible reference becoming a scripture suggestion", note: "Find spoken references, review scripture suggestions, and keep the operator in control of what appears on screen.",
     highlights: ["Spoken references", "Scripture suggestions", "Review and present"],
     steps: [
       { title: "Connect your audio", copy: "Choose the audio input for the speech tools and check that the preacher’s voice can be heard clearly." },
@@ -122,7 +122,7 @@ export const presentationFeatures: PresentationFeature[] = [
     questions: [
       { q: "Do the speech tools need internet access?", a: "Yes. Speech and AI services require an internet connection and are subject to your plan and available credits." },
       { q: "Can I review the scripture first?", a: "Yes. Review the reference and passage before presenting it. Automatic queue and suggestion behavior can be configured in the app." },
-      { q: "Will it recognize every reference perfectly?", a: "Recognition depends on the audio and spoken context. Use a clear audio input and have an operator review suggestions during the service." },
+      { q: "Will it recognize every reference perfectly?", a: "Recognition depends on audio quality and spoken context. Use a clear audio input and have an operator review suggestions during the service." },
     ],
   },
 ];

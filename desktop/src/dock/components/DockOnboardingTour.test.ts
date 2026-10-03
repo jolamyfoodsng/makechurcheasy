@@ -15,9 +15,10 @@ describe("DockOnboardingTour", () => {
     expect(tourSource).toContain("Quick Edits & Styling");
   });
 
-  it("supports skipping and completion with localStorage persistence", () => {
+  it("supports skipping and completion with localStorage persistence and completion event", () => {
     expect(tourSource).toContain("localStorage.setItem(DOCK_ONBOARDING_KEY, \"true\")");
     expect(tourSource).toContain("localStorage.getItem(DOCK_ONBOARDING_KEY)");
+    expect(tourSource).toContain("window.dispatchEvent(new CustomEvent(DOCK_ONBOARDING_COMPLETED_EVENT))");
     expect(tourSource).toContain("Skip tour");
     expect(tourSource).toContain("Got it!");
     expect(tourSource).toContain("Step {currentStep + 1} of {TOUR_STEPS.length}");

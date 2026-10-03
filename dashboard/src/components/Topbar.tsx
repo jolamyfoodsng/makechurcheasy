@@ -114,7 +114,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                   </span>
                 ) : (
                   <div className={`text-[11px] ${isAdmin ? "text-slate-400" : "text-slate-500"}`}>
-                    {isAdmin ? "Admin" : role}
+                    {mongoUser?.role === "admin" ? "Admin" : role}
                   </div>
                 )}
                 {planBadge && !ambassadorInfo.isAmbassador ? (

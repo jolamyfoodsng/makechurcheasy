@@ -42,3 +42,6 @@ tmp/
 output/
 *.csv
 eazyworship/
+
+# Recovered secrets
+recovered-secrets/

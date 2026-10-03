@@ -182,6 +182,18 @@ interface UserDetail {
   avatar?: string;
   phone?: string;
   country?: string;
+  signupCountry?: string;
+  signupCity?: string;
+  lastLoginCountry?: string;
+  lastLoginCity?: string;
+  lastLoginTimezone?: string;
+  locationHistory?: Array<{
+    country: string;
+    city?: string;
+    timezone?: string;
+    ip?: string;
+    timestamp: string;
+  }>;
   language?: string;
   city?: string;
   state?: string;
@@ -1915,7 +1927,13 @@ export default function AdminUserDetailPage() {
                 </div>
               </InfoRow>
               <InfoRow label="Phone number" value={user.phone || "—"} />
-              <InfoRow label="Country" value={getCountryDisplayName(user.country)} />
+              <InfoRow label="Signup Country" value={getCountryDisplayName(user.signupCountry || user.country)} />
+              {user.signupCity && (
+                <InfoRow label="Signup City" value={user.signupCity} />
+              )}
+              {user.lastLoginCountry && user.lastLoginCountry !== (user.signupCountry || user.country) && (
+                <InfoRow label="Latest Login Country" value={`${getCountryDisplayName(user.lastLoginCountry)} (Detected)`} />
+              )}
               <InfoRow label="Location (City / State)" value={[user.city, user.state].filter(Boolean).join(", ") || "—"} />
               <InfoRow label="Preferred language" value={user.language ? user.language.toUpperCase() : "English (EN)"} />
               <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
