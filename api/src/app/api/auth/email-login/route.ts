@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import * as OTPAuth from "otpauth";
 import clientPromise from "@/lib/mongodb";
 import { sendEmail, loginCodeEmail } from "@/lib/emailTemplates";
 import { rateLimit } from "@/lib/rateLimit";
@@ -41,12 +42,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { email, password, deviceId, installationId, fingerprintHash } = (await req.json()) as {
+    const { email, password, deviceId, installationId, fingerprintHash, twoFactorCode } = (await req.json()) as {
       email?: string;
       password?: string;
       deviceId?: string;
       installationId?: string;
       fingerprintHash?: string;
+      twoFactorCode?: string;
     };
 
     if (!email || !password || !deviceId) {
@@ -88,6 +90,58 @@ export async function POST(req: NextRequest) {
         { error: "Invalid email or password" },
         { status: 401, headers: CORS_HEADERS }
       );
+    }
+
+    // Two-factor authentication check if enabled on account
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!twoFactorCode || typeof twoFactorCode !== "string" || !twoFactorCode.trim()) {
+        return NextResponse.json(
+          {
+            requiresTwoFactor: true,
+            email: user.email,
+            message: "Please enter your two-factor authentication code.",
+          },
+          { status: 200, headers: CORS_HEADERS }
+        );
+      }
+
+      const cleanToken = twoFactorCode.trim();
+      const totp = new OTPAuth.TOTP({
+        issuer: "MakeChurchEasy",
+        label: user.email || "user",
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret),
+      });
+
+      const delta = totp.validate({ token: cleanToken, window: 1 });
+      let isValid2FA = delta !== null;
+
+      // Check recovery codes if TOTP validation failed
+      if (!isValid2FA && Array.isArray(user.twoFactorRecoveryCodes)) {
+        const normalized = cleanToken.replace(/[\s-]/g, "").toUpperCase();
+        const codeIndex = user.twoFactorRecoveryCodes.findIndex(
+          (rc: string) => rc.replace(/[\s-]/g, "").toUpperCase() === normalized
+        );
+        if (codeIndex !== -1) {
+          isValid2FA = true;
+          // Consume the used recovery code
+          const updatedCodes = [...user.twoFactorRecoveryCodes];
+          updatedCodes.splice(codeIndex, 1);
+          await db.collection("users").updateOne(
+            { _id: user._id },
+            { $set: { twoFactorRecoveryCodes: updatedCodes } }
+          );
+        }
+      }
+
+      if (!isValid2FA) {
+        return NextResponse.json(
+          { error: "Invalid two-factor authentication code. Please try again." },
+          { status: 401, headers: CORS_HEADERS }
+        );
+      }
     }
 
     // Check if this device is already trusted for this user (exclude soft-deleted)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import * as OTPAuth from "otpauth";
 import clientPromise from "@/lib/mongodb";
 import { signSessionToken } from "@/lib/jwt";
 import { setAuthCookieOnResponse } from "@/lib/auth";
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { email, password } = await req.json();
+    const { email, password, twoFactorCode } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -89,6 +90,55 @@ export async function POST(req: NextRequest) {
         { error: "Invalid email or password" },
         { status: 401 }
       );
+    }
+
+    // Two-factor authentication check if enabled on account
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!twoFactorCode || typeof twoFactorCode !== "string" || !twoFactorCode.trim()) {
+        return NextResponse.json({
+          requiresTwoFactor: true,
+          email: user.email,
+          message: "Please enter your two-factor authentication code.",
+        });
+      }
+
+      const cleanToken = twoFactorCode.trim();
+      const totp = new OTPAuth.TOTP({
+        issuer: "MakeChurchEasy",
+        label: user.email || "user",
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret),
+      });
+
+      const delta = totp.validate({ token: cleanToken, window: 1 });
+      let isValid2FA = delta !== null;
+
+      // Check recovery codes if TOTP validation failed
+      if (!isValid2FA && Array.isArray(user.twoFactorRecoveryCodes)) {
+        const normalized = cleanToken.replace(/[\s-]/g, "").toUpperCase();
+        const codeIndex = user.twoFactorRecoveryCodes.findIndex(
+          (rc: string) => rc.replace(/[\s-]/g, "").toUpperCase() === normalized
+        );
+        if (codeIndex !== -1) {
+          isValid2FA = true;
+          // Consume the used recovery code
+          const updatedCodes = [...user.twoFactorRecoveryCodes];
+          updatedCodes.splice(codeIndex, 1);
+          await db.collection("users").updateOne(
+            { _id: user._id },
+            { $set: { twoFactorRecoveryCodes: updatedCodes } }
+          );
+        }
+      }
+
+      if (!isValid2FA) {
+        return NextResponse.json(
+          { error: "Invalid two-factor authentication code. Please try again." },
+          { status: 401 }
+        );
+      }
     }
 
     // Email not verified — generate new PIN and redirect to verification

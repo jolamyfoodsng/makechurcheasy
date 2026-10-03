@@ -6,9 +6,6 @@ import { createFlutterwavePayment, isFlutterwaveConfigured } from "@/lib/flutter
 import clientPromise from "@/lib/mongodb";
 import * as crypto from "node:crypto";
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
-const PAYSTACK_API = "https://api.paystack.co";
-
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -104,68 +101,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fallback to Paystack if legacy
-    if (!PAYSTACK_SECRET_KEY) {
-      return NextResponse.json(
-        { error: "Payment gateway is currently unconfigured" },
-        { status: 503, headers: CORS_HEADERS }
-      );
-    }
-
-    const amountInSmallestUnit = Math.round(selectedPack.price * 100);
-    const reference = `topup_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-    const callbackUrl = returnUrl || `${appUrl}/credits?topup=success&reference=${reference}`;
-
-    const res = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        amount: amountInSmallestUnit,
-        currency: selectedPack.currency,
-        reference,
-        metadata: {
-          type: "transcription_topup",
-          userId,
-          packId: selectedPack.id,
-          hours: selectedPack.hours,
-          credits: selectedPack.credits,
-          seconds: selectedPack.seconds,
-          price: selectedPack.price,
-          currency: selectedPack.currency,
-          custom_fields: [
-            {
-              display_name: "Top-up Package",
-              variable_name: "topup_package",
-              value: `${selectedPack.hours} Hours (${selectedPack.credits} Credits)`,
-            },
-          ],
-        },
-        callback_url: callbackUrl,
-      }),
-    });
-
-    const result = (await res.json()) as any;
-    if (!result.status || !result.data) {
-      console.error("[Transcription Top-up Init]", result.message);
-      return NextResponse.json(
-        { error: result.message || "Failed to initialize payment" },
-        { status: 402, headers: CORS_HEADERS }
-      );
-    }
-
     return NextResponse.json(
-      {
-        authorization_url: result.data.authorization_url,
-        access_code: result.data.access_code,
-        reference: result.data.reference,
-        amount: amountInSmallestUnit,
-        package: selectedPack,
-      },
-      { headers: CORS_HEADERS }
+      { error: "Flutterwave is not configured" },
+      { status: 503, headers: CORS_HEADERS },
     );
   } catch (error) {
     console.error("[api/transcription/topup] Error:", error);

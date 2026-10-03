@@ -67,6 +67,7 @@ function LoginInner() {
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
   // Migration state
   const [migrateEmail, setMigrateEmail] = useState("");
@@ -154,6 +155,10 @@ function LoginInner() {
         setVerifyEmailNotice("");
         setVerifyEmailResendTimer(60);
         startResendTimer();
+        setLoading(false);
+        return;
+      }
+      if (result.requiresTwoFactor) {
         setLoading(false);
         return;
       }
@@ -284,10 +289,14 @@ function LoginInner() {
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                {t("auth.twoFactor.enterCode") || "Two-Factor Authentication"}
+                {useRecoveryCode
+                  ? "Enter Backup Recovery Code"
+                  : (t("auth.twoFactor.enterCode") || "Two-Factor Authentication")}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {t("auth.twoFactor.description") || "Enter the 6-digit code from your authenticator app"}
+                {useRecoveryCode
+                  ? "Enter one of your 8-character recovery codes"
+                  : (t("auth.twoFactor.description") || "Enter the 6-digit code from your authenticator app")}
               </p>
             </div>
           </div>
@@ -300,19 +309,31 @@ function LoginInner() {
           )}
 
           <form onSubmit={handleTwoFactorVerify} className="flex flex-col gap-4">
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={twoFactorToken}
-              onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, ""))}
-              placeholder="000000"
-              autoFocus
-              className="h-13 w-full rounded-xl border border-slate-200 bg-white px-3 text-center font-mono text-2xl font-bold tracking-[0.35em] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-            />
+            {useRecoveryCode ? (
+              <input
+                type="text"
+                maxLength={12}
+                value={twoFactorToken}
+                onChange={(e) => setTwoFactorToken(e.target.value.toUpperCase())}
+                placeholder="XXXX-XXXX"
+                autoFocus
+                className="h-13 w-full rounded-xl border border-slate-200 bg-white px-3 text-center font-mono text-xl font-bold tracking-[0.2em] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
+              />
+            ) : (
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={twoFactorToken}
+                onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                autoFocus
+                className="h-13 w-full rounded-xl border border-slate-200 bg-white px-3 text-center font-mono text-2xl font-bold tracking-[0.35em] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
+              />
+            )}
             <button
               type="submit"
-              disabled={twoFactorLoading || twoFactorToken.length !== 6}
+              disabled={twoFactorLoading || (useRecoveryCode ? twoFactorToken.trim().length < 6 : twoFactorToken.length !== 6)}
               className="h-11 rounded-xl bg-blue-600 text-sm font-semibold text-white transition-all hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
             >
               {twoFactorLoading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -320,18 +341,35 @@ function LoginInner() {
             </button>
           </form>
 
-          <button
-            type="button"
-            onClick={() => {
-              cancelTwoFactor();
-              setTwoFactorToken("");
-              setTwoFactorError("");
-            }}
-            className="mt-6 text-xs text-slate-500 hover:text-slate-900 transition-colors font-semibold flex items-center gap-1.5 justify-center w-full cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            {t("auth.forgotPassword.backToSignIn") || "Back to sign in"}
-          </button>
+          <div className="mt-4 flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setUseRecoveryCode(!useRecoveryCode);
+                setTwoFactorToken("");
+                setTwoFactorError("");
+              }}
+              className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer transition-colors"
+            >
+              {useRecoveryCode
+                ? "Use 6-digit authenticator code instead"
+                : "Lost access? Use a backup recovery code"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                cancelTwoFactor();
+                setTwoFactorToken("");
+                setTwoFactorError("");
+                setUseRecoveryCode(false);
+              }}
+              className="text-xs text-slate-500 hover:text-slate-900 transition-colors font-semibold flex items-center gap-1.5 justify-center w-full cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              {t("auth.forgotPassword.backToSignIn") || "Back to sign in"}
+            </button>
+          </div>
         </div>
       </AuthShell>
     );
@@ -592,7 +630,7 @@ function LoginInner() {
             Welcome back
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-            Sign in to manage your sanctuary displays, licenses, and AI credits.
+            Sign in to manage your church displays, licenses, and AI credits.
           </p>
         </div>
 
@@ -697,7 +735,7 @@ function LoginInner() {
                 <Monitor className="w-4 h-4 text-blue-600" />
               </div>
               <div className="leading-tight">
-                <span className="text-xs font-bold text-slate-900 block">Sanctuary PC or Mac?</span>
+                <span className="text-xs font-bold text-slate-900 block">Church PC or Mac?</span>
                 <span className="text-[11px] text-slate-500 block">Run services with MakeChurchEasy Studio</span>
               </div>
             </div>

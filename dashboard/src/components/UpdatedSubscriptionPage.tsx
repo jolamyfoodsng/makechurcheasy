@@ -1,5 +1,5 @@
 /**
- * UpdatedSubscriptionPage — Subscription plans page with Paystack payment.
+ * UpdatedSubscriptionPage — Subscription plans page with Flutterwave payment.
  *
  * Public pricing is limited to Free, Basic, and Growth.
  */
@@ -275,7 +275,7 @@ export default function UpdatedSubscriptionPage() {
         className="flex flex-wrap items-center justify-between gap-6 bg-white p-6 md:p-8"
         style={{ borderRadius: 12, border: "1px solid #E2E8F0" }}
       >
-        <TrustItem icon={<ShieldCheck className="h-5 w-5 text-[#1D4ED8]" />} title="Secure Payments" text="Powered by Paystack" />
+        <TrustItem icon={<ShieldCheck className="h-5 w-5 text-[#1D4ED8]" />} title="Secure Payments" text="Powered by Flutterwave" />
         <TrustItem icon={<Clock className="h-5 w-5 text-[#22C55E]" />} title="Cancel Anytime" text="No questions asked" />
         <TrustItem icon={<LifeBuoy className="h-5 w-5 text-[#1D4ED8]" />} title="Support" text="We are here to help" />
       </div>

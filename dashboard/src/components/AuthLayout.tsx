@@ -67,7 +67,7 @@ export function AuthShowcase() {
           Church Presentation Without the Technical Friction
         </h2>
         <p className="text-sm xl:text-base text-slate-300 max-w-lg mb-6 leading-relaxed">
-          Instantly project Bible verses, automate scripture lookup with speech AI, and drive flawless OBS lower thirds for your sanctuary and broadcast.
+          Instantly project Bible verses, automate scripture lookup with speech AI, and drive flawless OBS lower thirds for your church and broadcast.
         </p>
 
         {/* Desktop App Window Card */}
@@ -79,7 +79,7 @@ export function AuthShowcase() {
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
             </div>
-            <span className="font-mono text-[11px] text-slate-400">MakeChurchEasy Studio · Sanctuary Output</span>
+            <span className="font-mono text-[11px] text-slate-400">MakeChurchEasy Studio · Church Output</span>
             <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">ON AIR</span>
           </div>
 

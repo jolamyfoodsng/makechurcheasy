@@ -69,8 +69,9 @@ jobs:
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: placeholder
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
           NEXT_PUBLIC_FIREBASE_APP_ID: placeholder
-          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: placeholder
-          PAYSTACK_SECRET_KEY: placeholder
+          FLW_PUBLIC_KEY: placeholder
+          FLW_SECRET_KEY: placeholder
+          FLW_ENCRYPTION_KEY: placeholder
 
   build-dashboard:
     name: Build Dashboard (Next.js)
@@ -97,7 +98,6 @@ jobs:
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: placeholder
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
           NEXT_PUBLIC_FIREBASE_APP_ID: placeholder
-          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: placeholder
 
   verify-env:
     name: Required env vars present

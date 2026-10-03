@@ -98,10 +98,16 @@ describe("dock projection settings", () => {
       ...loadProjectionSettings(),
       presentationSourceVisibility: "keep-visible",
       lowerThirdSourceVisibility: "active-only",
+      preserveAudioOnSourceSwitch: false,
     });
 
     expect(loadProjectionSettings().presentationSourceVisibility).toBe("keep-visible");
     expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("active-only");
+    expect(loadProjectionSettings().preserveAudioOnSourceSwitch).toBe(false);
+  });
+
+  it("defaults preserveAudioOnSourceSwitch to true", () => {
+    expect(loadProjectionSettings().preserveAudioOnSourceSwitch).toBe(true);
   });
 
   it("shows Program background routing as one compact dropdown in the dock sidebar", () => {
@@ -116,6 +122,7 @@ describe("dock projection settings", () => {
     expect(dockPageSource).toContain('updateProjectionSceneMode(event.target.value as ProjectionSettings["sceneMode"])');
     expect(dockPageSource).toContain("updateProjectionSettings({ restoreOriginalScene: e.target.checked })");
     expect(dockPageSource).toContain("presentationSourceVisibility");
+    expect(dockPageSource).toContain("preserveAudioOnSourceSwitch");
     expect(dockPageSource).toContain("lowerThirdSourceVisibility");
     expect(dockPageSource).toContain("Your own OBS sources are untouched");
     expect(dockPageSource).not.toContain("setProjectionSettings((s) => ({ ...s, restoreOriginalScene: e.target.checked }))");

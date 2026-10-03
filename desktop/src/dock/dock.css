@@ -24091,6 +24091,11 @@ body.dock-modal-open {
   height: 16px;
 }
 
+.dock-media-console--short-height .dock-media-tab__label,
+.dock-media-console--short-height .dock-media-tab__count {
+  display: none;
+}
+
 .dock-media-console--short-height .dock-media-tabs-row__actions {
   flex-direction: column;
   align-items: stretch;
@@ -24240,10 +24245,25 @@ body.dock-modal-open {
   border-bottom-color: var(--dock-accent);
 }
 
+.dock-media-tab__label {
+  display: inline;
+  white-space: nowrap;
+}
+
 .dock-media-tab__count {
-  font-size: 12px;
-  font-weight: 500;
-  opacity: 0.55;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 9px;
+  margin-left: 2px;
+}
+
+.dock-media-tab--active .dock-media-tab__count {
+  background: var(--dock-accent-soft);
+  color: var(--dock-accent);
+  opacity: 1;
 }
 
 .dock-media-tab--icon {
@@ -24283,6 +24303,10 @@ body.dock-modal-open {
 .dock-media-tabs--compact .dock-media-tab__count {
   font-size: 10px;
   opacity: 0.55;
+}
+
+.dock-media-tabs--compact .dock-media-tab__label {
+  display: none;
 }
 
 /* ── Search Bar ── */

@@ -5,6 +5,7 @@ import { parseCccHymnDrafts } from "./cccHymnImport";
 import { detectSongs } from "./legacy/songDetector";
 import { parseWorshipLyricSections } from "./slideEngine";
 import { buildFallbackDraft } from "./smartImportService";
+import { hasTauriInvoke } from "../services/tauriSafe";
 import type {
   AiProcessResult,
   BulkImportChunkRequest,
@@ -385,6 +386,9 @@ class TauriOpenCodeProvider implements DocumentStructureProvider {
   readonly name = "opencode-local";
 
   async structureChunk(request: BulkImportChunkRequest): Promise<{ songs: SmartImportSongDraft[] }> {
+    if (!hasTauriInvoke()) {
+      throw new Error("Local worship import AI is only available inside the desktop application.");
+    }
     const response = await invoke<LocalWorshipImportStructureResponse>("structure_worship_import_chunk", {
       request,
     });
@@ -412,6 +416,9 @@ class TauriOpenCodeProvider implements DocumentStructureProvider {
 }
 
 async function ensureLocalWorshipImportAiConfigured(): Promise<void> {
+  if (!hasTauriInvoke()) {
+    throw new Error("Local worship import AI is only available inside the desktop application.");
+  }
   const status = await withTimeout(
     invoke<LocalWorshipImportAiStatus>("get_worship_import_ai_status"),
     LOCAL_SETUP_TIMEOUT_MS,

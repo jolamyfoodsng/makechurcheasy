@@ -111,8 +111,8 @@ export const presentationFeatures: PresentationFeature[] = [
   },
   {
     id: "voice-bible", label: "Verse AI", title: "Speak it.\nShow it.",
-    copy: "A preacher calls a Bible reference. Use MakeChurchEazy’s speech and AI tools to find the scripture faster and prepare it for presentation.",
-    alt: "Illustration of a spoken Bible reference becoming a scripture suggestion", note: "Less typing. Less searching. Faster response.",
+    copy: "Connect a microphone or OBS audio input. Verse AI listens for spoken Bible references and suggests the passage so your operator can review it, choose a translation, and prepare it for presentation from inside OBS. Speech recognition and AI features require internet access and depend on your plan and credits.",
+    alt: "Illustration of a spoken Bible reference becoming a scripture suggestion", note: "Find spoken references, review scripture suggestions, and keep the operator in control of what appears on screen.",
     highlights: ["Spoken references", "Scripture suggestions", "Review and present"],
     steps: [
       { title: "Connect your audio", copy: "Choose the audio input for the speech tools and check that the preacher’s voice can be heard clearly." },
@@ -122,7 +122,7 @@ export const presentationFeatures: PresentationFeature[] = [
     questions: [
       { q: "Do the speech tools need internet access?", a: "Yes. Speech and AI services require an internet connection and are subject to your plan and available credits." },
       { q: "Can I review the scripture first?", a: "Yes. Review the reference and passage before presenting it. Automatic queue and suggestion behavior can be configured in the app." },
-      { q: "Will it recognize every reference perfectly?", a: "Recognition depends on the audio and spoken context. Use a clear audio input and have an operator review suggestions during the service." },
+      { q: "Will it recognize every reference perfectly?", a: "Recognition depends on audio quality and spoken context. Use a clear audio input and have an operator review suggestions during the service." },
     ],
   },
 ];

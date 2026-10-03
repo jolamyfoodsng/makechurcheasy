@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
-  if (!req.nextUrl.pathname.startsWith("/api/")) {
+  const pathname = req.nextUrl.pathname;
+
+  // Protect /admin routes before rendering any page: redirect unauthenticated users to login
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    const sessionCookie = req.cookies.get("session-token")?.value;
+    if (!sessionCookie) {
+      const loginUrl = req.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  if (!pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
@@ -33,5 +46,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: "/api/:path*",
+  matcher: ["/api/:path*", "/admin", "/admin/:path*"],
 };

@@ -132,7 +132,7 @@ export function AdminSidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpe
             </div>
             <div className="flex flex-col leading-tight">
               <span className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-                Sanctuary OS
+                MakeChurchEazy
                 <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-400 border border-indigo-800/60 font-bold">
                   Admin
                 </span>

@@ -1648,6 +1648,30 @@ function DockPageContent({
 
                         <label className="dock-sidebar__select-field">
                           <span className="dock-sidebar__select-label">
+                            <Icon name={projectionSettings.preserveAudioOnSourceSwitch ? "volume_up" : "volume_off"} size={14} />
+                            <span>{t('page.presentationAudioVisibility', 'Presentation audio playback')}</span>
+                          </span>
+                          <select
+                            className="dock-sidebar__select"
+                            value={projectionSettings.preserveAudioOnSourceSwitch ? "keep-playing" : "mute"}
+                            onChange={(event) => {
+                              updateProjectionSettings({
+                                preserveAudioOnSourceSwitch: event.target.value === "keep-playing",
+                              });
+                              void dockObsClient.reconcileMcePresentationVisibility().catch(() => {});
+                            }}
+                            aria-label={t('page.presentationAudioVisibility', 'Presentation audio playback')}
+                          >
+                            <option value="keep-playing">{t('page.keepAudioPlaying', 'Keep audio playing (Recommended)')}</option>
+                            <option value="mute">{t('page.muteAudioWithSources', 'Mute/hide audio with other sources')}</option>
+                          </select>
+                        </label>
+                        <div className="dock-sidebar__hint">
+                          {t('page.presentationAudioVisibilityDesc', 'When Bible, Worship, or Notes is pushed, keep background music and audio tracks playing in OBS.')}
+                        </div>
+
+                        <label className="dock-sidebar__select-field">
+                          <span className="dock-sidebar__select-label">
                             <Icon name="branding_watermark" size={14} />
                             <span>{t('page.lowerThirdSourceVisibility', 'Lower third behavior')}</span>
                           </span>

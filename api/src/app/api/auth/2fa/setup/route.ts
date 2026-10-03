@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import * as OTPAuth from "otpauth";
+import QRCode from "qrcode";
 
 export async function POST() {
   try {
@@ -35,6 +36,21 @@ export async function POST() {
     const secret = totp.secret.base32;
     const otpauthUrl = totp.toString();
 
+    // Generate base64 QR code data URL
+    let qrCode = "";
+    try {
+      qrCode = await QRCode.toDataURL(otpauthUrl, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: "#0f172a",
+          light: "#ffffff",
+        },
+      });
+    } catch (qrErr) {
+      console.error("Failed to generate local QR code:", qrErr);
+    }
+
     // Store the secret temporarily (not enabled yet — waits for verification)
     await db.collection("users").updateOne(
       { _id: authUser.mongoUser._id },
@@ -50,6 +66,7 @@ export async function POST() {
     return NextResponse.json({
       secret,
       otpauthUrl,
+      qrCode,
     });
   } catch (error) {
     console.error("2FA setup error:", error);

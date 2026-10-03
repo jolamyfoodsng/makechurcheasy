@@ -590,7 +590,7 @@ function StepWelcome({
               <Check size={11} /> Lower Third
             </span>
             <span className="ob-preview-mini-badge">
-              <Check size={11} /> Sanctuary Program
+              <Check size={11} /> Church Screen
             </span>
           </div>
         </div>

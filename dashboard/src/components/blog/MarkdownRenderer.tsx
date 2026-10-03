@@ -296,6 +296,10 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
             {parseInline(pLines.join(" "))}
           </p>
         );
+      } else {
+        // Preserve unsupported Markdown lines and always advance the parser.
+        parsedBlocks.push(<p key={`text-${i}`}>{parseInline(rawLines[i])}</p>);
+        i++;
       }
     }
 

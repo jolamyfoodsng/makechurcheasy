@@ -273,7 +273,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     tagline: "Promotional offer with coupon code & pro tier discount",
     icon: Gift,
     patch: {
-      title: "Special 25% Off Sanctuary Pro",
+      title: "Special 25% Off Church Pro",
       message: "Unlock unlimited workspace members, custom themes, and AI automation credits at a special limited rate.",
       tone: "offer",
       audience: "all_users",

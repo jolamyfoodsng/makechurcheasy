@@ -9,6 +9,8 @@ export interface ProjectionSettings {
   presentationSourceVisibility: "active-only" | "keep-visible";
   /** Decide whether lower thirds may leave the first MCE source visible. */
   lowerThirdSourceVisibility: "keep-first" | "active-only";
+  /** Decide whether background audio keeps playing when other presentation content is pushed. */
+  preserveAudioOnSourceSwitch: boolean;
 }
 
 const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
@@ -21,6 +23,7 @@ const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   presentationOnly: false,
   presentationSourceVisibility: "active-only",
   lowerThirdSourceVisibility: "keep-first",
+  preserveAudioOnSourceSwitch: true,
 };
 
 type StoredProjectionSettings = Partial<ProjectionSettings> & {
@@ -67,6 +70,7 @@ export function loadProjectionSettings(): ProjectionSettings {
       lowerThirdSourceVisibility: parsed.lowerThirdSourceVisibility === "active-only"
         ? "active-only"
         : DEFAULT_PROJECTION_SETTINGS.lowerThirdSourceVisibility,
+      preserveAudioOnSourceSwitch: parsed.preserveAudioOnSourceSwitch !== false,
     };
   } catch {
     return { ...DEFAULT_PROJECTION_SETTINGS };

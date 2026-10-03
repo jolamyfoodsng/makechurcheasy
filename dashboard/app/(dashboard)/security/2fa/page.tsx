@@ -26,6 +26,7 @@ export default function TwoFactorPage() {
   const [step, setStep] = useState<Step>("loading");
   const [secret, setSecret] = useState("");
   const [otpauthUrl, setOtpauthUrl] = useState("");
+  const [qrCodeData, setQrCodeData] = useState("");
   const [token, setToken] = useState("");
   const [disableToken, setDisableToken] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -33,7 +34,7 @@ export default function TwoFactorPage() {
   const [loading, setLoading] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [copiedCodes, setCopiedCodes] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
+  const [showSecret, setShowSecret] = useState(true);
   const [codesSaved, setCodesSaved] = useState(false);
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function TwoFactorPage() {
       const res = await setup2FA();
       setSecret(res.secret);
       setOtpauthUrl(res.otpauthUrl);
+      if (res.qrCode) setQrCodeData(res.qrCode);
       setStep("scanning");
     } catch (e: any) {
       setError(e.message || t("security.twoFA.failedToStart"));
@@ -115,9 +117,9 @@ export default function TwoFactorPage() {
     }
   }, []);
 
-  const qrCodeUrl = otpauthUrl
+  const qrCodeUrl = qrCodeData || (otpauthUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`
-    : "";
+    : "");
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto w-full space-y-6 pb-16">
