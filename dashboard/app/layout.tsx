@@ -50,10 +50,10 @@ export const metadata: Metadata = {
       "MakeChurchEasy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
     images: [
       {
-        url: "/logos/make_church_easy_logo.png",
-        width: 1200,
-        height: 630,
-        alt: "MakeChurchEasy — Church Presentation Software for OBS Studio",
+        url: "/og-image.jpg",
+        width: 1376,
+        height: 768,
+        alt: "MakeChurchEazy — Church Presentation Software for OBS Studio. Get Your First Month Free!",
       },
     ],
   },
@@ -61,8 +61,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "MakeChurchEasy | Church Presentation Software for OBS",
     description:
-      "All-in-one church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, AI tools, and livestream graphics.",
-    images: ["/logos/make_church_easy_logo.png"],
+      "All-in-one church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, AI tools, and livestream graphics. Get your first month free!",
+    images: ["/og-image.jpg"],
   },
   robots: {
     index: true,

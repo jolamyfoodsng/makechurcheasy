@@ -328,7 +328,7 @@ function SignupInner() {
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">Account Created!</h2>
           <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-            Your 14-day free trial has been activated. Redirecting you to your dashboard…
+            Your 30-day (1 month) free trial has been activated. Redirecting you to your dashboard…
           </p>
           <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" />
         </div>
@@ -343,7 +343,7 @@ function SignupInner() {
         {/* Header */}
         <div className="mb-5">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Start your 14-day free trial
+            Start your 1-month free trial
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
             Full access to offline Bibles, Studio, and AI speech-to-scripture. No credit card required.
@@ -509,14 +509,14 @@ function SignupInner() {
             className="mt-1.5 h-11 rounded-xl bg-blue-600 text-sm font-semibold text-white transition-all hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? "Creating account…" : "Start 14-Day Free Trial"}
+            {loading ? "Creating account…" : "Start 1-Month Free Trial"}
           </button>
 
           {/* Feature Perks */}
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-1.5">
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />
-              <span>14-day free trial with full Growth plan features</span>
+              <span>1-month free trial with full Growth plan features</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />

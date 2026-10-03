@@ -26,16 +26,16 @@ export interface ResolvedPricing {
 }
 
 // Nigeria — fixed NGN pricing
-export const NIGERIA_PRICES: PlanPrices = { basic: 4000, growth: 8000 };
-export const NIGERIA_INTRO: PlanIntro = { basic: 3500, growth: 7500 };
+export const NIGERIA_PRICES: PlanPrices = { basic: 2800, growth: 7000 };
+export const NIGERIA_INTRO: PlanIntro = {};
 
 // Africa — USD base pricing
-export const AFRICA_USD_PRICES: PlanPrices = { basic: 5, growth: 8 };
+export const AFRICA_USD_PRICES: PlanPrices = { basic: 3, growth: 6 };
 export const AFRICA_INTRO: PlanIntro = {};
 
 // Global — USD base pricing
-export const GLOBAL_USD_PRICES: PlanPrices = { basic: 7, growth: 10 };
+export const GLOBAL_USD_PRICES: PlanPrices = { basic: 7, growth: 12 };
 export const GLOBAL_INTRO: PlanIntro = {};
 
-// Yearly multiplier: 10 months for the price of 12 (save 2 months)
-export const YEARLY_MULTIPLIER = 10;
+// Yearly multiplier: 15% discount
+export const YEARLY_MULTIPLIER = 10.2;

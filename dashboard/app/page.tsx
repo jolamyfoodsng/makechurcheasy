@@ -10,9 +10,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     title, description, type: "website", url: "/", siteName: "MakeChurchEazy",
-    images: [{ url: "/logos/make_church_easy_logo.png", alt: "MakeChurchEazy church presentation software for OBS" }],
+    images: [{ url: "/og-image.jpg", width: 1376, height: 768, alt: "MakeChurchEazy church presentation software for OBS - Get Your First Month Free" }],
   },
-  twitter: { card: "summary_large_image", title, description, images: ["/logos/make_church_easy_logo.png"] },
+  twitter: { card: "summary_large_image", title, description, images: ["/og-image.jpg"] },
 };
 
 export default function Page() {

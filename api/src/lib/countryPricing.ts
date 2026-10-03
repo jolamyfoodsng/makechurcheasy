@@ -153,22 +153,22 @@ const FLUTTERWAVE_LOCAL_COUNTRIES = new Set([
 ]);
 
 const NIGERIA_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
-  growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
+  basic: { monthly: 2800, yearly: 28500 },
+  growth: { monthly: 7000, yearly: 71400 },
 };
 
 const AFRICA_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 5, yearly: 50 },
-  growth: { monthly: 10, yearly: 100 },
+  basic: { monthly: 3, yearly: 30 },
+  growth: { monthly: 6, yearly: 61.2 },
 };
 
 const GLOBAL_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 7, yearly: 70 },
-  growth: { monthly: 15, yearly: 150 },
+  basic: { monthly: 7, yearly: 71.4 },
+  growth: { monthly: 12, yearly: 122.4 },
 };
 
-// Version 9: Set Nigeria to ₦3.5k/₦4k Basic and ₦7.5k/₦8k Growth.
-const COUNTRY_PRICING_MIGRATION_VERSION = 9;
+// Version 10: Updated Basic (₦2.8k / $3 / $7) and Growth (₦7k / $6 / $12)
+const COUNTRY_PRICING_MIGRATION_VERSION = 10;
 
 export function invalidateCountryPricingCache() {
   _cache = null;
@@ -184,8 +184,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "₦",
     enabled: true,
     plans: {
-      basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
-      growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
+      basic: { monthly: 2800, yearly: 28500 },
+      growth: { monthly: 7000, yearly: 71400 },
     },
   },
   GH: {

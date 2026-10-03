@@ -778,7 +778,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
     { name: "AI Summary", cost: 5, unit: "flat", description: "Generate a sermon summary." },
   ],
   translationWordsPerCredit: 150,
-  trial: { durationDays: 14, enabled: true },
+  trial: { durationDays: 30, enabled: true },
   pricingPlans: [
     {
       id: "basic",

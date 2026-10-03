@@ -13,7 +13,7 @@ const COLLECTION = "trial_settings";
 export const DEFAULT_TRIAL_SETTINGS: TrialSettings = {
   enableForNewUsers: true,
   enableForExistingUsers: false,
-  defaultDurationDays: 14,
+  defaultDurationDays: 30,
   sendExtensionEmails: true,
   sendRestartEmails: true,
   sendStopEmails: true,

@@ -805,6 +805,10 @@ function cleanTranscript(text: string): string {
     .replace(/[’']/g, "'")
     .replace(/\b(?:due\s+to\s+ron[oa]my|due\s+toron[oa]my|due\s+to\s+economy|due\s+to\s+autonomy|due\s+autonomy|duty\s+ron[oa]my|duty\s+autonomy|dew\s+teron[oa]my|dewteron[oa]my|dew\s+tronomy|due\s+to\s+run\s+me|due\s+to\s+run\s+my|ditatonomy|the\s+theonomy|theonomy|deut\s+dynamometer|dynamometer)\b/g, " deuteronomy ")
     .replace(/\b(chapter|chap|ch|chapt|capter|captor|capture)\b/g, " chapter ")
+    // Separate 'vs' or 'v' attached to numbers like '7vs7' -> '7 vs 7'
+    .replace(/(\d)\s*(?:vs|vrs|v)\s*(\d)/gi, "$1:$2")
+    .replace(/(\d)\s*(?:vs|vrs|v)\b/gi, "$1 verse ")
+    .replace(/\b(?:vs|vrs|v)\s*(\d)/gi, " verse $1")
     .replace(/\b(verse|verses|vs|vrs|vase|vas|vass|buzz|bah|bus|bas|worse)\b/g, " verse ")
     .replace(/[–—]/g, "-")
     .replace(/(\d)\s*:\s*(\d)/g, "$1:$2")

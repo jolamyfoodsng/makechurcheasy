@@ -226,10 +226,10 @@ export type CanonicalLimitEntitlementKey = {
 export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlements> = {
   free: {
     credits: 50,
-    maxSongs: 3,
-    maxImages: 3,
-    maxVideos: 2,
-    maxBibleVersions: 3,
+    maxSongs: 10,
+    maxImages: 10,
+    maxVideos: 5,
+    maxBibleVersions: 5,
     maxTeams: 3,
     maxDevices: 1,
     maxMultiviewTemplates: 0,
@@ -238,9 +238,9 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     remoteControl: false,
     mobileSupport: false,
     presentationMode: false,
-    bulkImport: false,
-    easyWorshipImport: false,
-    propresenterImport: false,
+    bulkImport: true,
+    easyWorshipImport: true,
+    propresenterImport: true,
     cloudSync: false,
     lowerThirds: false,
     translation: false,
@@ -256,10 +256,10 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     countdowns: false,
   },
   basic: {
-    credits: 100,
-    maxSongs: 100,
-    maxImages: 100,
-    maxVideos: 100,
+    credits: 240, // 4 hours included (60 credits/hr)
+    maxSongs: -1,
+    maxImages: -1,
+    maxVideos: -1,
     maxBibleVersions: -1,
     maxTeams: 5,
     maxDevices: 3,
@@ -269,9 +269,9 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     remoteControl: false,
     mobileSupport: false,
     presentationMode: false,
-    bulkImport: false,
-    easyWorshipImport: false,
-    propresenterImport: false,
+    bulkImport: true,
+    easyWorshipImport: true,
+    propresenterImport: true,
     cloudSync: false,
     lowerThirds: false,
     translation: false,
@@ -287,7 +287,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     countdowns: false,
   },
   growth: {
-    credits: 2000,
+    credits: 600, // 10 hours included (60 credits/hr)
     maxSongs: -1,
     maxImages: -1,
     maxVideos: -1,
@@ -320,7 +320,6 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     slideshow: true,
     countdowns: true,
   },
-
 };
 
 export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
@@ -328,24 +327,24 @@ export const REGION_PRICING: Record<PricingRegion, RegionPricingProfile> = {
     currency: "NGN",
     currencySymbol: "₦",
     plans: {
-      basic: { introductoryMonthly: 3500, monthly: 4000, yearly: 40000 },
-      growth: { introductoryMonthly: 7500, monthly: 8000, yearly: 80000 },
+      basic: { monthly: 2800, yearly: 28500 },
+      growth: { monthly: 7000, yearly: 71400 },
     },
   },
   AFRICA: {
     currency: "USD",
     currencySymbol: "$",
     plans: {
-      basic: { monthly: 5, yearly: 50 },
-      growth: { monthly: 8, yearly: 80 },
+      basic: { monthly: 3, yearly: 30 },
+      growth: { monthly: 6, yearly: 61.2 },
     },
   },
   ROW: {
     currency: "USD",
     currencySymbol: "$",
     plans: {
-      basic: { monthly: 7, yearly: 70 },
-      growth: { monthly: 10, yearly: 100 },
+      basic: { monthly: 7, yearly: 71.4 },
+      growth: { monthly: 12, yearly: 122.4 },
     },
   },
 };
@@ -394,17 +393,6 @@ function isExpiredAdminManagedSubscription(
   return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
 }
 
-function isExpiredStoredPaidSubscription(
-  user: EffectivePlanUserLike | null | undefined,
-  nowMs: number,
-): boolean {
-  const storedPlan = normalizePlanId(user?.plan);
-  if (storedPlan === "free") return false;
-  if (!user?.subscriptionExpiresAt) return false;
-  const expiresAtMs = new Date(user.subscriptionExpiresAt).getTime();
-  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
-}
-
 export function normalizePlanId(plan?: string | null): CanonicalPlanId {
   const normalized = String(plan || "free").trim().toLowerCase();
   if ((CANONICAL_PLAN_IDS as readonly string[]).includes(normalized)) {
@@ -439,7 +427,6 @@ export function getEffectivePlan(
   if (isExpiredAdminTemporaryPlan(user, nowMs)) return "free";
   if (isExpiredAdminManagedSubscription(user, nowMs)) return "free";
   if (normalizeBooleanFlag(user.ambassador?.active)) return "growth";
-  if (isExpiredStoredPaidSubscription(user, nowMs)) return "free";
   const storedPlan = normalizePlanId(user.plan);
   if (storedPlan !== "free") return storedPlan;
   if (isActiveTrial(user, nowMs)) return "growth";
@@ -615,7 +602,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
   trialEnabled?: boolean;
 }): LegacyCompatiblePlanConfig {
   const updatedAt = options?.updatedAt || new Date().toISOString();
-  const trialDurationDays = options?.trialDurationDays ?? 14;
+  const trialDurationDays = options?.trialDurationDays ?? 30;
   const trialEnabled = options?.trialEnabled ?? true;
 
   const freeTier = buildTierConfig("free", "Free", { monthlyPlanCode: "", yearlyPlanCode: "" });
@@ -704,11 +691,11 @@ export function buildLegacyCompatiblePlanConfig(options?: {
           },
         },
         features: [
-          { text: "100 songs, 100 images, and 100 videos" },
+          { text: "Unlimited songs, lyrics, and media (Local)" },
           { text: "Unlimited Bible versions and 3 devices" },
-          { text: "Bible, Worship, Media, and up to 5 multiview templates" },
-          { text: "Verse AI with 100 monthly credits" },
-          { text: "Countdowns, tickers, lower thirds, and transcript translation require Growth" },
+          { text: "Automatic scene and source creation" },
+          { text: "Speech-to-Scripture with 4 hours included + Top-up" },
+          { text: "1-click EasyWorship, ProPresenter, and OpenLP import" },
         ],
         buttonText: "Get Basic",
         paystackPlanCode: "mce_basic_monthly",
@@ -742,10 +729,10 @@ export function buildLegacyCompatiblePlanConfig(options?: {
         },
         features: [
           { text: "Unlimited songs, images, videos, and Bible versions" },
-          { text: "10 devices and 20 team members" },
-          { text: "Mobile Controller and Remote OBS Control" },
-          { text: "Bulk import, EasyWorship, and ProPresenter" },
-          { text: "Cloud Sync and 2,000 monthly credits" },
+          { text: "Cloud Sync across operators & media laptops" },
+          { text: "Mobile Control App & Remote OBS presentation" },
+          { text: "Lower Thirds, Tickers, and Sermon Notes Export" },
+          { text: "Speech-to-Scripture with 10 hours max included + Top-up" },
         ],
         buttonText: "Get Growth",
         paystackPlanCode: "mce_growth_monthly",

@@ -485,7 +485,7 @@ pub async fn start_assemblyai_stream(
         || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
     let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
     let engine_label = if is_deepgram {
-        "Deepgram Nova-2"
+        "Deepgram Nova-3"
     } else if is_http_endpoint {
         "Cloudflare Whisper"
     } else {
@@ -774,12 +774,14 @@ async fn run_cloudflare_transcriber(
 
 fn build_deepgram_endpoint() -> String {
     let mut query = vec![
-        "model=nova-2".to_string(),
+        "model=nova-3".to_string(),
         "encoding=linear16".to_string(),
         "sample_rate=16000".to_string(),
         "channels=1".to_string(),
         "interim_results=true".to_string(),
         "smart_format=true".to_string(),
+        "numerals=true".to_string(),
+        "filler_words=false".to_string(),
         "endpointing=850".to_string(),
         "utterance_end_ms=1000".to_string(),
     ];
@@ -796,7 +798,10 @@ fn build_deepgram_endpoint() -> String {
             "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" | "scripture" | "Holy Bible" => 7,
             _ => 6,
         };
-        query.push(format!("keywords={}:{weight}", urlencoding::encode(term)));
+        // Provide both keyterm (Nova-3 native) and keywords (legacy/fallback)
+        let encoded = urlencoding::encode(term);
+        query.push(format!("keyterm={encoded}"));
+        query.push(format!("keywords={encoded}:{weight}"));
     }
 
     format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))

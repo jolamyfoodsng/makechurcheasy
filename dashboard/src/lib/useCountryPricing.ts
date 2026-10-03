@@ -34,10 +34,10 @@ const FALLBACK_PRICING: CountryPricing = {
   currency: "USD",
   currencySymbol: "$",
   plans: {
-    basic: { monthly: 7, yearly: 70 },
-    growth: { monthly: 10, yearly: 100 },
+    basic: { monthly: 7, yearly: 71.4 },
+    growth: { monthly: 12, yearly: 122.4 },
   },
-  pricingVersion: 1,
+  pricingVersion: 2,
   region: "global",
   source: "fallback",
 };
