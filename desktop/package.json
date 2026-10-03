@@ -15,12 +15,12 @@
     "generate:embeddings": "node scripts/generate-bible-embeddings.cjs",
     "sync:local-llm-model": "node scripts/sync-local-llm-model.cjs",
     "sync:google-fonts": "node scripts/sync-google-font-catalog.mjs",
-    "version:patch": "npm version patch --no-git-tag-version ",
+    "version:patch": "npm version patch --no-git-tag-version && node scripts/sync-version.cjs",
     "version:minor": " npm run build  && npm version minor --no-git-tag-version &&  node scripts/sync-version.cjs",
     "version:major": "npm run build  && npm version major --no-git-tag-version && node scripts/sync-version.cjs",
-    "release:patch": "npm run version:patch && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
-    "release:minor": "npm run version:minor && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
-    "release:major": "npm run version:major && git add . && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git push",
+    "release:patch": "node scripts/create-release.cjs patch",
+    "release:minor": "node scripts/create-release.cjs minor",
+    "release:major": "node scripts/create-release.cjs major",
     "latest": " node scripts/generate-update-json.cjs"
   },
   "dependencies": {
