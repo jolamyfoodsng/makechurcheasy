@@ -26,7 +26,7 @@ export function MarketingHeader({ homepage = false }: { homepage?: boolean }) {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [menuOpen]);
   const home = homepage ? "" : "/";
-  const links = <><Link href="/features">Features</Link><a href={`${home}#how-it-works`}>How it works</a><Link href="/docs">Docs</Link><a href={`${home}#plans`}>Pricing</a><Link href="/blog">Blog</Link><Link href="/tutorials">Resources <ArrowRight size={14} /></Link></>;
+  const links = <><Link href="/features">Features</Link><a href={`${home}#how-it-works`}>How it works</a><Link href="/docs">Docs</Link><Link href="/pricing">Pricing</Link><Link href="/blog">Blog</Link><Link href="/tutorials">Resources <ArrowRight size={14} /></Link></>;
   return <header className={styles.header}>
     <div className={styles.headerInner}>
       <Brand />
@@ -46,7 +46,7 @@ export function MarketingFooter() {
     <div className={styles.footerTop}>
       <div><Brand light /><p>For the people behind the service.</p></div>
       <nav aria-label="Footer navigation">
-        <div><strong>Product</strong><Link href="/features">Features</Link><Link href="/#plans">Pricing</Link><Link href="/download">Download</Link></div>
+        <div><strong>Product</strong><Link href="/features">Features</Link><Link href="/pricing">Pricing</Link><Link href="/download">Download</Link></div>
         <div><strong>Resources</strong><Link href="/docs">Documentation</Link><Link href="/blog">Blog</Link><Link href="/tutorials">Tutorials</Link><Link href="/support">Support</Link><Link href="/contact">Contact us</Link><Link href="/login">Your account</Link></div>
       </nav>
     </div>

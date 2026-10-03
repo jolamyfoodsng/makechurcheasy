@@ -35,7 +35,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const AUTH_OPTIONAL_PATHS = new Set(["/", "/download", "/support", "/tutorials", "/signup"]);
+const AUTH_OPTIONAL_PATHS = new Set(["/", "/pricing", "/download", "/support", "/tutorials", "/signup"]);
 
 function isAuthOptionalPath(pathname: string | null): boolean {
   const path = pathname || "/";

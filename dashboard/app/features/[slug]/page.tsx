@@ -54,7 +54,7 @@ export default async function FeaturePage({ params }: Props) {
 
       <section className={`${styles.section} ${styles.faqSection} ${styles.detailFaq}`}>
         <div><p className={styles.eyebrow}>GOOD TO KNOW</p><h2>Your questions,<br />answered.</h2><Link href="/tutorials" className={styles.textLink}>Watch the tutorials <ArrowRight size={17} /></Link></div>
-        <div className={styles.faqList}>{feature.questions.map(item => <details key={item.q}><summary>{item.q}<ChevronDown size={20} /></summary><p>{item.a}</p></details>)}<p className={styles.featurePlanNote}>Feature availability and limits vary by plan. <Link href="/subscription/plans">Compare current plans.</Link></p></div>
+        <div className={styles.faqList}>{feature.questions.map(item => <details key={item.q}><summary>{item.q}<ChevronDown size={20} /></summary><p>{item.a}</p></details>)}<p className={styles.featurePlanNote}>Feature availability and limits vary by plan. <Link href="/pricing">Compare current plans.</Link></p></div>
       </section>
 
       <section className={styles.relatedSection}>
