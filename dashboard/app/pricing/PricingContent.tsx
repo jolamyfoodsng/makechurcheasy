@@ -15,8 +15,8 @@ const regions = [
 const plans = [
   { id: "free", name: "Free", icon: BookOpen, audience: "Explore the essentials for your next service.", cta: "Start free", href: "/signup", highlights: ["Up to 10 songs, lyrics & media", "5 Bible versions", "30-minute speech-to-scripture trial", "Free EW / ProPresenter import"] },
   { id: "basic", name: "Basic", icon: Monitor, audience: "A simpler setup for your weekly services.", cta: "Get started with Basic", href: "/signup?callbackUrl=%2Fsubscription%2Fplans", highlights: ["Unlimited local songs, lyrics & media", "All Bible versions", "Automatic OBS scenes & sources", "4 speech-to-scripture hours / month"] },
-  { id: "growth", name: "Growth", icon: Layers, audience: "Keep your operators and content connected.", cta: "Get started with Growth", href: "/signup?callbackUrl=%2Fsubscription%2Fplans", highlights: ["Unlimited local & cloud content", "Cloud sync across operators", "Mobile control & lower thirds", "10 speech-to-scripture hours / month"] },
-  { id: "pro", name: "Pro", icon: Building2, audience: "One connected workflow across your campuses.", cta: "Talk to us about Pro", href: "/contact", highlights: ["Unlimited multi-campus content sync", "Mobile control & sermon export", "20 speech-to-scripture hours / month", "Full phone support & direct line"] },
+  { id: "growth", name: "Growth", icon: Layers, audience: "Keep your operators and content connected.", cta: "Get started with Growth", href: "/signup?callbackUrl=%2Fsubscription%2Fplans", inherits: "Everything in Basic, plus:", highlights: ["Cloud storage for songs, lyrics & media", "Cloud sync across operators", "Mobile control app", "Lower thirds & sermon export", "10 speech-to-scripture hours / month", "Priority support"] },
+  { id: "pro", name: "Pro", icon: Building2, audience: "One connected workflow across your campuses.", cta: "Talk to us about Pro", href: "/contact", inherits: "Everything in Growth, plus:", highlights: ["Unlimited multi-campus content sync", "20 speech-to-scripture hours / month", "Full phone support & direct line", "Online remote laptop control — coming soon"] },
 ] as const;
 
 type ComparisonRow = { label: string; values: readonly (string | boolean)[] };
@@ -76,7 +76,7 @@ export default function PricingContent() {
           <p className={styles.audience}>{plan.audience}</p>
           <div className={styles.price} aria-live="polite" aria-atomic="true"><strong>{price(index)}</strong><span>{region.currency} / month</span></div>
           <Link href={plan.href} className={`${plan.id === "growth" ? shared.button : shared.outlineButton} ${styles.planButton}`}>{plan.cta}<ArrowRight size={16} aria-hidden="true" /></Link>
-          <ul>{plan.highlights.map(feature => <li key={feature}><Check size={16} aria-hidden="true" /><span>{feature}</span></li>)}</ul>
+          <div className={styles.planFeatures}>{"inherits" in plan && <p className={styles.inheritance}>{plan.inherits}</p>}<ul>{plan.highlights.map(feature => <li key={feature}><Check size={16} aria-hidden="true" /><span>{feature}</span></li>)}</ul></div>
         </article>)}
       </div>
       <p className={styles.importNote}><Check size={18} aria-hidden="true" />Bring your content with you. EasyWorship and ProPresenter import is free on every plan.</p>

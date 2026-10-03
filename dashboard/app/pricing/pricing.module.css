@@ -21,7 +21,9 @@
 .price strong { font-size: clamp(32px, 3vw, 40px); font-weight: 700; line-height: 1.2; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
 .price > span { font-size: 13px; color: var(--muted); }
 .page .planButton { padding-inline: 12px; width: 100%; font-size: 13px; min-height: 48px; }
-.plan ul { list-style: none; padding: 24px 0 0; margin: 24px 0 0; border-top: 1px solid var(--line); display: grid; gap: 16px; }
+.planFeatures { padding-top: 24px; margin-top: 24px; border-top: 1px solid var(--line); }
+.page .inheritance { margin: 0 0 18px; font-size: 14px; font-weight: 600; line-height: 1.6; color: var(--ink); }
+.plan ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
 .plan li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.65; color: var(--secondary); }
 .plan li svg { flex-shrink: 0; margin-top: 3px; color: var(--copper); }
 .page .importNote { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; color: var(--secondary); font-size: 14px; line-height: 1.6; }
