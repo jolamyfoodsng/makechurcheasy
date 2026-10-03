@@ -13,6 +13,7 @@
  */
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { BIBLE_API_BASE } from "./bibleApiConfig";
 import { BIBLE_BOOKS } from "./types";
 import type { RawBibleData, CatalogBible } from "./types";
 import { filterDownloadableCatalogBibles } from "./bibleValidation";
@@ -21,7 +22,7 @@ import { filterDownloadableCatalogBibles } from "./bibleValidation";
 // Config
 // ---------------------------------------------------------------------------
 
-const API_BASE = "https://versecast-bible-api.solitary-credit-34b2.workers.dev/api";
+const API_BASE = BIBLE_API_BASE;
 
 /**
  * Version header sent with every Bible API request.

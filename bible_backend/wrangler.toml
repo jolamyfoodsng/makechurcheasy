@@ -1,0 +1,29 @@
+name = "versecast-bible-api"
+main = "src/worker.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "5d9285b368f0d67b286dbef11874db16"
+
+[env.development]
+name = "versecast-bible-api-dev"
+
+[env.production]
+name = "versecast-bible-api"
+
+[env.production.vars]
+NODE_ENV = "production"
+BIBLE_ONLY_MODE = "true"
+AUTO_SEED_FROM_R2 = "false"
+R2_BUCKET_NAME = "sunday-switcher"
+R2_PREFIX = ""
+R2_PUBLIC_BASE_URL = "https://pub-2fb79acbec6a40329dd13028877379a5.r2.dev"
+DOWNLOAD_URL_TTL_SECONDS = "300"
+
+[vars]
+NODE_ENV = "production"
+BIBLE_ONLY_MODE = "true"
+AUTO_SEED_FROM_R2 = "false"
+R2_BUCKET_NAME = "sunday-switcher"
+R2_PREFIX = ""
+R2_PUBLIC_BASE_URL = "https://pub-2fb79acbec6a40329dd13028877379a5.r2.dev"
+DOWNLOAD_URL_TTL_SECONDS = "300"

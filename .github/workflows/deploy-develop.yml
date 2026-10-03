@@ -101,6 +101,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: bible_backend/package-lock.json
       - name: Deploy API Router (develop)
         working-directory: api/cloudflare-api-router
         run: npx wrangler deploy --env development
@@ -108,7 +110,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.DEV_CLOUDFLARE_TOKEN }}
       - name: Deploy Bible API Worker
         working-directory: bible_backend
-        run: npx wrangler deploy --env development
+        run: npm ci && npx wrangler deploy --env development
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.DEV_CLOUDFLARE_TOKEN }}
 

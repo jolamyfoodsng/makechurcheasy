@@ -1,10 +1,9 @@
 import { getAllMedia, saveMedia } from "../library/libraryDb";
 import type { MediaItem } from "../library/libraryTypes";
 import { getOverlayBaseUrl } from "./overlayUrl";
+import { BIBLE_API_BASE } from "../bible/bibleApiConfig";
 
-const TEMPLATE_VIDEO_API_BASE =
-  ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_OBS_BACKEND_API_BASE?.trim() ||
-    "https://versecast-bible-api.solitary-credit-34b2.workers.dev") + "/api";
+const TEMPLATE_VIDEO_API_BASE = BIBLE_API_BASE;
 
 const APP_VERSION: string =
   typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";

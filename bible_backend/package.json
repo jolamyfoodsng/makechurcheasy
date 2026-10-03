@@ -1,0 +1,18 @@
+{
+  "name": "makechurcheazy-bible-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.12.27",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "wrangler": "^4.98.0"
+  }
+}

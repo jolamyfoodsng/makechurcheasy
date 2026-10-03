@@ -123,9 +123,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: bible_backend/package-lock.json
       - name: Deploy Bible API Worker
         working-directory: bible_backend
-        run: npx wrangler deploy --env production
+        run: npm ci && npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.PROD_CLOUDFLARE_TOKEN }}
 
