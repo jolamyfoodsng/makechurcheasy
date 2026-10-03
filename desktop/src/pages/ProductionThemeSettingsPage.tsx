@@ -164,18 +164,21 @@ function buildThemePreviewHtml(theme: ObsTheme): string {
       .map((url) => `<link rel="stylesheet" href="${url}">`)
       .join("\n")
     : "";
+  // A data stylesheet keeps the preview's CSS together while allowing the
+  // sandboxed srcDoc iframe to load it under the desktop WebView CSP.
+  const previewCss = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+body { min-width:200px; transform-origin: top left; text-align: left; }
+${theme.css}`;
+  const previewStylesheet = `data:text/css;charset=utf-8,${encodeURIComponent(previewCss)}`;
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${fontImports}
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { min-width:200px; transform-origin: top left; text-align: left; }
-${theme.css}
-</style>
+<link rel="stylesheet" href="${previewStylesheet}">
 </head>
 <body>
 ${html}
