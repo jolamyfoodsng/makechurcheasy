@@ -1112,8 +1112,8 @@
 
 .planGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 1136px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  max-width: 1200px;
   margin: 0 auto 32px;
   gap: 24px;
   text-align: left;

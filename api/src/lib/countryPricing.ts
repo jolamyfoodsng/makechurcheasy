@@ -168,7 +168,7 @@ const GLOBAL_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
 };
 
 // Version 10: Updated Basic (₦2.8k / $3 / $7) and Growth (₦7k / $6 / $12)
-const COUNTRY_PRICING_MIGRATION_VERSION = 10;
+const COUNTRY_PRICING_MIGRATION_VERSION = 11;
 
 export function invalidateCountryPricingCache() {
   _cache = null;
@@ -767,10 +767,10 @@ async function loadDoc(): Promise<CountryPricingDoc> {
     }
   }
 
-  // Version 9: Apply the requested Nigerian monthly prices to existing DB
-  // rows, including rows created by the previous v8 pricing migration.
-  if ((doc.version || 0) < 9) {
+  // Version 11: Refresh revised default countries (Nigeria ₦2,800/₦7,000, US /, etc.)
+  if ((doc.version || 0) < 11) {
     localCurrencyRepairs.NG = DEFAULT_COUNTRIES.NG;
+    localCurrencyRepairs.US = DEFAULT_COUNTRIES.US;
   }
 
   if (needsGhanaFullRepair || Object.keys(localCurrencyRepairs).length > 0 || doc.version < COUNTRY_PRICING_MIGRATION_VERSION) {
