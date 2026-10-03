@@ -1132,6 +1132,13 @@ fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
         clean_path,
         ""
             | "index.html"
+            // Load the OBS Dock shell immediately; DockAuthGate checks the
+            // signed-in desktop session and retries while the session handoff
+            // is completing. Blocking this request here races that recovery.
+            | "dock"
+            | "dock.html"
+            | "lm-dock"
+            | "lm-dock.html"
             // OBS/projection renderers must load even before the dock auth
             // session is restored. They receive content through local overlay
             // packets; blocking their HTML turns browser sources into a 401.
