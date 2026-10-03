@@ -7,7 +7,7 @@ import shared from "../homepage.module.css";
 import styles from "./pricing.module.css";
 
 const regions = [
-  { id: "nigeria", label: "Nigeria", currency: "NGN", symbol: "₦", prices: [0, 2800, 7000, 15000] },
+  { id: "nigeria", label: "Nigeria", currency: "NGN", symbol: "₦", prices: [0, 2800, 6000, 15000] },
   { id: "africa", label: "Africa", currency: "USD", symbol: "$", prices: [0, 3, 6, 12] },
   { id: "global", label: "Global", currency: "USD", symbol: "$", prices: [0, 7, 12, 20] },
 ] as const;
@@ -21,7 +21,7 @@ const plans = [
 
 type ComparisonRow = { label: string; values: readonly (string | boolean)[] };
 const rows: ComparisonRow[] = [
-  { label: "Pricing (NGN)", values: ["₦0", "₦2,800/mo", "₦7,000/mo", "₦15,000/mo"] },
+  { label: "Pricing (NGN)", values: ["₦0", "₦2,800/mo", "₦6,000/mo", "₦15,000/mo"] },
   { label: "Pricing (Africa)", values: ["$0", "$3/mo", "$6/mo", "$12/mo"] },
   { label: "Pricing (Global)", values: ["$0", "$7/mo", "$12/mo", "$20/mo"] },
   { label: "Songs, Lyrics & Media", values: ["Up to 10", "Unlimited (Local)", "Unlimited (Local + Cloud)", "Unlimited (Multi-Campus Sync)"] },
