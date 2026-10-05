@@ -54,7 +54,7 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean; setIsOpen?: (
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const trialDuration = trialDurationDays || 14;
+  const trialDuration = trialDurationDays || 30;
   const trialProgressPct = isOnTrial
     ? Math.min(100, Math.round(((trialDuration - trialDaysLeft) / trialDuration) * 100))
     : 0;

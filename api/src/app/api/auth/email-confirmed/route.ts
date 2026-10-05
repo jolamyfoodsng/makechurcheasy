@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
           welcomeEmail({
             userName: mongoUser.name || "",
             userEmail: mongoUser.email,
-            trialDays: trialData.durationDays ?? 14,
+            trialDays: trialData.durationDays ?? 30,
             trialEndsAt: trialData.endsAt ?? "",
           })
         ).catch(() => { });
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
           activationRequiredWelcomeEmail({
             userName: mongoUser.name || "there",
             userEmail: mongoUser.email,
-            trialDays: trialClaimResult.assignment?.durationDays || 7,
+            trialDays: trialClaimResult.assignment?.durationDays || 30,
           })
         ).catch(() => { });
       } catch {

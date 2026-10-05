@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
     } else if (user.trial?.endsAt) {
       trialForWelcome = {
         endsAt: user.trial.endsAt,
-        durationDays: user.trial.durationDays || 14,
+        durationDays: user.trial.durationDays || 30,
       };
     }
 

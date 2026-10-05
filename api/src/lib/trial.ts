@@ -250,7 +250,7 @@ export function resolveEffectivePlan(user: RawMongoUser | null | undefined): Eff
 
 // ── New User Factory ────────────────────────────────────────────────────────
 
-const DEFAULT_TRIAL_DAYS = 14;
+const DEFAULT_TRIAL_DAYS = 30;
 
 /**
  * Get the default trial duration from platform settings.

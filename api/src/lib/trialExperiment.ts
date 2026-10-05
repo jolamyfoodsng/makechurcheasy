@@ -20,8 +20,8 @@ export const TRIAL_EXPERIMENT_ID = "activated_trial_7d_v1";
 export const DEFAULT_TRIAL_EXPERIMENT_SETTINGS: TrialExperimentSettings = {
   enabled: false,
   enabledAt: null,
-  activatedTrialDurationDays: 7,
-  controlTrialDurationDays: 14,
+  activatedTrialDurationDays: 30,
+  controlTrialDurationDays: 30,
   betaTrialDurationDays: 30,
   activatedVariantAllocationPercent: 50,
   updatedAt: new Date().toISOString(),
@@ -37,9 +37,10 @@ function normalizeSettings(raw: Partial<TrialExperimentSettings> | null | undefi
   return {
     enabled: raw?.enabled === true,
     enabledAt: typeof raw?.enabledAt === "string" ? raw.enabledAt : null,
-    activatedTrialDurationDays: clampInteger(raw?.activatedTrialDurationDays, 7, 1, 90),
-    controlTrialDurationDays: clampInteger(raw?.controlTrialDurationDays, 14, 1, 90),
-    betaTrialDurationDays: clampInteger(raw?.betaTrialDurationDays, 30, 1, 180),
+    // All new free trials are one month regardless of activation cohort.
+    activatedTrialDurationDays: 30,
+    controlTrialDurationDays: 30,
+    betaTrialDurationDays: 30,
     activatedVariantAllocationPercent: clampInteger(raw?.activatedVariantAllocationPercent, 50, 0, 100),
     updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
   };
@@ -116,6 +117,14 @@ export async function getOrAssignTrialExperiment(
 
   const stored = user?.trialExperiment;
   if (stored && isVariant(stored.variant) && stored.experimentId === TRIAL_EXPERIMENT_ID) {
+    if (stored.durationDays !== 30) {
+      const normalized = { ...stored, durationDays: 30 };
+      await db.collection("users").updateOne(
+        { _id: new (await import("mongodb")).ObjectId(userId) },
+        { $set: { "trialExperiment.durationDays": 30 } },
+      );
+      return normalized as TrialExperimentAssignment;
+    }
     return stored as TrialExperimentAssignment;
   }
 
@@ -138,11 +147,7 @@ export async function getOrAssignTrialExperiment(
     : stableBucket(userId) < settings.activatedVariantAllocationPercent
       ? "activated_7d"
       : "control";
-  const durationDays = variant === "activated_7d"
-    ? settings.activatedTrialDurationDays
-    : variant === "beta"
-      ? settings.betaTrialDurationDays
-      : settings.controlTrialDurationDays;
+  const durationDays = 30;
   const assignment: TrialExperimentAssignment = {
     experimentId: TRIAL_EXPERIMENT_ID,
     variant,

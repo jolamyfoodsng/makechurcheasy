@@ -1505,7 +1505,7 @@ function App() {
       {/* 5. Trial welcome modal — overlays app after auth */}
       {showTrialModal && user?.trial?.endsAt && (
         <TrialModal
-          trialDays={user.trial?.durationDays || 14}
+          trialDays={user.trial?.durationDays || 30}
           trialEndsAt={user.trial.endsAt}
           isExistingUser={(user.trial?.durationDays || 0) >= 10}
           onDismiss={handleTrialModalDismiss}

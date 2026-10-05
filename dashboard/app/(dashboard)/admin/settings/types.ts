@@ -141,7 +141,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   },
   trial: {
     enabled: true,
-    defaultDurationDays: 14,
+    defaultDurationDays: 30,
     sendExtensionEmails: true,
     sendRestartEmails: true,
     sendStopEmails: true,

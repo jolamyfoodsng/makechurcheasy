@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
       try {
         const userTrial = user.trial;
         const trialEndsAt = userTrial?.endsAt || user.trialEndsAt;
-        const trialDays = userTrial?.durationDays || 14;
+        const trialDays = userTrial?.durationDays || 30;
 
         if (sendExtensionEmails && trialEndsAt) {
           await sendEmail(
@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
       try {
         const userTrial = user.trial;
         const trialEndsAt = userTrial?.endsAt || user.trialEndsAt;
-        const trialDays = userTrial?.durationDays || 14;
+        const trialDays = userTrial?.durationDays || 30;
 
         if (sendExtensionEmails && trialEndsAt) {
           await sendEmail(
@@ -216,7 +216,7 @@ export async function GET(req: NextRequest) {
             activationNudgeEmail({
               userName: user.name || "there",
               userEmail: user.email,
-              trialDays: user.trialExperiment?.durationDays || 7,
+              trialDays: user.trialExperiment?.durationDays || 30,
               activationRequired: true,
             }),
           );
@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
       try {
         const userTrial = user.trial;
         const trialEndsAt = userTrial?.endsAt || user.trialEndsAt;
-        const trialDays = userTrial?.durationDays || 14;
+        const trialDays = userTrial?.durationDays || 30;
 
         if (sendExtensionEmails && trialEndsAt) {
           await sendEmail(
@@ -308,7 +308,7 @@ export async function GET(req: NextRequest) {
       try {
         const userTrial = user.trial;
         const trialEndsAt = userTrial?.endsAt || user.trialEndsAt;
-        const trialDays = userTrial?.durationDays || 14;
+        const trialDays = userTrial?.durationDays || 30;
 
         if (sendExtensionEmails && trialEndsAt) {
           await sendEmail(
@@ -375,7 +375,7 @@ export async function GET(req: NextRequest) {
     for (const user of trialEnding2Users) {
       try {
         const userTrialEndsAt = user.trial?.endsAt || user.trialEndsAt;
-        const trialDays = user.trial?.durationDays || 14;
+        const trialDays = user.trial?.durationDays || 30;
 
         if (sendExtensionEmails && sendTrialExpiryEmails && userTrialEndsAt) {
           await sendEmail(
@@ -434,7 +434,7 @@ export async function GET(req: NextRequest) {
     for (const user of trialEndingTomorrowUsers) {
       try {
         const userTrialEndsAt = user.trial?.endsAt || user.trialEndsAt;
-        const trialDays = user.trial?.durationDays || 14;
+        const trialDays = user.trial?.durationDays || 30;
 
         if (sendExtensionEmails && sendTrialExpiryEmails && userTrialEndsAt) {
           await sendEmail(

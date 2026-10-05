@@ -603,7 +603,7 @@ export function buildLegacyCompatiblePlanConfig(options?: {
   trialEnabled?: boolean;
 }): LegacyCompatiblePlanConfig {
   const updatedAt = options?.updatedAt || new Date().toISOString();
-  const trialDurationDays = options?.trialDurationDays ?? 14;
+  const trialDurationDays = options?.trialDurationDays ?? 30;
   const trialEnabled = options?.trialEnabled ?? true;
 
   const freeTier = buildTierConfig("free", "Free", { monthlyPlanCode: "", yearlyPlanCode: "" });

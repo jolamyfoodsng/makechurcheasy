@@ -211,7 +211,7 @@ export function useSubscription(): SubscriptionState {
   const trialEndsAt = trialEndsAtStr ? new Date(trialEndsAtStr) : null;
   const trialStartedAtStr = mongoUser?.trial?.startedAt || null;
   const trialStartedAt = trialStartedAtStr ? new Date(trialStartedAtStr) : null;
-  const trialDurationDays = mongoUser?.trial?.durationDays ?? 14;
+  const trialDurationDays = mongoUser?.trial?.durationDays ?? 30;
   const now = new Date();
   const trialDaysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))

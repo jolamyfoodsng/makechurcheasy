@@ -237,7 +237,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
   },
   trial: {
     enabled: true,
-    defaultDurationDays: 14,
+    defaultDurationDays: 30,
     sendExtensionEmails: true,
     sendRestartEmails: true,
     sendStopEmails: true,
@@ -469,6 +469,33 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
       .collection<PlatformSettings>(COLLECTION)
       .updateOne({ _id: DOC_ID as any }, { $set: seed }, { upsert: true });
     doc = seed;
+  }
+
+  // Migrate existing installations from the previous 14-day default once.
+  // A version marker lets admins change the duration again after this rollout.
+  if (Number((doc as any).trialDurationMigrationVersion || 0) < 1) {
+    const migratedAt = new Date().toISOString();
+    await db.collection<PlatformSettings>(COLLECTION).updateOne(
+      { _id: DOC_ID as any },
+      {
+        $set: {
+          "trial.defaultDurationDays": 30,
+          trialDurationMigrationVersion: 1,
+          updatedAt: migratedAt,
+        },
+      },
+    );
+    await db.collection("trial_settings").updateOne(
+      { _id: "default" as any },
+      { $set: { defaultDurationDays: 30, updatedAt: migratedAt } },
+      { upsert: true },
+    );
+    doc = {
+      ...doc,
+      trial: { ...doc.trial, defaultDurationDays: 30 },
+      updatedAt: migratedAt,
+    } as PlatformSettings;
+    (doc as any).trialDurationMigrationVersion = 1;
   }
 
   // Deep-merge each section with defaults to fill in any missing fields

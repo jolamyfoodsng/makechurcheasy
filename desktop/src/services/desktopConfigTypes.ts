@@ -140,7 +140,7 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
   },
   trial: {
     enabled: true,
-    defaultDurationDays: 14,
+    defaultDurationDays: 30,
   },
   credits: {
     translationCost: 1,
