@@ -39,7 +39,7 @@ use tokio_tungstenite::tungstenite::Message;
 static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
 
 const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
-const REALTIME_MODEL: &str = "universal-3-5-pro";
+const REALTIME_MODEL: &str = "universal-streaming-english";
 const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
 const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -48,8 +48,6 @@ const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
-const REALTIME_PROMPT: &str = "English Christian church sermon, Bible preaching, scripture reading, Holy Bible, Old Testament, New Testament, Genesis, Exodus, Leviticus, Numbers, Deuteronomy, Joshua, Judges, Ruth, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, Ezra, Nehemiah, Esther, Job, Psalms, Proverbs, Ecclesiastes, Song of Solomon, Isaiah, Jeremiah, Lamentations, Ezekiel, Daniel, Hosea, Joel, Amos, Obadiah, Jonah, Micah, Nahum, Habakkuk, Zephaniah, Haggai, Zechariah, Malachi, Matthew, Mark, Luke, John, Acts, Romans, First Corinthians, Second Corinthians, Galatians, Ephesians, Philippians, Colossians, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, Titus, Philemon, Hebrews, James, First Peter, Second Peter, First John, Second John, Third John, Jude, Revelation, chapter and verse, King James Version, New International Version, New Living Translation, English Standard Version, The Message, Amplified Bible, KJV, NIV, NLT, ESV, MSG, switch to NLT, switch to NIV, switch to KJV.";
-
 // Bible vocabulary boosts recognition without guessing a book in the parser.
 const REALTIME_KEYTERMS: &[&str] = &[
     "verse",
@@ -166,41 +164,31 @@ unsafe impl Sync for StreamBox {}
 #[derive(Clone, Copy)]
 struct RealtimeProfile {
     label: &'static str,
-    realtime_mode: &'static str,
     min_turn_silence_ms: u32,
     max_turn_silence_ms: u32,
-    interruption_delay_ms: u32,
 }
 
 fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
     match detection_speed {
         Some("sharp") => RealtimeProfile {
             label: "sharp",
-            realtime_mode: "min_latency",
             min_turn_silence_ms: 200,
             max_turn_silence_ms: 1_000,
-            interruption_delay_ms: 0,
         },
         Some("fast") => RealtimeProfile {
             label: "fast",
-            realtime_mode: "min_latency",
             min_turn_silence_ms: 100,
             max_turn_silence_ms: 700,
-            interruption_delay_ms: 0,
         },
         Some("accurate") => RealtimeProfile {
             label: "accurate",
-            realtime_mode: "max_accuracy",
             min_turn_silence_ms: 700,
             max_turn_silence_ms: 1_800,
-            interruption_delay_ms: 500,
         },
         _ => RealtimeProfile {
             label: "balanced",
-            realtime_mode: "balanced",
             min_turn_silence_ms: 300,
             max_turn_silence_ms: 1_200,
-            interruption_delay_ms: 250,
         },
     }
 }
@@ -1200,22 +1188,14 @@ async fn run_realtime_transcriber(
 }
 
 fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
-    let language_codes = serde_json::json!(["en"]).to_string();
     let params = [
         ("speech_model", REALTIME_MODEL.to_string()),
         ("encoding", "pcm_s16le".to_string()),
         ("sample_rate", TARGET_RATE.to_string()),
-        ("mode", profile.realtime_mode.to_string()),
-        ("language_codes", language_codes),
         ("include_partial_turns", "true".to_string()),
-        ("continuous_partials", "true".to_string()),
-        (
-            "interruption_delay",
-            profile.interruption_delay_ms.to_string(),
-        ),
+        ("format_turns", "true".to_string()),
         ("min_turn_silence", profile.min_turn_silence_ms.to_string()),
         ("max_turn_silence", profile.max_turn_silence_ms.to_string()),
-        ("prompt", REALTIME_PROMPT.to_string()),
         (
             "keyterms_prompt",
             serde_json::json!(REALTIME_KEYTERMS).to_string(),
@@ -1242,7 +1222,6 @@ where
 {
     let update = serde_json::json!({
         "type": "UpdateConfiguration",
-        "prompt": REALTIME_PROMPT,
         "keyterms_prompt": REALTIME_KEYTERMS,
         "min_turn_silence": profile.min_turn_silence_ms,
         "max_turn_silence": profile.max_turn_silence_ms,
@@ -1681,6 +1660,11 @@ mod tests {
             let url = reqwest::Url::parse(&endpoint).unwrap();
             let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
             let terms: Vec<String> = serde_json::from_str(&params["keyterms_prompt"]).unwrap();
+            assert_eq!(params["speech_model"], "universal-streaming-english");
+            assert_eq!(params["format_turns"], "true");
+            assert!(!params.contains_key("mode"));
+            assert!(!params.contains_key("prompt"));
+            assert!(!params.contains_key("interruption_delay"));
             assert!(terms.len() <= 100);
             assert!(terms.iter().all(|term| term.chars().count() <= 50));
             for book in books.as_object().unwrap().keys() {

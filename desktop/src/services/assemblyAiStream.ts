@@ -45,8 +45,7 @@ export function connectAssemblyAiStream(
   sampleRate: number,
   callbacks: AssemblyAiCallbacks,
 ): AssemblyAiStreamHandle {
-  // universal-streaming-english → fast streaming model
-  const url = `${WS_BASE}?sample_rate=${sampleRate}&encoding=pcm_s16le&token=${encodeURIComponent(apiKey)}&speech_model=u3-rt-pro&modes=max_accuracy`;
+  const url = `${WS_BASE}?sample_rate=${sampleRate}&encoding=pcm_s16le&format_turns=true&token=${encodeURIComponent(apiKey)}&speech_model=universal-streaming-english`;
 
   let ws: WebSocket | null = null;
   let closed = false;
