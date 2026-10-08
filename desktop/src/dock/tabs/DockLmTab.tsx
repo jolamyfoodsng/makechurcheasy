@@ -201,6 +201,26 @@ export function getLmCandidateKey(candidate: Pick<VoiceBibleCandidate, "book" | 
   return `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
 }
 
+export function claimNextLmAutoPushCandidate<T extends { key: string; candidate: VoiceBibleCandidate }>(
+  candidates: T[],
+  claimedKeys: Set<string>,
+  lastPushedAt: ReadonlyMap<string, number>,
+  nowMs: number,
+  duplicateWindowSec: number,
+): T | null {
+  const target = candidates.find(({ key, candidate }) => (
+    !claimedKeys.has(key) &&
+    !isLmAutoPushSuppressed(
+      lastPushedAt.get(getLmCandidateKey(candidate)),
+      nowMs,
+      duplicateWindowSec,
+    )
+  ));
+
+  if (target) claimedKeys.add(target.key);
+  return target ?? null;
+}
+
 export function mergeRetainedLmQueue(
   current: RetainedLmCandidate[],
   incoming: VoiceBibleCandidate[],
@@ -1270,23 +1290,17 @@ export default function DockLmTab({
       }
     }
 
-    const unseen = candidatesToPush.filter(({ key }) => (
-      !autoPushedKeysRef.current.has(key) && !autoPushInFlightRef.current.has(key)
-    ));
-    if (unseen.length === 0) return;
-
-    for (const item of unseen) autoPushedKeysRef.current.add(item.key);
-
-    const nowMs = Date.now();
-    const target = unseen.find(({ candidate }) => (
-      !isLmAutoPushSuppressed(
-        autoPushLastPushedAtRef.current.get(getLmCandidateKey(candidate)),
-        nowMs,
-        settings.autoPushDedupWindow,
-      )
-    ));
+    const target = claimNextLmAutoPushCandidate(
+      candidatesToPush,
+      autoPushedKeysRef.current,
+      autoPushLastPushedAtRef.current,
+      Date.now(),
+      settings.autoPushDedupWindow,
+    );
     if (!target) return;
 
+    // Send one verse at a time. Other candidates stay unclaimed for the next
+    // render after this push completes.
     autoPushInFlightRef.current.add(target.key);
     void handlePushVerse(target.candidate, target.source).then((success) => {
       if (success) autoPushLastPushedAtRef.current.set(getLmCandidateKey(target.candidate), Date.now());

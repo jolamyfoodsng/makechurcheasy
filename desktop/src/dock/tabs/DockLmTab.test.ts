@@ -4,6 +4,7 @@ vi.mock("../../hooks/useAppTheme", () => ({
   useAppTheme: () => ({ appearance: { theme: "dark" }, setTheme: vi.fn() }),
 }));
 import {
+  claimNextLmAutoPushCandidate,
   getLmCandidateKey,
   getSelectedTranscriptEntries,
   isLmAutoPushSuppressed,
@@ -68,6 +69,22 @@ describe("DockLmTab settings helpers", () => {
     expect(isLmAutoPushSuppressed(1_000, 10_000, 15)).toBe(true);
     expect(isLmAutoPushSuppressed(1_000, 20_000, 15)).toBe(false);
     expect(isLmAutoPushSuppressed(1_000, 10_000, 0)).toBe(false);
+  });
+
+  it("claims one auto-push verse at a time so later verses in a batch are not skipped", () => {
+    const first = candidate("John", 3, 11);
+    const second = candidate("John", 3, 12);
+    const batch = [first, second].map((item) => ({
+      key: `queue:${getLmCandidateKey(item)}:1000`,
+      candidate: item,
+      source: "queue" as const,
+    }));
+    const claimedKeys = new Set<string>();
+
+    expect(claimNextLmAutoPushCandidate(batch, claimedKeys, new Map(), 1_000, 15)).toBe(batch[0]);
+    expect([...claimedKeys]).toEqual([batch[0].key]);
+    expect(claimNextLmAutoPushCandidate(batch, claimedKeys, new Map(), 1_100, 15)).toBe(batch[1]);
+    expect([...claimedKeys]).toEqual([batch[0].key, batch[1].key]);
   });
 
   it("uses compact Full/LT mode labels", () => {
