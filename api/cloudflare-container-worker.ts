@@ -35,6 +35,7 @@ const CONTAINER_ENV_NAMES = [
   "ZOHO_CAMPAIGNS_NEW_SIGNUPS_LIST_KEY",
   "ZOHO_CAMPAIGNS_SIGNUP_LIST_KEY",
   "ZOHO_CAMPAIGNS_SIGNUP_FORM_DISABLED",
+  "ZOHO_CAMPAIGNS_SYNC_CRON_SECRET",
   "CLOUDFLARE_EMAIL_ACCOUNT_ID",
   "CLOUDFLARE_EMAIL_API_TOKEN",
   "FLW_API_BASE_URL",
@@ -179,13 +180,34 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, workerEnv: WorkerEnv, ctx: ExecutionContext): Promise<void> {
+    const cron = controller.cron || "";
+    const zohoSyncSecret = String((workerEnv as Record<string, unknown>).ZOHO_CAMPAIGNS_SYNC_CRON_SECRET || "");
+    if (cron === "*/15 * * * *" && zohoSyncSecret) {
+      const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
+      const zohoSyncUrl = "http://localhost:3000/api/cron/zoho-campaigns-sync";
+      ctx.waitUntil(
+        container.fetch(new Request(zohoSyncUrl, {
+          method: "POST",
+          headers: { authorization: `Bearer ${zohoSyncSecret}` },
+        })).then(async (res) => {
+          if (!res.ok) {
+            console.error(`[Cloudflare Cron] Zoho signup retry failed: HTTP ${res.status}`);
+            return;
+          }
+          const result = await res.json().catch(() => ({}));
+          console.log("[Cloudflare Cron] Zoho signup retry completed", result);
+        }).catch((err) => {
+          console.error("[Cloudflare Cron] Error triggering Zoho signup retry:", err);
+        }),
+      );
+    }
+
     const cronSecret = String((workerEnv as Record<string, unknown>).CRON_SECRET || "");
     if (!cronSecret) {
-      console.error("[Cloudflare Cron] CRON_SECRET is not configured; skipping scheduled job");
+      console.error("[Cloudflare Cron] CRON_SECRET is not configured; skipping generic scheduled jobs");
       return;
     }
     const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
-    const cron = controller.cron || "";
 
     const dispatchUrl = `http://localhost:3000/api/cron/dispatcher?cron=${encodeURIComponent(cron)}`;
     ctx.waitUntil(

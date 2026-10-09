@@ -5,7 +5,7 @@ import { getPlanConfig } from "@/lib/db";
 import { claimTrialForUserIfEligible } from "@/lib/trialAbuse";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail, welcomeEmail } from "@/lib/emailTemplates";
-import { sendVerifiedSignupWelcomeThroughZoho, type ZohoSignupWelcomeResult } from "@/lib/zohoCampaigns";
+import { processVerifiedSignupZohoSync, type ProcessZohoSignupResult } from "@/lib/zohoSignupSync";
 import { nanoid } from "nanoid";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
@@ -155,6 +155,7 @@ export async function GET(req: NextRequest) {
     );
 
     const now = new Date().toISOString();
+    let shouldSyncExistingGoogleVerification = false;
 
     if (user) {
       if (user.isActive === false) {
@@ -170,6 +171,18 @@ export async function GET(req: NextRequest) {
         lastLogin: now,
         emailVerified: true,
       };
+      if (!user.emailVerified) {
+        const platformSettings = await getPlatformSettings();
+        if (platformSettings.notifications.welcomeEmail) {
+          shouldSyncExistingGoogleVerification = true;
+          updateFields.zohoSignupSync = {
+            status: "pending",
+            requestedAt: new Date(now),
+            attempts: 0,
+            nextAttemptAt: new Date(now),
+          };
+        }
+      }
       if (!user.emailVerifiedAt) {
         updateFields.emailVerifiedAt = now;
       }
@@ -202,6 +215,18 @@ export async function GET(req: NextRequest) {
         { $set: updateFields }
       );
       user = { ...user, ...updateFields };
+      if (shouldSyncExistingGoogleVerification) {
+        try {
+          const zohoResult = await processVerifiedSignupZohoSync(user._id);
+          if (zohoResult.status === "confirmation-required") {
+            console.error("[google/callback] Zoho signup list requires another confirmation.");
+          }
+        } catch (zohoError) {
+          console.error("[google/callback] Zoho enrollment will be retried:", {
+            error: zohoError instanceof Error ? zohoError.name : "unknown_error",
+          });
+        }
+      }
     } else {
       const platformSettings = await getPlatformSettings();
       if (!platformSettings.system.allowRegistrations) {
@@ -242,6 +267,16 @@ export async function GET(req: NextRequest) {
         trialId: null as string | null,
         onboardingCompleted: true,
         lifecycleEmails: {},
+        ...(platformSettings.notifications.welcomeEmail
+          ? {
+              zohoSignupSync: {
+                status: "pending",
+                requestedAt: new Date(now),
+                attempts: 0,
+                nextAttemptAt: new Date(now),
+              },
+            }
+          : {}),
         createdAt: now,
         lastLogin: now,
       };
@@ -249,18 +284,16 @@ export async function GET(req: NextRequest) {
       const result = await db.collection("users").insertOne(newUser);
       user = { ...newUser, _id: result.insertedId };
 
-      let zohoWelcomeResult: ZohoSignupWelcomeResult = "disabled";
+      let zohoWelcomeResult: ProcessZohoSignupResult | null = null;
       if (platformSettings.notifications.welcomeEmail) {
-        zohoWelcomeResult = await sendVerifiedSignupWelcomeThroughZoho({
-          email: user.email,
-          firstName: user.name,
-        });
-        if (zohoWelcomeResult === "sent") {
-          await db.collection("users").updateOne(
-            { _id: result.insertedId },
-            { $set: { "lifecycleEmails.welcomeSent": true } }
-          );
-        } else if (zohoWelcomeResult === "confirmation-required") {
+        try {
+          zohoWelcomeResult = await processVerifiedSignupZohoSync(result.insertedId);
+        } catch (zohoError) {
+          console.error("[google/callback] Zoho enrollment will be retried:", {
+            error: zohoError instanceof Error ? zohoError.name : "unknown_error",
+          });
+        }
+        if (zohoWelcomeResult?.status === "confirmation-required") {
           console.error("[google/callback] Zoho signup list requires another confirmation; welcome email was not duplicated.");
         }
       }
@@ -300,7 +333,6 @@ export async function GET(req: NextRequest) {
               $set: {
                 credits: planConfig.plans.trial.credits,
                 trialId: record._id?.toString(),
-                "lifecycleEmails.welcomeSent": true,
               },
             }
           );
@@ -308,8 +340,7 @@ export async function GET(req: NextRequest) {
           user.trialId = record._id?.toString() || null;
           if (
             platformSettings.notifications.welcomeEmail &&
-            zohoWelcomeResult !== "sent" &&
-            zohoWelcomeResult !== "confirmation-required"
+            zohoWelcomeResult?.status === "disabled"
           ) {
             sendEmail(
               welcomeEmail({
@@ -318,7 +349,10 @@ export async function GET(req: NextRequest) {
                 trialDays: welcomeData.durationDays,
                 trialEndsAt: welcomeData.endsAt,
               })
-            ).catch((err) => console.error("[google/callback] Failed to send welcome email:", err));
+            ).then(() => db.collection("users").updateOne(
+              { _id: result.insertedId },
+              { $set: { "lifecycleEmails.welcomeSent": true } },
+            )).catch((err) => console.error("[google/callback] Failed to send welcome email:", err));
           }
         } else if (!trialClaim.eligible) {
           console.warn("[google/callback] Trial not granted:", {

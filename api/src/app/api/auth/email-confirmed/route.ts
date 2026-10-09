@@ -4,6 +4,8 @@ import clientPromise from "@/lib/mongodb";
 import { getPlanConfig } from "@/lib/db";
 import { getTrialForUser } from "@/lib/trialRecords";
 import { claimTrialForUserIfEligible } from "@/lib/trialAbuse";
+import { getPlatformSettings } from "@/lib/platformSettings";
+import { processVerifiedSignupZohoSync } from "@/lib/zohoSignupSync";
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,7 +38,6 @@ export async function POST(req: NextRequest) {
     const updateFields: Record<string, any> = {
       emailVerified: true,
       emailVerifiedAt: now.toISOString(),
-      "lifecycleEmails.welcomeSent": true,
     };
 
     // Only create a trial if the user doesn't already have one
@@ -81,36 +82,60 @@ export async function POST(req: NextRequest) {
       { $set: updateFields }
     );
 
+    const platformSettings = await getPlatformSettings();
+    let zohoWelcomeResult: Awaited<ReturnType<typeof processVerifiedSignupZohoSync>> | null = null;
+    if (platformSettings.notifications.welcomeEmail) {
+      try {
+        zohoWelcomeResult = await processVerifiedSignupZohoSync(mongoUser._id);
+      } catch (zohoError) {
+        console.error("[email-confirmed] Zoho enrollment will be retried:", {
+          error: zohoError instanceof Error ? zohoError.name : "unknown_error",
+        });
+      }
+    }
+
     // Send Welcome email (Email 2) immediately — trial activation (Email 3)
     // is sent separately 5–10 minutes later by the lifecycle cron.
-    if (trialData) {
+    if (platformSettings.notifications.welcomeEmail && zohoWelcomeResult?.status === "disabled" && trialData) {
       try {
         const { sendEmail, welcomeEmail } = await import(
           "@/lib/emailTemplates"
         );
-        sendEmail(
+        await sendEmail(
           welcomeEmail({
             userName: mongoUser.name || "",
             userEmail: mongoUser.email,
             trialDays: trialData.durationDays ?? 30,
             trialEndsAt: trialData.endsAt ?? "",
           })
-        ).catch(() => { });
+        );
+        await db.collection("users").updateOne(
+          { _id: mongoUser._id },
+          { $set: { "lifecycleEmails.welcomeSent": true } },
+        );
       } catch {
         /* email not critical */
       }
-    } else if (trialClaimResult?.reason === "activation_required") {
+    } else if (
+      platformSettings.notifications.welcomeEmail &&
+      zohoWelcomeResult?.status === "disabled" &&
+      trialClaimResult?.reason === "activation_required"
+    ) {
       try {
         const { sendEmail, activationRequiredWelcomeEmail } = await import(
           "@/lib/emailTemplates"
         );
-        sendEmail(
+        await sendEmail(
           activationRequiredWelcomeEmail({
             userName: mongoUser.name || "there",
             userEmail: mongoUser.email,
             trialDays: trialClaimResult.assignment?.durationDays || 30,
           })
-        ).catch(() => { });
+        );
+        await db.collection("users").updateOne(
+          { _id: mongoUser._id },
+          { $set: { "lifecycleEmails.welcomeSent": true } },
+        );
       } catch {
         /* email not critical */
       }

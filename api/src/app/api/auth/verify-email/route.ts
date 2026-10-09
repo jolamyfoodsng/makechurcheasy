@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { getPlanConfig } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail, welcomeEmail } from "@/lib/emailTemplates";
-import { sendVerifiedSignupWelcomeThroughZoho } from "@/lib/zohoCampaigns";
+import { processVerifiedSignupZohoSync } from "@/lib/zohoSignupSync";
 import { getTrialForUser } from "@/lib/trialRecords";
 
 const limiter = rateLimit({ windowMs: 60_000, max: 10 });
@@ -201,23 +201,20 @@ export async function POST(req: NextRequest) {
 
     const platformSettings = await getPlatformSettings();
     const welcomeEmailEnabled = platformSettings.notifications.welcomeEmail;
-    const zohoWelcomeResult = welcomeEmailEnabled
-      ? await sendVerifiedSignupWelcomeThroughZoho({
-          email: user.email,
-          firstName: user.name,
-        })
-      : "disabled";
-
-    if (zohoWelcomeResult === "sent") {
-      await db.collection("users").updateOne(
-        { _id: user._id },
-        { $set: { "lifecycleEmails.welcomeSent": true } }
-      );
+    let zohoWelcomeResult: Awaited<ReturnType<typeof processVerifiedSignupZohoSync>> | null = null;
+    if (welcomeEmailEnabled) {
+      try {
+        zohoWelcomeResult = await processVerifiedSignupZohoSync(user._id);
+      } catch (zohoError) {
+        console.error("[verify-email] Zoho enrollment will be retried:", {
+          error: zohoError instanceof Error ? zohoError.name : "unknown_error",
+        });
+      }
     }
 
-    if (zohoWelcomeResult === "confirmation-required") {
+    if (zohoWelcomeResult?.status === "confirmation-required") {
       console.error("[verify-email] Zoho signup list requires another confirmation; welcome email was not duplicated.");
-    } else if (trialForWelcome && welcomeEmailEnabled && zohoWelcomeResult !== "sent") {
+    } else if (trialForWelcome && welcomeEmailEnabled && zohoWelcomeResult?.status === "disabled") {
       try {
         await sendEmail(
           welcomeEmail({
