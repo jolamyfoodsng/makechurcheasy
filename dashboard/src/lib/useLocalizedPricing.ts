@@ -13,8 +13,8 @@ interface UseLocalizedPricingResult {
   pricing: ResolvedPricing | null;
   loading: boolean;
   error: string | null;
-  getPlanPrice: (plan: "basic" | "growth", cycle: "monthly" | "yearly") => number;
-  getIntroPrice: (plan: "basic" | "growth") => number | undefined;
+  getPlanPrice: (plan: "basic" | "growth" | "pro", cycle: "monthly" | "yearly") => number;
+  getIntroPrice: (plan: "basic" | "growth" | "pro") => number | undefined;
   formatPrice: (amount: number) => string;
   rawCurrency: string;
 }
@@ -47,6 +47,7 @@ export function useLocalizedPricing(): UseLocalizedPricingResult {
         const resolvedData = data.flutterwave || data;
         const basic = resolvedData.plans.basic || {};
         const growth = resolvedData.plans.growth || {};
+        const pro = resolvedData.plans.pro || {};
         const region = resolvedData.region === "nigeria" || resolvedData.region === "africa" || resolvedData.region === "global"
           ? resolvedData.region
           : "global";
@@ -58,14 +59,17 @@ export function useLocalizedPricing(): UseLocalizedPricingResult {
           prices: {
             basic: Number(basic.monthly) || 0,
             growth: Number(growth.monthly) || 0,
+            pro: Number(pro.monthly) || (region === "nigeria" ? 12000 : region === "africa" ? 15 : 20),
           },
           yearlyPrices: {
             basic: Number(basic.yearly) || 0,
             growth: Number(growth.yearly) || 0,
+            pro: Number(pro.yearly) || (region === "nigeria" ? 122400 : region === "africa" ? (String(resolvedData.currency).toUpperCase() === "USD" ? 122 : Math.round((Number(pro.monthly) || 15) * 8.13)) : 204),
           },
           introPrices: {
             basic: Number.isFinite(Number(basic.introductoryMonthly)) ? Number(basic.introductoryMonthly) : undefined,
             growth: Number.isFinite(Number(growth.introductoryMonthly)) ? Number(growth.introductoryMonthly) : undefined,
+            pro: Number.isFinite(Number(pro.introductoryMonthly)) ? Number(pro.introductoryMonthly) : undefined,
           },
           country: typeof resolvedData.countryCode === "string" ? resolvedData.countryCode : undefined,
           countryName: typeof resolvedData.countryName === "string" ? resolvedData.countryName : undefined,
@@ -89,18 +93,18 @@ export function useLocalizedPricing(): UseLocalizedPricingResult {
   }, [mongoUser?._id, mongoUser?.country]);
 
   const getPlanPrice = useCallback(
-    (plan: "basic" | "growth", cycle: "monthly" | "yearly"): number => {
+    (plan: "basic" | "growth" | "pro", cycle: "monthly" | "yearly"): number => {
       if (!pricing) return 0;
       if (cycle === "yearly" && pricing.yearlyPrices?.[plan] != null) {
         return pricing.yearlyPrices[plan];
       }
-      return pricing.prices[plan];
+      return pricing.prices[plan] || 0;
     },
     [pricing],
   );
 
   const getIntroPrice = useCallback(
-    (plan: "basic" | "growth"): number | undefined => pricing?.introPrices[plan],
+    (plan: "basic" | "growth" | "pro"): number | undefined => pricing?.introPrices[plan],
     [pricing],
   );
 

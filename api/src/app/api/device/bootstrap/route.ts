@@ -12,6 +12,7 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
 import { resolveDeviceContext } from "@/lib/deviceRequest";
 import { getLocalDevPlanOverride } from "@/lib/localDevPlanOverride";
+import { getClientTrialEligibility } from "@/lib/trialAbuse";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
     const entitlements = planConfig.plans[effectivePlan]?.entitlements || planConfig.plans.free.entitlements;
     const credits = await calculateUserCredits(userId, userForPlan);
     const activeSubscription = await getActiveSubscription(userId).catch(() => null);
+    const trialEligibility = await getClientTrialEligibility(userId, Boolean(trialResponse));
 
     return NextResponse.json(
       {
@@ -114,6 +116,7 @@ export async function GET(req: NextRequest) {
             effectivePlan,
             entitlements,
             trial: trialResponse,
+            trialEligibility,
             ambassador: user.ambassador || null,
             adminTemporaryPlan: user.adminTemporaryPlan || null,
             adminManagedSubscription: user.adminManagedSubscription || null,

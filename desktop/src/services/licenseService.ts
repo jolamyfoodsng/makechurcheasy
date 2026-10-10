@@ -75,6 +75,8 @@ export interface PlanLimits {
   campusManagement: boolean;
   unlimitedDevices: boolean;
   unlimitedMultiview: boolean;
+  multistream?: boolean;
+  multistreamHours?: number;
 }
 
 const UNLIMITED = Infinity;
@@ -120,6 +122,8 @@ function entitlementsToPlanLimits(
     campusManagement: ent.campusManagement,
     unlimitedDevices: ent.devices === -1,
     unlimitedMultiview: ent.multiviewTemplates === -1,
+    multistream: ent.multistream,
+    multistreamHours: ent.multistreamHours,
   };
 }
 
@@ -145,6 +149,8 @@ function buildAllLimits(config: PlanConfig): Record<PlanTier, PlanLimits> {
         customReports: false, mobileControl: false, presentationMode: false, apiAccess: false,
         teamManagement: false, campusManagement: false, slideshow: false,
         countdowns: false,
+        multistream: false,
+        multistreamHours: 0,
       });
     }
   }
@@ -393,6 +399,8 @@ export function canUseCloudFeatures(user: AuthUser | null): boolean {
   return getUserPlanLimits(user).cloudSync;
 }
 
+export const canUseCloudSync = canUseCloudFeatures;
+
 export function canUseAdvancedAnalytics(user: AuthUser | null): boolean {
   return getUserPlanLimits(user).advancedAnalytics;
 }
@@ -419,6 +427,14 @@ export function canUseUnlimitedDevices(user: AuthUser | null): boolean {
 
 export function canUseUnlimitedMultiview(user: AuthUser | null): boolean {
   return getUserPlanLimits(user).unlimitedMultiview;
+}
+
+export function canUseMultistream(user: AuthUser | null): boolean {
+  return getUserPlanLimits(user).multistream ?? false;
+}
+
+export function getMultistreamHoursLimit(user: AuthUser | null): number {
+  return getUserPlanLimits(user).multistreamHours ?? 0;
 }
 
 // ── Resource Checks (async — count from IndexedDB) ───────────────────────────

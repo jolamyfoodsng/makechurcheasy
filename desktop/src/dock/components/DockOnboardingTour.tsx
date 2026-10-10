@@ -206,10 +206,10 @@ export const DockOnboardingTour: React.FC = () => {
         aria-label="MakeChurchEasy Dock Onboarding"
         style={{
           ...tooltipStyle,
-          backgroundColor: "#18181b",
-          color: "#f4f4f5",
+          backgroundColor: "#131724",
+          color: "#f8fafc",
           borderRadius: 12,
-          border: "1px solid #3f3f46",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
           boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)",
           padding: 16,
           boxSizing: "border-box",
@@ -228,7 +228,7 @@ export const DockOnboardingTour: React.FC = () => {
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
-                backgroundColor: "#2563eb",
+                backgroundColor: "#4f46e5",
                 color: "#fff",
                 padding: "2px 8px",
                 borderRadius: 9999,
@@ -284,9 +284,9 @@ export const DockOnboardingTour: React.FC = () => {
               <button
                 onClick={handlePrev}
                 style={{
-                  background: "#27272a",
-                  border: "1px solid #3f3f46",
-                  color: "#e4e4e7",
+                  background: "#1e293b",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  color: "#f8fafc",
                   fontSize: 12,
                   fontWeight: 500,
                   cursor: "pointer",
@@ -300,7 +300,7 @@ export const DockOnboardingTour: React.FC = () => {
             <button
               onClick={handleNext}
               style={{
-                background: "#2563eb",
+                background: "#4f46e5",
                 border: "none",
                 color: "#fff",
                 fontSize: 12,

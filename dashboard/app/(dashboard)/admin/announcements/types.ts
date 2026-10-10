@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Sparkles, Gift, Megaphone, BellRing, Wrench, ImageIcon } from "lucide-react";
+import { BellRing, Code2, Gift, ImageIcon, Megaphone, Type, Wrench } from "lucide-react";
 
 export type AnnouncementTone = "info" | "success" | "warning" | "offer" | "upgrade";
 export type AnnouncementAudience =
@@ -13,24 +13,43 @@ export type AnnouncementAudience =
   | "just_subscribed"
   | "cancelled_users"
   | "expired_trials"
-  | "reactivation_offer_users";
+  | "inactive_7d"
+  | "inactive_30d"
+  | "never_opened_app"
+  | "reactivation_offer_users"
+  | "personal_offer_users";
 export type AnnouncementStatus = "draft" | "scheduled" | "active" | "paused" | "archived";
 export type AnnouncementSurface = "dashboard" | "desktop";
+export type AnnouncementLayout = "standard" | "promo" | "image_only" | "custom";
+export type ButtonStyle = "primary" | "secondary" | "link";
 export type PaidPlan = "basic" | "growth";
 export type DiscountBillingCycle = "monthly" | "yearly";
 export type RangeKey = "today" | "7d" | "30d" | "90d";
 export type FilterStatus = "all" | "active" | "scheduled" | "paused" | "ended" | "draft";
 
+export const MAX_BUTTONS = 4;
+export const MAX_MESSAGE_LENGTH = 2000;
+export const MAX_HTML_LENGTH = 30000;
+
+export interface AnnouncementButton {
+  id: string;
+  label: string;
+  url: string;
+  style: ButtonStyle;
+}
+
 export interface Announcement {
   _id: string;
   title: string;
   message: string;
+  layout?: AnnouncementLayout;
+  buttons?: AnnouncementButton[];
+  bodyHtml?: string | null;
   tone: AnnouncementTone;
   status: AnnouncementStatus;
   surfaces: AnnouncementSurface[];
   audience: AnnouncementAudience;
   tags: string[];
-  format?: "standard" | "image_only";
   targetUserIds?: string[];
   targetEmails?: string[];
   ctaLabel?: string | null;
@@ -47,6 +66,7 @@ export interface Announcement {
   publishAt: string;
   expiresAt?: string | null;
   deliverySpacingMinutes: number;
+  maxShowsPerUser?: number;
   metrics: { shown: number; dismissed: number; clicked: number };
   createdAt: string;
 }
@@ -127,18 +147,66 @@ export interface AnnouncementInsights {
   recentPlatformEvents: PlatformUserEvent[];
 }
 
+/** One person who was shown an announcement, and what they did with it. */
+export interface AnnouncementPersonRow {
+  userId: string;
+  userName: string;
+  email: string;
+  country: string;
+  plan: string;
+  surface: AnnouncementSurface;
+  status: "clicked" | "dismissed" | "seen";
+  shownAt: string | null;
+  clickedAt: string | null;
+  clickCount: number;
+  buttonId: string | null;
+  buttonLabel: string | null;
+}
+
+export interface AnnouncementDetailAnalytics {
+  announcement: {
+    id: string;
+    title: string;
+    message: string;
+    status: AnnouncementStatus;
+    layout: AnnouncementLayout | null;
+    audience: AnnouncementAudience;
+    surfaces: AnnouncementSurface[];
+    buttons: AnnouncementButton[];
+    imageUrl: string | null;
+    publishAt: string;
+    expiresAt: string | null;
+  };
+  totals: {
+    reached: number;
+    views: number;
+    dismissed: number;
+    clickers: number;
+    totalClicks: number;
+    clickRate: number;
+    dismissRate: number;
+  };
+  series: Array<{ date: string; label: string; views: number; clicks: number }>;
+  countries: Array<{ country: string; reached: number; clickers: number; clickRate: number }>;
+  buttons: Array<{ id: string; label: string; url: string; clicks: number }>;
+  surfaces: Array<{ surface: AnnouncementSurface; reached: number; clickers: number }>;
+  people: AnnouncementPersonRow[];
+  truncated: boolean;
+}
+
 export interface AnnouncementForm {
   title: string;
   message: string;
+  layout: AnnouncementLayout;
   tone: AnnouncementTone;
   status: "active" | "scheduled" | "draft";
   surfaces: AnnouncementSurface[];
   audience: AnnouncementAudience;
   tags: string;
   targetEmails: string;
-  ctaLabel: string;
-  ctaUrl: string;
+  buttons: AnnouncementButton[];
   imageUrl: string;
+  bodyHtml: string;
   offerCode: string;
   offerDiscountPercent: number;
   offerDurationMonths: number;
@@ -149,83 +217,63 @@ export interface AnnouncementForm {
   publishAt: string;
   expiresAt: string;
   deliverySpacingMinutes: number;
-  format?: "standard" | "image_only";
+  maxShowsPerUser: number;
 }
 
-export const AUDIENCES: Array<{ value: AnnouncementAudience; label: string; hint: string; badge: string }> = [
-  { value: "all_users", label: "All users", hint: "Broadcast to every registered user", badge: "Universal" },
-  { value: "free_users", label: "Free users", hint: "Free plan accounts & upgrade prompts", badge: "Monetization" },
-  { value: "paid_users", label: "Paid subscribers", hint: "Active paying church accounts", badge: "Customers" },
-  { value: "trial_users", label: "Trial users", hint: "Accounts currently evaluating during trial", badge: "Conversion" },
-  { value: "basic_users", label: "Basic plan", hint: "Basic tier users for upsells", badge: "Tier" },
-  { value: "growth_users", label: "Growth plan", hint: "Growth tier church leaders", badge: "Tier" },
-  { value: "ambassador_users", label: "Ambassadors", hint: "Official ambassadors & affiliates", badge: "VIP" },
-  { value: "just_subscribed", label: "New subscribers", hint: "Subscribed within the last 14 days", badge: "Welcome" },
-  { value: "cancelled_users", label: "Cancelled users", hint: "Win-back offers & reactivations", badge: "Retention" },
-  { value: "expired_trials", label: "Expired trials", hint: "Trial recovery discounts & nudges", badge: "Recovery" },
-  { value: "reactivation_offer_users", label: "Returning users with a Growth gift", hint: "Users selected for the June–August reactivation campaign who have not claimed their free Growth month", badge: "Reactivation" },
+export const AUDIENCES: Array<{ value: AnnouncementAudience; label: string; hint: string }> = [
+  { value: "all_users", label: "Everyone", hint: "Every registered user" },
+  { value: "free_users", label: "Free plan", hint: "Users on the free plan" },
+  { value: "paid_users", label: "Paying subscribers", hint: "Active paid accounts" },
+  { value: "trial_users", label: "On a trial", hint: "Accounts currently in their trial" },
+  { value: "basic_users", label: "Basic plan", hint: "Users on Basic" },
+  { value: "growth_users", label: "Growth plan", hint: "Users on Growth" },
+  { value: "ambassador_users", label: "Ambassadors", hint: "Ambassadors and affiliates" },
+  { value: "just_subscribed", label: "New subscribers", hint: "Subscribed in the last 14 days" },
+  { value: "cancelled_users", label: "Cancelled", hint: "Users who cancelled their subscription" },
+  { value: "expired_trials", label: "Expired trials", hint: "Trial ended without upgrading" },
+  { value: "inactive_7d", label: "Inactive for 7 days", hint: "No activity in the last week" },
+  { value: "inactive_30d", label: "Inactive for 30 days", hint: "No activity in the last month" },
+  { value: "never_opened_app", label: "Never opened the app", hint: "Signed up but never opened the desktop app" },
+  {
+    value: "reactivation_offer_users",
+    label: "Returning users with a Growth gift",
+    hint: "Selected for the reactivation campaign and not yet claimed",
+  },
+  {
+    value: "personal_offer_users",
+    label: "Win-back offer holders",
+    hint: "Only people issued this offer by the Offers ladders. Managed in Admin > Offers",
+  },
 ];
 
-export const TONES: Array<{
-  value: AnnouncementTone;
+/** Tones for the plain layout. Offer/upgrade belong to the promo layout only. */
+export const STANDARD_TONES: Array<{ value: AnnouncementTone; label: string }> = [
+  { value: "info", label: "Info" },
+  { value: "success", label: "Good news" },
+  { value: "warning", label: "Notice" },
+];
+
+export const PROMO_TONES: Array<{ value: AnnouncementTone; label: string }> = [
+  { value: "offer", label: "Offer" },
+  { value: "upgrade", label: "Upgrade" },
+];
+
+export const LAYOUTS: Array<{
+  value: AnnouncementLayout;
   label: string;
   description: string;
-  badgeClass: string;
-  borderClass: string;
-  textClass: string;
-  glowClass: string;
+  icon: LucideIcon;
 }> = [
-  {
-    value: "upgrade",
-    label: "Upgrade / Pro",
-    description: "High-converting upgrade highlight with feature badges",
-    badgeClass: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-    borderClass: "border-violet-500/40",
-    textClass: "text-violet-400",
-    glowClass: "from-violet-600/20 to-indigo-600/10",
-  },
-  {
-    value: "offer",
-    label: "Special Offer",
-    description: "Promotional discount codes with coupon layout",
-    badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-    borderClass: "border-amber-500/40",
-    textClass: "text-amber-400",
-    glowClass: "from-amber-600/20 to-orange-600/10",
-  },
-  {
-    value: "info",
-    label: "Information",
-    description: "Product updates, feature releases, and guidance",
-    badgeClass: "bg-sky-500/15 text-sky-300 border-sky-500/30",
-    borderClass: "border-sky-500/40",
-    textClass: "text-sky-400",
-    glowClass: "from-sky-600/20 to-blue-600/10",
-  },
-  {
-    value: "success",
-    label: "Celebration",
-    description: "Ministry greetings, good news, and congratulations",
-    badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-    borderClass: "border-emerald-500/40",
-    textClass: "text-emerald-400",
-    glowClass: "from-emerald-600/20 to-teal-600/10",
-  },
-  {
-    value: "warning",
-    label: "Notice / Alert",
-    description: "Scheduled maintenance or important service advisories",
-    badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-    borderClass: "border-rose-500/40",
-    textClass: "text-rose-400",
-    glowClass: "from-rose-600/20 to-amber-600/10",
-  },
+  { value: "standard", label: "Text", description: "Title, message, optional image and buttons", icon: Type },
+  { value: "image_only", label: "Image", description: "A banner people click to open a link", icon: ImageIcon },
+  { value: "custom", label: "Custom HTML", description: "Write your own layout with HTML and CSS", icon: Code2 },
+  { value: "promo", label: "Discount offer", description: "Promo code and billing cycle picker", icon: Gift },
 ];
 
 export const RANGES: Array<{ key: RangeKey; label: string }> = [
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" },
-  { key: "90d", label: "Last 90 days" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "90d", label: "90 days" },
 ];
 
 export const RANGE_API_MAP: Record<RangeKey, string> = {
@@ -235,18 +283,37 @@ export const RANGE_API_MAP: Record<RangeKey, string> = {
   "90d": "monthly",
 };
 
+export const STARTER_HTML = `<div style="font-family: system-ui, sans-serif; padding: 28px; text-align: center; color: #1f2937;">
+  <h2 style="margin: 0 0 8px; font-size: 22px;">Your headline</h2>
+  <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.5; color: #4b5563;">
+    A short line that explains what is new.
+  </p>
+  <a href="https://makechurcheasy.com" style="display: inline-block; padding: 10px 18px; border-radius: 8px; background: #0238E9; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
+    Learn more
+  </a>
+</div>`;
+
+export function newButtonId(): string {
+  return `b${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function newButton(patch: Partial<AnnouncementButton> = {}): AnnouncementButton {
+  return { id: newButtonId(), label: "", url: "", style: "primary", ...patch };
+}
+
 export const defaultForm: AnnouncementForm = {
   title: "",
   message: "",
-  tone: "upgrade",
+  layout: "standard",
+  tone: "info",
   status: "active",
   surfaces: ["dashboard", "desktop"],
   audience: "all_users",
   tags: "",
   targetEmails: "",
-  ctaLabel: "View plans",
-  ctaUrl: "/subscription/plans",
+  buttons: [],
   imageUrl: "",
+  bodyHtml: "",
   offerCode: "",
   offerDiscountPercent: 0,
   offerDurationMonths: 1,
@@ -256,8 +323,8 @@ export const defaultForm: AnnouncementForm = {
   priority: 10,
   publishAt: "",
   expiresAt: "",
-  deliverySpacingMinutes: 120,
-  format: "standard",
+  deliverySpacingMinutes: 0,
+  maxShowsPerUser: 1,
 };
 
 export interface CampaignTemplate {
@@ -269,144 +336,201 @@ export interface CampaignTemplate {
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
-    name: "Special Discount Offer",
-    tagline: "Promotional offer with coupon code & pro tier discount",
-    icon: Gift,
-    patch: {
-      title: "Special 25% Off Church Pro",
-      message: "Unlock unlimited workspace members, custom themes, and AI automation credits at a special limited rate.",
-      tone: "offer",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "promo, discount",
-      ctaLabel: "Claim 25% Discount",
-      ctaUrl: "/subscription/plans?promo=SAVE25",
-      offerCode: "SAVE25",
-      offerDiscountPercent: 25,
-      offerDurationMonths: 1,
-      offerApplicablePlans: ["basic", "growth"],
-      offerApplicableBillingCycles: ["monthly", "yearly"],
-      deliverySpacingMinutes: 120,
-      priority: 35,
-      format: "standard",
-    },
+    name: "Plain announcement",
+    tagline: "A title and a message. Add buttons if you need them.",
+    icon: Megaphone,
+    patch: { layout: "standard", tone: "info", title: "", message: "", buttons: [], tags: "" },
   },
   {
-    name: "Graphic Banner (Image-Only)",
-    tagline: "Upload an image banner that opens your link when clicked",
-    icon: ImageIcon,
-    patch: {
-      title: "Special Announcement Banner",
-      message: "Click the banner to explore.",
-      tone: "offer",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "promo, image-only",
-      ctaLabel: "Open Link",
-      ctaUrl: "/subscription/plans",
-      offerCode: "",
-      offerDiscountPercent: 0,
-      deliverySpacingMinutes: 120,
-      priority: 30,
-      format: "image_only",
-    },
-  },
-  {
-    name: "Premium Upgrade Promo",
-    tagline: "Drive free users to upgrade with feature showcase & discount",
-    icon: Sparkles,
-    patch: {
-      title: "Unlock More With MakeChurchEasy Premium",
-      message: "Upgrade today to unlock high-capacity AI credits, unlimited cloud media storage, premium OBS lower-thirds, and priority church support.",
-      tone: "upgrade",
-      audience: "free_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "upgrade, premium, offer",
-      ctaLabel: "View Premium Plans",
-      ctaUrl: "/subscription/plans",
-      offerCode: "CHURCHGROWTH20",
-      offerDiscountPercent: 20,
-      offerDurationMonths: 3,
-      offerApplicablePlans: ["basic", "growth"],
-      offerApplicableBillingCycles: ["monthly", "yearly"],
-      deliverySpacingMinutes: 180,
-      priority: 30,
-    },
-  },
-  {
-    name: "Seasonal / Holiday Offer",
-    tagline: "Limited-time church package or seasonal ministry discount",
-    icon: Gift,
-    patch: {
-      title: "Special Ministry Season Offer",
-      message: "Equip your media and presentation team this season with our most popular tools at a discounted church rate.",
-      tone: "offer",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "holiday, promo, discount",
-      ctaLabel: "Claim Discount",
-      ctaUrl: "/subscription/plans",
-      offerCode: "SEASON25",
-      offerDiscountPercent: 25,
-      offerDurationMonths: 3,
-      offerApplicablePlans: ["basic", "growth"],
-      offerApplicableBillingCycles: ["yearly"],
-      deliverySpacingMinutes: 120,
-      priority: 40,
-    },
-  },
-  {
-    name: "New Feature Announcement",
-    tagline: "Notify users of new desktop or dock capabilities",
+    name: "Feature update",
+    tagline: "Tell people about something new in the app.",
     icon: BellRing,
     patch: {
-      title: "New Feature: Enhanced Worship Presentation Tools",
-      message: "We've added lightning-fast song search, offline Bible caching, and multi-display output directly in your desktop dock.",
+      layout: "standard",
       tone: "info",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "features, update, changelog",
-      ctaLabel: "Explore Features",
-      ctaUrl: "/dashboard",
-      deliverySpacingMinutes: 0,
+      title: "New in MakeChurchEasy",
+      message: "Write what changed and why it helps your team on Sunday.",
+      buttons: [newButton({ label: "See what's new", url: "/features" })],
+      tags: "update",
       priority: 15,
     },
   },
   {
-    name: "Happy New Month Blessing",
-    tagline: "Heartfelt greeting & pastoral encouragement for church teams",
-    icon: Megaphone,
-    patch: {
-      title: "Happy New Month from MakeChurchEasy",
-      message: "We are praying this month brings fresh grace, deep spiritual impact, and renewed fruitfulness to your ministry and services.",
-      tone: "success",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "greeting, blessing, community",
-      ctaLabel: "Go to Dashboard",
-      ctaUrl: "/dashboard",
-      deliverySpacingMinutes: 0,
-      priority: 5,
-    },
-  },
-  {
-    name: "Scheduled System Maintenance",
-    tagline: "Inform church admins in advance of planned service windows",
+    name: "Maintenance notice",
+    tagline: "Warn people ahead of planned downtime.",
     icon: Wrench,
     patch: {
-      title: "Planned Server Maintenance Notice",
-      message: "We will be performing scheduled infrastructure upgrades on Monday at 2:00 AM UTC. Service may experience brief latency for 15 minutes.",
+      layout: "standard",
       tone: "warning",
-      audience: "all_users",
-      surfaces: ["dashboard", "desktop"],
-      tags: "maintenance, advisory",
-      ctaLabel: "Check Status",
-      ctaUrl: "/support",
-      deliverySpacingMinutes: 0,
+      title: "Planned maintenance",
+      message: "We will be doing maintenance on Monday at 2:00 AM UTC. You may notice brief delays for about 15 minutes.",
+      buttons: [],
+      tags: "maintenance",
       priority: 50,
     },
   },
+  {
+    name: "Image banner",
+    tagline: "Upload a picture that opens a link when clicked.",
+    icon: ImageIcon,
+    patch: {
+      layout: "image_only",
+      tone: "info",
+      title: "Announcement banner",
+      message: "",
+      buttons: [newButton({ label: "Open", url: "" })],
+      tags: "",
+      priority: 30,
+    },
+  },
+  {
+    name: "Custom HTML",
+    tagline: "Start from a small HTML layout you can edit.",
+    icon: Code2,
+    patch: {
+      layout: "custom",
+      tone: "info",
+      title: "Announcement",
+      message: "Open the app to see this announcement.",
+      bodyHtml: STARTER_HTML,
+      buttons: [],
+      tags: "",
+    },
+  },
+  {
+    name: "Discount offer",
+    tagline: "Promo code with a billing cycle picker.",
+    icon: Gift,
+    patch: {
+      layout: "promo",
+      tone: "offer",
+      title: "Special offer",
+      message: "A limited-time discount for your church team.",
+      buttons: [newButton({ label: "Claim offer", url: "/subscription/plans" })],
+      tags: "promo",
+      offerCode: "",
+      offerDiscountPercent: 25,
+      offerDurationMonths: 1,
+      priority: 35,
+    },
+  },
 ];
+
+// ── Conversion between the API shape and the editor form ────────────────────
+
+/** Announcements saved before `layout` existed: work out what the apps showed. */
+export function detectLegacyLayout(announcement: Announcement): AnnouncementLayout {
+  if (announcement.layout) return announcement.layout;
+  const tags = (announcement.tags || []).map((tag) => tag.toLowerCase());
+  if (announcement.imageUrl && tags.some((tag) => tag.includes("image-only"))) return "image_only";
+  if (
+    announcement.offerCode ||
+    announcement.offerDiscountPercent ||
+    ["offer", "upgrade"].includes(announcement.tone) ||
+    tags.some((tag) => tag.includes("discount") || tag.includes("offer"))
+  ) {
+    return "promo";
+  }
+  return "standard";
+}
+
+export function announcementButtons(announcement: Announcement): AnnouncementButton[] {
+  if (announcement.buttons?.length) return announcement.buttons;
+  if (announcement.ctaUrl) {
+    return [
+      {
+        id: "b1",
+        label: announcement.ctaLabel || "Open",
+        url: announcement.ctaUrl,
+        style: "primary",
+      },
+    ];
+  }
+  return [];
+}
+
+export function announcementToForm(announcement: Announcement): AnnouncementForm {
+  return {
+    title: announcement.title,
+    message: announcement.message,
+    layout: detectLegacyLayout(announcement),
+    tone: announcement.tone,
+    status: announcement.status === "scheduled" ? "scheduled" : "active",
+    surfaces: announcement.surfaces,
+    audience: announcement.audience,
+    tags: (announcement.tags || []).filter((tag) => tag.toLowerCase() !== "image-only").join(", "),
+    targetEmails: (announcement.targetEmails || []).join(", "),
+    buttons: announcementButtons(announcement),
+    imageUrl: announcement.imageUrl || "",
+    bodyHtml: announcement.bodyHtml || "",
+    offerCode: announcement.offerCode || "",
+    offerDiscountPercent: announcement.offerDiscountPercent || 0,
+    offerDurationMonths: announcement.offerDurationMonths || 1,
+    offerMaxRedemptions: announcement.offerMaxRedemptions || 0,
+    offerApplicablePlans: announcement.offerApplicablePlans?.length
+      ? announcement.offerApplicablePlans
+      : ["basic", "growth"],
+    offerApplicableBillingCycles: announcement.offerApplicableBillingCycles?.length
+      ? announcement.offerApplicableBillingCycles
+      : ["monthly", "yearly"],
+    priority: announcement.priority,
+    publishAt: announcement.publishAt ? toDateTimeLocalInputValue(new Date(announcement.publishAt)) : "",
+    expiresAt: announcement.expiresAt ? toDateTimeLocalInputValue(new Date(announcement.expiresAt)) : "",
+    deliverySpacingMinutes: announcement.deliverySpacingMinutes,
+    maxShowsPerUser: announcement.maxShowsPerUser ?? 1,
+  };
+}
+
+/** Build the request body. Older apps still look for the `image-only` tag and ctaLabel/ctaUrl. */
+export function formToPayload(form: AnnouncementForm, status: "draft" | "active" | "scheduled") {
+  const tags = form.tags
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag && tag.toLowerCase() !== "image-only");
+  if (form.layout === "image_only") tags.push("image-only");
+
+  const buttons = form.buttons
+    .map((button) => ({
+      ...button,
+      // The image itself is the button, so it needs no label from the admin.
+      label: button.label.trim() || (form.layout === "image_only" ? "Open" : ""),
+      url: button.url.trim(),
+    }))
+    .filter((button) => button.label && button.url)
+    .slice(0, form.layout === "image_only" ? 1 : form.layout === "custom" ? 0 : MAX_BUTTONS);
+  const isPromo = form.layout === "promo";
+
+  return {
+    title: form.title.trim(),
+    message: form.message.trim(),
+    layout: form.layout,
+    tone: form.tone,
+    status,
+    surfaces: form.surfaces,
+    audience: form.audience,
+    tags,
+    targetEmails: form.targetEmails,
+    buttons,
+    // Always sent, even when empty, so removing every button clears the old call to action.
+    ctaLabel: buttons[0]?.label ?? "",
+    ctaUrl: buttons[0]?.url ?? "",
+    imageUrl: form.layout === "custom" && !form.imageUrl ? "" : form.imageUrl,
+    bodyHtml: form.layout === "custom" ? form.bodyHtml : "",
+    offerCode: isPromo ? form.offerCode : "",
+    offerDiscountPercent: isPromo ? form.offerDiscountPercent : 0,
+    offerDurationMonths: isPromo ? form.offerDurationMonths : null,
+    offerMaxRedemptions: isPromo ? form.offerMaxRedemptions : 0,
+    offerApplicablePlans: isPromo ? form.offerApplicablePlans : [],
+    offerApplicableBillingCycles: isPromo ? form.offerApplicableBillingCycles : [],
+    priority: form.priority,
+    publishAt: fromLocalInputValue(form.publishAt) || new Date().toISOString(),
+    expiresAt: fromLocalInputValue(form.expiresAt),
+    deliverySpacingMinutes: form.deliverySpacingMinutes,
+    maxShowsPerUser: form.maxShowsPerUser,
+  };
+}
+
+// ── Formatting helpers ──────────────────────────────────────────────────────
 
 export function toDateTimeLocalInputValue(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
@@ -415,14 +539,8 @@ export function toDateTimeLocalInputValue(date: Date | string): string {
   return new Date(d.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-export function defaultExpiresAtValue(now = new Date()): string {
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 0, 0);
-  return toDateTimeLocalInputValue(endOfToday);
-}
-
 export function createDefaultForm(): AnnouncementForm {
-  return { ...defaultForm, expiresAt: "" };
+  return { ...defaultForm, buttons: [], surfaces: [...defaultForm.surfaces] };
 }
 
 export function fromLocalInputValue(value: string): string | null {
@@ -442,15 +560,7 @@ export function formatDate(value?: string | null): string | null {
 }
 
 export function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  return formatDate(value) ?? "-";
 }
 
 export function formatEventName(event: string): string {
@@ -475,4 +585,14 @@ export function effectiveStatus(announcement: Announcement): FilterStatus {
 export function audienceLabel(audience: AnnouncementAudience): string {
   const entry = AUDIENCES.find((a) => a.value === audience);
   return entry?.label ?? audience.replace(/_/g, " ");
+}
+
+export function layoutLabel(layout: AnnouncementLayout): string {
+  return LAYOUTS.find((l) => l.value === layout)?.label ?? layout;
+}
+
+export function clickRate(clicks: number, views: number): string {
+  if (!views) return "0%";
+  const rate = (clicks / views) * 100;
+  return `${rate >= 10 ? Math.round(rate) : rate.toFixed(1)}%`;
 }

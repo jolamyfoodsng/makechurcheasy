@@ -622,7 +622,7 @@ html.mv-theme-light .canvas-area {
 .tv-gradient {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.4), transparent);
+    background: rgba(0, 0, 0, 0.7);
 }
 
 .lower-third-glass {
@@ -661,7 +661,7 @@ html.mv-theme-light .canvas-area {
     left: 0;
     width: 256px;
     height: 100%;
-    background: linear-gradient(to right, rgba(74, 142, 255, 0.1), transparent);
+    background: transparent;
     mix-blend-mode: screen;
     pointer-events: none;
 }

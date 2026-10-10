@@ -1,16 +1,10 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
-  Activity,
   AlertCircle,
-  ArrowRight,
   BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
-  Crown,
-  History,
-  Image as ImageIcon,
   Images,
   Info,
   Mic,
@@ -25,11 +19,9 @@ import { useNavigate } from "react-router-dom";
 
 import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
 import { useAuth } from "../contexts/AuthContext";
-import { useCountryPricing } from "../hooks/useCountryPricing";
 import { getAllMedia } from "../library/libraryDb";
 import { getSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
-import { getTrialDaysRemaining, getUserPlan, isInTrial } from "../services/licenseService";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService, type ConnectionStatus } from "../services/obsService";
 import { getOverlayBaseUrlSync, useDockBaseUrl, useLanDockBaseUrl } from "../services/overlayUrl";
@@ -43,7 +35,8 @@ import {
   isMceBridgeLoaded,
   isMovePluginLoaded,
 } from "../services/obsMovePlugin";
-import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import MultiPlatformStreamingBanner from "../components/MultiPlatformStreamingBanner";
+import BroadcastHowItWorksModal from "../components/BroadcastHowItWorksModal";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,64 +47,70 @@ function getGreetingKey(): string {
   return "dashboard.greeting.evening";
 }
 
-function formatRelativeTime(date: Date): string {
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
-}
+// ── 1. Greeting Section ────────────────────────────────────────────────────
 
-// ── Activity Log ───────────────────────────────────────────────────────────
-
-interface ActivityEntry {
-  id: string;
-  icon: typeof Mic;
-  iconColor: string;
-  text: string;
-  time: Date;
-}
-
-// ── Dashboard Header ───────────────────────────────────────────────────────
-
-interface DashboardHeaderProps {
+interface DashboardGreetingProps {
   pastorName: string;
-  obsStatus: ConnectionStatus;
-  dockAvailable: boolean;
-  onConnectObs: () => void;
+  obsConnected: boolean;
   onWatchTutorials: () => void;
 }
 
-function DashboardHeader({
+function DashboardGreeting({
   pastorName,
-  obsStatus,
-  dockAvailable,
-  onConnectObs,
+  obsConnected,
   onWatchTutorials,
-}: DashboardHeaderProps) {
+}: DashboardGreetingProps) {
   const { t } = useTranslation();
   const greetingKey = useMemo(() => getGreetingKey(), []);
 
-  // Determine if it is within the first week of installation (7 days)
-  const isFirstWeek = useMemo(() => {
-    const installKey = "mce_installed_at";
-    try {
-      let installedAt = localStorage.getItem(installKey);
-      if (!installedAt) {
-        installedAt = Date.now().toString();
-        localStorage.setItem(installKey, installedAt);
-      }
-      const diffMs = Date.now() - Number(installedAt);
-      return diffMs < 7 * 24 * 60 * 60 * 1000;
-    } catch {
-      return true;
-    }
-  }, []);
+  return (
+    <header className="header-container">
+      <div className="header-left">
+        <div>
+          <h2 className="header-title">
+            {t(greetingKey)}, {pastorName || "User"}{" "}
+            <span className="header-emoji">&#x1F44B;</span>
+          </h2>
+          <p className="header-subtitle">
+            {obsConnected
+              ? t("dashboard.header.readyMessage", "Everything looks ready for your next service.")
+              : t("dashboard.header.connectMessage", "Connect to OBS Studio to start your service.")}
+          </p>
+        </div>
+      </div>
+      <div className="header-right">
+        <button
+          type="button"
+          className="header-tutorial-btn"
+          onClick={onWatchTutorials}
+          title={t("dashboard.header.watchTutorials", "Watch Tutorials")}
+        >
+          <span className="header-tutorial-btn__icon-box">
+            <Play className="header-tutorial-btn__icon" />
+          </span>
+          <span className="header-tutorial-btn__label">
+            {t("dashboard.header.watchTutorials", "Watch Tutorials")}
+          </span>
+        </button>
+      </div>
+    </header>
+  );
+}
 
+// ── 2. OBS + Dock Status Panel ─────────────────────────────────────────────
+
+interface DashboardObsDockStatusProps {
+  obsStatus: ConnectionStatus;
+  dockAvailable: boolean;
+  onConnectObs: () => void;
+}
+
+function DashboardObsDockStatus({
+  obsStatus,
+  dockAvailable,
+  onConnectObs,
+}: DashboardObsDockStatusProps) {
+  const { t } = useTranslation();
   const obsConnected = obsStatus === "connected";
   const [showHowToConnect, setShowHowToConnect] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -129,290 +128,207 @@ function DashboardHeader({
   }, []);
 
   return (
-    <>
-      <header className="header-container">
-        <div className="header-left">
-          <div>
-            <h2 className="header-title">
-              {t(greetingKey)},{" "}
-              {pastorName || "User"}{" "}
-              <span className="header-emoji">&#x1F44B;</span>
-            </h2>
-            <p className="header-subtitle">
-              {obsConnected
-                ? t("dashboard.header.readyMessage")
-                : t("dashboard.header.connectMessage")}
-            </p>
+    <div className="status-panel">
+      <div className="status-panel__top">
+        <div className="status-panel__items">
+          <div className="status-item">
+            <Monitor className="status-icon" />
+            <div>
+              <p className="status-title">
+                {t("dashboard.status.obs", "OBS")} {obsConnected ? t("dashboard.obs.connected", "Connected") : t("dashboard.obs.disconnected", "Disconnected")}{" "}
+                <span
+                  className={`status-dot ${obsConnected ? "status-dot--live" : ""}`}
+                  style={{
+                    backgroundColor: obsConnected
+                      ? "var(--success, #22c55e)"
+                      : "var(--error, #ef4444)",
+                  }}
+                />
+              </p>
+              <p className="status-desc">
+                {obsConnected
+                  ? t("dashboard.obs.studioOnline", "Studio is online and ready")
+                  : t("dashboard.obs.notConnected", "Not connected to OBS")}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="header-right">
-          <button
-            type="button"
-            className={`header-tutorial-btn ${isFirstWeek ? "header-tutorial-btn--pulsing" : ""}`}
-            onClick={onWatchTutorials}
-            title={t("dashboard.header.watchTutorials", "Watch Tutorials")}
-          >
-            <span className="header-tutorial-btn__icon-box">
-              <Play className="header-tutorial-btn__icon" />
-            </span>
-            <span className="header-tutorial-btn__label">
-              {t("dashboard.header.watchTutorials", "Watch Tutorials")}
-            </span>
-            {isFirstWeek && (
-              <span className="header-tutorial-btn__badge">
-                <span className="header-tutorial-btn__pulse-dot" />
-                NEW
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
 
-      <div className="status-panel">
-        <div className="status-item">
-          <Monitor className="status-icon" />
-          <div>
-            <p className="status-title">
-              {t("dashboard.status.obs")} {obsConnected ? t("dashboard.obs.connected") : t("dashboard.obs.disconnected")}{" "}
-              <span
-                className={`status-dot ${obsConnected ? "status-dot--live" : ""}`}
-                style={{
-                  backgroundColor: obsConnected
-                    ? "var(--success)"
-                    : "var(--error)",
-                }}
-              />
-            </p>
-            <p className="status-desc">
-              {obsConnected
-                ? t("dashboard.obs.studioOnline")
-                : t("dashboard.obs.notConnected")}
-            </p>
+          <div className="status-item">
+            <MonitorSmartphone className="status-icon" />
+            <div>
+              <p className="status-title">
+                {t("dashboard.status.dock", "Dock")} {dockAvailable ? t("dashboard.dock.detected", "Working") : t("dashboard.dock.notDetected", "Dock not detected")}{" "}
+                <span
+                  className="status-dot"
+                  style={{
+                    backgroundColor: dockAvailable
+                      ? "var(--success, #22c55e)"
+                      : "var(--text-muted, #64748b)",
+                  }}
+                />
+              </p>
+              <p className="status-desc">
+                {dockAvailable
+                  ? t("dashboard.dock.detected", "Working")
+                  : t("dashboard.dock.notDetected", "Dock not detected")}
+              </p>
+            </div>
           </div>
         </div>
-        <div className="status-item">
-          <MonitorSmartphone className="status-icon" />
-          <div>
-            <p className="status-title">
-              {t("dashboard.status.dock")} {dockAvailable ? t("dashboard.dock.detected") : t("dashboard.dock.notDetected")}{" "}
-              <span
-                className="status-dot"
-                style={{
-                  backgroundColor: dockAvailable
-                    ? "var(--success)"
-                    : "var(--text-muted)",
-                }}
-              />
-            </p>
-            <p className="status-desc">
-              {dockAvailable
-                ? t("dashboard.dock.detected")
-                : t("dashboard.dock.notDetected")}
-            </p>
-          </div>
-        </div>
+
         <button
-          className="btn-primary"
+          type="button"
+          className={`status-panel__obs-btn ${
+            obsConnected
+              ? "status-panel__obs-btn--connected"
+              : "status-panel__obs-btn--disconnected"
+          }`}
           onClick={() => {
             track("connect_obs_clicked");
             onConnectObs();
           }}
-          title={t("dashboard.btn.connect")}>
+          title={t("dashboard.btn.connect", "Connect")}
+        >
           {obsConnected ? (
             <>
-              <Check className="btn-icon" /> {t("dashboard.btn.obsConnected")}
+              <Check className="btn-icon" /> {t("dashboard.btn.obsConnected", "OBS Connected")}
             </>
           ) : (
             <>
-              <Monitor className="btn-icon" /> {t("dashboard.btn.connectToObs")}
+              <Monitor className="btn-icon" /> {t("dashboard.btn.connectToObs", "Connect to OBS")}
             </>
           )}
         </button>
-
-        <div className="status-panel__accordion-divider" />
-
-        <button
-          type="button"
-          className="status-panel__accordion-toggle"
-          onClick={() => setShowHowToConnect((prev) => !prev)}
-          aria-expanded={showHowToConnect}
-          title={t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}
-        >
-          <div className="status-panel__accordion-toggle-left">
-            {showHowToConnect ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <span>{t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}</span>
-          </div>
-          <span className="status-panel__accordion-hint">
-            {showHowToConnect ? t("common.hide", "Hide") : t("dashboard.urls.viewDockUrlAndSteps", "View Dock URL & Setup")}
-          </span>
-        </button>
-
-        {showHowToConnect && (
-          <div className="status-panel__accordion-body">
-            {/* Connection URLs: Bible Overlay Dock & Scripture Assistant */}
-            <div className="urls-row">
-              <div className="urls-group status-panel__url-block">
-                <div className="url-label-block">
-                  <span className="url-label-text text-indigo">
-                    {t("dashboard.urls.bibleOverlay", "Bible Overlay Dock")}
-                  </span>
-                  <p className="url-label-desc">
-                    {t("dashboard.urls.bibleOverlayDesc", "Scripture presentation and Bible controls inside OBS")}
-                  </p>
-                </div>
-                <div className="url-input-group">
-                  <input
-                    className="url-input input-indigo"
-                    readOnly
-                    value={overlayUrl}
-                  />
-                  <button
-                    className="url-btn btn-indigo"
-                    onClick={() => handleCopy("overlay", overlayUrl)}
-                    title={t("dashboard.urls.copy", "Copy URL")}
-                  >
-                    {copiedId === "overlay" ? (
-                      <Check className="url-btn-icon" />
-                    ) : (
-                      <Copy className="url-btn-icon" />
-                    )}
-                    {copiedId === "overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
-                  </button>
-                </div>
-              </div>
-
-              <div className="urls-group status-panel__url-block">
-                <div className="url-label-block">
-                  <span className="url-label-text text-green">
-                    {t("dashboard.urls.scriptureAssistant", "Scripture Assistant")}
-                  </span>
-                  <p className="url-label-desc">
-                    {t("dashboard.urls.scriptureAssistantDesc", "Automatically detects and displays Bible references as the preacher speaks")}
-                  </p>
-                </div>
-                <div className="url-input-group">
-                  <input
-                    className="url-input input-green"
-                    readOnly
-                    value={lmDockUrl}
-                  />
-                  <button
-                    className="url-btn btn-green"
-                    onClick={() => handleCopy("dock", lmDockUrl)}
-                    title={t("dashboard.urls.copy", "Copy URL")}
-                  >
-                    {copiedId === "dock" ? (
-                      <Check className="url-btn-icon" />
-                    ) : (
-                      <Copy className="url-btn-icon" />
-                    )}
-                    {copiedId === "dock" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Step-by-step instructions */}
-            <div className="urls-info-box">
-              <div className="urls-info-header">
-                <Info className="urls-info-icon" />
-                <span className="urls-info-title">
-                  {obsConnected
-                    ? t("dashboard.urls.obsConnectedInfo", "OBS is connected — this URL is ready to use")
-                    : t("dashboard.urls.obsNotConnectedInfo", "Connect to OBS first, then add as Custom Browser Dock")}
-                </span>
-              </div>
-              <ol className="urls-info-list">
-                <li>{t("dashboard.urls.step1", "Open OBS Studio.")}</li>
-                <li>{t("dashboard.urls.step2", "Go to Docks → Custom Browser Docks.")}</li>
-                <li>{t("dashboard.urls.step3", "Enter a name for the dock (e.g. \"MakeChurchEasy\").")}</li>
-                <li>{t("dashboard.urls.step4", "Paste the URL.")}</li>
-                <li>{t("dashboard.urls.step5", "Click Apply.")}</li>
-                <li>{t("dashboard.urls.step6", "The dock will appear inside OBS and can be moved, resized, or docked anywhere in the interface.")}</li>
-              </ol>
-              <div className="urls-info-footer">
-                <AlertCircle className="urls-info-footer-icon" />
-                <span>{t("dashboard.urls.warning", "These are OBS Dock URLs, not Browser Sources. Do not add them under Sources.")}</span>
-              </div>
-              {lanBase && (
-                <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(255, 255, 255, 0.04)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12, color: "#94a3b8" }}>
-                  <span>
-                    OBS on a <em>different laptop</em> on this Wi-Fi? Use: <strong style={{ color: "#e2e8f0" }}>{lanBase}/dock</strong>
-                  </span>
-                  <button
-                    type="button"
-                    style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, padding: "2px 8px", color: "#cbd5e1", fontSize: 11, cursor: "pointer" }}
-                    onClick={() => handleCopy("lan-overlay", `${lanBase}/dock`)}
-                    title={t("dashboard.urls.copy", "Copy URL")}
-                  >
-                    {copiedId === "lan-overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
-    </>
-  );
-}
 
-// ── Plan Upgrade Banner ────────────────────────────────────────────────────
+      <div className="status-panel__accordion-divider" />
 
-function PlanUpgradeBanner() {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const { getFormattedPlanPrice, loading } = useCountryPricing();
-  const storedPlan = String(user?.plan || "free").trim().toLowerCase();
-  const trialActive = storedPlan === "free" && isInTrial(user);
-  const plan = getUserPlan(user);
-  const isFree = plan === "free";
-  const promoText = t("common.upgradePlansStartToday", {
-    amount: "3,500",
-    defaultValue: UPGRADE_PROMO_FALLBACK,
-  });
-
-  if (!trialActive && !isFree) return null;
-
-  const handleUpgrade = () => {
-    openUrl("https://makechurcheazy.com/subscription/plans");
-  };
-
-  if (trialActive) {
-    const days = getTrialDaysRemaining(user);
-    return (
-      <div className="plan-upgrade-banner plan-upgrade-banner--trial">
-        <div className="plan-upgrade-banner-content">
-          <Crown size={16} className="plan-upgrade-banner-icon" />
-          <div className="plan-upgrade-banner-copy">
-            <span>Free trial — {days} day{days !== 1 ? "s" : ""} remaining</span>
-            <span className="plan-upgrade-banner-promo">{promoText}</span>
-          </div>
+      <button
+        type="button"
+        className="status-panel__accordion-toggle"
+        onClick={() => setShowHowToConnect((prev) => !prev)}
+        aria-expanded={showHowToConnect}
+        title={t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}
+      >
+        <div className="status-panel__accordion-toggle-left">
+          {showHowToConnect ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          <span>{t("dashboard.urls.howToAdd", "How to Add a Dock in OBS")}</span>
         </div>
-        <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
-          Upgrade <ArrowRight size={14} />
-        </button>
-      </div>
-    );
-  }
-
-  const monthly = loading ? "..." : getFormattedPlanPrice("basic", "monthly");
-
-  return (
-    <div className="plan-upgrade-banner">
-      <div className="plan-upgrade-banner-content">
-        <Crown size={16} className="plan-upgrade-banner-icon" />
-        <div className="plan-upgrade-banner-copy">
-          <span>Upgrade to Basic — from {monthly}/month</span>
-          <span className="plan-upgrade-banner-promo">{promoText}</span>
-        </div>
-      </div>
-      <button className="plan-upgrade-banner-btn" onClick={handleUpgrade}>
-        Subscribe <ArrowRight size={14} />
+        <span className="status-panel__accordion-hint">
+          {showHowToConnect ? t("common.hide", "Hide") : t("dashboard.urls.viewDockUrlAndSteps", "View Dock URL & Setup")}
+        </span>
       </button>
+
+      {showHowToConnect && (
+        <div className="status-panel__accordion-body">
+          {/* Connection URLs: Bible Overlay Dock & Scripture Assistant */}
+          <div className="urls-row">
+            <div className="urls-group status-panel__url-block">
+              <div className="url-label-block">
+                <span className="url-label-text text-indigo">
+                  {t("dashboard.urls.bibleOverlay", "Bible Overlay Dock")}
+                </span>
+                <p className="url-label-desc">
+                  {t("dashboard.urls.bibleOverlayDesc", "Scripture presentation and Bible controls inside OBS")}
+                </p>
+              </div>
+              <div className="url-input-group">
+                <input
+                  className="url-input input-indigo"
+                  readOnly
+                  value={overlayUrl}
+                />
+                <button
+                  className="url-btn btn-indigo"
+                  onClick={() => handleCopy("overlay", overlayUrl)}
+                  title={t("dashboard.urls.copy", "Copy URL")}
+                >
+                  {copiedId === "overlay" ? (
+                    <Check className="url-btn-icon" />
+                  ) : (
+                    <Copy className="url-btn-icon" />
+                  )}
+                  {copiedId === "overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                </button>
+              </div>
+            </div>
+
+            <div className="urls-group status-panel__url-block">
+              <div className="url-label-block">
+                <span className="url-label-text text-green">
+                  {t("dashboard.urls.scriptureAssistant", "Scripture Assistant")}
+                </span>
+                <p className="url-label-desc">
+                  {t("dashboard.urls.scriptureAssistantDesc", "Automatically detects and displays Bible references as the preacher speaks")}
+                </p>
+              </div>
+              <div className="url-input-group">
+                <input
+                  className="url-input input-green"
+                  readOnly
+                  value={lmDockUrl}
+                />
+                <button
+                  className="url-btn btn-green"
+                  onClick={() => handleCopy("dock", lmDockUrl)}
+                  title={t("dashboard.urls.copy", "Copy URL")}
+                >
+                  {copiedId === "dock" ? (
+                    <Check className="url-btn-icon" />
+                  ) : (
+                    <Copy className="url-btn-icon" />
+                  )}
+                  {copiedId === "dock" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step-by-step instructions */}
+          <div className="urls-info-box">
+            <div className="urls-info-header">
+              <Info className="urls-info-icon" />
+              <span className="urls-info-title">
+                {obsConnected
+                  ? t("dashboard.urls.obsConnectedInfo", "OBS is connected — this URL is ready to use")
+                  : t("dashboard.urls.obsNotConnectedInfo", "Connect to OBS first, then add as Custom Browser Dock")}
+              </span>
+            </div>
+            <ol className="urls-info-list">
+              <li>{t("dashboard.urls.step1", "Open OBS Studio.")}</li>
+              <li>{t("dashboard.urls.step2", "Go to Docks → Custom Browser Docks.")}</li>
+              <li>{t("dashboard.urls.step3", "Enter a name for the dock (e.g. \"MakeChurchEasy\").")}</li>
+              <li>{t("dashboard.urls.step4", "Paste the URL.")}</li>
+              <li>{t("dashboard.urls.step5", "Click Apply.")}</li>
+              <li>{t("dashboard.urls.step6", "The dock will appear inside OBS and can be moved, resized, or docked anywhere in the interface.")}</li>
+            </ol>
+            <div className="urls-info-footer">
+              <AlertCircle className="urls-info-footer-icon" />
+              <span>{t("dashboard.urls.warning", "These are OBS Dock URLs, not Browser Sources. Do not add them under Sources.")}</span>
+            </div>
+            {lanBase && (
+              <div style={{ marginTop: 14, padding: "10px 14px", background: "rgba(255, 255, 255, 0.05)", borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, fontSize: 14, color: "var(--text-secondary, #d4d4d8)" }}>
+                <span>
+                  OBS on a <em>different laptop</em> on this Wi-Fi? Use: <strong style={{ color: "#ffffff" }}>{lanBase}/dock</strong>
+                </span>
+                <button
+                  type="button"
+                  style={{ background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: 6, padding: "4px 12px", color: "#ffffff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => handleCopy("lan-overlay", `${lanBase}/dock`)}
+                  title={t("dashboard.urls.copy", "Copy URL")}
+                >
+                  {copiedId === "lan-overlay" ? t("dashboard.urls.copied", "Copied") : t("dashboard.urls.copy", "Copy URL")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
 
 // ── Monthly Usage Widget ────────────────────────────────────────────────────
 
@@ -481,7 +397,7 @@ function FeatureGrid({
             </span>
           ) : voiceBibleConnected ? (
             <span className="dash-card__badge dash-card__badge--purple">
-              {t("dashboard.vb.ready", "AI READY")}
+              {t("dashboard.vb.ready", "Ready")}
             </span>
           ) : (
             <span className="dash-card__badge dash-card__badge--muted">
@@ -648,81 +564,13 @@ function FeatureGrid({
 
 
 
-// ── Activity & Status ──────────────────────────────────────────────────────
-
-interface ActivityAndStatusProps {
-  activities: ActivityEntry[];
-  onNavigate: (path: string) => void;
-}
-
-function ActivityAndStatus({
-  activities,
-  onNavigate,
-}: ActivityAndStatusProps) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="activity-status-grid activity-status-grid--single">
-      {/* Recent Activity */}
-      <div className="panel" style={{ gridColumn: "1 / -1" }}>
-        <div className="panel-header">
-          <h3 className="panel-title">
-            <History className="panel-icon" /> {t("dashboard.activity.recentActivity")}
-          </h3>
-          <button
-            className="btn-view-all"
-            onClick={() => onNavigate("/settings")}
-            title={t("dashboard.activity.viewAll")}>
-            {t("dashboard.activity.viewAll")}
-          </button>
-        </div>
-
-        <div className="activity-list">
-          {activities.length === 0 && (
-            <div className="activity-item-last">
-              <div className="activity-content">
-                <Activity className="activity-icon icon-variant" />
-                <p className="activity-text" style={{ color: "var(--text-muted)" }}>
-                  {t("dashboard.activity.noActivity")}
-                </p>
-              </div>
-            </div>
-          )}
-          {activities.slice(0, 5).map((entry, i) => {
-            const IconComponent = entry.icon;
-            const isLast = i === activities.length - 1 || i === 4;
-            return (
-              <div
-                key={entry.id}
-                className={isLast ? "activity-item-last" : "activity-item"}
-              >
-                <div className="activity-content">
-                  <IconComponent
-                    className={`activity-icon ${entry.iconColor}`}
-                  />
-                  <p className="activity-text">{entry.text}</p>
-                </div>
-                <span className="activity-time">
-                  {formatRelativeTime(entry.time)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Quick Actions & Footer ─────────────────────────────────────────────────
-
 // ── Main Dashboard Component ───────────────────────────────────────────────
 
 export default function ProductionHomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { t } = useTranslation();
   const [showMovePluginPrompt, setShowMovePluginPrompt] = useState(false);
+  const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
   const moveTransitionEnsureAttempt = useRef(false);
 
   // ── Settings ──
@@ -759,30 +607,6 @@ export default function ProductionHomePage() {
   // ── Media ──
   const [mediaCount, setMediaCount] = useState(0);
   const [recentMediaCount, setRecentMediaCount] = useState(0);
-
-  // ── Activity ──
-  const [activities, setActivities] = useState<ActivityEntry[]>([]);
-
-  // ── Add activity entry ──
-  const addActivity = useCallback(
-    (
-      icon: typeof Mic,
-      iconColor: string,
-      text: string,
-    ) => {
-      setActivities((prev) => {
-        const entry: ActivityEntry = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          icon,
-          iconColor,
-          text,
-          time: new Date(),
-        };
-        return [entry, ...prev].slice(0, 20);
-      });
-    },
-    [],
-  );
 
   // ── Load initial data ──
   useEffect(() => {
@@ -846,38 +670,8 @@ export default function ProductionHomePage() {
       })
       .catch(() => { });
 
-    // Seed initial activity from loaded data
-    getInstalledTranslations().then((list) => {
-      if (list.length > 0) {
-        addActivity(
-          BookOpen,
-          "icon-blue",
-          t("dashboard.activity.translationsInstalled", { count: list.length }),
-        );
-      }
-    });
-    getAllSongs().then((songs) => {
-      if (songs.length > 0) {
-        addActivity(
-          Music,
-          "icon-green",
-          t("dashboard.activity.songsInLibrary", { count: songs.length }),
-        );
-      }
-    });
-    getAllMedia().then((items) => {
-      if (items.length > 0) {
-        addActivity(
-          ImageIcon,
-          "icon-orange",
-          t("dashboard.activity.mediaLoaded", { count: items.length }),
-        );
-      }
-    });
-
     return () => clearInterval(dockInterval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, t]);
+  }, [user]);
 
   // Older installations and users who skipped onboarding still get the
   // bundled Move plugin offer from the dashboard.
@@ -934,26 +728,6 @@ export default function ProductionHomePage() {
     return unsub;
   }, []);
 
-  // ── Track OBS connection events ──
-  useEffect(() => {
-    if (obsStatus === "connected") {
-      addActivity(Monitor, "icon-primary", t("dashboard.activity.obsConnected"));
-    } else if (obsStatus === "error") {
-      addActivity(Monitor, "icon-variant", t("dashboard.activity.obsError"));
-    }
-  }, [obsStatus, addActivity, t]);
-
-  // ── Track Speech to Scripture events ──
-  const prevVbStatus = useMemo(() => voiceBible.status, [voiceBible.status]);
-  useEffect(() => {
-    if (voiceBible.status === "listening" && prevVbStatus !== "listening") {
-      addActivity(Mic, "icon", t("dashboard.activity.vbStarted"));
-    } else if (voiceBible.status === "idle" && prevVbStatus === "listening") {
-      addActivity(Mic, "icon", t("dashboard.activity.vbStopped"));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceBible.status]);
-
   // ── Actions ──
   const handleNavigate = useCallback(
     (path: string) => {
@@ -963,14 +737,9 @@ export default function ProductionHomePage() {
     [navigate],
   );
 
-
-
   const handleConnectObs = useCallback(async () => {
     try {
-      // If obsService.connect does not exist, replace with appropriate connect/reconnect method.
       await obsService.connect();
-
-      // Give OBS status a moment to update.
       setTimeout(() => {
         if (obsService.status !== "connected") {
           navigate("/settings?tab=obs");
@@ -985,15 +754,23 @@ export default function ProductionHomePage() {
     <div className="app-page__inner">
       <OnboardingResumeBanner />
 
-      {/* <AppIdCard /> */}
-      <DashboardHeader
+      <DashboardGreeting
         pastorName={pastorName}
+        obsConnected={obsStatus === "connected"}
+        onWatchTutorials={() => navigate("/tutorials")}
+      />
+
+      <DashboardObsDockStatus
         obsStatus={obsStatus}
         dockAvailable={dockAvailable}
         onConnectObs={handleConnectObs}
-        onWatchTutorials={() => navigate("/tutorials")}
       />
-      <PlanUpgradeBanner />
+
+      <MultiPlatformStreamingBanner
+        onOpenBroadcast={() => navigate("/broadcast")}
+        onHowItWorks={() => setShowHowItWorksModal(true)}
+      />
+
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}
         voiceBibleConnected={voiceBible.status !== "error"}
@@ -1005,12 +782,13 @@ export default function ProductionHomePage() {
         recentMediaCount={recentMediaCount}
         onNavigate={handleNavigate}
       />
-      {/* <RemotePresentationStatus /> */}
-      <ActivityAndStatus
-        activities={activities}
-        onNavigate={handleNavigate}
+
+      <BroadcastHowItWorksModal
+        open={showHowItWorksModal}
+        onClose={() => setShowHowItWorksModal(false)}
+        onOpenUpgrade={() => navigate("/credits")}
       />
-      {/* <WhatsNewSection /> */}
+
       {showMovePluginPrompt && (
         <MovePluginInstallModal onClose={() => setShowMovePluginPrompt(false)} />
       )}

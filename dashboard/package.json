@@ -14,6 +14,7 @@
     "check:locales": "node ../scripts/check-locales.cjs"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.546.0",

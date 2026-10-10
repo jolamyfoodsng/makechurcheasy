@@ -221,6 +221,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   "obs-church-studio.theme-preference",
   "ocs-fav-obs-themes",
   "ocs-fav-bible-themes",
+  "mce-saved-broadcast-graphics",
 
   // Production settings
   "ocs-production-mode-settings",

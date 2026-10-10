@@ -52,7 +52,7 @@ export default function ResourcesPage() {
           </div>
 
           {/* Direct Tab Switcher without emojis */}
-          <div className="lib-tab-switcher" style={{ marginTop: "12px", borderBottom: "1px solid var(--border-subtle, rgba(255,255,255,0.1))" }}>
+          <div className="lib-tab-switcher" style={{ marginTop: "14px", borderBottom: "1px solid var(--border, rgba(255, 255, 255, 0.1))", display: "flex", gap: "8px" }}>
             <button
               type="button"
               className={`lib-tab-btn${tab === "bible" ? " lib-tab-btn--active" : ""}`}
@@ -61,13 +61,14 @@ export default function ResourcesPage() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
-                fontSize: "0.85rem",
-                fontWeight: tab === "bible" ? 600 : 500,
-                color: tab === "bible" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
-                borderBottom: tab === "bible" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                padding: "10px 18px",
+                fontSize: "0.9375rem",
+                fontWeight: tab === "bible" ? 700 : 500,
+                color: tab === "bible" ? "#ffffff" : "var(--text-muted, #a1a1aa)",
+                borderBottom: tab === "bible" ? "2px solid var(--primary, #4F46E5)" : "2px solid transparent",
                 background: "transparent",
                 cursor: "pointer",
+                transition: "color 0.15s ease",
               }}
             >
               Bible Library & Downloads
@@ -80,13 +81,14 @@ export default function ResourcesPage() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
-                fontSize: "0.85rem",
-                fontWeight: tab === "worship" ? 600 : 500,
-                color: tab === "worship" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
-                borderBottom: tab === "worship" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                padding: "10px 18px",
+                fontSize: "0.9375rem",
+                fontWeight: tab === "worship" ? 700 : 500,
+                color: tab === "worship" ? "#ffffff" : "var(--text-muted, #a1a1aa)",
+                borderBottom: tab === "worship" ? "2px solid var(--primary, #4F46E5)" : "2px solid transparent",
                 background: "transparent",
                 cursor: "pointer",
+                transition: "color 0.15s ease",
               }}
             >
               Worship Songs
@@ -99,13 +101,14 @@ export default function ResourcesPage() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
-                fontSize: "0.85rem",
-                fontWeight: tab === "media" ? 600 : 500,
-                color: tab === "media" ? "var(--accent, #6366f1)" : "var(--text-muted, #94a3b8)",
-                borderBottom: tab === "media" ? "2px solid var(--accent, #6366f1)" : "2px solid transparent",
+                padding: "10px 18px",
+                fontSize: "0.9375rem",
+                fontWeight: tab === "media" ? 700 : 500,
+                color: tab === "media" ? "#ffffff" : "var(--text-muted, #a1a1aa)",
+                borderBottom: tab === "media" ? "2px solid var(--primary, #4F46E5)" : "2px solid transparent",
                 background: "transparent",
                 cursor: "pointer",
+                transition: "color 0.15s ease",
               }}
             >
               Media Library

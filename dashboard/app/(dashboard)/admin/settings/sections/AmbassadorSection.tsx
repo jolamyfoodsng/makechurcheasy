@@ -52,14 +52,6 @@ export function AmbassadorSection({
         </div>
 
         <div className="divide-y divide-slate-100">
-          <div className="px-6 py-4">
-            <Toggle
-              label={t("enableProgram")}
-              description={t("enableProgramDescription")}
-              checked={data.enabled}
-              onChange={(v) => update({ enabled: v })}
-            />
-          </div>
 
           <div className="px-6 py-4">
             <div className="grid grid-cols-2 gap-4">

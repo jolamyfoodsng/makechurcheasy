@@ -17,6 +17,7 @@ export interface MongoUser {
   appId: string;
   emailVerified: boolean;
   provider?: string;
+  googleAccount?: { email?: string; connectedAt?: string } | null;
   password?: boolean;
   language: string;
   onboardingCompleted: boolean;
@@ -43,6 +44,11 @@ export interface MongoUser {
     restartedAt?: string | null;
     grantedBy?: string;
     lastModifiedBy?: string;
+  } | null;
+  /** Why this account has no free trial (null when not applicable). */
+  trialEligibility?: {
+    status: "used_on_device" | "desktop_required";
+    message: string;
   } | null;
   activationMilestones?: {
     appDownloaded?: boolean;

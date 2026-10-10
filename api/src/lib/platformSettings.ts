@@ -22,6 +22,62 @@ export function invalidatePlatformSettingsCache() {
   _cache = null;
 }
 
+export type PaymentProviderKey = "flutterwave" | "mtnMomo" | "nowpayments";
+export type FeatureSwitchKey =
+  | "speechToScripture"
+  | "liveTranslation"
+  | "mobileRemote"
+  | "multistream"
+  | "presentationLink";
+
+export interface AdminControls {
+  /** Turn each checkout provider on/off (on top of system.allowPayments). */
+  paymentProviders: Record<PaymentProviderKey, boolean>;
+  /** Emergency off switches. false = feature turned off for everyone. */
+  features: Record<FeatureSwitchKey, boolean>;
+  speech: {
+    /** AssemblyAI realtime model used for Speech-to-Scripture. */
+    model: "universal-streaming-english" | "universal-streaming-multilingual";
+    /**
+     * Fair-use cap: max Speech-to-Scripture minutes per day for trial and paid users.
+     * 0 = no cap. Free users use transcriptionPricing.freeDailyMinutes (Admin → Credits).
+     */
+    dailyMinutesCap: number;
+  };
+  signup: {
+    /** Max new accounts from one IP address in 24 hours. 0 = no limit. */
+    maxSignupsPerIpPerDay: number;
+    /** Max new accounts from one device in 24 hours (needs device id). 0 = no limit. */
+    maxSignupsPerDevicePerDay: number;
+    blockDisposableEmails: boolean;
+    /** Extra blocked email domains, e.g. "tempmail.dev". */
+    blockedDomains: string[];
+  };
+  support: {
+    whatsappUrl: string;
+    youtubeUrl: string;
+    supportEmail: string;
+  };
+}
+
+export const DEFAULT_ADMIN_CONTROLS: AdminControls = {
+  paymentProviders: { flutterwave: true, mtnMomo: true, nowpayments: true },
+  features: {
+    speechToScripture: true,
+    liveTranslation: true,
+    mobileRemote: true,
+    multistream: true,
+    presentationLink: true,
+  },
+  speech: { model: "universal-streaming-english", dailyMinutesCap: 0 },
+  signup: { maxSignupsPerIpPerDay: 5, maxSignupsPerDevicePerDay: 2, blockDisposableEmails: true, blockedDomains: [] },
+  support: {
+    whatsappUrl: "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t",
+    youtubeUrl: "https://www.youtube.com/playlist?list=PLRua6gJfgC0o",
+    supportEmail: "support@makechurcheazy.com",
+  },
+};
+
 export interface PlatformSettings {
   _id?: string;
   appUpdates: {
@@ -38,6 +94,14 @@ export interface PlatformSettings {
     linuxDownloadUrl: string;
     releaseNotesUrl: string;
     policyPublishedAt: string;
+    /**
+     * When the current forced-update policy started. Server-managed: reset only
+     * when forceUpdatesEnabled, minimumSupportedVersion or gracePeriodHours
+     * change, never by editing messages or links. The grace countdown and the
+     * server-side gate both anchor to this so every client agrees on the
+     * deadline.
+     */
+    enforcementStartedAt: string | null;
     emergencyLockEnabledAt: string | null;
     emergencyLockEffectiveAt: string | null;
   };
@@ -161,6 +225,8 @@ export interface PlatformSettings {
   };
   security: {
     maintenanceMode: boolean;
+    /** Shown to users while maintenance mode is on (login screen + lock screen). */
+    maintenanceMessage: string;
     internetVerificationEnabled: boolean;
     maxOfflineDays: number;
     verificationIntervalHours: number;
@@ -175,6 +241,8 @@ export interface PlatformSettings {
     newTranslationEngine: boolean;
     newMobileApp: boolean;
   };
+  /** Admin → Settings → Controls (added 2026-10-10). */
+  controls: AdminControls;
   themes: {
     defaultBibleTheme: string;
     defaultWorshipTheme: string;
@@ -232,6 +300,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
     linuxDownloadUrl: "",
     releaseNotesUrl: "",
     policyPublishedAt: new Date(0).toISOString(),
+    enforcementStartedAt: null,
     emergencyLockEnabledAt: null,
     emergencyLockEffectiveAt: null,
   },
@@ -352,6 +421,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
   },
   security: {
     maintenanceMode: false,
+    maintenanceMessage: "MakeChurchEasy is under scheduled maintenance. We'll be back shortly.",
     internetVerificationEnabled: false,
     maxOfflineDays: 28,
     verificationIntervalHours: 6,
@@ -366,6 +436,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
     newTranslationEngine: false,
     newMobileApp: false,
   },
+  controls: DEFAULT_ADMIN_CONTROLS,
   themes: {
     defaultBibleTheme: "",
     defaultWorshipTheme: "",
@@ -554,6 +625,43 @@ export async function updatePlatformSection(
       nextDelay !== Number(currentAppUpdates?.emergencyLockDelay ?? 0);
 
     setFields["appUpdates.policyPublishedAt"] = nowIso;
+
+    // Server-managed: never trust a value echoed back by the admin form.
+    delete setFields["appUpdates.enforcementStartedAt"];
+    // Versions: trim stray spaces ("  3.17.0") and write "3.4" as "3.4.0".
+    for (const key of ["latestVersion", "minimumSupportedVersion"] as const) {
+      if (key in data) {
+        const raw = String(data[key] ?? "").trim().replace(/^v/i, "");
+        const parts = /^\d+(\.\d+){0,2}$/.test(raw) ? raw.split(".") : null;
+        if (parts) while (parts.length < 3) parts.push("0");
+        setFields[`appUpdates.${key}`] = parts ? parts.join(".") : raw;
+      }
+    }
+    if ("gracePeriodHours" in data) {
+      const grace = Number(data.gracePeriodHours);
+      setFields["appUpdates.gracePeriodHours"] = Number.isFinite(grace)
+        ? Math.min(2160, Math.max(0, Math.round(grace)))
+        : 0;
+    }
+
+    // Forced-update countdown anchor. Only the fields that change what users
+    // must do restart the clock; editing a message or download link must not
+    // hand everyone a fresh grace period.
+    const nextForceUpdates = "forceUpdatesEnabled" in data
+      ? Boolean(data.forceUpdatesEnabled)
+      : Boolean(currentAppUpdates?.forceUpdatesEnabled);
+    const enforcementChanged = (
+      ["forceUpdatesEnabled", "minimumSupportedVersion", "gracePeriodHours"] as const
+    ).some(
+      (key) =>
+        key in data &&
+        String(setFields[`appUpdates.${key}`] ?? "") !== String(currentAppUpdates?.[key] ?? ""),
+    );
+    if (!nextForceUpdates) {
+      setFields["appUpdates.enforcementStartedAt"] = null;
+    } else if (enforcementChanged || !currentAppUpdates?.enforcementStartedAt) {
+      setFields["appUpdates.enforcementStartedAt"] = nowIso;
+    }
 
     if (!nextEmergencyLock) {
       setFields["appUpdates.emergencyLockEnabledAt"] = null;

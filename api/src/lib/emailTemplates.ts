@@ -294,6 +294,11 @@ function divider(): string {
   return `<hr style="border:none;border-top:1px solid #e2e8f0;margin:26px 0;">`;
 }
 
+/** Footer line for marketing email: one click to stop offers and promotional email. */
+function unsubscribeFooter(url: string): string {
+  return `<p style="margin:26px 0 0;font-size:12px;color:#94a3b8;line-height:1.6;">Don't want offers like this? <a href="${url}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>. Account, security and billing emails will still reach you.</p>`;
+}
+
 // ─── Auth Email Templates ───────────────────────────────────────────────────
 
 export function loginCodeEmail(code: string): SendEmailOptions {
@@ -368,13 +373,14 @@ export function welcomeEmail(params: {
       "Welcome",
       `
         ${heading("Welcome to MakeChurchEasy!")}
-        ${paragraph(`Hi ${userName}, your email is verified and your account is ready. MakeChurchEasy helps your church deliver powerful presentations, translate services in real time, and transcribe sermons — all from one app.`)}
+        ${paragraph(`Hi ${userName}, your email is verified and your account is ready. MakeChurchEasy helps your church deliver powerful presentations, go live to several platforms at once, translate services in real time, and transcribe sermons — all from one app.`)}
         ${card([
         ["Trial", `${trialDays} days of full access`],
         ["Expires", endDate],
       ])}
         ${paragraph("<strong style=\"color:#0f172a;\">Here's what you can do:</strong>")}
-        ${paragraph("• <strong>Bible Presentations</strong> — Display scriptures beautifully on screen<br>• <strong>Live Translation</strong> — Translate your service into 50+ languages<br>• <strong>Speech-to-Scripture</strong> — Transcribe sermons and auto-display verses<br>• <strong>AI Summaries</strong> — Auto-generate sermon notes and bulletins")}
+        ${paragraph("• <strong>Multi-stream</strong> — Go live to YouTube, Facebook and more at the same time, straight from the app. Your trial includes 20 hours of multi-streaming a month<br>• <strong>Lower Thirds &amp; Tickers</strong> — Show names, titles, scriptures and announcements over your live stream<br>• <strong>Bible Presentations</strong> — Display scriptures beautifully on screen<br>• <strong>Live Translation</strong> — Translate your service into 50+ languages<br>• <strong>Speech-to-Scripture</strong> — Transcribe sermons and auto-display verses<br>• <strong>AI Summaries</strong> — Auto-generate sermon notes and bulletins")}
+        ${paragraph("<strong style=\"color:#0f172a;\">Try multi-stream this Sunday:</strong> add your YouTube and Facebook stream keys under your speaker profile, switch on two or more destinations, and press Go Live. MakeChurchEasy sends your service to every platform for you — no extra software needed.", { mt: 14 })}
         ${button(APP_URL + "/dashboard", "Go to Dashboard")}
         ${paragraph(`<strong style="color:#0f172a;\">Download the desktop app:</strong>`)}
         ${paragraph(`<a href="${APP_URL}/downloads" style="color:{{brand.primaryColor}};font-weight:600;">Download MakeChurchEasy →</a>`)}
@@ -1092,27 +1098,24 @@ export function reEngagementEmail(
   params: {
     userName: string;
     userEmail: string;
+    /** Marketing emails carry a one-click unsubscribe link. */
+    unsubscribeUrl?: string;
   }
 ): SendEmailOptions {
-  const { userName, userEmail } = params;
+  const { userName, userEmail, unsubscribeUrl } = params;
   return {
     to: userEmail,
-    subject: "We miss you at MakeChurchEasy — Come back and save 20%",
+    subject: "We miss you at MakeChurchEasy",
     html: wrap(
       "We miss you",
       `
         ${heading("We miss you!")}
-        ${paragraph(`Hi ${userName}, it's been a week since your Growth Trial ended. Your church community is waiting — and we'd love to have you back.`)}
+        ${paragraph(`Hi ${escapeEmailText(userName)}, it's been a week since your free trial ended. Your church community is waiting, and we'd love to have you back.`)}
         ${paragraph("While you were away, here's what churches using MakeChurchEasy have been doing:")}
         ${paragraph("• <strong>Delivered 1,000+ presentations</strong> across congregations<br>• <strong>Translated services</strong> for multilingual communities<br>• <strong>Transcribed sermons</strong> with Speech-to-Scripture<br>• <strong>Generated sermon notes</strong> with AI Summaries")}
-        ${card([
-        ["Special offer", "20% off your first 3 months"],
-        ["Use code", "COMEBACK20"],
-        ["Expires", "7 days from today"],
-      ])}
-        ${button(`${APP_URL}/dashboard`, "Upgrade Now — Save 20%")}
-        ${paragraph("This offer is only available for a limited time. Don't miss out on making your church services more impactful.", { color: "#94a3b8" })}
+        ${button(`${APP_URL}/subscription/plans`, "See plans")}
         ${paragraph(`Questions? Reply to this email or reach us at <a href="mailto:${SUPPORT_EMAIL}" style="color:{{brand.primaryColor}};">${SUPPORT_EMAIL}</a>.`, { color: "#94a3b8", mt: 8 })}
+        ${unsubscribeUrl ? unsubscribeFooter(unsubscribeUrl) : ""}
   `
     ),
   };
@@ -1373,6 +1376,8 @@ export interface DiscountOfferEmailParams {
   billingCycle?: string;
   expiresAt?: string;
   customNote?: string;
+  /** Marketing emails carry a one-click unsubscribe link. */
+  unsubscribeUrl?: string;
 }
 
 export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailOptions {
@@ -1390,6 +1395,7 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
     billingCycle = "monthly",
     expiresAt,
     customNote,
+    unsubscribeUrl,
   } = params;
 
   const recipientLabel = churchName || name || "Church Leader";
@@ -1442,6 +1448,7 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
         Clicking the button will automatically apply your discount at checkout. You can also enter the promo code <strong>${promoCode || ""}</strong> on the plans page.
       </p>
       ${paragraph("If you have any questions or need setup assistance for your service, just reply directly to this email.", { color: "#94a3b8", mt: 24 })}
+      ${unsubscribeUrl ? unsubscribeFooter(unsubscribeUrl) : ""}
     `
   );
 
@@ -1449,5 +1456,92 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
     to: toEmail,
     subject,
     html,
+  };
+}
+
+
+// ─── Win-back offer ladder emails ───────────────────────────────────────────
+
+export interface OfferJourneyEmailParams {
+  toEmail: string;
+  name?: string;
+  subject: string;
+  title: string;
+  message: string;
+  /** Plain-language summary, e.g. "50% off for 1 month". */
+  offerSummary: string;
+  primary: { label: string; url: string };
+  secondary?: { label: string; url: string } | null;
+  promoCode?: string | null;
+  /** When the offer closes (ISO). */
+  closesAt: string;
+  unsubscribeUrl: string;
+}
+
+function formatEmailDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Africa/Lagos" });
+}
+
+export function offerJourneyEmail(params: OfferJourneyEmailParams): SendEmailOptions {
+  const { toEmail, name, subject, title, message, offerSummary, primary, secondary, promoCode, closesAt, unsubscribeUrl } = params;
+  const greeting = name ? `Hi ${escapeEmailText(name)},` : "Hi there,";
+  const until = formatEmailDate(closesAt);
+  const rows: [string, string][] = [["Your offer", escapeEmailText(offerSummary)]];
+  if (until) rows.push(["Open until", until]);
+  const promoBox = promoCode
+    ? `<p style="margin:0 0 18px;font-size:13px;color:#64748b;">Your code, applied automatically when you use the button: <strong style="font-family:monospace;letter-spacing:0.06em;color:#0f172a;">${escapeEmailText(promoCode)}</strong></p>`
+    : "";
+  return {
+    to: toEmail,
+    subject,
+    html: wrap(
+      "Your offer",
+      `
+        ${heading(escapeEmailText(title))}
+        ${paragraph(greeting)}
+        ${paragraph(escapeEmailText(message), { mt: 10 })}
+        ${card(rows)}
+        ${promoBox}
+        ${button(primary.url, escapeEmailText(primary.label))}
+        ${secondary ? `<p style="margin:-10px 0 20px;font-size:14px;"><a href="${secondary.url}" style="color:{{brand.primaryColor}};font-weight:700;">${escapeEmailText(secondary.label)}</a></p>` : ""}
+        ${paragraph(`Questions? Reply to this email or reach us at <a href="mailto:${SUPPORT_EMAIL}" style="color:{{brand.primaryColor}};">${SUPPORT_EMAIL}</a>.`, { color: "#94a3b8", mt: 8 })}
+        ${unsubscribeFooter(unsubscribeUrl)}
+      `
+    ),
+  };
+}
+
+export interface OfferFreePeriodEndingEmailParams {
+  toEmail: string;
+  name?: string;
+  freeUntil: string;
+  percentOff: number;
+  discountMonths: number;
+  ctaUrl: string;
+  promoCode: string;
+  unsubscribeUrl: string;
+}
+
+export function offerFreePeriodEndingEmail(params: OfferFreePeriodEndingEmailParams): SendEmailOptions {
+  const { toEmail, name, freeUntil, percentOff, discountMonths, ctaUrl, promoCode, unsubscribeUrl } = params;
+  const greeting = name ? `Hi ${escapeEmailText(name)},` : "Hi there,";
+  const months = `${discountMonths} month${discountMonths === 1 ? "" : "s"}`;
+  return {
+    to: toEmail,
+    subject: `Your free Basic period ends ${formatEmailDate(freeUntil) || "soon"}`,
+    html: wrap(
+      "Your free period is ending",
+      `
+        ${heading("Keep Basic at half the price")}
+        ${paragraph(greeting)}
+        ${paragraph(`Your free Basic period ends on ${formatEmailDate(freeUntil) || "soon"}. If your team found it useful, you can keep going with ${percentOff}% off for your first ${months}.`, { mt: 10 })}
+        ${card([["Your offer", `${percentOff}% off for ${months}`], ["Code", escapeEmailText(promoCode)]])}
+        ${button(ctaUrl, `Keep Basic at ${percentOff}% off`)}
+        ${paragraph("If you don't subscribe, your account simply returns to the Free plan. Nothing is charged.", { color: "#94a3b8", mt: 8 })}
+        ${unsubscribeFooter(unsubscribeUrl)}
+      `
+    ),
   };
 }

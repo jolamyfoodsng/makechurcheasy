@@ -25,6 +25,10 @@ import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockBottomSearchPanel from "../components/DockBottomSearchPanel";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
+import {
+  DOCK_THEME_SYNC_EVENT,
+  type DockThemeSyncPayload,
+} from "../dockThemeSync";
 import DockTranslationControls, {
   type DockTranslationValue,
 } from "../components/DockTranslationControls";
@@ -1253,6 +1257,7 @@ export default function DockNotesTab({
       quickSettingsOverride?: DockFullscreenQuickThemeSettings,
       fitOptions?: DockOverlayFitOptions,
     ) => {
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("notes");
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
       const visibilityEpoch = visibilityEpochRef.current;
@@ -1458,9 +1463,9 @@ export default function DockNotesTab({
     const option = sizeOptions.find((item) => item.id === id);
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const minFontSize = isFullscreen ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+    const minFontSize = isFullscreen ? 16 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
     const minRefFontSize = overlayMode === "fullscreen"
-      ? 14
+      ? 10
       : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
     const maxRefFontSize = overlayMode === "fullscreen"
       ? 150
@@ -1476,11 +1481,11 @@ export default function DockNotesTab({
       lineHeight: preset.lineHeight,
       refSpacing: preset.refSpacing,
       lowerThirdSize: option.preset,
-      lowerThirdWidthPreset: option.width,
+      lowerThirdWidthPreset: lowerThirdQuickSettings?.lowerThirdWidthPreset === "full" ? "full" : option.width,
       lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
       lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
     };
-  }, [overlayMode]);
+  }, [lowerThirdQuickSettings?.lowerThirdWidthPreset, overlayMode]);
 
   const handleNotesQuickActionsPositionChange = useCallback((top: number, left: number | null) => {
     setQuickActionsTop(top);
@@ -1592,6 +1597,78 @@ export default function DockNotesTab({
     prefs.quickUpdateImmediately = quickUpdateImmediately;
     saveDockNotesPreferences(prefs);
   }, [fullscreenLinesPerSlide, fullscreenQuickSettings, lowerThirdLinesPerSlide, lowerThirdQuickSettings, notesAutoSplit, notesLinesPerSlide, quickActionsLeft, quickActionsTop, quickUpdateImmediately]);
+
+  useEffect(() => {
+    const handleThemeSync = (event: Event) => {
+      const customEvent = event as CustomEvent<DockThemeSyncPayload>;
+      const payload = customEvent.detail;
+      if (!payload || !payload.targetTabs.includes("notes")) return;
+
+      const { targetModes, quickSettings, theme, themeId, sourceTab, sourceMode } = payload;
+      const findTheme = (mode: "fullscreen" | "lower-third", id: string | null | undefined): BibleTheme | null => {
+        if (!id) return null;
+        if (theme && theme.id === id) return theme;
+        return getFallbackDockNotesTheme(mode, id);
+      };
+
+      if (targetModes.includes("fullscreen")) {
+        const fsTheme = theme ?? findTheme("fullscreen", themeId);
+        const fsSettings = normalizeExplicitOutputFontSettings(quickSettings, "fullscreen");
+        if (fsTheme) {
+          setSelectedFSTheme(fsTheme);
+          selectedFSThemeRef.current = fsTheme;
+        }
+        setFullscreenQuickSettings(fsSettings);
+        liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+          fsTheme ?? selectedFSThemeRef.current,
+          "fullscreen",
+          fsSettings,
+        ) as unknown as Record<string, unknown>;
+      }
+
+      if (targetModes.includes("lower-third")) {
+        const ltTheme = theme ?? findTheme("lower-third", themeId);
+        const ltSettings = normalizeExplicitOutputFontSettings(quickSettings, "lower-third");
+        if (ltTheme) {
+          setSelectedLTTheme(ltTheme);
+          selectedLTThemeRef.current = ltTheme;
+        }
+        setLowerThirdQuickSettings(ltSettings);
+        liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+          ltTheme ?? selectedLTThemeRef.current,
+          "lower-third",
+          ltSettings,
+        ) as unknown as Record<string, unknown>;
+      }
+
+      if (targetModes.includes(overlayMode) && (sourceTab !== "notes" || sourceMode !== overlayMode)) {
+        const activeSettings = overlayMode === "fullscreen"
+          ? normalizeExplicitOutputFontSettings(quickSettings, "fullscreen")
+          : normalizeExplicitOutputFontSettings(quickSettings, "lower-third");
+
+        if (overlayVisible && activeSlideIndex !== null) {
+          void pushNoteSlide(activeSlideIndex, activeSettings);
+        } else {
+          const currentThemeSettings = overlayMode === "fullscreen"
+            ? liveFullscreenThemeSettingsRef.current
+            : liveLowerThirdThemeSettingsRef.current;
+          void dockObsClient.primeNotesOverlay({
+            overlayMode,
+            bibleThemeSettings: currentThemeSettings,
+            backgroundOnly: true,
+          });
+        }
+      }
+    };
+
+    window.addEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+    return () => window.removeEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+  }, [
+    activeSlideIndex,
+    overlayMode,
+    overlayVisible,
+    pushNoteSlide,
+  ]);
 
   // Escape key handler
   useEffect(() => {
@@ -2403,7 +2480,7 @@ export default function DockNotesTab({
               lineCount={notesLinesPerSlide}
               lineMode={notesAutoSplit ? "count" : "original"}
               maxLineCount={MAX_NOTE_LINES_PER_SLIDE}
-              minFontSize={overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
+              minFontSize={overlayMode === "fullscreen" ? 16 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
               updateImmediately={quickUpdateImmediately}
               isLive={overlayVisible}
               top={quickActionsTop}
@@ -2416,6 +2493,8 @@ export default function DockNotesTab({
               getSizePresetPatch={getNotesQuickSizePatch}
               onOpenSettings={() => setShowThemeSettings(true)}
               onUpdateImmediatelyChange={setQuickUpdateImmediately}
+              overlayMode={overlayMode}
+              onOverlayModeChange={handleOverlayModeChange}
             />
           </section>
 

@@ -5231,25 +5231,25 @@ bible-preview-toggle>span {
 }
 
 .bible-free-mode-banner__btn--primary {
-  background: #2563eb;
+  background: #4f46e5;
   color: #ffffff;
-  border: 1px solid #3b82f6;
+  border: 1px solid #6366f1;
 }
 
 .bible-free-mode-banner__btn--primary:hover {
-  background: #1d4ed8;
+  background: #4338ca;
   color: #ffffff;
 }
 
 .bible-free-mode-banner__btn--secondary {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--b-text-1, #e0e0e0);
-  border: 1px solid var(--b-border, #475569);
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .bible-free-mode-banner__btn--secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: #64748b;
+  background: #334155;
+  color: #ffffff;
 }
 
 @media (max-width: 680px) {

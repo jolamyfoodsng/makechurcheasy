@@ -5,7 +5,8 @@
  * navigation chrome: nav links, OBS/Dock status, user profile.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAdminControls } from "../hooks/useAdminControls";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AppLogo } from "./AppLogo";
@@ -35,7 +36,9 @@ import {
   ExternalLink,
   X,
   FileText,
-} from "lucide-react";
+  Radio,
+  MonitorPlay,
+  Layers, Youtube } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -67,19 +70,25 @@ export default function DashboardSidebar({
   const { appName, isTest } = getEnvConfig();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
-  const [isResourcesOpen, setIsResourcesOpen] = useState(true);
-  const [isTranscriptsOpen, setIsTranscriptsOpen] = useState(true);
+  const supportLinks = useAdminControls().support;
+  const [isResourcesOpen, setIsResourcesOpen] = useState(false);
+  const [isTranscriptsOpen, setIsTranscriptsOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
 
 
 
   const navItem = useCallback(
-    (to: string, Icon: typeof Mic, label: string) => {
+    (to: string, Icon: typeof Mic, label: string, pulseDot = false) => {
       const full = to.split("?")[0];
       const query = to.includes("?") ? to.split("?")[1] : "";
+      const pathMatches =
+        currentPath === full ||
+        currentPath.startsWith(`${full}/`) ||
+        currentPath.startsWith(`${full}?`);
       const isActive =
         to === "/"
           ? currentPath === "/"
-          : currentPath.startsWith(full) &&
+          : pathMatches &&
           (query ? currentPath.includes(query) : !currentPath.includes("?"));
       return (
         <a
@@ -91,14 +100,47 @@ export default function DashboardSidebar({
             e.preventDefault();
             onNavigate(to);
           }}
+          style={{ position: "relative" }}
         >
           <Icon className="sidebar-nav-icon" />
           <span className="sidebar-nav-text">{label}</span>
+          {pulseDot && (
+            collapsed ? (
+              <span className="sidebar-live-dot sidebar-live-dot--collapsed" aria-hidden="true" />
+            ) : (
+              <span className="sidebar-nav-live-status">
+                <span className="sidebar-live-dot" aria-hidden="true" />
+                <span>Live</span>
+              </span>
+            )
+          )}
         </a>
       );
     },
     [currentPath, onNavigate, collapsed],
   );
+
+  useEffect(() => {
+    if (currentPath.startsWith("/resources")) setIsResourcesOpen(true);
+    if (currentPath.startsWith("/transcripts") || currentPath.startsWith("/speech-to-scripture")) {
+      setIsTranscriptsOpen(true);
+    }
+    if (
+      currentPath.startsWith("/broadcast-graphics") ||
+      currentPath.startsWith("/production/themes") ||
+      currentPath.startsWith("/gallery") ||
+      currentPath.startsWith("/multiview")
+    ) {
+      setIsTemplatesOpen(true);
+    }
+  }, [currentPath]);
+
+  const templatesLabel = t("sidebar.templatesGraphics", { defaultValue: "Templates & Graphics" });
+  const templatesActive =
+    currentPath.startsWith("/broadcast-graphics") ||
+    currentPath.startsWith("/production/themes") ||
+    currentPath.startsWith("/gallery") ||
+    currentPath.startsWith("/multiview");
 
   return (
     <nav
@@ -197,8 +239,6 @@ export default function DashboardSidebar({
             </div>
           )}
 
-          {navItem("/production/themes", Palette, t("sidebar.themes"))}
-
           {/* Resources collapsible parent item */}
           <div
             className={`sidebar-nav-item sidebar-nav-parent${currentPath.startsWith("/resources") ? " sidebar-nav-item-active" : ""}`}
@@ -283,7 +323,85 @@ export default function DashboardSidebar({
               </a>
             </div>
           )}
-          {navItem("/gallery", LayoutGrid, t("sidebar.multiView"))}
+
+          {/* OBS and screen visuals grouped in one compact section */}
+          <div
+            className={`sidebar-nav-item sidebar-nav-parent${templatesActive ? " sidebar-nav-item-active" : ""}`}
+          >
+            <a
+              className="sidebar-nav-parent-link"
+              href="#"
+              title={collapsed ? templatesLabel : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                onNavigate("/broadcast-graphics");
+              }}
+            >
+              <Layers className="sidebar-nav-icon" />
+              <span className="sidebar-nav-text">{templatesLabel}</span>
+            </a>
+            {!collapsed && (
+              <button
+                type="button"
+                className={`sidebar-nav-chevron-btn${isTemplatesOpen ? " sidebar-nav-chevron-btn--open" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsTemplatesOpen((prev) => !prev);
+                }}
+                title={isTemplatesOpen ? `Collapse ${templatesLabel}` : `Expand ${templatesLabel}`}
+                aria-label={isTemplatesOpen ? `Collapse ${templatesLabel}` : `Expand ${templatesLabel}`}
+                aria-expanded={isTemplatesOpen}
+                aria-controls={isTemplatesOpen ? "sidebar-templates-subnav" : undefined}
+              >
+                <ChevronDown className="sidebar-nav-chevron" />
+              </button>
+            )}
+          </div>
+
+          {!collapsed && isTemplatesOpen && (
+            <div className="sidebar-subnav-list" id="sidebar-templates-subnav">
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/broadcast-graphics") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title={t("sidebar.broadcastGraphics", { defaultValue: "Broadcast Graphics" })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/broadcast-graphics");
+                }}
+              >
+                <MonitorPlay className="sidebar-subnav-icon" />
+                <span>{t("sidebar.broadcastGraphics", { defaultValue: "Broadcast Graphics" })}</span>
+              </a>
+
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/gallery") || currentPath.startsWith("/multiview") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title={t("sidebar.multiView", { defaultValue: "Multi View" })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/gallery");
+                }}
+              >
+                <LayoutGrid className="sidebar-subnav-icon" />
+                <span>{t("sidebar.multiView", { defaultValue: "Multi View" })}</span>
+              </a>
+
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/production/themes") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title={t("sidebar.themes", { defaultValue: "Themes" })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/production/themes");
+                }}
+              >
+                <Palette className="sidebar-subnav-icon" />
+                <span>{t("sidebar.themes", { defaultValue: "Themes" })}</span>
+              </a>
+            </div>
+          )}
+
+          {navItem("/broadcast", Radio, t("sidebar.multiStream", { defaultValue: "Multi-Stream" }), true)}
           {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
       </div>
@@ -440,8 +558,9 @@ export default function DashboardSidebar({
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px", marginBottom: "20px" }}>
               {/* WhatsApp */}
+              {supportLinks.whatsappUrl && (
               <a
-                href="https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t"
+                href={supportLinks.whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -476,6 +595,7 @@ export default function DashboardSidebar({
                 </div>
                 <ExternalLink size={16} style={{ color: "var(--text-muted, #94a3b8)" }} />
               </a>
+              )}
 
               {/* Telegram */}
               <a
@@ -516,8 +636,9 @@ export default function DashboardSidebar({
               </a>
 
               {/* Email */}
+              {supportLinks.supportEmail && (
               <a
-                href="mailto:support@makechurcheazy.com"
+                href={`mailto:${supportLinks.supportEmail}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -546,14 +667,55 @@ export default function DashboardSidebar({
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Email Support</div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>support@makechurcheazy.com</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>{supportLinks.supportEmail}</div>
                 </div>
                 <ExternalLink size={16} style={{ color: "var(--text-muted, #94a3b8)" }} />
               </a>
+              )}
+
+              {/* YouTube help videos */}
+              {supportLinks.youtubeUrl && (
+              <a
+                href={supportLinks.youtubeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  color: "inherit",
+                  textDecoration: "none",
+                  transition: "background 0.15s ease",
+                }}
+              >
+                <div style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.2)",
+                  color: "#ef4444",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}>
+                  <Youtube size={18} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Help Videos</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>Step-by-step tutorials on YouTube</div>
+                </div>
+                <ExternalLink size={16} style={{ color: "var(--text-muted, #94a3b8)" }} />
+              </a>
+              )}
 
               {/* Emergency Hotline / Phone */}
               <a
-                href="tel:+2348142740847"
+                href="tel:+2349054545286"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -582,7 +744,7 @@ export default function DashboardSidebar({
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Sunday Emergency Hotline</div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>+234 814 274 0847</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted, #94a3b8)" }}>+234 905 454 5286</div>
                 </div>
                 <ExternalLink size={16} style={{ color: "var(--text-muted, #94a3b8)" }} />
               </a>

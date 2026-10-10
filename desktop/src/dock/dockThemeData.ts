@@ -1,6 +1,10 @@
 import type { BibleTheme } from "../bible/types";
+import type { SavedBroadcastGraphic } from "../services/broadcastGraphicsStorage";
+import type { LowerThirdTheme } from "../lowerthirds/types";
+import type { TickerTheme } from "../data/tickerThemes";
 import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes } from "../services/favoriteThemes";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
+import { BIBLE_BUILTIN_THEMES } from "../bible/bibleThemes";
 
 function mergeIdSets(...sets: Array<Iterable<string>>): Set<string> {
   const merged = new Set<string>();
@@ -88,10 +92,14 @@ export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
   ]);
   const allFavoriteIds = new Set([...fullscreenFavoriteIds, ...lowerThirdFavoriteIds]);
   const customThemes = await loadDockCustomBibleThemes();
-  const builtinIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
+  const allBuiltins = [
+    ...BUILTIN_THEMES,
+    ...BIBLE_BUILTIN_THEMES.filter((bt) => !BUILTIN_THEMES.some((t) => t.id === bt.id)),
+  ];
+  const builtinIds = new Set(allBuiltins.map((theme) => theme.id));
   const uniqueCustom = customThemes.filter((theme) => !builtinIds.has(theme.id));
   // Built-in themes: only show if favorited. Custom themes: always show.
-  const favoritedBuiltins = BUILTIN_THEMES.filter((theme) => allFavoriteIds.has(theme.id));
+  const favoritedBuiltins = allBuiltins.filter((theme) => allFavoriteIds.has(theme.id));
   const localThemes = [...favoritedBuiltins, ...uniqueCustom];
   const remoteById = new Map(remoteFavorites.map((theme) => [theme.id, theme]));
   const localById = new Map(localThemes.map((theme) => [theme.id, theme]));
@@ -108,4 +116,68 @@ export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
     themeNames: values.map((t) => t.name),
   });
   return values;
+}
+
+/**
+ * Saved Broadcast Graphics marked "added to OBS". Same origin as the app → read its
+ * storage directly; inside OBS → read the file the app writes on every save.
+ */
+export async function loadDockSavedGraphics(): Promise<Array<SavedBroadcastGraphic & { theme?: LowerThirdTheme }>> {
+  try {
+    const { loadSavedBroadcastGraphics, savedGraphicsForDock } = await import("../services/broadcastGraphicsStorage");
+    if (loadSavedBroadcastGraphics().some((g) => g.isAddedToObs)) {
+      // Same filtering as the Dock file: paused / hidden / other-plan graphics are left out.
+      return await savedGraphicsForDock();
+    }
+  } catch {
+    // Fall back to the dock JSON file below.
+  }
+  const remote = await loadJsonArray<SavedBroadcastGraphic & { theme?: LowerThirdTheme }>("/uploads/dock-saved-graphics.json");
+  return remote.filter((g) => g && typeof g.id === "string" && typeof g.templateId === "string" && g.isAddedToObs !== false);
+}
+
+/**
+ * Admin control of Broadcast Graphics for the Dock: graphics that are paused, hidden or not
+ * on this user's plan (`blocked`) and the admin-published graphics (`packageThemes`).
+ * Same origin as the app → read the app's downloaded catalog; inside OBS → read the file
+ * the app writes whenever the catalog changes. With neither, nothing is blocked.
+ */
+export interface DockGraphicsPolicy {
+  blocked: Set<string>;
+  packageThemes: LowerThirdTheme[];
+  /** Admin-uploaded tickers ("mce-ticker@1"), already in the app's HTML ticker shape. */
+  packageTickers: TickerTheme[];
+}
+
+export async function loadDockGraphicsPolicy(): Promise<DockGraphicsPolicy> {
+  try {
+    const catalog = await import("../services/broadcastGraphicsCatalog");
+    const local = catalog.getBroadcastGraphicsCatalog();
+    if (local) {
+      return {
+        blocked: new Set(catalog.getBlockedGraphicThemeIds(local)),
+        packageThemes: catalog.getPackageThemes(local),
+        packageTickers: catalog.getPackageTickers(local),
+      };
+    }
+  } catch {
+    // Fall back to the dock JSON file below.
+  }
+  try {
+    const res = await fetch("/uploads/dock-broadcast-graphics.json", { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as { blocked?: unknown; packageThemes?: unknown; packageTickers?: unknown };
+      const blocked = Array.isArray(data.blocked) ? data.blocked.filter((id): id is string => typeof id === "string") : [];
+      const packageThemes = Array.isArray(data.packageThemes)
+        ? (data.packageThemes as LowerThirdTheme[]).filter((t) => t && typeof t.id === "string" && typeof t.html === "string")
+        : [];
+      const packageTickers = Array.isArray(data.packageTickers)
+        ? (data.packageTickers as TickerTheme[]).filter((t) => t && typeof t.id === "string" && typeof t.html === "string")
+        : [];
+      return { blocked: new Set(blocked), packageThemes, packageTickers };
+    }
+  } catch {
+    // No policy yet.
+  }
+  return { blocked: new Set(), packageThemes: [], packageTickers: [] };
 }

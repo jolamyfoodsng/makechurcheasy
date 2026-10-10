@@ -11,7 +11,7 @@
 
 // `notes` remains a legacy value so saved sessions and staged items can still
 // be read, but Notes now lives inside the combined Worship tab in the Dock.
-export type DockTab = "planner" | "bible" | "worship" | "notes" | "media" | "multiview" | "ministry";
+export type DockTab = "planner" | "bible" | "worship" | "notes" | "media" | "multiview" | "ministry" | "broadcast";
 export type DockStageType = DockTab | "live" | "speaker" | "sermon" | "event" | "media" | "animated-lt" | "notes";
 
 /** Tabs that are unavailable once a Dock session is on the Free plan. */
@@ -35,6 +35,7 @@ export const DOCK_TABS: DockTabDef[] = [
   { id: "media", label: "Media", icon: "photo_library", summary: "Upload and present images, videos, and graphics" },
   { id: "ministry", label: "Ministry", icon: "campaign", summary: "Live ticker announcements and ministry updates" },
   { id: "multiview", label: "Multi-View", icon: "grid_view", summary: "Compose and push multi-source layouts to OBS" },
+  { id: "broadcast", label: "Broadcast", icon: "cell_tower", summary: "Manage stream destinations, ministers, and live broadcasting" },
 ];
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import {
   parseRawReleaseNotes,
   isTrivialReleaseNotes,
   getReleaseHighlights,
-  CURATED_RELEASE_NOTES,
+  stripReleaseBoilerplate,
 } from "./releaseNotesService";
 
 describe("releaseNotesService", () => {
@@ -45,12 +45,36 @@ describe("releaseNotesService", () => {
     expect(highlights[2].badge).toBe("fix");
   });
 
-  it("returns curated release notes when raw notes are trivial or empty", () => {
-    const highlights = getReleaseHighlights("3.19.0", "MakeChurchEasy v3.19.0");
-    expect(highlights).toEqual(CURATED_RELEASE_NOTES.latest);
-    expect(highlights.length).toBeGreaterThanOrEqual(3);
-    expect(highlights[0].title).toContain("Multi-View");
-    expect(highlights[1].title).toContain("Voice AI");
+  it("does not show another release's curated notes when notes are trivial", () => {
+    expect(getReleaseHighlights("3.19.0", "MakeChurchEasy v3.19.0")).toEqual([]);
+  });
+
+  it("ignores the generic CI release template", () => {
+    const ciTemplate = [
+      "## MakeChurchEasy",
+      "",
+      "### Downloads",
+      "| Platform | File |",
+      "|----------|------|",
+      "| Windows | `.exe` (NSIS installer) or `.msi` |",
+      "",
+      "### Auto-Update",
+      "Existing installations will automatically download and install this update on next launch.",
+      "",
+      "---",
+      "_Built automatically from commit abc123_",
+    ].join("\n");
+    expect(stripReleaseBoilerplate(ciTemplate)).toBe("");
+    expect(isTrivialReleaseNotes(ciTemplate)).toBe(true);
+    expect(getReleaseHighlights("3.33.4", ciTemplate)).toEqual([]);
+  });
+
+  it("keeps the real changelog when it follows the CI template", () => {
+    const notes = "## 1. Service Schedule\n- **Queue:** Plan Sunday\n\n### Downloads\n| Platform | File |\n|---|---|";
+    const highlights = getReleaseHighlights("3.34.0", notes);
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0].title).toBe("Service Schedule");
+    expect(highlights[0].points).toHaveLength(1);
   });
 
   it("prefers rich custom notes over fallback when provided", () => {

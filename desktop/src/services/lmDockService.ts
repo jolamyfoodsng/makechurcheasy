@@ -12,6 +12,7 @@
  */
 
 import { dockBridge } from "./dockBridge";
+import { getAdminControls } from "./desktopConfig";
 import { ScriptureDetectionEngine } from "./scriptureEngine";
 import { getOverlayBaseUrl } from "./overlayUrl";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
@@ -203,38 +204,15 @@ const CLOUDFLARE_STT_URL = (
   (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
 ).trim();
 
-const DEEPGRAM_API_KEYS = (
-  (import.meta as any).env?.VITE_DEEPGRAM_API_KEYS ??
-  (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ??
-  ""
-)
-  .split(/[\r\n,]+/)
-  .map((key: string) => key.trim())
-  .filter(Boolean);
-
-function shuffled<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
-}
-
 function getAssemblyAiKey(): string {
-  if (DEEPGRAM_API_KEYS.length > 0) {
-    // Each session gets a different starting key. The native stream receives
-    // the remaining keys as fallbacks if the first account rejects a session.
-    return `deepgram:${shuffled(DEEPGRAM_API_KEYS).join(",")}`;
+  if (ASSEMBLYAI_API_KEYS.length > 0) {
+    return ASSEMBLYAI_API_KEYS[Math.floor(Math.random() * ASSEMBLYAI_API_KEYS.length)];
   }
   if (CLOUDFLARE_STT_URL) {
     return CLOUDFLARE_STT_URL;
   }
-  if (ASSEMBLYAI_API_KEYS.length === 0) {
-    console.warn("[VoiceService] No API keys configured. Set speech service API keys in your .env file.");
-    return "";
-  }
-  return ASSEMBLYAI_API_KEYS[Math.floor(Math.random() * ASSEMBLYAI_API_KEYS.length)];
+  console.warn("[VoiceService] No API keys configured. Set speech service API keys in your .env file.");
+  return "";
 }
 
 export type LmServiceStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
@@ -1493,14 +1471,9 @@ export class LmDockService {
         console.warn("[LmDockService] Scripture preload failed:", err);
       });
 
-      // Check if offline - warm the Whisper model without blocking mic startup.
-      if (!navigator.onLine) {
-        void import("./whisperService")
-          .then(({ loadWhisperModel }) => loadWhisperModel())
-          .catch((err) => {
-            console.warn("[LmDockService] Whisper preload failed:", err);
-          });
-      }
+      // No offline Whisper warm-up here: live transcription runs through the
+      // native AssemblyAI stream, nothing reads the browser Whisper model, and
+      // loading it cost 150–300 MB of RAM on low-memory laptops while offline.
 
       const apiKey = getAssemblyAiKey();
       if (!apiKey) {
@@ -1650,6 +1623,7 @@ export class LmDockService {
         apiKey,
         deviceId: micId || null,
         detectionSpeed: this.detectionSpeed,
+        speechModel: getAdminControls().speech.model,
       });
       void nativeStartPromise
         .then(() => {

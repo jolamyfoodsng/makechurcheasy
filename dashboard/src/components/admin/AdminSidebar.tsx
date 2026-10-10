@@ -23,8 +23,11 @@ import {
   GraduationCap,
   ArrowLeft,
   Percent,
+  Repeat2,
   AlertTriangle,
   Newspaper,
+  Radio,
+  MonitorPlay,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -51,6 +54,8 @@ const broadcastReachItems: NavItem[] = [
   { path: "/admin/communications", label: "Communications", icon: Mail },
   { path: "/admin/email-previews", label: "Email Previews", icon: MailOpen },
   { path: "/admin/announcements", label: "Announcements", icon: Megaphone },
+  { path: "/admin/multistream", label: "Multi-Stream Usage", icon: Radio },
+  { path: "/admin/broadcast-graphics", label: "Broadcast Graphics", icon: MonitorPlay },
   { path: "/admin/production-themes", label: "Production Themes", icon: Palette },
   { path: "/admin/tutorials", label: "Tutorials", icon: GraduationCap },
   { path: "/admin/release-mirror", label: "Release Mirror", icon: UploadCloud },
@@ -58,6 +63,7 @@ const broadcastReachItems: NavItem[] = [
 
 const growthSystemItems: NavItem[] = [
   { path: "/admin/discounts", label: "Discounts", icon: Percent },
+  { path: "/admin/offers", label: "Win-back Offers", icon: Repeat2 },
   { path: "/admin/referrals", label: "Referrals", icon: Gift },
   { path: "/admin/credits", labelKey: "admin.sidebar.credits", icon: Zap },
   { path: "/admin/analytics", labelKey: "admin.sidebar.analytics", icon: BarChart3 },

@@ -1,10 +1,20 @@
 import { ObjectId } from "mongodb";
 import clientPromise from "./mongodb";
+import {
+  getPersonalOfferSummary,
+  markOfferClicked,
+  markOfferSeen,
+  userHasOpenPopupOffer,
+  userHoldsOffer,
+} from "./offerMatch";
 import { COLLECTIONS, ensureIndexes } from "./db";
 import type {
   Announcement,
   AnnouncementAudience,
+  AnnouncementButton,
+  AnnouncementButtonStyle,
   AnnouncementDelivery,
+  AnnouncementLayout,
   DiscountBillingCycle,
   PlanTier,
   AnnouncementSurface,
@@ -12,6 +22,7 @@ import type {
 } from "@/types/schemas";
 import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 
 // ── Event Bus for real-time notification ─────────────────────────────────────
 
@@ -52,6 +63,7 @@ export const ANNOUNCEMENT_AUDIENCES: AnnouncementAudience[] = [
   "inactive_30d",
   "never_opened_app",
   "reactivation_offer_users",
+  "personal_offer_users",
 ];
 
 export const ANNOUNCEMENT_SURFACES: AnnouncementSurface[] = ["dashboard", "desktop"];
@@ -63,6 +75,9 @@ const RECENT_SUBSCRIBER_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 export interface AnnouncementInput {
   title?: string;
   message?: string;
+  layout?: AnnouncementLayout;
+  buttons?: Array<Partial<AnnouncementButton>> | null;
+  bodyHtml?: string | null;
   tone?: AnnouncementTone;
   status?: Announcement["status"];
   surfaces?: AnnouncementSurface[];
@@ -91,6 +106,9 @@ export interface PublicAnnouncement {
   deliveryId: string;
   title: string;
   message: string;
+  layout: AnnouncementLayout | null;
+  buttons: AnnouncementButton[];
+  bodyHtml: string | null;
   tone: AnnouncementTone;
   surface: AnnouncementSurface;
   tags: string[];
@@ -104,6 +122,8 @@ export interface PublicAnnouncement {
   offerApplicableBillingCycles: DiscountBillingCycle[];
   expiresAt: string | null;
   createdAt: string;
+  /** Set for personal win-back offers: this person's own deadline and kind, so the app can show a countdown. */
+  personalOffer?: { ladderId: string; rungId: string; kind: string; closesAt: string } | null;
 }
 
 export type AnnouncementInsightRange = "daily" | "weekly" | "monthly";
@@ -306,8 +326,30 @@ function normalizeCountry(value: unknown): string {
 
 function userCountry(user: Record<string, any> | undefined): string {
   if (!user) return "Unknown";
-  return normalizeCountry(user.country || user.billingCountry || user.profile?.country || user.demographics?.country);
+  return normalizeCountry(
+    user.country ||
+      user.billingCountry ||
+      user.profile?.country ||
+      user.demographics?.country ||
+      user.lastLoginCountry ||
+      user.signupCountry ||
+      user.subscriptionCountry,
+  );
 }
+
+const USER_INSIGHT_PROJECTION = {
+  name: 1,
+  email: 1,
+  country: 1,
+  billingCountry: 1,
+  lastLoginCountry: 1,
+  signupCountry: 1,
+  subscriptionCountry: 1,
+  profile: 1,
+  demographics: 1,
+  plan: 1,
+  effectivePlan: 1,
+} as const;
 
 function userDateSinceFilter(field: string, since: Date) {
   return {
@@ -349,6 +391,66 @@ function safeClickRate(clicks: number, views: number): number {
   return views > 0 ? Number(((clicks / views) * 100).toFixed(1)) : 0;
 }
 
+export const ANNOUNCEMENT_LAYOUTS: AnnouncementLayout[] = ["standard", "promo", "image_only", "custom"];
+const BUTTON_STYLES: AnnouncementButtonStyle[] = ["primary", "secondary", "link"];
+export const MAX_ANNOUNCEMENT_BUTTONS = 4;
+const MAX_BODY_HTML_LENGTH = 30_000;
+const MAX_MESSAGE_LENGTH = 2_000;
+
+/** Only web links and in-app paths. Blocks javascript:, data: and protocol-relative URLs. */
+function cleanButtonUrl(value: unknown): string | null {
+  const url = String(value ?? "").trim();
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname ? parsed.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+  if (/^mailto:[^\s@]+@[^\s@]+$/i.test(url)) return url;
+  if (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\")) return url;
+  return null;
+}
+
+function cleanButtons(value: AnnouncementInput["buttons"]): AnnouncementButton[] {
+  if (!Array.isArray(value)) return [];
+  const result: AnnouncementButton[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const label = String(raw.label ?? "").trim().slice(0, 40);
+    const url = cleanButtonUrl(raw.url);
+    if (!label || !url) continue;
+    const style = BUTTON_STYLES.includes(raw.style as AnnouncementButtonStyle)
+      ? raw.style as AnnouncementButtonStyle
+      : result.length === 0 ? "primary" : "secondary";
+    const id = String(raw.id ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || `b${result.length + 1}`;
+    if (result.some((button) => button.id === id)) continue;
+    result.push({ id, label, url, style });
+    if (result.length >= MAX_ANNOUNCEMENT_BUTTONS) break;
+  }
+  return result;
+}
+
+/**
+ * Custom HTML is shown by the apps inside a sandboxed frame without scripts.
+ * This is a second layer: drop anything that can run code or load another page.
+ */
+export function sanitizeAnnouncementHtml(value: unknown): string | null {
+  let html = String(value ?? "").trim();
+  if (!html) return null;
+  if (html.length > MAX_BODY_HTML_LENGTH) {
+    throw new Error(`Custom HTML is too long (max ${MAX_BODY_HTML_LENGTH.toLocaleString()} characters)`);
+  }
+  html = html
+    .replace(/<\s*(script|iframe|object|frameset)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, "")
+    .replace(/<\s*\/?\s*(script|iframe|object|embed|frame|frameset|meta|base|link)\b[^>]*>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src|action|formaction|xlink:href)\s*=\s*("|')\s*(javascript|data|vbscript):[^"']*\2/gi, '$1=$2#$2');
+  return html.trim() || null;
+}
+
 export function normalizeAnnouncementInput(
   body: AnnouncementInput,
   adminUserId: string,
@@ -356,9 +458,25 @@ export function normalizeAnnouncementInput(
 ): Announcement {
   const now = new Date().toISOString();
   const title = String(body.title ?? existing?.title ?? "").trim();
-  const message = String(body.message ?? existing?.message ?? "").trim();
-  if (!title || !message) {
-    throw new Error("title and message are required");
+  const message = String(body.message ?? existing?.message ?? "").trim().slice(0, MAX_MESSAGE_LENGTH);
+  const layout = ANNOUNCEMENT_LAYOUTS.includes(body.layout as AnnouncementLayout)
+    ? body.layout as AnnouncementLayout
+    : existing?.layout;
+  const bodyHtml = body.bodyHtml === undefined
+    ? existing?.bodyHtml ?? null
+    : sanitizeAnnouncementHtml(body.bodyHtml);
+  const buttons = body.buttons === undefined
+    ? existing?.buttons ?? []
+    : cleanButtons(body.buttons);
+  const imageUrlInput = String(body.imageUrl ?? existing?.imageUrl ?? "").trim();
+  if (!title) {
+    throw new Error("A title is required");
+  }
+  if (!message && !bodyHtml && !imageUrlInput) {
+    throw new Error("Add a message, an image or custom HTML");
+  }
+  if (layout === "custom" && !bodyHtml) {
+    throw new Error("Custom layout needs HTML content");
   }
 
   const tone = ANNOUNCEMENT_TONES.includes(body.tone as AnnouncementTone)
@@ -398,10 +516,19 @@ export function normalizeAnnouncementInput(
     1_000_000,
   );
 
+  // The first button doubles as the classic call to action so apps that
+  // predate buttons still show it.
+  const firstButton = buttons[0];
+  const ctaLabelInput = String(body.ctaLabel ?? existing?.ctaLabel ?? "").trim();
+  const ctaUrlInput = String(body.ctaUrl ?? existing?.ctaUrl ?? "").trim();
+
   return {
     ...(existing ?? {}),
     title,
     message,
+    layout,
+    buttons,
+    bodyHtml,
     tone,
     status: explicitStatus ?? existing?.status ?? defaultStatus,
     surfaces,
@@ -409,9 +536,9 @@ export function normalizeAnnouncementInput(
     tags: cleanStrings(body.tags ?? existing?.tags ?? []),
     targetUserIds: cleanStrings(body.targetUserIds ?? existing?.targetUserIds ?? []),
     targetEmails: cleanStrings(body.targetEmails ?? existing?.targetEmails ?? []).map((email) => email.toLowerCase()),
-    ctaLabel: String(body.ctaLabel ?? existing?.ctaLabel ?? "").trim() || null,
-    ctaUrl: String(body.ctaUrl ?? existing?.ctaUrl ?? "").trim() || null,
-    imageUrl: String(body.imageUrl ?? existing?.imageUrl ?? "").trim() || null,
+    ctaLabel: firstButton ? firstButton.label : ctaLabelInput || null,
+    ctaUrl: firstButton ? firstButton.url : ctaUrlInput || null,
+    imageUrl: imageUrlInput || null,
     offerCode,
     offerDiscountPercent: offerCode ? offerDiscountPercent : null,
     offerDurationMonths: offerCode && offerDiscountPercent ? offerDurationMonths : null,
@@ -446,6 +573,9 @@ function announcementToPublic(
     deliveryId: delivery._id?.toString() || "",
     title: announcement.title,
     message: announcement.message,
+    layout: announcement.layout || null,
+    buttons: announcement.buttons || [],
+    bodyHtml: announcement.bodyHtml || null,
     tone: announcement.tone,
     surface,
     tags: announcement.tags || [],
@@ -558,6 +688,11 @@ export async function userMatchesAnnouncement(
         userId,
         status: "available",
       }, { projection: { _id: 1 } }));
+    }
+    case "personal_offer_users": {
+      const offer = announcement.personalOffer;
+      if (!userId || !offer?.ladderId || !offer?.rungId) return false;
+      return userHoldsOffer(userId, offer.ladderId, offer.rungId);
     }
     default:
       return false;
@@ -716,7 +851,7 @@ export async function getAnnouncementAdminInsights(
     ? await usersCol
       .find(
         { _id: { $in: objectIds } },
-        { projection: { name: 1, email: 1, country: 1, billingCountry: 1, profile: 1, demographics: 1, plan: 1 } },
+        { projection: USER_INSIGHT_PROJECTION },
       )
       .toArray()
     : [];
@@ -864,6 +999,281 @@ export async function getAnnouncementAdminInsights(
   };
 }
 
+// ── Per-announcement analytics ───────────────────────────────────────────────
+
+export interface AnnouncementPersonRow {
+  userId: string;
+  userName: string;
+  email: string;
+  country: string;
+  plan: string;
+  surface: AnnouncementSurface;
+  status: "clicked" | "dismissed" | "seen";
+  shownAt: string | null;
+  clickedAt: string | null;
+  clickCount: number;
+  buttonId: string | null;
+  buttonLabel: string | null;
+}
+
+export interface AnnouncementDetailAnalytics {
+  announcement: {
+    id: string;
+    title: string;
+    message: string;
+    status: Announcement["status"];
+    layout: AnnouncementLayout | null;
+    audience: AnnouncementAudience;
+    surfaces: AnnouncementSurface[];
+    buttons: AnnouncementButton[];
+    imageUrl: string | null;
+    publishAt: string;
+    expiresAt: string | null;
+  };
+  totals: {
+    reached: number;
+    views: number;
+    dismissed: number;
+    clickers: number;
+    totalClicks: number;
+    clickRate: number;
+    dismissRate: number;
+  };
+  series: Array<{ date: string; label: string; views: number; clicks: number }>;
+  countries: Array<{ country: string; reached: number; clickers: number; clickRate: number }>;
+  buttons: Array<{ id: string; label: string; url: string; clicks: number }>;
+  surfaces: Array<{ surface: AnnouncementSurface; reached: number; clickers: number }>;
+  people: AnnouncementPersonRow[];
+  truncated: boolean;
+}
+
+const MAX_ANALYTICS_DELIVERIES = 20_000;
+const MAX_ANALYTICS_PEOPLE = 1_000;
+
+/** Who saw an announcement, who clicked it (name, email, country, plan) and which button they used. */
+export async function getAnnouncementDetailAnalytics(
+  announcementId: string,
+): Promise<AnnouncementDetailAnalytics | null> {
+  if (!ObjectId.isValid(announcementId)) return null;
+  await ensureIndexes();
+  const client = await clientPromise;
+  const db = client.db();
+
+  const announcement = await db
+    .collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS)
+    .findOne({ _id: new ObjectId(announcementId) });
+  if (!announcement) return null;
+
+  const deliveries = await db
+    .collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES)
+    .find({ announcementId })
+    .sort({ updatedAt: -1 })
+    .limit(MAX_ANALYTICS_DELIVERIES + 1)
+    .toArray();
+  const truncated = deliveries.length > MAX_ANALYTICS_DELIVERIES;
+  if (truncated) deliveries.length = MAX_ANALYTICS_DELIVERIES;
+
+  const userIds = Array.from(new Set(deliveries.map((d) => idText(d.userId)).filter(Boolean)));
+  const objectIds = userIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+  const users: Array<Record<string, any>> = [];
+  // Chunked so a large audience does not build one huge $in query.
+  for (let i = 0; i < objectIds.length; i += 1000) {
+    users.push(
+      ...(await db
+        .collection("users")
+        .find({ _id: { $in: objectIds.slice(i, i + 1000) } }, { projection: USER_INSIGHT_PROJECTION })
+        .toArray()),
+    );
+  }
+  const userMap = new Map(users.map((user) => [idText(user._id), user]));
+  const buttonMap = new Map((announcement.buttons || []).map((button) => [button.id, button]));
+
+  type Row = AnnouncementPersonRow & { sortAt: string };
+  const rows: Row[] = [];
+  const countryBuckets = new Map<string, { reached: Set<string>; clickers: Set<string> }>();
+  const surfaceBuckets = new Map<AnnouncementSurface, { reached: Set<string>; clickers: Set<string> }>();
+  const buttonClicks = new Map<string, number>();
+  const reached = new Set<string>();
+  const clickers = new Set<string>();
+  let views = 0;
+  let dismissed = 0;
+  let totalClicks = 0;
+
+  const days = 30;
+  const series = buildSeries(days).map((item) => ({
+    date: item.date,
+    label: item.label,
+    views: 0,
+    clicks: 0,
+  }));
+  const seriesMap = new Map(series.map((item) => [item.date, item]));
+
+  for (const delivery of deliveries) {
+    const userId = idText(delivery.userId);
+    if (!userId) continue;
+    const user = userMap.get(userId);
+    const country = userCountry(user);
+    const clickedAt = delivery.firstClickedAt || delivery.clickedAt || null;
+    const clicked = Boolean(clickedAt);
+    const status: AnnouncementPersonRow["status"] = clicked
+      ? "clicked"
+      : delivery.dismissedAt
+        ? "dismissed"
+        : "seen";
+
+    if (delivery.shownAt) views += 1;
+    if (delivery.dismissedAt) dismissed += 1;
+    if (clicked) totalClicks += Math.max(1, delivery.clickCount || 1);
+
+    reached.add(userId);
+    if (clicked) clickers.add(userId);
+
+    const countryBucket = countryBuckets.get(country) || { reached: new Set<string>(), clickers: new Set<string>() };
+    countryBucket.reached.add(userId);
+    if (clicked) countryBucket.clickers.add(userId);
+    countryBuckets.set(country, countryBucket);
+
+    const surfaceBucket = surfaceBuckets.get(delivery.surface) || { reached: new Set<string>(), clickers: new Set<string>() };
+    surfaceBucket.reached.add(userId);
+    if (clicked) surfaceBucket.clickers.add(userId);
+    surfaceBuckets.set(delivery.surface, surfaceBucket);
+
+    const shownDate = parseMaybeDate(delivery.shownAt);
+    if (shownDate) {
+      const bucket = seriesMap.get(dateKey(shownDate));
+      if (bucket) bucket.views += 1;
+    }
+    const clickedDate = parseMaybeDate(delivery.lastClickedAt || clickedAt);
+    if (clickedDate) {
+      const bucket = seriesMap.get(dateKey(clickedDate));
+      if (bucket) bucket.clicks += 1;
+    }
+
+    const buttonId = delivery.clickedButtonId || null;
+    if (clicked && buttonId) buttonClicks.set(buttonId, (buttonClicks.get(buttonId) || 0) + 1);
+
+    rows.push({
+      userId,
+      userName: String(user?.name || "").trim() || "Unknown user",
+      email: String(user?.email || ""),
+      country,
+      plan: String(user?.effectivePlan || user?.plan || "free"),
+      surface: delivery.surface,
+      status,
+      shownAt: delivery.shownAt || null,
+      clickedAt,
+      clickCount: clicked ? Math.max(1, delivery.clickCount || 1) : 0,
+      buttonId,
+      buttonLabel: buttonId ? buttonMap.get(buttonId)?.label || null : null,
+      sortAt: clickedAt || delivery.dismissedAt || delivery.shownAt || "",
+    });
+  }
+
+  // Clicks first (newest first), then everyone else who only saw it.
+  rows.sort((a, b) => {
+    if ((a.status === "clicked") !== (b.status === "clicked")) return a.status === "clicked" ? -1 : 1;
+    return String(b.sortAt).localeCompare(String(a.sortAt));
+  });
+
+  const countries = Array.from(countryBuckets.entries())
+    .map(([country, bucket]) => ({
+      country,
+      reached: bucket.reached.size,
+      clickers: bucket.clickers.size,
+      clickRate: safeClickRate(bucket.clickers.size, bucket.reached.size),
+    }))
+    .sort((a, b) => b.clickers - a.clickers || b.reached - a.reached);
+
+  const buttons = (announcement.buttons || []).map((button) => ({
+    id: button.id,
+    label: button.label,
+    url: button.url,
+    clicks: buttonClicks.get(button.id) || 0,
+  }));
+
+  return {
+    announcement: {
+      id: announcementId,
+      title: announcement.title,
+      message: announcement.message,
+      status: announcement.status,
+      layout: announcement.layout || null,
+      audience: announcement.audience,
+      surfaces: announcement.surfaces,
+      buttons: announcement.buttons || [],
+      imageUrl: announcement.imageUrl || null,
+      publishAt: announcement.publishAt,
+      expiresAt: announcement.expiresAt || null,
+    },
+    totals: {
+      reached: reached.size,
+      views,
+      dismissed,
+      clickers: clickers.size,
+      totalClicks,
+      clickRate: safeClickRate(clickers.size, reached.size),
+      dismissRate: safeClickRate(dismissed, views),
+    },
+    series,
+    countries,
+    buttons,
+    surfaces: Array.from(surfaceBuckets.entries()).map(([surface, bucket]) => ({
+      surface,
+      reached: bucket.reached.size,
+      clickers: bucket.clickers.size,
+    })),
+    people: rows.slice(0, MAX_ANALYTICS_PEOPLE).map(({ sortAt: _sortAt, ...row }) => row),
+    truncated: truncated || rows.length > MAX_ANALYTICS_PEOPLE,
+  };
+}
+
+// ── Cheap change detection for clients ───────────────────────────────────────
+//
+// Desktop apps poll this every few minutes instead of running the full
+// per-user announcement check. The value only changes when the set of
+// announcements that can be delivered right now changes: publish, edit,
+// pause, archive, delete, a scheduled one going live, or one expiring.
+// It is the same for every user, so it is cached in memory and at the edge.
+
+const VERSION_CACHE_MS = 60 * 1000;
+const versionCache = new Map<AnnouncementSurface, { value: string; computedAt: number }>();
+
+export function invalidateAnnouncementsVersion(): void {
+  versionCache.clear();
+}
+
+export async function getAnnouncementsVersion(surface: AnnouncementSurface): Promise<string> {
+  const cached = versionCache.get(surface);
+  if (cached && Date.now() - cached.computedAt < VERSION_CACHE_MS) {
+    return cached.value;
+  }
+
+  const client = await clientPromise;
+  const db = client.db();
+  const nowIso = new Date().toISOString();
+  const live = await db
+    .collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS)
+    .find(
+      {
+        status: { $in: ["active", "scheduled"] },
+        surfaces: surface,
+        publishAt: { $lte: nowIso },
+        $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: nowIso } }],
+      },
+      { projection: { _id: 1, updatedAt: 1 } },
+    )
+    .sort({ _id: 1 })
+    .limit(500)
+    .toArray();
+
+  const fingerprint = live
+    .map((announcement) => `${announcement._id?.toString()}:${announcement.updatedAt || ""}`)
+    .join("|");
+  const value = createHash("sha1").update(fingerprint).digest("hex").slice(0, 16);
+  versionCache.set(surface, { value, computedAt: Date.now() });
+  return value;
+}
+
 export async function createAnnouncement(body: AnnouncementInput, adminUserId: string): Promise<Announcement> {
   await ensureIndexes();
   const client = await clientPromise;
@@ -871,6 +1281,7 @@ export async function createAnnouncement(body: AnnouncementInput, adminUserId: s
   const announcement = normalizeAnnouncementInput(body, adminUserId);
   const result = await db.collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS).insertOne(announcement);
   const created = { ...announcement, _id: result.insertedId };
+  invalidateAnnouncementsVersion();
   if (created.status === "active") {
     emitPublished(result.insertedId.toString());
   }
@@ -903,6 +1314,8 @@ export async function updateAnnouncement(
     { $set: updateDoc },
   );
 
+  invalidateAnnouncementsVersion();
+
   // Emit real-time event when published or restarted
   if (announcement.status === "active") {
     if (existing.status !== "active") {
@@ -920,143 +1333,223 @@ export async function updateAnnouncement(
   return { ...announcement, _id: objectId };
 }
 
-export async function getNextAnnouncementForUser(
+/** Most announcements one request may hand to an app that pages through them. */
+export const MAX_ANNOUNCEMENTS_PER_BATCH = 3;
+
+export interface AnnouncementsForUserResult {
+  /** Up to `limit` announcements, in the order the app should page through them. */
+  announcements: PublicAnnouncement[];
+  /** First entry of `announcements`; older app versions show only this one. */
+  announcement: PublicAnnouncement | null;
+  nextAvailableAt?: string | null;
+}
+
+function compareAnnouncementOrder(a: Announcement, b: Announcement): number {
+  return (
+    (b.priority ?? 0) - (a.priority ?? 0) ||
+    String(a.publishAt || "").localeCompare(String(b.publishAt || "")) ||
+    String(a.createdAt || "").localeCompare(String(b.createdAt || ""))
+  );
+}
+
+/**
+ * Returns the announcements this user should see now, up to `limit` (capped at
+ * MAX_ANNOUNCEMENTS_PER_BATCH). Apps that can page through several at once ask
+ * for more than one; everything else keeps getting a single announcement.
+ *
+ * Announcements the user was already given but has not dismissed come first,
+ * then new ones by priority. Each new one is recorded as shown right away so
+ * that it can be dismissed by its deliveryId, so `metrics.shown` counts an
+ * announcement when it is handed to the app, not when the user pages to it.
+ */
+export async function getAnnouncementsForUser(
   user: Record<string, any>,
   surface: AnnouncementSurface,
-): Promise<{ announcement: PublicAnnouncement | null; nextAvailableAt?: string | null }> {
+  limit = 1,
+): Promise<AnnouncementsForUserResult> {
   await ensureIndexes();
   const client = await clientPromise;
   const db = client.db();
   const userId = user._id?.toString?.() || String(user._id || "");
   const now = new Date();
   const nowIso = now.toISOString();
+  const max = Math.min(MAX_ANNOUNCEMENTS_PER_BATCH, Math.max(1, Math.floor(limit) || 1));
 
-  const pendingDelivery = await db
+  const picked: Array<{ announcement: Announcement; delivery: AnnouncementDelivery }> = [];
+  const pickedIds = new Set<string>();
+
+  const pendingDeliveries = await db
     .collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES)
-    .findOne(
-      { userId, surface, dismissedAt: null },
-      { sort: { shownAt: 1 } },
-    );
+    .find({ userId, surface, dismissedAt: null })
+    .sort({ shownAt: 1 })
+    .limit(20)
+    .toArray();
 
-  if (pendingDelivery && ObjectId.isValid(pendingDelivery.announcementId)) {
+  for (const pendingDelivery of pendingDeliveries) {
+    if (picked.length >= max) break;
+    if (!ObjectId.isValid(pendingDelivery.announcementId)) continue;
+    if (pickedIds.has(pendingDelivery.announcementId)) continue;
     const existing = await db.collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS).findOne({
       _id: new ObjectId(pendingDelivery.announcementId),
       status: { $in: ["active", "scheduled"] },
     });
     if (existing && isAnnouncementDeliverableNow(existing, nowIso)) {
-      return { announcement: announcementToPublic(existing, pendingDelivery, surface) };
+      // A personal offer that was claimed, redeemed or has run out is not shown again.
+      if (existing.personalOffer?.ladderId && !(await userHasOpenPopupOffer(userId, existing.personalOffer.ladderId, existing.personalOffer.rungId))) {
+        await db
+          .collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES)
+          .updateOne({ _id: pendingDelivery._id }, { $set: { dismissedAt: nowIso, updatedAt: nowIso } });
+        continue;
+      }
+      picked.push({ announcement: existing, delivery: pendingDelivery });
+      pickedIds.add(pendingDelivery.announcementId);
     }
   }
 
-  const candidates = await db
-    .collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS)
-    .find({
-      status: { $in: ["active", "scheduled"] },
-      surfaces: surface,
-      publishAt: { $lte: nowIso },
-      $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: nowIso } }],
-    })
-    .sort({ priority: -1, publishAt: 1, createdAt: 1 })
-    .limit(100)
-    .toArray();
-
   let nextAvailableAt: string | null = null;
 
-  for (const candidate of candidates) {
-    const announcementId = candidate._id?.toString();
-    if (!announcementId) continue;
+  if (picked.length < max) {
+    const candidates = await db
+      .collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS)
+      .find({
+        status: { $in: ["active", "scheduled"] },
+        surfaces: surface,
+        publishAt: { $lte: nowIso },
+        $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: nowIso } }],
+      })
+      .sort({ priority: -1, publishAt: 1, createdAt: 1 })
+      .limit(100)
+      .toArray();
 
-    const existingDelivery = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).findOne({
-      userId,
-      announcementId,
-      surface,
-    });
-    const currentShowCount = existingDelivery?.showCount ?? (existingDelivery ? 1 : 0);
-    if (currentShowCount >= Math.max(1, candidate.maxShowsPerUser || 1)) continue;
-    if (!(await userMatchesAnnouncement(candidate, user))) continue;
+    for (const candidate of candidates) {
+      if (picked.length >= max) break;
+      const announcementId = candidate._id?.toString();
+      if (!announcementId || pickedIds.has(announcementId)) continue;
 
-    if (existingDelivery) {
-      if (existingDelivery.dismissedAt) {
-        const spacingMinutes = candidate.deliverySpacingMinutes ?? 0;
-        // If no spacing interval is set (<= 0), an explicit dismissal means do not re-show.
-        if (spacingMinutes <= 0) {
-          continue;
-        }
-        // If a spacing interval is set, enforce the cooldown after dismissal.
-        const dismissedAtMs = new Date(existingDelivery.dismissedAt).getTime();
-        const spacingMs = spacingMinutes * 60 * 1000;
-        const allowedAtMs = dismissedAtMs + spacingMs;
-        if (allowedAtMs > now.getTime()) {
-          nextAvailableAt = new Date(allowedAtMs).toISOString();
-          continue;
-        }
-      } else if (existingDelivery.shownAt) {
-        const spacingMs = Math.max(0, candidate.deliverySpacingMinutes || 0) * 60 * 1000;
-        if (spacingMs > 0) {
-          const allowedAtMs = new Date(existingDelivery.shownAt).getTime() + spacingMs;
+      const existingDelivery = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).findOne({
+        userId,
+        announcementId,
+        surface,
+      });
+      const currentShowCount = existingDelivery?.showCount ?? (existingDelivery ? 1 : 0);
+      if (currentShowCount >= Math.max(1, candidate.maxShowsPerUser || 1)) continue;
+      if (!(await userMatchesAnnouncement(candidate, user))) continue;
+      if (candidate.personalOffer?.ladderId && !(await userHasOpenPopupOffer(userId, candidate.personalOffer.ladderId, candidate.personalOffer.rungId))) {
+        continue;
+      }
+
+      if (existingDelivery) {
+        if (existingDelivery.dismissedAt) {
+          const spacingMinutes = candidate.deliverySpacingMinutes ?? 0;
+          // If no spacing interval is set (<= 0), an explicit dismissal means do not re-show.
+          if (spacingMinutes <= 0) {
+            continue;
+          }
+          // If a spacing interval is set, enforce the cooldown after dismissal.
+          const dismissedAtMs = new Date(existingDelivery.dismissedAt).getTime();
+          const spacingMs = spacingMinutes * 60 * 1000;
+          const allowedAtMs = dismissedAtMs + spacingMs;
           if (allowedAtMs > now.getTime()) {
             nextAvailableAt = new Date(allowedAtMs).toISOString();
             continue;
           }
+        } else if (existingDelivery.shownAt) {
+          const spacingMs = Math.max(0, candidate.deliverySpacingMinutes || 0) * 60 * 1000;
+          if (spacingMs > 0) {
+            const allowedAtMs = new Date(existingDelivery.shownAt).getTime() + spacingMs;
+            if (allowedAtMs > now.getTime()) {
+              nextAvailableAt = new Date(allowedAtMs).toISOString();
+              continue;
+            }
+          }
         }
       }
-    }
 
-    let delivery: AnnouncementDelivery;
-    if (existingDelivery?._id) {
-      delivery = {
-        ...existingDelivery,
-        showCount: currentShowCount + 1,
-        shownAt: nowIso,
-        dismissedAt: null,
-        clickedAt: null,
-        updatedAt: nowIso,
-      };
-      await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).updateOne(
-        { _id: existingDelivery._id },
-        {
-          $set: {
-            showCount: delivery.showCount,
-            shownAt: delivery.shownAt,
-            dismissedAt: null,
-            clickedAt: null,
-            updatedAt: nowIso,
+      let delivery: AnnouncementDelivery;
+      if (existingDelivery?._id) {
+        delivery = {
+          ...existingDelivery,
+          showCount: currentShowCount + 1,
+          shownAt: nowIso,
+          dismissedAt: null,
+          clickedAt: null,
+          updatedAt: nowIso,
+        };
+        await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).updateOne(
+          { _id: existingDelivery._id },
+          {
+            $set: {
+              showCount: delivery.showCount,
+              shownAt: delivery.shownAt,
+              dismissedAt: null,
+              clickedAt: null,
+              updatedAt: nowIso,
+            },
           },
-        },
+        );
+      } else {
+        delivery = {
+          announcementId,
+          userId,
+          surface,
+          showCount: 1,
+          shownAt: nowIso,
+          dismissedAt: null,
+          clickedAt: null,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        const result = await db
+          .collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES)
+          .insertOne(delivery);
+        delivery = { ...delivery, _id: result.insertedId };
+      }
+      await db.collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS).updateOne(
+        { _id: candidate._id },
+        { $inc: { "metrics.shown": 1 }, $set: { updatedAt: nowIso } },
       );
-    } else {
-      delivery = {
-        announcementId,
-        userId,
-        surface,
-        showCount: 1,
-        shownAt: nowIso,
-        dismissedAt: null,
-        clickedAt: null,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      const result = await db
-        .collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES)
-        .insertOne(delivery);
-      delivery = { ...delivery, _id: result.insertedId };
+      picked.push({ announcement: candidate, delivery });
+      pickedIds.add(announcementId);
     }
-    await db.collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS).updateOne(
-      { _id: candidate._id },
-      { $inc: { "metrics.shown": 1 }, $set: { updatedAt: nowIso } },
-    );
-    return {
-      announcement: announcementToPublic(candidate, delivery, surface),
-    };
   }
 
-  return { announcement: null, nextAvailableAt };
+  picked.sort((a, b) => compareAnnouncementOrder(a.announcement, b.announcement));
+  const announcements = await Promise.all(
+    picked.map(async ({ announcement, delivery }) => {
+      const publicAnnouncement = announcementToPublic(announcement, delivery, surface);
+      const personal = announcement.personalOffer;
+      if (personal?.ladderId) {
+        const summary = await getPersonalOfferSummary(userId, personal.ladderId, personal.rungId).catch(() => null);
+        publicAnnouncement.personalOffer = summary
+          ? { ladderId: personal.ladderId, rungId: personal.rungId, kind: summary.kind, closesAt: summary.closesAt }
+          : null;
+        // Handing the pop-up to the app counts as the offer being seen.
+        await markOfferSeen(userId, personal.ladderId, personal.rungId).catch(() => undefined);
+      }
+      return publicAnnouncement;
+    }),
+  );
+
+  return {
+    announcements,
+    announcement: announcements[0] ?? null,
+    nextAvailableAt: announcements.length === 0 ? nextAvailableAt : null,
+  };
+}
+
+export async function getNextAnnouncementForUser(
+  user: Record<string, any>,
+  surface: AnnouncementSurface,
+): Promise<{ announcement: PublicAnnouncement | null; nextAvailableAt?: string | null }> {
+  const { announcement, nextAvailableAt } = await getAnnouncementsForUser(user, surface, 1);
+  return { announcement, nextAvailableAt };
 }
 
 export async function dismissAnnouncementDelivery(
   userId: string,
   deliveryId: string,
   clicked: boolean,
+  buttonId?: string | null,
 ): Promise<boolean> {
   await ensureIndexes();
   const client = await clientPromise;
@@ -1069,8 +1562,15 @@ export async function dismissAnnouncementDelivery(
   }
 
   const now = new Date().toISOString();
+  const cleanButtonId = buttonId ? String(buttonId).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) : "";
   const update = clicked
-    ? { dismissedAt: now, clickedAt: now, updatedAt: now }
+    ? {
+        dismissedAt: now,
+        clickedAt: now,
+        lastClickedAt: now,
+        ...(cleanButtonId ? { clickedButtonId: cleanButtonId } : {}),
+        updatedAt: now,
+      }
     : { dismissedAt: now, updatedAt: now };
 
   const query: any = { userId, dismissedAt: null };
@@ -1085,7 +1585,9 @@ export async function dismissAnnouncementDelivery(
 
   const result = await db.collection<AnnouncementDelivery>(COLLECTIONS.ANNOUNCEMENT_DELIVERIES).updateMany(
     { userId, announcementId: delivery.announcementId, dismissedAt: null },
-    { $set: update },
+    clicked
+      ? { $set: update, $min: { firstClickedAt: now }, $inc: { clickCount: 1 } }
+      : { $set: update },
   );
 
   if (result.modifiedCount > 0) {
@@ -1096,7 +1598,31 @@ export async function dismissAnnouncementDelivery(
         $set: { updatedAt: now },
       },
     );
+    if (clicked && ObjectId.isValid(delivery.announcementId)) {
+      const clickedAnnouncement = await db
+        .collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS)
+        .findOne({ _id: new ObjectId(delivery.announcementId) }, { projection: { personalOffer: 1 } });
+      if (clickedAnnouncement?.personalOffer?.ladderId) {
+        await markOfferClicked(userId, clickedAnnouncement.personalOffer.ladderId, clickedAnnouncement.personalOffer.rungId).catch(() => undefined);
+      }
+    }
   }
 
   return result.modifiedCount > 0;
+}
+
+/** Dismiss several deliveries at once (the app's carousel closing). True if any was recorded. */
+export async function dismissAnnouncementDeliveries(
+  userId: string,
+  deliveryIds: string[],
+  clicked: boolean,
+  buttonId?: string | null,
+): Promise<boolean> {
+  const unique = Array.from(
+    new Set(deliveryIds.filter((id): id is string => typeof id === "string" && id.length > 0)),
+  ).slice(0, 10);
+  const results = await Promise.all(
+    unique.map((deliveryId) => dismissAnnouncementDelivery(userId, deliveryId, clicked, buttonId)),
+  );
+  return results.some(Boolean);
 }

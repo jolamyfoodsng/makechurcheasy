@@ -1,4 +1,5 @@
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
+import { BIBLE_BUILTIN_THEMES } from "../bible/bibleThemes";
 import {
   BOOK_ABBREVS,
   DEFAULT_THEME_SETTINGS,
@@ -275,7 +276,9 @@ export function resolveEffectiveRefFontWeight(
   if (refFontWeight && refFontWeight !== "normal") {
     return refFontWeight;
   }
-  return (fontWeight && fontWeight !== "normal") ? fontWeight : "black";
+  // Follow the verse weight, including Regular. Previously a Regular verse
+  // forced the reference back to Black.
+  return fontWeight || "black";
 }
 
 export function resolveThemeForBibleOverlayMode(
@@ -351,7 +354,13 @@ export function extractFullscreenQuickThemeSettings(
     lowerThirdCardPadding: sanitizeCssPadding(settings.lowerThirdCardPadding),
     lowerThirdBarMaxHeight: clampNumber(Number(settings.lowerThirdBarMaxHeight ?? 600), 120, 900),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(settings.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius),
+    boxBackground: settings.boxBackground || (settings.backgroundColor ? settings.backgroundColor : ""),
+    boxBackgroundImage: settings.boxBackgroundImage || "",
+    boxOpacity: clampNumber(settings.boxOpacity ?? 1, 0, 1),
+    borderRadius: clampNumber(settings.borderRadius ?? settings.lowerThirdCardRadius ?? 16, 0, 64),
+    padding: typeof settings.padding === "number" ? settings.padding : 28,
+    safeArea: typeof settings.safeArea === "number" ? settings.safeArea : 40,
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius ?? settings.borderRadius),
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
     ...compareSettings,
@@ -396,9 +405,9 @@ function normalizeQuickThemeSettings(
   const source = asRecord(value);
   if (!source) return null;
   const compareSettings = normalizeCompareThemeSettings(source);
-  const fontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28;
+  const fontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 16;
   const fontSizeMax = mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200;
-  const refFontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14;
+  const refFontSizeMin = mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10;
   const refFontSizeMax = mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150;
 
   const rawFontColor = colorValue(source, "fontColor", base.fontColor);
@@ -495,7 +504,7 @@ function normalizeQuickThemeSettings(
     referenceBackgroundRadius: numberValue(source, "referenceBackgroundRadius", base.referenceBackgroundRadius, 0, 40),
     lowerThirdPosition: oneOf(source, "lowerThirdPosition", base.lowerThirdPosition, ["left", "center", "right"] as const),
     lowerThirdSize: oneOf(source, "lowerThirdSize", base.lowerThirdSize, ["smallest", "smaller", "small", "medium", "big", "bigger", "biggest"] as const),
-    lowerThirdWidthPreset: oneOf(source, "lowerThirdWidthPreset", base.lowerThirdWidthPreset === "full" ? "md" : base.lowerThirdWidthPreset, ["sm", "md", "lg", "xl", "xxl"] as const),
+    lowerThirdWidthPreset: oneOf(source, "lowerThirdWidthPreset", base.lowerThirdWidthPreset, ["full", "sm", "md", "lg", "xl", "xxl"] as const),
     lowerThirdOffsetX: numberValue(source, "lowerThirdOffsetX", base.lowerThirdOffsetX ?? 0, -500, 500),
     lowerThirdCaptionPosition: oneOf(source, "lowerThirdCaptionPosition", base.lowerThirdCaptionPosition, ["top", "bottom"] as const),
     lowerThirdEdge: sanitizeLowerThirdEdge(source.lowerThirdEdge ?? base.lowerThirdEdge),
@@ -508,7 +517,13 @@ function normalizeQuickThemeSettings(
       900,
     ),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(source.lowerThirdPaddingLinked ?? base.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius ?? base.lowerThirdCardRadius),
+    boxBackground: typeof source.boxBackground === "string" ? source.boxBackground : base.boxBackground,
+    boxBackgroundImage: typeof source.boxBackgroundImage === "string" ? source.boxBackgroundImage : base.boxBackgroundImage,
+    boxOpacity: numberValue(source, "boxOpacity", base.boxOpacity ?? 1, 0, 1),
+    borderRadius: numberValue(source, "borderRadius", base.borderRadius ?? 16, 0, 64),
+    padding: numberValue(source, "padding", base.padding ?? 28, 0, 200),
+    safeArea: numberValue(source, "safeArea", base.safeArea ?? 40, 0, 200),
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius ?? source.borderRadius ?? base.lowerThirdCardRadius),
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(source.lowerThirdTextDirection ?? base.lowerThirdTextDirection),
     compareTranslationWidth: numberValue(source, "compareTranslationWidth", base.compareTranslationWidth, 30, 50),
     backgroundType: bgType,
@@ -617,7 +632,12 @@ export function applyFullscreenQuickThemeSettings(
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
           : quickSettings.backgroundPattern,
-      boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
+      boxBackground: useNoBg
+        ? "transparent"
+        : (quickSettings.boxBackground || theme.settings.boxBackground || (useColorBg ? quickSettings.backgroundColor : "rgba(15, 23, 42, 0.85)")),
+      boxBackgroundImage: quickSettings.boxBackgroundImage ?? theme.settings.boxBackgroundImage ?? "",
+      boxOpacity: quickSettings.boxOpacity ?? theme.settings.boxOpacity ?? 1,
+      borderRadius: quickSettings.borderRadius ?? theme.settings.borderRadius ?? 16,
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,
       referenceBackgroundStyle: quickSettings.referenceBackgroundStyle,
@@ -663,13 +683,14 @@ function getFallbackTheme(
   mode: DockBibleOverlayMode,
   preferredThemeId?: string,
 ): BibleTheme {
-  return themes.find(
+  const allPool = [...themes, ...BIBLE_BUILTIN_THEMES.filter((bt) => !themes.some((t) => t.id === bt.id))];
+  return allPool.find(
     (theme) => theme.id === preferredThemeId && themeSupportsBibleOverlayMode(theme, mode),
   )
     ?? BUILTIN_THEMES.find(
       (theme) => theme.id === preferredThemeId && themeSupportsBibleOverlayMode(theme, mode),
     )
-    ?? themes.find((theme) => themeSupportsBibleOverlayMode(theme, mode))
+    ?? allPool.find((theme) => themeSupportsBibleOverlayMode(theme, mode))
     ?? BUILTIN_THEMES.find((theme) => themeSupportsBibleOverlayMode(theme, mode))
     ?? BUILTIN_THEMES[0];
 }
@@ -678,6 +699,11 @@ async function loadAllBibleOutputThemes(): Promise<BibleTheme[]> {
   const themeMap = new Map<string, BibleTheme>();
   for (const theme of BUILTIN_THEMES) {
     themeMap.set(theme.id, theme);
+  }
+  for (const theme of BIBLE_BUILTIN_THEMES) {
+    if (!themeMap.has(theme.id)) {
+      themeMap.set(theme.id, theme);
+    }
   }
 
   try {

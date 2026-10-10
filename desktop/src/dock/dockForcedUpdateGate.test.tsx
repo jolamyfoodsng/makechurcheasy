@@ -87,7 +87,7 @@ describe("DockAuthGate forced update lock enforcement", () => {
     expect(html).not.toContain("Remind Me Later");
   });
 
-  it("renders the overlay with 'I Updated, Refresh' button when in countdown mode without Remind Me Later", () => {
+  it("lets the dock close the reminder during the countdown, but never offers Remind Me Later", () => {
     vi.spyOn(forcedUpdateHook, "useForcedUpdate").mockReturnValue({
       state: {
         ...baseMockState,
@@ -108,10 +108,37 @@ describe("DockAuthGate forced update lock enforcement", () => {
       </DockAuthGate>
     );
 
-    // The modal shows 'I Updated, Refresh' and never shows 'Remind Me Later' in the dock
+    // The dock reminder can be closed for now while time is left
     expect(html).toContain("I Updated, Refresh");
+    expect(html).toContain("Close for now");
     expect(html).not.toContain("Remind Me Later");
     expect(html).toContain("Update Required");
+  });
+
+  it("cannot be closed once the dock is locked (last 30 minutes or expired)", () => {
+    vi.spyOn(forcedUpdateHook, "useForcedUpdate").mockReturnValue({
+      state: {
+        ...baseMockState,
+        active: true,
+        blocked: false,
+        hoursRemaining: 0.2,
+        gracePeriodHours: 168,
+        lockAt: new Date(Date.now() + 0.2 * 3600 * 1000).toISOString(),
+        startedAt: new Date().toISOString(),
+      },
+      isVisible: true,
+      dismiss: undefined,
+      refetch: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <DockAuthGate>
+        <div data-testid="dock-children">Dock Content</div>
+      </DockAuthGate>
+    );
+
+    expect(html).toContain("I Updated, Refresh");
+    expect(html).not.toContain("Close for now");
   });
 
   it("falls back to opening download URL in browser/OBS environment without throwing", async () => {

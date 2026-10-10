@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkSignupAbuse, clientIpFromRequest, signupDeviceIdFromRequest } from "@/lib/adminControls";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import clientPromise from "@/lib/mongodb";
@@ -32,13 +33,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
     }
 
-    const { name, email, password, churchName, referralCode } = (await req.json()) as {
+    const body = (await req.json()) as {
       name?: string;
       email?: string;
       password?: string;
       churchName?: string;
       referralCode?: string;
+      installationId?: string;
+      deviceId?: string;
     };
+    const { name, email, password, churchName, referralCode } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -96,6 +100,15 @@ export async function POST(req: NextRequest) {
     const signupCity = req.headers.get("x-mce-geo-city")?.trim() || "";
     const signupTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
     const signupIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+    const signupDeviceId = signupDeviceIdFromRequest(req, body);
+    const abuse = await checkSignupAbuse(db, {
+      email: normalizedEmail,
+      ip: signupIp || clientIpFromRequest(req),
+      deviceId: signupDeviceId,
+    });
+    if (!abuse.ok) {
+      return NextResponse.json({ error: abuse.error, code: abuse.code }, { status: 403 });
+    }
 
     // Create user
     const now = new Date().toISOString();
@@ -113,10 +126,20 @@ export async function POST(req: NextRequest) {
       timezone: signupTimezone,
       signupCountry: normalizedCountry,
       signupCity,
-      signupIp,
+      signupIp: signupIp || clientIpFromRequest(req),
+      ...(signupDeviceId ? { signupDeviceId } : {}),
       lastLoginCountry: normalizedCountry,
       lastLoginCity: signupCity,
       lastLoginIp: signupIp,
+      locationHistory: [
+        {
+          country: normalizedCountry || "UNKNOWN",
+          ...(signupCity ? { city: signupCity } : {}),
+          ...(signupTimezone ? { timezone: signupTimezone } : {}),
+          ...(signupIp ? { ip: signupIp } : {}),
+          timestamp: now,
+        },
+      ],
       language: signupLanguage,
       phone: "",
       role: "user",

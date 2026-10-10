@@ -53,6 +53,26 @@ export interface DownloadProgress {
   downloaded: number;
 }
 
+export type UpdateInstallStatus = "downloading" | "installing" | "relaunching";
+
+/**
+ * An update whose bytes are already on disk / in memory and verified.
+ * `install()` is the only step that interrupts the operator, so callers can
+ * run it right away ("Update now"), when the user clicks "Restart now", or
+ * when the app is being quit.
+ */
+export interface PreparedUpdate {
+  version: string;
+  source: "signed" | "installer";
+  install: (options?: {
+    /** Restart MakeChurchEasy after installing (default true). */
+    relaunch?: boolean;
+    onStatusChange?: (status: UpdateInstallStatus) => void;
+  }) => Promise<void>;
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 // ── Version Age / Forced Update ──
 
 /** How old (in days) the current version can be before forced update */
@@ -280,28 +300,19 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 // ── Download & Install ──
 
 /**
- * Download and install an update with progress tracking.
- * After install completes, relaunches the app automatically.
- *
- * @param update - The Update object from checkForUpdate()
- * @param onProgress - Called with download progress updates
- * @param onStatusChange - Called when status changes (downloading → installing → relaunching)
+ * Download (but do not install) a signed Tauri update. The returned
+ * PreparedUpdate installs it later without downloading again.
  */
-export async function downloadAndInstallUpdate(
+export async function downloadSignedUpdate(
   update: Update,
   onProgress?: (progress: DownloadProgress) => void,
-  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void
-): Promise<void> {
-  onStatusChange?.("downloading");
-
+): Promise<PreparedUpdate> {
   // Pass auth headers for private repo binary downloads
   const headers = getUpdaterHeaders();
 
-  // Track cumulative download progress
   let totalContentLength = 0;
   let totalDownloaded = 0;
 
-  // Download the update binary with progress tracking
   await update.download((event) => {
     switch (event.event) {
       case "Started":
@@ -309,27 +320,43 @@ export async function downloadAndInstallUpdate(
         totalDownloaded = 0;
         onProgress?.({ contentLength: totalContentLength, downloaded: 0 });
         break;
-
       case "Progress":
         totalDownloaded += event.data.chunkLength ?? 0;
         onProgress?.({ contentLength: totalContentLength, downloaded: totalDownloaded });
         break;
-
       case "Finished":
         break;
     }
   }, headers ? { headers } : undefined);
 
-  onStatusChange?.("installing");
+  return {
+    version: update.version,
+    source: "signed",
+    install: async ({ relaunch: shouldRelaunch = true, onStatusChange } = {}) => {
+      onStatusChange?.("installing");
+      // Windows (passive NSIS/MSI) quits this process inside install().
+      await update.install();
+      if (!shouldRelaunch) return;
+      onStatusChange?.("relaunching");
+      // Brief pause so the user sees "Restarting..."
+      await wait(800);
+      await relaunch();
+    },
+  };
+}
 
-  // Install the downloaded update
-  await update.install();
-
-  onStatusChange?.("relaunching");
-
-  // Brief pause so the user sees "Relaunching..."
-  await new Promise((r) => setTimeout(r, 800));
-  await relaunch();
+/**
+ * Download and install an update with progress tracking, then relaunch.
+ * Kept for the blocking (forced) update screens.
+ */
+export async function downloadAndInstallUpdate(
+  update: Update,
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: UpdateInstallStatus) => void,
+): Promise<void> {
+  onStatusChange?.("downloading");
+  const prepared = await downloadSignedUpdate(update, onProgress);
+  await prepared.install({ relaunch: true, onStatusChange });
 }
 
 // ── Published release source ──
@@ -475,20 +502,20 @@ export function findPlatformAsset(assets: PublishedReleaseAsset[], platform: Pla
 }
 
 /**
- * Download an installer from an admin-configured URL, launch it with the
- * operating system, and exit this app so the installer can replace it.
+ * Download an installer from a URL to a temp file without running it.
+ * `install()` opens the installer with the OS and quits this app so the
+ * installer can replace it.
  */
-export async function downloadAndInstallFromUrl(
+export async function downloadInstallerFromUrl(
   url: string,
   onProgress?: (progress: DownloadProgress) => void,
-  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void,
-): Promise<void> {
+  version = "",
+): Promise<PreparedUpdate> {
   const parsedUrl = new URL(url);
   const fallbackName = `MakeChurchEasy-${Date.now()}.installer`;
   const filename = decodeURIComponent(parsedUrl.pathname.split("/").pop() || fallbackName)
     .replace(/[^a-zA-Z0-9._-]/g, "_") || fallbackName;
 
-  onStatusChange?.("downloading");
   const response = await tauriFetch(url);
   if (!response.ok) throw new Error(`Download failed (${response.status})`);
 
@@ -524,11 +551,32 @@ export async function downloadAndInstallFromUrl(
   const filePath = await join(tmpDir, filename);
   await writeFile(filePath, new Uint8Array(buffer));
 
-  onStatusChange?.("installing");
-  await open(filePath);
-  onStatusChange?.("relaunching");
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  await exit(0);
+  return {
+    version,
+    source: "installer",
+    install: async ({ onStatusChange } = {}) => {
+      onStatusChange?.("installing");
+      await open(filePath);
+      onStatusChange?.("relaunching");
+      await wait(800);
+      // The installer replaces the app, so this process must quit either way.
+      await exit(0);
+    },
+  };
+}
+
+/**
+ * Download an installer from an admin-configured URL, launch it with the
+ * operating system, and exit this app so the installer can replace it.
+ */
+export async function downloadAndInstallFromUrl(
+  url: string,
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: UpdateInstallStatus) => void,
+): Promise<void> {
+  onStatusChange?.("downloading");
+  const prepared = await downloadInstallerFromUrl(url, onProgress);
+  await prepared.install({ onStatusChange });
 }
 
 /**
@@ -551,26 +599,37 @@ export async function downloadAndInstallFromGitHub(
   const platform = detectPlatform();
   const asset = findPlatformAsset(release.assets ?? [], platform);
   if (!asset) throw new Error(`No installer available for ${platform}`);
-  await downloadAndInstallFromUrl(asset.browser_download_url, onProgress, onStatusChange);
+  onStatusChange?.("downloading");
+  const prepared = await downloadInstallerFromUrl(asset.browser_download_url, onProgress, release.version);
+  await prepared.install({ onStatusChange });
+}
+
+/** Download the published platform installer without running it. */
+export async function downloadInstallerFromGitHub(
+  onProgress?: (progress: DownloadProgress) => void,
+): Promise<PreparedUpdate> {
+  const release = await fetchLatestPublishedRelease();
+  const platform = detectPlatform();
+  const asset = findPlatformAsset(release.assets ?? [], platform);
+  if (!asset) throw new Error(`No installer available for ${platform}`);
+  return downloadInstallerFromUrl(asset.browser_download_url, onProgress, release.version);
 }
 
 /**
- * Install a signed updater result only after it has been reconciled with the
- * real published release. If the manifest is stale, mismatched, or its URL is
- * broken, use the verified GitHub installer instead.
+ * Download a verified update without installing it. The signed updater is
+ * used when its manifest matches the real published release; otherwise (or
+ * when the signed download fails) the published installer is downloaded.
  */
-export async function downloadAndInstallVerifiedUpdate(
+export async function downloadVerifiedUpdate(
   update: Update | undefined,
   onProgress?: (progress: DownloadProgress) => void,
-  onStatusChange?: (status: "downloading" | "installing" | "relaunching") => void,
-): Promise<void> {
+): Promise<PreparedUpdate> {
   if (update) {
     try {
       const release = await fetchLatestPublishedRelease();
       if (isUpdateFromPublishedRelease(update, release)) {
         try {
-          await downloadAndInstallUpdate(update, onProgress, onStatusChange);
-          return;
+          return await downloadSignedUpdate(update, onProgress);
         } catch (error) {
           console.warn("[updater] Signed update download failed; using published installer:", error);
         }
@@ -586,5 +645,20 @@ export async function downloadAndInstallVerifiedUpdate(
     }
   }
 
-  await downloadAndInstallFromGitHub(onProgress, onStatusChange);
+  return downloadInstallerFromGitHub(onProgress);
+}
+
+/**
+ * Install a signed updater result only after it has been reconciled with the
+ * real published release. If the manifest is stale, mismatched, or its URL is
+ * broken, use the verified GitHub installer instead.
+ */
+export async function downloadAndInstallVerifiedUpdate(
+  update: Update | undefined,
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: UpdateInstallStatus) => void,
+): Promise<void> {
+  onStatusChange?.("downloading");
+  const prepared = await downloadVerifiedUpdate(update, onProgress);
+  await prepared.install({ relaunch: true, onStatusChange });
 }

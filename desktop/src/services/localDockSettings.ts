@@ -144,6 +144,7 @@ function queueBrowserDatabaseUpdate(
   scope: string,
   update: (current: SettingsMap) => SettingsMap,
 ): Promise<void> {
+  if (typeof indexedDB === "undefined") return Promise.resolve();
   const previous = browserWriteQueues.get(scope) ?? Promise.resolve();
   const next = previous
     .catch(() => undefined)
@@ -304,6 +305,34 @@ function queueWrite(scope: string, key: string, value: unknown): Promise<void> {
   return next;
 }
 
+let legacyDbSettingsMap: Map<string, unknown> | null = null;
+let legacyDbSettingsLoaded = false;
+
+async function getLegacyDbSetting(keyCandidate: string): Promise<unknown | undefined> {
+  if (typeof indexedDB === "undefined") return undefined;
+  if (!legacyDbSettingsLoaded) {
+    legacyDbSettingsLoaded = true;
+    try {
+      const { getCentralDb, STORES } = await import("./db");
+      const db = await getCentralDb();
+      if (db.objectStoreNames.contains(STORES.APP_SETTINGS)) {
+        const allKeys = await db.getAllKeys(STORES.APP_SETTINGS);
+        if (allKeys.length > 0) {
+          const map = new Map<string, unknown>();
+          for (const k of allKeys) {
+            const val = await db.get(STORES.APP_SETTINGS, k);
+            map.set(String(k), val);
+          }
+          legacyDbSettingsMap = map;
+        }
+      }
+    } catch {
+      legacyDbSettingsMap = null;
+    }
+  }
+  return legacyDbSettingsMap?.get(keyCandidate);
+}
+
 async function migrateLegacyValue(key: string, loaded: SettingsMap): Promise<void> {
   if (Object.prototype.hasOwnProperty.call(loaded, key)) return;
 
@@ -327,17 +356,16 @@ async function migrateLegacyValue(key: string, loaded: SettingsMap): Promise<voi
   // Import that copy only when there is no native record or localStorage copy.
   if (raw === null) {
     try {
-      const { getByKey, STORES } = await import("./db");
       const userId = readUserIdFromBrowserSession();
       const candidates = userId ? [`${key}:${userId}`, key] : [key];
       for (const candidate of candidates) {
-        const durable = await getByKey<unknown>(STORES.APP_SETTINGS, candidate);
+        const durable = await getLegacyDbSetting(candidate);
         if (durable !== undefined) {
           loaded[key] = durable;
           await saveToDesktop(currentScope, key, durable);
           try {
-            const { deleteRecord } = await import("./db");
-            await deleteRecord(STORES.APP_SETTINGS, candidate);
+            const { deleteRecord, STORES } = await import("./db");
+            void deleteRecord(STORES.APP_SETTINGS, candidate).catch(() => {});
           } catch {
             // The native copy is already safe; cleanup can happen later.
           }
@@ -396,18 +424,31 @@ export async function hydrateNativeDockSettings(): Promise<void> {
     settings = { ...loaded, ...pendingValues };
 
     if (settings[MIGRATION_MARKER] !== true) {
-      let migrationFailed = false;
-      for (const key of collectLegacyKeys()) {
+      let alreadyMigrated = false;
+      if (typeof localStorage !== "undefined") {
         try {
-          await migrateLegacyValue(key, settings);
-        } catch (error) {
-          migrationFailed = true;
-          console.warn(`[DockSettings] Could not migrate ${key}:`, error);
-        }
+          alreadyMigrated = localStorage.getItem(MIGRATION_MARKER) === "true";
+        } catch { /* ignore */ }
       }
-      if (!migrationFailed) {
+
+      if (alreadyMigrated) {
         settings[MIGRATION_MARKER] = true;
-        await saveToDesktop(currentScope, MIGRATION_MARKER, true);
+        void saveToDesktop(currentScope, MIGRATION_MARKER, true).catch(() => {});
+      } else {
+        for (const key of collectLegacyKeys()) {
+          try {
+            await migrateLegacyValue(key, settings);
+          } catch (error) {
+            console.warn(`[DockSettings] Could not migrate ${key}:`, error);
+          }
+        }
+        settings[MIGRATION_MARKER] = true;
+        if (typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem(MIGRATION_MARKER, "true");
+          } catch { /* ignore */ }
+        }
+        await saveToDesktop(currentScope, MIGRATION_MARKER, true).catch(() => {});
       }
     }
 

@@ -180,6 +180,13 @@ export interface AuthUser {
     durationDays?: number;
     welcomeShown?: boolean;
   };
+  /** Why this account has no trial (set by the server, null when not applicable). */
+  trialEligibility?: TrialEligibility | null;
+}
+
+export interface TrialEligibility {
+  status: "used_on_device" | "desktop_required";
+  message: string;
 }
 
 interface AuthSession {
@@ -215,6 +222,7 @@ interface DeviceBootstrapResponse {
       oneTimeOfferId?: string | null;
       oneTimeOfferName?: string | null;
       trial?: AuthUser["trial"];
+      trialEligibility?: AuthUser["trialEligibility"];
     };
     credits: {
       remaining: number;
@@ -724,6 +732,7 @@ export async function refreshAccountBootstrapFromServer(): Promise<RefreshPlanRe
       oneTimeOfferId: remoteHas("oneTimeOfferId") ? remote.oneTimeOfferId ?? null : current.oneTimeOfferId ?? null,
       oneTimeOfferName: remoteHas("oneTimeOfferName") ? remote.oneTimeOfferName ?? null : current.oneTimeOfferName ?? null,
       trial: resolveBootstrappedTrial(remote, current),
+      trialEligibility: remoteHas("trialEligibility") ? remote.trialEligibility ?? null : current.trialEligibility ?? null,
     };
 
     const sessionChanged = JSON.stringify(updatedUser) !== JSON.stringify(current);
@@ -915,6 +924,7 @@ export async function redeemPairingCode(
       adminManagedSubscription: data.user.adminManagedSubscription || null,
       subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
+      trialEligibility: data.user.trialEligibility ?? null,
     };
 
     await saveSession({
@@ -1002,6 +1012,7 @@ export function watchPairingStatus(
       adminManagedSubscription: data.user.adminManagedSubscription || null,
       subscriptionExpiresAt: data.user.subscriptionExpiresAt || null,
       trial: data.user.trial || undefined,
+      trialEligibility: data.user.trialEligibility ?? null,
     };
 
     try {

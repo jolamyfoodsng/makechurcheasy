@@ -10,7 +10,7 @@
  * so they share one favorites list.
  */
 
-import { canonicalizeLowerThirdThemeId } from "../lowerthirds/themes";
+import { canonicalizeLowerThirdThemeId } from "../lowerthirds/themeIdCanonical";
 import { serializeBibleThemesForDock } from "./dockBibleThemeAssets";
 import {
   getNativeDockSettingsScope,

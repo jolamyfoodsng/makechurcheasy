@@ -8,6 +8,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { checkVersionGate } from "@/lib/versionGate";
 import {
   claimTrialForUserIfEligible,
+  getClientTrialEligibility,
 } from "@/lib/trialAbuse";
 
 const loginLimiter = rateLimit({ windowMs: 60_000, max: 10 });
@@ -203,6 +204,10 @@ export async function POST(req: NextRequest) {
             role: trustedUser.role,
             plan: trustedUser.plan || "free",
             trial: trustedUser.trial || null,
+            trialEligibility: await getClientTrialEligibility(
+              trustedUser._id.toString(),
+              Boolean(trustedUser.trial || trustedUser.trialId),
+            ),
           },
           deviceId,
           deviceSecret: existingDevice.deviceSecret || null,

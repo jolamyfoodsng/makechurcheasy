@@ -33,6 +33,16 @@ export async function proxyToBackend(
     headers.set("x-mce-client-ip", clientIp.trim());
   }
 
+  const edgeCity = request.headers.get("x-mce-geo-city") || request.headers.get("x-vercel-ip-city");
+  if (edgeCity && !headers.has("x-mce-geo-city")) {
+    headers.set("x-mce-geo-city", edgeCity.trim());
+  }
+
+  const edgeTimezone = request.headers.get("x-mce-geo-timezone") || request.headers.get("x-vercel-ip-timezone");
+  if (edgeTimezone && !headers.has("x-mce-geo-timezone")) {
+    headers.set("x-mce-geo-timezone", edgeTimezone.trim());
+  }
+
   try {
     const method = request.method.toUpperCase();
     const hasBody = method !== "GET" && method !== "HEAD";

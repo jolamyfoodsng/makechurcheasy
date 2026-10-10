@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 use crate::{
-    now_unix_millis, presentation_viewer_count, PresentationStateEnvelope,
+    merge_presentation_state, now_unix_millis, presentation_viewer_count, PresentationStateEnvelope,
     PresentationViewerHeartbeat, PRESENTATION_STATE, PRESENTATION_VIEWERS,
 };
 
@@ -500,6 +500,8 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                                 std::sync::Mutex::new(std::collections::BTreeMap::new())
                             });
                             if let Ok(mut state) = state_store.lock() {
+                                let previous = state.get(&session_id).cloned();
+                                merge_presentation_state(&body, &mut payload, previous.as_ref());
                                 state.insert(session_id.clone(), payload.clone());
                             }
                             broadcast_presentation_state(&payload);

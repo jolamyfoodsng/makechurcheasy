@@ -38,6 +38,7 @@ import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
 import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
 import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
+import DockMotionControls from "./DockMotionControls";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,7 +64,7 @@ const LT_APPEARANCE_COLOR_CONTROLS: Array<{ key: LTAppearanceColorKey; label: st
   { key: "bgColor", label: "Background", fallback: "#111827" },
   { key: "textColor", label: "Primary Text", fallback: "#ffffff" },
   { key: "infoColor", label: "Supporting Text", fallback: "#94a3b8" },
-  { key: "accentColor", label: "Accent", fallback: "#1d4ed8" },
+  { key: "accentColor", label: "Accent", fallback: "#4f46e5" },
 ];
 
 function sanitizeLtColor(value: unknown): string | undefined {
@@ -137,6 +138,35 @@ function withoutLtAppearanceColors(styles: LTCustomStyle): LTCustomStyle {
   };
 }
 
+// Motion straps (public/kinetic) are bare animated text: no box, so no background.
+// Their look is set through theme variables (kxColor, kxSpeed, kxScale, kxAutoOut).
+function isKineticTheme(theme: LowerThirdTheme): boolean {
+  return typeof theme.html === "string" && theme.html.includes("kx-root");
+}
+
+// Church graphics (public/kinetic/church-lower-thirds.js) carry many differently-shaped
+// fields (giving lines, links, timers), so each field is shown with its own label.
+function isGraphicsTheme(theme: LowerThirdTheme): boolean {
+  return Array.isArray(theme.tags) && theme.tags.includes("Graphics");
+}
+
+const dockFieldLabelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 10,
+  fontWeight: 600,
+  color: "var(--dock-text)",
+  margin: "2px 0 3px",
+};
+
+/** Fill variables that older saved slots don't have yet with the theme defaults. */
+function withThemeDefaults(theme: LowerThirdTheme, values: Record<string, string>): Record<string, string> {
+  const merged = { ...values };
+  for (const v of theme.variables) {
+    if (merged[v.key] === undefined) merged[v.key] = v.defaultValue ?? "";
+  }
+  return merged;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -159,7 +189,8 @@ function loadInitialSlotState(themeId: string, slotIndex: number, theme: LowerTh
   return {
     variableValues: defaults,
     customStyles: { ...LT_DEFAULT_CUSTOM_STYLE },
-    position: "bottom-left",
+    // Graphics saved in Broadcast Graphics start where the user placed them.
+    position: (theme as LowerThirdTheme & { defaultPosition?: LTPosition }).defaultPosition || "bottom-left",
     animationIn: (theme.animation?.name as LTAnimationIn) || "slide-left",
     exitStyle: "fade",
   };
@@ -440,7 +471,11 @@ export default function DockLowerThirdEditor({
             || hint.includes("ministry") || hint.includes("church")
           );
 
-        if (isNameField) {
+        if (isNameField && (key === "firstname" || key === "lastname")) {
+          // Separate first/last fields (Motion straps): split the speaker's name.
+          const parts = sp.name.trim().split(/\s+/);
+          next[v.key] = key === "firstname" ? (parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || "") : (parts.length > 1 ? parts[parts.length - 1] : "");
+        } else if (isNameField) {
           next[v.key] = sp.name;
         } else if (isTitleField) {
           const combined = [resolvedRole, churchName].filter(Boolean).join(", ");
@@ -498,6 +533,8 @@ export default function DockLowerThirdEditor({
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const kineticTheme = useMemo(() => isKineticTheme(theme), [theme]);
+  const graphicsTheme = useMemo(() => isGraphicsTheme(theme), [theme]);
 
   const skipAutoSaveRef = useRef(true);
   const isSavingRef = useRef(false);
@@ -718,10 +755,10 @@ export default function DockLowerThirdEditor({
     const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
-      variableValues,
+      withThemeDefaults(theme, variableValues),
       true,
       false,
-      size,
+      kineticTheme ? "lg" : size,
       customStyles,
       undefined as LTFontSize | undefined,
       position,
@@ -731,17 +768,17 @@ export default function DockLowerThirdEditor({
       overlayExitStyle,
     );
     onSend(url);
-  }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onSend]);
+  }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onSend, kineticTheme]);
 
   const handleAnimateOut = useCallback(() => {
     if (!onAnimateOut) return;
     const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
-      variableValues,
+      withThemeDefaults(theme, variableValues),
       false,
       true,
-      size,
+      kineticTheme ? "lg" : size,
       customStyles,
       undefined as LTFontSize | undefined,
       position,
@@ -751,7 +788,7 @@ export default function DockLowerThirdEditor({
       overlayExitStyle,
     );
     onAnimateOut(url);
-  }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut]);
+  }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onAnimateOut, kineticTheme]);
 
   return (
     <div className="dock-lt-editor-layout">
@@ -795,8 +832,8 @@ export default function DockLowerThirdEditor({
           </div>
         )}
 
-        {/* ── Speaker Quick Select (only for speaker themes) ── */}
-        {isCurrentThemeSpeaker && (
+        {/* ── Speaker Quick Select (only for speaker themes; Motion straps show it in DockMotionControls) ── */}
+        {isCurrentThemeSpeaker && !kineticTheme && (
           <div style={{ padding: "0 0 6px" }}>
             <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 4 }}>
               {t("lowerThird.speaker")}
@@ -854,7 +891,11 @@ export default function DockLowerThirdEditor({
 
 
             {/* First Edit Container: Logo + Textfields */}
-            <div className={`dock-lt-first-edit${hasLogoVariable ? "" : " dock-lt-first-edit--no-logo"}`}>
+            <div
+              className={`dock-lt-first-edit${hasLogoVariable ? "" : " dock-lt-first-edit--no-logo"}`}
+              // Graphics have many fields: picture on its own full-width row, fields below at full width.
+              style={graphicsTheme ? { display: "flex", flexDirection: "column", alignItems: "stretch", gap: 8 } : undefined}
+            >
               {hasLogoVariable && imageVariable && (
                 <>
                   <input
@@ -873,10 +914,15 @@ export default function DockLowerThirdEditor({
                     onMouseEnter={() => setImageHovered(true)}
                     onMouseLeave={() => setImageHovered(false)}
                     aria-busy={imageUploading}
+                    style={graphicsTheme ? { width: "100%", minWidth: 0, height: 76, flex: "none", aspectRatio: "auto" } : undefined}
                   >
                     {(imagePreviewUrl || variableValues[imageVariable.key]) ? (
                       <>
-                        <img src={imagePreviewUrl || variableValues[imageVariable.key]} alt="" />
+                        <img
+                          src={imagePreviewUrl || variableValues[imageVariable.key]}
+                          alt=""
+                          style={graphicsTheme ? { width: "100%", height: "100%", objectFit: "contain" } : undefined}
+                        />
                         {imageHovered && (
                           <div className="dock-lt-image-picker-overlay">
                             <button
@@ -909,7 +955,7 @@ export default function DockLowerThirdEditor({
                   </div>
                 </>
               )}
-              <div className="dock-lt-textfields">
+              <div className="dock-lt-textfields" style={graphicsTheme ? { width: "100%", minWidth: 0 } : undefined}>
                 {/* Dynamic fields from theme variables (text/list types, excluding image/logo variables) */}
                 {theme.variables
                   .filter((v) => {
@@ -922,11 +968,52 @@ export default function DockLowerThirdEditor({
                   })
                   .map((v, idx) => {
                     void idx;
+                    // Multi-pick list with known options (e.g. social icons): toggle chips, kept as a comma list.
+                    if (v.type === "list" && Array.isArray(v.options) && v.options.length) {
+                      const picked = String(variableValues[v.key] ?? "").split(/[\s,]+/).filter(Boolean);
+                      return (
+                        <div className="dock-lt-field-row" key={v.key} style={{ display: "block" }}>
+                          <label style={dockFieldLabelStyle}>{(v.label || v.key).replace(/\s*\(comma list\)/i, "")}</label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {v.options.map((opt) => {
+                              const on = picked.includes(opt.value);
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = on ? picked.filter((p) => p !== opt.value) : [...picked, opt.value];
+                                    setVariableValues((prev) => ({ ...prev, [v.key]: next.join(",") }));
+                                  }}
+                                  style={{
+                                    padding: "3px 8px",
+                                    borderRadius: 999,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    border: `1px solid ${on ? "var(--dock-accent, #6366f1)" : "var(--dock-border)"}`,
+                                    background: on ? "color-mix(in srgb, var(--dock-accent, #6366f1) 22%, transparent)" : "transparent",
+                                    color: on ? "var(--dock-text)" : "var(--dock-text-dim)",
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
-                      <div className="dock-lt-field-row" key={v.key}>
+                      <div className="dock-lt-field-row" key={v.key} style={graphicsTheme ? { display: "block" } : undefined}>
+                        {graphicsTheme && (
+                          <label style={dockFieldLabelStyle} htmlFor={`dock-lt-field-${v.key}`}>{v.label || v.key}</label>
+                        )}
                         <input
+                          id={`dock-lt-field-${v.key}`}
                           className="dock-lt-field-input"
                           type="text"
+                          style={graphicsTheme ? { width: "100%", boxSizing: "border-box" } : undefined}
                           value={variableValues[v.key] ?? ""}
                           onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
                           placeholder={v.label || v.key}
@@ -939,13 +1026,18 @@ export default function DockLowerThirdEditor({
                 {theme.variables
                   .filter((v) => v.type === "select" && v.key !== "state" && v.key !== "animMode")
                   .map((v) => (
-                    <div className="dock-lt-field-row" key={v.key}>
+                    <div className="dock-lt-field-row" key={v.key} style={graphicsTheme ? { display: "block" } : undefined}>
+                      {graphicsTheme && (
+                        <label style={dockFieldLabelStyle} htmlFor={`dock-lt-field-${v.key}`}>{v.label || v.key}</label>
+                      )}
                       <select
+                        id={`dock-lt-field-${v.key}`}
                         className="dock-lt-field-input"
+                        style={graphicsTheme ? { width: "100%", boxSizing: "border-box" } : undefined}
                         value={variableValues[v.key] ?? ""}
                         onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
                       >
-                        <option value="">{v.label || v.key}</option>
+                        {!graphicsTheme && <option value="">{v.label || v.key}</option>}
                         {(v.options ?? []).map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
@@ -954,7 +1046,7 @@ export default function DockLowerThirdEditor({
                   ))}
                 {/* Number-type variables */}
                 {theme.variables
-                  .filter((v) => v.type === "number")
+                  .filter((v) => v.type === "number" && !v.key.startsWith("kx"))
                   .map((v) => (
                     <div className="dock-lt-field-row" key={v.key}>
                       <input
@@ -969,6 +1061,18 @@ export default function DockLowerThirdEditor({
               </div>
             </div>
 
+            {kineticTheme ? (
+              <DockMotionControls
+                theme={theme}
+                speakers={speakers}
+                selectedSpeakerIdx={selectedSpeakerIdx}
+                onSelectSpeaker={setSelectedSpeakerIdx}
+                values={variableValues}
+                onValueChange={(key, value) => setVariableValues((prev) => ({ ...prev, [key]: value }))}
+                position={position}
+                onPositionChange={setPosition}
+              />
+            ) : (
             <div
               style={{
                 marginTop: 6,
@@ -1073,6 +1177,7 @@ export default function DockLowerThirdEditor({
                 </div>
               )}
             </div>
+            )}
 
             {/* Panel Bottom: Memory + Time Controls */}
             <div className="dock-lt-panel-bottom">

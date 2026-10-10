@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth";
 import {
   ANNOUNCEMENT_SURFACES,
-  dismissAnnouncementDelivery,
-  getNextAnnouncementForUser,
+  dismissAnnouncementDeliveries,
+  getAnnouncementsForUser,
 } from "@/lib/announcements";
 import type { AnnouncementSurface } from "@/types/schemas";
 
@@ -42,7 +42,11 @@ export async function GET(req: NextRequest) {
     }
 
     const surface = getSurface(req);
-    const result = await getNextAnnouncementForUser(authUser.mongoUser, surface);
+    // Apps that can page through several announcements send ?limit=N. Older
+    // apps do not, so they keep receiving a single announcement.
+    const rawLimit = Number(req.nextUrl.searchParams.get("limit"));
+    const limit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.floor(rawLimit) : 1;
+    const result = await getAnnouncementsForUser(authUser.mongoUser, surface, limit);
     return corsJson(result);
   } catch (error) {
     console.error("[UserAnnouncements] GET error:", error);
@@ -60,13 +64,24 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({})) as {
       deliveryId?: string;
+      deliveryIds?: string[];
       clicked?: boolean;
+      buttonId?: string;
     };
-    if (!body.deliveryId) {
+    const deliveryIds = [
+      ...(Array.isArray(body.deliveryIds) ? body.deliveryIds : []),
+      ...(body.deliveryId ? [body.deliveryId] : []),
+    ].filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (deliveryIds.length === 0) {
       return corsJson({ error: "deliveryId is required" }, { status: 400 });
     }
 
-    const success = await dismissAnnouncementDelivery(userId, body.deliveryId, Boolean(body.clicked));
+    const success = await dismissAnnouncementDeliveries(
+      userId,
+      deliveryIds,
+      Boolean(body.clicked),
+      typeof body.buttonId === "string" ? body.buttonId : null,
+    );
     return corsJson({ success });
   } catch (error) {
     console.error("[UserAnnouncements] POST error:", error);

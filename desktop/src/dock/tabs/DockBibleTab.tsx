@@ -8,7 +8,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { useAppTheme } from "../../hooks/useAppTheme";
 import { preloadBibleSearch, searchBible, type SearchResult as BibleKeywordResult } from "../../bible/bibleData";
 import { addFavorite, getFavorites, removeFavorite } from "../../bible/bibleDb";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
@@ -85,6 +84,10 @@ import {
   DOCK_BIBLE_PREFS_KEY,
   updateDockBibleKeywordMatchPreference,
 } from "../dockBibleKeywordPreference";
+import {
+  DOCK_THEME_SYNC_EVENT,
+  type DockThemeSyncPayload,
+} from "../dockThemeSync";
 import {
   resolveEffectiveRefColor,
   resolveEffectiveRefFontWeight,
@@ -263,6 +266,16 @@ type BibleBrowserQuickSettingsPatch = Partial<Pick<
   | "lowerThirdWidthPreset"
   | "lowerThirdCardPadding"
   | "lowerThirdBarMaxHeight"
+  | "backgroundType"
+  | "backgroundImage"
+  | "backgroundImageFilePath"
+  | "backgroundVideo"
+  | "backgroundVideoFilePath"
+  | "backgroundColor"
+  | "backgroundColorEnd"
+  | "backgroundPattern"
+  | "backgroundOpacity"
+  | "fullscreenShadeOpacity"
 >>;
 type BibleQuickSettingsSaveContext = DockThemeSettingsSaveContext & {
   lineCount?: number;
@@ -455,17 +468,39 @@ interface BibleOutputControlsMenuProps {
   settings: DockFullscreenQuickThemeSettings;
   lineCount: number;
   isFitTextMode: boolean;
-  browserQuickUpdateImmediately: boolean;
-  hasPendingBrowserQuickChanges: boolean;
+  /** @deprecated Changes always apply immediately. */
+  browserQuickUpdateImmediately?: boolean;
+  /** @deprecated Changes always apply immediately. */
+  hasPendingBrowserQuickChanges?: boolean;
   mode?: "fullscreen" | "lower-third";
   compareEnabled?: boolean;
   onToggleCompare?: () => void;
+  translationB?: string;
+  availableTranslations?: BibleTranslationOption[];
+  onTranslationBChange?: (trans: string) => void;
   onClose: () => void;
   onLowerThirdSizePresetChange: (option: DockQuickSizeOption) => void;
   onLineCountChange: (lineCount: number) => void;
-  onUpdateImmediatelyChange: (checked: boolean) => void;
-  onSave: () => void | Promise<void>;
+  /** @deprecated Changes always apply immediately. */
+  onUpdateImmediatelyChange?: (checked: boolean) => void;
+  /** @deprecated Changes always apply immediately. */
+  onSave?: () => void | Promise<void>;
   onOpenSettings?: () => void;
+  onFontSizeStep?: (delta: number) => void;
+  currentFontSize?: number;
+  minFontSize?: number;
+  maxFontSize?: number;
+  /** Full screen / Lower third switch (hidden when not provided, e.g. full-screen-only). */
+  onOverlayModeChange?: (mode: "fullscreen" | "lower-third") => void;
+  /** Show / Hide the verse on the output without clearing the selection. */
+  outputVisible?: boolean;
+  outputVisibilityPending?: boolean;
+  onToggleOutputVisible?: () => void;
+  /** Reference line and "(KJV)" on the output. */
+  referenceShown?: boolean;
+  onReferenceShownChange?: (shown: boolean) => void;
+  versionShown?: boolean;
+  onVersionShownChange?: (shown: boolean) => void;
 }
 
 // Compatibility anchors: dock-bible-reference-popover dock-bible-reference-trigger bible.referenceDisplay
@@ -474,17 +509,28 @@ function BibleOutputControlsMenu({
   settings,
   lineCount,
   isFitTextMode,
-  browserQuickUpdateImmediately,
-  hasPendingBrowserQuickChanges,
   mode = "lower-third",
   compareEnabled,
   onToggleCompare,
+  translationB,
+  availableTranslations,
+  onTranslationBChange,
   onClose,
   onLowerThirdSizePresetChange,
   onLineCountChange,
-  onUpdateImmediatelyChange,
-  onSave,
   onOpenSettings,
+  onFontSizeStep,
+  currentFontSize,
+  minFontSize = 14,
+  maxFontSize = 200,
+  onOverlayModeChange,
+  outputVisible = true,
+  outputVisibilityPending = false,
+  onToggleOutputVisible,
+  referenceShown = true,
+  onReferenceShownChange,
+  versionShown = true,
+  onVersionShownChange,
 }: BibleOutputControlsMenuProps) {
   const { t } = useTranslation();
 
@@ -523,10 +569,47 @@ function BibleOutputControlsMenu({
           </button>
         )}
       </div>
+
+      {(onOverlayModeChange || onToggleOutputVisible) && (
+        <div className="dock-output-quick-actions__row">
+          {onOverlayModeChange && (
+            <div className="dock-output-quick-actions__segmented" role="group" aria-label={t("bible.outputLayout", "Output layout")}>
+              {(["fullscreen", "lower-third"] as const).map((layout) => (
+                <button
+                  key={layout}
+                  type="button"
+                  className={`dock-output-quick-actions__segment${mode === layout ? " dock-output-quick-actions__segment--active" : ""}`}
+                  aria-pressed={mode === layout}
+                  onClick={() => onOverlayModeChange(layout)}
+                >
+                  {layout === "fullscreen" ? t("bible.fullscreen", "Full screen") : t("bible.lowerThird", "Lower third")}
+                </button>
+              ))}
+            </div>
+          )}
+          {onToggleOutputVisible && (
+            <button
+              type="button"
+              className={`dock-output-quick-actions__visibility${outputVisible ? "" : " dock-output-quick-actions__visibility--hidden"}`}
+              onClick={onToggleOutputVisible}
+              disabled={outputVisibilityPending}
+              aria-pressed={!outputVisible}
+              title={outputVisible
+                ? t("bible.hideOutputHint", "Hide the verse on the output (keeps your place)")
+                : t("bible.showOutputHint", "Show the verse on the output again")}
+            >
+              <Icon name={outputVisible ? "visibility_off" : "visibility"} size={12} />
+              <span>{outputVisible ? t("common.hide", "Hide") : t("common.show", "Show")}</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {isFitTextMode && (
         <div className="dock-bible-reader__font-size-field">
           <span className="dock-bible-reader__font-size-field-label">{t("bible.frameSize", "Text size")}</span>
           <small>{t("bible.frameSizeDescription", "Larger text and reference; narrower text area.")}</small>
+          <div className="dock-output-quick-actions__size-row">
           <div className="dock-bible-reader__size-presets" role="group" aria-label={t("bible.frameSize", "Text size")}>
             {sizeOptions.map((option) => {
               const isOptionActive = mode === "fullscreen"
@@ -544,6 +627,32 @@ function BibleOutputControlsMenu({
                 </button>
               );
             })}
+          </div>
+          {onFontSizeStep && typeof currentFontSize === "number" && (
+            <div className="dock-bible-reader__font-size-controls">
+              <button
+                type="button"
+                className="dock-bible-reader__font-size-btn"
+                onClick={() => onFontSizeStep(-2)}
+                disabled={currentFontSize <= minFontSize}
+                aria-label={t("bible.decreaseFontSize", "Decrease text size")}
+                title={t("bible.decreaseFontSize", "Decrease text size")}
+              >
+                <Icon name="remove" size={12} />
+              </button>
+              <span className="dock-bible-reader__font-size-value">{currentFontSize}px</span>
+              <button
+                type="button"
+                className="dock-bible-reader__font-size-btn"
+                onClick={() => onFontSizeStep(2)}
+                disabled={currentFontSize >= maxFontSize}
+                aria-label={t("bible.increaseFontSize", "Increase text size")}
+                title={t("bible.increaseFontSize", "Increase text size")}
+              >
+                <Icon name="add" size={12} />
+              </button>
+            </div>
+          )}
           </div>
         </div>
       )}
@@ -564,46 +673,54 @@ function BibleOutputControlsMenu({
           </select>
         </label>
       </div>
-      {onToggleCompare && (
-        <div className="dock-bible-reader__font-size-field-row dock-bible-reader__compare-toggle-row">
-          <button
-            type="button"
-            className={`dock-bible-reader__compare-mode-toggle-btn${compareEnabled ? " dock-bible-reader__compare-mode-toggle-btn--active" : ""}`}
-            onClick={onToggleCompare}
-            aria-pressed={Boolean(compareEnabled)}
-          >
-            <Icon name="compare_arrows" size={12} />
-            <span className="dock-bible-reader__compare-mode-toggle-label">
-              {t("dock.bottomToolbar.compareTranslations", "Compare Translations")}
-            </span>
-            {compareEnabled && (
-              <span className="dock-bible-reader__compare-mode-badge">{t("common.on", "ON")}</span>
-            )}
-          </button>
+      {(onReferenceShownChange || onVersionShownChange) && (
+        <div className="dock-output-quick-actions__checks">
+          {onReferenceShownChange && (
+            <label className="dock-bible-reader__font-size-checkbox">
+              <input
+                type="checkbox"
+                checked={referenceShown}
+                onChange={(event) => onReferenceShownChange(event.target.checked)}
+              />
+              <span>{t("bible.showReference", "Show reference")}</span>
+            </label>
+          )}
+          {onVersionShownChange && (
+            <label className="dock-bible-reader__font-size-checkbox">
+              <input
+                type="checkbox"
+                checked={versionShown}
+                disabled={!referenceShown}
+                onChange={(event) => onVersionShownChange(event.target.checked)}
+              />
+              <span>{t("bible.showVersion", "Show version (KJV)")}</span>
+            </label>
+          )}
         </div>
       )}
-      <div className="dock-bible-reader__font-size-menu-footer">
-        <div className="dock-bible-reader__font-size-menu-preferences">
-          <label className="dock-bible-reader__font-size-checkbox">
-            <input
-              type="checkbox"
-              checked={browserQuickUpdateImmediately}
-              onChange={(event) => onUpdateImmediatelyChange(event.target.checked)}
-            />
-            <span>{t("bible.updateImmediately", "Update Immediately")}</span>
-          </label>
+      {compareEnabled && onToggleCompare && (
+        <div className="dock-bible-reader__font-size-field" style={{ width: "100%" }}>
+          {compareEnabled && availableTranslations && availableTranslations.length > 0 && onTranslationBChange && (
+            <label className="dock-bible-reader__font-size-field" style={{ width: "100%", marginTop: "3px" }}>
+              <span className="dock-bible-reader__font-size-field-label">
+                {t("dock.compare.compareWith", "Compare with")}
+              </span>
+              <select
+                className="dock-bible-reader__font-size-select"
+                value={translationB}
+                onChange={(event) => onTranslationBChange(event.target.value)}
+                aria-label={t("dock.compare.translationB", "Translation B")}
+              >
+                {availableTranslations.map((trans) => (
+                  <option key={`quick-compare-trans-${trans.value}`} value={trans.value}>
+                    {trans.value.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
-        {!browserQuickUpdateImmediately && (
-          <button
-            type="button"
-            className="dock-bible-reader__font-size-save"
-            onClick={onSave}
-            disabled={!hasPendingBrowserQuickChanges}
-          >
-            {t("common.save", "Save")}
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -758,7 +875,13 @@ function extractFullscreenQuickThemeSettings(
     lowerThirdCardPadding: sanitizeCssPadding(settings.lowerThirdCardPadding),
     lowerThirdBarMaxHeight: clampNumber(Number(settings.lowerThirdBarMaxHeight ?? 600), 120, 900),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(settings.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius),
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius ?? settings.borderRadius),
+    boxBackground: settings.boxBackground || (settings.backgroundColor ? settings.backgroundColor : ""),
+    boxBackgroundImage: settings.boxBackgroundImage || "",
+    boxOpacity: clampNumber(settings.boxOpacity ?? 1, 0, 1),
+    borderRadius: clampNumber(settings.borderRadius ?? settings.lowerThirdCardRadius ?? 16, 0, 64),
+    padding: typeof settings.padding === "number" ? settings.padding : 28,
+    safeArea: typeof settings.safeArea === "number" ? settings.safeArea : 40,
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
     ...compareSettings,
@@ -776,14 +899,17 @@ function buildDefaultLowerThirdQuickThemeSettings(
 
   return normalizeLowerThirdFitSettings({
     ...base,
-    fontSize: sizePreset.fontSize,
-    refFontSize: sizePreset.refFontSize,
-    lineHeight: sizePreset.lineHeight,
-    refSpacing: sizePreset.refSpacing,
-    lowerThirdBarMaxHeight: sizePreset.maxHeight,
-    referenceBackgroundEnabled: false,
-    lowerThirdWidthPreset:
-      base.lowerThirdWidthPreset === "full" ? "md" : base.lowerThirdWidthPreset,
+    fontSize: typeof settings.fontSize === "number" && settings.fontSize > 0
+      ? clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX)
+      : sizePreset.fontSize,
+    refFontSize: typeof settings.refFontSize === "number" && settings.refFontSize > 0
+      ? clampNumber(settings.refFontSize, LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, LOWER_THIRD_REFERENCE_FONT_SIZE_MAX)
+      : sizePreset.refFontSize,
+    lineHeight: settings.lineHeight || sizePreset.lineHeight,
+    refSpacing: typeof settings.refSpacing === "number" ? settings.refSpacing : sizePreset.refSpacing,
+    lowerThirdBarMaxHeight: typeof settings.lowerThirdBarMaxHeight === "number" ? settings.lowerThirdBarMaxHeight : sizePreset.maxHeight,
+    referenceBackgroundEnabled: settings.referenceBackgroundEnabled ?? false,
+    lowerThirdWidthPreset: base.lowerThirdWidthPreset,
   });
 }
 
@@ -795,15 +921,19 @@ function extractLowerThirdQuickThemeSettings(
     LOWER_THIRD_SIZE_PRESETS[settings.lowerThirdSize || DEFAULT_THEME_SETTINGS.lowerThirdSize] ||
     LOWER_THIRD_SIZE_PRESETS.medium;
   const base = extractFullscreenQuickThemeSettings(settings, backgroundType);
-  const fontSize = clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX);
+  const fontSize = typeof settings.fontSize === "number" && settings.fontSize > 0
+    ? clampNumber(settings.fontSize, LOWER_THIRD_FIT_MIN_FONT_SIZE, LOWER_THIRD_FONT_SIZE_MAX)
+    : sizePreset.fontSize;
   return {
     ...base,
     fontSize,
-    refFontSize: clampNumber(
-      settings.refFontSize || (fontSize + 5),
-      LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
-      LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
-    ),
+    refFontSize: typeof settings.refFontSize === "number" && settings.refFontSize > 0
+      ? clampNumber(settings.refFontSize, LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE, LOWER_THIRD_REFERENCE_FONT_SIZE_MAX)
+      : clampNumber(
+        fontSize + 5,
+        LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
+        LOWER_THIRD_REFERENCE_FONT_SIZE_MAX,
+      ),
     lowerThirdBarMaxHeight: clampNumber(Number(settings.lowerThirdBarMaxHeight ?? sizePreset.maxHeight), 120, 900),
   };
 }
@@ -862,7 +992,7 @@ function sanitizeFullscreenQuickThemeSettings(
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<DockFullscreenQuickThemeSettings>;
   const fontWeight =
-    source.fontWeight === "light" || source.fontWeight === "normal" || source.fontWeight === "bold" || source.fontWeight === "extrabold"
+    source.fontWeight === "light" || source.fontWeight === "normal" || source.fontWeight === "bold" || source.fontWeight === "extrabold" || source.fontWeight === "black"
       ? source.fontWeight
       : DEFAULT_THEME_SETTINGS.fontWeight;
   const fontStyle =
@@ -889,7 +1019,7 @@ function sanitizeFullscreenQuickThemeSettings(
 
   const fontSize = clampNumber(
     Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
-    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
+    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 16,
     mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
   );
   const fontColor = sanitizeColor(source.fontColor, DEFAULT_THEME_SETTINGS.fontColor);
@@ -900,7 +1030,7 @@ function sanitizeFullscreenQuickThemeSettings(
   const rawRefFontSize = Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize);
   const refFontSize = clampNumber(
     rawRefFontSize > 0 ? rawRefFontSize : (fontSize + 5),
-    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
+    mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10,
     mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
   );
 
@@ -997,15 +1127,14 @@ function sanitizeFullscreenQuickThemeSettings(
         ? source.lowerThirdSize
         : DEFAULT_THEME_SETTINGS.lowerThirdSize,
     lowerThirdWidthPreset:
-      source.lowerThirdWidthPreset === "sm" ||
+      source.lowerThirdWidthPreset === "full" ||
+        source.lowerThirdWidthPreset === "sm" ||
         source.lowerThirdWidthPreset === "md" ||
         source.lowerThirdWidthPreset === "lg" ||
         source.lowerThirdWidthPreset === "xl" ||
         source.lowerThirdWidthPreset === "xxl"
         ? source.lowerThirdWidthPreset
-        : source.lowerThirdWidthPreset === "full"
-          ? "md"
-          : DEFAULT_THEME_SETTINGS.lowerThirdWidthPreset,
+        : DEFAULT_THEME_SETTINGS.lowerThirdWidthPreset,
     lowerThirdOffsetX: clampNumber(
       Number(source.lowerThirdOffsetX ?? 0),
       -500,
@@ -1024,7 +1153,13 @@ function sanitizeFullscreenQuickThemeSettings(
       900,
     ),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(source.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius),
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius ?? source.borderRadius),
+    boxBackground: typeof source.boxBackground === "string" ? source.boxBackground : "",
+    boxBackgroundImage: typeof source.boxBackgroundImage === "string" ? source.boxBackgroundImage : "",
+    boxOpacity: clampNumber(Number(source.boxOpacity ?? 1), 0, 1),
+    borderRadius: clampNumber(Number(source.borderRadius ?? source.lowerThirdCardRadius ?? 16), 0, 64),
+    padding: clampNumber(Number(source.padding ?? 28), 0, 200),
+    safeArea: clampNumber(Number(source.safeArea ?? 40), 0, 200),
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(source.lowerThirdTextDirection),
     compareTranslationWidth: clampNumber(Number(source.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth), 30, 50),
     backgroundType: source.backgroundType,
@@ -1154,7 +1289,8 @@ function applyFullscreenQuickThemeSettings(
           ? (theme.settings.backgroundColorEnd || "#162040")
           : useColorBg
             ? (quickSettings.backgroundColorEnd || "#162040")
-            : (quickSettings.backgroundColorEnd || ""),
+            // Image/pattern/video: no gradient end, so a leftover gradient can't cover the media.
+            : (usePatternBg || useImageBg || useVideoBg) ? "" : (quickSettings.backgroundColorEnd || ""),
       bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
       // Keep the last pattern in quick settings so the picker can restore it
       // after a temporary color/video switch, but only send it to the overlay
@@ -1164,7 +1300,14 @@ function applyFullscreenQuickThemeSettings(
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
           : quickSettings.backgroundPattern,
-      boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
+      boxBackground: useNoBg
+        ? "transparent"
+        : (quickSettings.boxBackground || theme.settings.boxBackground || (useColorBg ? quickSettings.backgroundColor : "rgba(15, 23, 42, 0.85)")),
+      boxBackgroundImage: quickSettings.boxBackgroundImage ?? theme.settings.boxBackgroundImage ?? "",
+      boxOpacity: quickSettings.boxOpacity ?? theme.settings.boxOpacity ?? 1,
+      borderRadius: quickSettings.borderRadius ?? theme.settings.borderRadius ?? 16,
+      padding: typeof quickSettings.padding === "number" ? quickSettings.padding : (theme.settings.padding ?? 28),
+      safeArea: typeof quickSettings.safeArea === "number" ? quickSettings.safeArea : (theme.settings.safeArea ?? 40),
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,
       referenceBackgroundStyle: quickSettings.referenceBackgroundStyle,
@@ -1471,8 +1614,6 @@ function DockBibleTab({
   onToggleMenu,
 }: Props) {
   const { t } = useTranslation();
-  const { effective: effectiveTheme, setTheme } = useAppTheme();
-  const nextTheme = effectiveTheme === "dark" ? "light" : "dark";
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const fullscreenOnlyMode = Boolean(fullscreenOnly);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("bible");
@@ -1635,6 +1776,12 @@ function DockBibleTab({
   const [referenceVersionVisible, setReferenceVersionVisible] = useState(
     () => sanitizeReferenceVersionVisible(initialPrefs.referenceVersionVisible),
   );
+  // Remembers Full / Short so "Show reference" in the output controls turns the
+  // reference back on in the format the operator had chosen.
+  const lastVisibleReferenceFormatRef = useRef<BibleReferenceFormat>(
+    referenceFormat === "hidden" ? DEFAULT_BIBLE_REFERENCE_FORMAT : referenceFormat,
+  );
+  if (referenceFormat !== "hidden") lastVisibleReferenceFormatRef.current = referenceFormat;
   const [translationA, setTranslationA] = useState(initialPrefs.translationA ?? "KJV");
   const [translationB, setTranslationB] = useState(initialPrefs.translationB ?? "NIV");
   const [comparePassageDrafts, setComparePassageDrafts] = useState<ComparePassageDraft[]>(() =>
@@ -1769,9 +1916,10 @@ function DockBibleTab({
       : null,
   );
   const [isQuickActionsDragging, setIsQuickActionsDragging] = useState(false);
-  const [browserQuickUpdateImmediately, setBrowserQuickUpdateImmediately] = useState(
-    () => initialUiPrefs.browserQuickUpdateImmediately !== false,
-  );
+  // Output changes always go live immediately (the "Update Immediately" + Save
+  // step was removed from the output controls). An older saved "off" preference
+  // is ignored so nobody is left with changes that never reach OBS.
+  const [browserQuickUpdateImmediately, setBrowserQuickUpdateImmediately] = useState(true);
   const [draftBrowserQuickThemeSettings, setDraftBrowserQuickThemeSettings] =
     useState<DockFullscreenQuickThemeSettings | null>(null);
   const [draftBrowserVerseLineCount, setDraftBrowserVerseLineCount] = useState<number | null>(null);
@@ -2784,50 +2932,78 @@ function DockBibleTab({
     (async () => {
       try {
         const { getChapter } = await import("../../bible/bibleData");
-        const uniqueTranslations = Array.from(
-          new Set(quickTranslations.map((value) => value.toUpperCase())),
-        );
+        const activeVer = (activeTranslation || columnTranslations[activeColumnIndex] || quickTranslations[0] || "KJV").toUpperCase();
+        const primaryIndex = activeColumnIndex >= 0 && activeColumnIndex < columnTranslations.length ? activeColumnIndex : 0;
+        const primaryVersion = (columnTranslations[primaryIndex] || activeVer).toUpperCase();
+
         const passageMap = new Map<string, BiblePassage>();
         const errorMap = new Map<string, string>();
 
-        await Promise.all(
-          uniqueTranslations.map(async (version) => {
-            try {
-              const passage = await getChapter(selectedBook, selectedChapter, version);
-              passageMap.set(version, passage);
-            } catch (error) {
-              errorMap.set(
-                version,
-                error instanceof Error ? error.message : t("bible.unableToLoadVersion"),
-              );
-            }
-          }),
+        // 1. Immediately load and render the primary visible translation for instant UI display
+        try {
+          const primaryPassage = await getChapter(selectedBook, selectedChapter, primaryVersion);
+          passageMap.set(primaryVersion, primaryPassage);
+          if (!cancelled) {
+            const initialPassages = createEmptyPassages();
+            initialPassages[primaryIndex] = primaryPassage;
+            setChapterPassages(initialPassages);
+            setChapterLoading(false);
+
+            const verses = (primaryPassage.verses ?? []).map((v) => ({
+              verse: v.verse,
+              text: v.text,
+            }));
+            invoke("set_bible_reading_state", {
+              translation: primaryPassage.translation ?? primaryVersion,
+              book: selectedBook,
+              chapter: selectedChapter,
+              verses,
+              selectedVerse: selectedVerse ?? null,
+            }).catch(() => { });
+          }
+        } catch (error) {
+          errorMap.set(
+            primaryVersion,
+            error instanceof Error ? error.message : t("bible.unableToLoadVersion"),
+          );
+        }
+
+        if (cancelled) return;
+
+        // 2. Load remaining column translations in the background without blocking the UI
+        const otherTranslations = Array.from(
+          new Set(
+            columnTranslations
+              .map((value) => value.toUpperCase())
+              .filter((version) => version !== primaryVersion),
+          ),
         );
+
+        if (otherTranslations.length > 0) {
+          await Promise.all(
+            otherTranslations.map(async (version) => {
+              try {
+                const passage = await getChapter(selectedBook, selectedChapter, version);
+                passageMap.set(version, passage);
+              } catch (error) {
+                errorMap.set(
+                  version,
+                  error instanceof Error ? error.message : t("bible.unableToLoadVersion"),
+                );
+              }
+            }),
+          );
+        }
+
         if (cancelled) return;
         const nextPassages = createEmptyPassages();
         const nextErrors = createEmptyErrors();
         columnTranslations.forEach((version, index) => {
-          nextPassages[index] = passageMap.get(version) ?? null;
-          nextErrors[index] = errorMap.get(version) ?? "";
+          nextPassages[index] = passageMap.get(version.toUpperCase()) ?? null;
+          nextErrors[index] = errorMap.get(version.toUpperCase()) ?? "";
         });
         setChapterPassages(nextPassages);
         setChapterErrors(nextErrors);
-
-        // Update the shared Bible reading state so mobile can show the same chapter
-        const primaryPassage = nextPassages[0];
-        if (primaryPassage && !cancelled) {
-          const verses = (primaryPassage.verses ?? []).map((v) => ({
-            verse: v.verse,
-            text: v.text,
-          }));
-          invoke("set_bible_reading_state", {
-            translation: primaryPassage.translation ?? quickTranslations[0] ?? "KJV",
-            book: selectedBook,
-            chapter: selectedChapter,
-            verses,
-            selectedVerse: selectedVerse ?? null,
-          }).catch(() => { });
-        }
       } catch (error) {
         if (cancelled) return;
         const nextErrors = createEmptyErrors();
@@ -3618,6 +3794,7 @@ function DockBibleTab({
         compareTranslationsOverride?: { translationA: string; translationB: string };
       },
     ) => {
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("bible");
       const requestId = ++liveVerseRequestIdRef.current;
       const visibilityEpoch = visibilityEpochRef.current;
       const effectiveTranslation = options?.translation ?? activeTranslation;
@@ -4329,6 +4506,77 @@ function DockBibleTab({
     selectedLowerThirdThemeRef,
   ]);
 
+  useEffect(() => {
+    const handleThemeSync = (event: Event) => {
+      const customEvent = event as CustomEvent<DockThemeSyncPayload>;
+      const payload = customEvent.detail;
+      if (!payload || !payload.targetTabs.includes("bible")) return;
+
+      const { targetModes, quickSettings, theme, themeId, backgroundPreset, sourceTab, sourceMode } = payload;
+      const findTheme = (id: string | null | undefined): BibleTheme | null => {
+        if (!id) return null;
+        if (theme && theme.id === id) return theme;
+        return BUILTIN_THEMES.find((t) => t.id === id) ?? null;
+      };
+      const resolvedTheme = theme ?? findTheme(themeId);
+
+      if (targetModes.includes("fullscreen")) {
+        setFullscreenQuickThemeSettings(quickSettings);
+        setSavedFullscreenQuickThemeSettings(quickSettings);
+        if (resolvedTheme) {
+          setSelectedBibleTheme(resolvedTheme);
+          selectedBibleThemeRef.current = resolvedTheme;
+        }
+        const baseFs = resolveThemeForOverlayMode(
+          resolvedTheme ?? selectedBibleThemeRef.current,
+          "fullscreen",
+        );
+        liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+          baseFs,
+          quickSettings,
+        ).settings;
+      }
+
+      if (targetModes.includes("lower-third")) {
+        setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+        setLowerThirdQuickThemeSettings(quickSettings);
+        setSavedLowerThirdQuickThemeSettings(quickSettings);
+        if (resolvedTheme) {
+          setSelectedLowerThirdTheme(resolvedTheme);
+          selectedLowerThirdThemeRef.current = resolvedTheme;
+        }
+        const baseLt = resolveThemeForOverlayMode(
+          resolvedTheme ?? selectedLowerThirdThemeRef.current,
+          "lower-third",
+        );
+        liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+          baseLt,
+          quickSettings,
+        ).settings;
+      }
+
+      if (backgroundPreset) {
+        setBackgroundPreset(backgroundPreset);
+        backgroundPresetRef.current = backgroundPreset;
+      }
+
+      const liveMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
+      if (targetModes.includes(liveMode) && (sourceTab !== "bible" || sourceMode !== liveMode)) {
+        void refreshCurrentBibleOutputAfterThemeSave(liveMode, quickSettings, {
+          selectedTheme: resolvedTheme ?? undefined,
+          backgroundPreset: backgroundPreset ?? undefined,
+        });
+      }
+    };
+
+    window.addEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+    return () => window.removeEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+  }, [
+    fullscreenOnlyMode,
+    refreshCurrentBibleOutputAfterThemeSave,
+  ]);
+
+
   const refreshCurrentBibleOutputForLineCount = useCallback((lineCount: number) => {
     if (!bibleOverlayVisible || !selectedBook || !selectedChapter || !selectedVerse) {
       return Promise.resolve<DockOverlayFontFitMeasurement | null>(null);
@@ -4545,11 +4793,11 @@ function DockBibleTab({
     : activeLowerThirdQuickThemeSettings;
   const browserFontMode = fullscreenOnlyMode || overlayMode === "fullscreen" ? "fullscreen" : "lower-third";
   const browserFontSizeMin = browserFontMode === "fullscreen"
-    ? 28
+    ? 16
     : LOWER_THIRD_FIT_MIN_FONT_SIZE;
   const browserFontSizeMax = browserFontMode === "fullscreen" ? 200 : LOWER_THIRD_FONT_SIZE_MAX;
   const browserReferenceFontSizeMin = browserFontMode === "fullscreen"
-    ? 14
+    ? 10
     : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
   const browserReferenceFontSizeMax = browserFontMode === "fullscreen"
     ? 150
@@ -4622,7 +4870,7 @@ function DockBibleTab({
       lineHeight: preset.lineHeight,
       refSpacing: option.refSpacing ?? preset.refSpacing,
       lowerThirdSize: option.preset,
-      lowerThirdWidthPreset: option.width,
+      lowerThirdWidthPreset: activeBrowserFontSettings.lowerThirdWidthPreset === "full" ? "full" : option.width,
       lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
       lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
       compareVerseFontSizeLeft: nextVerseSize,
@@ -4636,11 +4884,43 @@ function DockBibleTab({
     void handleSyncBibleBrowserSettings(patch);
     setDraftBrowserQuickThemeSettings(null);
   }, [
+    activeBrowserFontSettings.lowerThirdWidthPreset,
     applyBrowserQuickSettingsPatch,
     browserFontSizeMax,
     browserFontSizeMin,
     browserReferenceFontSizeMax,
     browserReferenceFontSizeMin,
+    handleSyncBibleBrowserSettings,
+  ]);
+
+  const handleBrowserFontSizeStep = useCallback((delta: number) => {
+    const currentSize = displayedBrowserFontSettings.fontSize || (browserFontMode === "fullscreen" ? 56 : 36);
+    const nextSize = clampNumber(currentSize + delta, browserFontSizeMin, browserFontSizeMax);
+    const nextRefSize = clampNumber(
+      Math.round(nextSize * (browserFontMode === "fullscreen" ? 0.7 : 0.8)),
+      browserReferenceFontSizeMin,
+      browserReferenceFontSizeMax,
+    );
+    const patch: BibleBrowserQuickSettingsPatch = {
+      fontSize: nextSize,
+      refFontSize: nextRefSize,
+      compareVerseFontSizeLeft: nextSize,
+      compareVerseFontSizeRight: nextSize,
+      compareAutoFitMaxFontSize: nextSize,
+      compareReferenceFontSizeLeft: nextRefSize,
+      compareReferenceFontSizeRight: nextRefSize,
+    };
+    applyBrowserQuickSettingsPatch(patch);
+    void handleSyncBibleBrowserSettings(patch);
+    setDraftBrowserQuickThemeSettings(null);
+  }, [
+    applyBrowserQuickSettingsPatch,
+    browserFontMode,
+    browserFontSizeMax,
+    browserFontSizeMin,
+    browserReferenceFontSizeMax,
+    browserReferenceFontSizeMin,
+    displayedBrowserFontSettings.fontSize,
     handleSyncBibleBrowserSettings,
   ]);
 
@@ -5253,9 +5533,9 @@ function DockBibleTab({
 
     const win = typeof window !== "undefined" ? (window as any) : null;
     if (win && typeof win.requestIdleCallback === "function") {
-      handle = win.requestIdleCallback(run, { timeout: 2500 });
+      handle = win.requestIdleCallback(run, { timeout: 20000 });
     } else {
-      handle = setTimeout(run, 1500);
+      handle = setTimeout(run, 15000);
     }
 
     return () => {
@@ -5940,6 +6220,28 @@ function DockBibleTab({
     setTranslationB(newTranslation);
   }, [translationA, translationB]);
 
+  const handleQuickTranslationBChange = useCallback((newTranslation: string) => {
+    handleTranslationBChange(newTranslation);
+    if (selectedBook && selectedChapter !== null && selectedVerse !== null && compareEnabled) {
+      void goLiveVerse(selectedBook, selectedChapter, selectedVerse, {
+        translation: activeTranslation,
+        compareTranslationsOverride: {
+          translationA: activeTranslation,
+          translationB: newTranslation,
+        },
+        reveal: true,
+      });
+    }
+  }, [
+    activeTranslation,
+    compareEnabled,
+    goLiveVerse,
+    handleTranslationBChange,
+    selectedBook,
+    selectedChapter,
+    selectedVerse,
+  ]);
+
   const openThemeSettings = useCallback((tab: ThemeSettingsTab = "text") => {
     setThemeSettingsInitialTab(tab);
     setShowComparePopover(false);
@@ -6616,6 +6918,11 @@ function DockBibleTab({
     [activeColumnIndex, activeTranslation, handleVerseClick],
   );
 
+  // Switching version only changes what the Dock shows. The verse on air in
+  // OBS stays as it is until the operator clicks a verse (which then goes out
+  // in the new version) — changing versions mid-reading must not cut the live
+  // output. Callers that do want to project (e.g. the compare modal) call
+  // goLiveVerse themselves.
   const handleQuickVersionChange = useCallback((columnIndex: number, version: string) => {
     const nextValue = version.toUpperCase();
     setColumnTranslations((current) => {
@@ -8172,8 +8479,8 @@ function DockBibleTab({
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        const menuWidth = 195;
-                        const menuHeight = 150;
+                        const menuWidth = 210;
+                        const menuHeight = 280;
                         const viewportW = window.innerWidth || 800;
                         const viewportH = window.innerHeight || 600;
                         const clampedX = Math.max(8, Math.min(e.clientX, viewportW - menuWidth - 8));
@@ -8337,6 +8644,32 @@ function DockBibleTab({
                     <Icon name="content_copy" size={16} />
                     <span>{t("bible.copyVerse", "Copy Verse")}</span>
                   </button>
+                  <div className="dock-bible-context-menu__divider" />
+                  <div className="dock-bible-context-menu__section">
+                    <div className="dock-bible-context-menu__section-header">
+                      <Icon name="format_align_left" size={13} />
+                      <span>{t("bible.linesPerStage", "Lines per stage")}</span>
+                    </div>
+                    <div className="dock-bible-context-menu__lines-grid">
+                      {Array.from({ length: MAX_VERSE_LINES }, (_, index) => index + 1).map((count) => {
+                        const isActive = displayedBrowserVerseLineCount === count;
+                        return (
+                          <button
+                            key={count}
+                            type="button"
+                            className={`dock-bible-context-menu__line-btn${isActive ? " dock-bible-context-menu__line-btn--active" : ""}`}
+                            onClick={() => {
+                              handleBrowserVerseLineCountChange(count);
+                              setVerseContextMenu(null);
+                            }}
+                          >
+                            {isActive && <span className="dock-bible-context-menu__line-check">✓</span>}
+                            <span>{count === 1 ? t("bible.oneLine", "1 Line") : t("bible.xLines", `${count} Lines`, { count })}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </>,
               document.body,
@@ -8375,6 +8708,9 @@ function DockBibleTab({
                 mode={browserFontMode}
                 compareEnabled={compareEnabled}
                 onToggleCompare={() => handleCompareEnabledChange(!compareEnabled)}
+                translationB={translationB}
+                availableTranslations={availableTranslations}
+                onTranslationBChange={handleQuickTranslationBChange}
                 onClose={() => setShowBrowserFontSizePopover(false)}
                 onLowerThirdSizePresetChange={handleLowerThirdSizePresetChange}
                 onLineCountChange={handleBrowserVerseLineCountChange}
@@ -8384,6 +8720,18 @@ function DockBibleTab({
                   setShowBrowserFontSizePopover(false);
                   openThemeSettings("background");
                 }}
+                onFontSizeStep={handleBrowserFontSizeStep}
+                currentFontSize={displayedBrowserFontSettings.fontSize || (browserFontMode === "fullscreen" ? 56 : 36)}
+                minFontSize={browserFontSizeMin}
+                maxFontSize={browserFontSizeMax}
+                onOverlayModeChange={fullscreenOnlyMode ? undefined : handleOverlayModeChange}
+                outputVisible={bibleOverlayVisible}
+                outputVisibilityPending={visibilityActionPending}
+                onToggleOutputVisible={() => { void handleToggleBibleVisibility(); }}
+                referenceShown={referenceFormat !== "hidden"}
+                onReferenceShownChange={(shown) => handleReferenceFormatChange(shown ? lastVisibleReferenceFormatRef.current : "hidden")}
+                versionShown={referenceVersionVisible}
+                onVersionShownChange={handleReferenceVersionVisibleChange}
               />
             </div>
 
@@ -8437,64 +8785,15 @@ function DockBibleTab({
               bottomPanel={bottomSearchPanel}
               bottomPanelToggle={undefined}
               children={
-                <>
-                  <DockSceneRoutingControl
-                    module="bible"
-                    route={sceneRoute}
-                    onRouteChange={updateSceneRoute}
-                    title={t("sceneRouting.bible", "Output")}
-                    placement="above"
-                    showLabel
-                    iconName="cast"
-                  />
-                  <div className="dock-btm-overflow__divider" role="separator" />
-                  <button
-                    type="button"
-                    className="dock-btm-overflow__menu-item"
-                    data-dock-close-overflow="true"
-                    data-dock-compare-trigger="true"
-                    onClick={() => setShowComparePopover(true)}
-                    title={t("dock.compare.title", "Compare Translations & Passages")}
-                    aria-label={t("dock.compare.title", "Compare Translations & Passages")}
-                  >
-                    <Icon name="swap_horiz" size={16} />
-                    <span>{t("dock.compare.title", "Compare Translations & Passages")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-btm-overflow__menu-item"
-                    data-dock-close-overflow="true"
-                    onClick={() => setShowBibleHistory(true)}
-                    title={t("bible.viewHistory", "View Bible History")}
-                    aria-label={t("bible.viewHistory", "View Bible History")}
-                  >
-                    <Icon name="history" size={16} />
-                    <span>{t("bible.viewHistory", "View Bible History")}</span>
-                  </button>
-                  <div className="dock-btm-overflow__divider" role="separator" />
-                  <button
-                    type="button"
-                    className="dock-btm-overflow__menu-item"
-                    data-dock-close-overflow="true"
-                    onClick={() => window.location.reload()}
-                    title={t("dock.reloadDock", "Reload / Refresh Dock")}
-                    aria-label={t("dock.reloadDock", "Reload / Refresh Dock")}
-                  >
-                    <Icon name="refresh" size={16} />
-                    <span>{t("dock.reloadDock", "Reload / Refresh Dock")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dock-btm-overflow__menu-item"
-                    data-dock-close-overflow="true"
-                    onClick={() => setTheme(nextTheme)}
-                    title={effectiveTheme === "dark" ? t("dock.switchToLightMode", "Light Mode") : t("dock.switchToDarkMode", "Dark Mode")}
-                    aria-label={effectiveTheme === "dark" ? t("dock.switchToLightMode", "Light Mode") : t("dock.switchToDarkMode", "Dark Mode")}
-                  >
-                    <Icon name={effectiveTheme === "dark" ? "light_mode" : "dark_mode"} size={16} />
-                    <span>{effectiveTheme === "dark" ? t("dock.switchToLightMode", "Light Mode") : t("dock.switchToDarkMode", "Dark Mode")}</span>
-                  </button>
-                </>
+                <DockSceneRoutingControl
+                  module="bible"
+                  route={sceneRoute}
+                  onRouteChange={updateSceneRoute}
+                  title={t("sceneRouting.bible", "Output")}
+                  placement="above"
+                  showLabel
+                  iconName="cast"
+                />
               }
             />
 

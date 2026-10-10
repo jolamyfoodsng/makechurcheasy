@@ -325,7 +325,7 @@ function drainQueue(): void {
   if (processingQueue) return;
   processingQueue = true;
 
-  while (pendingQueue.length > 0 && semaphore.inFlight < semaphore.max) {
+  while (pendingQueue.length > 0) {
     // Pick the highest-priority non-cancelled request
     const idx = pendingQueue.findIndex((r) => !r.cancelled);
     if (idx === -1) {
@@ -333,6 +333,10 @@ function drainQueue(): void {
       break;
     }
     const request = pendingQueue[idx];
+    // High-priority (live content packets, scene switches) never wait for a
+    // concurrency slot held by rate-limited housekeeping calls; that wait
+    // made the first click after a pause show the previous verse/slide.
+    if (request.priority !== "high" && semaphore.inFlight >= semaphore.max) break;
     pendingQueue.splice(idx, 1);
     if (request.key) pendingByKey.delete(request.key);
 
@@ -345,13 +349,23 @@ function drainQueue(): void {
 
 async function executeRequest(request: QueuedRequest): Promise<void> {
   const callStartTime = performance.now();
+  const holdsSlot = request.priority !== "high";
+  let slotHeld = false;
+  const releaseSlot = () => {
+    if (!slotHeld) return;
+    slotHeld = false;
+    semaphore.release();
+  };
 
   try {
-    // Acquire concurrency slot
-    await semaphore.acquire();
+    // Acquire concurrency slot (high-priority requests bypass the semaphore)
+    if (holdsSlot) {
+      await semaphore.acquire();
+      slotHeld = true;
+    }
 
     if (request.cancelled) {
-      semaphore.release();
+      releaseSlot();
       return;
     }
 
@@ -361,7 +375,7 @@ async function executeRequest(request: QueuedRequest): Promise<void> {
     }
 
     if (request.cancelled) {
-      semaphore.release();
+      releaseSlot();
       return;
     }
 
@@ -387,11 +401,11 @@ async function executeRequest(request: QueuedRequest): Promise<void> {
         recordLatency(totalTime, callLatencyMs);
       }
     } finally {
-      semaphore.release();
+      releaseSlot();
       drainQueue();
     }
   } catch {
-    semaphore.release();
+    releaseSlot();
     drainQueue();
   }
 }

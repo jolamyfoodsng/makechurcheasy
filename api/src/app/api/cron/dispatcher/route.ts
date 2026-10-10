@@ -10,7 +10,7 @@
  *   - "0 3 * * *"              : Trial reconciliation & downgrades (03:00 UTC)
  *   - "30 3 * * *"             : Ambassador expiry (03:30 UTC)
  *   - "45 3 * * *"             : Temporary plan expiry (03:45 UTC)
- *   - "15 4 * * *"             : Refresh saved reactivation eligibility (04:15 UTC)
+ *   - "15 4 * * *"             : Refresh saved reactivation eligibility, then run win-back offer ladders (04:15 UTC)
  *   - "0 22 * * *"             : Daily Telegram signup report (22:00 UTC / 23:00 Lagos)
  *
  * Protected by CRON_SECRET.
@@ -129,6 +129,22 @@ async function handleDispatch(req: NextRequest) {
       } catch (err) {
         console.error("[Cron Dispatcher] Reactivation audience refresh failed:", err);
         results.reactivationAudience = { error: err instanceof Error ? err.message : "Failed" };
+      }
+    }
+
+    // 6b. Win-back offer ladders (04:15 UTC, after trials and temporary plans
+    // have expired for the day). Does nothing unless switched on in Admin > Offers.
+    if (runAll || cronParam.includes("15 4 *")) {
+      try {
+        const { GET: runOfferJourneys } = await import("@/app/api/cron/offer-journeys/route");
+        const offerReq = new NextRequest(new URL("/api/cron/offer-journeys", req.url), {
+          headers: { authorization: `Bearer ${CRON_SECRET}` },
+        });
+        const offerRes = await runOfferJourneys(offerReq);
+        results.offerJourneys = await offerRes.json().catch(() => ({ status: offerRes.status }));
+      } catch (err) {
+        console.error("[Cron Dispatcher] Offer journeys failed:", err);
+        results.offerJourneys = { error: err instanceof Error ? err.message : "Failed" };
       }
     }
 

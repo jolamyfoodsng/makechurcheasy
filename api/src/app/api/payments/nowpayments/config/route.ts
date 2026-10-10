@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       enabled:
         platformSettings.system.allowPayments &&
+        platformSettings.controls?.paymentProviders?.nowpayments !== false &&
         isNowPaymentsConfigured() &&
         callbackConfigured &&
         isNowPaymentsPriceCurrencySupported("USD"),

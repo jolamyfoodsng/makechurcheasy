@@ -210,6 +210,33 @@ function renderBlockedHtmlPage(): string {
 </html>`;
 }
 
+/**
+ * Dev only: the overlay fingerprint above is computed once when Vite starts.
+ * When an OBS overlay HTML file changes, restart the dev server so the Dock
+ * gets a new `v=` token and OBS loads the new overlay document instead of
+ * keeping the old one in memory.
+ */
+function overlayHtmlRestartPlugin(): Plugin {
+  const watched = new Set(OVERLAY_HTML_FILES.map((fileName) => resolve(PUBLIC_DIR, fileName)));
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return {
+    name: "mce-overlay-html-restart",
+    apply: "serve",
+    configureServer(server) {
+      server.watcher.add(Array.from(watched));
+      server.watcher.on("change", (file) => {
+        if (!watched.has(resolve(file))) return;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          server.config.logger.info(`[overlay] ${file} changed, restarting so OBS reloads the overlay`);
+          void server.restart();
+        }, 300);
+      });
+    },
+  };
+}
+
 function standaloneHtmlGuardPlugin(): Plugin {
   return {
     name: "standalone-html-guard",
@@ -417,7 +444,7 @@ function capitalize(s: string): string {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [standaloneHtmlGuardPlugin(), react(), authSessionPlugin(), entitlementServerPlugin()],
+  plugins: [standaloneHtmlGuardPlugin(), overlayHtmlRestartPlugin(), react(), authSessionPlugin(), entitlementServerPlugin()],
 
   resolve: {
     alias: {

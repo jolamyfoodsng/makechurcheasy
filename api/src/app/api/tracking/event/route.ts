@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getAuthUserFromRequest } from "@/lib/auth";
 import { recordActivationEvent } from "@/lib/activation";
+import { recordGraphicUsage } from "@/lib/broadcastGraphicUsage";
 
 // Simple in-memory rate limiter (per-IP, resets on cold start)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -60,6 +61,9 @@ const VALID_EVENTS = new Set([
   // Themes
   "theme_created",
   "theme_applied",
+  // Broadcast Graphics usage (per graphic, per user — see lib/broadcastGraphicUsage.ts)
+  "broadcast_graphic_added_to_obs",
+  "broadcast_graphic_shown",
   // General
   "first_app_open",
   "app_started",
@@ -153,6 +157,18 @@ export async function POST(req: NextRequest) {
       properties && typeof properties === "object" ? properties as Record<string, unknown> : {},
       Number.isFinite(eventDate.getTime()) ? eventDate : new Date(),
     );
+
+    const eventProps = properties && typeof properties === "object" ? properties as Record<string, unknown> : {};
+    try {
+      await recordGraphicUsage(
+        resolvedUserId,
+        event,
+        eventProps,
+        Number.isFinite(eventDate.getTime()) ? eventDate : new Date(),
+      );
+    } catch (usageError) {
+      console.warn("[tracking/event] Graphic usage not recorded:", usageError);
+    }
 
     const client = await clientPromise;
     const db = client.db();

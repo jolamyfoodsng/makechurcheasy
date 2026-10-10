@@ -6,7 +6,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Check, Clock, LifeBuoy, Loader2, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Check, Clock, Crown, LifeBuoy, Loader2, ShieldCheck, Zap } from "lucide-react";
 import { useCountryPricing } from "../lib/useCountryPricing";
 import { useSubscription } from "../lib/useSubscription";
 
@@ -32,6 +32,7 @@ const PLANS: PlanDef[] = [
       "3 Bible versions",
       "1 device",
       "50 credits",
+      "Single-channel live stream (Free)",
       "No credit card required",
     ],
   },
@@ -44,6 +45,7 @@ const PLANS: PlanDef[] = [
       "Unlimited Bible versions",
       "3 devices",
       "Bible, Worship, Media, and Countdowns",
+      "10 hrs/mo multi-platform streaming in OBS (no extra plugins)",
       "Verse AI with 100 monthly credits",
       "No Tickers, Lower Thirds, Multiview, or transcript translation",
     ],
@@ -57,6 +59,7 @@ const PLANS: PlanDef[] = [
       "10 devices and 20 team members",
       "Presentation Mode and mobile control",
       "Bulk import, EasyWorship, and ProPresenter import",
+      "20 hrs/mo multi-platform streaming in OBS (no extra plugins)",
       "Cloud Sync and 2,000 monthly credits",
       "Priority support",
     ],
@@ -177,7 +180,7 @@ export default function UpdatedSubscriptionPage() {
               <div className="mb-6 mt-2 flex flex-col items-center text-center">
                 <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-full ${isGrowth ? "bg-[#EFF6FF]" : "bg-[#F8FAFC]"}`}>
                   {isGrowth ? (
-                    <Sparkles className="h-7 w-7 text-[#1D4ED8]" />
+                    <Crown className="h-7 w-7 text-[#1D4ED8]" />
                   ) : isBasic ? (
                     <Zap className="h-7 w-7 text-[#1D4ED8]" />
                   ) : (

@@ -4,8 +4,8 @@ import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscre
  * The readable starting point for lower-third fit mode.  Fit mode may reduce
  * a larger preset to this value, but it must never collapse below it.
  */
-export const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
-export const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+export const LOWER_THIRD_FIT_MIN_FONT_SIZE = 12;
+export const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 10;
 /**
  * Lower-third typography is intentionally independent from fullscreen sizing.
  * Keep this high enough for the 2XL/3XL quick presets (128px/160px), while
@@ -34,8 +34,8 @@ export function normalizeExplicitOutputFontSettings(
   settings: DockFullscreenQuickThemeSettings,
   mode: "fullscreen" | "lower-third",
 ): DockFullscreenQuickThemeSettings {
-  const minFontSize = mode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
-  const minRefFontSize = mode === "fullscreen" ? 14 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+  const minFontSize = mode === "fullscreen" ? 16 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+  const minRefFontSize = mode === "fullscreen" ? 10 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
   const requestedFontSize = Number(settings.fontSize);
   const requestedRefFontSize = Number(settings.refFontSize);
 

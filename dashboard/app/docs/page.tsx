@@ -1,20 +1,34 @@
 import type { Metadata } from "next";
-import { DocsClient } from "./DocsClient";
+import { DocsShell } from "./DocsShell";
+import { DOC_PAGES } from "./docs-data";
 
 export const metadata: Metadata = {
-  title: "MakeChurchEazy Documentation | Setup & OBS Guides",
-  description:
-    "Complete step-by-step documentation for MakeChurchEazy: installing desktop apps, OBS Studio browser source setup, scripture search, EasyWorship song imports, and mobile remote control.",
+  title: DOC_PAGES.overview.seoTitle,
+  description: DOC_PAGES.overview.description,
+  keywords: DOC_PAGES.overview.keywords,
   alternates: { canonical: "/docs" },
   openGraph: {
-    title: "MakeChurchEazy Documentation | Church Presentation & OBS",
-    description:
-      "Step-by-step setup guides for church presentation, OBS Studio livestreaming, and scripture projection.",
+    title: DOC_PAGES.overview.seoTitle,
+    description: DOC_PAGES.overview.description,
     url: "https://makechurcheazy.com/docs",
     type: "website",
+    siteName: "MakeChurchEazy",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1376,
+        height: 768,
+        alt: "MakeChurchEazy Documentation — Church Presentation & OBS Studio Guides",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DOC_PAGES.overview.seoTitle,
+    description: DOC_PAGES.overview.description,
   },
 };
 
-export default function DocsPage() {
-  return <DocsClient />;
+export default function DocsRootPage() {
+  return <DocsShell page={DOC_PAGES.overview} />;
 }

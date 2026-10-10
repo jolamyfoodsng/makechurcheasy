@@ -123,4 +123,24 @@ describe("DockBibleTab reference display", () => {
     expect(dockBibleTabSource).toContain("fullscreenVerseLineCount: nextLineCount");
     expect(dockBibleTabSource).toContain("lowerThirdVerseLineCount: nextLineCount");
   });
+
+  it("keeps quick controls focused on readable text and comparison settings", () => {
+    const quickMenuStart = dockBibleTabSource.indexOf("function BibleOutputControlsMenu");
+    const quickMenuEnd = dockBibleTabSource.indexOf("function sanitizeCssPadding", quickMenuStart);
+    const quickMenuSource = dockBibleTabSource.slice(quickMenuStart, quickMenuEnd);
+
+    expect(quickMenuSource).not.toContain("Output Mode");
+    expect(quickMenuSource).not.toContain("dock-bible-reader__mode-toggle-group");
+    expect(quickMenuSource).not.toContain("dock-bible-reader__bg-presets");
+    expect(quickMenuSource).not.toContain("onBackgroundSelect(");
+
+    // Fine font size stepper
+    expect(quickMenuSource).toContain("dock-bible-reader__font-size-controls");
+    expect(quickMenuSource).toContain("onFontSizeStep(-2)");
+    expect(quickMenuSource).toContain("onFontSizeStep(2)");
+
+    // Secondary translation in compare mode
+    expect(quickMenuSource).toContain("Compare with");
+    expect(quickMenuSource).toContain("onTranslationBChange(event.target.value)");
+  });
 });

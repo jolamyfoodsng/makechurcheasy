@@ -14,8 +14,9 @@ describe("Basic plan entitlements", () => {
       maxBibleVersions: -1,
       maxMultiviewTemplates: 5,
       multiview: true,
-      tickers: false,
-      lowerThirds: false,
+      tickers: true,
+      maxLowerThirds: -1,
+      maxTickerThemes: -1,
       speechToScripture: true,
       translation: false,
       countdowns: false,
@@ -30,8 +31,9 @@ describe("Basic plan entitlements", () => {
       bibleVersions: -1,
       multiviewTemplates: 5,
       multiview: true,
-      tickers: false,
-      lowerThirds: 0,
+      tickers: true,
+      lowerThirds: -1,
+      tickerThemes: -1,
       speechToScripture: true,
       translation: false,
       sermonExport: false,
@@ -40,12 +42,13 @@ describe("Basic plan entitlements", () => {
     });
   });
 
-  it("keeps Growth unlimited and Free fully locked for Dock features", () => {
+  it("keeps Growth unlimited and gives Free 3 broadcast graphics and 3 tickers", () => {
     expect(getLegacyCompatibleEntitlementsForPlan("free")).toMatchObject({
       multiviewTemplates: 0,
       multiview: false,
-      tickers: false,
-      lowerThirds: 0,
+      tickers: true,
+      lowerThirds: 3,
+      tickerThemes: 3,
       countdowns: false,
     });
     expect(getLegacyCompatibleEntitlementsForPlan("growth")).toMatchObject({

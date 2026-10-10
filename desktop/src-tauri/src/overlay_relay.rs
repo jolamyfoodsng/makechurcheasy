@@ -83,7 +83,11 @@ fn is_overlay_update(text: &str) -> bool {
 }
 
 pub async fn start_overlay_relay(port: u16) -> Result<(), String> {
-    let bind_host = if cfg!(debug_assertions) { "0.0.0.0" } else { "127.0.0.1" };
+    let bind_host = if cfg!(debug_assertions) {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
     let addr = format!("{}:{}", bind_host, port);
 
     let listener = match TcpListener::bind(&addr).await {

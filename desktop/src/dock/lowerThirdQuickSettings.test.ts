@@ -48,7 +48,7 @@ function makeSettings(
     referenceBackgroundColor: "#D1D5DB",
     referenceBackgroundStyle: "solid",
     referenceBackgroundRadius: 12,
-    lowerThirdPosition: "left",
+    lowerThirdPosition: "center",
     lowerThirdSize: "medium",
     lowerThirdWidthPreset: "md",
     lowerThirdOffsetX: 0,
@@ -61,27 +61,38 @@ function makeSettings(
 }
 
 describe("lowerThirdQuickSettings", () => {
-  it("keeps fit-to-frame lower thirds at a readable 45px minimum", () => {
+  it("allows lower third font sizes below 45px without enforcing a 45px clamp", () => {
     const normalized = normalizeLowerThirdFitSettings(makeSettings({
       autoFontScale: true,
       fontSize: 32,
-      refFontSize: 10,
+      refFontSize: 14,
     }));
 
-    expect(normalized.fontSize).toBe(45);
-    expect(normalized.refFontSize).toBe(16);
+    expect(normalized.fontSize).toBe(32);
+    expect(normalized.refFontSize).toBe(14);
   });
 
-  it("migrates legacy lower thirds into always-on fit mode", () => {
+  it("enforces safe absolute floor (12px font, 10px ref) for extreme values", () => {
+    const normalized = normalizeLowerThirdFitSettings(makeSettings({
+      autoFontScale: true,
+      fontSize: 6,
+      refFontSize: 4,
+    }));
+
+    expect(normalized.fontSize).toBe(12);
+    expect(normalized.refFontSize).toBe(10);
+  });
+
+  it("migrates legacy lower thirds into always-on fit mode while preserving user font size", () => {
     const normalized = normalizeLowerThirdFitSettings(makeSettings({
       autoFontScale: false,
       fontSize: 32,
-      refFontSize: 10,
+      refFontSize: 14,
     }));
 
     expect(normalized.autoFontScale).toBe(true);
-    expect(normalized.fontSize).toBe(45);
-    expect(normalized.refFontSize).toBe(16);
+    expect(normalized.fontSize).toBe(32);
+    expect(normalized.refFontSize).toBe(14);
   });
 
   it("preserves an explicitly selected Notes font size without an upper cap", () => {

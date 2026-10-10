@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SignJWT } from "jose";
+import { verifySessionToken } from "@/lib/jwt";
 
 function appOrigin(appUrl: string): string {
   try {
@@ -58,8 +60,19 @@ export async function GET(req: NextRequest) {
   const rawRef = req.nextUrl.searchParams.get("referralCode") || req.nextUrl.searchParams.get("ref");
   const ref = rawRef ? rawRef.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : undefined;
 
-  // Encode origin, returnUrl, and referral code in state so callback can reconstruct redirectUri and attribute referrals
-  const statePayload = JSON.stringify({ o: clientOrigin, r: returnUrl, ref: ref || undefined });
+  const intent = req.nextUrl.searchParams.get("intent") === "link" ? "link" : "login";
+  let userId: string | undefined;
+  if (intent === "link") {
+    const token = req.cookies.get("session-token")?.value;
+    const session = token ? await verifySessionToken(token) : null;
+    if (!session?.sub) return NextResponse.redirect(`${clientOrigin}/login?error=google_link_signin_required`);
+    userId = session.sub;
+  }
+  const authSecret = process.env.AUTH_SECRET;
+  if (!authSecret) return NextResponse.json({ error: "Google OAuth is not configured" }, { status: 500 });
+  const statePayload = await new SignJWT({ o: clientOrigin, r: returnUrl, ref: ref || undefined, intent, uid: userId })
+    .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").setJti(crypto.randomUUID())
+    .sign(new TextEncoder().encode(authSecret));
 
   const params = new URLSearchParams({
     client_id: clientId,

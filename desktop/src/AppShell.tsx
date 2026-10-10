@@ -27,9 +27,11 @@ import BibleCommandPalette from "./components/BibleCommandPalette";
 import { BibleProvider } from "./bible/bibleStore";
 import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
+import AppStatusStrip from "./components/AppStatusStrip";
 import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import EasyWorshipAnnouncementBanner from "./components/EasyWorshipAnnouncementBanner";
+import TrialUnavailableBanner from "./components/TrialUnavailableBanner";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
 import { safeTauriListen } from "./services/tauriSafe";
@@ -239,8 +241,10 @@ export function AppShell() {
         id="app-main-content"
         tabIndex={-1}
         className={`app-main${sidebarCollapsed ? " app-main--collapsed" : ""}${isTranscriptDetailRoute ? " app-main--transcript-detail" : ""}${isFixedViewportRoute ? " app-main--fixed-viewport" : ""}`}>
+        <AppStatusStrip />
         <LiveStatusBar />
         <EasyWorshipAnnouncementBanner />
+        <TrialUnavailableBanner />
         <div className="app-glow" />
         <div className={`app-content${isTranscriptDetailRoute ? " app-content--transcript-detail" : ""}${isFixedViewportRoute ? " app-content--fixed-viewport" : ""}`}>
           <VoiceBibleResumeBanner />

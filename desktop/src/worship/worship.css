@@ -1429,7 +1429,7 @@ button.worship-online-action.at-limit {
   width: 32px;
   height: 18px;
   border-radius: var(--b-radius, 2px);
-  background: linear-gradient(135deg, #1a237e, #4a148c);
+  background: #1a237e;
   border: 1px solid var(--b-border, #2C2C2C);
 }
 
@@ -1907,9 +1907,9 @@ button.worship-online-action.at-limit {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--b-green, #00E676);
-  border: 1px solid var(--b-green, #00E676);
-  border-radius: var(--b-radius, 2px);
+  background: var(--primary, #4f46e5);
+  border: 1px solid var(--primary, #4f46e5);
+  border-radius: var(--b-radius, 6px);
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -1918,7 +1918,7 @@ button.worship-online-action.at-limit {
 }
 
 .worship-btn-primary:hover {
-  background: #00c965;
+  background: #4338ca;
 }
 
 .worship-btn-primary svg {
@@ -2114,7 +2114,7 @@ button.worship-online-action.at-limit {
 .worship-live-strip {
   flex-shrink: 0;
   border-top: 1px solid var(--b-border, #2C2C2C);
-  background: linear-gradient(180deg, rgba(18, 18, 18, 0.98) 0%, rgba(14, 14, 14, 1) 100%);
+  background: #0c0e17;
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;

@@ -2,19 +2,19 @@
 
 :root {
     /* Core Colors connected to App.css design system */
-    --app-bg: var(--bg, #0B0F17);
-    --app-surface: var(--surface, #151D2C);
-    --app-surface-hover: var(--surface-hover, #26354D);
-    --app-surface-variant: var(--surface-raised, #1E293B);
-    --app-border: var(--border, rgba(255, 255, 255, 0.08));
-    --app-border-light: var(--border-subtle, rgba(255, 255, 255, 0.05));
+    --app-bg: #0c0e17;
+    --app-surface: #131724;
+    --app-surface-hover: #1c2132;
+    --app-surface-variant: #171b28;
+    --app-border: rgba(255, 255, 255, 0.08);
+    --app-border-light: rgba(255, 255, 255, 0.05);
 
     /* Primary & Text */
-    --app-primary: var(--primary, #4F46E5);
-    --app-primary-hover: var(--primary-hover, #4338CA);
-    --app-text-main: var(--text-primary, #F8FAFC);
-    --app-text-muted: var(--text-secondary, #94A3B8);
-    --app-text-accent: var(--accent-blue, #6366F1);
+    --app-primary: #4f46e5;
+    --app-primary-hover: #4338ca;
+    --app-text-main: #ffffff;
+    --app-text-muted: #94a3b8;
+    --app-text-accent: #818cf8;
 
     /* Highlights */
     --hl-yellow: #fef08a;
@@ -27,9 +27,9 @@
     --hl-purple-bg: rgba(192, 132, 252, 0.14);
 
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.25), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
-    --shadow-primary: 0 4px 14px 0 rgba(79, 70, 229, 0.39);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    --shadow-primary: none;
 }
 
 :root.light,
@@ -48,7 +48,7 @@ body.light {
     --app-primary-hover: var(--primary-hover, #2563EB);
     --app-text-main: var(--text-primary, #0F172A);
     --app-text-muted: var(--text-secondary, #64748B);
-    --app-text-accent: var(--primary, #1D4ED8);
+    --app-text-accent: var(--primary, #4f46e5);
 
     --hl-yellow: #a16207;
     --hl-yellow-bg: rgba(161, 98, 7, 0.10);
@@ -61,7 +61,7 @@ body.light {
 
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
-    --shadow-primary: 0 4px 14px 0 rgba(29, 78, 216, 0.25);
+    --shadow-primary: 0 4px 14px 0 rgba(79, 70, 229, 0.25);
 }
 
 /* Base Resets */
@@ -234,12 +234,14 @@ a {
 }
 
 .btn-outline {
-    border: 1px solid var(--app-border);
-    color: var(--app-text-main);
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f8fafc;
 }
 
 .btn-outline:hover {
-    background: var(--app-surface);
+    background: #334155;
+    color: #ffffff;
 }
 
 .btn-icon-only {
@@ -1034,26 +1036,27 @@ a {
 }
 
 .main-title {
-    font-size: 1.875rem;
+    font-size: 26px;
     font-weight: 700;
     letter-spacing: -0.5px;
+    color: #ffffff;
 }
 
 .edit-btn {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: var(--app-surface-variant);
+    background: #27272a;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
-    color: var(--app-text-muted);
+    font-size: 13px;
+    color: #d4d4d8;
     transition: 0.2s;
 }
 
 .edit-btn:hover {
-    background: var(--app-border);
+    background: #3f3f46;
     color: white;
 }
 
@@ -1068,8 +1071,8 @@ a {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.875rem;
-    color: var(--app-text-muted);
+    font-size: 14.5px;
+    color: #d4d4d8;
 }
 
 .title-actions {
@@ -1306,10 +1309,10 @@ a {
 
 .t-content {
     flex: 1;
-    font-family: 'Charis SIL', 'CMG Sans', sans-serif;
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: var(--app-text-main);
+    font-family: 'Charis SIL', 'CMG Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    color: #ffffff;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -1337,7 +1340,7 @@ a {
 
 /* Right Sidebar (Scriptures & Translations) */
 .right-sidebar {
-    width: 340px;
+    width: 360px;
     flex-shrink: 0;
     min-height: 0;
     overflow: hidden;
@@ -1345,16 +1348,16 @@ a {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    background: var(--app-surface);
+    background: #18181b;
     border-left: 1px solid var(--app-border);
 }
 
 
 .section-title {
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: var(--app-text-main);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: #ffffff;
 }
 
 .match-badge {
@@ -1373,18 +1376,18 @@ a {
 }
 
 .s-card {
-    background: var(--app-surface-variant);
+    background: #27272a;
     border: 1px solid var(--app-border);
-    border-radius: 10px;
-    padding: 14px 16px;
+    border-radius: 12px;
+    padding: 16px;
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .s-card:hover {
-    border-color: var(--app-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transform: translateY(-1px);
 }
 
@@ -1431,9 +1434,9 @@ a {
 }
 
 .s-title {
-    font-size: 0.875rem;
+    font-size: 15px;
     font-weight: 600;
-    color: var(--app-text-main);
+    color: #ffffff;
 }
 
 .s-actions {
@@ -1441,7 +1444,7 @@ a {
     gap: 8px;
     opacity: 0;
     transition: 0.2s;
-    color: var(--app-text-muted);
+    color: #a1a1aa;
 }
 
 .s-card:hover .s-actions {
@@ -1449,13 +1452,13 @@ a {
 }
 
 .s-action-icon:hover {
-    color: var(--app-primary);
+    color: #3b82f6;
 }
 
 .s-text {
-    font-size: 0.75rem;
-    color: var(--app-text-muted);
-    line-height: 1.4;
+    font-size: 14px;
+    color: #d4d4d8;
+    line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -1465,8 +1468,8 @@ a {
 
 .s-time {
     font-family: 'Geist', monospace;
-    font-size: 10px;
-    color: var(--app-text-muted);
+    font-size: 12px;
+    color: #a1a1aa;
 }
 
 .quick-actions-grid {

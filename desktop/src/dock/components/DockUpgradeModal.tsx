@@ -8,6 +8,7 @@
 import { useTranslation } from "react-i18next";
 import { Lock, Zap } from "lucide-react";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
+import { openDashboardSubscriptionPlans } from "../../services/subscriptionNavigation";
 
 interface DockUpgradeModalProps {
   open: boolean;
@@ -46,7 +47,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
             </button>
             <button
               className="dock-upgrade__btn dock-upgrade__btn--primary"
-              onClick={() => window.open("https://makechurcheazy.com/subscription/plans", "_blank")}
+              onClick={() => void openDashboardSubscriptionPlans()}
               title={t('upgrade.upgrade')}>
               <Zap size={15} />
               <span>{t('upgrade.upgrade')}</span>

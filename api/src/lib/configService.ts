@@ -9,8 +9,14 @@
  * here rather than reading raw admin settings.
  */
 
-import { getPlatformSettings, type PlatformSettings } from "./platformSettings";
+import {
+  DEFAULT_ADMIN_CONTROLS,
+  getPlatformSettings,
+  type AdminControls,
+  type PlatformSettings,
+} from "./platformSettings";
 import { getPlanConfig } from "./db";
+import { getEnforcementWindow } from "./versionGate";
 
 // ── Desktop Config ──────────────────────────────────────────────────────────
 
@@ -29,6 +35,11 @@ export interface DesktopConfig {
     linuxDownloadUrl: string;
     releaseNotesUrl: string;
     policyPublishedAt: string;
+    enforcementStartedAt: string | null;
+    /** ISO time old versions get blocked; null when no countdown applies */
+    enforcementDeadlineAt: string | null;
+    /** Server clock, so clients can correct for a wrong local clock */
+    serverTime: string;
     emergencyLockEnabledAt: string | null;
     emergencyLockEffectiveAt: string | null;
   };
@@ -83,9 +94,16 @@ export interface DesktopConfig {
   };
   security: {
     maintenanceMode: boolean;
+    maintenanceMessage: string;
     internetVerificationEnabled: boolean;
     maxOfflineDays: number;
     verificationIntervalHours: number;
+  };
+  /** Admin → Settings → Controls: off switches, speech model, support links. */
+  controls: {
+    features: AdminControls["features"];
+    speech: { model: AdminControls["speech"]["model"] };
+    support: AdminControls["support"];
   };
   themes: {
     defaultBibleTheme: string;
@@ -148,6 +166,13 @@ export async function getDesktopConfig(): Promise<DesktopConfig> {
       linuxDownloadUrl: settings.appUpdates.linuxDownloadUrl,
       releaseNotesUrl: settings.appUpdates.releaseNotesUrl,
       policyPublishedAt: settings.appUpdates.policyPublishedAt,
+      enforcementStartedAt: settings.appUpdates.enforcementStartedAt ?? null,
+      enforcementDeadlineAt: (() => {
+        if (!settings.appUpdates.forceUpdatesEnabled) return null;
+        const w = getEnforcementWindow(settings.appUpdates);
+        return w.deadlineAtMs ? new Date(w.deadlineAtMs).toISOString() : null;
+      })(),
+      serverTime: new Date().toISOString(),
       emergencyLockEnabledAt: settings.appUpdates.emergencyLockEnabledAt,
       emergencyLockEffectiveAt: settings.appUpdates.emergencyLockEffectiveAt,
     },
@@ -202,9 +227,15 @@ export async function getDesktopConfig(): Promise<DesktopConfig> {
     },
     security: {
       maintenanceMode: settings.security.maintenanceMode,
+      maintenanceMessage: settings.security.maintenanceMessage || "",
       internetVerificationEnabled: settings.security.internetVerificationEnabled,
       maxOfflineDays: settings.security.maxOfflineDays,
       verificationIntervalHours: settings.security.verificationIntervalHours,
+    },
+    controls: {
+      features: { ...(settings.controls ?? DEFAULT_ADMIN_CONTROLS).features },
+      speech: { model: (settings.controls ?? DEFAULT_ADMIN_CONTROLS).speech.model },
+      support: { ...(settings.controls ?? DEFAULT_ADMIN_CONTROLS).support },
     },
     themes: {
       defaultBibleTheme: settings.themes.defaultBibleTheme,

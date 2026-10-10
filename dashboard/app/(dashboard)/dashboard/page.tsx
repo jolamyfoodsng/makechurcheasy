@@ -113,6 +113,9 @@ export default function Overview() {
     );
   }
 
+  const trialEligibility = !isOnTrial && !mongoUser?.trial?.endsAt
+    ? mongoUser?.trialEligibility ?? null
+    : null;
   const firstName = user?.name?.split(" ")[0] || "there";
   const churchName = user?.churchName || "";
   const ambassadorInfo = getAmbassadorInfo(mongoUser?.ambassador || (user as any)?.ambassador, mongoUser?.role || user?.role);
@@ -190,6 +193,41 @@ export default function Overview() {
               </Link>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Why there is no free trial */}
+      {!ambassadorInfo.isAmbassador && isFreePlan && trialEligibility && (
+        <div
+          role="status"
+          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border p-4 sm:p-5 ${
+            trialEligibility.status === "used_on_device"
+              ? "border-amber-200 bg-amber-50"
+              : "border-indigo-200 bg-indigo-50"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            {trialEligibility.status === "used_on_device" ? (
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            ) : (
+              <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                {trialEligibility.status === "used_on_device"
+                  ? "Free trial already used on this computer"
+                  : "Start your free trial on the desktop app"}
+              </p>
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">{trialEligibility.message}</p>
+            </div>
+          </div>
+          <Link
+            href={trialEligibility.status === "used_on_device" ? "/subscription/plans" : "/downloads"}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0"
+          >
+            <span>{trialEligibility.status === "used_on_device" ? "See plans" : "Download the app"}</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       )}
 

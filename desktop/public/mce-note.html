@@ -65,14 +65,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
+      font-family: 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
+      --font-family: 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 900;
       --font-style: normal;
@@ -777,6 +777,7 @@
     }
 
   </style>
+  <script src="/theme-renderer.js"></script>
 </head>
 
 <body data-mode="fullscreen">
@@ -1008,15 +1009,25 @@
         return m[t.toLowerCase()] || 'none';
       }
 
+      // "CMG Sans Black" is registered as a one-weight family, so putting it first
+      // locked the text to Black and the Weight setting did nothing on the output.
+      // Use the full "CMG Sans" family (100–900) and let --font-weight choose; the
+      // default weight is still Black (900), so default themes look the same.
       function scriptureFontFamily(fontFamily) {
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
-        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        if (!value) return '"CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        var hadBlackAlias = false;
+        var families = value.split(',').map(function (part) { return part.trim(); }).filter(function (part) {
+          var name = part.replace(/^["']|["']$/g, '').trim().toLowerCase();
+          if (name === 'cmg sans black') { hadBlackAlias = true; return false; }
+          return Boolean(part);
+        });
+        var hasCmgSans = families.some(function (part) {
+          return part.replace(/^["']|["']$/g, '').trim().toLowerCase() === 'cmg sans';
+        });
+        if (hadBlackAlias && !hasCmgSans) families.unshift('"CMG Sans"');
+        value = families.join(',') || '"CMG Sans"';
         var lower = value.toLowerCase();
-        if (lower.indexOf('cmg sans') !== -1) {
-          if (lower.indexOf('cmg sans black') === -1) {
-            value = '"CMG Sans Black",' + value;
-          }
-        }
         if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
         if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
         return value;
@@ -1159,6 +1170,35 @@
         return PATTERN_CSS[value] || '';
       }
 
+      // Was referenced by applyThemeLowerThird but missing in this overlay
+      // (copied from mce-worship-overlay.html).
+      function resolveBackgroundImageCss(image) {
+        let value = String(image || '').trim();
+        if (!value || value === '__BG_SOURCE__') return '';
+        if (value === '__FROM_CSS__') return readInjectedCssVar('--bg-image') || '';
+        if (value === '__FROM_LOCALSTORAGE__') value = localStorage.getItem('bible-overlay-bg-image') || '';
+        if (!value || value === 'none') return '';
+        if (/^url\(/i.test(value)) return value;
+        const resolved = resolveOverlayMediaUrl(value);
+        return resolved ? `url("${resolved.replace(/"/g, '\\"')}")` : '';
+      }
+
+      // Resolves uploaded/local media to a URL OBS's browser can load (served by the overlay server).
+      function resolveOverlayMediaUrl(value) {
+        let trimmed = String(value || '').trim();
+        if (!trimmed) return '';
+        if (/^(?:data:|blob:|https?:\/\/)/i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('/uploads/')) return trimmed;
+        if (trimmed.startsWith('uploads/')) return '/' + trimmed;
+        if (/^file:\/\//i.test(trimmed)) {
+          try { trimmed = decodeURIComponent(trimmed.replace(/^file:\/\//i, '')); }
+          catch { trimmed = trimmed.replace(/^file:\/\//i, ''); }
+        }
+        if (trimmed.startsWith('/') && !/^\/(?:Users|home|Volumes|var|private|tmp)\//.test(trimmed)) return trimmed;
+        const fileName = trimmed.split(/[\\/]/).pop()?.trim() || '';
+        return fileName ? '/uploads/' + encodeURIComponent(fileName) : trimmed;
+      }
+
       function clearVideoElement(videoEl) {
         if (!videoEl) return;
         try { videoEl.pause(); } catch { }
@@ -1199,11 +1239,24 @@
           ? `linear-gradient(${bgGradientAngle}deg, ${bgColor}, ${bgColorEnd})`
           : bgColor;
 
+        // The background picker's chosen type wins; leftover colours from an
+        // earlier choice must never cover a selected image/pattern/video.
+        const backgroundType = String(theme.backgroundType || '').trim().toLowerCase();
+        const isThemeBackground = !backgroundType || backgroundType === 'theme';
+        const isMediaBackground = backgroundType === 'image' || backgroundType === 'pattern' || backgroundType === 'video';
+
         root.style.setProperty('--bg-opacity', bgOpacity);
         hideBackgroundCrossfade();
 
-        const bgVideoUrl = String(theme.backgroundVideo || '').trim();
-        if (bgVideoUrl) {
+        if (backgroundType === 'off') {
+          clearFullscreenBackgroundVideo();
+          root.style.setProperty('--bg-image', 'none');
+          root.style.setProperty('--bg-color', 'transparent');
+          return;
+        }
+
+        const bgVideoUrl = resolveOverlayMediaUrl(theme.backgroundVideo) || resolveOverlayMediaUrl(theme.backgroundVideoFilePath);
+        if (bgVideoUrl && (backgroundType === 'video' || isThemeBackground)) {
           const controller = seamlessLoopControllers.get(backgroundVideoEl);
           if (controller) {
             stopSeamlessLoop(controller, { clearSrc: true, resetActiveToPrimary: true });
@@ -1228,20 +1281,14 @@
         clearFullscreenBackgroundVideo();
 
         const patternCss = resolvePatternCss(theme.backgroundPattern);
-        if (patternCss) {
+        if (patternCss && (backgroundType === 'pattern' || isThemeBackground)) {
           root.style.setProperty('--bg-image', patternCss);
           root.style.setProperty('--bg-color', 'transparent');
           return;
         }
 
-        if (hasGradient) {
-          root.style.setProperty('--bg-color', 'transparent');
-          root.style.setProperty('--bg-image', bgColorFinal);
-          return;
-        }
-
-        const rawBgImage = String(theme.backgroundImage || '').trim();
-        if (rawBgImage) {
+        const rawBgImage = String(theme.backgroundImage || '').trim() || String(theme.backgroundImageFilePath || '').trim();
+        if (rawBgImage && (backgroundType === 'image' || isThemeBackground)) {
           let bgUrl = rawBgImage;
           if (bgUrl === '__BG_SOURCE__') {
             root.style.setProperty('--bg-image', 'none');
@@ -1260,13 +1307,20 @@
           if (bgUrl === '__FROM_LOCALSTORAGE__') {
             bgUrl = localStorage.getItem('bible-overlay-bg-image') || '';
           }
-          root.style.setProperty('--bg-image', bgUrl ? `url(${bgUrl})` : 'none');
-          root.style.setProperty('--bg-color', bgUrl ? 'transparent' : bgColor);
+          const bgImageCss = resolveBackgroundImageCss(bgUrl);
+          root.style.setProperty('--bg-image', bgImageCss || 'none');
+          root.style.setProperty('--bg-color', bgImageCss ? 'transparent' : bgColor);
+          return;
+        }
+
+        if (hasGradient && !isMediaBackground) {
+          root.style.setProperty('--bg-color', 'transparent');
+          root.style.setProperty('--bg-image', bgColorFinal);
           return;
         }
 
         root.style.setProperty('--bg-image', 'none');
-        root.style.setProperty('--bg-color', bgColor);
+        root.style.setProperty('--bg-color', isMediaBackground ? 'transparent' : bgColor);
       }
 
       function resolveSafeArea() {
@@ -1709,7 +1763,7 @@
         root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
         root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
-        root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight));
+        root.style.setProperty('--ref-font-weight', mapFontWeight(s.refFontWeight || s.fontWeight || 'black'));
         root.style.setProperty('--ref-font-style', 'normal');
         root.style.setProperty('--ref-font-color', s.refFontColor || '#fff');
         root.style.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
@@ -1844,7 +1898,7 @@
         if (targetMode === 'lower-third') {
           root.style.setProperty('--lt-max-width', 'none');
         } else {
-          const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
+          const wp2 = s.lowerThirdWidthPreset || 'full', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['full'];
           root.style.setProperty('--lt-max-width', (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
         }
         if (targetMode === 'lower-third') {
@@ -2078,32 +2132,18 @@
         writeRenderAck(packet);
       }
 
-      async function runOverlayTransitionQueue() {
+      function runOverlayTransitionQueue() {
         if (overlayTransitionInFlight) return;
         overlayTransitionInFlight = true;
         try {
           while (pendingOverlayPacket) {
-            const firstPacket = pendingOverlayPacket;
-            pendingOverlayPacket = null;
-            const exitMode = activeMode || initialMode;
-            const exitPacket = currentOverlayData || currentBibleState || firstPacket;
-            const animateOut = hasShownOnce && isOverlayAnimationEnabled(exitPacket);
-            const exitDuration = getOverlayAnimationDurationMs(exitPacket);
-
-            if (animateOut) {
-              playVerseExitAnimation(exitMode);
-              await waitForOverlayAnimation(exitDuration);
-            }
-
-            // If another slide arrived during the exit, render only the newest one.
-            const packet = pendingOverlayPacket || firstPacket;
+            // Render immediately (same as Worship). Waiting for the exit and
+            // entry animations made rapid clicks queue behind older notes.
+            // The CSS fade still plays; it is purely visual.
+            const packet = pendingOverlayPacket;
             pendingOverlayPacket = null;
             const animateIn = hasRenderableSlide(packet) && isOverlayAnimationEnabled(packet);
             commitOverlayPacket(packet, animateIn);
-
-            if (animateIn) {
-              await waitForOverlayAnimation(getOverlayAnimationDurationMs(packet));
-            }
           }
         } finally {
           overlayTransitionInFlight = false;
@@ -2111,8 +2151,26 @@
         }
       }
 
+      // Newest packet wins across every transport (OBS event, relay socket,
+      // CSS, hash, storage) and both renderers. Without this, a stale packet
+      // re-read from CSS could repaint an older verse/slide.
+      var latestSeenOverlayRevision = 0; // var: hoisted, safe if a packet arrives before this line runs
       function processOverlayUpdate(packet) {
         if (!packet) return;
+        if (packet.action !== 'animate-out') {
+          const incomingRevision = Number(packet.revision ?? packet.timestamp ?? 0);
+          const seenRevision = Number(latestSeenOverlayRevision) || 0;
+          if (incomingRevision && incomingRevision < seenRevision) return;
+          if (incomingRevision > seenRevision) latestSeenOverlayRevision = incomingRevision;
+        }
+        // Theme Editor layouts: drawn by the shared renderer (public/theme-renderer.js).
+        // Returns false for legacy themes, which continue below unchanged.
+        if (window.MCEThemeOverlay && window.MCEThemeOverlay.handle(packet, {
+          legacy: [overlay, ltBar],
+          persist: typeof persistOverlayPacket === 'function' ? persistOverlayPacket : null,
+          ack: typeof writeRenderAck === 'function' ? writeRenderAck : null,
+          animateOutDone: typeof signalAnimateOutComplete === 'function' ? signalAnimateOutComplete : null,
+        })) return;
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
         if (packet.theme && (!packet.slide && !packet.blanked)) {
           const themedPacket = { ...(currentOverlayData || currentBibleState || {}), ...packet };
@@ -2265,7 +2323,9 @@
           lastAppliedThemeKeyByMode.fullscreen = '';
           lastAppliedThemeKeyByMode['lower-third'] = '';
         }
-        lastCssOverlayData = '';
+        // Mark this packet's CSS data as already handled so CSS/mutation
+        // readers do not process it (or an older one) a second time.
+        lastCssOverlayData = extractCssCustomPropertyValue(cssText, '--overlay-data') || lastCssOverlayData;
         return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
@@ -2299,6 +2359,7 @@
           const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
           if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
+            if (packet.theme && window.MCEThemeOverlay) window.MCEThemeOverlay.syncTheme(packet.theme, { legacy: [overlay, ltBar] });
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
             }

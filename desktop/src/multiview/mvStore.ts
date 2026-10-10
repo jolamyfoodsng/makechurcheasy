@@ -622,6 +622,9 @@ export function updateSettings(patch: Partial<MVSettings>): MVSettings {
     syncBrandingToDock(updated).catch(() => { });
   }
 
+  // Trigger debounced cloud auto-sync if enabled
+  import("../services/cloudSyncService").then((m) => m.triggerDebouncedAutoSync()).catch(() => { });
+
   return updated;
 }
 

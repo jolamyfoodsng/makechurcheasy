@@ -318,8 +318,10 @@ export interface AdminTemporaryPlan {
   emailSentAt?: string;
   endedAt?: string;
   endedBy?: string;
-  endedReason?: "expired" | "ended_by_admin";
+  endedReason?: "expired" | "ended_by_admin" | "paid_plan_activated" | "grant_failed" | "converted_to_admin_subscription";
   expiredAt?: string;
+  campaignKey?: string;
+  offerId?: string;
 }
 
 export interface AdminManagedSubscription {
@@ -355,6 +357,20 @@ export interface UserProfile {
   devices?: string[];
   creditTransactions?: string[];
   country: string;
+  signupCountry?: string;
+  signupCity?: string;
+  signupIp?: string;
+  lastLoginCountry?: string;
+  lastLoginCity?: string;
+  lastLoginIp?: string;
+  lastLoginTimezone?: string;
+  locationHistory?: Array<{
+    country: string;
+    city?: string;
+    timezone?: string;
+    ip?: string;
+    timestamp: string;
+  }>;
   phone: string;
   jobTitle: string;
   language: string;
@@ -953,12 +969,29 @@ export type AnnouncementAudience =
   | "inactive_7d"
   | "inactive_30d"
   | "never_opened_app"
-  | "reactivation_offer_users";
+  | "reactivation_offer_users"
+  | "personal_offer_users";
+
+export type AnnouncementLayout = "standard" | "promo" | "image_only" | "custom";
+export type AnnouncementButtonStyle = "primary" | "secondary" | "link";
+
+export interface AnnouncementButton {
+  id: string;
+  label: string;
+  url: string;
+  style: AnnouncementButtonStyle;
+}
 
 export interface Announcement {
   _id?: ObjectId;
   title: string;
   message: string;
+  /** Explicit layout. Missing on older announcements, which clients detect from tone and tags. */
+  layout?: AnnouncementLayout;
+  /** Extra action buttons (max 4). The first one is mirrored into ctaLabel/ctaUrl for older apps. */
+  buttons?: AnnouncementButton[];
+  /** Custom HTML/CSS shown in a sandboxed frame (no scripts). */
+  bodyHtml?: string | null;
   tone: AnnouncementTone;
   status: AnnouncementStatus;
   surfaces: AnnouncementSurface[];
@@ -976,6 +1009,11 @@ export interface Announcement {
   offerRedemptionCount?: number;
   offerApplicablePlans?: PlanTier[];
   offerApplicableBillingCycles?: DiscountBillingCycle[];
+  /**
+   * Set on the pop-up templates of the win-back offer ladders. Only users who
+   * hold a live offer for this ladder rung see it (audience personal_offer_users).
+   */
+  personalOffer?: { ladderId: string; rungId: string } | null;
   priority: number;
   publishAt: string;
   expiresAt?: string | null;
@@ -1001,6 +1039,11 @@ export interface AnnouncementDelivery {
   shownAt: string;
   dismissedAt?: string | null;
   clickedAt?: string | null;
+  /** Survives the delivery being shown again, so click history is not lost. */
+  firstClickedAt?: string | null;
+  lastClickedAt?: string | null;
+  clickCount?: number;
+  clickedButtonId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

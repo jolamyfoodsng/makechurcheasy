@@ -57,6 +57,24 @@ function getCountryPlanPrice(
     return plan.yearly;
 }
 
+interface LiveOffer {
+    offerId: string;
+    ladderId: string;
+    rungId: string;
+    kind: 'percent_off' | 'free_period' | 'trial_extension';
+    title: string;
+    ctaLabel: string;
+    code: string | null;
+    percentOff: number;
+    discountMonths: number;
+    freeDays: number;
+    trialExtensionDays: number;
+    plans: string[];
+    billingCycle: string;
+    closesAt: string;
+    needsClaim: boolean;
+}
+
 interface EarlyAccessOffer {
     enabled: boolean;
     eligible: boolean;
@@ -579,6 +597,8 @@ export default function NewPlansPage() {
     const [purchasedPlan, setPurchasedPlan] = useState<PricingPlanConfig | null>(null);
     const [earlyAccessOffer, setEarlyAccessOffer] = useState<EarlyAccessOffer | null>(null);
     const autoCheckoutStartedRef = useRef(false);
+    // A personal win-back offer this account holds right now (see Admin > Offers).
+    const [liveOffer, setLiveOffer] = useState<LiveOffer | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -601,6 +621,35 @@ export default function NewPlansPage() {
         const params = new URLSearchParams(window.location.search);
         const code = params.get('promo') || params.get('code') || params.get('discount') || '';
         if (code) setPromoCode(code.toUpperCase().replace(/[^A-Z0-9_-]/g, ''));
+        // Offer links say which billing cycle their code covers.
+        const billing = params.get('billing')?.trim().toLowerCase();
+        if (billing === 'monthly' || billing === 'yearly') setBillingCycle(billing);
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch('/api/user/offers/active', { credentials: 'include', cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                const offers: LiveOffer[] = Array.isArray(data?.offers) ? data.offers : [];
+                // Free offers first (they need a button press), then the best discount.
+                const pick =
+                    offers.find((offer) => offer.needsClaim) ||
+                    offers.filter((offer) => offer.code).sort((a, b) => b.percentOff - a.percentOff)[0] ||
+                    null;
+                if (!cancelled) {
+                    setLiveOffer(pick);
+                    // Show the prices the offer covers, unless the link already chose a cycle.
+                    const linked = new URLSearchParams(window.location.search).get('billing');
+                    if (pick?.code && !linked && (pick.billingCycle === 'monthly' || pick.billingCycle === 'yearly')) {
+                        setBillingCycle(pick.billingCycle);
+                    }
+                }
+            } catch { /* the offer banner is optional */ }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
     useEffect(() => {
@@ -634,6 +683,14 @@ export default function NewPlansPage() {
         proceedToPayment(plan, amountInSubunit, user.email, billingCycle);
     }, [billingCycle, countryPricing, user]);
 
+    // The code typed or linked wins; otherwise the account's own offer applies to the plan and billing it covers.
+    const codeFor = useCallback((planId: string, cycle: string): string => {
+        const typed = promoCode.trim();
+        if (typed) return typed;
+        if (liveOffer?.code && liveOffer.plans.includes(planId) && liveOffer.billingCycle === cycle) return liveOffer.code;
+        return '';
+    }, [promoCode, liveOffer]);
+
     const proceedToPayment = useCallback(async (plan: PricingPlanConfig, _amountInSubunit: number, email: string, cycle: BillingCycle = billingCycle) => {
         try {
             setPaymentStatus('verifying');
@@ -646,7 +703,7 @@ export default function NewPlansPage() {
                     plan: plan.id,
                     billingCycle: cycle,
                     email,
-                    ...(promoCode.trim() ? { discountCode: promoCode.trim() } : {}),
+                    ...(codeFor(plan.id, cycle) ? { discountCode: codeFor(plan.id, cycle) } : {}),
                 }),
             });
             const data = await res.json();
@@ -663,7 +720,7 @@ export default function NewPlansPage() {
                     paymentMethod: 'flutterwave',
                     planId: plan.id,
                     billingCycle: cycle,
-                    discountCode: promoCode.trim() || undefined,
+                    discountCode: codeFor(plan.id, cycle) || undefined,
                 }));
             } catch { /* best-effort */ }
 
@@ -672,7 +729,7 @@ export default function NewPlansPage() {
             setPaymentStatus('error');
             setPaymentError(t('subscription.plans.couldNotVerify'));
         }
-    }, [billingCycle, promoCode, t]);
+    }, [billingCycle, codeFor, t]);
 
     useEffect(() => {
         if (autoCheckoutStartedRef.current) return;
@@ -853,6 +910,32 @@ export default function NewPlansPage() {
                 <p className="text-center text-xs text-slate-500 mb-8">
                     {t('subscription.plans.priceComparisonOnly', { plan: subscription?.billingCycle || 'monthly' })}
                 </p>
+
+                {liveOffer && (
+                    <div className="mb-8 rounded-xl border border-indigo-200 bg-indigo-50 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                                <Gift className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-slate-900">{liveOffer.title}</h2>
+                                <p className="text-sm text-slate-600 mt-1">
+                                    {liveOffer.needsClaim
+                                        ? `This offer is open until ${new Date(liveOffer.closesAt).toLocaleDateString()}.`
+                                        : `${liveOffer.percentOff}% off for ${liveOffer.discountMonths} month${liveOffer.discountMonths === 1 ? '' : 's'}, applied automatically when you check out with ${liveOffer.plans.map((id) => id.charAt(0).toUpperCase() + id.slice(1)).join(' or ')} (${liveOffer.billingCycle}). Open until ${new Date(liveOffer.closesAt).toLocaleDateString()}.`}
+                                </p>
+                            </div>
+                        </div>
+                        {liveOffer.needsClaim && (
+                            <a
+                                href={`/offers/claim?ladder=${encodeURIComponent(liveOffer.ladderId)}&rung=${encodeURIComponent(liveOffer.rungId)}`}
+                                className="h-11 px-5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors inline-flex items-center md:shrink-0"
+                            >
+                                {liveOffer.ctaLabel}
+                            </a>
+                        )}
+                    </div>
+                )}
 
                 {earlyAccessOffer?.enabled && earlyAccessOffer.eligible && (
                     <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">

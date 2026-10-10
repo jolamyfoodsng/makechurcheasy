@@ -1,3 +1,31 @@
+export type PaymentProviderKey = "flutterwave" | "mtnMomo" | "nowpayments";
+export type FeatureSwitchKey =
+  | "speechToScripture"
+  | "liveTranslation"
+  | "mobileRemote"
+  | "multistream"
+  | "presentationLink";
+
+export interface AdminControls {
+  paymentProviders: Record<PaymentProviderKey, boolean>;
+  features: Record<FeatureSwitchKey, boolean>;
+  speech: {
+    model: "universal-streaming-english" | "universal-streaming-multilingual";
+    dailyMinutesCap: number;
+  };
+  signup: {
+    maxSignupsPerIpPerDay: number;
+    maxSignupsPerDevicePerDay: number;
+    blockDisposableEmails: boolean;
+    blockedDomains: string[];
+  };
+  support: {
+    whatsappUrl: string;
+    youtubeUrl: string;
+    supportEmail: string;
+  };
+}
+
 export interface PlatformSettings {
   appUpdates: {
     forceUpdatesEnabled: boolean;
@@ -13,6 +41,8 @@ export interface PlatformSettings {
     linuxDownloadUrl: string;
     releaseNotesUrl: string;
     policyPublishedAt: string;
+    /** Set by the server when the forced-update countdown starts. */
+    enforcementStartedAt: string | null;
     emergencyLockEnabledAt: string | null;
     emergencyLockEffectiveAt: string | null;
   };
@@ -105,6 +135,7 @@ export interface PlatformSettings {
   };
   security: {
     maintenanceMode: boolean;
+    maintenanceMessage: string;
     internetVerificationEnabled: boolean;
     maxOfflineDays: number;
     verificationIntervalHours: number;
@@ -113,6 +144,7 @@ export interface PlatformSettings {
     allowRegistrations: boolean;
     allowPayments: boolean;
   };
+  controls: AdminControls;
   featureFlags: {
     remotePresentationBeta: boolean;
     cloudSyncBeta: boolean;
@@ -136,6 +168,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     linuxDownloadUrl: "",
     releaseNotesUrl: "",
     policyPublishedAt: new Date(0).toISOString(),
+    enforcementStartedAt: null,
     emergencyLockEnabledAt: null,
     emergencyLockEffectiveAt: null,
   },
@@ -229,6 +262,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   },
   security: {
     maintenanceMode: false,
+    maintenanceMessage: "MakeChurchEasy is under scheduled maintenance. We'll be back shortly.",
     internetVerificationEnabled: false,
     maxOfflineDays: 28,
     verificationIntervalHours: 6,
@@ -236,6 +270,23 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   system: {
     allowRegistrations: true,
     allowPayments: true,
+  },
+  controls: {
+    paymentProviders: { flutterwave: true, mtnMomo: true, nowpayments: true },
+    features: {
+      speechToScripture: true,
+      liveTranslation: true,
+      mobileRemote: true,
+      multistream: true,
+      presentationLink: true,
+    },
+    speech: { model: "universal-streaming-english", dailyMinutesCap: 0 },
+    signup: { maxSignupsPerIpPerDay: 5, maxSignupsPerDevicePerDay: 2, blockDisposableEmails: true, blockedDomains: [] },
+    support: {
+      whatsappUrl: "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t",
+      youtubeUrl: "https://www.youtube.com/playlist?list=PLRua6gJfgC0o",
+      supportEmail: "support@makechurcheazy.com",
+    },
   },
   featureFlags: {
     remotePresentationBeta: false,

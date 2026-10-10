@@ -379,22 +379,23 @@
 }
 
 .lt-btn--primary {
-  background: #C8102E;
+  background: var(--primary, #4f46e5);
   color: #fff;
 }
 
 .lt-btn--primary:hover:not(:disabled) {
-  background: #a00d24;
+  background: var(--primary-hover, #4338ca);
 }
 
 .lt-btn--secondary {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .lt-btn--secondary:hover:not(:disabled) {
-  background: var(--surface-raised);
+  background: #334155;
+  color: #ffffff;
 }
 
 .lt-btn--danger {
@@ -1415,23 +1416,23 @@
 }
 
 .lt-page-btn--primary {
-  background: #C8102E;
+  background: var(--primary, #4f46e5);
   color: #fff;
 }
 
 .lt-page-btn--primary:hover:not(:disabled) {
-  background: #a00d24;
+  background: var(--primary-hover, #4338ca);
 }
 
 .lt-page-btn--secondary {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .lt-page-btn--secondary:hover:not(:disabled) {
-  background: var(--surface-raised);
-  color: var(--text-primary);
+  background: #334155;
+  color: #ffffff;
 }
 
 .lt-page-btn--danger {
@@ -1450,23 +1451,23 @@
 }
 
 .lt-page-btn--visibility.is-visible {
-  background: linear-gradient(135deg, rgba(0, 230, 118, 0.2), rgba(0, 230, 118, 0.1));
+  background: rgba(16, 185, 129, 0.16);
   color: #d9ffea;
-  border-color: rgba(0, 230, 118, 0.35);
+  border-color: rgba(16, 185, 129, 0.35);
 }
 
 .lt-page-btn--visibility.is-visible:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 230, 118, 0.14));
+  background: rgba(16, 185, 129, 0.24);
 }
 
 .lt-page-btn--visibility.is-hidden {
-  background: linear-gradient(135deg, rgba(255, 196, 64, 0.18), rgba(255, 196, 64, 0.08));
+  background: rgba(245, 158, 11, 0.16);
   color: #ffe7b0;
-  border-color: rgba(255, 196, 64, 0.35);
+  border-color: rgba(245, 158, 11, 0.35);
 }
 
 .lt-page-btn--visibility.is-hidden:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(255, 196, 64, 0.26), rgba(255, 196, 64, 0.14));
+  background: rgba(245, 158, 11, 0.24);
 }
 
 /* Source list */
@@ -2363,7 +2364,7 @@
 }
 
 .lt-theme-picker-card-preview {
-  background: linear-gradient(140deg, var(--theme-accent, #4ADE80) -25%, #0B1120 72%);
+  background: #111726;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   padding: 8px;

@@ -288,14 +288,14 @@ const TAB_LIST: { key: SettingsTab; label: string; icon: string }[] = [
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#a1a1aa", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
       {children}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { width: "100%", height: 34, padding: "0 10px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: 6, fontSize: 13, color: "var(--input-text)", outline: "none" };
+const inputStyle: React.CSSProperties = { width: "100%", height: 38, padding: "0 12px", background: "#171b28", border: "1px solid rgba(255, 255, 255, 0.12)", borderRadius: 8, fontSize: 14, color: "#ffffff", outline: "none" };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: "none" as const };
 
 function TimerSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (u: Partial<CountdownConfig>) => void }) {
@@ -1032,65 +1032,65 @@ export default function CountdownsPage() {
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
       {/* ── Left Sidebar ── */}
-      <div style={{ width: 256, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: 16, borderBottom: "1px solid var(--border)" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>My Countdowns</h3>
+      <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: 18, borderBottom: "1px solid var(--border)" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 750, color: "#ffffff", marginBottom: 12 }}>My Countdowns</h3>
           <button onClick={() => setShowTemplates(!showTemplates)}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
-            <Plus size={15} /> Create Countdown
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 0", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
+            <Plus size={16} /> Create Countdown
           </button>
         </div>
 
         {showTemplates && (
-          <div style={{ padding: 10, borderBottom: "1px solid var(--border)", background: "var(--bg)" }}>
-            <p style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Choose Template</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ padding: 12, borderBottom: "1px solid var(--border)", background: "#131724" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#a1a1aa", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Choose Template</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {COUNTDOWN_TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => handleCreate(t.id)}
-                  style={{ textAlign: "left", padding: "8px 10px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid transparent", color: "var(--text)", cursor: "pointer", transition: "all 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+                  style={{ textAlign: "left", padding: "9px 12px", borderRadius: 8, fontSize: 13, background: "transparent", border: "1px solid transparent", color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#1c2132"; e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}>
                   <div style={{ fontWeight: 600 }}>{t.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 1 }}>{t.description}</div>
+                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{t.description}</div>
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: 6 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
           {countdowns.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center" }}>
               <Clock size={36} style={{ color: "var(--text-disabled)", margin: "0 auto 10px" }} />
-              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No countdowns yet</p>
+              <p style={{ fontSize: 14, color: "var(--text-muted)" }}>No countdowns yet</p>
             </div>
           ) : (
             countdowns.map((cd) => (
               <div key={cd.id} onClick={() => { setActiveId(cd.id); setMenuOpen(null); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, cursor: "pointer", marginBottom: 2, border: `1px solid ${activeId === cd.id ? "var(--primary)" : "transparent"}`, background: activeId === cd.id ? "var(--primary-soft)" : "transparent", transition: "all 0.12s" }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", marginBottom: 4, border: `1px solid ${activeId === cd.id ? "var(--primary)" : "transparent"}`, background: activeId === cd.id ? "var(--primary-soft)" : "transparent", transition: "all 0.12s" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cd.title || "Untitled"}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{getTemplateName(cd.templateId)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cd.title || "Untitled"}</div>
+                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{getTemplateName(cd.templateId)}</div>
                 </div>
                 <div style={{ position: "relative" }}>
                   <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === cd.id ? null : cd.id); }}
-                    style={{ padding: 4, borderRadius: 4, background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", opacity: 0.5, transition: "opacity 0.15s" }}
+                    style={{ padding: 6, borderRadius: 6, background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", opacity: 0.6, transition: "opacity 0.15s" }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; }}>
-                    <MoreVertical size={14} />
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.6"; }}>
+                    <MoreVertical size={15} />
                   </button>
                   {menuOpen === cd.id && (
                     <>
                       <div style={{ position: "fixed", inset: 0, zIndex: 10 }} onClick={() => setMenuOpen(null)} />
-                      <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 150, background: "var(--surface)", borderRadius: 8, border: "1px solid var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", padding: 4, zIndex: 20 }}>
-                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 12, background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 4 }}>
-                          <Copy size={13} /> Duplicate
+                      <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 160, background: "#171b28", borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", padding: 6, zIndex: 20 }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", borderRadius: 6 }}>
+                          <Copy size={14} /> Duplicate
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleExport(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 12, background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 4 }}>
-                          <Download size={13} /> Export
+                        <button onClick={(e) => { e.stopPropagation(); handleExport(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", borderRadius: 6 }}>
+                          <Download size={14} /> Export
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(cd.id); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 12, background: "transparent", border: "none", color: "var(--error)", cursor: "pointer", borderRadius: 4 }}>
-                          <Trash2 size={13} /> Delete
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(cd.id); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#f87171", cursor: "pointer", borderRadius: 6 }}>
+                          <Trash2 size={14} /> Delete
                         </button>
                       </div>
                     </>
@@ -1101,10 +1101,10 @@ export default function CountdownsPage() {
           )}
         </div>
 
-        <div style={{ padding: 10, borderTop: "1px solid var(--border)" }}>
+        <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
           <button onClick={() => importRef.current?.click()}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0", border: "1px dashed var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text-secondary)", background: "transparent", cursor: "pointer" }}>
-            <Upload size={14} /> Import
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 0", border: "1px dashed rgba(255, 255, 255, 0.2)", borderRadius: 8, fontSize: 13, fontWeight: 500, color: "#d4d4d8", background: "transparent", cursor: "pointer" }}>
+            <Upload size={15} /> Import
           </button>
           <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
         </div>
@@ -1113,28 +1113,28 @@ export default function CountdownsPage() {
       {/* ── Center: Preview ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Toolbar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Timer size={16} style={{ color: "var(--text-muted)" }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Countdowns</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Timer size={18} style={{ color: "#60a5fa" }} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: "#ffffff" }}>Countdowns</span>
           </div>
           {active && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button onClick={timer.isRunning ? timer.pause : timer.start}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: timer.isRunning ? "var(--warning-bg)" : "var(--success-bg)", color: timer.isRunning ? "var(--warning)" : "var(--success)" }}>
-                {timer.isRunning ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Play</>}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: timer.isRunning ? "rgba(234, 179, 8, 0.2)" : "rgba(34, 197, 94, 0.2)", color: timer.isRunning ? "#facc15" : "#4ade80" }}>
+                {timer.isRunning ? <><Pause size={14} /> Pause</> : <><Play size={14} /> Play</>}
               </button>
-              <button onClick={timer.reset} style={{ padding: 5, borderRadius: 6, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }} title="Reset">
-                <RotateCcw size={13} />
+              <button onClick={timer.reset} style={{ padding: 7, borderRadius: 8, background: "transparent", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#d4d4d8", cursor: "pointer" }} title="Reset">
+                <RotateCcw size={14} />
               </button>
-              <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+              <div style={{ width: 1, height: 22, background: "rgba(255, 255, 255, 0.12)" }} />
               <button onClick={() => handleUpdate({})}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "var(--surface-raised)", color: "var(--text)", border: "1px solid var(--border)", cursor: "pointer" }}>
-                <Save size={13} /> Save
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#1e293b", color: "#f8fafc", border: "1px solid rgba(255, 255, 255, 0.12)", cursor: "pointer" }}>
+                <Save size={14} /> Save
               </button>
               <button onClick={handleSendToOBS}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "var(--primary)", color: "#fff", border: "none", cursor: "pointer" }}>
-                <Send size={13} /> Send to OBS
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--primary)", color: "#fff", border: "none", cursor: "pointer" }}>
+                <Send size={14} /> Send to OBS
               </button>
             </div>
           )}
@@ -1143,21 +1143,21 @@ export default function CountdownsPage() {
         {/* Preview area */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, overflow: "auto", background: "var(--bg)" }}>
           {active ? (
-            <div style={{ width: "100%", maxWidth: 720 }}>
+            <div style={{ width: "100%", maxWidth: 760 }}>
               <CountdownPreview cd={active} timer={timer} />
-              <div style={{ marginTop: 8, textAlign: "center" }}>
+              <div style={{ marginTop: 12, textAlign: "center" }}>
                 <input value={active.title} onChange={(e) => handleUpdate({ title: e.target.value })}
-                  style={{ background: "transparent", border: "none", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", textAlign: "center", width: "100%", outline: "none" }}
+                  style={{ background: "transparent", border: "none", fontSize: 15, fontWeight: 600, color: "#ffffff", textAlign: "center", width: "100%", outline: "none" }}
                   placeholder="Countdown title..." />
               </div>
             </div>
           ) : (
             <div style={{ textAlign: "center" }}>
               <Clock size={48} style={{ color: "var(--text-disabled)", margin: "0 auto 12px" }} />
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>No countdown selected</h2>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>Create a countdown to get started</p>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", marginBottom: 6 }}>No countdown selected</h2>
+              <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>Create a countdown to get started</p>
               <button onClick={() => handleCreate("circular")}
-                style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
+                style={{ padding: "10px 24px", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
                 + Create Countdown
               </button>
             </div>
@@ -1167,13 +1167,13 @@ export default function CountdownsPage() {
 
       {/* ── Right Panel: Settings ── */}
       {active && (
-        <div style={{ width: 300, flexShrink: 0, borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ width: 320, flexShrink: 0, borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Tab bar */}
-          <div style={{ display: "flex", gap: 2, padding: 6, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 3, padding: 8, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             {TAB_LIST.map((tab) => (
               <button key={tab.key} onClick={() => setSettingsTab(tab.key)}
-                style={{ flex: 1, padding: "6px 0", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: settingsTab === tab.key ? "var(--surface-raised)" : "transparent", color: settingsTab === tab.key ? "var(--text)" : "var(--text-muted)", transition: "all 0.12s" }}>
-                <span style={{ marginRight: 3 }}>{tab.icon}</span>{tab.label}
+                style={{ flex: 1, padding: "8px 0", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: settingsTab === tab.key ? "var(--surface-raised)" : "transparent", color: settingsTab === tab.key ? "#ffffff" : "var(--text-muted)", transition: "all 0.12s" }}>
+                <span style={{ marginRight: 4 }}>{tab.icon}</span>{tab.label}
               </button>
             ))}
           </div>

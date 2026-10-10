@@ -16,12 +16,12 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--bg-dark, #111211);
-  color: var(--text-primary, #F7F2EC);
-  --text-primary: #F7F2EC;
-  --text-secondary: #D5C5B9;
-  --text-muted: #A59488;
-  --input-placeholder: #A59488;
+  background: var(--bg-dark, #0c0e17);
+  color: var(--text-primary, #ffffff);
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --input-placeholder: #64748b;
   color-scheme: inherit;
 }
 
@@ -296,12 +296,12 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-search-dropdown__label {
-  color: #2563eb;
+  color: #4f46e5;
 }
 
 :root.light .dock-search-dropdown__item:hover .dock-search-dropdown__label,
 :root.light .dock-search-dropdown__item--active .dock-search-dropdown__label {
-  color: #1d4ed8;
+  color: #4338ca;
 }
 
 :root.light .dock-search-dropdown__snippet {
@@ -359,7 +359,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-search-dropdown__item--recent svg {
-  color: var(--dock-accent, #2563eb);
+  color: var(--dock-accent, #4f46e5);
 }
 
 :root.light .dock-bible-favorites-modal__item {
@@ -943,6 +943,14 @@ html.mv-theme-light #dock-root,
 :root.light :is(
   .dock-bible-actions__menu,
   .dock-search-dropdown,
+  .bible-version-library__panel,
+  .dock-bible-reader__history-dropdown,
+  .dock-bible-compare-popover,
+  .dock-bible-reference-popover,
+  .dock-bible-controls__chapter-dropdown,
+  .dock-bible-controls__verse-dropdown,
+  .dock-bible-controls__book-dropdown,
+  .dock-bible-context-menu,
   .dock-animated-lt-card__popover,
   .dock-animated-lt-card__color-popover,
   .dock-btm-overflow__menu,
@@ -950,9 +958,29 @@ html.mv-theme-light #dock-root,
   .dock-media-context-menu
 ) {
   background: var(--dock-surface) !important;
+  background-color: var(--dock-surface) !important;
   border-color: var(--dock-border) !important;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12) !important;
   color: var(--dock-text) !important;
+}
+
+:root.light .bible-version-library__search {
+  background: var(--dock-surface-alt) !important;
+  border-bottom-color: var(--dock-border) !important;
+}
+
+:root.light .bible-version-library__search-input {
+  background: var(--dock-surface) !important;
+  border-color: var(--dock-border) !important;
+}
+
+:root.light .bible-version-library__section-header {
+  background: var(--dock-surface) !important;
+  border-bottom-color: var(--dock-border) !important;
+}
+
+:root.light .bible-version-library__row:hover {
+  background: var(--dock-surface-hover) !important;
 }
 
 :root.light .dock-bible-actions__menu-item,
@@ -1067,7 +1095,6 @@ html.mv-theme-light #dock-root,
   .dock-console-panel,
   .dock-presentation-bible-lm-pane,
   .dock-btm-toolbar,
-  .dock-btm-overflow__menu,
   .dock-btm-display-mode-menu,
   .dock-dialog,
   .dock-modal,
@@ -1090,9 +1117,7 @@ html.mv-theme-light #dock-root,
    copper/ink language as the admin console. These final rules intentionally
    use the token values so dark and light themes stay in sync. */
 .dock-root {
-  background-image:
-    radial-gradient(circle at 88% -12%, color-mix(in srgb, var(--dock-accent) 12%, transparent), transparent 28%),
-    linear-gradient(155deg, color-mix(in srgb, var(--dock-accent) 7%, var(--dock-bg)), var(--dock-bg) 42%, var(--dock-bg-secondary));
+  background-image: none !important;
 }
 
 .dock-root :where(
@@ -1108,8 +1133,7 @@ html.mv-theme-light #dock-root,
 }
 
 .dock-root .dock-shell-header {
-  background:
-    linear-gradient(110deg, color-mix(in srgb, var(--dock-accent) 12%, var(--dock-surface)), var(--dock-surface) 58%) !important;
+  background: var(--dock-surface) !important;
 }
 
 .dock-root :where(.dock-shell-titleline__section, .dock-tab, .dock-worship-subtab, .dock-bottom-nav__item) {
@@ -1122,7 +1146,7 @@ html.mv-theme-light #dock-root,
 
 .dock-root .dock-tab--active::after {
   height: 3px;
-  background: linear-gradient(90deg, var(--dock-accent), var(--dock-yellow)) !important;
+  background: var(--dock-accent) !important;
 }
 
 .dock-root :where(.dock-card, .dock-lyric-card, .dock-console-panel, .dock-settings-menu) {
@@ -1157,9 +1181,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-root {
-  background-image:
-    radial-gradient(circle at 88% -12%, rgba(169, 83, 53, 0.10), transparent 28%),
-    linear-gradient(155deg, #fbf7f1, var(--dock-bg) 48%, #eee5db);
+  background-image: none !important;
 }
 
 :root.light .dock-root :where(
@@ -1175,7 +1197,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-root .dock-shell-header {
-  background: linear-gradient(110deg, #fffaf4, var(--dock-surface) 62%) !important;
+  background: var(--dock-surface) !important;
 }
 
 :root.light .dock-root .dock-bottom-nav__item {
@@ -1311,5 +1333,4 @@ html.mv-theme-light #dock-root,
   color: var(--dock-accent, #A95335);
   box-shadow: 0 2px 8px rgba(169, 83, 53, 0.18);
 }
-
 

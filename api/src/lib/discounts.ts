@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import clientPromise from "./mongodb";
 import { COLLECTIONS } from "./db";
 import { userMatchesAnnouncement } from "./announcements";
+import { markOfferRedeemed } from "./offerMatch";
 import type { Announcement, DiscountBillingCycle, PlanTier } from "@/types/schemas";
 
 export class DiscountCodeError extends Error {
@@ -155,6 +156,12 @@ export async function recordDiscountRedemption({
   const client = await clientPromise;
   const db = client.db();
   const now = new Date().toISOString();
+
+  // If the code belonged to a win-back offer, mark that offer redeemed. Safe to
+  // repeat, so a payment that is reported twice (webhook and verify) is fine.
+  await markOfferRedeemed(userId, discount.code, paystackReference).catch((error) =>
+    console.error("[discounts] Could not mark win-back offer redeemed:", error),
+  );
 
   try {
     await db.collection(COLLECTIONS.DISCOUNT_REDEMPTIONS).insertOne({

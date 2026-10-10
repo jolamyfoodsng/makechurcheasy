@@ -47,6 +47,7 @@ import clientPromise from "@/lib/mongodb";
 import { recordActivationEvent } from "@/lib/activation";
 import { notifyTelegramCheckoutStarted } from "@/lib/telegramNotifications";
 import crypto from "node:crypto";
+import { paymentProviderDisabledResponse } from "@/lib/adminControls";
 
 const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 
@@ -98,6 +99,11 @@ export async function POST(req: NextRequest) {
       paymentMethod !== "flutterwave"
     ) {
       return NextResponse.json({ error: "Unsupported payment method" }, { status: 400 });
+    }
+    {
+      const providerKey = paymentMethod === "mtn_momo" ? "mtnMomo" : paymentMethod === "nowpayments" ? "nowpayments" : "flutterwave";
+      const disabled = await paymentProviderDisabledResponse(providerKey);
+      if (disabled) return disabled;
     }
     if (paymentMethod === "nowpayments") {
       const callbackUrl = getNowPaymentsIpnCallbackUrl();

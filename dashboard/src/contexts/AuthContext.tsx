@@ -13,6 +13,7 @@ import {
 import { setUserId, clearUserId } from "../lib/userId";
 import { resolveLocalePreference } from "@/i18n/routing";
 import type { MongoUser } from "@/lib/authTypes";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 interface AuthContextValue {
   mongoUser: MongoUser | null;
@@ -24,6 +25,8 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string, twoFactorCode?: string) => Promise<{ needsMigration?: boolean; emailNotVerified?: boolean; requiresTwoFactor?: boolean; email?: string }>;
   signUpWithEmail: (email: string, password: string, name: string, churchName: string, referralCode?: string) => Promise<{ needsEmailVerification?: boolean; email?: string; existingAccount?: boolean }>;
   signInWithGoogle: (returnUrl?: string) => Promise<boolean>;
+  connectGoogleAccount: (returnUrl?: string) => void;
+  signInWithPasskey: () => Promise<{ requiresTwoFactor?: boolean }>;
   logOut: () => Promise<void>;
   sendVerificationEmail: () => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
@@ -109,6 +112,24 @@ function getOrCreateSessionId(): string {
   }
 }
 
+
+/** Stable per-browser id so Admin → Controls can limit sign-ups per computer. */
+function getSignupBrowserId(): string {
+  try {
+    const key = "mce_signup_browser_id";
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 export function AuthProvider({
   children,
   initialMongoUser = null,
@@ -121,7 +142,7 @@ export function AuthProvider({
   const [mongoUser, setMongoUser] = useState<MongoUser | null>(initialMongoUser);
   const [loading, setLoading] = useState(() => !initialMongoUser && !authOptionalPath);
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
-  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | { passkeyTicket: string } | null>(null);
   const signingUpRef = useState(false)[0];
   const AUTH_REFRESH_INTERVAL_MS = 30_000;
 
@@ -277,7 +298,7 @@ export function AuthProvider({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, email, password, churchName, referralCode }),
+      body: JSON.stringify({ name, email, password, churchName, referralCode, installationId: getSignupBrowserId() }),
     });
 
     if (!signupRes.ok) {
@@ -321,7 +342,42 @@ export function AuthProvider({
     return false;
   }
 
+  function connectGoogleAccount(returnUrl = "/settings/google") {
+    const safeReturnUrl = returnUrl.startsWith("/") && !returnUrl.startsWith("//") ? returnUrl : "/settings/google";
+    window.location.href = `/api/auth/google?intent=link&origin=${encodeURIComponent(window.location.origin)}&returnUrl=${encodeURIComponent(window.location.origin + safeReturnUrl)}`;
+  }
+
+  async function signInWithPasskey(): Promise<{ requiresTwoFactor?: boolean }> {
+    const optionsResponse = await fetch("/api/auth/passkeys/login-options", { method: "POST", credentials: "include" });
+    const options = await optionsResponse.json();
+    if (!optionsResponse.ok) throw new Error(options.error || "Passkey sign-in is unavailable.");
+    const assertion = await startAuthentication({ optionsJSON: options });
+    const verifyResponse = await fetch("/api/auth/passkeys/login-verify", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(assertion) });
+    const result = await verifyResponse.json();
+    if (!verifyResponse.ok) throw new Error(result.error || "Passkey sign-in failed.");
+    if (result.requiresTwoFactor) {
+      setPendingCredentials({ passkeyTicket: result.ticket });
+      setRequiresTwoFactor(true);
+      return { requiresTwoFactor: true };
+    }
+    const mongo = await fetchMongoUser();
+    setMongoUser(mongo);
+    if (mongo?._id) setUserId(mongo._id);
+    return {};
+  }
+
   async function verifyTwoFactor(token: string) {
+    if (pendingCredentials && "passkeyTicket" in pendingCredentials) {
+      const res = await fetch("/api/auth/passkeys/complete-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ ticket: pendingCredentials.passkeyTicket, code: token }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Invalid two-factor authentication code");
+      const mongo = await fetchMongoUser();
+      setMongoUser(mongo);
+      if (mongo?._id) setUserId(mongo._id);
+      setRequiresTwoFactor(false);
+      setPendingCredentials(null);
+      return;
+    }
     if (pendingCredentials) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -408,7 +464,7 @@ export function AuthProvider({
   }
 
   function isGoogleLinked(): boolean {
-    return mongoUser?.provider === "google";
+    return mongoUser?.provider === "google" || Boolean(mongoUser?.googleAccount?.email);
   }
 
   async function updatePassword(newPassword: string) {
@@ -446,6 +502,8 @@ export function AuthProvider({
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
+        connectGoogleAccount,
+        signInWithPasskey,
         logOut,
         sendVerificationEmail,
         sendPasswordResetEmail,

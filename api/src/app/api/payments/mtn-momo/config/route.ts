@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       enabled:
         config.enabled &&
         platformSettings.system.allowPayments &&
+        platformSettings.controls?.paymentProviders?.mtnMomo !== false &&
         currencyMatches &&
         sandboxCurrencyMatches,
       countryResolutionRequired: pricingResolution.requiresCountrySelection,

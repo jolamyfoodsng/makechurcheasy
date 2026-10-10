@@ -19,6 +19,13 @@ NEXT_PUBLIC_APP_ENV = "production"
 NEXT_PUBLIC_APP_URL = "https://makechurcheazy.com"
 NEXT_PUBLIC_API_URL = "https://api.makechurcheazy.com"
 
+NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-89SPDL1KE4"
+NEXT_PUBLIC_FIREBASE_API_KEY = "AIzaSyAuqCQOBAPuWZbzZ8YYRuW2gkwcD24hXPE"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID = "easybiblemount"
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = "easybiblemount.firebaseapp.com"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = "easybiblemount.firebasestorage.app"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = "236701453148"
+NEXT_PUBLIC_FIREBASE_APP_ID = "1:236701453148:web:7f521b2502acc8a2c60f99"
 [[routes]]
 pattern = "makechurcheazy.com/*"
 zone_name = "makechurcheazy.com"

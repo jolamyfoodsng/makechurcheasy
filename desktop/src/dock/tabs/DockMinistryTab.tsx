@@ -20,9 +20,12 @@ import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
 import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import Icon from "../DockIcon";
 import { LT_ALL_THEMES } from "../../lowerthirds/themes";
-import { loadDockLTFavorites, loadDockTickerFavorites } from "../dockThemeData";
+import { loadDockGraphicsPolicy, loadDockLTFavorites, loadDockSavedGraphics, loadDockTickerFavorites } from "../dockThemeData";
+import { BROADCAST_GRAPHICS_CATALOG_UPDATED_EVENT } from "../../services/broadcastGraphicsCatalog";
+import { BROADCAST_GRAPHICS_UPDATED_EVENT, buildSavedGraphicTheme } from "../../services/broadcastGraphicsStorage";
 import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import { dockClient } from "../../services/dockBridge";
+import { trackGraphicUsage } from "../../services/tracking";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
 import { LT_SIZE_FONT_SCALE, LT_SIZE_LABELS } from "../../lowerthirds/types";
@@ -33,7 +36,7 @@ import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockTimeTab from "./DockTimeTab";
-import { requireEntitlement, getDockPlan, showUpgradeModal } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal, getDockEntitlementLimit } from "../dockEntitlement";
 import { checkEntitlementSync } from "../../services/entitlementClient";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
@@ -45,12 +48,17 @@ import { loadDockOutputFontFamily } from "../dockOutputTypography";
 import {
   clearPresentationScreen,
   publishTickerToPresentation,
+  publishGraphicToPresentation,
+  clearGraphicFromPresentation,
 } from "../../services/presentationPublish";
 import {
   DEFAULT_DOCK_TICKER_THEME_OPTION,
   formatDockTickerMessages,
   getDockTickerThemeOptionsForFavorites,
+  isDockTickerBlocked,
+  setDockTickerAdminPolicy,
   renderDockTickerThemeHtml,
+  probeHtmlTickerColors,
   resolveDockTickerDividerChar,
   resolveDockTickerThemeOption,
   type DockTickerDivider,
@@ -78,6 +86,10 @@ interface LTThemeEntry {
   kind: "lt";
   theme: LowerThirdTheme;
   label: string;
+  /** A graphic the user saved in Broadcast Graphics → My Graphics. */
+  custom?: boolean;
+  /** Library template the theme was made from (for usage tracking). */
+  templateId?: string;
 }
 interface BibleThemeEntry {
   kind: "bible";
@@ -155,9 +167,9 @@ const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
 const TICKER_MESSAGE_SPACING_MAX = 100;
 const TICKER_COLOR_POPOVER_WIDTH = 270;
-const COLOR_INPUT_FALLBACK = "#1d4ed8";
+const COLOR_INPUT_FALLBACK = "#4f46e5";
 const TICKER_COLOR_INPUT_FALLBACKS: Record<TickerColorKey, string> = {
-  accent: "#1d4ed8",
+  accent: "#4f46e5",
   accentText: "#ffffff",
   barBg: "#0f172a",
   barText: "#ffffff",
@@ -223,6 +235,58 @@ function colorInputValue(value: unknown, fallback: string = COLOR_INPUT_FALLBACK
     return `#${hex.split("").map((char) => char + char).join("")}`.toLowerCase();
   }
   return `#${hex}`.toLowerCase();
+}
+
+/**
+ * Hex / rgb text field for a ticker colour. Keeps what you type in a local draft so a half-typed value
+ * ("#47") isn't wiped, and only saves it once it is a valid colour. Clearing the field removes the override.
+ */
+function TickerColorTextInput({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  onCommit: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
+  // Follow outside changes (the colour swatch, Reset) while the field isn't being typed in.
+  useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+  const invalid = draft.trim() !== "" && !sanitizeCssColor(draft);
+  return (
+    <input
+      type="text"
+      value={draft}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        if (next.trim() === "" || sanitizeCssColor(next)) onCommit(next);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        setDraft(value);
+      }}
+      placeholder={placeholder}
+      spellCheck={false}
+      aria-invalid={invalid || undefined}
+      style={{
+        minWidth: 0,
+        height: 24,
+        background: "var(--dock-surface, #111827)",
+        border: `1px solid ${invalid ? "#ef4444" : "var(--dock-border, #334155)"}`,
+        borderRadius: 3,
+        color: "var(--dock-text, #f8fafc)",
+        fontFamily: "inherit",
+        fontSize: 10,
+        padding: "0 6px",
+      }}
+    />
+  );
 }
 
 function loadTickerColorOverrides(raw: unknown): TickerColorOverrides {
@@ -371,6 +435,7 @@ export default function DockMinistryTab({
   const hasTickerSceneRoute = tickerSceneRoute.enabled && tickerSceneRoute.targets.length > 0;
   const hasLowerThirdSceneRoute = lowerThirdSceneRoute.enabled && lowerThirdSceneRoute.targets.length > 0;
   const [tickerFavIds, setTickerFavIds] = useState<Set<string>>(new Set());
+  const [tickerPolicyVersion, setTickerPolicyVersion] = useState(0);
   const [remoteProductionThemes, setRemoteProductionThemes] = useState<RemoteProductionTheme[]>(() => getCachedRemoteProductionThemes());
   const [tickerBranding, setTickerBranding] = useState<TickerBranding>(loadInitialTickerBranding);
   const [tickerColorPopoverOpen, setTickerColorPopoverOpen] = useState(false);
@@ -536,16 +601,38 @@ export default function DockMinistryTab({
 
   const refreshLtFavorites = useCallback(async () => {
     try {
-      const ltIdSet = await loadDockLTFavorites().catch(() => new Set<string>());
+      const [ltIdSet, savedGraphics, policy] = await Promise.all([
+        loadDockLTFavorites().catch(() => new Set<string>()),
+        loadDockSavedGraphics().catch(() => []),
+        loadDockGraphicsPolicy().catch(() => ({ blocked: new Set<string>(), packageThemes: [] as LowerThirdTheme[], packageTickers: [] })),
+      ]);
       const entries: MixedLTThemeEntry[] = [];
+      // Admin-published graphics join the bundled ones; paused / hidden / other-plan ones are left out.
+      const pool = [
+        ...availableLtThemes,
+        ...policy.packageThemes.filter((p) => !availableLtThemes.some((t) => t.id === p.id)),
+      ].filter((t) => !policy.blocked.has(t.id));
+
+      // Custom graphics saved in Broadcast Graphics ("Save & add to OBS") come first,
+      // each under its own name with its saved text and colours.
+      for (const saved of savedGraphics) {
+        if (policy.blocked.has(saved.templateId)) continue;
+        const template = pool.find((t) => t.id === saved.templateId);
+        const theme = template ? buildSavedGraphicTheme(saved, template) : saved.theme;
+        if (!theme) continue;
+        entries.push({ kind: "lt", theme, label: theme.name, custom: true, templateId: saved.templateId });
+      }
 
       // LowerThirdTheme favorites — only show themes favorited/added to OBS
-      const ltThemes = availableLtThemes.filter((t) => ltIdSet.has(t.id));
+      const ltThemes = pool.filter((t) => ltIdSet.has(t.id));
       for (const t of ltThemes) {
         entries.push({ kind: "lt", theme: t, label: t.name });
       }
 
-      setLtFavorites(entries);
+      // Plan limit (Free = 3 by default, set in Admin → Plan Config). A church that
+      // has more from a trial or earlier plan keeps only the first ones in the Dock.
+      const ltLimit = getDockEntitlementLimit("lowerThirds");
+      setLtFavorites(ltLimit >= 0 && Number.isFinite(ltLimit) ? entries.slice(0, ltLimit) : entries);
     } catch (err) {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
       setLtFavorites([]);
@@ -554,9 +641,21 @@ export default function DockMinistryTab({
 
   const refreshTickerFavorites = useCallback(async () => {
     try {
-      const favIds = await loadDockTickerFavorites();
+      const [allFavIds, policy] = await Promise.all([
+        loadDockTickerFavorites(),
+        loadDockGraphicsPolicy().catch(() => null),
+      ]);
+      // Admin → Broadcast Graphics → Tickers: uploaded tickers join the list; paused,
+      // hidden and other-plan tickers are left out.
+      if (policy) setDockTickerAdminPolicy({ blocked: policy.blocked, packageTickers: policy.packageTickers });
+      const tickerLimit = getDockEntitlementLimit("tickerThemes");
+      const usableFavIds = [...allFavIds].filter((id) => !isDockTickerBlocked(id));
+      const favIds = tickerLimit >= 0 && Number.isFinite(tickerLimit)
+        ? new Set(usableFavIds.slice(0, tickerLimit))
+        : new Set(usableFavIds);
       setTickerFavIds(favIds);
-      const available = getDockTickerThemeOptionsForFavorites(favIds, remoteProductionThemes);
+      setTickerPolicyVersion((v) => v + 1);
+      const available = getDockTickerThemeOptionsForFavorites(favIds, remoteProductionThemes, tickerLimit);
       setSettings((current) => {
         const currentTheme = available.find((option) => option.id === current.themeId);
         if (currentTheme) return current;
@@ -586,8 +685,10 @@ export default function DockMinistryTab({
       void refreshTickerFavorites();
     };
     window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+    window.addEventListener(BROADCAST_GRAPHICS_UPDATED_EVENT, refreshAll);
+    window.addEventListener(BROADCAST_GRAPHICS_CATALOG_UPDATED_EVENT, refreshAll);
     const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key.includes("ocs-fav-")) {
+      if (!event.key || event.key.includes("ocs-fav-") || event.key.includes("mce-saved-broadcast-graphics") || event.key.includes("mce-broadcast-graphics-catalog")) {
         refreshAll();
       }
     };
@@ -599,12 +700,20 @@ export default function DockMinistryTab({
     });
     return () => {
       window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refreshAll);
+      window.removeEventListener(BROADCAST_GRAPHICS_UPDATED_EVENT, refreshAll);
+      window.removeEventListener(BROADCAST_GRAPHICS_CATALOG_UPDATED_EVENT, refreshAll);
       window.removeEventListener("storage", onStorage);
       unsubscribe();
     };
   }, [refreshLtFavorites, refreshTickerFavorites]);
 
-  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(tickerFavIds, remoteProductionThemes);
+  // tickerPolicyVersion re-renders the list after the admin ticker policy is applied.
+  void tickerPolicyVersion;
+  const effectiveThemeList = getDockTickerThemeOptionsForFavorites(
+    tickerFavIds,
+    remoteProductionThemes,
+    getDockEntitlementLimit("tickerThemes"),
+  );
   const selectedTickerTheme =
     effectiveThemeList.find((option) => option.id === settings.themeId) ??
     effectiveThemeList[0] ??
@@ -620,18 +729,40 @@ export default function DockMinistryTab({
         accent: brandColor,
         separator: brandColor,
       }
-      : {
-        accent: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
-        accentText: "#ffffff",
-        barBg: "#0f172a",
-        barText: "#ffffff",
-        separator: sanitizeCssColor(selectedTickerTheme.accentColor) ?? brandColor,
-      };
+      // HTML/package tickers keep their own CSS colours; only the user's picked colours override them.
+      : ({} as TickerThemeColors);
     return {
       ...baseColors,
       ...loadTickerColorOverrides(settings.colors),
     };
   })();
+  // Read the colours an HTML ticker really shows (only while the picker is open) so the swatches match it.
+  const [probedTickerColors, setProbedTickerColors] = useState<{ themeId: string; colors: Partial<TickerThemeColors> } | null>(null);
+  useEffect(() => {
+    if (!tickerColorPopoverOpen || !selectedTickerTheme) return;
+    if (selectedTickerTheme.source === "dock" || selectedTickerTheme.source === "remote") return;
+    let cancelled = false;
+    const themeId = selectedTickerTheme.id;
+    void probeHtmlTickerColors(selectedTickerTheme).then((colors) => {
+      if (!cancelled) setProbedTickerColors({ themeId, colors });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickerColorPopoverOpen, selectedTickerTheme?.id, selectedTickerTheme?.source]);
+  // What the picker shows for colours the user hasn't changed: the colours the ticker really uses.
+  // (HTML tickers keep their own CSS, so `tickerColors` is empty for them until something is overridden.)
+  const tickerPickerDefaults: Record<TickerColorKey, string> = {
+    ...TICKER_COLOR_INPUT_FALLBACKS,
+    ...(selectedTickerTheme?.source === "permanent" || selectedTickerTheme?.source === "remote-template"
+      ? Object.fromEntries(Object.entries(selectedTickerTheme.theme.colors ?? {}).filter(([, v]) => !!v))
+      : {}),
+    ...(probedTickerColors?.themeId === selectedTickerTheme?.id ? probedTickerColors.colors : {}),
+    ...(tickerColors ?? {}),
+  };
+  // HTML tickers have no divider of their own, so the separator colour only shows once a divider is chosen.
+  const tickerSeparatorNeedsDivider =
+    (selectedTickerTheme?.source === "permanent" || selectedTickerTheme?.source === "remote-template")
+    && (settings.divider === "theme" || settings.divider === "none");
   const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock" || selectedTickerTheme?.source === "remote"
     ? tickerBranding.logoUrl
     : "";
@@ -640,6 +771,10 @@ export default function DockMinistryTab({
 
   const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
   const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: fallbackLtTheme, label: fallbackLtTheme?.name ?? "Speaker" };
+  // Motion straps (public/kinetic) have their own Size slider, so the SM/LG/XL row is hidden for them.
+  const isMotionLtEntry = ltSelectedEntry.kind === "lt"
+    && typeof ltSelectedEntry.theme.html === "string"
+    && ltSelectedEntry.theme.html.includes("kx-root");
   const selectedBibleLtSettings = ltSelectedEntry.kind === "bible"
     ? (ltSelectedEntry.theme.variants?.lowerThird?.settings ?? ltSelectedEntry.theme.settings)
     : null;
@@ -904,6 +1039,77 @@ export default function DockMinistryTab({
     }
   }, [activeMessages, hasTickerSceneRoute, obsFontFamily, presentationLinkMode, selectedTickerTheme, settings, t, tickerBrandLogoUrl, tickerBrandName, tickerColors, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
+  // ── Live sync: while the ticker is on air, setting changes update OBS right away ──
+  const handlePushRef = useRef(handlePush);
+  handlePushRef.current = handlePush;
+  const liveSyncKeyRef = useRef("");
+  const liveSyncPositionRef = useRef(settings.position);
+  const liveSyncKey = JSON.stringify([
+    selectedTickerTheme?.id,
+    settings.heading,
+    settings.speed,
+    settings.messageSpacing,
+    settings.divider,
+    settings.loop,
+    settings.position,
+    tickerColors,
+    obsFontFamily,
+    activeMessages.map((m) => m.text),
+  ]);
+  useEffect(() => {
+    if (!running || !selectedTickerTheme || activeMessages.length === 0) {
+      liveSyncKeyRef.current = liveSyncKey;
+      liveSyncPositionRef.current = settings.position;
+      return;
+    }
+    if (liveSyncKeyRef.current === liveSyncKey) return;
+    const timer = window.setTimeout(async () => {
+      liveSyncKeyRef.current = liveSyncKey;
+      try {
+        if (presentationLinkMode || liveSyncPositionRef.current !== settings.position) {
+          // Position changes need the OBS transform updated, so run a full push.
+          liveSyncPositionRef.current = settings.position;
+          await handlePushRef.current();
+          return;
+        }
+        const html = renderDockTickerThemeHtml({
+          option: selectedTickerTheme,
+          heading: settings.heading,
+          messages: activeMessages.map((m) => m.text),
+          speed: settings.speed,
+          position: settings.position,
+          loop: settings.loop,
+          paused: isPaused,
+          colors: tickerColors,
+          fontFamily: obsFontFamily,
+          brandLogoUrl: tickerBrandLogoUrl,
+          brandName: tickerBrandName,
+          divider: settings.divider,
+          messageSpacing: settings.messageSpacing,
+        });
+        const video = await dockObsClient.call("GetVideoSettings") as { baseWidth: number; baseHeight: number };
+        const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+        const sourceNames = hasTickerSceneRoute
+          ? [
+            ...tickerSceneRoute.targets.map((target) => dockObsClient.getSceneRouteSourceName("ticker", target.sceneName)),
+            ...(tickerSceneRoute.syncPresentation ? ["MCE Ticker"] : []),
+          ]
+          : ["MCE Ticker"];
+        await Promise.all(sourceNames.map((inputName) =>
+          dockObsClient.call("SetInputSettings", {
+            inputName,
+            inputSettings: { url: dataUrl, width: video.baseWidth, height: TICKER_HEIGHT },
+          }),
+        ));
+      } catch (err) {
+        console.warn("[DockMinistry] Live ticker sync failed:", err);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // liveSyncKey covers every value that changes the ticker output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSyncKey, running]);
+
   // ── Pause ticker (stops scroll in OBS) ──
   const handlePause = useCallback(async () => {
     if (!selectedTickerTheme) return;
@@ -1117,7 +1323,7 @@ export default function DockMinistryTab({
         <>
           {/* Feedback */}
           {error && (
-            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--error">
+            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--error">
               <Icon name="error" size={14} />
               <span>{error}</span>
               <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title={t("common.close")}>
@@ -1126,7 +1332,7 @@ export default function DockMinistryTab({
             </div>
           )}
           {success && (
-            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--success">
+            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--success">
               <Icon name="check_circle" size={14} />
               <span>{success}</span>
             </div>
@@ -1169,8 +1375,19 @@ export default function DockMinistryTab({
 
             {/* Settings */}
             <div className="dock-mv-tab__section dock-mv-tab__section--ticker-settings">
-              <div className="dock-mv-tab__section-label">{t("ministry.settings")}</div>
-              <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="dock-mv-tab__section-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{t("ministry.settings")}</span>
+                {running && (
+                  <span
+                    title="Changes are sent to OBS as you make them"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 700, color: "#22c55e", textTransform: "none" }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />
+                    Live sync on
+                  </span>
+                )}
+              </div>
+              <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <label style={{ fontSize: 10, color: "var(--dock-text-dim)", flex: "0 0 50px" }}>{t("ministry.heading")}</label>
                   <div
@@ -1235,33 +1452,57 @@ export default function DockMinistryTab({
                     </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }}>{t("ministry.speed")}</label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={100}
-                    value={settings.speed}
-                    onChange={(e) => setSettings((s) => ({ ...s, speed: Number(e.target.value) }))}
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 24, textAlign: "right" }}>{settings.speed}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <label style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 50 }} title="Extra space before the next message">
-                    Space
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={TICKER_MESSAGE_SPACING_MAX}
-                    value={settings.messageSpacing}
-                    onChange={(e) => setSettings((s) => ({ ...s, messageSpacing: Number(e.target.value) }))}
-                    aria-label="Extra space before the next message"
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ fontSize: 10, color: "var(--dock-text-dim)", minWidth: 32, textAlign: "right" }}>{settings.messageSpacing}px</span>
-                </div>
+                {([
+                  {
+                    key: "speed" as const,
+                    label: t("ministry.speed"),
+                    min: 1,
+                    max: 100,
+                    value: settings.speed,
+                    display: settings.speed <= 33 ? "Slow" : settings.speed <= 66 ? "Medium" : "Fast",
+                    hints: ["Slow", "Fast"],
+                  },
+                  {
+                    key: "messageSpacing" as const,
+                    label: "Space",
+                    min: 0,
+                    max: TICKER_MESSAGE_SPACING_MAX,
+                    value: settings.messageSpacing,
+                    display: `${settings.messageSpacing}px`,
+                    hints: ["Tight", "Wide"],
+                  },
+                ]).map((control) => (
+                  <div key={control.key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <label style={{ fontSize: 10, fontWeight: 600, color: "var(--dock-text-dim)" }}>{control.label}</label>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "var(--dock-text)",
+                        background: "var(--dock-surface)",
+                        border: "1px solid var(--dock-border)",
+                        borderRadius: 999,
+                        padding: "1px 8px",
+                      }}>{control.display}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={control.min}
+                      max={control.max}
+                      value={control.value}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setSettings((s) => ({ ...s, [control.key]: value }));
+                      }}
+                      aria-label={control.label}
+                      style={{ width: "100%", accentColor: "var(--dock-accent)" }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--dock-text-dim)" }}>
+                      <span>{control.hints[0]}</span>
+                      <span>{control.hints[1]}</span>
+                    </div>
+                  </div>
+                ))}
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 20 }}>
                   <div style={{ display: "block", alignItems: "center", gap: 6 }}>
                     <label style={{ fontSize: 10, display: "block", color: "var(--dock-text-dim)", minWidth: 50, }}>{t("ministry.position")}</label>
@@ -1539,7 +1780,7 @@ export default function DockMinistryTab({
         <>
           {/* LT Feedback */}
           {ltFeedback && (
-            <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--${ltFeedbackTone}`}>
+            <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--${ltFeedbackTone}`}>
               <Icon name={ltFeedbackTone === "success" ? "check_circle" : "error"} size={14} />
               <span>{ltFeedback}</span>
               <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)} title={t("common.close")}>
@@ -1575,7 +1816,7 @@ export default function DockMinistryTab({
                   >
                     {ltFavorites.map((entry, i) => (
                       <option key={`${entry.kind}-${entry.label}-${i}`} value={i}>
-                        {entry.label}{entry.kind === "bible" ? ` ${t("ministry.custom")}` : ""}
+                        {entry.label}{entry.kind === "bible" || (entry.kind === "lt" && entry.custom) ? ` ${t("ministry.custom")}` : ""}
                       </option>
                     ))}
                   </select>
@@ -1598,7 +1839,8 @@ export default function DockMinistryTab({
               </div>
             </div>
 
-            {/* Size Multiplier */}
+            {/* Size Multiplier (Motion straps use the Size slider in their own settings) */}
+            {!isMotionLtEntry && (
             <div className="dock-mv-tab__section">
               <div className="dock-mv-tab__section-label">{t("ministry.size")}</div>
               {/* <div className="dock-mv-tab__section-desc">{t("ministry.sizeDesc")}</div> */}
@@ -1630,6 +1872,7 @@ export default function DockMinistryTab({
                 ))}
               </div>
             </div>
+            )}
 
             {/* Render editor based on selected theme type */}
             {ltSelectedEntry?.kind === "lt" ? (
@@ -1647,6 +1890,17 @@ export default function DockMinistryTab({
                   setLtSending(true);
                   setLtFeedback(null);
                   try {
+                    if (presentationLinkMode) {
+                      // Free plan / presentation link: the graphic plays over the
+                      // link's Browser Source; nothing is created in OBS.
+                      const ltEntry = ltSelectedEntry?.kind === "lt" ? (ltSelectedEntry as LTThemeEntry) : null;
+                      await publishGraphicToPresentation(url, ltEntry?.theme?.id);
+                      setLtLive(true);
+                      setLtFeedbackTone("success");
+                      setLtFeedback(t("ministry.lowerThirdLive"));
+                      if (ltEntry) trackGraphicUsage("shown", ltEntry.templateId || ltEntry.theme?.id, ltEntry.theme?.name);
+                      return;
+                    }
                     await ensureObsConnected();
                     // Keep the OBS browser viewport stable. The selected
                     // size is rendered by lower-third-overlay.html so it
@@ -1676,6 +1930,10 @@ export default function DockMinistryTab({
                     setLtLive(true);
                     setLtFeedbackTone("success");
                     setLtFeedback(t("ministry.lowerThirdLive"));
+                    if (ltSelectedEntry?.kind === "lt") {
+                      const ltEntry = ltSelectedEntry as LTThemeEntry;
+                      trackGraphicUsage("shown", ltEntry.templateId || ltEntry.theme?.id, ltEntry.theme?.name);
+                    }
                   } catch (err) {
                     setLtFeedbackTone("error");
                     setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
@@ -1687,8 +1945,18 @@ export default function DockMinistryTab({
                   setLtSending(true);
                   setLtFeedback(null);
                   try {
-                    await ensureObsConnected();
                     const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                    if (presentationLinkMode) {
+                      // Play the exit on the presentation link, then remove the graphic.
+                      await publishGraphicToPresentation(url);
+                      await new Promise((resolve) => setTimeout(resolve, exitDuration));
+                      await clearGraphicFromPresentation();
+                      setLtLive(false);
+                      setLtFeedbackTone("success");
+                      setLtFeedback(t("ministry.lowerThirdCleared"));
+                      return;
+                    }
+                    await ensureObsConnected();
                     if (hasLowerThirdSceneRoute) {
                       await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
                         dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
@@ -1717,8 +1985,18 @@ export default function DockMinistryTab({
                   setLtSending(true);
                   setLtFeedback(null);
                   try {
-                    await ensureObsConnected();
                     const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                    if (presentationLinkMode) {
+                      // Play the exit on the presentation link, then remove the graphic.
+                      await publishGraphicToPresentation(url);
+                      await new Promise((resolve) => setTimeout(resolve, exitDuration));
+                      await clearGraphicFromPresentation();
+                      setLtLive(false);
+                      setLtFeedbackTone("success");
+                      setLtFeedback(t("ministry.lowerThirdAnimatedOut"));
+                      return;
+                    }
+                    await ensureObsConnected();
                     if (hasLowerThirdSceneRoute) {
                       await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
                         dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName)
@@ -2106,7 +2384,8 @@ export default function DockMinistryTab({
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {TICKER_COLOR_CONTROLS.map(({ key, label }) => {
               const explicitColor = settings.colors?.[key] ?? "";
-              const effectiveColor = sanitizeCssColor(explicitColor) ?? tickerColors[key];
+              const effectiveColor = sanitizeCssColor(explicitColor) ?? tickerPickerDefaults[key];
+              const needsDivider = key === "separator" && tickerSeparatorNeedsDivider;
               return (
                 <label
                   key={key}
@@ -2117,7 +2396,9 @@ export default function DockMinistryTab({
                     gap: 6,
                     fontSize: 10,
                     color: "var(--dock-text-dim, #cbd5e1)",
+                    opacity: needsDivider ? 0.55 : 1,
                   }}
+                  title={needsDivider ? t("ministry.tickerColor.separatorHint", "Choose a divider (Dot, Line, Diamond or Spark) to use this colour.") : undefined}
                 >
                   <span>{t(`ministry.tickerColor.${key}`, label)}</span>
                   <input
@@ -2135,23 +2416,10 @@ export default function DockMinistryTab({
                       cursor: "pointer",
                     }}
                   />
-                  <input
-                    type="text"
+                  <TickerColorTextInput
                     value={explicitColor}
-                    onChange={(e) => setTickerColorOverride(key, e.target.value)}
                     placeholder={effectiveColor}
-                    spellCheck={false}
-                    style={{
-                      minWidth: 0,
-                      height: 24,
-                      background: "var(--dock-surface, #111827)",
-                      border: "1px solid var(--dock-border, #334155)",
-                      borderRadius: 3,
-                      color: "var(--dock-text, #f8fafc)",
-                      fontFamily: "inherit",
-                      fontSize: 10,
-                      padding: "0 6px",
-                    }}
+                    onCommit={(next) => setTickerColorOverride(key, next)}
                   />
                 </label>
               );

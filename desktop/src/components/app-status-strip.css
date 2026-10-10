@@ -1,0 +1,114 @@
+/* Slim top bar: plan chip on the left, update countdown on the right. */
+.app-status-strip {
+  position: sticky;
+  top: 0;
+  z-index: 41;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+/* The live status bar sits right below the strip when both are visible. */
+.app-status-strip + .live-status-bar {
+  top: 36px;
+}
+
+.app-status-strip__side {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-status-strip__side--end {
+  margin-left: auto;
+}
+
+.app-status-strip__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-status-strip__chip--plan {
+  color: var(--text-primary);
+  background: rgba(123, 104, 238, 0.12);
+  border-color: rgba(123, 104, 238, 0.35);
+}
+
+.app-status-strip__chip--update {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.app-status-strip__chip--urgent {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.app-status-strip__label {
+  line-height: 1;
+}
+
+.app-status-strip__action {
+  height: 20px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #fff;
+}
+
+.app-status-strip__action--plan {
+  background: #7b68ee;
+}
+
+.app-status-strip__action--update {
+  background: #f59e0b;
+  color: #1f1300;
+}
+
+.app-status-strip__chip--urgent .app-status-strip__action--update {
+  background: #ef4444;
+  color: #fff;
+}
+
+.app-status-strip__action:hover {
+  filter: brightness(1.1);
+}
+
+.app-status-strip__action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.app-status-strip__action:disabled { opacity: 0.75; cursor: default; filter: none; }
+
+.app-status-strip__label--button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-status-strip__label--button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

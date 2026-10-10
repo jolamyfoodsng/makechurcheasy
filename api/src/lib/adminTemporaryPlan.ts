@@ -22,8 +22,11 @@ export type AdminTemporaryPlanState = {
   emailSentAt?: string;
   endedAt?: string;
   endedBy?: string;
-  endedReason?: "expired" | "ended_by_admin";
+  endedReason?: "expired" | "ended_by_admin" | "paid_plan_activated" | "grant_failed" | "converted_to_admin_subscription";
   expiredAt?: string;
+  /** Set when the grant came from a campaign or win-back offer. */
+  campaignKey?: string;
+  offerId?: string;
 };
 
 type UserLike = Record<string, any>;

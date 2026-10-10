@@ -233,6 +233,8 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
     <ForcedUpdateOverlay
       state={forcedUpdate.state}
       isDock={true}
+      // Closable until the final 24 hours; undefined once it has to stay.
+      onDismiss={forcedUpdate.dismiss}
       onRefresh={async () => {
         await forcedUpdate.refetch();
         void checkAuth();

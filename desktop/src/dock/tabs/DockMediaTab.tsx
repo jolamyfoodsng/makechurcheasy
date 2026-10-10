@@ -6785,7 +6785,7 @@ let _cachedGlobalUploadsDir: string | null = null;
                         width: 96,
                         height: 96,
                         borderRadius: "50%",
-                        background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.35) 100%)",
+                        background: "#171b28",
                         border: "2px solid rgba(59, 130, 246, 0.4)",
                         display: "flex",
                         alignItems: "center",

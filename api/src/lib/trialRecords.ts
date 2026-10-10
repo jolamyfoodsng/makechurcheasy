@@ -11,6 +11,7 @@
 import clientPromise from "./mongodb";
 import type { ObjectId } from "mongodb";
 import type { TrialStatus } from "@/types/schemas";
+import { markUserConverted } from "./offerMatch";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -277,6 +278,27 @@ export async function stopActiveTrialForPaidPlan(
       },
     ),
   ]);
+
+  // A free period or temporary plan that was granted before the person paid
+  // must not stay active: when it ran out it would send a paying customer back
+  // to Free. Only the grant is ended; the plan they just bought is untouched.
+  await db
+    .collection("users")
+    .updateOne(
+      { _id: userObjectId, "adminTemporaryPlan.active": true },
+      {
+        $set: {
+          "adminTemporaryPlan.active": false,
+          "adminTemporaryPlan.endedAt": now,
+          "adminTemporaryPlan.endedBy": lastModifiedBy,
+          "adminTemporaryPlan.endedReason": "paid_plan_activated",
+        },
+      },
+    )
+    .catch((error) => console.error("[trialRecords] Could not end temporary plan after payment:", error));
+
+  // Win-back offers stop once someone is a customer.
+  await markUserConverted(userId).catch((error) => console.error("[trialRecords] Offer conversion failed:", error));
 
   return trialResult.modifiedCount > 0 || userResult.modifiedCount > 0;
 }

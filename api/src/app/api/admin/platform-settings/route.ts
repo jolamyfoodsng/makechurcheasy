@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { getPlatformSettings, updatePlatformSection, reseedPlatformSettings } from "@/lib/platformSettings";
+import { sanitizeAdminControls } from "@/lib/adminControls";
 
 const VALID_SECTIONS = [
   "appUpdates",
@@ -16,6 +17,7 @@ const VALID_SECTIONS = [
   "security",
   "system",
   "featureFlags",
+  "controls",
 ] as const;
 
 type SectionName = (typeof VALID_SECTIONS)[number];
@@ -66,9 +68,15 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    const safeData = section === "controls"
+      ? (sanitizeAdminControls(data) as unknown as Record<string, unknown>)
+      : section === "security" && "maintenanceMessage" in data
+        ? { ...data, maintenanceMessage: String(data.maintenanceMessage ?? "").slice(0, 500) }
+        : data;
+
     const updated = await updatePlatformSection(
       section as SectionName,
-      data,
+      safeData,
       auth.adminUserId
     );
 

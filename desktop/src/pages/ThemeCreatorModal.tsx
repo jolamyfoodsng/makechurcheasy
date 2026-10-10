@@ -10,9 +10,11 @@ import {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import type { ChangeEvent } from "react";
 import Icon from "../components/Icon";
 import {
@@ -63,7 +65,9 @@ import {
 } from "../services/templateVideos";
 import { saveLibraryMediaFile, MEDIA_FILE_ACCEPT } from "../library/MediaTab";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
-import { BIBLE_BUILTIN_THEMES, getBibleThemePreviewHtml } from "../bible/bibleThemes";
+import { getBibleThemePreviewHtml } from "../bible/bibleThemes";
+import { LAYOUT_PRESET_THEMES } from "../themes/layout/presetThemes";
+import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -235,7 +239,7 @@ function clamp(value: number, min: number, max: number): number {
 function getLowerThirdLayout(settings: BibleThemeSettings, canvasWidth = OBS_CANVAS_WIDTH) {
   const safeArea = Math.max(0, Number(settings.safeArea) || 40);
   const paddedWidth = Math.max(LT_MIN_WIDTH, canvasWidth - safeArea * 2);
-  const requestedReduction = LT_WIDTH_REDUCTION[settings.lowerThirdWidthPreset || "full"] ?? 0;
+  const requestedReduction = LT_WIDTH_REDUCTION[settings.lowerThirdWidthPreset || "md"] ?? 0;
   const maxReduction = Math.max(0, paddedWidth - LT_MIN_WIDTH);
   const reduction = clamp(requestedReduction, 0, maxReduction);
   const barWidth = Math.max(LT_MIN_WIDTH, paddedWidth - reduction);
@@ -276,7 +280,8 @@ function getLowerThirdLayout(settings: BibleThemeSettings, canvasWidth = OBS_CAN
 function normalizeThemeSettings(settings: BibleThemeSettings): BibleThemeSettings {
   const normalized = {
     ...settings,
-    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "full",
+    lowerThirdPosition: settings.lowerThirdPosition || "center",
+    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "md",
     lineHeight: clamp(Number(settings.lineHeight) || 1.6, 1, 3),
   };
   const layout = getLowerThirdLayout(normalized);
@@ -346,27 +351,43 @@ function TemplateVideoPreview({ asset }: { asset: TemplateVideoAsset }) {
 // ---------------------------------------------------------------------------
 
 function buildFullscreenPreviewHtml(settings: BibleThemeSettings, category: BibleThemeCategory, _opts: PreviewOptions): string {
-  const content = SAMPLE_CONTENT[category];
-  const shadowCss = settings.textShadow !== "none" ? `text-shadow: ${settings.textShadow};` : "";
-  const outlineCss = settings.textOutline ? `-webkit-text-stroke: ${settings.textOutlineWidth}px ${settings.textOutlineColor};` : "";
-  const transformCss = settings.textTransform !== "none" ? `text-transform: ${settings.textTransform};` : "";
-  const alignCss = `text-align: ${settings.textAlign};`;
+  const content = SAMPLE_CONTENT[category] || SAMPLE_CONTENT.bible;
+  const shadowCss = settings.textShadow && settings.textShadow !== "none" ? `text-shadow: ${settings.textShadow};` : "";
+  const outlineCss = settings.textOutline ? `-webkit-text-stroke: ${settings.textOutlineWidth || 4}px ${settings.textOutlineColor || "#000000"};` : "";
+  const transformCss = settings.textTransform && settings.textTransform !== "none" ? `text-transform: ${settings.textTransform};` : "";
+  const alignCss = `text-align: ${settings.textAlign || "center"};`;
   const shadeCss = settings.fullscreenShadeEnabled
-    ? `background: ${settings.fullscreenShadeColor}; opacity: ${settings.fullscreenShadeOpacity}; position: absolute; inset: 0;`
+    ? `background: ${settings.fullscreenShadeColor || "#000000"}; opacity: ${settings.fullscreenShadeOpacity ?? 0.42}; position: absolute; inset: 0;`
     : "";
-  const bgStyle = settings.backgroundColor !== "transparent"
-    ? `background-color: ${settings.backgroundColor};`
-    : settings.backgroundImage
-      ? `background-image: url('${settings.backgroundImage}'); background-size: cover; background-position: center;`
-      : "background: transparent;";
-  const bgOpacityCss = settings.backgroundColor !== "transparent" ? "" : `opacity: ${settings.backgroundOpacity};`;
+
+  let bgHtml = "";
+  if (settings.backgroundVideo) {
+    bgHtml = `<video src="${settings.backgroundVideo}" autoplay loop muted playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:${settings.backgroundOpacity ?? 1};"></video>`;
+  } else if (settings.backgroundImage) {
+    bgHtml = `<div class="bg" style="position:absolute;inset:0;background-image:url('${settings.backgroundImage}');background-size:cover;background-position:center;opacity:${settings.backgroundOpacity ?? 1};"></div>`;
+  } else if (settings.backgroundPattern) {
+    const patUrl = settings.backgroundPattern.startsWith("data:") || settings.backgroundPattern.startsWith("http")
+      ? `url('${settings.backgroundPattern}')`
+      : settings.backgroundPattern;
+    const baseColor = settings.backgroundColor && settings.backgroundColor !== "transparent" ? settings.backgroundColor : "#0B1426";
+    bgHtml = `<div class="bg" style="position:absolute;inset:0;background-color:${baseColor};background-image:${patUrl};background-repeat:repeat;opacity:${settings.backgroundOpacity ?? 1};"></div>`;
+  } else if (settings.backgroundColor && settings.backgroundColor !== "transparent") {
+    if (settings.backgroundColorEnd) {
+      const angle = settings.bgGradientAngle ?? 135;
+      bgHtml = `<div class="bg" style="position:absolute;inset:0;background:linear-gradient(${angle}deg, ${settings.backgroundColor}, ${settings.backgroundColorEnd});opacity:${settings.backgroundOpacity ?? 1};"></div>`;
+    } else {
+      bgHtml = `<div class="bg" style="position:absolute;inset:0;background-color:${settings.backgroundColor};opacity:${settings.backgroundOpacity ?? 1};"></div>`;
+    }
+  } else {
+    bgHtml = `<div class="bg" style="position:absolute;inset:0;background-color:#0B1426;"></div>`;
+  }
 
   const refAlign = settings.refTextAlign === "match" ? settings.textAlign : settings.refTextAlign;
   const refSpacing = settings.refSpacing ?? 24;
   const refMarginTop = settings.refPosition === "top" ? `0 0 ${refSpacing}px 0` : `${refSpacing}px 0 0 0`;
   const refBgCss = settings.referenceBackgroundEnabled
     ? (() => {
-      const bg = settings.referenceBackgroundColor;
+      const bg = settings.referenceBackgroundColor || "#F4D17B";
       const r = settings.referenceBackgroundRadius ?? 12;
       if (settings.referenceBackgroundStyle === "pill") return `background:${bg};border-radius:999px;padding:4px 16px;display:inline-block;`;
       if (settings.referenceBackgroundStyle === "outline") return `border:1px solid ${bg};border-radius:${r}px;padding:4px 16px;display:inline-block;`;
@@ -382,15 +403,16 @@ function buildFullscreenPreviewHtml(settings: BibleThemeSettings, category: Bibl
 
   return `<!DOCTYPE html><html><head><style>
 @import url('/fonts/google/google-fonts.css');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Montserrat:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Inter:wght@300;400;600;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily};${alignCss}}
-.bg{position:absolute;inset:0;${bgStyle}${bgOpacityCss}}
+body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily || "Inter, sans-serif"};${alignCss}}
+.bg{position:absolute;inset:0;}
 .shade{${shadeCss}}
-.content{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding: ${settings.padding}px;${alignCss}}
-.verse{font-size:${settings.fontSize / 2}px;font-weight:${settings.fontWeight};font-style:${settings.fontStyle || "normal"};color:${settings.fontColor};line-height:${settings.lineHeight};${shadowCss}${outlineCss}${transformCss}}
-.reference{font-size:${settings.refFontSize / 2}px;font-weight:${settings.refFontWeight === "light" ? "300" : settings.refFontWeight};color:${settings.refFontColor};text-transform:${settings.refTextTransform !== "none" ? settings.refTextTransform : "none"};text-align:${refAlign};letter-spacing:${settings.refLetterSpacing}px;opacity:${settings.refOpacity}}
+.content{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:${settings.padding || 80}px;${alignCss}}
+.verse{font-size:${settings.fontSize ? settings.fontSize / 2 : 48}px;font-weight:${settings.fontWeight || "normal"};font-style:${settings.fontStyle || "normal"};color:${settings.fontColor || "#FFFFFF"};line-height:${settings.lineHeight || 1.5};${shadowCss}${outlineCss}${transformCss}}
+.reference{font-size:${settings.refFontSize ? settings.refFontSize / 2 : 24}px;font-weight:${settings.refFontWeight === "light" ? "300" : (settings.refFontWeight || "bold")};color:${settings.refFontColor || "#FACC15"};text-transform:${settings.refTextTransform !== "none" ? (settings.refTextTransform || "none") : "none"};text-align:${refAlign || "center"};letter-spacing:${settings.refLetterSpacing || 0}px;opacity:${settings.refOpacity ?? 1}}
 </style></head><body>
-<div class="bg"></div>
+${bgHtml}
 <div class="shade"></div>
 <div class="content">
   ${refHtmlTop}
@@ -402,49 +424,79 @@ body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamil
 
 function buildLowerThirdPreviewHtml(settings: BibleThemeSettings, _category: BibleThemeCategory, _opts: PreviewOptions): string {
   const content = SAMPLE_CONTENT.bible;
-  const shadowCss = settings.textShadow !== "none" ? `text-shadow: ${settings.textShadow};` : "";
-  const outlineCss = settings.textOutline ? `-webkit-text-stroke: ${settings.textOutlineWidth}px ${settings.textOutlineColor};` : "";
-  const transformCss = settings.textTransform !== "none" ? `text-transform: ${settings.textTransform};` : "";
-  const alignCss = `text-align: ${settings.textAlign};`;
-  const boxBg = settings.boxBackground !== "transparent"
-    ? `background-color: ${settings.boxBackground};`
-    : settings.boxBackgroundImage
-      ? `background-image: url('${settings.boxBackgroundImage}'); background-size: cover; background-position: center;`
-      : "background: rgba(0,0,0,0.7);";
-  const borderRadius = settings.borderRadius ?? 12;
+  const shadowCss = settings.textShadow && settings.textShadow !== "none" ? `text-shadow: ${settings.textShadow};` : "";
+  const outlineCss = settings.textOutline ? `-webkit-text-stroke: ${settings.textOutlineWidth || 4}px ${settings.textOutlineColor || "#000000"};` : "";
+  const transformCss = settings.textTransform && settings.textTransform !== "none" ? `text-transform: ${settings.textTransform};` : "";
+  const alignCss = `text-align: ${settings.textAlign || "center"};`;
+  const boxBg = settings.boxBackgroundImage
+    ? `background-image: url('${settings.boxBackgroundImage}'); background-size: cover; background-position: center;`
+    : settings.boxBackground && settings.boxBackground !== "transparent"
+      ? `background-color: ${settings.boxBackground};`
+      : "background: rgba(15, 23, 42, 0.85);";
+  const isFullWidth = settings.lowerThirdWidthPreset === "full";
+  const borderRadius = isFullWidth ? 0 : (settings.borderRadius ?? 16);
   const ltHeight = settings.lowerThirdHeight ? `height: ${settings.lowerThirdHeight}px;` : "";
+  const refFontFam = settings.refFontFamily ? `font-family: ${settings.refFontFamily};` : "";
 
   const refAlign = settings.refTextAlign === "match" ? settings.textAlign : settings.refTextAlign;
-  const refSpacing = settings.refSpacing ?? 24;
-  const refMarginTop = settings.refPosition === "top" ? `0 0 ${refSpacing}px 0` : `${refSpacing}px 0 0 0`;
+  const refSpacing = settings.refSpacing ?? 16;
+  const refMargin = settings.refPosition === "top" ? `0 0 ${refSpacing}px 0` : `${refSpacing}px 0 0 0`;
   const refBgCss = settings.referenceBackgroundEnabled
     ? (() => {
-      const bg = settings.referenceBackgroundColor;
-      const r = settings.referenceBackgroundRadius ?? 12;
-      if (settings.referenceBackgroundStyle === "pill") return `background:${bg};border-radius:999px;padding:4px 16px;display:inline-block;`;
-      if (settings.referenceBackgroundStyle === "outline") return `border:1px solid ${bg};border-radius:${r}px;padding:4px 16px;display:inline-block;`;
-      return `background:${bg};border-radius:${r}px;padding:4px 16px;display:inline-block;`;
+      const bg = settings.referenceBackgroundColor || "#000000";
+      const r = settings.referenceBackgroundRadius ?? 4;
+      if (settings.referenceBackgroundStyle === "pill") return `background:${bg};border-radius:999px;padding:5px 18px;display:inline-block;`;
+      if (settings.referenceBackgroundStyle === "outline") return `border:1.5px solid ${bg};border-radius:${r}px;padding:5px 16px;display:inline-block;background:transparent;`;
+      return `background:${bg};border-radius:${r}px;padding:5px 16px;display:inline-block;`;
     })()
     : "";
-  const refHtmlTop = settings.refPosition === "top"
-    ? `<p class="reference" style="margin:${refMarginTop};${refBgCss}">${content.refAbbr}</p>`
-    : "";
-  const refHtmlBottom = settings.refPosition === "bottom"
-    ? `<p class="reference" style="margin:${refMarginTop};${refBgCss}">${content.refAbbr}</p>`
+  const refSelfAlign = refAlign === "right" ? "flex-end" : refAlign === "left" ? "flex-start" : "center";
+  const refHtml = `<div style="display:flex;justify-content:${refSelfAlign};width:100%;"><p class="reference" style="margin:${refMargin};${refBgCss}${refFontFam}">${content.refAbbr}</p></div>`;
+
+  // Placement styles
+  let positionStyle = "left: 50%; transform: translateX(-50%);";
+  if (isFullWidth) {
+    positionStyle = "left: 0; right: 0; bottom: 0; width: 100%; max-width: 100%; border-radius: 0;";
+  } else if (settings.lowerThirdPosition === "left") {
+    positionStyle = `left: ${settings.safeArea || 40}px; right: auto; transform: none;`;
+  } else if (settings.lowerThirdPosition === "right") {
+    positionStyle = `right: ${settings.safeArea || 40}px; left: auto; transform: none;`;
+  }
+
+  // Width preset
+  let widthLimit = "max-width: 1500px;";
+  if (isFullWidth) {
+    widthLimit = "max-width: 100%; width: 100%;";
+  } else if (settings.lowerThirdWidthPreset === "sm") {
+    widthLimit = "max-width: 900px;";
+  } else if (settings.lowerThirdWidthPreset === "md") {
+    widthLimit = "max-width: 1100px;";
+  } else if (settings.lowerThirdWidthPreset === "lg") {
+    widthLimit = "max-width: 1450px;";
+  } else if (settings.lowerThirdWidthPreset === "xl") {
+    widthLimit = "max-width: 1650px;";
+  }
+
+  // Cyan wave / top glow accent banner if full width
+  const isCyanWave = isFullWidth && (settings.boxBackground.toLowerCase().includes("0a1838") || settings.boxBackground.toLowerCase().includes("0a193b"));
+  const waveTopHtml = isCyanWave
+    ? `<div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #0284C7 0%, #22D3EE 30%, #38BDF8 70%, #0284C7 100%);box-shadow:0 0 16px rgba(34,211,238,0.65), 0 0 30px rgba(6,182,212,0.4);"></div>`
     : "";
 
   return `<!DOCTYPE html><html><head><style>
 @import url('/fonts/google/google-fonts.css');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Montserrat:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Inter:wght@300;400;600;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily};background:transparent}
-.lt{position:absolute;bottom:64px;left:50%;transform:translateX(-50%);max-width:calc(100% - ${settings.safeArea * 2}px);padding:${settings.padding}px 32px;${boxBg}border-radius:${borderRadius}px;${ltHeight}${alignCss}}
-.verse{font-size:${settings.fontSize / 2}px;font-weight:${settings.fontWeight};font-style:${settings.fontStyle || "normal"};color:${settings.fontColor};line-height:${settings.lineHeight};${shadowCss}${outlineCss}${transformCss}}
-.reference{font-size:${settings.refFontSize / 2}px;font-weight:${settings.refFontWeight === "light" ? "300" : settings.refFontWeight};color:${settings.refFontColor};text-transform:${settings.refTextTransform !== "none" ? settings.refTextTransform : "none"};text-align:${refAlign};letter-spacing:${settings.refLetterSpacing}px;opacity:${settings.refOpacity}}
+body{width:1920px;height:1080px;overflow:hidden;font-family:${settings.fontFamily || "Inter, sans-serif"};background:transparent}
+.lt{position:absolute;bottom:${isFullWidth ? 0 : 36}px;${positionStyle}width:calc(100% - ${(settings.safeArea || 40) * 2}px);${widthLimit}padding:${settings.padding || 24}px 36px;${boxBg}border-radius:${borderRadius}px;border:1px solid rgba(255,255,255,0.12);box-shadow:0 20px 50px rgba(0,0,0,0.45);${ltHeight}display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;}
+.verse{font-size:${settings.fontSize ? settings.fontSize / 2 : 36}px;font-weight:${settings.fontWeight || "normal"};font-style:${settings.fontStyle || "normal"};color:${settings.fontColor || "#FFFFFF"};line-height:${settings.lineHeight || 1.3};${shadowCss}${outlineCss}${transformCss}${alignCss}}
+.reference{font-size:${settings.refFontSize ? settings.refFontSize / 2 : 20}px;font-weight:${settings.refFontWeight === "light" ? "300" : (settings.refFontWeight || "bold")};color:${settings.refFontColor || "#FACC15"};text-transform:${settings.refTextTransform !== "none" ? (settings.refTextTransform || "none") : "none"};text-align:${refAlign || "left"};letter-spacing:${settings.refLetterSpacing || 0}px;opacity:${settings.refOpacity ?? 1}}
 </style></head><body>
 <div class="lt">
-  ${refHtmlTop}
+  ${waveTopHtml}
+  ${settings.refPosition === "top" ? refHtml : ""}
   <p class="verse">${content.verse}</p>
-  ${refHtmlBottom}
+  ${settings.refPosition === "bottom" ? refHtml : ""}
 </div>
 </body></html>`;
 }
@@ -484,10 +536,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     editTheme?.templateType === "lower-third" ? "lower-third" : "fullscreen"
   );
   const [enabledVariants, setEnabledVariants] = useState<Set<VariantType>>(() => {
-    if (editTheme?.enabledVariants) {
+    if (editTheme?.enabledVariants && editTheme.enabledVariants.length > 0) {
       return new Set(editTheme.enabledVariants as VariantType[]);
     }
-    return new Set<VariantType>([editTheme?.templateType === "lower-third" ? "lower-third" : "fullscreen"]);
+    return new Set<VariantType>(["fullscreen", "lower-third"]);
   });
 
   // ── Per-variant settings ──
@@ -593,6 +645,12 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   const handleSwitchVariant = useCallback((variant: VariantType) => {
     setActiveVariant(variant);
+    setEnabledVariants((prev) => {
+      if (prev.has(variant)) return prev;
+      const next = new Set(prev);
+      next.add(variant);
+      return next;
+    });
     undoStackRef.current = [];
     redoStackRef.current = [];
     setCanUndo(false);
@@ -650,9 +708,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const loadThemeLibrary = useCallback(async () => {
     try {
       const customThemes = await getCustomThemes();
-      setThemeLibrary([...BIBLE_BUILTIN_THEMES, ...customThemes]);
+      setThemeLibrary([...LAYOUT_PRESET_THEMES, ...customThemes]);
     } catch {
-      setThemeLibrary([...BIBLE_BUILTIN_THEMES]);
+      setThemeLibrary([...LAYOUT_PRESET_THEMES]);
     }
   }, []);
 
@@ -661,7 +719,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [loadThemeLibrary]);
 
   const filteredThemes = useMemo(() => {
-    let list = themeLibrary.filter((t) => t.templateType === activeVariant);
+    // Layout themes are listed in both variants; picking one switches to its format.
+    let list = themeLibrary.filter((t) => t.templateType === activeVariant || Boolean(t.settings.layout));
     if (librarySearch.trim()) {
       const q = librarySearch.toLowerCase();
       list = list.filter(
@@ -676,7 +735,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const handleLoadTheme = useCallback((theme: BibleTheme) => {
     const incomingSettings = normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...theme.settings });
     const incomingRawTemplate = theme.rawTemplate || null;
-    if (activeVariant === "fullscreen") {
+    const layoutFormat = theme.settings.layout?.format;
+    const targetVariant: VariantType = layoutFormat ?? activeVariant;
+    if (layoutFormat && layoutFormat !== activeVariant) setActiveVariant(layoutFormat);
+    if (targetVariant === "fullscreen") {
       setFullscreenSettings(incomingSettings);
       setFullscreenRawTemplate(incomingRawTemplate);
     } else {
@@ -698,7 +760,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     setLowerThirdRawTemplate(null);
     setName("Untitled Theme");
     setCategories(["bible"]);
-    setEnabledVariants(new Set(["fullscreen"]));
+    setEnabledVariants(new Set(["fullscreen", "lower-third"]));
     setActiveVariant("fullscreen");
     undoStackRef.current = [];
     redoStackRef.current = [];
@@ -780,39 +842,48 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   type ZoomMode = "fit" | 50 | 75 | 100 | 125;
   const [previewZoom, setPreviewZoom] = useState<ZoomMode>("fit");
   const previewWrapperRef = useRef<HTMLDivElement>(null);
-  const [fitScale, setFitScale] = useState(1);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [fitScale, setFitScale] = useState(0.4);
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
 
+  useLayoutEffect(() => {
+    const el = previewWrapperRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      const availW = Math.max(100, rect.width - 48);
+      const availH = Math.max(100, rect.height - 48);
+      setFitScale(Math.max(0.05, Math.min(availW / 1920, availH / 1080)));
+    }
+  }, []);
+
   useEffect(() => {
-    if (previewZoom !== "fit") return;
     const wrapper = previewWrapperRef.current;
     if (!wrapper) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
-          setContainerSize({ width, height });
-          setFitScale(Math.min(width / 1920, height / 1080));
+          const availW = Math.max(100, width - 48);
+          const availH = Math.max(100, height - 48);
+          const target = Math.max(0.05, Math.min(availW / 1920, availH / 1080));
+          setFitScale((prev) => (Math.abs(prev - target) > 0.005 ? target : prev));
         }
       }
     });
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [previewZoom]);
+  }, []);
 
-  const canvasTransform = useMemo(() => {
+  const currentScale = useMemo(() => {
     if (previewZoom === "fit") {
-      return `scale(${fitScale})`;
+      return fitScale;
     }
-    const scale = previewZoom / 100;
-    const scaledW = 1920 * scale;
-    const scaledH = 1080 * scale;
-    const offsetX = (containerSize.width - scaledW) / 2;
-    const offsetY = (containerSize.height - scaledH) / 2;
-    return `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-  }, [previewZoom, fitScale, containerSize]);
+    return previewZoom / 100;
+  }, [previewZoom, fitScale]);
+
+  const tvWidth = Math.max(10, Math.round(1920 * currentScale));
+  const tvHeight = Math.max(10, Math.round(1080 * currentScale));
 
   // ── Background picker state ──
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
@@ -967,7 +1038,11 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const saveTheme = useCallback(async (duplicate: boolean) => {
     setSaving(true);
     try {
-      const primaryType = enabledVariants.has("fullscreen") ? "fullscreen" : "lower-third";
+      const resolvedVariants = new Set(enabledVariants);
+      resolvedVariants.add(activeVariant);
+      resolvedVariants.add("fullscreen");
+      resolvedVariants.add("lower-third");
+      const primaryType = activeVariant || (resolvedVariants.has("fullscreen") ? "fullscreen" : "lower-third");
       const primarySettings = primaryType === "fullscreen" ? fullscreenSettings : lowerThirdSettings;
       const primaryRawTemplate = primaryType === "fullscreen" ? fullscreenRawTemplate : lowerThirdRawTemplate;
 
@@ -981,10 +1056,10 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
         settings: { ...primarySettings },
         ...(primaryRawTemplate ? { rawTemplate: primaryRawTemplate } : {}),
         variants: {
-          ...(enabledVariants.has("fullscreen") ? { fullscreen: { settings: { ...fullscreenSettings }, ...(fullscreenRawTemplate ? { rawTemplate: fullscreenRawTemplate } : {}) } } : {}),
-          ...(enabledVariants.has("lower-third") ? { lowerThird: { settings: { ...lowerThirdSettings }, ...(lowerThirdRawTemplate ? { rawTemplate: lowerThirdRawTemplate } : {}) } } : {}),
+          fullscreen: { settings: { ...fullscreenSettings }, ...(fullscreenRawTemplate ? { rawTemplate: fullscreenRawTemplate } : {}) },
+          lowerThird: { settings: { ...lowerThirdSettings }, ...(lowerThirdRawTemplate ? { rawTemplate: lowerThirdRawTemplate } : {}) },
         },
-        enabledVariants: Array.from(enabledVariants),
+        enabledVariants: Array.from(resolvedVariants),
         createdAt: isEditing && !duplicate ? editTheme!.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -1058,7 +1133,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   // RENDER
   // ════════════════════════════════════════════════════════════════════════
 
-  return (
+  const modalContent = (
     <div className="tc-editor">
       {/* ── Top Toolbar ── */}
       <div className="tc-toolbar">
@@ -1079,9 +1154,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             {(["fullscreen", "lower-third"] as VariantType[]).map((v) => (
               <button
                 key={v}
-                className={`tc-variant-tab${activeVariant === v ? " active" : ""}${!enabledVariants.has(v) ? " disabled" : ""}`}
-                onClick={() => { if (enabledVariants.has(v)) handleSwitchVariant(v); }}
-                title={!enabledVariants.has(v) ? "Enable this variant first" : `Edit ${v === "fullscreen" ? "Fullscreen" : "Lower Third"}`}
+                className={`tc-variant-tab${activeVariant === v ? " active" : ""}`}
+                onClick={() => handleSwitchVariant(v)}
+                title={`Edit ${v === "fullscreen" ? "Fullscreen" : "Lower Third"}`}
               >
                 {v === "fullscreen" ? <Monitor size={14} /> : <LayoutGrid size={14} />}
                 {v === "fullscreen" ? "Fullscreen" : "Lower Third"}
@@ -1179,7 +1254,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                         : "#1a1a2e",
                   }}
                 >
-                  {theme.preview ? (
+                  {theme.settings.layout ? (
+                    <ThemeLayoutPreview layout={theme.settings.layout} />
+                  ) : theme.preview ? (
                     <img src={theme.preview} alt={theme.name} />
                   ) : (
                     <div className="tc-theme-card-thumb-placeholder">
@@ -1229,21 +1306,88 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
         {/* Center Panel: Live Preview */}
         <main className="tc-preview-area">
-          <div className="tc-preview-wrapper" ref={previewWrapperRef}>
-            <div className="tv-screen">
-              <div className="preview-canvas" style={{ transform: canvasTransform }}>
+          <div
+            className="tc-preview-wrapper"
+            ref={previewWrapperRef}
+            style={{
+              overflow: previewZoom === "fit" ? "hidden" : "auto",
+            }}
+          >
+            <div
+              className="tv-screen"
+              style={{
+                width: `${tvWidth}px`,
+                height: `${tvHeight}px`,
+                position: "relative",
+                overflow: "hidden",
+                borderRadius: "8px",
+                backgroundColor: activeVariant === "fullscreen"
+                  ? (settings.backgroundColor && settings.backgroundColor !== "transparent" ? settings.backgroundColor : "#0f1118")
+                  : "#0f1118",
+                boxShadow: "0 25px 60px -12px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                flexShrink: 0,
+              }}
+            >
+              {/* Background Plate layer simulating broadcast video for lower-thirds */}
+              {activeVariant === "lower-third" && (
+                <>
+                  <div
+                    className="tv-bg-plate"
+                    style={{
+                      backgroundImage: "url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=2000')",
+                    }}
+                  />
+                  <div className="tv-gradient" />
+                </>
+              )}
+
+              <div
+                className="preview-canvas"
+                style={{
+                  width: "1920px",
+                  height: "1080px",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  transformOrigin: "top left",
+                  transform: `scale(${currentScale})`,
+                }}
+              >
+                {settings.layout ? (
+                  <ThemeLayoutPreview layout={settings.layout} animate style={{ width: "1920px", height: "1080px" }} />
+                ) : (
                 <iframe
                   key={previewFrameKey}
                   srcDoc={previewHtml}
                   sandbox="allow-same-origin"
-                  style={{ width: "100%", height: "100%", border: "none", pointerEvents: "none" }}
+                  style={{ width: "1920px", height: "1080px", border: "none", pointerEvents: "none", display: "block" }}
                   title="Theme Preview"
                 />
+                )}
                 {showSafeArea && (
-                  <div className="tc-safe-area-overlay" style={{ position: "absolute", inset: 0, border: "1px dashed rgba(29,78,216,0.5)", pointerEvents: "none", margin: `${settings.safeArea}px` }} />
+                  <div
+                    className="tc-safe-area-overlay"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      border: "2px dashed rgba(59,130,246,0.6)",
+                      pointerEvents: "none",
+                      margin: `${settings.safeArea || 40}px`,
+                    }}
+                  />
                 )}
                 {showGrid && (
-                  <div className="tc-grid-overlay" style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: "linear-gradient(rgba(29,78,216,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(29,78,216,0.15) 1px, transparent 1px)", backgroundSize: "192px 108px" }} />
+                  <div
+                    className="tc-grid-overlay"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      pointerEvents: "none",
+                      backgroundImage:
+                        "linear-gradient(rgba(59,130,246,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.15) 1px, transparent 1px)",
+                      backgroundSize: "192px 108px",
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -1366,6 +1510,29 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                       <button key={p.value} className={`case-btn${settings.refPosition === p.value ? " active" : ""}`} onClick={() => patch({ refPosition: p.value })}>{p.label}</button>
                     ))}
                   </div>
+
+                  <div className="format-group" style={{ marginTop: "6px" }}>
+                    {([
+                      { value: "left" as const, IconComp: AlignLeft, label: "Left" },
+                      { value: "center" as const, IconComp: AlignCenter, label: "Center" },
+                      { value: "right" as const, IconComp: AlignRight, label: "Right" },
+                    ]).map((a) => (
+                      <button key={a.value} className={`format-btn${settings.refTextAlign === a.value ? " active" : ""}`} onClick={() => patch({ refTextAlign: a.value })} title={a.label}>
+                        <a.IconComp size={16} />
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="case-group" style={{ marginTop: "6px" }}>
+                    {([
+                      { value: "uppercase" as const, label: "UPPER" },
+                      { value: "capitalize" as const, label: "Title" },
+                      { value: "none" as const, label: "Normal" },
+                    ]).map((c) => (
+                      <button key={c.value} className={`case-btn${settings.refTextTransform === c.value ? " active" : ""}`} onClick={() => patch({ refTextTransform: c.value })}>{c.label}</button>
+                    ))}
+                  </div>
+
                   <div className="slider-row">
                     <div className="slider-wrapper" style={{ flex: 1 }}>
                       <span>SIZE</span>
@@ -1373,12 +1540,63 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                       <div className="slider-val">{settings.refFontSize}px</div>
                     </div>
                   </div>
+
+                  <div className="slider-row">
+                    <div className="slider-wrapper" style={{ flex: 1 }}>
+                      <span>LETTER SPACING</span>
+                      <input type="range" min={0} max={6} step={0.5} value={settings.refLetterSpacing || 0} onChange={(e) => patch({ refLetterSpacing: Number(e.target.value) })} />
+                      <div className="slider-val">{settings.refLetterSpacing || 0}px</div>
+                    </div>
+                  </div>
+
+                  <div className="slider-row">
+                    <div className="slider-wrapper" style={{ flex: 1 }}>
+                      <span>SPACING</span>
+                      <input type="range" min={4} max={40} step={2} value={settings.refSpacing || 16} onChange={(e) => patch({ refSpacing: Number(e.target.value) })} />
+                      <div className="slider-val">{settings.refSpacing || 16}px</div>
+                    </div>
+                  </div>
+
                   <div className="typography-row">
                     <span className="tc-label-mono">COLOR</span>
                     <label className="color-box" style={{ backgroundColor: settings.refFontColor }}>
                       <input type="color" value={settings.refFontColor} onChange={(e) => patch({ refFontColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                     </label>
                   </div>
+
+                  <div className="tc-inspector-toggle-row" style={{ marginTop: "10px" }}>
+                    <span className="tc-label-mono">BADGE BOX</span>
+                    <button className="tc-toggle-switch" data-active={settings.referenceBackgroundEnabled} onClick={() => patch({ referenceBackgroundEnabled: !settings.referenceBackgroundEnabled })} title="Toggle reference badge">
+                      <span className="tc-toggle-knob" />
+                    </button>
+                  </div>
+
+                  {settings.referenceBackgroundEnabled && (
+                    <>
+                      <div className="case-group" style={{ marginTop: "6px" }}>
+                        {([
+                          { value: "solid" as const, label: "Solid" },
+                          { value: "pill" as const, label: "Pill" },
+                          { value: "outline" as const, label: "Outline" },
+                        ]).map((st) => (
+                          <button key={st.value} className={`case-btn${settings.referenceBackgroundStyle === st.value ? " active" : ""}`} onClick={() => patch({ referenceBackgroundStyle: st.value })}>{st.label}</button>
+                        ))}
+                      </div>
+                      <div className="typography-row" style={{ marginTop: "6px" }}>
+                        <span className="tc-label-mono">BADGE COLOR</span>
+                        <label className="color-box" style={{ backgroundColor: settings.referenceBackgroundColor }}>
+                          <input type="color" value={settings.referenceBackgroundColor} onChange={(e) => patch({ referenceBackgroundColor: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
+                        </label>
+                      </div>
+                      <div className="slider-row">
+                        <div className="slider-wrapper" style={{ flex: 1 }}>
+                          <span>BADGE RADIUS</span>
+                          <input type="range" min={0} max={24} step={1} value={settings.referenceBackgroundRadius ?? 4} onChange={(e) => patch({ referenceBackgroundRadius: Number(e.target.value) })} />
+                          <div className="slider-val">{settings.referenceBackgroundRadius ?? 4}px</div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1484,6 +1702,12 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                         <input type="range" min={0} max={40} value={settings.borderRadius} onChange={(e) => patch({ borderRadius: Number(e.target.value) })} />
                         <div className="slider-val">{settings.borderRadius}px</div>
                       </div>
+                    </div>
+                    <div className="typography-row" style={{ marginTop: "8px" }}>
+                      <span className="tc-label-mono">CARD COLOR</span>
+                      <label className="color-box" style={{ backgroundColor: settings.boxBackground !== "transparent" ? settings.boxBackground : "#1e293b" }}>
+                        <input type="color" value={settings.boxBackground.startsWith("#") ? settings.boxBackground : "#1e293b"} onChange={(e) => patch({ boxBackground: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
+                      </label>
                     </div>
                   </div>
                 )}
@@ -1648,4 +1872,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       )}
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }

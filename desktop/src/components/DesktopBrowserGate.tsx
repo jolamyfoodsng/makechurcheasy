@@ -40,8 +40,8 @@ function FullscreenMessage({
         alignItems: "center",
         justifyContent: "center",
         padding: "24px",
-        background: "#0f172a",
-        color: "#e2e8f0",
+        background: "#0c0e17",
+        color: "#ffffff",
         fontFamily: 'Inter, "Open Sans", system-ui, sans-serif',
       }}
     >
@@ -49,14 +49,14 @@ function FullscreenMessage({
         style={{
           width: "min(420px, 100%)",
           padding: "28px",
-          border: "1px solid rgba(148, 163, 184, 0.22)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
           borderRadius: "12px",
-          background: "rgba(15, 23, 42, 0.92)",
-          boxShadow: "0 28px 80px rgba(2, 6, 23, 0.45)",
+          background: "#131724",
+          boxShadow: "0 28px 80px rgba(0, 0, 0, 0.5)",
         }}
       >
         <h1 style={{ margin: "0 0 12px", fontSize: "1.4rem", lineHeight: 1.2 }}>{title}</h1>
-        <p style={{ margin: "0 0 16px", color: "#cbd5e1", lineHeight: 1.5 }}>{description}</p>
+        <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.5 }}>{description}</p>
         {actionLabel ? (
           <button
             type="button"
@@ -67,8 +67,8 @@ function FullscreenMessage({
               padding: "11px 16px",
               font: "inherit",
               fontWeight: 600,
-              color: "#eff6ff",
-              background: "#2563eb",
+              color: "#ffffff",
+              background: "#4f46e5",
               cursor: "pointer",
             }}
           >

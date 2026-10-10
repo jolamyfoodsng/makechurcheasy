@@ -34,7 +34,8 @@ interface DockOutputQuickActionsProps {
   maxLineCount: number;
   minFontSize: number;
   maxFontSize?: number;
-  updateImmediately: boolean;
+  /** @deprecated Changes always apply immediately; kept so callers compile. */
+  updateImmediately?: boolean;
   isLive: boolean;
   top: number;
   left: number | null;
@@ -48,8 +49,15 @@ interface DockOutputQuickActionsProps {
   sizePresets?: readonly DockOutputQuickSizePreset[];
   activeSizePreset?: string;
   getSizePresetPatch?: (id: string) => DockOutputQuickSettingsPatch | null;
-  onUpdateImmediatelyChange: (value: boolean) => void;
+  /** @deprecated Changes always apply immediately; kept so callers compile. */
+  onUpdateImmediatelyChange?: (value: boolean) => void;
   onOpenSettings?: () => void;
+  /** Full screen / Lower third switch (hidden when not provided). */
+  overlayMode?: "fullscreen" | "lower-third";
+  onOverlayModeChange?: (mode: "fullscreen" | "lower-third") => void;
+  /** Show / Hide the text on the output without clearing the selection (hidden when not provided). */
+  onToggleOutputVisible?: () => void;
+  outputVisibilityPending?: boolean;
 }
 
 interface QuickActionDragState {
@@ -139,7 +147,6 @@ export default function DockOutputQuickActions({
   maxLineCount,
   minFontSize,
   maxFontSize,
-  updateImmediately,
   isLive,
   top,
   left,
@@ -149,9 +156,15 @@ export default function DockOutputQuickActions({
   sizePresets,
   activeSizePreset,
   getSizePresetPatch,
-  onUpdateImmediatelyChange,
   onOpenSettings,
+  overlayMode,
+  onOverlayModeChange,
+  onToggleOutputVisible,
+  outputVisibilityPending = false,
 }: DockOutputQuickActionsProps) {
+  // Every change goes straight to the output. (The old "Update Immediately"
+  // checkbox + Save step confused operators mid-service.)
+  const updateImmediately = true;
   const [open, setOpen] = useState(false);
   const [draftSettings, setDraftSettings] = useState<DockOutputQuickSettingsPatch | null>(null);
   const [draftLineCount, setDraftLineCount] = useState<number | null>(null);
@@ -175,7 +188,6 @@ export default function DockOutputQuickActions({
     ? maxFontSize as number
     : Number.POSITIVE_INFINITY;
   const areManualFontSizesDisabled = false;
-  const hasPendingChanges = draftSettings !== null || draftLineCount !== null || draftLineMode !== null;
   const renderedTop = dragPosition?.top ?? top;
   const renderedLeft = dragPosition?.left ?? left;
   const menuOnRight = renderedLeft !== null && renderedLeft < 210;
@@ -251,31 +263,7 @@ export default function DockOutputQuickActions({
     setDraftLineMode(nextMode);
   }, [displayedLineCount, onCommit, updateImmediately]);
 
-  const handleSave = useCallback(() => {
-    if (!hasPendingChanges) return;
-    onCommit(
-      draftSettings ?? {},
-      (draftLineMode ?? lineMode) === "original" ? undefined : draftLineCount ?? lineCount,
-      draftLineMode ?? undefined,
-    );
-    setDraftSettings(null);
-    setDraftLineCount(null);
-    setDraftLineMode(null);
-  }, [draftLineCount, draftLineMode, draftSettings, hasPendingChanges, lineCount, lineMode, onCommit]);
 
-  const handleUpdateImmediatelyChange = useCallback((nextValue: boolean) => {
-    if (nextValue && hasPendingChanges) {
-      onCommit(
-        draftSettings ?? {},
-        (draftLineMode ?? lineMode) === "original" ? undefined : draftLineCount ?? lineCount,
-        draftLineMode ?? undefined,
-      );
-      setDraftSettings(null);
-      setDraftLineCount(null);
-      setDraftLineMode(null);
-    }
-    onUpdateImmediatelyChange(nextValue);
-  }, [draftLineCount, draftLineMode, draftSettings, hasPendingChanges, lineCount, lineMode, onCommit, onUpdateImmediatelyChange]);
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
@@ -391,6 +379,39 @@ export default function DockOutputQuickActions({
             </div>
           </div>
 
+          {(onOverlayModeChange || onToggleOutputVisible) && (
+            <div className="dock-output-quick-actions__row">
+              {onOverlayModeChange && overlayMode && (
+                <div className="dock-output-quick-actions__segmented" role="group" aria-label="Output layout">
+                  {(["fullscreen", "lower-third"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`dock-output-quick-actions__segment${overlayMode === mode ? " dock-output-quick-actions__segment--active" : ""}`}
+                      aria-pressed={overlayMode === mode}
+                      onClick={() => onOverlayModeChange(mode)}
+                    >
+                      {mode === "fullscreen" ? "Full screen" : "Lower third"}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {onToggleOutputVisible && (
+                <button
+                  type="button"
+                  className={`dock-output-quick-actions__visibility${isLive ? "" : " dock-output-quick-actions__visibility--hidden"}`}
+                  onClick={onToggleOutputVisible}
+                  disabled={outputVisibilityPending}
+                  aria-pressed={!isLive}
+                  title={isLive ? "Hide the text on the output (keeps your place)" : "Show the text on the output again"}
+                >
+                  <Icon name={isLive ? "visibility_off" : "visibility"} size={12} />
+                  <span>{isLive ? "Hide" : "Show"}</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {sizePresets && sizePresets.length > 0 && getSizePresetPatch && (
             <div className="dock-bible-reader__font-size-field">
               <span className="dock-bible-reader__font-size-field-label">Text size</span>
@@ -463,26 +484,6 @@ export default function DockOutputQuickActions({
             </select>
           </label>
 
-          <div className="dock-bible-reader__font-size-menu-footer">
-            <label className="dock-bible-reader__font-size-checkbox">
-              <input
-                type="checkbox"
-                checked={updateImmediately}
-                onChange={(event) => handleUpdateImmediatelyChange(event.target.checked)}
-              />
-              <span>Update Immediately</span>
-            </label>
-            {!updateImmediately && (
-              <button
-                type="button"
-                className="dock-bible-reader__font-size-save"
-                onClick={handleSave}
-                disabled={!hasPendingChanges}
-              >
-                Save
-              </button>
-            )}
-          </div>
         </div>
       )}
     </div>

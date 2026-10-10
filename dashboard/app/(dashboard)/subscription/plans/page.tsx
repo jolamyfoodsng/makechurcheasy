@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Coins, Gift, Globe2, Loader2, Star, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Coins,
+  CreditCard,
+  Gift,
+  Loader2,
+  ShieldCheck,
+  Star,
+  X,
+} from "lucide-react";
 import { useSubscription } from "@/lib/useSubscription";
 import { useLocalizedPricing } from "@/lib/useLocalizedPricing";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge } from "@/components/ui";
 import { trackProductEvent } from "@/lib/productTracking";
 import { requestCountrySelection } from "@/components/ProfileCompletionModal";
 
 type BillingCycle = "monthly" | "yearly";
-type PublicPlan = "free" | "basic" | "growth";
+type PublicPlan = "free" | "basic" | "growth" | "pro";
 type PaidPlan = Exclude<PublicPlan, "free">;
 type PaymentMethod = "flutterwave" | "nowpayments";
 
@@ -39,39 +49,55 @@ const PLAN_NAMES: Record<PublicPlan, string> = {
   free: "Free",
   basic: "Basic",
   growth: "Growth",
+  pro: "Pro",
 };
 
-const PLAN_COPY: Record<PublicPlan, { subtitle: string; features: string[] }> = {
+// Features synchronized word-for-word from /pricing
+const PLAN_COPY: Record<PublicPlan, { subtitle: string; badge?: string; inherits?: string; features: string[] }> = {
   free: {
-    subtitle: "Start with the essentials",
+    subtitle: "Explore the essentials for your next service.",
     features: [
-      "3 songs, 3 images, and 2 videos",
-      "3 Bible versions",
-      "1 device",
-      "50 credits",
-      "Community support",
+      "Up to 10 songs, lyrics & media",
+      "5 Bible versions",
+      "30-minute speech-to-scripture trial",
+      "Free EW / ProPresenter import",
     ],
   },
   basic: {
-    subtitle: "For small and medium churches",
+    subtitle: "A simpler setup for your weekly services.",
     features: [
-      "100 songs, 100 images, and 100 videos",
-      "Unlimited Bible versions",
-      "3 devices",
-      "Bible, Worship, Media, and Countdowns",
-      "Verse AI with 100 monthly credits",
-      "No Tickers, Lower Thirds, Multiview, or transcript translation",
+      "Unlimited local songs, lyrics & media",
+      "All Bible versions",
+      "Automatic OBS scenes & sources",
+      "OBS Multistream (10 hrs/mo — no extra plugin needed)",
+      "4 speech-to-scripture hours / month",
+      "Free EW / ProPresenter import",
     ],
   },
   growth: {
-    subtitle: "For active churches and media teams",
+    subtitle: "Keep your operators and content connected.",
+    badge: "For growing teams",
+    inherits: "Everything in Basic, plus:",
     features: [
-      "Unlimited songs, images, videos, and Bible versions",
-      "10 devices and 20 team members",
-      "Presentation Mode and mobile control",
-      "Bulk import, EasyWorship, and ProPresenter import",
-      "Cloud Sync and 2,000 monthly credits",
-      "Priority support and early feature access",
+      "OBS Multistream (20 hrs/mo — YouTube & Facebook together)",
+      "Cloud storage for songs, lyrics & media",
+      "Cloud sync across operators",
+      "Mobile control app",
+      "Lower thirds & sermon export",
+      "10 speech-to-scripture hours / month",
+      "Priority support",
+    ],
+  },
+  pro: {
+    subtitle: "One connected workflow across your campuses.",
+    badge: "Multi-Campus",
+    inherits: "Everything in Growth, plus:",
+    features: [
+      "OBS Multistream (40 hrs/mo — multi-platform broadcasting)",
+      "Unlimited multi-campus content sync",
+      "20 speech-to-scripture hours / month",
+      "Full phone support & direct line",
+      "Online remote laptop control — coming soon",
     ],
   },
 };
@@ -80,7 +106,7 @@ function normalizePublicPlan(plan?: string | null): PublicPlan {
   const value = String(plan || "free").toLowerCase();
   if (value === "basic") return "basic";
   if (value === "growth") return "growth";
-  if (value === "pro") return "growth";
+  if (value === "pro") return "pro";
   return "free";
 }
 
@@ -96,20 +122,46 @@ function formatOfferAmount(amount: number, currency: string, symbol: string) {
   }
 }
 
+function getLocalPaymentMethods(countryCode?: string, currency?: string) {
+  const country = String(countryCode || "").toUpperCase();
+  const code = String(currency || "").toUpperCase();
+  if (country === "NG" || code === "NGN") return "Cards, Bank Transfer, USSD";
+  if (country === "GH" || code === "GHS") return "Cards, Bank Transfer, Mobile Money (MTN, Telecel, AirtelTigo)";
+  if (country === "KE" || code === "KES") return "Cards, Bank Transfer, M-Pesa";
+  if (country === "ZA" || code === "ZAR") return "Cards & Instant EFT";
+  if (country === "EG" || code === "EGP") return "Cards & Fawry";
+  if (country === "ET" || code === "ETB") return "Cards & Amole Money";
+  if (country === "RW" || code === "RWF") return "Cards & Mobile Money (MTN, M-Pesa)";
+  if (country === "UG" || code === "UGX") return "Cards, Bank Transfer, Mobile Money (MTN, Airtel)";
+  if (country === "TZ" || code === "TZS") return "Cards, Bank Transfer, Mobile Money";
+  if (country === "ZM" || code === "ZMW") return "Cards, Bank Transfer, M-Pesa";
+  if (country === "CM" || code === "XAF") return "Cards & Mobile Money (MTN, Orange)";
+  if (country === "CI" || code === "XOF") return "Cards & Mobile Money (Orange, Wave, MTN)";
+  if (country === "SN" || code === "XOF") return "Cards & Mobile Money (Orange, Wave)";
+  if (country === "GB" || code === "GBP") return "Cards, Apple Pay & Google Pay";
+  if (country === "CA" || code === "CAD") return "Cards, Apple Pay & Google Pay";
+  if (country === "US") return "Cards, Apple Pay & Google Pay";
+  if (code === "EUR") return "Cards & SEPA Transfer";
+  if (code === "USD") return "International Cards (USD)";
+  return "Cards & local bank transfer";
+}
+
 export default function ComparePlansPage() {
   const pricing = useLocalizedPricing();
   const { plan: currentPlan, isOnTrial, trialDaysLeft } = useSubscription();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [promoCode, setPromoCode] = useState("");
-  const [upgrading, setUpgrading] = useState<PaidPlan | null>(null);
-  const [offerCheckout, setOfferCheckout] = useState<string | null>(null);
+  const [upgradingState, setUpgradingState] = useState<{
+    plan: PaidPlan;
+    method: PaymentMethod;
+  } | null>(null);
+  const [offerCheckout, setOfferCheckout] = useState<{
+    offerId: string;
+    method: PaymentMethod;
+  } | null>(null);
   const [offers, setOffers] = useState<EligibleSpecialOffer[]>([]);
   const [offersLoading, setOffersLoading] = useState(true);
   const [error, setError] = useState("");
-  const [paymentMethodByPlan, setPaymentMethodByPlan] = useState<Record<PaidPlan, PaymentMethod>>({
-    basic: "flutterwave",
-    growth: "flutterwave",
-  });
   const [nowPaymentsEnabled, setNowPaymentsEnabled] = useState(false);
   const [nowPaymentsConfigLoaded, setNowPaymentsConfigLoaded] = useState(false);
   const [flutterwaveEnabled, setFlutterwaveEnabled] = useState(false);
@@ -126,26 +178,13 @@ export default function ComparePlansPage() {
   const [discountError, setDiscountError] = useState("");
 
   const currentPlanKey = normalizePublicPlan(currentPlan);
-  const plans: PaidPlan[] = ["basic", "growth"];
+  const plans: PaidPlan[] = ["basic", "growth", "pro"];
   const isNigerian = pricing.pricing?.country?.toUpperCase() === "NG";
-  const paymentMethodsReady =
-    flutterwaveConfigLoaded &&
-    nowPaymentsConfigLoaded &&
-    (flutterwaveEnabled || nowPaymentsEnabled);
+  const localMethods = getLocalPaymentMethods(pricing.pricing?.country, pricing.pricing?.currency);
 
-  useEffect(() => {
-    if (!flutterwaveConfigLoaded || !nowPaymentsConfigLoaded) return;
-    setPaymentMethodByPlan((current) => ({
-      basic: getAvailablePaymentMethod(current.basic, {
-        flutterwaveEnabled,
-        nowPaymentsEnabled,
-      }),
-      growth: getAvailablePaymentMethod(current.growth, {
-        flutterwaveEnabled,
-        nowPaymentsEnabled,
-      }),
-    }));
-  }, [flutterwaveConfigLoaded, nowPaymentsConfigLoaded, flutterwaveEnabled, nowPaymentsEnabled]);
+  const flutterwaveReady = flutterwaveConfigLoaded && flutterwaveEnabled;
+  const nowPaymentsReady = nowPaymentsConfigLoaded && nowPaymentsEnabled;
+  const isAnyUpgrading = Boolean(upgradingState || offerCheckout);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -360,17 +399,9 @@ export default function ComparePlansPage() {
     };
   }, []);
 
-  const getPaymentMethodForPlan = (plan: PaidPlan): PaymentMethod => {
-    return getAvailablePaymentMethod(paymentMethodByPlan[plan], {
-      flutterwaveEnabled,
-      nowPaymentsEnabled,
-    });
-  };
-
-  const handleUpgrade = async (plan: PaidPlan) => {
-    const paymentMethod = getPaymentMethodForPlan(plan);
+  const handleUpgrade = async (plan: PaidPlan, paymentMethod: PaymentMethod) => {
     setError("");
-    setUpgrading(plan);
+    setUpgradingState({ plan, method: paymentMethod });
     trackProductEvent("checkout_started", {
       plan,
       billingCycle: billing,
@@ -391,14 +422,13 @@ export default function ComparePlansPage() {
         surface: "subscription_plans",
       });
       setError(e instanceof Error ? e.message : "Failed to start payment");
-      setUpgrading(null);
+      setUpgradingState(null);
     }
   };
 
-  const handleOfferCheckout = async (offer: EligibleSpecialOffer) => {
-    const paymentMethod = getPaymentMethodForPlan(offer.plan);
+  const handleOfferCheckout = async (offer: EligibleSpecialOffer, paymentMethod: PaymentMethod) => {
     setError("");
-    setOfferCheckout(offer.id);
+    setOfferCheckout({ offerId: offer.id, method: paymentMethod });
     trackProductEvent("checkout_started", {
       plan: offer.plan,
       billingCycle: offer.billingCycle,
@@ -434,18 +464,19 @@ export default function ComparePlansPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8 p-6 pb-16 md:p-8">
+    <div className="mx-auto w-full max-w-6xl space-y-8 p-6 pb-20 md:p-8">
+      {/* Top Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="mb-1 text-2xl font-bold text-slate-900">Compare Plans</h1>
+          <h1 className="mb-1 text-2xl font-extrabold tracking-tight text-slate-900">Compare Plans</h1>
           <p className="text-sm text-slate-500">
-            Choose the plan that fits your church.
+            Choose the plan that fits your church media team.
           </p>
         </div>
 
         <div className="flex flex-col gap-3 sm:items-end">
-          <label className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-sm">
-            <span className="mr-2 text-xs font-semibold uppercase text-slate-400">Code</span>
+          <label className="flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-2xs">
+            <span className="mr-2 text-xs font-bold uppercase tracking-wider text-slate-400">Code</span>
             <input
               value={promoCode}
               onChange={(event) => setPromoCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))}
@@ -453,35 +484,35 @@ export default function ComparePlansPage() {
               className="w-28 bg-transparent text-sm font-semibold uppercase text-slate-900 outline-none placeholder:text-slate-300"
             />
           </label>
-          <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500">Billing:</span>
-          <div className="flex rounded-lg bg-slate-100 p-0.5">
-            {(["monthly", "yearly"] as BillingCycle[]).map((cycle) => (
-              <button
-                key={cycle}
-                onClick={() => setBilling(cycle)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                  billing === cycle
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-                type="button"
-              >
-                {cycle}
-                {cycle === "yearly" && (
-                  <span className="ml-1 text-[10px] font-semibold text-green-600">Save 2mo</span>
-                )}
-              </button>
-            ))}
-          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Billing:</span>
+            <div className="flex rounded-xl bg-slate-100 p-1">
+              {(["monthly", "yearly"] as BillingCycle[]).map((cycle) => (
+                <button
+                  key={cycle}
+                  onClick={() => setBilling(cycle)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold capitalize transition-all ${
+                    billing === cycle
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                  type="button"
+                >
+                  {cycle}
+                  {cycle === "yearly" && (
+                    <span className="ml-1 text-[10px] font-extrabold text-emerald-600">Save 2mo</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {validatedDiscount && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900 shadow-sm">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-900 shadow-2xs">
           <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white font-extrabold text-xs shadow-sm">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white font-extrabold text-xs shadow-xs">
               %
             </span>
             <div>
@@ -518,6 +549,7 @@ export default function ComparePlansPage() {
         </div>
       )}
 
+      {/* Special Offers Section */}
       {!offersLoading && offers.length > 0 && (
         <section className="space-y-3">
           <div>
@@ -565,29 +597,48 @@ export default function ComparePlansPage() {
                       </div>
                     </div>
 
-                    <div className="shrink-0 rounded-xl border border-blue-100 bg-white p-4 md:w-56">
-                      <div className="mb-4">
+                    <div className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 md:w-64 space-y-2.5 shadow-2xs">
+                      <div className="mb-2">
                         {original ? (
                           <p className="text-sm font-semibold text-slate-400 line-through">
                             {formatOfferAmount(original, offer.currency, offer.currencySymbol)}
                           </p>
                         ) : null}
-                        <p className="text-3xl font-bold text-slate-900">
+                        <p className="text-3xl font-extrabold text-slate-900">
                           {formatOfferAmount(offer.price, offer.currency, offer.currencySymbol)}
                         </p>
                         <p className="mt-1 text-xs font-medium text-slate-500">{billingLabel}</p>
                       </div>
-                      <Button
-                        variant="primary"
-                        size="md"
-                        loading={offerCheckout === offer.id}
-                        disabled={!!offerCheckout || !!upgrading}
-                        icon={<ArrowRight className="h-4 w-4" />}
-                        onClick={() => handleOfferCheckout(offer)}
-                        className="w-full"
+
+                      {/* Cash / Card Option */}
+                      <button
+                        type="button"
+                        disabled={isAnyUpgrading || !flutterwaveReady}
+                        onClick={() => handleOfferCheckout(offer, "flutterwave")}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0238E9] hover:bg-[#012CAE] px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors disabled:opacity-50"
                       >
-                        {offer.ctaText}
-                      </Button>
+                        {offerCheckout?.offerId === offer.id && offerCheckout.method === "flutterwave" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <span>Pay with Cash / Card</span>
+                      </button>
+
+                      {/* Crypto Option */}
+                      <button
+                        type="button"
+                        disabled={isAnyUpgrading || !nowPaymentsReady}
+                        onClick={() => handleOfferCheckout(offer, "nowpayments")}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors disabled:opacity-50"
+                      >
+                        {offerCheckout?.offerId === offer.id && offerCheckout.method === "nowpayments" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-600" />
+                        ) : (
+                          <Coins className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        )}
+                        <span>Pay with Crypto</span>
+                      </button>
                     </div>
                   </div>
                 </Card>
@@ -597,12 +648,17 @@ export default function ComparePlansPage() {
         </section>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* Plans Grid */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {plans.map((planKey) => {
           const isCurrent = currentPlanKey === planKey;
           const isPaidCurrent = !isOnTrial && isCurrent;
-          const isBlockedByPaidGrowth = !isOnTrial && currentPlanKey === "growth";
+          const isBlockedByHigherPlan =
+            !isOnTrial &&
+            ((currentPlanKey === "growth" && planKey === "basic") ||
+             (currentPlanKey === "pro" && (planKey === "basic" || planKey === "growth")));
           const isGrowth = planKey === "growth";
+          const isPro = planKey === "pro";
           const price = pricing.getPlanPrice(planKey, billing);
           const monthlyEquivalent = billing === "yearly" ? price / 12 : price;
           const paidPeriodDays = billing === "yearly" ? 365 : 30;
@@ -614,346 +670,367 @@ export default function ComparePlansPage() {
             : price;
           const discountedMonthlyEquivalent = billing === "yearly" ? discountedPrice / 12 : discountedPrice;
 
+          const planCopy = PLAN_COPY[planKey];
+          const isUpgradingThisPlanCash = upgradingState?.plan === planKey && upgradingState.method === "flutterwave";
+          const isUpgradingThisPlanCrypto = upgradingState?.plan === planKey && upgradingState.method === "nowpayments";
+
           return (
-            <Card
+            <div
               key={planKey}
-              padding="lg"
-              className={`relative flex min-h-[420px] flex-col ${
-                isGrowth ? "border-blue-300 ring-1 ring-blue-100" : ""
+              className={`relative flex min-h-[500px] flex-col justify-between rounded-2xl bg-white p-7 transition-all ${
+                isGrowth
+                  ? "border-2 border-[#0238E9] shadow-[0_4px_24px_-2px_rgba(2,56,233,0.14)]"
+                  : "border border-slate-200 shadow-2xs hover:border-slate-300 hover:shadow-xs"
               }`}
             >
-              {isGrowth && (
-                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                  <Badge variant="info" size="sm">
-                    <Star className="mr-0.5 h-3 w-3" /> Recommended
-                  </Badge>
+              <div>
+                {/* Growth Recommended Badge */}
+                {isGrowth && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] px-3.5 py-0.5 text-xs font-bold text-[#0238E9] shadow-xs whitespace-nowrap">
+                      <Star className="h-3 w-3 fill-[#0238E9] text-[#0238E9]" /> For growing teams
+                    </span>
+                  </div>
+                )}
+
+                {/* Pro Multi-Campus Badge */}
+                {isPro && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-3 py-0.5 text-xs font-bold text-slate-700 shadow-2xs whitespace-nowrap">
+                      Multi-Campus
+                    </span>
+                  </div>
+                )}
+
+                {/* Current Plan Badge */}
+                {(isCurrent || (isOnTrial && isGrowth)) && (
+                  <div className="absolute right-4 top-4">
+                    <Badge variant={isOnTrial && isGrowth ? "warning" : "success"} size="sm">
+                      {isOnTrial && isGrowth ? "Growth Trial" : "Current Plan"}
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Plan Header */}
+                <div className="mb-4">
+                  <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">{PLAN_NAMES[planKey]}</h3>
+                  <p className="mt-1 text-sm text-slate-500 leading-snug">{planCopy.subtitle}</p>
                 </div>
-              )}
 
-              {(isCurrent || (isOnTrial && isGrowth)) && (
-                <div className="absolute right-5 top-5">
-                  <Badge variant={isOnTrial && isGrowth ? "warning" : "success"} size="sm">
-                    {isOnTrial && isGrowth ? "Growth Trial" : "Current Plan"}
-                  </Badge>
-                </div>
-              )}
+                {/* Price Display */}
+                <div className="mb-6">
+                  <div className="flex items-baseline gap-1.5">
+                    {isDiscountApplicable ? (
+                      <>
+                        <span className="text-xl font-bold text-slate-400 line-through">
+                          {pricing.formatPrice(monthlyEquivalent)}
+                        </span>
+                        <span className="text-4xl font-extrabold text-emerald-600">
+                          {pricing.formatPrice(discountedMonthlyEquivalent)}
+                        </span>
+                        <span className="text-sm font-medium text-slate-500">
+                          /month
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-black text-slate-900 tracking-tight">
+                          {pricing.formatPrice(monthlyEquivalent)}
+                        </span>
+                        <span className="text-sm font-medium text-slate-500">
+                          /month
+                        </span>
+                      </>
+                    )}
+                  </div>
 
-              <div className="mb-5">
-                <h3 className="text-xl font-bold text-slate-900">{PLAN_NAMES[planKey]}</h3>
-                <p className="mt-1 text-sm text-slate-500">{PLAN_COPY[planKey].subtitle}</p>
-              </div>
+                  {isDiscountApplicable && validatedDiscount ? (
+                    <p className="mt-1 text-xs font-semibold text-emerald-600">
+                      🎉 {validatedDiscount.percentOff}% off for {validatedDiscount.durationMonths} month{validatedDiscount.durationMonths > 1 ? "s" : ""}
+                    </p>
+                  ) : billing === "yearly" ? (
+                    <p className="mt-1 text-xs text-slate-500 font-medium">
+                      {pricing.formatPrice(price)} billed annually
+                    </p>
+                  ) : null}
 
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  {isDiscountApplicable ? (
-                    <>
-                      <span className="text-2xl font-bold text-slate-400 line-through">
-                        {pricing.formatPrice(monthlyEquivalent)}
-                      </span>
-                      <span className="text-4xl font-extrabold text-emerald-600">
-                        {pricing.formatPrice(discountedMonthlyEquivalent)}
-                      </span>
-                      <span className="text-sm text-slate-500">
-                        /month
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-bold text-slate-900">
-                        {pricing.formatPrice(monthlyEquivalent)}
-                      </span>
-                      <span className="text-sm text-slate-500">
-                        /month
-                      </span>
-                    </>
+                  {!isDiscountApplicable && introPrice && introPrice < price && (
+                    <p className="mt-1 text-xs font-semibold text-emerald-600">
+                      {pricing.formatPrice(introPrice)} first month
+                    </p>
                   )}
                 </div>
-                {isDiscountApplicable && validatedDiscount ? (
-                  <p className="mt-1 text-xs font-semibold text-emerald-600">
-                    🎉 {validatedDiscount.percentOff}% off for {validatedDiscount.durationMonths} month{validatedDiscount.durationMonths > 1 ? "s" : ""}
-                  </p>
-                ) : billing === "yearly" ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {pricing.formatPrice(price)} billed annually
-                  </p>
-                ) : null}
-                {!isDiscountApplicable && introPrice && introPrice < price && (
-                  <p className="mt-1 text-xs font-semibold text-green-600">
-                    {pricing.formatPrice(introPrice)} first month
+
+                {/* Feature Highlights from /pricing */}
+                <div className="mb-8 space-y-2.5">
+                  {"inherits" in planCopy && planCopy.inherits && (
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      {planCopy.inherits}
+                    </p>
+                  )}
+                  {planCopy.features.map((feature) => (
+                    <FeatureLine key={feature} label={feature} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons: Pay with Cash / Pay with Crypto */}
+              <div className="pt-5 border-t border-slate-100 space-y-2.5">
+                {isPaidCurrent ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-center">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-800">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      Current Plan
+                    </span>
+                  </div>
+                ) : isBlockedByHigherPlan ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-center">
+                    <span className="text-xs font-semibold text-slate-500">
+                      Included in Your Active Plan
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Primary Button: Pay with Cash / Card */}
+                    <div>
+                      <button
+                        type="button"
+                        disabled={isAnyUpgrading || !flutterwaveReady}
+                        onClick={() => handleUpgrade(planKey, "flutterwave")}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm font-bold text-white shadow-xs transition-all bg-[#0238E9] hover:bg-[#012CAE] active:bg-[#012596] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isUpgradingThisPlanCash ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-white" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-4 w-4 shrink-0" />
+                            <span>Pay with Cash / Card</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="mt-1 text-center text-[11px] text-slate-400 font-medium">
+                        {isNigerian ? "Cards, Bank Transfer, USSD" : localMethods} · Flutterwave
+                      </p>
+                    </div>
+
+                    {/* Secondary Button: Pay with Crypto */}
+                    <div>
+                      <button
+                        type="button"
+                        disabled={isAnyUpgrading || !nowPaymentsReady}
+                        onClick={() => handleUpgrade(planKey, "nowpayments")}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 px-4 text-sm font-semibold text-slate-700 shadow-2xs transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isUpgradingThisPlanCrypto ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                            <span>Connecting Crypto...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Coins className="h-4 w-4 shrink-0 text-amber-500" />
+                            <span>Pay with Crypto</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="mt-1 text-center text-[11px] text-slate-400 font-medium">
+                        BTC, ETH, USDT & more · NOWPayments
+                      </p>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Instant activation · Secure checkout</span>
+                    </div>
+                  </>
+                )}
+
+                {isOnTrial && trialDaysLeft > 0 && !isPaidCurrent && (
+                  <p className="mt-2 text-center text-[11px] leading-4 text-slate-500">
+                    Your {trialDaysLeft} trial days will be added to your subscription.
                   </p>
                 )}
               </div>
-
-              <div className="mb-6 flex-1 space-y-2">
-                {PLAN_COPY[planKey].features.map((feature) => (
-                  <FeatureLine key={feature} included label={feature} />
-                ))}
-              </div>
-
-              <PaymentMethodOptions
-                selected={paymentMethodByPlan[planKey]}
-                onChange={(method) => setPaymentMethodByPlan((current) => ({ ...current, [planKey]: method }))}
-                isNigerian={isNigerian}
-                countryCode={pricing.pricing?.country}
-                currency={pricing.pricing?.currency}
-                nowPaymentsEnabled={nowPaymentsEnabled}
-                nowPaymentsConfigLoaded={nowPaymentsConfigLoaded}
-                flutterwaveEnabled={flutterwaveEnabled}
-                flutterwaveConfigLoaded={flutterwaveConfigLoaded}
-              />
-
-              <Button
-                variant={isPaidCurrent ? "secondary" : isGrowth ? "primary" : "secondary"}
-                size="md"
-                loading={upgrading === planKey}
-                disabled={isPaidCurrent || !!upgrading || isBlockedByPaidGrowth || !paymentMethodsReady}
-                icon={!isPaidCurrent && !isBlockedByPaidGrowth ? <ArrowRight className="h-4 w-4" /> : undefined}
-                onClick={() => handleUpgrade(planKey)}
-                className="w-full"
-              >
-                {isPaidCurrent ? "Current Plan" : isBlockedByPaidGrowth ? `${PLAN_NAMES[planKey]} Plan` : `Upgrade to ${PLAN_NAMES[planKey]}`}
-              </Button>
-              {isOnTrial && trialDaysLeft > 0 && (
-                <p className="mt-2 text-center text-xs leading-4 text-slate-500">
-                  You&apos;re on a free trial, but you can upgrade now. Your {trialDaysLeft} unused day{trialDaysLeft === 1 ? "" : "s"} are added after this {paidPeriodDays}-day period, so your next payment is due in {nextPaymentInDays} days.
-                </p>
-              )}
-            </Card>
+            </div>
           );
         })}
       </div>
 
-      <section>
-        <h2 className="mb-4 text-lg font-bold text-slate-900">Feature Comparison</h2>
-        <Card padding="none" className="overflow-hidden">
+      {/* Feature Comparison Table Synchronized from /pricing */}
+      <section className="pt-8">
+        <div className="mb-4">
+          <h2 className="text-xl font-extrabold tracking-tight text-slate-900">Feature Comparison</h2>
+          <p className="text-sm text-slate-500">
+            Compare all features and capabilities side-by-side.
+          </p>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="border-b border-slate-200 bg-slate-50/80">
+                  <th scope="col" className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Feature
                   </th>
-                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th scope="col" className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-700">
                     Basic
                   </th>
-                  <th className="bg-blue-50/50 px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th scope="col" className="bg-[#EFF6FF]/70 px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-[#0238E9]">
                     Growth
+                  </th>
+                  <th scope="col" className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Pro
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                <CompareRow label="Songs" basic="100" growth="Unlimited" />
-                <CompareRow label="Images" basic="100" growth="Unlimited" />
-                <CompareRow label="Videos" basic="100" growth="Unlimited" />
-                <CompareRow label="Bible Versions" basic="Unlimited" growth="Unlimited" />
-                <CompareRow label="Devices" basic="3" growth="10" />
-                <CompareRow label="AI Credits / month" basic="100" growth="2,000" />
-                <CompareRow label="Verse AI / Speech-to-Scripture" basic={true} growth={true} />
-                <CompareRow label="Transcript Translation" basic={false} growth={true} />
-                <CompareRow label="Presentation Mode" basic={false} growth={true} />
-                <CompareRow label="Multiview" basic={false} growth={true} />
-                <CompareRow label="Lower Thirds" basic={false} growth={true} />
-                <CompareRow label="Tickers" basic={false} growth={true} />
-                <CompareRow label="Bulk Import" basic={false} growth={true} />
-                <CompareRow label="EasyWorship / ProPresenter Import" basic={false} growth={true} />
-                <CompareRow label="Cloud Sync" basic={false} growth={true} />
-                <CompareRow label="Priority Support" basic={false} growth={true} />
+              <tbody className="divide-y divide-slate-100 text-sm">
+                <CompareRow
+                  label="Monthly Pricing"
+                  basic={pricing.formatPrice(pricing.getPlanPrice("basic", "monthly")) + "/mo"}
+                  growth={pricing.formatPrice(pricing.getPlanPrice("growth", "monthly")) + "/mo"}
+                  pro={pricing.formatPrice(pricing.getPlanPrice("pro", "monthly")) + "/mo"}
+                />
+                <CompareRow
+                  label="Songs, Lyrics & Media"
+                  basic="Unlimited (Local)"
+                  growth="Unlimited (Local + Cloud)"
+                  pro="Unlimited (Multi-Campus Sync)"
+                />
+                <CompareRow
+                  label="Bible Versions"
+                  basic="Unlimited All"
+                  growth="Unlimited All"
+                  pro="Unlimited All"
+                />
+                <CompareRow
+                  label="Auto OBS Scene & Source Creation"
+                  basic={true}
+                  growth={true}
+                  pro={true}
+                />
+                <CompareRow
+                  label="Speech-to-Scripture Hours"
+                  basic="4 Hours/mo"
+                  growth="10 Hours/mo"
+                  pro="20 Hours/mo"
+                />
+                <CompareRow
+                  label="Speech-to-Scripture Top-Ups"
+                  basic="Included"
+                  growth="Included"
+                  pro="Included"
+                />
+                <CompareRow
+                  label="1-Click EW & ProPresenter Migration"
+                  basic="Free"
+                  growth="Free"
+                  pro="Free"
+                />
+                <CompareRow
+                  label="Cloud Sync Across Operators"
+                  basic={false}
+                  growth={true}
+                  pro="Multi-Campus"
+                />
+                <CompareRow
+                  label="Mobile Control App"
+                  basic={false}
+                  growth={true}
+                  pro={true}
+                />
+                <CompareRow
+                  label="Lower Thirds & Sermon Notes Export"
+                  basic={false}
+                  growth={true}
+                  pro={true}
+                />
+                <CompareRow
+                  label="Support Channel"
+                  basic="Standard Email"
+                  growth="Priority Support"
+                  pro="Full Phone & Direct Line"
+                />
+                <CompareRow
+                  label="Online Remote Laptop Control"
+                  basic={false}
+                  growth={false}
+                  pro="Coming Soon"
+                />
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </section>
-
     </div>
   );
 }
 
-function FeatureLine({ included, label }: { included: boolean; label: string }) {
+function FeatureLine({ label }: { label: string }) {
   return (
-    <div className="flex items-start gap-2 text-sm text-slate-600">
+    <div className="flex items-start gap-2.5 text-sm text-slate-600">
       <CheckCircle2
-        className={`mt-0.5 h-4 w-4 shrink-0 ${included ? "text-green-500" : "text-slate-300"}`}
+        className="mt-0.5 h-4 w-4 shrink-0 text-[#0238E9]"
       />
       <span>{label}</span>
     </div>
   );
 }
 
-function PaymentMethodOptions({
-  selected,
-  onChange,
-  isNigerian,
-  countryCode,
-  currency,
-  nowPaymentsEnabled,
-  nowPaymentsConfigLoaded,
-  flutterwaveEnabled,
-  flutterwaveConfigLoaded,
-}: {
-  selected: PaymentMethod;
-  onChange: (method: PaymentMethod) => void;
-  isNigerian: boolean;
-  countryCode?: string;
-  currency?: string;
-  nowPaymentsEnabled: boolean;
-  nowPaymentsConfigLoaded: boolean;
-  flutterwaveEnabled: boolean;
-  flutterwaveConfigLoaded: boolean;
-}) {
-  const localMethods = getLocalPaymentMethods(countryCode, currency);
-  const options: Array<{
-    method: PaymentMethod;
-    title: string;
-    description: string;
-    icon: ReactNode;
-    enabled: boolean;
-  }> = [
-    {
-      method: "flutterwave",
-      title: isNigerian ? "Nigerian payment (Cards, transfer, USSD)" : "Cards & local payment",
-      description: `${localMethods} · Flutterwave`,
-      icon: <Globe2 className="h-4 w-4" />,
-      enabled: flutterwaveEnabled,
-    },
-    {
-      method: "nowpayments",
-      title: "Pay with crypto",
-      description: "BTC, ETH, USDT, and more · NOWPayments",
-      icon: <Coins className="h-4 w-4" />,
-      enabled: nowPaymentsEnabled,
-    },
-  ];
-
-  return (
-    <div className="mb-5 border-t border-slate-100 pt-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay with</p>
-      <div className="grid grid-cols-1 gap-2" role="radiogroup" aria-label="Payment method">
-        {options.map((option) => {
-          const checking = option.method === "flutterwave"
-            ? !flutterwaveConfigLoaded
-            : option.method === "nowpayments"
-              ? !nowPaymentsConfigLoaded
-              : false;
-          const active = selected === option.method;
-          return (
-            <button
-              key={option.method}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              disabled={!option.enabled}
-              onClick={() => option.enabled && onChange(option.method)}
-              className={`flex min-h-14 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 ${active ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}
-            >
-              <span
-                aria-hidden="true"
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${active ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"}`}
-              >
-                {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-              </span>
-              <span className={`shrink-0 ${active ? "text-blue-700" : "text-slate-500"}`}>{option.icon}</span>
-              <span className="min-w-0">
-                <span className="block text-xs font-semibold">{option.title}</span>
-                <span className="block text-[11px] leading-4 text-slate-500">
-                  {checking ? "Checking..." : option.enabled ? option.description : "Unavailable"}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {selected === "flutterwave" && flutterwaveEnabled && (
-        <p className="mt-2 text-xs leading-4 text-slate-500">
-          {localMethods}. Powered by Flutterwave.
-        </p>
-      )}
-      {selected === "nowpayments" && nowPaymentsEnabled && (
-        <p className="mt-2 text-xs leading-4 text-slate-500">
-          NOWPayments lets you choose an available crypto asset for this invoice. The price is converted to USD at checkout.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function getAvailablePaymentMethod(
-  selected: PaymentMethod,
-  availability: {
-    flutterwaveEnabled: boolean;
-    nowPaymentsEnabled: boolean;
-  },
-): PaymentMethod {
-  if (selected === "flutterwave" && availability.flutterwaveEnabled) return selected;
-  if (selected === "nowpayments" && availability.nowPaymentsEnabled) return selected;
-  if (availability.flutterwaveEnabled) return "flutterwave";
-  if (availability.nowPaymentsEnabled) return "nowpayments";
-  return "flutterwave";
-}
-
-function getLocalPaymentMethods(countryCode?: string, currency?: string) {
-  const country = String(countryCode || "").toUpperCase();
-  const code = String(currency || "").toUpperCase();
-  if (country === "NG" || code === "NGN") return "Cards, Bank Transfer, and USSD";
-  if (country === "GH" || code === "GHS") return "Cards, Bank Transfer, and Mobile Money (MTN, Telecel, AirtelTigo)";
-  if (country === "KE" || code === "KES") return "Cards, Bank Transfer, and M-Pesa";
-  if (country === "ZA" || code === "ZAR") return "Cards and Instant EFT";
-  if (country === "EG" || code === "EGP") return "Cards and Fawry";
-  if (country === "ET" || code === "ETB") return "Cards and Amole Money";
-  if (country === "RW" || code === "RWF") return "Cards and Mobile Money (MTN, M-Pesa)";
-  if (country === "UG" || code === "UGX") return "Cards, Bank Transfer, and Mobile Money (MTN, Airtel)";
-  if (country === "TZ" || code === "TZS") return "Cards, Bank Transfer, and Mobile Money (M-Pesa, Tigo, Airtel, Halopesa)";
-  if (country === "ZM" || code === "ZMW") return "Cards, Bank Transfer, and M-Pesa";
-  if (country === "CM" || code === "XAF") return "Cards and Mobile Money (MTN, Orange Money)";
-  if (country === "CI" || (country === "CI" && code === "XOF")) return "Cards and Mobile Money (Moov, MTN, Orange, Wave)";
-  if (country === "SN" || (country === "SN" && code === "XOF")) return "Cards and Mobile Money (Orange Money, Wave)";
-  if (country === "MW" || code === "MWK") return "Cards and Bank Transfer";
-  if (country === "SL" || code === "SLL" || code === "SLE") return "Cards and Bank Transfer";
-  if (country === "GB" || code === "GBP") return "Cards, Apple Pay, and Google Pay";
-  if (country === "CA" || code === "CAD") return "Cards, Apple Pay, and Google Pay";
-  if (country === "US") return "Cards, Apple Pay, and Google Pay";
-  if (code === "EUR") return "Cards and SEPA Transfer";
-  if (code === "USD") return "International Cards (USD)";
-  return "Cards and local payment methods";
-}
-
 function CompareRow({
   label,
   basic,
   growth,
+  pro,
 }: {
   label: string;
   basic: string | boolean;
   growth: string | boolean;
+  pro: string | boolean;
 }) {
   return (
-    <tr>
-      <td className="px-5 py-3 text-sm font-medium text-slate-700">{label}</td>
+    <tr className="hover:bg-slate-50/60 transition-colors">
+      <td className="px-5 py-3.5 text-sm font-medium text-slate-800">{label}</td>
       <CompareCell value={basic} />
-      <CompareCell value={growth} highlighted />
+      <CompareCell value={growth} highlighted="growth" />
+      <CompareCell value={pro} />
     </tr>
   );
 }
 
-function CompareCell({ value, highlighted = false }: { value: string | boolean; highlighted?: boolean }) {
+function CompareCell({
+  value,
+  highlighted,
+}: {
+  value: string | boolean;
+  highlighted?: "growth";
+}) {
+  const bgClass =
+    highlighted === "growth"
+      ? "bg-[#EFF6FF]/40"
+      : "";
+  const textClass =
+    highlighted === "growth"
+      ? "text-[#0238E9] font-bold"
+      : "text-slate-600";
+
   if (typeof value === "boolean") {
     return (
-      <td className={`px-5 py-3 text-center ${highlighted ? "bg-blue-50/30" : ""}`}>
+      <td className={`px-5 py-3.5 text-center ${bgClass}`}>
         {value ? (
-          <CheckCircle2 className="mx-auto h-4 w-4 text-green-500" />
+          <CheckCircle2 className={`mx-auto h-4 w-4 ${highlighted === "growth" ? "text-[#0238E9]" : "text-emerald-500"}`} />
         ) : (
-          <span className="text-slate-300">-</span>
+          <span className="text-slate-300 font-bold">-</span>
         )}
       </td>
     );
   }
 
   return (
-    <td
-      className={`px-5 py-3 text-center text-sm font-medium ${
-        highlighted ? "bg-blue-50/30 text-blue-700" : "text-slate-600"
-      }`}
-    >
+    <td className={`px-5 py-3.5 text-center text-sm font-medium ${bgClass} ${textClass}`}>
       {value}
     </td>
   );

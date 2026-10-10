@@ -48,7 +48,8 @@ export default function UpdateBackgroundNoticeModal() {
           <h3 id="bg-notice-title">Your update will continue downloading</h3>
           <p>
             MakeChurchEasy is downloading the update in the background so you can continue
-            working without disruption. We will let you know as soon as the installation is ready.
+            working without disruption. MakeChurchEasy will not restart on its own: when the
+            download finishes you can restart, or it will install the next time you close the app.
           </p>
 
           <div className="update-modal-preview">

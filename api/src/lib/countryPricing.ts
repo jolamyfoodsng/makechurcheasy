@@ -153,22 +153,22 @@ const FLUTTERWAVE_LOCAL_COUNTRIES = new Set([
 ]);
 
 const NIGERIA_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
-  growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
+  basic: { monthly: 2700, yearly: 27540 },
+  growth: { monthly: 5500, yearly: 56100 },
 };
 
 const AFRICA_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 5, yearly: 50 },
-  growth: { monthly: 10, yearly: 100 },
+  basic: { monthly: 4, yearly: 30 },
+  growth: { monthly: 8, yearly: 61.2 },
 };
 
 const GLOBAL_BASE_USD_PLANS: Record<PlanTierKey, PlanPrice> = {
-  basic: { monthly: 7, yearly: 70 },
-  growth: { monthly: 15, yearly: 150 },
+  basic: { monthly: 7, yearly: 71.4 },
+  growth: { monthly: 12, yearly: 122.4 },
 };
 
-// Version 9: Set Nigeria to ₦3.5k/₦4k Basic and ₦7.5k/₦8k Growth.
-const COUNTRY_PRICING_MIGRATION_VERSION = 9;
+// Version 14: Refresh Africa USD ($4 / $8) and Global USD ($7 / $12)
+const COUNTRY_PRICING_MIGRATION_VERSION = 14;
 
 export function invalidateCountryPricingCache() {
   _cache = null;
@@ -184,8 +184,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "₦",
     enabled: true,
     plans: {
-      basic: { monthly: 4000, yearly: 60000, introductoryMonthly: 3500 },
-      growth: { monthly: 8000, yearly: 120000, introductoryMonthly: 7500 },
+      basic: { monthly: 2700, yearly: 27540 },
+      growth: { monthly: 5500, yearly: 56100 },
     },
   },
   GH: {
@@ -194,8 +194,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "GH₵",
     enabled: true,
     plans: {
-      basic: { monthly: 60, yearly: 600 },
-      growth: { monthly: 120, yearly: 1200 },
+      basic: { monthly: 60, yearly: 460 },
+      growth: { monthly: 120, yearly: 950 },
     },
   },
   KE: {
@@ -204,8 +204,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "KSh",
     enabled: true,
     plans: {
-      basic: { monthly: 500, yearly: 5000 },
-      growth: { monthly: 1000, yearly: 10000 },
+      basic: { monthly: 500, yearly: 3900 },
+      growth: { monthly: 1000, yearly: 7900 },
     },
   },
   ZA: {
@@ -214,8 +214,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "R",
     enabled: true,
     plans: {
-      basic: { monthly: 70, yearly: 700 },
-      growth: { monthly: 140, yearly: 1400 },
+      basic: { monthly: 70, yearly: 520 },
+      growth: { monthly: 140, yearly: 1070 },
     },
   },
   UG: {
@@ -432,8 +432,8 @@ const DEFAULT_COUNTRIES: Record<string, CountryPricingEntry> = {
     currencySymbol: "$",
     enabled: true,
     plans: {
-      basic: { monthly: 7, yearly: 70 },
-      growth: { monthly: 15, yearly: 150 },
+      basic: { monthly: 7, yearly: 71.4 },
+      growth: { monthly: 12, yearly: 122.4 },
     },
   },
   CA: {
@@ -767,10 +767,13 @@ async function loadDoc(): Promise<CountryPricingDoc> {
     }
   }
 
-  // Version 9: Apply the requested Nigerian monthly prices to existing DB
-  // rows, including rows created by the previous v8 pricing migration.
-  if ((doc.version || 0) < 9) {
+  // Version 14: Refresh US ($7 / $12), NG (₦2,700/₦5,500), ZA (R70/R140), GH (60/120), KE (500/1000)
+  if ((doc.version || 0) < 14) {
+    localCurrencyRepairs.US = DEFAULT_COUNTRIES.US;
     localCurrencyRepairs.NG = DEFAULT_COUNTRIES.NG;
+    localCurrencyRepairs.ZA = DEFAULT_COUNTRIES.ZA;
+    localCurrencyRepairs.GH = DEFAULT_COUNTRIES.GH;
+    localCurrencyRepairs.KE = DEFAULT_COUNTRIES.KE;
   }
 
   if (needsGhanaFullRepair || Object.keys(localCurrencyRepairs).length > 0 || doc.version < COUNTRY_PRICING_MIGRATION_VERSION) {

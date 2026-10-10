@@ -24,7 +24,7 @@ import {
   Play,
   LayoutDashboard,
   LogOut,
-  Sparkles,
+  Church,
   BookOpen,
   Zap,
   Tv,
@@ -399,7 +399,7 @@ export default function OnboardingPage() {
       <header className="ob-navbar">
         <div className="ob-navbar-brand">
           <div className="ob-brand-badge">
-            <Sparkles size={14} />
+            <Church size={14} />
           </div>
           <div className="ob-brand-info">
             <span className="ob-brand-name">MakeChurchEasy</span>
@@ -502,7 +502,7 @@ function StepWelcome({
       {/* Left Column: Concise Copy & Action */}
       <div className="ob-welcome-left">
         <div className="ob-welcome-pill">
-          <Sparkles size={12} className="ob-welcome-pill-icon" />
+          <Zap size={12} className="ob-welcome-pill-icon" />
           <span>OBS Studio Integration</span>
         </div>
 

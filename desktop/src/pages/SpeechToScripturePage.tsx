@@ -60,14 +60,14 @@ import { loadData } from "../services/store";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { trackVoiceSessionCompleted, trackVoiceSessionStarted } from "../services/tracking";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
-import { isWhisperReady, loadWhisperModel } from "../services/whisperService";
 import { createTranscript, saveTranscript } from "../transcripts/transcriptService";
 import { loadLmSettings } from "../services/lmSettings";
 import { resolveScriptureProjection } from "../services/scriptureProjection";
 import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
 import { isConfirmedAppClose } from "../services/appCloseGuard";
 import { useDockBaseUrl } from "../services/overlayUrl";
-import { getDesktopConfig } from "../services/desktopConfig";
+import { ADMIN_FEATURE_OFF_MESSAGES, getDesktopConfig } from "../services/desktopConfig";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 
 const API_BASE =
   import.meta.env.VITE_AUTH_API_URL ||
@@ -234,10 +234,13 @@ export default function SpeechToScripturePage() {
   const [accessDenied, setAccessDenied] = useState<{
     reason: string;
     requiredPlan?: string;
+    message?: string;
+    /** Set when a paid/trial fair-use cap (not the free allowance) was hit. */
+    paidDailyLimitMinutes?: number;
   } | null>(null);
 
   const hasCustomApiKey = Boolean(
-    (import.meta as any).env?.VITE_DEEPGRAM_API_KEY ||
+    (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEYS ||
     (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEY ||
     (import.meta as any).env?.DEV
   );
@@ -529,7 +532,15 @@ export default function SpeechToScripturePage() {
 
       if (!data.allowed) {
         console.warn("[SpeechToScripture] ❌ Access DENIED:", data.reason, "requiredPlan:", data.requiredPlan);
-        setAccessDenied({ reason: data.reason, requiredPlan: data.requiredPlan });
+        setAccessDenied({
+          reason: data.reason,
+          requiredPlan: data.requiredPlan,
+          message: typeof data.message === "string" ? data.message : undefined,
+          paidDailyLimitMinutes:
+            data.reason === "daily_speech_limit" && data.weeklyLimitMinutes == null && typeof data.dailyLimitMinutes === "number"
+              ? data.dailyLimitMinutes
+              : undefined,
+        });
         return;
       }
 
@@ -783,7 +794,8 @@ export default function SpeechToScripturePage() {
   const [transcriptCollapsed, setTranscriptCollapsed] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  const [whisperStatus, setWhisperStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // Offline Whisper is no longer preloaded (see below); the banner stays quiet.
+  const whisperStatus = "idle" as "idle" | "loading" | "ready" | "error";
   const [assemblyAIError, setAssemblyAIError] = useState(false);
   const [wasListening, setWasListening] = useState(false);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
@@ -806,17 +818,9 @@ export default function SpeechToScripturePage() {
     }
   }, [isOffline, isListening, isOnline, wasListening]);
 
-  // Pre-load Whisper model when offline
-  useEffect(() => {
-    if (isOffline && !isWhisperReady()) {
-      setWhisperStatus("loading");
-      loadWhisperModel({
-        onStatus: (status) => setWhisperStatus(status),
-      }).then((ok) => {
-        if (ok) setWhisperStatus("ready");
-      });
-    }
-  }, [isOffline]);
+  // The browser Whisper model is not used for live transcription (that runs
+  // through the native AssemblyAI stream), so it is no longer preloaded when
+  // offline — it only cost RAM on low-memory laptops.
 
   // Track AssemblyAI errors
   useEffect(() => {
@@ -1836,7 +1840,7 @@ export default function SpeechToScripturePage() {
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/subscription/plans")}
+                  onClick={() => void openDashboardSubscriptionPlans()}
                   title={t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}>
                   {t(accessDenied.reason === "trial_expired" ? "verseAi.chooseAPlan" : "verseAi.manageSubscription")}
                 </button>
@@ -1885,7 +1889,7 @@ export default function SpeechToScripturePage() {
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="sts3-btn sts3-btn--primary"
-                    onClick={() => navigate("/subscription/plans")}
+                    onClick={() => void openDashboardSubscriptionPlans()}
                     title={t("verseAi.upgradePlan")}>
                     {t("verseAi.upgradePlan")}
                   </button>
@@ -1898,7 +1902,27 @@ export default function SpeechToScripturePage() {
                 </div>
               </>
             )}
-            {accessDenied.reason === "daily_speech_limit" && (
+            {accessDenied.reason === "feature_disabled" && (
+              <>
+                <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Paused for maintenance</h2>
+                <p className="sts3-lock-desc">
+                  {accessDenied.message || ADMIN_FEATURE_OFF_MESSAGES.speechToScripture}
+                </p>
+                <button className="sts3-btn sts3-btn--ghost" onClick={() => setAccessDenied(null)} title="Dismiss">Dismiss</button>
+              </>
+            )}
+            {accessDenied.reason === "daily_speech_limit" && accessDenied.paidDailyLimitMinutes != null && (
+              <>
+                <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
+                <h2 className="sts3-lock-title">Daily limit reached</h2>
+                <p className="sts3-lock-desc">
+                  You've used today's {accessDenied.paidDailyLimitMinutes} minutes of Speech to Scripture. It will be available again tomorrow.
+                </p>
+                <button className="sts3-btn sts3-btn--ghost" onClick={() => setAccessDenied(null)} title="Dismiss">Dismiss</button>
+              </>
+            )}
+            {accessDenied.reason === "daily_speech_limit" && accessDenied.paidDailyLimitMinutes == null && (
               <>
                 <Clock size={40} style={{ color: "var(--warning)", marginBottom: 16 }} />
                 <h2 className="sts3-lock-title">Daily free allowance used</h2>
@@ -1906,7 +1930,7 @@ export default function SpeechToScripturePage() {
                   Free accounts can use Speech to Scripture for {FREE_SPEECH_TO_SCRIPTURE_MINUTES} minutes each day and {FREE_SPEECH_TO_SCRIPTURE_SUNDAY_MINUTES} minutes on Sundays. Your allowance will be available again tomorrow.
                 </p>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="sts3-btn sts3-btn--primary" onClick={() => navigate("/subscription/plans")} title="View plans">View plans</button>
+                  <button className="sts3-btn sts3-btn--primary" onClick={() => void openDashboardSubscriptionPlans()} title="View plans">View plans</button>
                   <button className="sts3-btn sts3-btn--ghost" onClick={() => setAccessDenied(null)} title="Dismiss">Dismiss</button>
                 </div>
               </>
@@ -1925,7 +1949,7 @@ export default function SpeechToScripturePage() {
                 </p>
                 <button
                   className="sts3-btn sts3-btn--primary"
-                  onClick={() => navigate("/subscription/plans")}
+                  onClick={() => void openDashboardSubscriptionPlans()}
                   title={t("verseAi.viewPlans")}>
                   {t("verseAi.viewPlans")}
                 </button>

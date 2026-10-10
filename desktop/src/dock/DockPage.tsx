@@ -57,8 +57,7 @@ import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
 import DockPresentationLinkModal from "./components/DockPresentationLinkModal";
 import DockScheduleIntroModal from "./components/DockScheduleIntroModal";
-import { getDockPlan, isDockFreePlan, registerUpgradeModal, startPlanRefresh } from "./dockEntitlement";
-import { FREE_DOCK_OBS_MUTATION_MESSAGE } from "./dockMutationPolicy";
+import { getDockPlan, isDockFreePlan, registerUpgradeModal, showUpgradeModal, startPlanRefresh } from "./dockEntitlement";
 import { LOCAL_DEV_PLAN_OVERRIDE_EVENT } from "../services/localDevPlanOverride";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { publishDockStagedItemToPresentation } from "../services/presentationDockBridge";
@@ -116,6 +115,13 @@ import {
 import { coerce, gt } from "semver";
 
 import { safeLazy } from "../utils/safeLazy";
+import {
+  loadBroadcastStore,
+  subscribeBroadcastStore,
+  setActiveProfileId,
+  getActiveProfile,
+  type BroadcastStoreState,
+} from "../services/broadcastSettingsService";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -123,6 +129,7 @@ const loadDockWorshipTab = () => import("./tabs/DockWorshipTab");
 const loadDockPlannerTab = () => import("./tabs/DockPlannerTab");
 const loadDockMultiviewTab = () => import("./tabs/DockMultiviewTab");
 const loadDockMinistryTab = () => import("./tabs/DockMinistryTab");
+const loadDockBroadcastTab = () => import("./tabs/DockBroadcastTab");
 const loadDockLmTab = () => import("./tabs/DockLmTab");
 const loadDockBibleCommandPaletteHost = () => import("./DockBibleCommandPaletteHost");
 
@@ -132,6 +139,7 @@ const DockWorshipTab = safeLazy(loadDockWorshipTab);
 const DockPlannerTab = safeLazy(loadDockPlannerTab);
 const DockMultiviewTab = safeLazy(loadDockMultiviewTab);
 const DockMinistryTab = safeLazy(loadDockMinistryTab);
+const DockBroadcastTab = safeLazy(loadDockBroadcastTab);
 const DockLmTab = safeLazy(loadDockLmTab);
 const DockBibleCommandPaletteHost = safeLazy(loadDockBibleCommandPaletteHost);
 
@@ -142,6 +150,7 @@ const DOCK_TAB_PRELOADERS: Partial<Record<DockTab, () => Promise<unknown>>> = {
   planner: loadDockPlannerTab,
   multiview: loadDockMultiviewTab,
   ministry: loadDockMinistryTab,
+  broadcast: loadDockBroadcastTab,
 };
 
 const DOCK_TAB_SHORTCUTS = [
@@ -150,6 +159,7 @@ const DOCK_TAB_SHORTCUTS = [
   { key: "3", tab: "media" as DockTab, labelKey: "page.shortcutTabMedia" },
   { key: "4", tab: "ministry" as DockTab, labelKey: "page.shortcutTabMinistry" },
   { key: "5", tab: "multiview" as DockTab, labelKey: "page.shortcutTabMultiview" },
+  { key: "6", tab: "broadcast" as DockTab, labelKey: "page.shortcutTabBroadcast" },
 ] as const;
 
 function preloadDockTab(tab: DockTab): void {
@@ -257,6 +267,8 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
       return t('page.shortcutTabPlanner');
     case "multiview":
       return t('page.shortcutTabMultiview');
+    case "broadcast":
+      return t('page.shortcutTabBroadcast');
     default:
       return t('dock.defaultTab');
   }
@@ -365,8 +377,18 @@ function DockPageContent({
   const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
-  const [showFreePlanNotice, setShowFreePlanNotice] = useState(false);
   const [showPresentationLinkModal, setShowPresentationLinkModal] = useState(false);
+  const [broadcastStore, setBroadcastStore] = useState<BroadcastStoreState>(loadBroadcastStore);
+  const [showBroadcastPicker, setShowBroadcastPicker] = useState(false);
+
+  useEffect(() => {
+    return subscribeBroadcastStore((next) => {
+      setBroadcastStore(next);
+    });
+  }, []);
+
+  const activeBroadcastProfile = useMemo(() => getActiveProfile(broadcastStore), [broadcastStore]);
+
   const presentationPublishRequestRef = useRef(0);
   const presentationPublishTailRef = useRef(Promise.resolve());
   const hiddenTabsKey = hiddenTabs.join("|");
@@ -381,6 +403,10 @@ function DockPageContent({
   const navigableDockTabs = useMemo(
     () => visibleDockTabs.filter((tab) => !disabledTabs.includes(tab.id)),
     [disabledTabs, visibleDockTabs],
+  );
+  const bottomDockTabs = useMemo(
+    () => navigableDockTabs.filter((tab) => tab.id !== "broadcast"),
+    [navigableDockTabs],
   );
 
   useEffect(() => {
@@ -472,20 +498,6 @@ function DockPageContent({
     saveDockOutputFontScale(DEFAULT_DOCK_OUTPUT_FONT_SCALE);
   }, []);
 
-  // Register the upgrade modal trigger so any dock tab can show it.
-  useEffect(() => {
-    if (!isFreePlan) return;
-
-    const noticeKey = getUserScopedKey("ocs-dock-free-plan-notice-v1");
-    try {
-      if (localStorage.getItem(noticeKey)) return;
-      localStorage.setItem(noticeKey, "1");
-    } catch {
-      // Still show the notice when embedded-browser storage is unavailable.
-    }
-    setShowFreePlanNotice(true);
-  }, [isFreePlan]);
-
   useEffect(() => {
     if (!isFreePlan || !presentationLinkMode) return;
 
@@ -540,7 +552,7 @@ function DockPageContent({
     // Also listen for custom dock-upgrade events (from GrowthBadge, etc.)
     const handleUpgradeEvent = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.message) setUpgradeModalMsg(detail.message);
+      if (detail?.message) showUpgradeModal(detail.message);
     };
     window.addEventListener("dock-upgrade", handleUpgradeEvent);
     return () => {
@@ -1245,6 +1257,150 @@ function DockPageContent({
                 </button>
               )}
             </div>
+
+            {/* Quick Minister / Profile Switcher Pill */}
+            {!headerCollapsed && activeTab !== "broadcast" && (
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowBroadcastPicker((prev) => !prev);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "2px 8px",
+                    borderRadius: 14,
+                    background: "rgba(245, 158, 11, 0.12)",
+                    border: "1px solid rgba(245, 158, 11, 0.35)",
+                    color: "var(--dock-accent, #f59e0b)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    maxWidth: 160,
+                  }}
+                  title={t("broadcast.switchProfile", "Switch Minister / Stream Profile")}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: activeBroadcastProfile?.color || "#f59e0b",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {activeBroadcastProfile?.nickname || "Broadcast"}
+                  </span>
+                  <Icon name="expand_more" size={12} />
+                </button>
+
+                {/* Dropdown Popover */}
+                {showBroadcastPicker && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: 220,
+                      background: "var(--dock-card-bg, #182234)",
+                      border: "1px solid var(--dock-border, #334155)",
+                      borderRadius: 10,
+                      padding: 6,
+                      boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+                      zIndex: 9999,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 3,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "var(--dock-muted, #94a3b8)",
+                        textTransform: "uppercase",
+                        padding: "2px 6px 4px",
+                        borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span>Ministers & Profiles</span>
+                      <span style={{ fontSize: 9, color: "var(--dock-accent, #f59e0b)" }}>1-Click Switch</span>
+                    </div>
+
+                    {broadcastStore.profiles.map((p) => {
+                      const isSelected = p.id === broadcastStore.activeProfileId;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveProfileId(p.id);
+                            setShowBroadcastPicker(false);
+                            showDockSaveFeedback(`Switched to ${p.nickname}`);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "5px 8px",
+                            borderRadius: 6,
+                            background: isSelected ? "rgba(245, 158, 11, 0.15)" : "transparent",
+                            border: "none",
+                            color: isSelected ? "var(--dock-accent, #f59e0b)" : "var(--dock-text, #e2e8f0)",
+                            fontSize: 11,
+                            fontWeight: isSelected ? 700 : 500,
+                            cursor: "pointer",
+                            textAlign: "left",
+                          }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.color || "#f59e0b" }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nickname}</span>
+                          </span>
+                          {isSelected && <Icon name="check" size={12} />}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBroadcastPicker(false);
+                        setActiveTab("broadcast");
+                        setRenderedTab("broadcast");
+                      }}
+                      style={{
+                        marginTop: 3,
+                        padding: "5px 8px",
+                        borderRadius: 6,
+                        background: "var(--dock-surface, #1e293b)",
+                        border: "1px dashed var(--dock-border, #475569)",
+                        color: "var(--dock-accent, #f59e0b)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Icon name="cell_tower" size={12} />
+                      <span>Open Broadcast Tab</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <div
               id="dock-shell-header-actions"
               hidden={headerCollapsed}
@@ -1717,6 +1873,23 @@ function DockPageContent({
                   <>
                     <div className="dock-sidebar__divider" />
 
+                    {/* Broadcast & Stream Destinations */}
+                    <button
+                      type="button"
+                      className="dock-sidebar__item"
+                      onClick={() => {
+                        setShowSettingsMenu(false);
+                        setActiveTab("broadcast");
+                        setRenderedTab("broadcast");
+                      }}
+                      title={t('page.shortcutTabBroadcast', 'Broadcast & Stream Destinations')}
+                    >
+                      <Icon name="cell_tower" size={16} />
+                      <span>{t('page.shortcutTabBroadcast', 'Broadcast & Stream Destinations')}</span>
+                    </button>
+
+                    <div className="dock-sidebar__divider" />
+
                     {/* OBS Connection */}
                     <button
                       type="button"
@@ -2051,13 +2224,18 @@ function DockPageContent({
                   />
                 </div>
               )}
+              {mountedDockTabs.has("broadcast") && (
+                <div className="dock-tab-panel" hidden={renderedTab !== "broadcast"}>
+                  <DockBroadcastTab />
+                </div>
+              )}
               </Suspense>
               </div>
 
               {/* ═══ HORIZONTAL TAB NAVIGATION (bottom of main dock, hidden when vertical) ═══ */}
               {!verticalTabs && (
                 <nav className="dock-bottom-nav" aria-label={t('page.dockSections')}>
-                  {navigableDockTabs.map((tab) => (
+                  {bottomDockTabs.map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
@@ -2209,12 +2387,11 @@ function DockPageContent({
 
       {/* ── Entitlement upgrade modal ── */}
       <DockUpgradeModal
-        open={showFreePlanNotice || Boolean(upgradeModalMsg)}
+        open={Boolean(upgradeModalMsg)}
         onClose={() => {
-          setShowFreePlanNotice(false);
           setUpgradeModalMsg("");
         }}
-        message={showFreePlanNotice ? FREE_DOCK_OBS_MUTATION_MESSAGE : upgradeModalMsg}
+        message={upgradeModalMsg}
       />
 
       {/* ── Free Plan OBS Setup modal ── */}

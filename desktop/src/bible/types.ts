@@ -4,6 +4,8 @@
  * Core types for scripture data, slides, themes, queue, and OBS output.
  */
 
+import type { ThemeLayout } from "../themes/layout/types";
+
 import { getDefaultBibleTheme } from "../services/desktopConfig";
 import { QUIET_CLOUDS_PATTERN_SRC } from "../library/backgroundAssets";
 import { SCRIPTURE_FONT_FAMILY, withScriptureFontFallback } from "./scriptureFont";
@@ -264,6 +266,7 @@ export interface BibleThemeSettings {
   textTransform: "none" | "uppercase" | "lowercase" | "capitalize";
 
   // Reference label
+  refFontFamily?: string;
   refFontSize: number;
   refFontColor: string;
   refFontWeight: "normal" | "bold" | "light" | "extrabold" | "black";
@@ -280,6 +283,20 @@ export interface BibleThemeSettings {
   referenceBackgroundColor: string;
   referenceBackgroundStyle: "solid" | "pill" | "outline";
   referenceBackgroundRadius: number;
+
+  // Box border & effects
+  boxBorderEnabled?: boolean;
+  boxBorderWidth?: number;
+  boxBorderStyle?: "solid" | "dashed" | "dotted";
+  boxBorderColor?: string;
+  boxBorderTop?: string;
+  boxShadowEnabled?: boolean;
+  boxShadowX?: number;
+  boxShadowY?: number;
+  boxShadowBlur?: number;
+  boxShadowColor?: string;
+  boxShadow?: string;
+  showAccentBar?: boolean;
 
   // Background
   /** Dock-selected background mode. Kept with the live settings so OBS and
@@ -346,6 +363,13 @@ export interface BibleThemeSettings {
   // Animation
   animation: "none" | "fade" | "slide-up" | "slide-left" | "scale-in" | "reveal-bg-then-text";
   animationDuration: number; // ms
+
+  /**
+   * Editor-built layout (Theme Editor). When present, the Bible / Worship /
+   * Notes overlays draw this layout with the shared theme renderer instead of
+   * the fixed legacy layout. Absent on legacy themes.
+   */
+  layout?: ThemeLayout;
 }
 
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
@@ -365,6 +389,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   textOutlineWidth: 4,
   textTransform: "none",
 
+  refFontFamily: "",
   refFontSize: 42,
   refFontColor: "#FACC15",
   refFontWeight: "black",
@@ -403,7 +428,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   boxBackgroundImage: "",
 
   lowerThirdSize: "medium",
-  lowerThirdPosition: "left",
+  lowerThirdPosition: "center",
   lowerThirdHeight: 0,
   lowerThirdWidthPreset: "md",
   lowerThirdOffsetX: 0,

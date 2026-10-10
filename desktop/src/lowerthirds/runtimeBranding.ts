@@ -442,6 +442,9 @@ export function applyBrandLogoDefaults(
   const next = { ...values };
   for (const variable of theme.variables) {
     if (!isLogoVariable(variable)) continue;
+    // A picture uploaded for this graphic (Broadcast Graphics → Customize) wins over the church logo.
+    const current = String(values[variable.key] || "").trim();
+    if (/^data:image\//i.test(current) && !current.startsWith("data:image/svg+xml;charset=UTF-8,")) continue;
     next[variable.key] = resolvedLogo;
   }
   return next;

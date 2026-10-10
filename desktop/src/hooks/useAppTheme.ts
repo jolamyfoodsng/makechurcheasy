@@ -48,7 +48,9 @@ function loadPref(): ThemePref {
 }
 
 function applyToDOM(effective: "dark" | "light") {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
+  if (!root) return;
   if (effective === "light") {
     root.classList.add("light");
   } else {
@@ -57,8 +59,10 @@ function applyToDOM(effective: "dark" | "light") {
 }
 
 /** Immediately apply on module load (prevents flash) */
-applyToDOM(resolveTheme(loadPref()));
-applyAppAppearanceToDOM(loadAppAppearance(), resolveTheme(loadPref()));
+if (typeof document !== "undefined") {
+  applyToDOM(resolveTheme(loadPref()));
+  applyAppAppearanceToDOM(loadAppAppearance(), resolveTheme(loadPref()));
+}
 
 // ---------- External store for cross-component reactivity ----------
 

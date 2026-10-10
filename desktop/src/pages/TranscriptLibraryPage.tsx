@@ -43,6 +43,7 @@ import type {
 
 import { useAuth } from "../contexts/AuthContext";
 import { checkEntitlementSync, getEffectivePlan } from "../services/entitlementClient";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import { onCreditChange, syncCreditsWithBackend } from "../services/credits";
 import CreditsDisplay from "../components/CreditsDisplay";
 
@@ -103,9 +104,6 @@ export default function TranscriptLibraryPage({
     [effectivePlan],
   );
   const canStartSession = entitlementResult.allowed;
-  const requiredPlan = entitlementResult.requiredPlan;
-  const [showUpgradeOverlay, setShowUpgradeOverlay] = useState(false);
-  const [upgradeContext, setUpgradeContext] = useState<"session" | "download">("session");
 
   // ── Credits tracking ──────────────────────────────────────────────────
   const hasUnlimitedPlan = effectivePlan === "ambassador" || effectivePlan === "unlimited";
@@ -186,8 +184,7 @@ export default function TranscriptLibraryPage({
     e.stopPropagation();
 
     if (isFreePlan) {
-      setUpgradeContext("download");
-      setShowUpgradeOverlay(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
 
@@ -237,8 +234,7 @@ export default function TranscriptLibraryPage({
 
   const handleNewSessionClick = useCallback(() => {
     if (!canStartSession) {
-      setUpgradeContext("session");
-      setShowUpgradeOverlay(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
     onNewSession?.();
@@ -529,36 +525,6 @@ export default function TranscriptLibraryPage({
               <div className="tl-confirm-actions">
                 <button type="button" className="tl-btn-cancel" onClick={cancelDelete} title={t("transcript.tooltip.cancelDelete")}>{t("common.cancel")}</button>
                 <button type="button" className="tl-btn-danger" onClick={confirmDelete} title={t("transcript.tooltip.confirmDelete")}>{t("transcript.delete")}</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Upgrade Overlay ── */}
-        {showUpgradeOverlay && (
-          <div className="tl-confirm-overlay" onClick={() => setShowUpgradeOverlay(false)}>
-            <div className="tl-confirm-dialog" onClick={(e) => e.stopPropagation()}>
-              <Lock size={32} style={{ color: "var(--primary)", marginBottom: 12 }} />
-              <div className="tl-confirm-title">
-                {upgradeContext === "download"
-                  ? "Upgrade to Download Transcripts"
-                  : t("transcript.upgrade.title")}
-              </div>
-              <div className="tl-confirm-message">
-                {upgradeContext === "download"
-                  ? "Downloading transcripts is a premium feature available on paid plans (Basic, Growth, Pro, or Unlimited). Upgrade your plan to export and download your service transcripts anytime."
-                  : t("transcript.upgrade.message")}
-                {upgradeContext !== "download" && requiredPlan && (
-                  <> {t("transcript.upgrade.requiredPlan", { plan: requiredPlan.charAt(0).toUpperCase() + requiredPlan.slice(1) })}</>
-                )}
-              </div>
-              <div className="tl-confirm-actions">
-                <button type="button" className="tl-btn-cancel" onClick={() => setShowUpgradeOverlay(false)} title={t("transcript.tooltip.close")}>
-                  {t("common.cancel")}
-                </button>
-                <a href="/subscription/plans" className="tl-btn tl-btn-primary" title={t("transcript.tooltip.managePlan")}>
-                  {t("transcript.upgrade.managePlan")}
-                </a>
               </div>
             </div>
           </div>

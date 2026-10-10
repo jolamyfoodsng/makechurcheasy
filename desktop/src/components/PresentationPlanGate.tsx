@@ -1,13 +1,10 @@
 import { Lock } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
-
 import { useAuth } from "../contexts/AuthContext";
-import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
+import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";
-import { UpgradeModal } from "./UpgradeModal";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 
 interface PresentationPlanGateProps {
   children: ReactNode;
@@ -15,8 +12,6 @@ interface PresentationPlanGateProps {
 
 export default function PresentationPlanGate({ children }: PresentationPlanGateProps) {
   const { user } = useAuth();
-  const { t } = useTranslation();
-  const [upgradeOpen, setUpgradeOpen] = useState(true);
 
   if (!user) return <>{children}</>;
 
@@ -27,10 +22,7 @@ export default function PresentationPlanGate({ children }: PresentationPlanGateP
 
   const message =
     "Presentation Mode is available on Growth. Free trial users can use it during the trial. Upgrade to Growth to open the presentation hub and use the local screen link.";
-  const promoText = t("common.upgradePlansStartToday", {
-    amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),
-    defaultValue: UPGRADE_PROMO_FALLBACK,
-  });
+  const promoText = UPGRADE_PROMO_FALLBACK;
 
   return (
     <div style={styles.root}>
@@ -44,19 +36,11 @@ export default function PresentationPlanGate({ children }: PresentationPlanGateP
         <button
           type="button"
           style={styles.button}
-          onClick={() => setUpgradeOpen(true)}
+          onClick={() => void openDashboardSubscriptionPlans()}
         >
           Upgrade to Growth
         </button>
       </div>
-      <UpgradeModal
-        open={upgradeOpen}
-        onClose={() => setUpgradeOpen(false)}
-        feature="presentationMode"
-        requiredPlan="growth"
-        currentPlan={currentPlan}
-        message={message}
-      />
     </div>
   );
 }

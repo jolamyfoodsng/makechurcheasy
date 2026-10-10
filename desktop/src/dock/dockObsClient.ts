@@ -34,7 +34,7 @@ import { stripCompatModeCSS } from "../services/performanceManager";
 import * as connTracker from "../services/obsConnectionTracker";
 import * as obsQueue from "../services/obsRequestQueue";
 import * as browserQueue from "../services/browserUpdateQueue";
-import { ALL_THEMES, type ThemeLike } from "../lowerthirds/themes";
+import type { ThemeLike } from "../lowerthirds/themes";
 import { getWorshipLTFavorites } from "../services/favoriteThemes";
 import { getOverlayBaseUrlSync, resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { OVERLAY_HTML_VERSION, buildVersionedOverlayUrl } from "../services/overlayVersion";
@@ -63,11 +63,11 @@ import type { DockOverlayFontFitMeasurement } from "./lowerThirdQuickSettings";
 import type { DockTranslationOrder } from "./dockTranslation";
 import { buildVlcPlaylistItems } from "./vlcPlaylist";
 import type { EditableTemplate } from "../templates/editableTemplateCatalog";
-import { createMceTemplateBlob } from "../templates/mceTemplatePackage";
 import type { DockTimeOverlayData } from "./timeOverlay";
 import {
   assertDockObsMutationAllowed,
   isFreeDockPlan,
+  isPresentationLinkUrl,
 } from "./dockMutationPolicy";
 import { recordPresentationHistory } from "./dockScheduleService";
 
@@ -731,6 +731,8 @@ export class DockObsClient {
    * A token scoped to this Dock process makes the first source load fetch the
    * current overlay HTML without changing the stable URL used for live packets.
    */
+  /** primary|scene pairs whose legacy alias items were already removed on this OBS connection. */
+  private readonly _legacyAliasCleanupDone = new Set<string>();
   private readonly _overlayDocumentSessionToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   /** Track last overlay mode per source so we can force-reload when switching HTML files */
   private _lastOverlayMode: Record<string, string> = {};
@@ -758,6 +760,8 @@ export class DockObsClient {
   private _lastCssOverlayBaseUrlBySource: Record<string, string> = {};
   private _lastCssOverlayThemeCssBySource: Record<string, string> = {};
   private _lastCssOverlayTabBySource: Record<string, CssOverlayPacketTab> = {};
+  /** Pending re-sends of the newest packet after a browser document (re)load, per source. */
+  private _redeliveryTimersBySource: Record<string, ReturnType<typeof setTimeout>[]> = {};
   /** Track the last browser source URL per input so identical verse pushes can skip reloads. */
   private _lastBrowserSourceUrlBySource: Record<string, string> = {};
   /** Avoid repeating expensive source order/fit checks on every fast overlay packet. */
@@ -834,6 +838,10 @@ export class DockObsClient {
   private _lastBibleFullscreenSetupSignature = "";
   /** A Dock refresh found and adopted the still-live Bible browser source. */
   private _restoredLiveBibleSource = false;
+  /** When OBS last accepted a content packet for each browser source (reveal gate). */
+  private _lastPacketDeliveredAtBySource: Record<string, number> = {};
+  /** Reveals waiting for a fresh packet for their source (see waitForFreshSourcePacket). */
+  private _freshPacketWaiters: Array<{ source: string; since: number; resolve: () => void }> = [];
   /** Track active fullscreen native BG config so verse changes do not reapply it */
   private _activeFullscreenBgSignature: Record<string, string> = {};
   /** One-time cleanup for legacy fullscreen BG inputs now rendered by the browser overlay. */
@@ -872,6 +880,7 @@ export class DockObsClient {
   }
 
   private resetObsStateCaches(): void {
+    this._legacyAliasCleanupDone.clear();
     this.stopProgramBackgroundWatcher();
     this._sceneItemListCache = null;
     this._programSceneCache = null;
@@ -1395,12 +1404,6 @@ export class DockObsClient {
 
         if (isFreeDockPlan()) {
           void this.clearMCESourcesForFreePlan();
-        } else {
-          // Preemptively refresh CEF browser sources in the background so that
-          // any sources loaded by OBS before MakeChurchEasy finished booting
-          // (which hit ERR_CONNECTION_REFUSED) are immediately restored and ready
-          // before the operator clicks their first verse or song.
-          void this.refreshAllOverlayCaches();
         }
 
         const startupPromise = (async () => {
@@ -1582,6 +1585,44 @@ export class DockObsClient {
       }
     }
     if (!this.isConnected) throw new Error("Not connected to OBS");
+
+    // Defensively handle GetCurrentProgramScene and GetCurrentPreviewScene:
+    // In obs-websocket, GetCurrentProgramScene and GetCurrentPreviewScene omit
+    // null checks on obs_frontend_get_current_scene(). When an active scene or
+    // MCE Presentation scene is deleted, obs_frontend_get_current_scene() temporarily returns NULL.
+    // obs-websocket then passes NULL to strlen(NULL) in std::string, causing an
+    // immediate SIGSEGV crash of the entire OBS Studio process.
+    // In contrast, GetSceneList has explicit null guards (cbz x0 in ARM64 disassembly)
+    // and safely returns currentProgramSceneName and currentPreviewSceneName without crashing.
+    if (requestType === "GetCurrentProgramScene") {
+      const sceneList = await this.call("GetSceneList", undefined, options) as {
+        currentProgramSceneName?: string | null;
+        currentProgramSceneUuid?: string | null;
+      };
+      const currentProgramSceneName = String(sceneList?.currentProgramSceneName ?? "").trim();
+      const currentProgramSceneUuid = String(sceneList?.currentProgramSceneUuid ?? "").trim();
+      return {
+        currentProgramSceneName,
+        sceneName: currentProgramSceneName,
+        currentProgramSceneUuid,
+        sceneUuid: currentProgramSceneUuid,
+      };
+    }
+    if (requestType === "GetCurrentPreviewScene") {
+      const sceneList = await this.call("GetSceneList", undefined, options) as {
+        currentPreviewSceneName?: string | null;
+        currentPreviewSceneUuid?: string | null;
+      };
+      const currentPreviewSceneName = String(sceneList?.currentPreviewSceneName ?? "").trim();
+      const currentPreviewSceneUuid = String(sceneList?.currentPreviewSceneUuid ?? "").trim();
+      return {
+        currentPreviewSceneName,
+        sceneName: currentPreviewSceneName,
+        currentPreviewSceneUuid,
+        sceneUuid: currentPreviewSceneUuid,
+      };
+    }
+
     const t0 = Date.now();
     try {
       const request = () => obsQueue.enqueue(
@@ -2202,19 +2243,32 @@ export class DockObsClient {
    * 3. Current source (Bible, Worship, Notes, Media, etc.)
    * 4. Backgrounds / cameras / other scene items
    */
-  async ensureSceneItemVisibleAndStacked(sceneName: string, sourceName: string): Promise<void> {
+  async ensureSceneItemVisibleAndStacked(sceneName: string, sourceName: string, force = false): Promise<void> {
     try {
       const cacheKey = `${sceneName}::${sourceName}`;
       const lastCheck = this._lastVerifiedStackedBySceneSource[cacheKey];
-      if (lastCheck && Date.now() - lastCheck < 15000) {
+      if (!force && lastCheck && Date.now() - lastCheck < 15000) {
         return;
       }
+      if (force) {
+        this.invalidateSceneItemListCache(sceneName);
+      }
 
-      const items = await this.getSceneItemListCached(sceneName);
-      if (!items.length) return;
+      let items = await this.getSceneItemListCached(sceneName);
+      if (!items.length && sceneName !== PRESENTATION_SCENE_NAME && sceneName !== DOCK_PRESENTATION_SCENE) return;
 
       const aliases = this.getSourceAliases(sourceName);
-      const item = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
+      let item = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
+      if (!item) {
+        if (sceneName === PRESENTATION_SCENE_NAME || sceneName === DOCK_PRESENTATION_SCENE) {
+          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName)) {
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
+            this.invalidateSceneItemListCache(sceneName);
+            items = await this.getSceneItemListCached(sceneName);
+            item = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
+          }
+        }
+      }
       if (!item) return;
 
       // 1. If item is currently hidden/disabled, unhide it!
@@ -2317,6 +2371,10 @@ export class DockObsClient {
 
   private async getLikelyOverlayScenes(): Promise<string[]> {
     const scenes = new Set<string>([DOCK_PRESENTATION_SCENE, PRESENTATION_SCENE_NAME]);
+    try {
+      const currentProgram = await this.getCurrentProgramSceneName().catch(() => "");
+      if (currentProgram) scenes.add(currentProgram);
+    } catch { /* ignore */ }
     return Array.from(scenes).filter(Boolean);
   }
 
@@ -2324,8 +2382,19 @@ export class DockObsClient {
     if (!sceneName || !sourceName) return false;
     try {
       this.invalidateSceneItemListCache(sceneName);
-      const items = await this.getSceneItemListCached(sceneName);
-      const item = items.find((entry) => entry.sourceName === sourceName);
+      let items = await this.getSceneItemListCached(sceneName);
+      const aliases = this.getSourceAliases(sourceName);
+      let item = items.find((entry) => entry.sourceName === sourceName || aliases.includes(entry.sourceName));
+      if (!item) {
+        if (sceneName === PRESENTATION_SCENE_NAME || sceneName === DOCK_PRESENTATION_SCENE) {
+          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName)) {
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
+            this.invalidateSceneItemListCache(sceneName);
+            items = await this.getSceneItemListCached(sceneName);
+            item = items.find((entry) => entry.sourceName === sourceName || aliases.includes(entry.sourceName));
+          }
+        }
+      }
       if (!item) return false;
 
       const tickerItem = items.find((entry) => entry.sourceName === DOCK_TICKER_SOURCE);
@@ -2530,6 +2599,7 @@ export class DockObsClient {
     primarySourceName: string,
     keepSources: string[] = [],
     _resources: DockResourceNames = DOCK_RESOURCES,
+    force = false,
   ): Promise<void> {
     const primary = primarySourceName.trim();
     const targetScene = sceneName.trim();
@@ -2557,15 +2627,22 @@ export class DockObsClient {
 
     // Fast path: if this overlay configuration was already applied and no OBS event invalidated it,
     // skip all OBS queries and mutation calls for ultra-low latency (<2ms) and 0% CPU overhead.
-    if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
+    if (!force && this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
 
     this.invalidateSceneItemListCache(targetScene);
     if (targetScene !== PRESENTATION_SCENE_NAME) {
       this.invalidateSceneItemListCache(PRESENTATION_SCENE_NAME);
     }
 
-    // Clean up legacy alias scene items so duplicate sources (e.g. MCE Worship alongside MCE Browser - Worship) never appear in OBS
-    if (primary === FULLSCREEN_SOURCE_NAMES.WORSHIP) {
+    // Clean up legacy alias scene items so duplicate sources (e.g. MCE Worship alongside MCE Browser - Worship) never appear in OBS.
+    // This is a dozen sequential OBS requests, so run it once per scene per OBS
+    // connection instead of on every projection (it delayed showing the source).
+    const legacyCleanupKey = `${primary}|${targetScene}`;
+    const runLegacyCleanup = !this._legacyAliasCleanupDone.has(legacyCleanupKey);
+    this._legacyAliasCleanupDone.add(legacyCleanupKey);
+    if (!runLegacyCleanup) {
+      // already cleaned for this connection
+    } else if (primary === FULLSCREEN_SOURCE_NAMES.WORSHIP) {
       await this.removeSceneItemBySource(targetScene, "MCE Worship").catch(() => { });
       await this.removeSceneItemBySource(targetScene, "MCE Worship BG").catch(() => { });
       if (targetScene !== PRESENTATION_SCENE_NAME) {
@@ -2630,7 +2707,7 @@ export class DockObsClient {
     // changing. Re-running SetSceneItemIndex for every Bible arrow press can
     // make OBS move the neighbouring source above the active source. A new
     // active source still falls through and gets ordered below the ticker.
-    if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
+    if (!force && this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;
 
     await this.ensureTickerAboveSource(targetScene, primary).catch(() => { });
     const requests: Array<{ requestType: string; requestData: Record<string, unknown> }> = [];
@@ -2677,7 +2754,12 @@ export class DockObsClient {
       const shouldKeep = keepSet.has(item.sourceName);
       if (shouldIsolateSources) {
         if (shouldKeep) {
-          if (item.sceneItemEnabled !== true) {
+          // A lower third sits on top of whatever is showing: it turns on only its
+          // own source and never re-shows sources the operator hid in OBS.
+          const mayEnable = !isLowerThirdSource
+            || item.sourceName === primary
+            || this._mcePresentationSourcesDisabledByVisibility.has(item.sourceName);
+          if (item.sceneItemEnabled !== true && mayEnable) {
             addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, true);
           }
           this._mcePresentationSourcesDisabledByVisibility.delete(item.sourceName);
@@ -2721,7 +2803,7 @@ export class DockObsClient {
   }
 
   /** Apply the operator's MCE-only visibility preference to MCE Presentation. */
-  async applyMcePresentationSourceVisibility(primarySourceName: string): Promise<void> {
+  async applyMcePresentationSourceVisibility(primarySourceName: string, force = false): Promise<void> {
     const primary = primarySourceName.trim();
     if (!isMcePresentationManagedSource(primary)) return;
     await this.ensureActiveMceOverlaySource(
@@ -2729,6 +2811,7 @@ export class DockObsClient {
       primary,
       [primary],
       DOCK_RESOURCES,
+      force,
     );
   }
 
@@ -2739,25 +2822,94 @@ export class DockObsClient {
    * React effect. The OBS request is still asynchronous at the transport
    * boundary, but the visibility decision starts in the same click event.
    */
-  async focusMcePresentationModule(module: DockPresentationModule, specificSourceName?: string): Promise<void> {
+  async focusMcePresentationModule(
+    module: DockPresentationModule,
+    specificSourceName?: string,
+    force = false,
+  ): Promise<void> {
     if (!this.isConnected) return;
     const targetSource = specificSourceName && isMcePresentationManagedSource(specificSourceName)
       ? specificSourceName
       : MCE_PRESENTATION_FOCUS_SOURCES[module];
 
+    // Ensure MCE Presentation scene exists before focusing module
+    await this.ensurePresentationSceneReady().catch(() => { });
+
     // Fast path: if this source is already the active presentation source,
-    // return immediately in 0ms without queuing or OBS calls.
-    if (this._lastActivePresentationSource === targetSource) {
+    // return immediately in 0ms without queuing or OBS calls unless forced.
+    if (!force && this._lastActivePresentationSource === targetSource) {
       writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module);
       return;
     }
 
+    if (force) {
+      this.invalidateActiveMceOverlayState();
+      this.invalidateSceneItemListCache(PRESENTATION_SCENE_NAME);
+    }
+
     await this.runSerializedPresentationMutation(() => (
-      this.applyMcePresentationSourceVisibility(targetSource)
+      this.applyMcePresentationSourceVisibility(targetSource, force)
     ));
     // The Dock page can refresh while OBS keeps the live MCE Presentation
     // source. Remember its selected module locally so the next Bible click
     // updates that source in place instead of briefly disabling it first.
+    writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module);
+  }
+
+  /**
+   * Verify and ensure the presentation source for the given module is:
+   * 1. Present and open / enabled (`sceneItemEnabled: true`)
+   * 2. Stacked at the top of the scene (right below ticker if ticker exists)
+   * 3. Conflicting full-screen sources (e.g. Image/Video) reconciled
+   *
+   * Called immediately on operator actions (e.g. clicking Bible version/verse,
+   * Worship song/slide, or Note/slide).
+   */
+  async ensureModuleSourceOpenAndOnTop(module: "bible" | "worship" | "notes"): Promise<void> {
+    if (!this.isConnected) return;
+
+    const sourceNameMap: Record<"bible" | "worship" | "notes", string> = {
+      bible: FULLSCREEN_SOURCE_NAMES.BIBLE,
+      worship: FULLSCREEN_SOURCE_NAMES.WORSHIP,
+      notes: FULLSCREEN_SOURCE_NAMES.NOTES,
+    };
+    const targetSource = sourceNameMap[module];
+    if (!targetSource) return;
+
+    // Fast-path: if this source is already the active presentation source and verified stacked recently,
+    // return immediately in 0ms without redundant OBS calls or redraw flickers.
+    const presentationKey = `${PRESENTATION_SCENE_NAME}::${targetSource}`;
+    const lastStacked = this._lastVerifiedStackedBySceneSource[presentationKey];
+    if (this._lastActivePresentationSource === targetSource && lastStacked && Date.now() - lastStacked < 15000) {
+      writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module);
+      return;
+    }
+
+    // Ensure MCE Presentation scene exists before inspecting scenes or stacking
+    const revealRequestedAt = Date.now();
+    await this.ensurePresentationSceneReady().catch(() => { });
+
+    // This source is about to be shown again (another module was on air, or
+    // it was cleared). It still holds its previous verse/slide, so let the
+    // click's own packet (primed in parallel by the tab) land first. Capped so
+    // a click that sends nothing is never held up for long.
+    if (this._lastActivePresentationSource !== targetSource) {
+      const packetSource = this._fullscreenSceneDefs[module]?.browserSourceName ?? targetSource;
+      await this.waitForFreshSourcePacket(packetSource, revealRequestedAt - 150, 450);
+      // OBS acknowledges the event before CEF paints; give it one frame.
+      await this.sleep(40);
+    }
+
+    // Focus presentation module without wiping caches or forcing resets
+    await this.focusMcePresentationModule(module, targetSource, false).catch(() => { });
+
+    const likelyScenes = await this.getLikelyOverlayScenes();
+
+    // Verify and stack target source in likely scenes without wiping unrelated caches
+    for (const sceneName of likelyScenes) {
+      await this.ensureSceneItemVisibleAndStacked(sceneName, targetSource, false).catch(() => { });
+    }
+
     writeNativeDockSetting(MCE_PRESENTATION_ACTIVE_MODULE_KEY, module);
   }
 
@@ -3533,7 +3685,9 @@ export class DockObsClient {
     }
     const resp = await this.call("GetCurrentProgramScene") as { currentProgramSceneName?: string; sceneName?: string };
     const name = (resp.currentProgramSceneName || resp.sceneName || "").trim();
-    this._programSceneCache = { name, expiresAt: now + 30_000 };
+    if (name) {
+      this._programSceneCache = { name, expiresAt: now + 30_000 };
+    }
     return name;
   }
 
@@ -4093,7 +4247,8 @@ export class DockObsClient {
     sourceName: string,
     width?: number,
     height?: number,
-    enable = true,
+    /** "keep" leaves an existing item's visibility untouched (new items start hidden). */
+    enable: boolean | "keep" = true,
     initialPacket?: Record<string, unknown>,
     initialCss?: string,
   ): Promise<number> {
@@ -4146,7 +4301,7 @@ export class DockObsClient {
     if (existing) {
       sceneItemId = existing.sceneItemId;
       // Re-enable the source if it was previously hidden (e.g. by clearAllOverlays)
-      if (enable && existing.sceneItemEnabled === false) {
+      if (enable === true && existing.sceneItemEnabled === false) {
         try {
           await this.call("SetSceneItemEnabled", {
             sceneName,
@@ -4155,7 +4310,7 @@ export class DockObsClient {
           });
         } catch { /* ignore */ }
       }
-      if (!enable && existing.sceneItemEnabled !== false) {
+      if (enable === false && existing.sceneItemEnabled !== false) {
         try {
           await this.call("SetSceneItemEnabled", {
             sceneName,
@@ -4184,7 +4339,7 @@ export class DockObsClient {
             const created = await this.call("CreateSceneItem", {
               sceneName,
               sourceName,
-              sceneItemEnabled: enable,
+              sceneItemEnabled: enable === true,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
             createdSceneItem = true;
@@ -4211,7 +4366,7 @@ export class DockObsClient {
                 shutdown: false,
                 restart_when_active: false,
               },
-              sceneItemEnabled: enable,
+              sceneItemEnabled: enable === true,
             }) as { sceneItemId: number };
             sceneItemId = created.sceneItemId;
             createdSceneItem = true;
@@ -4257,7 +4412,7 @@ export class DockObsClient {
               const created = await this.call("CreateSceneItem", {
                 sceneName,
                 sourceName,
-                sceneItemEnabled: enable,
+                sceneItemEnabled: enable === true,
               }) as { sceneItemId: number };
               sceneItemId = created.sceneItemId;
               createdSceneItem = true;
@@ -4336,7 +4491,7 @@ export class DockObsClient {
     }
 
     // 4. Make sure it's enabled/visible (only if requested)
-    if (enable) {
+    if (enable === true) {
       try {
         await this.call("SetSceneItemEnabled", {
           sceneName,
@@ -4778,8 +4933,18 @@ export class DockObsClient {
       } | null;
 
       const inputs = inputListResp?.inputs ?? [];
+      // Free users add the presentation link themselves as a Browser Source and
+      // may name it "MCE Presentation". Never remove a source that points at the
+      // presentation link, whatever its name.
+      const protectedSources = new Set<string>();
       for (const input of inputs) {
-        if (DockObsClient.isMCESource(input.inputName)) {
+        if (!DockObsClient.isMCESource(input.inputName)) continue;
+        const settings = await this.call("GetInputSettings", { inputName: input.inputName }, { bypassFreeMutationGate: true })
+          .catch(() => null) as { inputSettings?: { url?: unknown } } | null;
+        if (isPresentationLinkUrl(settings?.inputSettings?.url)) protectedSources.add(input.inputName);
+      }
+      for (const input of inputs) {
+        if (DockObsClient.isMCESource(input.inputName) && !protectedSources.has(input.inputName)) {
           try {
             await this.call("RemoveInput", { inputName: input.inputName }, { bypassFreeMutationGate: true });
             cleanedSources++;
@@ -4801,7 +4966,7 @@ export class DockObsClient {
           const items = resp?.sceneItems ?? [];
           for (const item of items) {
             const src = (item.sourceName ?? "").trim();
-            if (DockObsClient.isMCESource(src)) {
+            if (DockObsClient.isMCESource(src) && !protectedSources.has(src)) {
               try {
                 await this.call(
                   "RemoveSceneItem",
@@ -5185,9 +5350,6 @@ export class DockObsClient {
             inputSettings,
           });
           this._lastBrowserSourceUrlBySource[inputName] = url;
-          if (forceReload) {
-            void this.refreshBrowserSourceCache(inputName);
-          }
         } catch { /* ignore */ }
         return;
       }
@@ -5220,6 +5382,22 @@ export class DockObsClient {
       return parsed.toString();
     } catch {
       return documentUrl;
+    }
+  }
+
+  /** True when both URLs load the same overlay HTML file from the overlay server (query/hash ignored). */
+  private isSameOverlayDocument(currentUrl: string | undefined, nextUrl: string): boolean {
+    if (!currentUrl || !nextUrl) return false;
+    try {
+      const a = new URL(currentUrl);
+      const b = new URL(nextUrl);
+      // Same file AND same HTML content fingerprint (`v`, see overlayVersion.ts):
+      // a page built from older overlay HTML must still be reloaded.
+      return a.origin === b.origin
+        && a.pathname === b.pathname
+        && (a.searchParams.get("v") ?? "") === (b.searchParams.get("v") ?? "");
+    } catch {
+      return false;
     }
   }
 
@@ -5289,7 +5467,11 @@ export class DockObsClient {
     if (mode === "fullscreen" || mode === "lower-third") {
       this._lastOverlayMode[sourceName] = mode;
     }
-    this.rememberCssOverlayTransport(sourceName, packet, baseUrl, themeCss, tabType);
+    // Do not record `packet` as delivered: it has not been sent yet, and
+    // treating it as the live packet let later pushes/redeliveries reuse it.
+    this._lastCssOverlayBaseUrlBySource[sourceName] = baseUrl;
+    this._lastCssOverlayTabBySource[sourceName] = tabType;
+    void themeCss;
     return true;
   }
 
@@ -5338,10 +5520,69 @@ export class DockObsClient {
         },
         { priority: "high" },
       );
+      // A blank is not new content and must not release a waiting reveal.
+      if (targetSource && packet.blanked !== true) this.noteSourcePacketDelivered(targetSource);
       return true;
     } catch {
       return false;
     }
+  }
+
+  private noteSourcePacketDelivered(source: string): void {
+    const now = Date.now();
+    this._lastPacketDeliveredAtBySource[source] = now;
+    if (this._freshPacketWaiters.length === 0) return;
+    const remaining: Array<{ source: string; since: number; resolve: () => void }> = [];
+    for (const waiter of this._freshPacketWaiters) {
+      if (waiter.source === source && now >= waiter.since) waiter.resolve();
+      else remaining.push(waiter);
+    }
+    this._freshPacketWaiters = remaining;
+  }
+
+  /**
+   * Resolve once OBS has accepted a packet for `source` sent at or after
+   * `since` (or right away if one already was), or after `timeoutMs`.
+   *
+   * A hidden MCE browser source still holds the last thing it showed. Showing
+   * it again before the new verse/slide lands is the "old verse for a second
+   * or two" operators see after a clear, an idle pause or a Dock reload.
+   */
+  private waitForFreshSourcePacket(source: string, since: number, timeoutMs: number): Promise<void> {
+    if ((this._lastPacketDeliveredAtBySource[source] ?? 0) >= since) return Promise.resolve();
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        this._freshPacketWaiters = this._freshPacketWaiters.filter((w) => w.resolve !== finish);
+        resolve();
+      };
+      this._freshPacketWaiters.push({ source, since, resolve: finish });
+      setTimeout(finish, timeoutMs);
+    });
+  }
+
+  /**
+   * After a browser source loads a new document, packets emitted while the
+   * page is still starting have no listener and are silently lost (OBS acks the
+   * vendor request anyway). Re-send the NEWEST cached packet a few times while
+   * the page boots so the output always ends on the latest click. Duplicates
+   * are harmless: the overlay ignores packets it has already applied.
+   */
+  private scheduleLatestPacketRedelivery(inputName: string, tabType: CssOverlayPacketTab): void {
+    for (const timer of this._redeliveryTimersBySource[inputName] ?? []) clearTimeout(timer);
+    this._redeliveryTimersBySource[inputName] = [300, 700, 1400, 2600].map((delay) => setTimeout(() => {
+      const latest = this._lastCssOverlayPacketBySource[inputName];
+      if (!latest || !this.isConnected) return;
+      const css = this.buildCssOverlayDataCss(latest, this._lastCssOverlayThemeCssBySource[inputName] || "");
+      void this.emitBrowserOverlayPacket(
+        this._lastCssOverlayTabBySource[inputName] ?? tabType,
+        latest,
+        css,
+        inputName,
+      ).catch(() => false);
+    }, delay));
   }
 
   private async emitCssOverlayPacketWithFallback(
@@ -5385,6 +5626,16 @@ export class DockObsClient {
       inputName,
     );
     const urlChanged = await this.hasBrowserSourceUrlChanged(inputName, baseUrl);
+    if (sourceWasNotTracked && !urlChanged) {
+      // After a reconnect/idle the cache was cleared, but OBS still has this
+      // exact overlay page loaded. Update it in place instead of reloading it
+      // (a reload blanks the output and drops the packets sent while it boots,
+      // which is why the first click after a pause showed old content).
+      await this.emitCssOverlayPacketWithFallback(inputName, tabType, packet, baseUrl, overlayCss);
+      this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
+      this.scheduleLatestPacketRedelivery(inputName, tabType);
+      return;
+    }
     const previousMode = this._lastCssOverlayPacketBySource[inputName]?.mode;
     const modeChanged = previousMode !== undefined && previousMode !== packet.mode;
     const previousPacket = this._lastCssOverlayPacketBySource[inputName];
@@ -5401,10 +5652,7 @@ export class DockObsClient {
 
     // URL changes still require a browser reload. On the first packet after
     // connecting to OBS or creating a source, put the complete packet into CSS
-    // and URL hash as well: a newly loaded CEF document may not have attached
-    // its obs-browser event listener yet, so an event-only packet can be lost
-    // and leave the source blank.
-    // This is a one-time/bootstrap path; normal verse changes stay in-place.
+    // and URL hash as well with forceReload=false so CEF does not hard-reload.
     if (urlChanged || sourceWasNotTracked) {
       const bootstrapMode = packet.mode === "fullscreen" || packet.mode === "lower-third"
         ? packet.mode
@@ -5417,11 +5665,11 @@ export class DockObsClient {
       // A newly loaded page must know its content before its first paint.
       // Setting both the URL hash and overlay CSS guarantees the slide renders
       // immediately on the very first click without requiring a second click.
-      // On initial untracked bootstrap, pass forceReload=true so CEF refreshes away
-      // any cached ERR_CONNECTION_REFUSED from before MCE booted.
-      await this.setBrowserSourceUrl(inputName, bootstrapUrlWithData, sourceWasNotTracked, overlayCss);
+      await this.setBrowserSourceUrl(inputName, bootstrapUrlWithData, false, overlayCss);
+      if (packet.blanked !== true) this.noteSourcePacketDelivered(inputName);
       void this.emitBrowserOverlayPacket(tabType, packet, overlayCss, inputName).catch(() => false);
       this.rememberCssOverlayTransport(inputName, packet, baseUrl, themeCss, tabType);
+      this.scheduleLatestPacketRedelivery(inputName, tabType);
       return;
     }
 
@@ -5455,6 +5703,14 @@ export class DockObsClient {
     this._lastCssOverlayBaseUrlBySource[inputName] = baseUrl;
     this._lastCssOverlayThemeCssBySource[inputName] = themeCss || "";
     if (tabType) this._lastCssOverlayTabBySource[inputName] = tabType;
+    // Any delivery (fast, restored or prime paths) makes the full-path
+    // "same content as last push" signature stale; otherwise a repeat click
+    // could replay an older cached packet. The full paths set the signature
+    // again right after their own delivery.
+    const deliveredTab = tabType ?? this._lastCssOverlayTabBySource[inputName];
+    if (deliveredTab === "bible") this._lastBiblePushSignature = "";
+    else if (deliveredTab === "worship") this._lastWorshipPushSignature = "";
+    else if (deliveredTab === "notes") this._lastNotesPushSignature = "";
   }
 
   private isRefreshableTextBrowserSource(sourceName: string): boolean {
@@ -5743,6 +5999,10 @@ export class DockObsClient {
           sceneItemId: item.sceneItemId,
           sceneItemEnabled: false,
         });
+        // The next send must see the item as hidden so it turns it back on.
+        this.invalidateSceneItemListCache(sceneName);
+        this.invalidateActiveMceOverlayState(sceneName);
+        delete this._lastVerifiedStackedBySceneSource[`${sceneName}::${sourceName}`];
       }
     } catch { /* ignore */ }
   }
@@ -6011,6 +6271,21 @@ export class DockObsClient {
 
   // ── Theme resolution helpers ──
 
+  /**
+   * The lower-third catalog (~420 KB of theme HTML/CSS) is only needed when a
+   * caller doesn't pass a theme. It loads after the Dock is up (see the idle
+   * warm-up at the bottom of this file), not in the Dock's start-up bundle.
+   */
+  private static _lowerThirdCatalog: ThemeLike[] | null = null;
+  private static _lowerThirdCatalogLoad: Promise<void> | null = null;
+
+  static warmLowerThirdCatalog(): Promise<void> {
+    DockObsClient._lowerThirdCatalogLoad ??= import("../lowerthirds/themes")
+      .then(({ ALL_THEMES }) => { DockObsClient._lowerThirdCatalog = ALL_THEMES; })
+      .catch(() => { DockObsClient._lowerThirdCatalogLoad = null; });
+    return DockObsClient._lowerThirdCatalogLoad;
+  }
+
   private resolveLTTheme(
     theme: DockLTThemeRef | undefined,
     context: "speaker" | "sermon" | "event" | "worship" | "bible" | "ticker" | "custom",
@@ -6033,7 +6308,14 @@ export class DockObsClient {
     const hints = contextHints[context].map(normalizeThemeToken);
     const favoriteIds = getWorshipLTFavorites();
 
-    let list = ALL_THEMES.filter((t) => t.html && t.css);
+    const catalog = DockObsClient._lowerThirdCatalog;
+    if (!catalog) {
+      // Only in the first seconds after start-up: use the default theme and
+      // load the catalog for the next call.
+      void DockObsClient.warmLowerThirdCatalog();
+      return getDefaultLTTheme();
+    }
+    let list = catalog.filter((t) => t.html && t.css);
     if (categoryHint) {
       list = list.filter((t) => normalizeThemeToken(String(t.category || "")) === categoryHint);
     }
@@ -6331,12 +6613,15 @@ export class DockObsClient {
       : tabType === "worship" || tabType === "announcements"
         ? "worship"
         : "bible";
+    // Use the packet's own timestamp as its revision (the same clock the OBS
+    // event path uses) so an older packet can never outrank a newer click.
+    const revision = Number(standalonePacket.timestamp) || Date.now();
     overlayBridge.publish({
       channel: bridgeChannel,
       type: "overlay-update",
-      revision: Date.now(),
+      revision,
       ...(routedSource ? { targetSource: routedSource } : {}),
-      data: { ...standalonePacket, revision: Date.now() },
+      data: { ...standalonePacket, revision },
       css,
     });
   }
@@ -7007,6 +7292,7 @@ export class DockObsClient {
       mode,
     }, "bible", themeCss, sourceName);
     await this.deliverCssOverlayPacket(sourceName, "bible", packet, baseUrl, themeCss).catch(() => { });
+    await this.bringMceOverlayForward(sourceName).catch(() => { });
   }
 
   /**
@@ -7759,7 +8045,9 @@ export class DockObsClient {
             await this.deliverCssOverlayPacket(
               browserSrc,
               "bible",
-              cachedPacket,
+              // Fresh timestamp: the overlay only accepts packets at least as new
+              // as the last one it saw (e.g. after a blank/clear).
+              { ...cachedPacket, timestamp: Date.now() },
               cachedBaseUrl,
               this._lastCssOverlayThemeCssBySource[browserSrc] || "",
             ).catch(() => { });
@@ -8074,23 +8362,20 @@ export class DockObsClient {
         // source while replacing its packet so a refresh does not produce an
         // unnecessary off/on flash. A missing or newly-added source still
         // follows the normal hidden-until-ready path.
-        const preserveExistingLiveBibleSource = !data.targetScene
-          && readNativeDockSetting<unknown>(MCE_PRESENTATION_ACTIVE_MODULE_KEY) === "bible"
-          && Boolean(await this.getSceneItemBySource(
-            PRESENTATION_SCENE_NAME,
-            def.browserSourceName,
-          ));
-
-        // Ensure the unified source exists in MCE Presentation. Follow with
-        // ensureOverlaySource so a stale cache or manual OBS source deletion
-        // cannot leave the presentation scene with no visible Bible item.
-        await this._ensureFullscreenScene("bible", mode, preserveExistingLiveBibleSource);
+        // Projecting Bible must never hide an existing Bible item: the click
+        // has already made it visible, and hiding it here produced the
+        // show -> hide -> show flicker and a multi-second blank output after
+        // Worship/Notes had been projected. Existing items keep their
+        // visibility ("keep"); only a brand-new item starts hidden until its
+        // first packet lands. The final ensureActiveMceOverlaySource below
+        // verifies it is on (a no-op when it already is).
+        await this._ensureFullscreenScene("bible", mode, "keep");
         await this.ensureOverlaySource(
           sceneName,
           def.browserSourceName,
           undefined,
           undefined,
-          preserveExistingLiveBibleSource,
+          "keep",
         );
 
         // Hide the source in user's scene if it was there from lower-third mode
@@ -8785,6 +9070,30 @@ export class DockObsClient {
   }
 
   /**
+   * Send a blank packet straight to a hidden browser source (no reload, no
+   * visibility change). The cached packet is dropped so a later recovery
+   * redelivery can't bring the cleared content back.
+   */
+  private emitBlankPacketToHiddenSource(tabType: CssOverlayPacketTab, sourceName: string): void {
+    if (!this.isConnected || !sourceName) return;
+    for (const timer of this._redeliveryTimersBySource[sourceName] ?? []) clearTimeout(timer);
+    this._redeliveryTimersBySource[sourceName] = [];
+    const blankPacket: Record<string, unknown> = {
+      slide: null,
+      theme: null,
+      live: false,
+      blanked: true,
+      timestamp: Date.now(),
+    };
+    const previousMode = this._lastCssOverlayPacketBySource[sourceName]?.mode;
+    if (previousMode === "fullscreen" || previousMode === "lower-third") blankPacket.mode = previousMode;
+    delete this._lastCssOverlayPacketBySource[sourceName];
+    const css = this.buildCssOverlayDataCss(blankPacket, this._lastCssOverlayThemeCssBySource[sourceName] || "");
+    delete this._lastPacketDeliveredAtBySource[sourceName];
+    void this.emitBrowserOverlayPacket(tabType, blankPacket, css, sourceName).catch(() => false);
+  }
+
+  /**
    * Clear the Bible overlay — hide all Bible sources in both MCE Presentation
    * (fullscreen) and the user's current scene (lower-third), then restore state.
    */
@@ -8851,6 +9160,9 @@ export class DockObsClient {
         "lower-third",
         this._fullscreenSceneDefs["bible"].browserSourceName,
       );
+      // Also empty the (now hidden) OBS browser document. Otherwise it keeps
+      // this verse and shows it again for a moment on the next Bible click.
+      this.emitBlankPacketToHiddenSource("bible", browserSourceName);
 
       // Clean up the bible clone scene (studio mode)
       await this.deleteClone(undefined, "bible").catch(() => { });
@@ -9425,10 +9737,9 @@ export class DockObsClient {
 
     for (const resources of getAllDockResources()) {
       for (const sceneName of scenes) {
+        // Hide only: the source stays in the scene so the next send reuses it.
         await this.hideOverlaySource(sceneName, resources.ltSource);
         await this.hideFullscreenBg(sceneName, resources);
-        await this.removeSceneItemBySource(sceneName, resources.ltSource);
-        await this.removeSceneItemBySource(sceneName, resources.fsBgSource);
       }
       // Do NOT delete inputs globally — keep them alive for reuse.
       delete this._lastOverlayMode[resources.ltSource];
@@ -9530,11 +9841,11 @@ export class DockObsClient {
 
     await this.sleep(delivered ? waitMs : 0);
 
+    // Hide only: the lower-third source stays in the scene (no delete / re-create
+    // on the next send).
     for (const sceneName of scenes) {
       await this.hideOverlaySource(sceneName, resources.ltSource);
       await this.hideFullscreenBg(sceneName, resources);
-      await this.removeSceneItemBySource(sceneName, resources.ltSource);
-      await this.removeSceneItemBySource(sceneName, resources.fsBgSource);
     }
 
     delete this._lastOverlayMode[resources.ltSource];
@@ -9758,7 +10069,7 @@ export class DockObsClient {
           sourceName,
           undefined,
           undefined,
-          stableCssOverlayTab ? false : true,
+          stableCssOverlayTab ? "keep" : true,
         ).catch(() => { });
         if (!stableCssOverlayTab) {
           await this.ensureActiveMceOverlaySource(
@@ -9779,7 +10090,9 @@ export class DockObsClient {
           await this.deliverCssOverlayPacket(
             sourceName,
             tab,
-            cachedPacket,
+            // Fresh timestamp: the overlay only accepts packets at least as new
+            // as the last one it saw (e.g. after a blank/clear).
+            { ...cachedPacket, timestamp: Date.now() },
             cachedBaseUrl,
             this._lastCssOverlayThemeCssBySource[sourceName] || "",
           ).catch(() => { });
@@ -9870,7 +10183,10 @@ export class DockObsClient {
           }
           setInitialized(true);
         } else {
-          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, false, packet, themeCss).catch(() => { });
+          // "keep": never hide an already-visible Worship/Notes source between
+          // slides (that caused an off/on flicker on every click); a new item
+          // still starts hidden until its packet has been delivered.
+          await this.ensureOverlaySource(resources.worshipScene, sourceName, undefined, undefined, "keep", packet, themeCss).catch(() => { });
           // Ensure no separate fullscreen BG inputs are left behind; the
           // background will be rendered via the browser overlay CSS.
           await this._hideFullscreenBgSource("worship");
@@ -9899,10 +10215,10 @@ export class DockObsClient {
             await this.hideSceneSource(sceneName, resources.worshipScene);
             await this.hideFullscreenBg(sceneName, resources);
             await this._hideLowerThirdBgSource(sceneName).catch(() => { });
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true).catch(() => { });
           }
 
           if (!stableCssOverlayTab) {
@@ -9934,10 +10250,10 @@ export class DockObsClient {
             await this.clearAllOverlays(sourceName, sceneName, resources);
             await this.hideSceneSource(sceneName, resources.worshipScene);
             await this.hideFullscreenBg(sceneName, resources);
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true, cssOverlayPacket, themeCss);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true, cssOverlayPacket, themeCss);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true, cssOverlayPacket, themeCss).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true, cssOverlayPacket, themeCss).catch(() => { });
           }
 
           // Background is rendered by the browser overlay; hide any
@@ -9962,10 +10278,10 @@ export class DockObsClient {
 
           if (shouldRebuildSceneGraph()) {
             await this.clearAllOverlays(sourceName, sceneName, resources);
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true, cssOverlayPacket, themeCss);
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true, cssOverlayPacket, themeCss);
             setInitialized(true);
           } else {
-            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? false : true, cssOverlayPacket, themeCss).catch(() => { });
+            await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, stableCssOverlayTab ? "keep" : true, cssOverlayPacket, themeCss).catch(() => { });
           }
 
           await this.hideFullscreenBg(sceneName, resources);
@@ -10141,6 +10457,8 @@ export class DockObsClient {
 
       if (batchRequests.length > 0) {
         await this.callBatch(batchRequests, 2 /* Parallel */).catch(() => { });
+        // Empty the hidden lyrics document so the next song can't flash these lines.
+        this.emitBlankPacketToHiddenSource("worship", resources.worshipSource);
         // Invalidate caches since items were toggled
         this.invalidateSceneItemListCache(scene);
         this.invalidateActiveMceOverlayState(scene);
@@ -11969,6 +12287,9 @@ export class DockObsClient {
     const target = await this.getPresentationTargetScene("media");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("No active scene found in OBS");
+    // The template packager pulls in the ~130 KB Google Fonts catalog; load it
+    // only when a template is actually sent, not on every Dock start.
+    const { createMceTemplateBlob } = await import("../templates/mceTemplatePackage");
     const packageText = await createMceTemplateBlob(template).text();
 
     await this.ensureProgramSceneAsSourceInPresentation();
@@ -12352,7 +12673,8 @@ export class DockObsClient {
   private async _ensureFullscreenScene(
     key: string,
     initialMode?: "fullscreen" | "lower-third",
-    enable = true,
+    /** "keep" leaves an existing item's visibility untouched (new items start hidden). */
+    enable: boolean | "keep" = true,
     initialPacket?: Record<string, unknown>,
     initialCss?: string,
   ): Promise<{ sceneName: string; browserItemId: number }> {
@@ -12391,10 +12713,19 @@ export class DockObsClient {
         browserItemId = existing.sceneItemId;
         const actualInputName = existing.sourceName;
         if (this._lastFullscreenSourceSignature[actualInputName] !== sourceSignature) {
+          // Re-navigating a browser source that already shows this overlay page
+          // reloads it in OBS (blank output for seconds, and packets sent while
+          // it loads are lost). Only change the URL when the page itself differs.
+          let keepLoadedDocument = false;
+          if (!initialPacket) {
+            const loadedUrl = this._lastBrowserSourceUrlBySource[actualInputName]
+              || await this.readBrowserSourceUrl(actualInputName);
+            keepLoadedDocument = this.isSameOverlayDocument(loadedUrl, baseOverlayUrl);
+          }
           await this.call("SetInputSettings", {
             inputName: actualInputName,
             inputSettings: {
-              url: overlayUrl,
+              ...(keepLoadedDocument ? {} : { url: overlayUrl }),
               width: canvas.width,
               height: canvas.height,
               ...(initialCss !== undefined ? { css: initialCss } : {}),
@@ -12424,7 +12755,7 @@ export class DockObsClient {
             shutdown: false,
             restart_when_active: false,
           },
-          sceneItemEnabled: enable,
+          sceneItemEnabled: enable === true,
         }) as { sceneItemId: number };
         browserItemId = created.sceneItemId;
         createdSceneItem = true;
@@ -12441,7 +12772,7 @@ export class DockObsClient {
         if (msg.includes("already exists") || msg.includes("600")) {
           const aliases = this.getSourceAliases(def.browserSourceName);
           try {
-            const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: enable }) as { sceneItemId: number };
+            const added = await this.call("CreateSceneItem", { sceneName: DOCK_PRESENTATION_SCENE, sourceName: def.browserSourceName, sceneItemEnabled: enable === true }) as { sceneItemId: number };
             browserItemId = added.sceneItemId;
             createdSceneItem = true;
             this._lastFullscreenSourceSignature[def.browserSourceName] = sourceSignature;
@@ -12464,6 +12795,9 @@ export class DockObsClient {
     if (browserItemId !== null) {
       const sceneItemSignature = `${sourceSignature}|item:${browserItemId}`;
       if (!createdSceneItem && this._lastFullscreenSceneItemSignature[def.browserSourceName] === sceneItemSignature) {
+        if (enable === "keep") {
+          return { sceneName: DOCK_PRESENTATION_SCENE, browserItemId };
+        }
         if (!enable) {
           await this.call("SetSceneItemEnabled", {
             sceneName: DOCK_PRESENTATION_SCENE,
@@ -12505,7 +12839,9 @@ export class DockObsClient {
           },
         });
         await this.ensureTickerAboveSource(DOCK_PRESENTATION_SCENE, def.browserSourceName).catch(() => { });
-        if (enable) {
+        if (enable === "keep" && !createdSceneItem) {
+          // Leave visibility as the user/focus path set it.
+        } else if (enable === true) {
           await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: true });
         } else {
           await this.call("SetSceneItemEnabled", { sceneName: DOCK_PRESENTATION_SCENE, sceneItemId: browserItemId, sceneItemEnabled: false }).catch(() => { });
@@ -13049,6 +13385,76 @@ export class DockObsClient {
       return null;
     }
   }
+
+  /**
+   * Get the current streaming status from OBS (whether stream is active, timecode, bytes, etc.).
+   */
+  async getStreamStatus(): Promise<{
+    outputActive: boolean;
+    outputReconnecting: boolean;
+    outputTimecode: string;
+    outputDuration: number;
+    outputBytes: number;
+    outputSkippedFrames: number;
+    outputTotalFrames: number;
+  }> {
+    return (await this.call("GetStreamStatus", undefined, { bypassFreeMutationGate: true })) as never;
+  }
+
+  /**
+   * Get the current stream service settings (RTMP server, service, key) from OBS.
+   */
+  async getStreamServiceSettings(): Promise<{
+    streamServiceType: string;
+    streamServiceSettings: Record<string, unknown>;
+  }> {
+    return (await this.call("GetStreamServiceSettings", undefined, { bypassFreeMutationGate: true })) as never;
+  }
+
+  /**
+   * Set the stream service settings (RTMP server, service, key) in OBS.
+   */
+  async setStreamServiceSettings(
+    streamServiceType: string,
+    streamServiceSettings: Record<string, unknown>,
+  ): Promise<void> {
+    await this.call(
+      "SetStreamServiceSettings",
+      { streamServiceType, streamServiceSettings },
+      { bypassFreeMutationGate: true },
+    );
+  }
+
+  /**
+   * Start live streaming in OBS.
+   */
+  async startStream(): Promise<void> {
+    await this.call("StartStream", undefined, { bypassFreeMutationGate: true });
+  }
+
+  /**
+   * Stop live streaming in OBS.
+   */
+  async stopStream(): Promise<void> {
+    await this.call("StopStream", undefined, { bypassFreeMutationGate: true });
+  }
+
+  /**
+   * Toggle streaming in OBS.
+   */
+  async toggleStream(): Promise<{ outputActive: boolean }> {
+    return (await this.call("ToggleStream", undefined, { bypassFreeMutationGate: true })) as never;
+  }
 }
 
 export const dockObsClient = new DockObsClient();
+
+// Warm the lower-third catalog once the Dock is idle, off the start-up path.
+if (typeof window !== "undefined") {
+  window.setTimeout(() => {
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    const warm = () => { void DockObsClient.warmLowerThirdCatalog(); };
+    if (idle) idle(warm, { timeout: 5000 });
+    else warm();
+  }, 3000);
+}

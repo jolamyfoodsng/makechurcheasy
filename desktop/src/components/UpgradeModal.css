@@ -1,10 +1,10 @@
 :root {
-  --bg-color: #0A0A0A;
-  --modal-bg: #080808;
-  --card-bg: rgba(21, 21, 21, 0.4);
-  --card-bg-solid: #151515;
-  --accent-purple-start: #8b5cf6;
-  --accent-purple-end: #6366f1;
+  --bg-color: #0c0e17;
+  --modal-bg: #131724;
+  --card-bg: #171b28;
+  --card-bg-solid: #171b28;
+  --accent-purple-start: #4f46e5;
+  --accent-purple-end: #4f46e5;
   --text-white: #ffffff;
   --text-gray-300: #d1d5db;
   --text-gray-400: #9ca3af;
@@ -289,7 +289,7 @@ body {
   left: -1.5px;
   right: -1.5px;
   bottom: -1.5px;
-  background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+  background: #4f46e5;
   border-radius: 1.1rem;
   z-index: -1;
 }
@@ -310,8 +310,8 @@ body {
 
 .basic-plan .plan-icon-box {
   border-radius: 0.75rem;
-  background: linear-gradient(90deg, var(--accent-purple-start) 0%, var(--accent-purple-end) 100%);
-  box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.2);
+  background: #4f46e5;
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
   color: white;
 }
 
@@ -488,25 +488,26 @@ body {
 
 .btn-secondary {
   flex: 1;
-  background-color: transparent;
-  border: 1px solid #374151;
-  color: var(--text-gray-400);
+  background-color: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
 }
 
 .btn-secondary:hover {
-  background-color: #1f2937;
+  background-color: #334155;
+  color: #ffffff;
 }
 
 .btn-primary {
   flex: 2;
-  background: linear-gradient(90deg, var(--accent-purple-start) 0%, var(--accent-purple-end) 100%);
+  background: #4f46e5;
   color: white;
   border: none;
-  box-shadow: 0 20px 25px -5px rgba(139, 92, 246, 0.2), 0 8px 10px -6px rgba(139, 92, 246, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
+  background: #4338ca;
 }
 
 .btn-primary svg {

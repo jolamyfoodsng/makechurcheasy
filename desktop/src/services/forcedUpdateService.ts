@@ -4,8 +4,15 @@ import {
   refreshDesktopConfig,
   type DesktopConfig,
 } from "./desktopConfig";
-import { fetchLatestPublishedRelease } from "./updateService";
+import {
+  fetchLatestPublishedRelease,
+  type DownloadProgress,
+  type UpdateInstallStatus,
+} from "./updateService";
 import { coerce, gt, gte, lt } from "semver";
+import { getTrustedNowMs } from "./trustedClock";
+
+export { getTrustedNowMs };
 
 /**
  * forcedUpdateService.ts — Client-side forced update enforcement
@@ -37,6 +44,10 @@ export interface AppVersionSettings {
   linuxDownloadUrl: string;
   releaseNotesUrl: string;
   policyPublishedAt: string;
+  /** Server-managed countdown start; null/absent on older APIs. */
+  enforcementStartedAt?: string | null;
+  /** When old versions get blocked, as computed by the server. */
+  enforcementDeadlineAt?: string | null;
   emergencyLockEnabledAt: string | null;
   emergencyLockEffectiveAt: string | null;
 }
@@ -95,8 +106,17 @@ const RECORD_KEY = "ocs-forced-update-record-v1";
 const DISMISS_KEY = "ocs-forced-update-dismiss-v1";
 const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** The last day of a forced-update countdown: shown in red, with a last-day notice. */
+export const FINAL_DAY_HOURS = 24;
+
+/**
+ * The last half hour. From here on (and after the deadline) the update modal can
+ * no longer be closed: the user has to update.
+ */
+export const LOCK_WINDOW_HOURS = 0.5;
+
 /** Milestones (hours remaining) at which the overlay re-appears after dismiss */
-const MILESTONES = [24, 12, 6, 1];
+const MILESTONES = [24, 12, 6, 1, 0.5];
 /** Minimum hours between re-shows (cooldown) */
 const RE_SHOW_COOLDOWN_HOURS = 4;
 
@@ -138,7 +158,7 @@ function detectPlatform(): "windows" | "mac" | "linux" {
   return "linux";
 }
 
-function getDownloadUrlForCurrentPlatform(settings: AppVersionSettings): string {
+export function getDownloadUrlForCurrentPlatform(settings: AppVersionSettings): string {
   const platform = detectPlatform();
   if (platform === "windows") return settings.windowsDownloadUrl || "";
   if (platform === "mac") return settings.macDownloadUrl || "";
@@ -299,7 +319,7 @@ function getCachedSettings(): AppVersionSettings | null {
 
 function computeRemainingHours(lockAt: string | null): number {
   if (!lockAt) return 0;
-  const remainingMs = new Date(lockAt).getTime() - Date.now();
+  const remainingMs = new Date(lockAt).getTime() - getTrustedNowMs();
   return Math.max(0, remainingMs / (60 * 60 * 1000));
 }
 
@@ -385,13 +405,17 @@ function mapDesktopConfigToAppSettings(config: DesktopConfig): AppVersionSetting
       config.appUpdates.minimumSupportedVersion ??
       "",
     emergencyLockMessage:
-      config.appUpdates.emergencyLockMessage ??
+      (!config.appUpdates.emergencyLock && config.security.maintenanceMode && config.security.maintenanceMessage?.trim())
+        ? config.security.maintenanceMessage.trim()
+        : config.appUpdates.emergencyLockMessage ??
       "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
     windowsDownloadUrl: config.appUpdates.windowsDownloadUrl ?? "",
     macDownloadUrl: config.appUpdates.macDownloadUrl ?? "",
     linuxDownloadUrl: config.appUpdates.linuxDownloadUrl ?? "",
     releaseNotesUrl: config.appUpdates.releaseNotesUrl ?? "",
     policyPublishedAt: config.appUpdates.policyPublishedAt ?? new Date(0).toISOString(),
+    enforcementStartedAt: config.appUpdates.enforcementStartedAt ?? null,
+    enforcementDeadlineAt: config.appUpdates.enforcementDeadlineAt ?? null,
     emergencyLockEnabledAt: config.appUpdates.emergencyLockEnabledAt ?? null,
     emergencyLockEffectiveAt: config.appUpdates.emergencyLockEffectiveAt ?? null,
   };
@@ -421,6 +445,30 @@ export function getPolicyUpdateNotice(
     releaseNotesUrl: settings.releaseNotesUrl,
     message: settings.updateMessage || `A newer version of MakeChurchEasy (v${settings.latestVersion}) is available.`,
   };
+}
+
+function validIso(value?: string | null): string | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) && ms > 86_400_000 ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * When the forced-update countdown started and when it ends. The server owns
+ * both (so every computer shows the same deadline). Older APIs that send
+ * neither fall back to "starts the first time this computer sees the policy".
+ */
+function resolveForcedUpdateWindow(
+  settings: AppVersionSettings,
+  graceHours: number,
+): { startedAt: string; lockAt: string } {
+  const startedAt =
+    validIso(settings.enforcementStartedAt) ?? new Date(getTrustedNowMs()).toISOString();
+  if (graceHours <= 0) return { startedAt, lockAt: startedAt };
+  const lockAt =
+    validIso(settings.enforcementDeadlineAt) ??
+    new Date(new Date(startedAt).getTime() + graceHours * 3_600_000).toISOString();
+  return { startedAt, lockAt };
 }
 
 /**
@@ -497,6 +545,20 @@ export function getForcedUpdateState(
       };
     }
 
+    // The server is the authority on the deadline. If it tells us one, follow it
+    // (this also repairs records made by older builds from the local clock).
+    if (
+      record.lockType === "forced-update" &&
+      record.gracePeriodHours > 0 &&
+      validIso(settings.enforcementStartedAt)
+    ) {
+      const win = resolveForcedUpdateWindow(settings, record.gracePeriodHours);
+      if (win.startedAt !== record.startedAt || win.lockAt !== record.lockAt) {
+        record = { ...record, startedAt: win.startedAt, lockAt: win.lockAt };
+        setRecord(record);
+      }
+    }
+
     const hoursRemaining =
       record.lockAt && record.gracePeriodHours > 0
         ? computeRemainingHours(record.lockAt)
@@ -569,12 +631,8 @@ export function getForcedUpdateState(
 
   // Forced updates (version gate)
   if (settings.forceUpdatesEnabled && isBelowVersion(ver, settings.minimumSupportedVersion)) {
-    const startedAt = new Date().toISOString();
     const graceHours = Math.max(0, settings.gracePeriodHours || 0);
-    const lockAt =
-      graceHours > 0
-        ? new Date(new Date(startedAt).getTime() + graceHours * 60 * 60 * 1000).toISOString()
-        : startedAt;
+    const { startedAt, lockAt } = resolveForcedUpdateWindow(settings, graceHours);
 
     setRecord({
       policyKey,
@@ -625,4 +683,156 @@ export function getForcedUpdateState(
  */
 export function clearForcedUpdateRecord(): void {
   clearRecord();
+}
+
+// ── Live countdown ─────────────────────────────────────────────────────────
+
+export interface LiveCountdown {
+  /** Hours until the deadline; null when there is no countdown. */
+  hoursRemaining: number | null;
+  /** Whole days left, rounded up (7, 6, 5 ...); null when there is no countdown. */
+  daysLeft: number | null;
+  /** The deadline has passed. */
+  expired: boolean;
+  /** Within the last 24 hours (or already expired). */
+  finalDay: boolean;
+  /**
+   * The update modal must not be closable. True in the last 30 minutes and after
+   * the deadline, and always for a hard lock with no grace period.
+   */
+  modalLocked: boolean;
+}
+
+/**
+ * Evaluate the countdown against the clock right now. Components call this on
+ * a timer so the banner, the final-day modal lock and the expiry all flip on
+ * time without waiting for the next settings poll.
+ */
+export function getLiveCountdown(
+  state: Pick<ForcedUpdateState, "active" | "blocked" | "lockAt" | "gracePeriodHours" | "hoursRemaining">,
+  nowMs: number = getTrustedNowMs(),
+): LiveCountdown {
+  if (!state.active) {
+    return { hoursRemaining: null, daysLeft: null, expired: false, finalDay: false, modalLocked: false };
+  }
+  if (state.blocked || state.gracePeriodHours === null) {
+    return { hoursRemaining: state.blocked ? 0 : null, daysLeft: state.blocked ? 0 : null, expired: state.blocked, finalDay: true, modalLocked: true };
+  }
+  const hours = state.lockAt
+    ? Math.max(0, (new Date(state.lockAt).getTime() - nowMs) / 3_600_000)
+    : state.hoursRemaining ?? 0;
+  const expired = hours <= 0;
+  const finalDay = hours <= FINAL_DAY_HOURS;
+  return {
+    hoursRemaining: hours,
+    daysLeft: Math.ceil(hours / 24),
+    expired,
+    finalDay,
+    modalLocked: expired || hours <= LOCK_WINDOW_HOURS,
+  };
+}
+
+/** "6 days left", "23h 10m left", "42m left". Used by the top-right chip. */
+export function formatTimeLeft(hours: number): string {
+  if (hours <= 0) return "Update required";
+  if (hours > FINAL_DAY_HOURS) {
+    const days = Math.ceil(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} left`;
+  }
+  if (hours >= 1) {
+    const h = Math.floor(hours);
+    const m = Math.floor((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m left` : `${h}h left`;
+  }
+  return `${Math.max(1, Math.ceil(hours * 60))}m left`;
+}
+
+// ── Opening the right download ─────────────────────────────────────────────
+
+export const DEFAULT_DOWNLOAD_URL = "https://makechurcheazy.com/download";
+
+/**
+ * Open the installer page for this computer in the system browser. Falls back
+ * to the general download page when the admin has not set a link for this
+ * platform, so "Update now" always goes somewhere useful.
+ */
+export async function openUpdateDownload(url?: string | null): Promise<void> {
+  const target = (url || "").trim() || DEFAULT_DOWNLOAD_URL;
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(target);
+  } catch {
+    window.open(target, "_blank", "noopener,noreferrer");
+  }
+}
+
+// ── Shared state (so the top strip and the modal agree) ────────────────────
+
+let publishedState: ForcedUpdateState | null = null;
+const stateListeners = new Set<() => void>();
+
+/** The app shell publishes the latest evaluated state here. */
+export function publishForcedUpdateState(state: ForcedUpdateState): void {
+  publishedState = state;
+  stateListeners.forEach((listener) => listener());
+}
+
+export function subscribeForcedUpdateState(listener: () => void): () => void {
+  stateListeners.add(listener);
+  return () => {
+    stateListeners.delete(listener);
+  };
+}
+
+export function getPublishedForcedUpdateState(): ForcedUpdateState | null {
+  return publishedState;
+}
+
+// ── Installing the update from the releases repo ───────────────────────────
+
+/**
+ * Download the newest published release and install it, inside the app. Throws
+ * an Error with a message that is fine to show the user. It never sends the
+ * user to a website.
+ */
+export async function installLatestUpdate(
+  onProgress?: (progress: DownloadProgress) => void,
+  onStatusChange?: (status: UpdateInstallStatus) => void,
+): Promise<void> {
+  if (import.meta.env.DEV) {
+    throw new Error(
+      "Updates can't be installed from a development build. Use the installed app to test this.",
+    );
+  }
+  const { checkForUpdate, downloadAndInstallVerifiedUpdate } = await import("./updateService");
+  const result = await checkForUpdate();
+  if (!result.available || !result.update) {
+    throw new Error(
+      result.error
+        ? `Couldn't get the update: ${result.error}`
+        : "The new version isn't published yet. Please try again in a few minutes.",
+    );
+  }
+  await downloadAndInstallVerifiedUpdate(result.update, onProgress, onStatusChange);
+}
+
+// ── Open the update modal on request (clicking the countdown) ──────────────
+
+let modalRequests = 0;
+const modalListeners = new Set<() => void>();
+
+export function requestForcedUpdateModal(): void {
+  modalRequests += 1;
+  modalListeners.forEach((listener) => listener());
+}
+
+export function subscribeForcedUpdateModalRequests(listener: () => void): () => void {
+  modalListeners.add(listener);
+  return () => {
+    modalListeners.delete(listener);
+  };
+}
+
+export function getForcedUpdateModalRequestCount(): number {
+  return modalRequests;
 }

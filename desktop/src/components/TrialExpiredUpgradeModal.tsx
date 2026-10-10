@@ -2,19 +2,12 @@ import { useMemo, useState, useEffect } from "react";
 import Icon from "./Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan, isTrialExpired } from "../services/licenseService";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import "./TrialExpiredUpgradeModal.css";
-
-const TRIAL_EXPIRED_CHECKOUT_URL =
-  "https://makechurcheazy.com/subscription/plans?checkout=growth&billingCycle=monthly&reason=trial_expired";
 const DISMISS_SESSION_KEY = "trial_expired_dismissed";
 
 async function openCheckout() {
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(TRIAL_EXPIRED_CHECKOUT_URL);
-  } catch {
-    window.open(TRIAL_EXPIRED_CHECKOUT_URL, "_blank", "noopener,noreferrer");
-  }
+  await openDashboardSubscriptionPlans({ checkout: "growth", billingCycle: "monthly", reason: "trial_expired" });
 }
 
 export default function TrialExpiredUpgradeModal() {

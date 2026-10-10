@@ -6,6 +6,7 @@ import { getTrialForUser } from "@/lib/trialRecords";
 import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import { getEffectivePlan } from "@/lib/trial";
 import { logAuditEvent } from "@/lib/auditLog";
+import { loadUserEngagement, scoreUserEngagement } from "@/lib/userEngagement";
 
 export async function GET(
   req: NextRequest,
@@ -55,7 +56,13 @@ export async function GET(
       eventsCol
         .aggregate([
           { $match: activityMatch },
-          { $group: { _id: "$event", count: { $sum: 1 } } },
+          {
+            $group: {
+              _id: "$event",
+              count: { $sum: 1 },
+              seconds: { $sum: { $convert: { input: "$properties.durationSeconds", to: "double", onError: 0, onNull: 0 } } },
+            },
+          },
         ])
         .toArray(),
       db.collection("user_usage").findOne({ $or: [{ userId: id }, { userId: objectId }] }).catch(() => null),
@@ -63,11 +70,60 @@ export async function GET(
     ]);
 
     const eventCounts: Record<string, number> = {};
+    const eventSeconds: Record<string, number> = {};
     for (const doc of usageAgg) {
       eventCounts[doc._id] = doc.count;
+      eventSeconds[doc._id] = Number(doc.seconds) || 0;
     }
 
-    const voiceSessions = (eventCounts["voice_session_started"] || 0) + (eventCounts["voice_session_completed"] || 0);
+    // Real speech-to-scripture time from completed sessions (durationSeconds).
+    const voiceSeconds = eventSeconds["voice_session_completed"] || 0;
+
+    // Usage by window, emails, errors, multi-stream and graphics — all for this one user.
+    const userIdString = objectId.toString();
+    const since30 = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const userIdMatch = { $or: [{ userId: userIdString }, { userId: objectId }] };
+    const userEmail = String(user.email || "").toLowerCase().trim();
+    const emailMatch = { $or: [{ userId: userIdString }, ...(userEmail ? [{ to: userEmail }, { recipientEmail: userEmail }] : [])] };
+    const [
+      engagementMap,
+      emailsTotal, emails30, emailsFailed, lastEmail,
+      errorsTotal, errors30, lastError,
+      streamAgg, streamRecent, streamErrorsTotal, streamErrorsRecent,
+      graphicsTop,
+    ] = await Promise.all([
+      loadUserEngagement(db, [userIdString]).catch(() => null),
+      db.collection("email_logs").countDocuments(emailMatch).catch(() => 0),
+      db.collection("email_logs").countDocuments({ ...emailMatch, createdAt: { $gte: since30 } }).catch(() => 0),
+      db.collection("email_logs").countDocuments({ ...emailMatch, status: "failed" }).catch(() => 0),
+      db.collection("email_logs").findOne(emailMatch, { sort: { createdAt: -1 }, projection: { subject: 1, createdAt: 1, status: 1 } }).catch(() => null),
+      db.collection("error_logs").countDocuments(userIdMatch).catch(() => 0),
+      db.collection("error_logs").countDocuments({ ...userIdMatch, createdAt: { $gte: since30 } }).catch(() => 0),
+      db.collection("error_logs").findOne(userIdMatch, { sort: { createdAt: -1 }, projection: { message: 1, pathname: 1, createdAt: 1 } }).catch(() => null),
+      db.collection("multistream_sessions").aggregate([
+        { $match: { userId: userIdString } },
+        {
+          $group: {
+            _id: null,
+            sessions: { $sum: 1 },
+            seconds: { $sum: { $ifNull: ["$usedSeconds", 0] } },
+            errors: { $sum: { $ifNull: ["$errorCount", 0] } },
+            firstAt: { $min: "$startedAt" },
+            lastAt: { $max: "$startedAt" },
+            platforms: { $addToSet: "$channels.platform" },
+          },
+        },
+      ]).toArray().catch(() => []),
+      db.collection("multistream_sessions").find({ userId: userIdString }, { projection: { profileName: 1, channels: 1, status: 1, startedAt: 1, endedAt: 1, usedSeconds: 1, errorCount: 1, lastErrorCode: 1 } })
+        .sort({ startedAt: -1 }).limit(10).toArray().catch(() => []),
+      db.collection("multistream_errors").countDocuments({ userId: userIdString }).catch(() => 0),
+      db.collection("multistream_errors").find({ userId: userIdString }, { projection: { stage: 1, code: 1, message: 1, createdAt: 1, channels: 1 } })
+        .sort({ createdAt: -1 }).limit(10).toArray().catch(() => []),
+      db.collection("broadcast_graphic_usage").find({ userId: userIdString }, { projection: { graphicId: 1, name: 1, addedCount: 1, shownCount: 1, lastShownAt: 1 } })
+        .sort({ shownCount: -1, addedCount: -1 }).limit(8).toArray().catch(() => []),
+    ]);
+    const engagement = engagementMap?.get(userIdString) || null;
+    const streamSummary = (streamAgg as any[])[0] || null;
 
     const [activity, activityCount, devices, payments, paymentTotals, paymentCount] = await Promise.all([
       eventsCol
@@ -188,6 +244,12 @@ export async function GET(
       avatar: user.avatar || "",
       phone: user.phone || "",
       country: user.country || "",
+      signupCountry: user.signupCountry || user.country || "",
+      signupCity: user.signupCity || user.city || "",
+      lastLoginCountry: user.lastLoginCountry || "",
+      lastLoginCity: user.lastLoginCity || "",
+      lastLoginTimezone: user.lastLoginTimezone || "",
+      locationHistory: user.locationHistory || [],
       language: user.language || "",
       city: user.city || "",
       state: user.state || "",
@@ -201,7 +263,10 @@ export async function GET(
       emailVerified: Boolean(user.emailVerified),
       twoFactorEnabled: Boolean(user.twoFactorEnabled || user.twoFactorSecret),
       referralCode: user.referralCode || "",
-      referredBy: user.referredBy || "",
+      // Older accounts store a string; newer ones an object { code, referrerUserId, ... }.
+      referredBy: typeof user.referredBy === "string"
+        ? user.referredBy
+        : String(user.referredBy?.code || user.referredBy?.referrerUserId || ""),
       lastIp: user.lastIp || user.ipAddress || user.signupIp || user.lastLoginIp || "",
       role: user.role || "user",
       accountStatus: user.isActive === false ? "suspended" : "active",
@@ -238,11 +303,69 @@ export async function GET(
         bibleSearches: (eventCounts["bible_search"] || 0) + (eventCounts["bible_search_version"] || 0),
         songsCreated: Math.max(eventCounts["worship_song_created"] || 0, userUsageDoc?.songs || 0),
         mediaUploaded: Math.max(eventCounts["media_uploaded"] || 0, (userUsageDoc?.images || 0) + (userUsageDoc?.videos || 0)),
-        aiHoursUsed: +(voiceSessions * 0.025).toFixed(1),
-        transcriptCount: Math.max(
-          (eventCounts["transcript_created"] || 0) + (eventCounts["transcript_exported"] || 0),
-          dbTranscriptsCount || 0,
-        ),
+        // Was (started + completed sessions) × 0.025 h — an estimate that double-counted.
+        aiHoursUsed: +(voiceSeconds / 3600).toFixed(1),
+        transcriptCount: Math.max(eventCounts["transcript_created"] || 0, dbTranscriptsCount || 0),
+        bibleVersesPresented: eventCounts["bible_present"] || 0,
+        songsPresented: (eventCounts["worship_song_presented"] || 0) + (eventCounts["song_presented"] || 0),
+        mediaPresented: eventCounts["media_presented"] || 0,
+        graphicsShown: eventCounts["broadcast_graphic_shown"] || 0,
+        liveCaptionsSent: eventCounts["sts_push_to_live"] || 0,
+        voiceSessions: eventCounts["voice_session_completed"] || 0,
+        voiceMinutes: Math.round(voiceSeconds / 60),
+        transcriptsExported: eventCounts["transcript_exported"] || 0,
+        translations: eventCounts["translation_generated"] || 0,
+        obsConnections: eventCounts["obs_connected"] || 0,
+        appOpens: eventCounts["app_started"] || 0,
+      },
+      activityScore: engagement ? scoreUserEngagement(engagement) : null,
+      engagement: engagement
+        ? { day: engagement.day, week: engagement.week, month: engagement.month }
+        : null,
+      insights: {
+        emails: {
+          total: emailsTotal,
+          last30Days: emails30,
+          failed: emailsFailed,
+          last: lastEmail ? { subject: String(lastEmail.subject || ""), status: String(lastEmail.status || ""), createdAt: lastEmail.createdAt || null } : null,
+        },
+        errors: {
+          total: errorsTotal,
+          last30Days: errors30,
+          last: lastError ? { message: String(lastError.message || ""), pathname: String(lastError.pathname || ""), createdAt: lastError.createdAt || null } : null,
+        },
+        multistream: {
+          sessions: Number(streamSummary?.sessions) || 0,
+          seconds: Number(streamSummary?.seconds) || 0,
+          firstAt: streamSummary?.firstAt || null,
+          lastAt: streamSummary?.lastAt || null,
+          platforms: Array.from(new Set(((streamSummary?.platforms || []) as unknown[]).flat().map(String).filter(Boolean))),
+          errors: Math.max(Number(streamSummary?.errors) || 0, streamErrorsTotal),
+          recentSessions: (streamRecent as any[]).map((s) => ({
+            profileName: String(s.profileName || ""),
+            channels: Array.isArray(s.channels) ? s.channels : [],
+            status: String(s.status || ""),
+            startedAt: s.startedAt || null,
+            endedAt: s.endedAt || null,
+            seconds: Number(s.usedSeconds) || 0,
+            errorCount: Number(s.errorCount) || 0,
+            lastErrorCode: String(s.lastErrorCode || ""),
+          })),
+          recentErrors: (streamErrorsRecent as any[]).map((e) => ({
+            stage: String(e.stage || ""),
+            code: String(e.code || ""),
+            message: String(e.message || ""),
+            createdAt: e.createdAt || null,
+            channels: Array.isArray(e.channels) ? e.channels : [],
+          })),
+        },
+        graphics: (graphicsTop as any[]).map((g) => ({
+          graphicId: String(g.graphicId || ""),
+          name: String(g.name || g.graphicId || ""),
+          addedCount: Number(g.addedCount) || 0,
+          shownCount: Number(g.shownCount) || 0,
+          lastShownAt: g.lastShownAt || null,
+        })),
       },
       activity: activity.map((event) => ({
         event: String(event.event || "activity"),

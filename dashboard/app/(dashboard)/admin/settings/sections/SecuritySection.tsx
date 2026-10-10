@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Lock, Save, Shield } from "lucide-react";
-import { Card, CardHeader, Button, Input, Toggle, ConfirmDialog } from "@/components/ui";
+import { Card, CardHeader, Button, Input, Textarea, Toggle, ConfirmDialog } from "@/components/ui";
 import { useTranslations } from "next-intl";
 import type { PlatformSettings } from "../types";
 
@@ -144,6 +144,18 @@ export function SecuritySection({ data, onChange, onSave, saving }: Props) {
               onChange={() => handleToggle("maintenanceMode")}
               destructive
             />
+            <div className="mt-3">
+              <Textarea
+                label="Maintenance message"
+                value={data.maintenanceMessage ?? ""}
+                onChange={(e) => update({ maintenanceMessage: e.target.value.slice(0, 500) })}
+                placeholder="We're doing scheduled maintenance. We'll be back by 4:00 PM."
+                rows={2}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Shown on the desktop login and lock screens while maintenance mode is on. Click Save after editing.
+              </p>
+            </div>
           </div>
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">

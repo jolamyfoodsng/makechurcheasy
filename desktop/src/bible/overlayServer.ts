@@ -88,13 +88,14 @@ class OverlayBroadcaster {
     // Broadcast over local WebSocket relay bridge (ws://127.0.0.1:17891)
     // so OBS browser sources receive updates in real time even across separate processes
     try {
+      const revision = Number(this.currentPacket.timestamp) || Date.now();
       overlayBridge.publish({
         channel: "bible",
         type: "overlay-update",
-        revision: Date.now(),
+        revision,
         targetSource: "Bible - MCE Presentation",
         ...(this.currentPacket.mode ? { mode: this.currentPacket.mode } : {}),
-        data: { ...this.currentPacket, revision: Date.now() },
+        data: { ...this.currentPacket, revision },
       });
     } catch {
       // Relay bridge might be offline

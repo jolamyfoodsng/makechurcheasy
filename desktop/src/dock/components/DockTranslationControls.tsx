@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isDockFeatureEnabled } from "../dockAdminControls";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "../DockIcon";
@@ -216,6 +217,9 @@ export default function DockTranslationControls({
     setLoading(true);
     setError("");
     try {
+      if (!(await isDockFeatureEnabled("liveTranslation"))) {
+        throw new Error("Live translation is paused for maintenance. Please try again later.");
+      }
       const translatedEntries = await Promise.all(
         nonEmptySections.map(async (section) => [section.id, await translateWithGoogleWeb(section.text, language.code)] as const),
       );

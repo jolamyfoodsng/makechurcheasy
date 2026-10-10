@@ -3,7 +3,9 @@
  *
  * Behavior:
  * - Shows the release notes before the user chooses an action
- * - Offers "Update Now" or "Remind me later"
+ * - Offers "Update Now", "Update in Background" or "Remind me later"
+ * - "Update in Background" downloads quietly and waits for a restart (or
+ *   installs when the app is quit) instead of restarting mid-service
  * - Remembers the reminder choice and re-shows after the reminder window
  * - Shows download progress inline when updating
  */
@@ -16,7 +18,7 @@ import {
   updateDownloadManager,
   useUpdateDownload,
 } from "../services/updateDownloadManager";
-import { getReleaseHighlights } from "../services/releaseNotesService";
+import { getReleaseHighlights, stripReleaseBoilerplate } from "../services/releaseNotesService";
 import type { Update } from "@tauri-apps/plugin-updater";
 import Icon from "./Icon";
 
@@ -28,7 +30,7 @@ interface UpdateNotificationProps {
   message?: string;
 }
 
-type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "error";
+type UpdateStatus = "prompt" | "downloading" | "ready" | "installing" | "relaunching" | "error";
 
 const STORAGE_KEY = "ocs-update-notification-v1";
 
@@ -115,6 +117,7 @@ export default function UpdateNotification({
   const rawStatus = downloadState.status;
   const status: UpdateStatus =
     rawStatus === "downloading" ||
+    rawStatus === "ready" ||
     rawStatus === "installing" ||
     rawStatus === "relaunching" ||
     rawStatus === "error"
@@ -134,6 +137,8 @@ export default function UpdateNotification({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const cleanedNotes = useMemo(() => stripReleaseBoilerplate(result.notes), [result.notes]);
+
   const highlights = useMemo(() => {
     return getReleaseHighlights(result.version, result.notes);
   }, [result.version, result.notes]);
@@ -148,12 +153,28 @@ export default function UpdateNotification({
     await updateDownloadManager.startDownload((result.update as Update) ?? null, result.version);
   }, [manualDownloadUrl, result.update, result.version]);
 
+  const handleUpdateInBackground = useCallback(async () => {
+    if (!result.update && manualDownloadUrl) {
+      window.open(manualDownloadUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    await updateDownloadManager.startDownload((result.update as Update) ?? null, result.version, { background: true });
+  }, [manualDownloadUrl, result.update, result.version]);
+
+  const handleContinueInBackground = useCallback(() => {
+    updateDownloadManager.continueInBackground();
+  }, []);
+
+  const handleRestartNow = useCallback(() => {
+    void updateDownloadManager.installNow();
+  }, []);
+
   const handleRetry = useCallback(() => {
     updateDownloadManager.retry();
   }, []);
 
   const handleRemindLater = useCallback(() => {
-    if (updateDownloadManager.isBusy()) {
+    if (updateDownloadManager.isBusy() || updateDownloadManager.isReady()) {
       updateDownloadManager.dismissModal();
       return;
     }
@@ -169,6 +190,7 @@ export default function UpdateNotification({
   const statusConfig: Record<UpdateStatus, string> = {
     prompt: "system_update",
     downloading: "downloading",
+    ready: "check_circle",
     installing: "refresh",
     relaunching: "restart_alt",
     error: "error_outline",
@@ -260,10 +282,10 @@ export default function UpdateNotification({
                         </div>
                       ))}
                     </div>
-                  ) : result.notes ? (
-                    renderReleaseNotes(result.notes)
+                  ) : cleanedNotes ? (
+                    renderReleaseNotes(cleanedNotes)
                   ) : (
-                    <p className="update-notification__release-notes--empty">No release notes are available for this update.</p>
+                    <p className="update-notification__release-notes--empty">This update includes fixes and improvements.</p>
                   )}
                 </div>
 
@@ -296,6 +318,17 @@ export default function UpdateNotification({
             </div>
           )}
 
+          {status === "ready" && (
+            <div className="update-notification__progress">
+              <h2 id="update-notification-title" className="update-notification__release-title">
+                MakeChurchEasy {downloadState.version || result.version} is ready
+              </h2>
+              <p className="update-notification__progress-text">
+                Restart now to finish updating, or keep working — it installs automatically when you close MakeChurchEasy.
+              </p>
+            </div>
+          )}
+
           {status === "installing" && (
             <div className="update-notification__progress">
               <div className="update-notification__progress-track">
@@ -322,8 +355,16 @@ export default function UpdateNotification({
               type="button"
               className="update-notification__btn update-notification__btn--update"
               onClick={handleUpdate}
-             title="Update now">
+              title="Download, install and restart now">
               Update Now
+            </button>
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--later"
+              onClick={() => void handleUpdateInBackground()}
+              title="Download quietly; restart when you are ready"
+            >
+              Update in Background
             </button>
             <button
               type="button"
@@ -336,15 +377,36 @@ export default function UpdateNotification({
           </div>
         )}
 
-        {(status === "downloading" || status === "installing") && (
+        {status === "downloading" && (
           <div className="update-notification__actions">
             <button
               type="button"
               className="update-notification__btn update-notification__btn--later"
-              onClick={handleRemindLater}
-              title="Continue in background"
+              onClick={handleContinueInBackground}
+              title="Keep downloading in the background; restart when you are ready"
             >
               Continue in Background
+            </button>
+          </div>
+        )}
+
+        {status === "ready" && (
+          <div className="update-notification__actions">
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--update"
+              onClick={handleRestartNow}
+              title="Install the update and restart MakeChurchEasy"
+            >
+              Restart Now
+            </button>
+            <button
+              type="button"
+              className="update-notification__btn update-notification__btn--later"
+              onClick={() => updateDownloadManager.dismissModal()}
+              title="Install when I close MakeChurchEasy"
+            >
+              Later
             </button>
           </div>
         )}

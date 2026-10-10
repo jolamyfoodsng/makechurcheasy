@@ -56,6 +56,7 @@ export type LockReason =
   | "forced_upgrade"
   | "organization_disabled"
   | "device_removed"
+  | "device_disconnected_by_other"
   | "chargeback"
   | "too_many_devices"
   | "subscription_expired"
@@ -90,12 +91,21 @@ export interface LicensePayload {
   lockReason: LockReason;
   // Future extensibility
   maintenanceMode?: boolean;
+  /** Admin-written maintenance / emergency message. */
+  maintenanceMessage?: string;
   forceUpgradeRequired?: boolean;
   forceUpgradeVersion?: string;
   organizationDisabled?: boolean;
   deviceRemoved?: boolean;
   chargeback?: boolean;
   tooManyDevices?: boolean;
+  maxDevices?: number;
+  deviceCount?: number;
+  otherDevices?: Array<{
+    deviceId: string;
+    deviceName: string;
+    lastSeen?: string;
+  }>;
 }
 
 export interface LicenseCache {
@@ -226,7 +236,7 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
   for (const apiBase of candidates) {
     try {
       const res = await fetch(
-        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}&bootstrap=1`,
+        `${apiBase}/api/device/license?deviceId=${encodeURIComponent(deviceId)}&bootstrap=1&announcements=3`,
         {
           headers: {
             "X-App-Version": APP_VERSION,
@@ -259,6 +269,9 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
         }
 
         if (res.status === 401 || res.status === 404) {
+          if (error === "device_disconnected_by_another_computer") {
+            return { ok: false, lockReason: "device_disconnected_by_other", transient: false };
+          }
           return { ok: false, lockReason: "device_removed", transient: false };
         }
         if (res.status === 403 && /version/i.test(error)) {
@@ -725,6 +738,58 @@ export async function reverifyOnAuth(): Promise<boolean> {
   return verify();
 }
 
+/**
+ * Disconnect other active devices on the account and re-verify this device.
+ * Used when a Free plan user (or user who exceeded device limit) wants to
+ * switch active device to the current computer with one click.
+ */
+export async function disconnectOtherDevicesAndUnlock(
+  targetDeviceId?: string,
+): Promise<{ success: boolean; error?: string }> {
+  const deviceId = getDeviceId();
+  const deviceSecret = getDeviceSecret();
+  if (!deviceId) {
+    return { success: false, error: "No device ID found" };
+  }
+
+  const candidates = getDeviceApiBaseCandidates();
+  let succeeded = false;
+
+  for (const apiBase of candidates) {
+    try {
+      const res = await fetch(`${apiBase}/api/device/disconnect-others`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-App-Version": APP_VERSION,
+          "X-Device-Id": deviceId,
+          "X-MCE-Device-Id": deviceId,
+          "X-Device-Secret": deviceSecret || "",
+        },
+        body: JSON.stringify(targetDeviceId ? { targetDeviceId } : {}),
+      });
+
+      if (res.ok) {
+        succeeded = true;
+        break;
+      }
+    } catch (err) {
+      console.warn("[licenseGuard] Failed to call disconnect-others on", apiBase, err);
+    }
+  }
+
+  if (!succeeded) {
+    return {
+      success: false,
+      error: "Failed to disconnect other device. Please check your internet connection.",
+    };
+  }
+
+  clearDesktopBootstrapCache();
+  const unlocked = await verify();
+  return { success: unlocked };
+}
+
 // ── Initialization ───────────────────────────────────────────────────────────
 
 /**
@@ -845,8 +910,10 @@ export interface LockScreenConfig {
   icon: string;
   title: string;
   description: string;
-  primaryAction: "retry" | "subscribe" | "manage_devices" | "contact_support";
+  primaryAction: "retry" | "subscribe" | "manage_devices" | "contact_support" | "disconnect_others" | "reconnect";
   primaryLabel: string;
+  otherDeviceName?: string;
+  isDeviceLimit?: boolean;
 }
 
 export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload | null): LockScreenConfig {
@@ -883,10 +950,11 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
 
     case "maintenance":
       return {
-        icon: "build",
-        title: "Scheduled Maintenance",
+        icon: "schedule",
+        title: "Temporarily Unavailable",
         description:
-          "MakeChurchEasy is currently undergoing scheduled maintenance. Please try again shortly.",
+          getLicensePayload()?.maintenanceMessage?.trim() ||
+          "MakeChurchEasy is down for maintenance. It will reopen automatically as soon as it is back.",
         primaryAction: "retry",
         primaryLabel: "Retry",
       };
@@ -921,6 +989,16 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         primaryLabel: "Retry Verification",
       };
 
+    case "device_disconnected_by_other":
+      return {
+        icon: "devices_other",
+        title: "Logged Out on Another Computer",
+        description:
+          "This computer was disconnected because your MakeChurchEasy account was opened on another computer. The Free plan allows 1 computer at a time. Sign in again to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.",
+        primaryAction: "reconnect",
+        primaryLabel: "Sign In & Use Here",
+      };
+
     case "chargeback":
       return {
         icon: "report",
@@ -931,15 +1009,38 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         primaryLabel: "Contact Support",
       };
 
-    case "too_many_devices":
+    case "too_many_devices": {
+      const isFree =
+        !_payload?.plan ||
+        _payload.plan.toLowerCase() === "free" ||
+        _payload.maxDevices === 1;
+      const otherDeviceName = _payload?.otherDevices?.[0]?.deviceName;
+
+      if (isFree) {
+        return {
+          icon: "devices",
+          title: otherDeviceName ? `Active on ${otherDeviceName}` : "Active on Another Computer",
+          description: otherDeviceName
+            ? `Your Free plan allows 1 computer at a time, and your account is currently active on "${otherDeviceName}". Log out the other computer to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.`
+            : "Your Free plan allows 1 computer at a time. Another computer is currently active on your account. Log out the other computer to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.",
+          primaryAction: "disconnect_others",
+          primaryLabel: "Log Out & Continue",
+          otherDeviceName,
+          isDeviceLimit: true,
+        };
+      }
+
       return {
         icon: "devices",
         title: "Device Limit Reached",
         description:
-          "Your plan has no device slots available, so MakeChurchEasy cannot verify this device. Open Manage Devices to remove a device you no longer use, then return here and select Retry Verification. If you need to keep all your current devices, upgrade your plan for more device slots.",
-        primaryAction: "manage_devices",
-        primaryLabel: "Manage Devices",
+          `Your ${_payload?.plan || "current"} plan allows ${_payload?.maxDevices || 1} active computer(s), and all slots are currently in use. Log out other devices to use MakeChurchEasy here, or upgrade your plan for more device slots.`,
+        primaryAction: "disconnect_others",
+        primaryLabel: "Log Out & Continue",
+        otherDeviceName,
+        isDeviceLimit: true,
       };
+    }
 
     default:
       return {

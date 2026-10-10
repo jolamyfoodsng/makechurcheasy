@@ -269,6 +269,8 @@ describe("dockObsClient background reflection stress", () => {
         case "GetSceneList":
           return {
             scenes: Array.from(sceneItems.keys()).map((sceneName) => ({ sceneName })),
+            currentProgramSceneName,
+            currentPreviewSceneName,
           };
         case "CreateScene":
           if (!sceneItems.has(String(payload.sceneName))) {

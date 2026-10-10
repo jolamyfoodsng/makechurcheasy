@@ -269,7 +269,10 @@ export function saveDockNotes(items: DockNote[], notify = true): void {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(getUserScopedKey(DOCK_NOTES_KEY), JSON.stringify(items));
-    if (notify) notifyDockNotesUpdated(items);
+    if (notify) {
+      notifyDockNotesUpdated(items);
+      import("../services/cloudSyncService").then((m) => m.triggerDebouncedAutoSync()).catch(() => { });
+    }
   } catch {
     // Ignore storage failures inside OBS/browser dock contexts.
   }

@@ -560,13 +560,14 @@
 }
 
 .dock-schedule-btn--primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--dock-accent, #4f46e5);
+  border-color: var(--dock-accent, #4f46e5);
   color: #fff;
 }
 
 .dock-schedule-btn--primary:hover {
-  background: #2563eb;
+  background: var(--dock-accent-hover, #4338ca);
+  border-color: var(--dock-accent-hover, #4338ca);
 }
 
 /* ── Panel Card List ── */
@@ -1863,7 +1864,7 @@
 
 :root.light .dock-schedule-context-menu__item:hover {
   background: var(--dock-surface-hover, #f1f5f9);
-  color: var(--dock-accent, #2563eb);
+  color: var(--dock-accent, #4f46e5);
 }
 
 :root.light .dock-schedule-modal {

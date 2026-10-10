@@ -36,6 +36,7 @@ export interface PlanEntitlements {
   tickerThemes: number;
   themePresets: number;
   cloudStorageGB: number;
+  multistreamHours: number;
 
   // Boolean feature gates
   multiview: boolean;
@@ -57,6 +58,7 @@ export interface PlanEntitlements {
   campusManagement: boolean;
   slideshow: boolean;
   countdowns: boolean;
+  multistream: boolean;
 }
 
 /** Per-currency pricing. NGN amounts in whole naira. USD amounts in dollars. */
@@ -151,6 +153,7 @@ export type FeatureKey =
   | "songs" | "images" | "videos" | "themes" | "lowerThirds"
   | "devices" | "bibleVersions"
   | "multiviewTemplates" | "tickerThemes" | "themePresets" | "cloudStorageGB"
+  | "multistreamHours"
   // Boolean gates
   | "multiview" | "tickers" | "massImport" | "easyWorshipImport"
   | "proPresenterImport" | "translation" | "speechToScripture"
@@ -158,7 +161,8 @@ export type FeatureKey =
   | "customReports" | "mobileControl" | "presentationMode" | "apiAccess"
   | "teamManagement" | "campusManagement"
   | "slideshow"
-  | "countdowns";
+  | "countdowns"
+  | "multistream";
 
 // ── Display Labels ───────────────────────────────────────────────────────────
 
@@ -174,6 +178,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   tickerThemes: "Ticker Themes",
   themePresets: "Theme Presets",
   cloudStorageGB: "Cloud Storage",
+  multistreamHours: "Cloud Multistream Hours",
   multiview: "Multiview",
   tickers: "Tickers",
   massImport: "Mass Import",
@@ -193,6 +198,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   campusManagement: "Multi-Campus",
   slideshow: "Slideshow",
   countdowns: "Countdowns",
+  multistream: "Cloud Multistream",
 };
 
 // ── Derived Constants ────────────────────────────────────────────────────────

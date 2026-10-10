@@ -423,13 +423,13 @@
   width: max-content;
   max-width: min(340px, calc(100vw - 16px));
   padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  background: #181d28;
-  background: var(--dock-surface-elevated, var(--dock-surface, #181d28));
+  background: #111827;
+  background-color: #111827;
   box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -437,10 +437,21 @@
   animation: dock-btm-overflow-open 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+:root:not(.light) .dock-btm-overflow__menu {
+  background: #111827 !important;
+  background-color: #111827 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 :root.light .dock-btm-overflow__menu {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.12);
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
   box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 @keyframes dock-btm-overflow-open {

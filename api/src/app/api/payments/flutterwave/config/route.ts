@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       enabled:
         platformSettings.system.allowPayments &&
+        platformSettings.controls?.paymentProviders?.flutterwave !== false &&
         isFlutterwaveConfigured() &&
         isFlutterwaveCurrencySupported(flutterwavePricing.currency),
       paymentMethod: "flutterwave",

@@ -18,7 +18,7 @@ const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-releases";
 const args = process.argv.slice(2);
 if (args.length < 1) {
   console.error(
-    "Usage: node scripts/normalize-update-json.cjs <latest.json> [--out latest.json] [--source-repo owner/repo] [--target-repo owner/repo] [--tag vX.Y.Z]",
+    "Usage: node scripts/normalize-update-json.cjs <latest.json> [--out latest.json] [--source-repo owner/repo] [--target-repo owner/repo] [--tag vX.Y.Z] [--notes-file notes.md]",
   );
   process.exit(1);
 }
@@ -136,9 +136,21 @@ if (windowsNsis) {
   );
 }
 
+// Real release notes (from RELEASE_NOTES.md) replace the generic GitHub
+// release template, which is what the in-app "What's New" list shows.
+const notesFile = argValue("--notes-file");
+let notes = original.notes;
+if (notesFile) {
+  const resolved = path.resolve(notesFile);
+  const text = fs.existsSync(resolved) ? fs.readFileSync(resolved, "utf8").trim() : "";
+  if (text) notes = text;
+  else console.warn(`Notes file ${notesFile} is empty or missing; keeping existing notes.`);
+}
+
 const normalized = {
   ...original,
   version,
+  notes,
   platforms: normalizedPlatforms,
 };
 

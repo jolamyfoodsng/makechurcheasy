@@ -351,6 +351,8 @@ export interface LowerThirdTheme {
   description: string;
   /** Theme category for classification */
   category: LTCategory;
+  /** Broadcast Graphics library category (e.g. "service", "giving", "branding"), when the theme sets one */
+  graphicCategory?: string;
   /** Material icon name for the theme */
   icon: string;
   /** HTML template with {{variable}} placeholders */

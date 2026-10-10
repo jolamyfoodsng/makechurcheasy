@@ -978,7 +978,7 @@
   height: 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.35) 0%, var(--surface-hover) 100%);
+  background: var(--surface-raised);
 }
 
 .ticker-speed-slider::-webkit-slider-thumb {
@@ -998,7 +998,7 @@
   height: 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.35) 0%, var(--surface-hover) 100%);
+  background: var(--surface-raised);
 }
 
 .ticker-speed-slider::-moz-range-thumb {
@@ -1211,12 +1211,13 @@
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  color: #0F1114;
+  background: var(--primary, #4f46e5);
+  color: #ffffff;
   box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.2);
 }
 
 .ticker-start-btn:hover {
+  background: var(--primary-hover, #4338ca);
   box-shadow: 0 0 30px rgba(var(--primary-rgb), 0.4);
   transform: translateY(-1px);
 }

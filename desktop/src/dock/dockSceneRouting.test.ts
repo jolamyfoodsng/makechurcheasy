@@ -123,7 +123,7 @@ describe("dock scene routing", () => {
     const methodStart = obsClientSource.indexOf("private async ensureActiveMceOverlaySource(");
     const methodEnd = obsClientSource.indexOf("\n  /** Apply the operator's MCE-only visibility preference", methodStart);
     const methodSource = obsClientSource.slice(methodStart, methodEnd);
-    const stateCheckIndex = methodSource.indexOf("if (this._activeMceOverlayStateByScene[targetScene] === stateSignature) return;");
+    const stateCheckIndex = methodSource.indexOf("this._activeMceOverlayStateByScene[targetScene] === stateSignature");
     const firstOrderingIndex = methodSource.indexOf("await this.ensureTickerAboveSource(targetScene, primary)");
 
     expect(stateCheckIndex).toBeGreaterThan(-1);

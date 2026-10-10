@@ -176,9 +176,9 @@ function makeBiblePreview(value: string): string {
 }
 
 function getTemplatePreviewStyle(accentColor?: string): CSSProperties {
-  const accent = accentColor?.trim() || "#6A34DE";
+  const accent = accentColor?.trim() || "#4f46e5";
   return {
-    background: `linear-gradient(135deg, rgba(15, 18, 28, 0.96), color-mix(in srgb, rgba(15, 18, 28, 0.96) 58%, ${accent} 42%))`,
+    background: "#171b28",
     borderColor: `color-mix(in srgb, ${accent} 42%, transparent)`,
     boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 22%, transparent), 0 10px 26px rgba(0, 0, 0, 0.24)`,
     color: "#fff",

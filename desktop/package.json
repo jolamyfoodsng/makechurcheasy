@@ -1,12 +1,13 @@
 {
   "name": "makechurcheasy",
   "private": true,
-  "version": "3.33.4",
+  "version": "4.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "test": "vitest run",
-    "build": "tsc && vite build",
+    "build": "npm run build:theme-renderer && tsc && vite build",
+    "build:theme-renderer": "node scripts/build-theme-renderer.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "mobile:web": "node scripts/prepare-mobile-web.cjs",

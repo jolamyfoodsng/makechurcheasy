@@ -114,7 +114,7 @@
 
 .live-tool-card--emergency {
   border-color: var(--error-border);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--error-bg) 72%, transparent), var(--surface) 46%);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .live-tool-card--countdown {

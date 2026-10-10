@@ -502,6 +502,9 @@ class LTDurationStore {
   // ═══════════════════════════════════════════════════════════════════════
 
   private _loadGlobalDefaults(): LTGlobalDefaults {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return { ...LT_DEFAULT_GLOBAL_DEFAULTS, durations: { ...LT_DEFAULT_GLOBAL_DEFAULTS.durations } };
+    }
     try {
       const raw = localStorage.getItem(getUserScopedKey(LS_GLOBAL_DEFAULTS));
       if (raw) {
@@ -522,6 +525,7 @@ class LTDurationStore {
   }
 
   private _saveGlobalDefaults() {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") return;
     try {
       localStorage.setItem(getUserScopedKey(LS_GLOBAL_DEFAULTS), JSON.stringify(this._globalDefaults));
     } catch (err) {
@@ -530,6 +534,9 @@ class LTDurationStore {
   }
 
   private _loadDurationConfigs(): Record<string, LTDurationConfig> {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return {};
+    }
     try {
       const raw = localStorage.getItem(getUserScopedKey(LS_DURATION_CONFIGS));
       if (raw) return JSON.parse(raw);
@@ -540,6 +547,7 @@ class LTDurationStore {
   }
 
   private _saveDurationConfigs() {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") return;
     try {
       localStorage.setItem(getUserScopedKey(LS_DURATION_CONFIGS), JSON.stringify(this._durationConfigs));
     } catch (err) {

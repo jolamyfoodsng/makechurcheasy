@@ -6,18 +6,19 @@
  * upgrade, downgrade, or the current plan.
  */
 
-export type PlanTier = "free" | "basic" | "growth";
+export type PlanTier = "free" | "basic" | "growth" | "pro";
 
 export type PlanTransition = "current" | "upgrade" | "downgrade";
 
 /** Ordered plan hierarchy (lowest → highest). Index = level. */
-export const PLAN_ORDER: PlanTier[] = ["free", "basic", "growth"];
+export const PLAN_ORDER: PlanTier[] = ["free", "basic", "growth", "pro"];
 
 /** Numeric level for each plan. */
 export const PLAN_LEVEL: Record<PlanTier, number> = {
   free: 0,
   basic: 1,
   growth: 2,
+  pro: 3,
 };
 
 /**
@@ -79,6 +80,7 @@ export function getSortedPlans(
     free: "Free",
     basic: "Basic",
     growth: "Growth",
+    pro: "Pro",
   };
 
   return PLAN_ORDER.filter((p) => p !== "free").map((p) => ({

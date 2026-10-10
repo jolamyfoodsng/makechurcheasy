@@ -16,7 +16,7 @@
   padding: 18px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 8px;
-  background: var(--surface, var(--dock-surface, #111827));
+  background: var(--surface, var(--dock-surface, #131724));
   color: var(--text-primary, var(--dock-text, #f8fafc));
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
 }
@@ -110,15 +110,16 @@
   border: 0;
   border-radius: 6px;
   padding: 0 14px;
-  background: var(--accent-color, var(--dock-accent, #2563eb));
+  background: var(--accent-color, var(--dock-accent, #4f46e5));
   color: #fff;
   font-weight: 700;
   font-size: 0.8rem;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .interface-language-prompt button:hover {
-  filter: brightness(1.06);
+  background: #4338ca;
 }
 
 .interface-language-prompt button:focus-visible {

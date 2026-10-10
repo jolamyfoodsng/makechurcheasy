@@ -175,6 +175,35 @@ function getSubscriptionExpiringInfo(user: UserDetail): {
   };
 }
 
+type EngagementCounts = {
+  bibleVerses: number; bibleSearches: number; songsPresented: number; songsCreated: number;
+  mediaPresented: number; mediaUploaded: number; graphicsShown: number; graphicsAdded: number;
+  liveCaptions: number; voiceSessions: number; transcripts: number; translations: number;
+  obsConnections: number; appOpens: number; voiceSeconds: number;
+  multistreamSessions: number; multistreamSeconds: number; activeDays: number; openDays: number;
+  lastUseAt: string | null;
+};
+
+type UserInsights = {
+  emails: { total: number; last30Days: number; failed: number; last: { subject: string; status: string; createdAt: string | null } | null };
+  errors: { total: number; last30Days: number; last: { message: string; pathname: string; createdAt: string | null } | null };
+  multistream: {
+    sessions: number; seconds: number; firstAt: string | null; lastAt: string | null; platforms: string[]; errors: number;
+    recentSessions: Array<{ profileName: string; channels: Array<{ name?: string; platform?: string }>; status: string; startedAt: string | null; endedAt: string | null; seconds: number; errorCount: number; lastErrorCode: string }>;
+    recentErrors: Array<{ stage: string; code: string; message: string; createdAt: string | null; channels: Array<{ name?: string; platform?: string }> }>;
+  };
+  graphics: Array<{ graphicId: string; name: string; addedCount: number; shownCount: number; lastShownAt: string | null }>;
+};
+
+function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds || 0));
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h} h ${m % 60} min`;
+}
+
 interface UserDetail {
   id: string;
   name: string;
@@ -182,6 +211,18 @@ interface UserDetail {
   avatar?: string;
   phone?: string;
   country?: string;
+  signupCountry?: string;
+  signupCity?: string;
+  lastLoginCountry?: string;
+  lastLoginCity?: string;
+  lastLoginTimezone?: string;
+  locationHistory?: Array<{
+    country: string;
+    city?: string;
+    timezone?: string;
+    ip?: string;
+    timestamp: string;
+  }>;
   language?: string;
   city?: string;
   state?: string;
@@ -283,7 +324,27 @@ interface UserDetail {
     mediaUploaded: number;
     aiHoursUsed: number;
     transcriptCount: number;
+    bibleVersesPresented?: number;
+    songsPresented?: number;
+    mediaPresented?: number;
+    graphicsShown?: number;
+    liveCaptionsSent?: number;
+    voiceSessions?: number;
+    voiceMinutes?: number;
+    transcriptsExported?: number;
+    translations?: number;
+    obsConnections?: number;
+    appOpens?: number;
   };
+  /** Server-computed engagement score (last 24h / 7d / 30d of real use). */
+  activityScore?: (ReturnType<typeof calculateUserActivityScore> & {
+    daily: ReturnType<typeof calculateUserActivityMultiPeriod>["daily"];
+    weekly: ReturnType<typeof calculateUserActivityMultiPeriod>["weekly"];
+    monthly: ReturnType<typeof calculateUserActivityMultiPeriod>["monthly"];
+    method?: string;
+  }) | null;
+  engagement?: Record<"day" | "week" | "month", EngagementCounts> | null;
+  insights?: UserInsights;
   activity?: Array<{
     event: string;
     properties: Record<string, unknown>;
@@ -363,8 +424,13 @@ export default function AdminUserDetailPage() {
   const [selectedPaymentReceipt, setSelectedPaymentReceipt] = useState<NonNullable<UserDetail["payments"]>[number] | null>(null);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "success" | "failed" | "cancelled" | "pending">("all");
 
-  const activityScore = useMemo(() => user ? calculateUserActivityScore(user) : null, [user]);
-  const multiPeriodActivity = useMemo(() => user ? calculateUserActivityMultiPeriod(user) : null, [user]);
+  // Prefer the server's engagement score (real use in each window); fall back to the old client estimate.
+  const activityScore = useMemo(() => user ? (user.activityScore ?? calculateUserActivityScore(user)) : null, [user]);
+  const multiPeriodActivity = useMemo(() => {
+    if (!user) return null;
+    if (user.activityScore) return { daily: user.activityScore.daily, weekly: user.activityScore.weekly, monthly: user.activityScore.monthly };
+    return calculateUserActivityMultiPeriod(user);
+  }, [user]);
   const expiringInfo = useMemo(() => user ? getSubscriptionExpiringInfo(user) : null, [user]);
 
   // Referral Assignment Modal State
@@ -1915,7 +1981,13 @@ export default function AdminUserDetailPage() {
                 </div>
               </InfoRow>
               <InfoRow label="Phone number" value={user.phone || "—"} />
-              <InfoRow label="Country" value={getCountryDisplayName(user.country)} />
+              <InfoRow label="Signup Country" value={getCountryDisplayName(user.signupCountry || user.country)} />
+              {user.signupCity && (
+                <InfoRow label="Signup City" value={user.signupCity} />
+              )}
+              {user.lastLoginCountry && user.lastLoginCountry !== (user.signupCountry || user.country) && (
+                <InfoRow label="Latest Login Country" value={`${getCountryDisplayName(user.lastLoginCountry)} (Detected)`} />
+              )}
               <InfoRow label="Location (City / State)" value={[user.city, user.state].filter(Boolean).join(", ") || "—"} />
               <InfoRow label="Preferred language" value={user.language ? user.language.toUpperCase() : "English (EN)"} />
               <InfoRow label={t('admin.userDetail.appId')} value={user.appId || "—"} />
@@ -2220,7 +2292,7 @@ export default function AdminUserDetailPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
             <InfoRow label="Referral code" value={user.referralCode || "—"} />
-            <InfoRow label="Referred by" value={user.referredBy || "Direct / None"} />
+            <InfoRow label="Referred by" value={typeof user.referredBy === "string" ? (user.referredBy || "Direct / None") : String((user.referredBy as unknown as { code?: string } | null)?.code || "Direct / None")} />
             <InfoRow label="IP Address" value={user.lastIp || "—"} />
             <InfoRow
               label={t('common.signedUp')}
@@ -2947,42 +3019,193 @@ export default function AdminUserDetailPage() {
         ) : null}
       </div>
 
-      {/* Usage Stats */}
+      {/* Usage by period (real events; counts start when each event was added to the app) */}
       <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-indigo-400" />
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.usage.title')}</h2>
+              <p className="text-xs text-slate-500">What this church did in the app, by period</p>
+            </div>
           </div>
-          <h2 className="text-sm font-semibold text-slate-50">{t('admin.userDetail.usage.title')}</h2>
+          {user.engagement && (
+            <span className="text-xs text-slate-400">
+              Active days: {user.engagement.week.activeDays} in 7 days · {user.engagement.month.activeDays} in 30 days
+              {user.engagement.month.lastUseAt ? ` · last real use ${formatDateTime(user.engagement.month.lastUseAt)}` : ""}
+            </span>
+          )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-2">
-          <UsageStat
-            icon={<BookOpen className="w-4 h-4" />}
-            label={t('admin.userDetail.usage.bibleSearches')}
-            value={user.usage.bibleSearches}
-          />
-          <UsageStat
-            icon={<Music className="w-4 h-4" />}
-            label={t('admin.userDetail.usage.songsCreated')}
-            value={user.usage.songsCreated}
-          />
-          <UsageStat
-            icon={<Monitor className="w-4 h-4" />}
-            label={t('admin.userDetail.usage.mediaUploaded')}
-            value={user.usage.mediaUploaded}
-          />
-          <UsageStat
-            icon={<Mic className="w-4 h-4" />}
-            label={t('admin.userDetail.usage.aiHours')}
-            value={user.usage.aiHoursUsed}
-          />
-          <UsageStat
-            icon={<FileText className="w-4 h-4" />}
-            label={t('admin.userDetail.usage.transcripts')}
-            value={user.usage.transcriptCount}
-          />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wide text-slate-500">
+                <th className="py-2 pr-3 text-left font-medium">Activity</th>
+                <th className="py-2 px-3 text-right font-medium">24 h</th>
+                <th className="py-2 px-3 text-right font-medium">7 days</th>
+                <th className="py-2 px-3 text-right font-medium">30 days</th>
+                <th className="py-2 pl-3 text-right font-medium">All time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ["Bible verses shown", "bibleVerses", user.usage.bibleVersesPresented, <BookOpen key="i" className="w-3.5 h-3.5" />],
+                ["Bible searches", "bibleSearches", user.usage.bibleSearches, <Search key="i" className="w-3.5 h-3.5" />],
+                ["Worship songs shown", "songsPresented", user.usage.songsPresented, <Music key="i" className="w-3.5 h-3.5" />],
+                ["Songs created / imported", "songsCreated", user.usage.songsCreated, <Music key="i" className="w-3.5 h-3.5" />],
+                ["Media shown", "mediaPresented", user.usage.mediaPresented, <Monitor key="i" className="w-3.5 h-3.5" />],
+                ["Media uploaded", "mediaUploaded", user.usage.mediaUploaded, <Monitor key="i" className="w-3.5 h-3.5" />],
+                ["Broadcast graphics shown", "graphicsShown", user.usage.graphicsShown, <Tv key="i" className="w-3.5 h-3.5" />],
+                ["Speech-to-scripture sessions", "voiceSessions", user.usage.voiceSessions, <Mic key="i" className="w-3.5 h-3.5" />],
+                ["Live captions sent", "liveCaptions", user.usage.liveCaptionsSent, <Mic key="i" className="w-3.5 h-3.5" />],
+                ["Transcripts", "transcripts", user.usage.transcriptCount, <FileText key="i" className="w-3.5 h-3.5" />],
+                ["OBS connections", "obsConnections", user.usage.obsConnections, <Layers key="i" className="w-3.5 h-3.5" />],
+                ["App opens", "appOpens", user.usage.appOpens, <Laptop key="i" className="w-3.5 h-3.5" />],
+              ] as Array<[string, keyof EngagementCounts, number | undefined, React.ReactNode]>).map(([label, key, allTime, icon]) => (
+                <tr key={label} className="border-t border-slate-800">
+                  <td className="py-2 pr-3 text-slate-300"><span className="inline-flex items-center gap-2 text-slate-400">{icon}<span className="text-slate-300">{label}</span></span></td>
+                  {(["day", "week", "month"] as const).map((w) => (
+                    <td key={w} className="py-2 px-3 text-right font-mono text-slate-200">
+                      {user.engagement ? Number(user.engagement[w][key] || 0).toLocaleString() : "—"}
+                    </td>
+                  ))}
+                  <td className="py-2 pl-3 text-right font-mono font-semibold text-slate-50">{typeof allTime === "number" ? allTime.toLocaleString() : "—"}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-800">
+                <td className="py-2 pr-3 text-slate-300"><span className="inline-flex items-center gap-2 text-slate-400"><Mic className="w-3.5 h-3.5" /><span className="text-slate-300">Speech-to-scripture time</span></span></td>
+                {(["day", "week", "month"] as const).map((w) => (
+                  <td key={w} className="py-2 px-3 text-right font-mono text-slate-200">{user.engagement ? formatDuration(user.engagement[w].voiceSeconds) : "—"}</td>
+                ))}
+                <td className="py-2 pl-3 text-right font-mono font-semibold text-slate-50">{typeof user.usage.voiceMinutes === "number" ? formatDuration(user.usage.voiceMinutes * 60) : `${user.usage.aiHoursUsed} h`}</td>
+              </tr>
+              <tr className="border-t border-slate-800">
+                <td className="py-2 pr-3 text-slate-300"><span className="inline-flex items-center gap-2 text-slate-400"><Globe className="w-3.5 h-3.5" /><span className="text-slate-300">Multi-stream time</span></span></td>
+                {(["day", "week", "month"] as const).map((w) => (
+                  <td key={w} className="py-2 px-3 text-right font-mono text-slate-200">{user.engagement ? formatDuration(user.engagement[w].multistreamSeconds) : "—"}</td>
+                ))}
+                <td className="py-2 pl-3 text-right font-mono font-semibold text-slate-50">{user.insights ? formatDuration(user.insights.multistream.seconds) : "—"}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {user.insights && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {/* Multi-stream */}
+          <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/15 flex items-center justify-center"><Globe className="w-4 h-4 text-sky-400" /></div>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-50">Multi-stream</h2>
+                  <p className="text-xs text-slate-500">Sessions are kept for 90 days</p>
+                </div>
+              </div>
+              <a href="/admin/multistream" className="text-xs font-medium text-indigo-300 hover:underline">All churches →</a>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[
+                ["Sessions", user.insights.multistream.sessions.toLocaleString()],
+                ["Total time", formatDuration(user.insights.multistream.seconds)],
+                ["Errors", user.insights.multistream.errors.toLocaleString()],
+                ["Last used", user.insights.multistream.lastAt ? formatDateTime(user.insights.multistream.lastAt) : "Never"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-slate-800 bg-gray-950/40 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+                  <p className="text-sm font-semibold text-slate-100">{value}</p>
+                </div>
+              ))}
+            </div>
+            {user.insights.multistream.platforms.length > 0 && (
+              <p className="mb-3 text-xs text-slate-400">Platforms tried: <span className="text-slate-200">{user.insights.multistream.platforms.join(", ")}</span></p>
+            )}
+            {user.insights.multistream.recentSessions.length ? (
+              <ul className="divide-y divide-slate-800 text-xs">
+                {user.insights.multistream.recentSessions.map((s, i) => (
+                  <li key={`${s.startedAt}-${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span className="text-slate-300">{formatDateTime(s.startedAt)} · {s.profileName || "Profile"}</span>
+                    <span className="text-slate-400">{s.channels.map((c) => c.platform || c.name).filter(Boolean).join(", ") || "—"}</span>
+                    <span className="font-mono text-slate-200">{formatDuration(s.seconds)}</span>
+                    <span className={s.errorCount ? "text-red-300" : "text-slate-500"}>{s.errorCount ? `${s.errorCount} error${s.errorCount === 1 ? "" : "s"}${s.lastErrorCode ? ` (${s.lastErrorCode})` : ""}` : s.status}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-500">This church hasn't used multi-stream yet.</p>
+            )}
+            {user.insights.multistream.recentErrors.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold text-red-300">Recent multi-stream errors</p>
+                <ul className="space-y-1.5 text-xs">
+                  {user.insights.multistream.recentErrors.map((e, i) => (
+                    <li key={`${e.createdAt}-${i}`} className="rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-slate-300">
+                      <span className="font-mono text-red-300">{e.code}</span> · {e.stage} · {formatDateTime(e.createdAt)}
+                      <div className="text-slate-400">{e.message}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Emails, errors and graphics */}
+          <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6 space-y-5">
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center"><Mail className="w-4 h-4 text-emerald-400" /></div>
+                  <h2 className="text-sm font-semibold text-slate-50">Emails received</h2>
+                </div>
+                <button type="button" onClick={() => setActiveTab("emails")} className="text-xs font-medium text-indigo-300 hover:underline">Open Emails tab →</button>
+              </div>
+              <p className="text-sm text-slate-200">
+                <span className="font-semibold">{user.insights.emails.total.toLocaleString()}</span> total · {user.insights.emails.last30Days.toLocaleString()} in 30 days
+                {user.insights.emails.failed ? <span className="text-red-300"> · {user.insights.emails.failed} failed</span> : null}
+              </p>
+              {user.insights.emails.last && (
+                <p className="mt-1 text-xs text-slate-400">Last: “{user.insights.emails.last.subject}” · {formatDateTime(user.insights.emails.last.createdAt)}</p>
+              )}
+            </div>
+            <div className="border-t border-slate-800 pt-5">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center"><AlertTriangle className="w-4 h-4 text-red-400" /></div>
+                  <h2 className="text-sm font-semibold text-slate-50">App errors</h2>
+                </div>
+                <button type="button" onClick={() => setActiveTab("logs")} className="text-xs font-medium text-indigo-300 hover:underline">Open Logs tab →</button>
+              </div>
+              <p className="text-sm text-slate-200">
+                <span className="font-semibold">{user.insights.errors.total.toLocaleString()}</span> total · {user.insights.errors.last30Days.toLocaleString()} in 30 days
+              </p>
+              {user.insights.errors.last && (
+                <p className="mt-1 text-xs text-slate-400 break-words">Last: {user.insights.errors.last.message} {user.insights.errors.last.pathname ? `(${user.insights.errors.last.pathname})` : ""} · {formatDateTime(user.insights.errors.last.createdAt)}</p>
+              )}
+            </div>
+            <div className="border-t border-slate-800 pt-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/15 flex items-center justify-center"><Tv className="w-4 h-4 text-purple-400" /></div>
+                <h2 className="text-sm font-semibold text-slate-50">Broadcast graphics used</h2>
+              </div>
+              {user.insights.graphics.length ? (
+                <ul className="divide-y divide-slate-800 text-xs">
+                  {user.insights.graphics.map((g) => (
+                    <li key={g.graphicId} className="flex items-center justify-between gap-2 py-1.5">
+                      <span className="truncate text-slate-200">{g.name}</span>
+                      <span className="shrink-0 text-slate-400">added {g.addedCount}× · shown {g.shownCount}×{g.lastShownAt ? ` · ${formatDateTime(g.lastShownAt)}` : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-500">No graphics added or shown yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="bg-gray-900 border border-slate-700 rounded-2xl p-6">
@@ -5534,27 +5757,6 @@ function InfoRow({
   );
 }
 
-function UsageStat({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="text-center">
-      <div className="w-8 h-8 bg-gray-800 rounded-xl flex items-center justify-center text-slate-400 mx-auto mb-1.5">
-        {icon}
-      </div>
-      <p className="text-lg font-bold text-slate-50">
-        {value.toLocaleString()}
-      </p>
-      <p className="text-[11px] text-slate-500">{label}</p>
-    </div>
-  );
-}
 
 function Modal({ onClose, title, children }: { onClose: () => void; title: string; children: React.ReactNode }) {
   return (

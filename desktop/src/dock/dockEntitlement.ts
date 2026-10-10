@@ -28,6 +28,7 @@ import {
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { getStoredLocalDevPlanOverride } from "../services/localDevPlanOverride";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 
 const PLAN_KEY = "ocs-dock-plan";
 const ENTITLEMENTS_KEY = "ocs-dock-entitlements";
@@ -305,7 +306,7 @@ export async function requireEntitlement(
   if (result.allowed) return true;
 
   const msg = result.reason || "Upgrade to access this feature.";
-  _showUpgrade?.(msg);
+  showUpgradeModal(msg);
   return false;
 }
 
@@ -315,5 +316,9 @@ export async function requireEntitlement(
  * the standard entitlement check (e.g., per-file-type quota rejection).
  */
 export function showUpgradeModal(message: string): void {
+  if (/\b(upgrade|plan|premium|entitlement|limit)\b/i.test(message)) {
+    void openDashboardSubscriptionPlans();
+    return;
+  }
   _showUpgrade?.(message);
 }

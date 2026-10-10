@@ -29,12 +29,16 @@ describe("Dock bottom toolbar narrow actions", () => {
   });
 
   it("keeps Quick Edits as one text action in each bottom overflow", () => {
-    for (const source of [bibleTabSource, notesTabSource, worshipTabSource]) {
+    for (const source of [notesTabSource, worshipTabSource]) {
       expect(source).not.toContain("inlineAction=");
       expect(source).not.toContain("narrowOverflowActions=");
       expect(source).toContain("dock-btm-overflow__menu-item");
       expect(source).toContain("data-dock-close-overflow=\"true\"");
     }
+    expect(bibleTabSource).not.toContain("inlineAction=");
+    expect(bibleTabSource).not.toContain("narrowOverflowActions=");
+    expect(toolbarSource).toContain("dock-btm-overflow__menu-item");
+    expect(toolbarSource).toContain("data-dock-close-overflow=\"true\"");
     expect(quickActionsSource).not.toContain("onOpenQuickEdits");
     expect(bibleTabSource).toContain('t("dock.compare.short", "Compare")');
     expect(bibleDockUiSource).toContain("const bottomToolbarActions = isCompact ? compactActions : headerActions;");

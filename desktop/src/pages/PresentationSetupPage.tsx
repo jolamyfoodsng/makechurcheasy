@@ -40,6 +40,7 @@ import {
   savePresentationScreenZoom,
 } from "../services/presentationPublish";
 import { syncPresentationRemoteAccessInfo } from "../services/presentationRemote";
+import { ADMIN_FEATURE_OFF_MESSAGES, isAdminFeatureEnabled } from "../services/desktopConfig";
 import {
   EMPTY_PRESENTATION_REMOTE_STATE,
   fetchPresentationState,
@@ -539,7 +540,13 @@ function PresentationLinkPanel({
       const info = await syncPresentationRemoteAccessInfo(session.sessionId);
       const next = getPresentationSettings();
       setSession(next);
-      setMessage(info.running ? "Presentation link is ready on this network." : "Presentation link is ready locally.");
+      setMessage(
+        !isAdminFeatureEnabled("presentationLink")
+          ? `${ADMIN_FEATURE_OFF_MESSAGES.presentationLink} The link works on this computer only.`
+          : info.running
+            ? "Presentation link is ready on this network."
+            : "Presentation link is ready locally.",
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not refresh the presentation link.");
     } finally {

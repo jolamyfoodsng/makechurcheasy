@@ -41,6 +41,7 @@ import {
   getRemainingSongSlots,
 } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import { PremiumContentGate } from "../components/PremiumContentGate";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { BulkImportModal } from "../worship/BulkImportModal";
@@ -67,7 +68,6 @@ import {
   WORSHIP_SONGS_UPDATED_EVENT,
 } from "../worship/worshipDb";
 import WorshipSongModal from "../worship/WorshipSongModal";
-import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { fuzzyMatch } from "../services/fuzzySearch";
 
 /* ---------- helpers ---------- */
@@ -132,8 +132,6 @@ export function SongsTab() {
   const [activeCardMenuId, setActiveCardMenuId] = useState<string | null>(null);
   const moreToolsRef = useRef<HTMLDivElement>(null);
   const [languageFilter, setLanguageFilter] = useState<string>("all");
-  const [showSongLimitModal, setShowSongLimitModal] = useState(false);
-  const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [savingOnlineImport, setSavingOnlineImport] = useState(false);
   const onlineSearchRequestRef = useRef(0);
@@ -402,8 +400,7 @@ export function SongsTab() {
 
   const handleAddSong = useCallback(() => {
     if (hasReachedSongLimit) {
-      setSongLimitModalType("songs");
-      setShowSongLimitModal(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
     setShowAddModal(true);
@@ -411,8 +408,7 @@ export function SongsTab() {
 
   const handleBulkImport = useCallback(() => {
     if (!canImport) {
-      setSongLimitModalType("import");
-      setShowSongLimitModal(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
     setBulkImportOpen(true);
@@ -1088,69 +1084,6 @@ export function SongsTab() {
             void reload();
           }}
         />
-      )}
-
-      {/* Song limit / import restriction modal */}
-      {showSongLimitModal && (
-        <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal ssm-modal--prompt lib-upgrade-prompt" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="ssm-close"
-              onClick={() => setShowSongLimitModal(false)}
-              aria-label="Close upgrade prompt"
-              title="Close">
-              <Icon name="close" size={18} />
-            </button>
-            <div className="ssm-icon lib-upgrade-prompt__icon">
-              <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
-            </div>
-            <h2 className="ssm-title">
-              {songLimitModalType === "import" ? "Bulk Import Requires Growth" : "Song Limit Reached"}
-            </h2>
-            {songLimitModalType === "import" ? (
-              <>
-                <p className="ssm-desc">
-                  Bulk import is available on <strong>Growth</strong> and above.
-                </p>
-                <p className="ssm-hint">
-                  Free trial users can use it during the trial. Upgrade to Growth to import multiple worship songs at once.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="ssm-desc">
-                  Your <strong>{effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}</strong> plan
-                  allows up to <strong>{songLimit} songs</strong>.
-                  {songLimitModalType === "songs" && effectivePlan === "free"
-                    ? " You currently have " + songCount + " song" + (songCount !== 1 ? "s" : "") + "."
-                    : songLimitModalType === "songs" && songCount >= songLimit
-                      ? " You've reached your limit."
-                      : ""}
-                </p>
-                <p className="ssm-hint">
-                  Upgrade to <strong>Growth</strong> for unlimited songs and mass import. {UPGRADE_PROMO_FALLBACK}
-                </p>
-              </>
-            )}
-            <div className="ssm-actions lib-upgrade-prompt__actions">
-              <button
-                className="ssm-btn-cancel"
-                onClick={() => setShowSongLimitModal(false)}
-                title="Maybe Later">
-                Maybe Later
-              </button>
-              <button
-                className="ssm-btn-upgrade"
-                onClick={() => {
-                  window.open("https://makechurcheazy.com/subscription/plans", "_blank");
-                  setShowSongLimitModal(false);
-                }}
-                title="Upgrade to Growth">
-                Upgrade to Growth
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {showUpgradeModal && (

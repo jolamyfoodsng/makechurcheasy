@@ -45,18 +45,18 @@ const PRO_USER = { id: "u3", email: "test@test.com", plan: "pro" } as AuthUser;
 describe("Song limit filtering before dock delivery", () => {
   const twoHundredSongs = makeSongs(200);
 
-  it("free plan: slices 200 songs down to 3", () => {
+  it("free plan: slices 200 songs down to 10", () => {
     vi.mocked(getCachedPlan).mockReturnValue("free");
     const result = sliceToLimit(twoHundredSongs, FREE_USER);
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(10);
     expect(result[0].id).toBe("song-0");
     expect(result[2].id).toBe("song-2");
   });
 
-  it("basic plan: slices 200 songs down to 50", () => {
+  it("basic plan: keeps all 200 songs (unlimited in canonical entitlements)", () => {
     vi.mocked(getCachedPlan).mockReturnValue("basic");
     const result = sliceToLimit(twoHundredSongs, BASIC_USER);
-    expect(result).toHaveLength(50);
+    expect(result).toHaveLength(200);
     expect(result[49].id).toBe("song-49");
   });
 
@@ -66,10 +66,10 @@ describe("Song limit filtering before dock delivery", () => {
     expect(result).toHaveLength(200);
   });
 
-  it("null user falls back to free plan: 3 songs", () => {
+  it("null user falls back to free plan: 10 songs", () => {
     vi.mocked(getCachedPlan).mockReturnValue("free");
     const result = sliceToLimit(twoHundredSongs, null);
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(10);
   });
 
   it("free plan with only 2 songs returns all 2 (no over-slicing)", () => {
@@ -79,16 +79,16 @@ describe("Song limit filtering before dock delivery", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("basic plan limit is exactly 50", () => {
+  it("basic plan limit is unlimited (Infinity)", () => {
     vi.mocked(getCachedPlan).mockReturnValue("basic");
     const limits = getUserPlanLimits(BASIC_USER);
-    expect(limits.songs).toBe(50);
+    expect(limits.songs).toBe(Infinity);
   });
 
-  it("free plan limit is exactly 3", () => {
+  it("free plan limit is exactly 10", () => {
     vi.mocked(getCachedPlan).mockReturnValue("free");
     const limits = getUserPlanLimits(FREE_USER);
-    expect(limits.songs).toBe(3);
+    expect(limits.songs).toBe(10);
   });
 
   it("legacy pro plan limit is Infinity through the Growth mapping", () => {

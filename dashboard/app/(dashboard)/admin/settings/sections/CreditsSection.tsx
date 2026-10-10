@@ -170,27 +170,13 @@ export function CreditsSection() {
           />
         </div>
         <div className="px-6 py-4">
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label={t("translationCost")}
-              type="number"
-              min={0}
-              value={getCost("translation")}
-              onChange={(e) => updateCreditCost("translation", Number(e.target.value))}
-            />
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label={t("speechToScriptureCost")}
               type="number"
               min={0}
               value={getCost("speechToScripture")}
               onChange={(e) => updateCreditCost("speechToScripture", Number(e.target.value))}
-            />
-            <Input
-              label={t("aiSummaryCost")}
-              type="number"
-              min={0}
-              value={getCost("aiSummary")}
-              onChange={(e) => updateCreditCost("aiSummary", Number(e.target.value))}
             />
           </div>
         </div>

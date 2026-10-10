@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
-import { checkVersionGate, isBelowMinimum, shouldDeferDesktopUpdate } from "@/lib/versionGate";
+import { checkVersionGate, getEnforcementWindow, isBelowMinimum, shouldDeferDesktopUpdate } from "@/lib/versionGate";
 import { getEffectivePlan, isInTrial, isTrialExpired, type TrialUser } from "@/lib/trial";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { getTrialForUser } from "@/lib/trialRecords";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
 import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import { resolveDeviceContext } from "@/lib/deviceRequest";
-import { getDeviceLimitForPlan } from "@/lib/deviceLimits";
+import { getDeviceLimitForPlan, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { isDeviceLimitExceeded } from "@/lib/deviceLimitPolicy";
 import { getDesktopConfig } from "@/lib/configService";
-import { getNextAnnouncementForUser } from "@/lib/announcements";
+import { getAnnouncementsForUser } from "@/lib/announcements";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -220,6 +220,7 @@ export async function GET(req: NextRequest) {
 
     // 10. Check platform settings for emergency lock / force upgrade / verification
     let maintenanceMode = false;
+    let maintenanceMessage = "";
     let forceUpgradeRequired = false;
     let forceUpgradeVersion: string | undefined;
     let internetVerificationDays = 14;
@@ -229,10 +230,14 @@ export async function GET(req: NextRequest) {
       const ps = await getPlatformSettings();
       if (ps.appUpdates.emergencyLock || ps.security.maintenanceMode) {
         maintenanceMode = true;
+        maintenanceMessage = ps.appUpdates.emergencyLock
+          ? ps.appUpdates.emergencyLockMessage || ""
+          : ps.security.maintenanceMessage || "";
       }
       const minimumVersion = ps.appUpdates.minimumSupportedVersion || "";
       if (
         ps.appUpdates.forceUpdatesEnabled &&
+        getEnforcementWindow(ps.appUpdates).expired &&
         !shouldDeferDesktopUpdate(req) &&
         appVersion &&
         minimumVersion &&
@@ -284,11 +289,36 @@ export async function GET(req: NextRequest) {
     // Registration already uses plan_config; the license check must use the
     // same source so a Growth user is not locked by the global free-tier cap.
     const maxDevices = await getDeviceLimitForPlan(effectivePlan);
-    const deviceCount = await db.collection("devices").countDocuments({
+    let deviceCount = await db.collection("devices").countDocuments({
       userId: user._id.toString(),
       status: { $ne: "deleted" },
     });
-    const tooManyDevices = isDeviceLimitExceeded(deviceCount, maxDevices);
+    let tooManyDevices = isDeviceLimitExceeded(deviceCount, maxDevices);
+
+    let otherDevices: Array<{ deviceId: string; deviceName: string; lastSeen?: string }> = [];
+    if (tooManyDevices) {
+      if (effectivePlan === "free" || maxDevices === 1) {
+        // Free plan allows 1 computer at a time: automatically disconnect older computers
+        // and allow this computer without showing a blocking modal.
+        await evictOtherActiveDevices(user._id.toString(), { keepDeviceId: deviceId }, db);
+        tooManyDevices = false;
+        deviceCount = 1;
+        otherDevices = [];
+      } else {
+        const activeDevices = await db.collection("devices").find({
+          userId: user._id.toString(),
+          status: { $ne: "deleted" },
+        }).sort({ lastSeen: -1 }).toArray();
+
+        otherDevices = activeDevices
+          .filter((d) => String(d.deviceId) !== String(deviceId))
+          .map((d) => ({
+            deviceId: String(d.deviceId),
+            deviceName: String(d.deviceName || "Another computer"),
+            lastSeen: d.lastSeen ? new Date(d.lastSeen).toISOString() : undefined,
+          }));
+      }
+    }
 
     if (tooManyDevices && !lockReason) {
       lockReason = "too_many_devices";
@@ -312,7 +342,10 @@ export async function GET(req: NextRequest) {
       serverTime: now,
       lockReason,
       tooManyDevices: tooManyDevices || undefined,
-      ...(maintenanceMode && { maintenanceMode: true }),
+      maxDevices: maxDevices === Infinity ? -1 : maxDevices,
+      deviceCount,
+      otherDevices: otherDevices.length > 0 ? otherDevices : undefined,
+      ...(maintenanceMode && { maintenanceMode: true, maintenanceMessage }),
       ...(forceUpgradeRequired && {
         forceUpgradeRequired: true,
         forceUpgradeVersion,
@@ -329,17 +362,26 @@ export async function GET(req: NextRequest) {
     // Include the public desktop config and the next eligible announcement in
     // the same response so the client does not need separate health, config,
     // announcement, and streaming requests.
+    // Newer desktop releases pass ?announcements=N and page through up to N
+    // announcements; older ones only read `announcement` (the first).
+    const rawAnnouncementLimit = Number(req.nextUrl.searchParams.get("announcements"));
+    const announcementLimit =
+      Number.isFinite(rawAnnouncementLimit) && rawAnnouncementLimit >= 1
+        ? Math.floor(rawAnnouncementLimit)
+        : 1;
     let config = null;
     let announcement = null;
+    let announcements: unknown[] = [];
     let nextAvailableAt: string | null | undefined;
     try {
-      const [desktopConfig, nextAnnouncement] = await Promise.all([
+      const [desktopConfig, nextAnnouncements] = await Promise.all([
         getDesktopConfig(),
-        getNextAnnouncementForUser(user, "desktop"),
+        getAnnouncementsForUser(user, "desktop", announcementLimit),
       ]);
       config = desktopConfig;
-      announcement = nextAnnouncement.announcement;
-      nextAvailableAt = nextAnnouncement.nextAvailableAt;
+      announcement = nextAnnouncements.announcement;
+      announcements = nextAnnouncements.announcements;
+      nextAvailableAt = nextAnnouncements.nextAvailableAt;
     } catch (error) {
       console.warn("[device/license] Desktop bootstrap data unavailable:", error);
     }
@@ -350,6 +392,7 @@ export async function GET(req: NextRequest) {
         license,
         config,
         announcement,
+        announcements,
         nextAvailableAt: nextAvailableAt ?? null,
       },
       { headers: CORS_HEADERS },

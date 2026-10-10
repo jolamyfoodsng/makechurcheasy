@@ -26,16 +26,16 @@
 .dock-root {
   --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
   --dock-font-unicode-fallback: "Charis SIL", "Noto Sans", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  --dock-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
-  --dock-font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
+  --dock-font-body: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
+  --dock-font-heading: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
   --dock-font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   --dock-font-scale: 1;
-  --dock-bg: #0B0F17;
-  --dock-bg-secondary: #0F172A;
-  --dock-surface: #151D2C;
-  --dock-surface-alt: #1E293B;
-  --dock-surface-hover: #26354D;
-  --dock-surface-overlay: #151D2C;
+  --dock-bg: #0c0e17;
+  --dock-bg-secondary: #111726;
+  --dock-surface: #131724;
+  --dock-surface-alt: #171b28;
+  --dock-surface-hover: #1c2132;
+  --dock-surface-overlay: #131724;
   /* Shared aliases used by newer Dock controls. Keep these derived from the
      canonical tokens so light mode changes propagate automatically. */
   --dock-surface-0: var(--dock-bg);
@@ -44,8 +44,8 @@
   --dock-surface-3: var(--dock-surface-hover);
   --dock-border: rgba(255, 255, 255, 0.08);
   --dock-border-soft: rgba(255, 255, 255, 0.05);
-  --dock-border-active: #6366F1;
-  --dock-border-hover: rgba(99, 102, 241, 0.6);
+  --dock-border-active: #4f46e5;
+  --dock-border-hover: rgba(79, 70, 229, 0.6);
   --dock-text: #F8FAFC;
   --dock-text-secondary: #94A3B8;
   --dock-text-dim: #64748B;
@@ -58,11 +58,11 @@
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
   --input-placeholder: #64748B;
-  --dock-accent: #6366F1;
-  --dock-accent-hover: #818CF8;
-  --dock-accent-pressed: #4F46E5;
-  --dock-accent-soft: rgba(99, 102, 241, 0.14);
-  --dock-accent-soft-border: rgba(99, 102, 241, 0.35);
+  --dock-accent: #4f46e5;
+  --dock-accent-hover: #4338ca;
+  --dock-accent-pressed: #3730a3;
+  --dock-accent-soft: rgba(79, 70, 229, 0.14);
+  --dock-accent-soft-border: rgba(79, 70, 229, 0.35);
   --dock-green: #10B981;
   --dock-green-button: #059669;
   --dock-green-pressed: #047857;
@@ -75,7 +75,7 @@
   --dock-red-text: #FCA5A5;
   --dock-yellow: #F59E0B;
   --dock-yellow-soft: rgba(245, 158, 11, 0.14);
-  --dock-input-bg: #111827;
+  --dock-input-bg: #171b28;
   --dock-input-border: rgba(255, 255, 255, 0.12);
 
   display: flex;
@@ -88,10 +88,9 @@
   max-width: none;
   height: 100%;
   background: var(--dock-bg);
-  background-image: linear-gradient(155deg, rgba(99, 102, 241, 0.06), transparent 32%);
   color: var(--dock-text);
   font-family: var(--dock-font-body);
-  font-size: 12px;
+  font-size: 13px;
   zoom: var(--dock-font-scale, 1);
   font-weight: 400;
   line-height: 1.4;
@@ -419,15 +418,11 @@ body.dock-modal-open {
 /* ── Optional Dock personality effects ──────────────────────────────────── */
 .dock-root.dock-root--radial-glow {
   background-color: var(--dock-bg);
-  background-image: radial-gradient(circle at 100% 0%,
-      color-mix(in srgb, var(--dock-accent) 14%, transparent),
-      transparent 42%);
+  background-image: none;
 }
 
 .dock-root.dock-root--radial-glow .dock-content-main {
-  background-image: radial-gradient(circle at 100% 0%,
-      color-mix(in srgb, var(--dock-accent) 8%, transparent),
-      transparent 48%);
+  background-image: none;
 }
 
 .dock-root.dock-root--glass .dock-inline-header {
@@ -446,7 +441,6 @@ body.dock-modal-open {
   .dock-search-dropdown,
   .dock-presentation-bible-lm-pane,
   .dock-btm-toolbar,
-  .dock-btm-overflow__menu,
   .dock-btm-display-mode-menu,
   .dock-dialog,
   .dock-modal,
@@ -2808,6 +2802,17 @@ body.dock-modal-open {
   padding: 4px;
 }
 
+:root:not(.light) :is(
+  .dock-module--bible .dock-search-dropdown,
+  .dock-bible-search-row .dock-search-dropdown,
+  .dock-bible-search-bar .dock-search-dropdown
+) {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75) !important;
+}
+
 .dock-search-dropdown__item {
   display: flex;
   align-items: flex-start;
@@ -3126,6 +3131,7 @@ body.dock-modal-open {
 .dock-bible-chapter-trigger__book-short {
   display: none;
 }
+
 .dock-bible-chapter-trigger__book-full {
   display: inline;
 }
@@ -3134,6 +3140,7 @@ body.dock-modal-open {
   .dock-bible-chapter-trigger__book-full {
     display: none !important;
   }
+
   .dock-bible-chapter-trigger__book-short {
     display: inline !important;
   }
@@ -4361,7 +4368,7 @@ body.dock-modal-open {
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--dock-accent), #2563EB);
+  background: var(--dock-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8553,7 +8560,7 @@ body.dock-modal-open {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   letter-spacing: 0.1em;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -8580,8 +8587,8 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 3px;
@@ -8604,9 +8611,9 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-value {
   min-width: 36px;
   color: var(--dock-accent-hover);
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 26px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -8622,9 +8629,9 @@ body.dock-modal-open {
   background: transparent;
   color: var(--dock-accent-hover);
   font: inherit;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 26px;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -8658,15 +8665,38 @@ body.dock-modal-open {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  width: 168px;
-  max-height: min(320px, calc(100vh - 24px));
+  width: 200px;
+  max-height: min(440px, calc(100vh - 24px));
   overflow-y: auto;
   padding: 6px 8px;
-  border: 1px solid var(--dock-border);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: var(--dock-surface);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--dock-border);
+  background: #141720;
+  background-color: #141720;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
   transform: translateY(-50%);
+}
+
+:root:not(.light) .dock-bible-reader__font-size-menu {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-menu-header {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-output-quick-actions__settings {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-output-quick-actions__settings:hover,
+:root:not(.light) .dock-output-quick-actions__settings:focus-visible {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
 }
 
 .dock-bible-reader__quick-actions--menu-right .dock-bible-reader__font-size-menu {
@@ -8680,7 +8710,7 @@ body.dock-modal-open {
   justify-content: space-between;
   gap: 6px;
   color: var(--dock-text);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
@@ -8755,10 +8785,15 @@ body.dock-modal-open {
 .dock-bible-reader__font-size-field-label {
   min-width: 0;
   color: var(--dock-text-secondary);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-field-label {
+  color: #ffffff !important;
+  font-weight: 600;
 }
 
 .dock-bible-reader__font-size-field small {
@@ -8771,7 +8806,7 @@ body.dock-modal-open {
   justify-content: space-between;
   gap: 1px;
   width: 100%;
-  min-height: 22px;
+  min-height: 30px;
   padding: 1px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
   border-radius: 4px;
@@ -8786,14 +8821,14 @@ body.dock-modal-open {
 
 .dock-bible-reader__size-preset {
   flex: 1 1 0;
-  min-height: 22px;
-  padding: 2px 4px;
+  min-height: 30px;
+  padding: 4px 6px;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   background: var(--dock-surface-alt, #1e293b);
   color: var(--dock-text-secondary, #94a3b8);
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -8817,14 +8852,14 @@ body.dock-modal-open {
 
 .dock-bible-reader__font-size-select {
   width: 100%;
-  min-height: 22px;
-  padding: 0 6px;
+  min-height: 30px;
+  padding: 0 8px;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   background: var(--dock-surface-alt);
   color: var(--dock-text);
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .dock-bible-reader__font-size-select:focus {
@@ -8843,14 +8878,14 @@ body.dock-modal-open {
   align-items: center;
   gap: 5px;
   width: 100%;
-  min-height: 22px;
-  padding: 2px 6px;
+  min-height: 30px;
+  padding: 4px 8px;
   border: 1px solid var(--dock-border);
   border-radius: 4px;
   background: var(--dock-surface-alt, #1e293b);
   color: var(--dock-text-secondary, #94a3b8);
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -8886,10 +8921,109 @@ body.dock-modal-open {
   border-radius: 3px;
   background: var(--dock-accent);
   color: #ffffff;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-controls {
+  background: #1b1e2a !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-btn {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-btn svg {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-btn:disabled {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-value {
+  color: #ff9d66 !important;
+  font-weight: 700;
+}
+
+:root:not(.light) :is(
+  .dock-bible-reader__size-preset,
+  .dock-bible-reader__font-size-select,
+  .dock-bible-reader__compare-mode-toggle-btn
+) {
+  background: #1c202d !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+:root:not(.light) :is(
+  .dock-bible-reader__size-preset,
+  .dock-bible-reader__compare-mode-toggle-btn
+) svg {
+  color: #ffffff !important;
+}
+
+:root:not(.light) :is(
+  .dock-bible-reader__size-preset,
+  .dock-bible-reader__compare-mode-toggle-btn
+):hover {
+  background: #282f42 !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+:root:not(.light) :is(
+  .dock-bible-reader__size-preset--active,
+  .dock-bible-reader__compare-mode-toggle-btn--active
+) {
+  background: color-mix(in srgb, var(--dock-accent) 26%, #1c202d) !important;
+  border-color: var(--dock-accent) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px var(--dock-accent) !important;
+}
+
+:root:not(.light) :is(
+  .dock-bible-reader__size-preset--active,
+  .dock-bible-reader__compare-mode-toggle-btn--active
+) svg {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-select option {
+  background: #141720 !important;
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-checkbox {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-checkbox span {
+  color: #ffffff !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-checkbox-copy small {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-save {
+  background: var(--dock-accent) !important;
+  color: #ffffff !important;
+  border-color: var(--dock-accent) !important;
+}
+
+:root:not(.light) .dock-bible-reader__font-size-save:disabled {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
 }
 
 .dock-bible-reader__font-size-menu-footer {
@@ -8914,7 +9048,7 @@ body.dock-modal-open {
   align-items: center;
   gap: 4px;
   color: var(--dock-text-dim);
-  font-size: 8.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -8925,8 +9059,8 @@ body.dock-modal-open {
 }
 
 .dock-bible-reader__font-size-checkbox input {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin: 0;
   accent-color: var(--dock-accent);
 }
@@ -8945,20 +9079,20 @@ body.dock-modal-open {
 
 .dock-bible-reader__font-size-checkbox-copy small {
   color: var(--dock-text-dim);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.25;
 }
 
 .dock-bible-reader__font-size-save {
-  min-height: 22px;
+  min-height: 30px;
   padding: 0 8px;
   border: 1px solid var(--dock-accent);
   border-radius: 4px;
   background: var(--dock-accent);
   color: #fff;
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -8979,12 +9113,18 @@ body.dock-modal-open {
   max-width: calc(100vw - 24px);
   max-height: 50vh;
   margin-top: 4px;
-  background: var(--dock-surface, #111827);
-  border: 1px solid var(--dock-border, #334155);
+  background: #141720;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+:root:not(.light) .dock-bible-reader__history-dropdown {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dock-bible-reader__history-dropdown::-webkit-scrollbar {
@@ -9217,14 +9357,20 @@ body.dock-modal-open {
   max-width: min(320px, calc(100vw - 24px));
   max-height: min(640px, calc(100vh - 24px));
   padding: 10px;
-  background: var(--dock-surface, #111827);
-  border: 1px solid var(--dock-border, #334155);
+  background: #141720;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+}
+
+:root:not(.light) :is(.dock-bible-compare-popover, .dock-bible-reference-popover) {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dock-bible-reference-popover {
@@ -10241,7 +10387,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: center;
   height: 56px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--dock-accent) 15%, var(--dock-surface)) 0%, var(--dock-surface) 100%);
+  background: var(--dock-surface-alt);
   color: var(--dock-accent);
   flex-shrink: 0;
 }
@@ -11628,6 +11774,12 @@ body.dock-modal-open {
   gap: 3px;
 }
 
+:root:not(.light) .dock-bible-context-menu {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
 .dock-bible-context-menu__item {
   display: flex;
   align-items: center;
@@ -11656,6 +11808,83 @@ body.dock-modal-open {
   background: rgba(255, 255, 255, 0.16);
 }
 
+.dock-bible-context-menu__divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 3px 0;
+}
+
+.dock-bible-context-menu__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px 2px 2px;
+}
+
+.dock-bible-context-menu__section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.5);
+  user-select: none;
+}
+
+.dock-bible-context-menu__lines-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.dock-bible-context-menu__line-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  min-height: 28px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dock-bible-context-menu__line-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.dock-bible-context-menu__line-btn--active {
+  background: var(--dock-accent, #4f46e5);
+  border-color: #6366f1;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.dock-bible-context-menu__line-btn--active:hover {
+  background: var(--dock-accent-hover, #4338ca);
+  border-color: #818cf8;
+  color: #ffffff;
+}
+
+.dock-bible-context-menu__line-check {
+  font-size: 11px;
+  line-height: 1;
+}
+
 /* ── Compare Verses Modal ── */
 .dock-bible-compare-modal-backdrop {
   position: fixed;
@@ -11676,6 +11905,7 @@ body.dock-modal-open {
     opacity: 0;
     transform: scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -11696,6 +11926,13 @@ body.dock-modal-open {
   color: var(--dock-text);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+:root:not(.light) .dock-bible-compare-modal {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75) !important;
 }
 
 .dock-bible-compare-modal__header {
@@ -12039,19 +12276,19 @@ body.dock-modal-open {
   border-radius: 6px;
   font-size: 11.5px;
   font-weight: 600;
-  background: #2563eb;
-  border: 1px solid #3b82f6;
+  background: var(--dock-accent, #4f46e5);
+  border: 1px solid #6366f1;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
   transition: all 0.12s ease;
   user-select: none;
   white-space: nowrap;
 }
 
 .dock-bible-compare-modal__project-both-btn:hover:not(:disabled) {
-  background: #1d4ed8;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5);
+  background: var(--dock-accent-hover, #4338ca);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.5);
 }
 
 .dock-bible-compare-modal__project-both-btn:disabled {
@@ -12713,6 +12950,7 @@ body.dock-modal-open {
   .dock-bible-reader__quick-edit-label {
     display: none;
   }
+
   .dock-bible-reader__quick-edit-toolbar-btn {
     padding: 0;
     width: 34px;
@@ -14782,9 +15020,7 @@ body.dock-modal-open {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
   border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(11, 15, 22, 0.18), rgba(11, 15, 22, 0.58)),
-    color-mix(in srgb, var(--dock-surface) 92%, black 8%);
+  background: var(--dock-surface-alt);
 }
 
 .dock-media-card__preview {
@@ -14805,9 +15041,7 @@ body.dock-modal-open {
   justify-content: center;
   gap: 8px;
   color: color-mix(in srgb, var(--dock-text-dim) 82%, #ffffff 18%);
-  background:
-    radial-gradient(circle at top, rgba(29, 78, 216, 0.12), transparent 58%),
-    color-mix(in srgb, var(--dock-surface-alt) 86%, var(--dock-surface));
+  background: var(--dock-surface-alt);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -16211,9 +16445,7 @@ body.dock-modal-open {
   display: flex;
   width: 100%;
   height: 100%;
-  background:
-    linear-gradient(180deg, rgba(7, 10, 15, 0.22), rgba(7, 10, 15, 0.68)),
-    color-mix(in srgb, var(--dock-surface-alt) 86%, var(--dock-surface));
+  background: var(--dock-surface-alt);
 }
 
 .dock-media-template-preview video {
@@ -16262,9 +16494,7 @@ body.dock-modal-open {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
   border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(11, 15, 22, 0.18), rgba(11, 15, 22, 0.58)),
-    color-mix(in srgb, var(--dock-surface) 92%, black 8%);
+  background: var(--dock-surface-alt);
 }
 
 .dock-media-text-preview__shell .dock-media-card__placeholder {
@@ -16953,10 +17183,16 @@ body.dock-modal-open {
   max-height: min(204px, 50vh);
   overflow: auto;
   padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: #141720;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+}
 
+:root:not(.light) .dock-bible-controls__book-dropdown {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dock-bible-controls__dropdown-header {
@@ -17220,10 +17456,16 @@ body.dock-modal-open {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: #141720;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+}
 
+:root:not(.light) :is(.dock-bible-controls__chapter-dropdown, .dock-bible-controls__verse-dropdown) {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dock-bible-controls__verse-dropdown {
@@ -17339,14 +17581,21 @@ body.dock-modal-open {
   right: auto;
   width: min(260px, calc(100vw - 18px));
   max-height: min(430px, calc(100vh - 92px));
-  background: color-mix(in srgb, var(--dock-surface) 92%, #020617);
-  border: 1px solid color-mix(in srgb, var(--dock-border) 82%, transparent);
+  background: #141720;
+  background-color: #141720;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
   z-index: 90;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+:root:not(.light) .bible-version-library__panel {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .bible-version-library--align-right .bible-version-library__panel {
@@ -17357,9 +17606,14 @@ body.dock-modal-open {
 .bible-version-library__search {
   position: relative;
   padding: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 74%, transparent);
-  background: color-mix(in srgb, var(--dock-surface-alt) 48%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #191c28;
   flex-shrink: 0;
+}
+
+:root:not(.light) .bible-version-library__search {
+  background: #191c28 !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .bible-version-library__search-icon {
@@ -17375,15 +17629,20 @@ body.dock-modal-open {
   width: 100%;
   min-height: 34px;
   padding: 0 30px 0 32px;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: var(--dock-surface);
+  background: #11131a;
   color: var(--dock-text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+:root:not(.light) .bible-version-library__search-input {
+  background: #11131a !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 .bible-version-library__search-input:focus {
@@ -17427,7 +17686,7 @@ body.dock-modal-open {
 }
 
 .bible-version-library__section {
-  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 64%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .bible-version-library__section:last-child {
@@ -17446,10 +17705,15 @@ body.dock-modal-open {
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--dock-text-muted, #94A3B8);
-  background: color-mix(in srgb, var(--dock-surface) 94%, #020617);
+  background: #141720;
   z-index: 1;
-  border-bottom: 1px solid color-mix(in srgb, var(--dock-border) 50%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   text-transform: uppercase;
+}
+
+:root:not(.light) .bible-version-library__section-header {
+  background: #141720 !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .bible-version-library__list {
@@ -17481,13 +17745,25 @@ body.dock-modal-open {
   background: color-mix(in srgb, var(--dock-surface-hover) 72%, transparent);
 }
 
+:root:not(.light) .bible-version-library__row:hover {
+  background: #1e2230 !important;
+}
+
 .bible-version-library__row--active {
   background: color-mix(in srgb, var(--dock-accent) 18%, var(--dock-surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dock-accent) 28%, transparent);
 }
 
+:root:not(.light) .bible-version-library__row--active {
+  background: color-mix(in srgb, var(--dock-accent) 22%, #141720) !important;
+}
+
 .bible-version-library__row--active:hover {
   background: color-mix(in srgb, var(--dock-accent) 23%, var(--dock-surface));
+}
+
+:root:not(.light) .bible-version-library__row--active:hover {
+  background: color-mix(in srgb, var(--dock-accent) 28%, #141720) !important;
 }
 
 .bible-version-library__row-info {
@@ -17514,6 +17790,22 @@ body.dock-modal-open {
   flex-shrink: 0;
 }
 
+:root:not(.light) .bible-version-library__row-code {
+  color: #ffffff !important;
+}
+
+.bible-version-library__row-name {
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+:root:not(.light) .bible-version-library__row-name {
+  color: #e2e8f0 !important;
+}
+
+:root:not(.light) .bible-version-library__section-header span:first-child {
+  color: #ffffff !important;
+}
+
 .bible-version-library__row-lang {
   display: inline-flex;
   align-items: center;
@@ -17530,6 +17822,12 @@ body.dock-modal-open {
   line-height: 1;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+:root:not(.light) .bible-version-library__row-lang {
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
 }
 
 .bible-version-library__row-check {
@@ -17557,9 +17855,21 @@ body.dock-modal-open {
   transition: all 0.12s ease;
 }
 
+:root:not(.light) .bible-version-library__download-btn {
+  background: #1c202d !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
 .bible-version-library__download-btn:hover {
   border-color: var(--dock-accent);
   color: var(--dock-accent);
+}
+
+:root:not(.light) .bible-version-library__download-btn:hover {
+  background: #282f42 !important;
+  border-color: var(--dock-accent) !important;
+  color: var(--dock-accent) !important;
 }
 
 .bible-version-library__progress {
@@ -18534,10 +18844,10 @@ body.dock-modal-open {
 /* Quick Edit / Background Picker opens at 90% of the browser width. Keep the
    small-screen guard so the modal still fits beside the backdrop padding. */
 .dtb-studio__modal--picker {
-  --dtb-studio-width: min(420px, calc((100vw - 24px) / var(--dock-font-scale, 1)));
-  --dtb-studio-width: min(420px, calc((100dvw - 24px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(390px, calc((100vw - 20px) / var(--dock-font-scale, 1)));
+  --dtb-studio-width: min(390px, calc((100dvw - 20px) / var(--dock-font-scale, 1)));
   width: var(--dtb-studio-width);
-  max-width: 440px;
+  max-width: 390px;
 }
 
 /* Header — fixed at top */
@@ -19174,11 +19484,9 @@ body.dock-modal-open {
 }
 
 .dtb-slider--filled {
-  background: linear-gradient(
-    to right,
-    var(--dock-accent) 0 var(--dtb-slider-progress, 0%),
-    color-mix(in srgb, var(--dock-border) 60%, var(--dock-surface-alt)) var(--dtb-slider-progress, 0%) 100%
-  );
+  background: linear-gradient(to right,
+      var(--dock-accent) 0 var(--dtb-slider-progress, 0%),
+      color-mix(in srgb, var(--dock-border) 60%, var(--dock-surface-alt)) var(--dtb-slider-progress, 0%) 100%);
 }
 
 .dtb-slider::-webkit-slider-thumb {
@@ -20457,6 +20765,7 @@ body.dock-modal-open {
     opacity: 0;
     transform: translateY(8px) scale(0.96);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -20508,10 +20817,12 @@ body.dock-modal-open {
     transform: scale(0.9);
     opacity: 0.8;
   }
+
   70% {
     transform: scale(1.7);
     opacity: 0;
   }
+
   100% {
     transform: scale(1.7);
     opacity: 0;
@@ -21018,10 +21329,10 @@ body.dock-modal-open {
   border-radius: 4px;
   padding: 8px;
   transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1),
-              box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1),
-              border-color 0.15s ease,
-              background 0.15s ease,
-              opacity 0.2s ease;
+    box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.15s ease,
+    background 0.15s ease,
+    opacity 0.2s ease;
   user-select: none;
 }
 
@@ -21130,6 +21441,7 @@ body.dock-modal-open {
     transform: scaleX(0.97);
     box-shadow: 0 0 6px var(--dock-accent, #38BDF8);
   }
+
   100% {
     opacity: 1;
     transform: scaleX(1);
@@ -25453,7 +25765,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: space-between;
   padding: 8px 8px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, transparent 100%);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 3;
 }
 
@@ -25920,7 +26232,7 @@ body.dock-modal-open {
   bottom: 0;
   z-index: 6;
   padding-top: 4px;
-  background: linear-gradient(to bottom, transparent, var(--dock-bg) 28%);
+  background: var(--dock-bg);
 }
 
 .dock-overlay-actions__btn {
@@ -26399,7 +26711,7 @@ body.dock-modal-open {
   flex-direction: column;
   justify-content: flex-end;
   padding: 8px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 50%);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .dock-media-text-composer__overlay--left {
@@ -28772,7 +29084,7 @@ body.dock-modal-open {
 }
 
 .dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
-  flex: 0 0 56px;
+  flex: 0 0 37px;
   align-self: stretch;
   width: 56px;
   min-width: 56px;
@@ -30161,6 +30473,7 @@ body.dock-modal-open {
 .dtb-colors__toggle-row {
   display: flex;
   align-items: center;
+  width:100%;
   justify-content: space-between;
 }
 
@@ -31192,7 +31505,7 @@ body.dock-modal-open {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)), var(--dock-surface-1);
+  background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
   border-radius: 10px;
   cursor: pointer;
@@ -31203,7 +31516,7 @@ body.dock-modal-open {
 
 .dtb-color-inline__trigger:hover {
   border-color: var(--dock-border-hover);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)), var(--dock-surface-hover);
+  background: var(--dock-surface-hover);
 }
 
 .dtb-color-inline__trigger:focus-visible {
@@ -31251,7 +31564,7 @@ body.dock-modal-open {
 }
 
 .dtb-color-inline__popover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)), var(--dock-surface-0, #111827);
+  background: var(--dock-surface-0);
   border: 1px solid var(--dock-border);
   border-radius: 14px;
   padding: 12px;
@@ -31684,7 +31997,7 @@ body.dock-modal-open {
   overflow: hidden;
   border: 1px solid var(--dock-border, #334155);
   border-radius: 8px;
-  background: radial-gradient(circle at 50% 120%, rgba(30, 41, 59, 0.45), #080d1a);
+  background: #0c0e17;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -31872,10 +32185,10 @@ body.dock-modal-open {
   text-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
 }
 
-/* 4. Elegant Gold (Worship / Sanctuary serif luxury) */
+/* 4. Elegant Gold (Worship / Auditorium serif luxury) */
 .dock-time-preview--theme-elegant:not(.dock-time-preview--transparent) .dock-time-preview__card {
   border-color: rgba(234, 179, 8, 0.35);
-  background: linear-gradient(145deg, rgba(28, 24, 16, 0.95), rgba(15, 23, 42, 0.95));
+  background: #171b28;
   box-shadow: 0 0 16px rgba(234, 179, 8, 0.12), 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
@@ -31892,7 +32205,9 @@ body.dock-modal-open {
   letter-spacing: 0.14em;
 }
 
-.dock-time-preview--fullscreen .dock-time-preview__accent { display: none; }
+.dock-time-preview--fullscreen .dock-time-preview__accent {
+  display: none;
+}
 
 .dock-time-preview--fullscreen .dock-time-preview__content {
   align-items: center;
@@ -32191,9 +32506,19 @@ body.dock-modal-open {
   line-height: 1.35;
 }
 
-.dock-time-message--info { color: var(--dock-text-dim, #cbd5e1); }
-.dock-time-message--success { border-color: rgba(34, 197, 94, 0.45); color: #86efac; }
-.dock-time-message--error { border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
+.dock-time-message--info {
+  color: var(--dock-text-dim, #cbd5e1);
+}
+
+.dock-time-message--success {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.dock-time-message--error {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
 
 /* ── Display Mode Segmented Control ── */
 .dock-time-mode-switch {
@@ -32327,6 +32652,40 @@ body.dock-modal-open {
   background: rgba(22, 163, 74, 0.1);
   color: #86EFAC;
   border-bottom: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+/* Floating toast: shows over the bottom of the panel so the layout never jumps when it appears. */
+.dock-mv-tab__feedback--toast {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 9000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  animation: dock-mv-toast-in 0.16s ease-out;
+}
+
+.dock-mv-tab__feedback--toast.dock-mv-tab__feedback--success {
+  background: #0f2a1c;
+  border-color: rgba(22, 163, 74, 0.35);
+  /* Success messages are informational: let clicks reach the buttons underneath. */
+  pointer-events: none;
+}
+
+.dock-mv-tab__feedback--toast.dock-mv-tab__feedback--error {
+  background: #2e1215;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+@keyframes dock-mv-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-mv-tab__feedback--toast { animation: none; }
 }
 
 .dock-mv-tab__feedback-close {
@@ -34822,7 +35181,7 @@ body.dock-modal-open {
   position: absolute;
   inset: 0;
   display: block;
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.08) 25%, rgba(2, 6, 23, 0.9) 100%);
+  background: rgba(2, 6, 23, 0.6);
   content: "";
 }
 
@@ -39925,7 +40284,7 @@ button.dock-btm-toolbar__clear--inline,
   left: 0;
   right: 0;
   height: 60%;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  background: rgba(0, 0, 0, 0.65);
   pointer-events: none;
 }
 
@@ -40199,14 +40558,27 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 @keyframes dock-progress-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes dock-progress-indeterminate {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(180%); }
-  100% { transform: translateX(400%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    transform: translateX(180%);
+  }
+
+  100% {
+    transform: translateX(400%);
+  }
 }
 
 .dock-media-add-modal__pane--template .dock-animation-grid {
@@ -40386,32 +40758,39 @@ button.dock-btm-toolbar__clear--inline,
     gap: 3px;
     border-bottom: none;
   }
+
   .dock-media-pills--secondary {
     padding: 1px 0 2px;
     gap: 3px;
   }
+
   .dock-media-pill,
   .dock-media-pill--small {
     padding: 1px 5px;
     font-size: 8px;
     line-height: 14px;
   }
+
   .dock-media-pill__count {
     font-size: 7.5px;
   }
+
   .dock-media-search {
     min-height: 22px;
     height: 22px;
     padding: 0 4px;
   }
+
   .dock-media-search__input {
     min-height: 18px;
     font-size: 9px;
     padding: 0 2px;
   }
+
   .dock-media-search-row {
     gap: 4px;
   }
+
   .dock-media-search-row .dock-btn {
     width: 22px;
     min-width: 22px;
@@ -40419,22 +40798,28 @@ button.dock-btm-toolbar__clear--inline,
     min-height: 22px;
     padding: 0;
   }
+
   .dock-media-list {
     grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
     gap: 6px;
   }
+
   .dock-media-section__meta {
     display: none;
   }
+
   .dock-time-shell__header {
     padding: 4px 8px;
   }
+
   .dock-time-shell__header p {
     display: none;
   }
+
   .dock-time-tabs {
     padding: 4px 8px;
   }
+
   .dock-time-tabs__button {
     padding: 4px 6px;
     font-size: 9px;
@@ -41184,10 +41569,16 @@ button.dock-btm-toolbar__clear--inline,
   flex-direction: column;
   gap: 3px;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  background: #141720;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+}
+
+:root:not(.light) .dock-bible-actions__menu {
+  background: #141720 !important;
+  background-color: #141720 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .dock-bible-actions__menu-item,
@@ -41984,7 +42375,7 @@ button.dock-btm-toolbar__clear--inline,
   min-height: 0;
 }
 
-.dock-template-card__preview .templates-canvas-shell > div {
+.dock-template-card__preview .templates-canvas-shell>div {
   max-width: 100%;
   max-height: 100%;
 }
@@ -41997,7 +42388,7 @@ button.dock-btm-toolbar__clear--inline,
   position: absolute;
   inset: 0;
   content: "";
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.04), rgba(2, 6, 23, 0.64));
+  background: rgba(2, 6, 23, 0.45);
   opacity: 0;
   transition: opacity 0.18s ease;
   pointer-events: none;
@@ -42058,7 +42449,7 @@ button.dock-btm-toolbar__clear--inline,
   white-space: nowrap;
 }
 
-.dock-template-card__title-row > span {
+.dock-template-card__title-row>span {
   flex: 0 0 auto;
   color: var(--dock-accent);
   font-size: 10px;
@@ -42113,7 +42504,7 @@ button.dock-btm-toolbar__clear--inline,
   gap: 12px;
 }
 
-.dtb-bg-picker__asset-grid > .dtb-bg-picker__card {
+.dtb-bg-picker__asset-grid>.dtb-bg-picker__card {
   align-self: start;
   height: max-content;
 }
@@ -42179,6 +42570,29 @@ button.dock-btm-toolbar__clear--inline,
   border: 1px solid var(--qs-border);
   border-radius: 12px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  height: auto !important;
+  max-height: min(88dvh, calc((100dvh - 24px) / var(--dock-font-scale, 1))) !important;
+  width: min(390px, calc((100dvw - 20px) / var(--dock-font-scale, 1))) !important;
+  max-width: 390px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio__settings-view--picker {
+  flex: 0 1 auto !important;
+  max-height: calc(88dvh - 200px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio-card--picker {
+  flex: 0 1 auto !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker {
+  flex: 0 1 auto !important;
+  width: 100%;
+  padding: 12px 14px 4px 14px;
 }
 
 .dtb-studio__modal--picker .dtb-studio__header {
@@ -42235,39 +42649,87 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 /* Primary Tabs (Text, Layout, Background) */
-.dtb-studio__modal--picker .dtb-bg-picker__tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  margin-bottom: 0;
+.dtb-studio__modal--picker .dtb-bg-picker__layout,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
-.dtb-studio__modal--picker .dtb-bg-picker__tab {
-  flex: 1;
-  min-height: 32px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--qs-text-muted, #8e8896);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
+.dtb-studio__modal--picker .dtb-bg-picker__tabs,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  gap: 6px !important;
+  padding: 4px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 9px !important;
+  margin-bottom: 2px !important;
+  flex-shrink: 0 !important;
 }
 
-.dtb-studio__modal--picker .dtb-bg-picker__tab:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.05);
+.dtb-studio__modal--picker .dtb-bg-picker__tab,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab {
+  flex: 1 1 0 !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 0 12px !important;
+  border-radius: 7px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--qs-text-muted, #8e8896) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  text-decoration: none !important;
 }
 
-.dtb-studio__modal--picker .dtb-bg-picker__tab--active {
-  background: var(--qs-accent, #f05a16) !important;
+.dtb-studio__modal--picker .dtb-bg-picker__tab span,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab span {
+  display: inline !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: inherit !important;
+  text-indent: 0 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab svg,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab svg {
+  color: inherit !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab:hover,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab:hover {
   color: #ffffff !important;
-  font-weight: 650;
-  box-shadow: 0 2px 8px rgba(240, 90, 22, 0.35);
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab--active,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab--active {
+  background: rgba(240, 90, 22, 0.12) !important;
+  border-color: var(--qs-accent, #f05a16) !important;
+  color: var(--qs-accent, #f05a16) !important;
+  font-weight: 650 !important;
+  box-shadow: 0 0 12px rgba(240, 90, 22, 0.22), inset 0 -2px 0 0 var(--qs-accent, #f05a16) !important;
 }
 
 /* Secondary Selector: Subtabs (All, Bible, Reference) */
@@ -42340,6 +42802,166 @@ button.dock-btm-toolbar__clear--inline,
   gap: 10px;
   margin-top: 0;
   border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+}
+
+.dtb-studio__modal--picker .dtb-icon-segmented {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 14px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px !important;
+}
+
+.dtb-studio__modal--picker .dtb-font-weight-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 8px 12px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px !important;
+}
+
+.dtb-studio__modal--picker .dtb-control-subsection {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  border: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.dtb-setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dtb-setting-info .dtb-position-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.dtb-setting-description {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--qs-text-muted, #8e8896);
+  line-height: 1.25;
+}
+
+.dtb-studio__modal--picker .dtb-position-options,
+.dtb-studio__modal--picker .dtb-icon-segmented__options {
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 3px !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 7px !important;
+  flex-shrink: 0 !important;
+}
+
+.dtb-studio__modal--picker .dtb-position-btn,
+.dtb-studio__modal--picker .dtb-icon-segmented__button {
+  padding: 5px 12px !important;
+  min-height: 30px !important;
+  border-radius: 5px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #a49da9 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.dtb-studio__modal--picker .dtb-position-btn:hover,
+.dtb-studio__modal--picker .dtb-icon-segmented__button:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dtb-studio__modal--picker .dtb-position-btn--active,
+.dtb-studio__modal--picker .dtb-icon-segmented__button--active {
+  background: rgba(240, 90, 22, 0.18) !important;
+  border-color: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 10px rgba(240, 90, 22, 0.25) !important;
+}
+
+.dtb-studio__modal--picker .dtb-position-btn--active svg,
+.dtb-studio__modal--picker .dtb-icon-segmented__button--active svg {
+  color: var(--qs-accent, #f05a16) !important;
+}
+
+.dtb-setting-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 86px;
+}
+
+.dtb-select-control {
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  min-height: 27px;
+  padding: 0 18px 0 8px;
+  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  background: var(--qs-panel-2, #28222c);
+  color: var(--qs-text, #f7f4f8);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dtb-select-control:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dtb-select-control:focus-visible,
+.dtb-select-control:focus {
+  outline: none;
+  border-color: var(--qs-accent-border, rgba(240, 90, 22, 0.6));
+  box-shadow: 0 0 0 1px rgba(240, 90, 22, 0.25);
+}
+
+.dtb-select-control option {
+  background: var(--qs-panel-2, #28222c);
+  color: var(--qs-text, #f7f4f8);
+  padding: 4px 6px;
+}
+
+.dtb-setting-control__chevron {
+  position: absolute;
+  right: 5px;
+  pointer-events: none;
+  color: var(--qs-text-muted, #8e8896);
+  font-size: 12px;
 }
 
 .dtb-control-section__head {
@@ -42747,7 +43369,8 @@ button.dock-btm-toolbar__clear--inline,
 /* Sticky Footer in Quick Settings Modal */
 .dtb-studio__modal--picker .dtb-studio__footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
@@ -42758,51 +43381,421 @@ button.dock-btm-toolbar__clear--inline,
   z-index: 25;
 }
 
-.dtb-studio__modal--picker .dtb-studio__footer-btn {
-  flex: 1 1 auto;
+.dtb-studio__modal--picker .dtb-studio__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+/* ── Cross-Tab & Cross-Scene Theme Sync Panel ── */
+.dtb-studio__sync-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #17131b;
+  border: 1px solid rgba(240, 90, 22, 0.22);
+  border-radius: 10px;
+  width: 90%;
+}
+
+.dtb-studio__sync-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dtb-studio__sync-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dtb-studio__sync-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.dtb-studio__sync-title svg {
+  color: var(--qs-accent, #f05a16);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.dtb-studio__sync-subtitle {
+  font-size: 11px;
+  color: var(--qs-text-muted, #8e8896);
+  line-height: 1.25;
+}
+
+.dtb-studio__sync-info-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 12px;
+  color: var(--qs-text-muted, #8e8896);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Custom Designed Dropdown for Theme Scope ── */
+.dtb-studio__sync-dropdown-container {
+  position: relative;
+  width: 100%;
+}
+
+.dtb-studio__sync-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  min-height: 38px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #f7f4f8;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.dtb-studio__sync-dropdown-trigger:hover,
+.dtb-studio__sync-dropdown-trigger--open {
+  border-color: rgba(240, 90, 22, 0.5);
+  background: rgba(240, 90, 22, 0.08);
+}
+
+.dtb-studio__sync-dropdown-trigger-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dtb-studio__sync-dropdown-trigger-icon {
+  color: var(--qs-accent, #f05a16);
+  flex-shrink: 0;
+}
+
+.dtb-studio__sync-dropdown-trigger-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f7f4f8;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dtb-studio__sync-dropdown-chevron {
+  color: var(--qs-text-muted, #8e8896);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.dtb-studio__sync-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #19141f;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(240, 90, 22, 0.2);
+  backdrop-filter: blur(16px);
+  animation: dtb-studio-fadeIn 0.15s ease;
+}
+
+.dtb-studio__sync-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #d1cbd6;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.dtb-studio__sync-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.dtb-studio__sync-dropdown-item--active {
+  background: rgba(240, 90, 22, 0.12) !important;
+  border-color: rgba(240, 90, 22, 0.35) !important;
+  color: #ffffff !important;
+}
+
+.dtb-studio__sync-dropdown-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qs-text-muted, #8e8896);
+  flex-shrink: 0;
+}
+
+.dtb-studio__sync-dropdown-item--active .dtb-studio__sync-dropdown-item-icon {
+  color: var(--qs-accent, #f05a16);
+}
+
+.dtb-studio__sync-dropdown-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dtb-studio__sync-dropdown-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.dtb-studio__sync-dropdown-item-desc {
+  font-size: 10.5px;
+  color: var(--qs-text-muted, #8e8896);
+  line-height: 1.25;
+}
+
+.dtb-studio__sync-dropdown-item-check {
+  display: flex;
+  align-items: center;
+  color: var(--qs-accent, #f05a16);
+  flex-shrink: 0;
+}
+
+.dtb-studio__sync-segmented {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.dtb-studio__sync-seg-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  min-height: 34px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #a49da9;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.dtb-studio__sync-seg-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dtb-studio__sync-seg-btn--active {
+  background: rgba(240, 90, 22, 0.16) !important;
+  border-color: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(240, 90, 22, 0.25) !important;
+}
+
+.dtb-studio__sync-seg-btn svg {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: inherit;
+}
+
+.dtb-studio__sync-seg-btn--active svg {
+  color: var(--qs-accent, #f05a16);
+}
+
+.dtb-studio__sync-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.35;
+  padding: 2px 4px;
+}
+
+.dtb-studio__sync-hint--all {
+  color: #94a3b8;
+}
+
+.dtb-studio__sync-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  animation: dtb-studio-fadeIn 0.2s ease;
+}
+
+.dtb-studio__sync-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dtb-studio__sync-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dtb-studio__sync-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2dde6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dtb-studio__sync-toggle-all {
+  background: transparent;
+  border: none;
+  color: var(--qs-accent, #f05a16);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.dtb-studio__sync-toggle-all:hover {
+  background: rgba(240, 90, 22, 0.12);
+  text-decoration: underline;
+}
+
+.dtb-studio__sync-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.dtb-studio__sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  min-height: 30px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #a49da9;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.dtb-studio__sync-chip input[type="checkbox"] {
+  display: none;
+}
+
+.dtb-studio__sync-chip svg {
+  font-size: 14px;
+  color: #8e8896;
+  flex-shrink: 0;
+}
+
+.dtb-studio__sync-chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.dtb-studio__sync-chip--active {
+  background: rgba(240, 90, 22, 0.14) !important;
+  border-color: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.dtb-studio__sync-chip--active svg {
+  color: var(--qs-accent, #f05a16) !important;
+}
+
+/* Footer Action Buttons */
+.dtb-studio__modal--picker .dtb-studio__footer-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--reset {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: var(--qs-panel-2, #28222c);
-  color: #e2dde6;
-  gap: 6px;
+  flex: 0 0 32% !important;
+  width: 32% !important;
+  min-height: 42px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  gap: 8px !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--reset:hover {
-  background: #322b37;
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--save {
-  border: 1px solid var(--qs-accent, #f05a16);
-  background: var(--qs-accent, #f05a16);
-  color: #ffffff;
-  font-weight: 650;
-  box-shadow: 0 2px 10px rgba(240, 90, 22, 0.35);
-  gap: 6px;
+  flex: 1 1 auto !important;
+  min-height: 42px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--qs-accent, #f05a16) !important;
+  background: var(--qs-accent, #f05a16) !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  box-shadow: 0 2px 14px rgba(240, 90, 22, 0.45) !important;
+  gap: 8px !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--save:hover {
-  background: #e04f0f;
-  border-color: #e04f0f;
+  background: #e04f0f !important;
+  border-color: #e04f0f !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--save:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.5 !important;
+  cursor: default !important;
 }
 
 /* ===================================================================
@@ -42836,6 +43829,7 @@ button.dock-btm-toolbar__clear--inline,
     opacity: 0;
     transform: translateY(16px) scale(0.97);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -42847,8 +43841,13 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 @keyframes dock-force-update-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .force-update-progress-fill--pulse {
@@ -42856,8 +43855,15 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 @keyframes dock-force-update-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .force-update-btn {
@@ -42879,20 +43885,309 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .force-update-btn--primary {
-  background: var(--dock-accent, #1d4ed8);
+  background: var(--dock-accent, #4f46e5);
   color: #fff;
 }
 
 .force-update-btn--primary:hover {
-  background: #2563eb;
+  background: var(--dock-accent-hover, #4338ca);
 }
 
 .force-update-btn--secondary {
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.15));
-  background: transparent;
-  color: var(--dock-text-secondary, #94a3b8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1e293b;
+  color: #f8fafc;
 }
 
 .force-update-btn--secondary:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: #334155;
+  color: #ffffff;
+}
+
+/* ── Text effects: Outline + Shadow (EasyWorship / ProPresenter style) ── */
+.dtb-fx-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dtb-fx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dock-bg, #0f1219) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
+}
+
+.dtb-fx-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dtb-fx-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dtb-fx-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dock-text, #f8fafc);
+}
+
+.dtb-fx-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
+  border-radius: 999px;
+  background: var(--dock-surface-2, #181c26);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dtb-fx-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #94a3b8;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.dtb-fx-switch--on {
+  background: var(--dock-accent, #3b82f6);
+  border-color: var(--dock-accent, #3b82f6);
+}
+
+.dtb-fx-switch--on .dtb-fx-switch__knob {
+  transform: translateX(14px);
+  background: #ffffff;
+}
+
+.dtb-fx-switch:focus-visible {
+  outline: 2px solid var(--dock-accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+.dtb-fx-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dtb-fx-field .dtb-effect-stepper span {
+  min-width: 38px;
+}
+
+.dtb-fx-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dtb-fx-styles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dtb-fx-style {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 85%, transparent);
+  background: var(--dock-surface-2, #181c26);
+  color: var(--dock-text-secondary, #cbd5e1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.dtb-fx-style:hover {
+  border-color: var(--dock-accent, #3b82f6);
+  color: var(--dock-text, #ffffff);
+}
+
+.dtb-fx-style--active {
+  background: color-mix(in srgb, var(--dock-accent, #3b82f6) 22%, transparent);
+  border-color: var(--dock-accent, #3b82f6);
+  color: var(--dock-text, #ffffff);
+}
+
+/* ── Output controls (Quick): layout switch, Hide/Show, size row, reference toggles ── */
+.dock-output-quick-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* The menu is ~220px wide: layout switch and Hide/Show each get a full row. */
+.dock-output-quick-actions__segmented {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  min-width: 0;
+}
+
+.dock-output-quick-actions__segment {
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dock-output-quick-actions__segment:hover {
+  color: var(--dock-text);
+}
+
+.dock-output-quick-actions__segment--active {
+  background: var(--dock-accent);
+  color: #fff;
+}
+
+.dock-output-quick-actions__visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+.dock-output-quick-actions__visibility:hover:not(:disabled) {
+  border-color: var(--dock-accent);
+}
+
+.dock-output-quick-actions__visibility--hidden {
+  background: color-mix(in srgb, #ef4444 18%, var(--dock-surface));
+  border-color: color-mix(in srgb, #ef4444 55%, var(--dock-border));
+}
+
+.dock-output-quick-actions__visibility:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.dock-output-quick-actions__size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dock-output-quick-actions__size-row .dock-bible-reader__size-presets {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dock-output-quick-actions__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 2px;
+}
+
+/* ── Background picker: one Text page (Verse / Effects / Reference) ── */
+.dtb-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 2px 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dtb-section-heading__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dock-text, #f8fafc);
+  cursor: pointer;
+}
+
+/* ── Collapsible control sections (Effects, Font & Style) ── */
+.dtb-collapsible__head {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  gap: 8px;
+}
+
+.dtb-collapsible__head .dtb-control-section__title {
+  margin-right: auto;
+}
+
+.dtb-collapsible__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dock-text-secondary, #94a3b8);
+}
+
+.dtb-collapsible__chevron {
+  flex-shrink: 0;
+  color: var(--dock-text-secondary, #94a3b8);
+  transition: transform 0.15s ease;
+}
+
+.dtb-collapsible--open .dtb-collapsible__chevron {
+  transform: rotate(180deg);
+}
+
+.dtb-collapsible__head:focus-visible {
+  outline: 2px solid var(--dock-accent, #3b82f6);
+  outline-offset: 2px;
+  border-radius: 6px;
 }

@@ -53,9 +53,9 @@ pub fn normalize_scope(scope: &str) -> Result<String, String> {
         return Ok("device".to_string());
     }
     if value.len() > 160
-        || !value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, ':' | '-' | '_' | '.'))
+        || !value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, ':' | '-' | '_' | '.')
+        })
     {
         return Err("Invalid Dock settings scope".to_string());
     }
@@ -67,10 +67,9 @@ fn normalize_key(key: &str) -> Result<String, String> {
     if value.is_empty() || value.len() > 240 {
         return Err("Invalid Dock settings key".to_string());
     }
-    if !value
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || matches!(character, ':' | '-' | '_' | '.'))
-    {
+    if !value.chars().all(|character| {
+        character.is_ascii_alphanumeric() || matches!(character, ':' | '-' | '_' | '.')
+    }) {
         return Err("Invalid Dock settings key".to_string());
     }
     Ok(value.to_string())

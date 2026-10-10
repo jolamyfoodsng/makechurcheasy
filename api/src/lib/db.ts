@@ -65,6 +65,7 @@ export const COLLECTIONS = {
   TRANSCRIPTS: "transcripts",
   CUSTOM_THEMES: "custom_themes",
   PRODUCTION_THEMES: "production_themes",
+  BROADCAST_GRAPHICS: "broadcast_graphics",
   TUTORIAL_PLAYLISTS: "tutorial_playlists",
   APP_SETTINGS: "app_settings",
   TRIAL_SETTINGS: "trial_settings",
@@ -78,6 +79,10 @@ export const COLLECTIONS = {
   ANNOUNCEMENTS: "announcements",
   ANNOUNCEMENT_DELIVERIES: "announcement_deliveries",
   DISCOUNT_REDEMPTIONS: "discount_redemptions",
+  USER_OFFERS: "user_offers",
+  OFFER_JOURNEYS: "offer_journeys",
+  OFFER_SETTINGS: "offer_settings",
+  OFFER_CLAIM_SIGNALS: "offer_claim_signals",
   REFERRALS: "referrals",
   NOWPAYMENTS_INTENTS: "nowpayments_payment_intents",
   FLUTTERWAVE_INTENTS: "flutterwave_payment_intents",
@@ -187,6 +192,10 @@ export async function ensureIndexes() {
     db.collection(COLLECTIONS.PRODUCTION_THEMES).createIndex({ themeId: 1 }, { unique: true }),
     db.collection(COLLECTIONS.PRODUCTION_THEMES).createIndex({ kind: 1, enabled: 1, updatedAt: -1 }),
 
+    // broadcast_graphics — admin settings for bundled graphics + uploaded graphic packages
+    db.collection(COLLECTIONS.BROADCAST_GRAPHICS).createIndex({ graphicId: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.BROADCAST_GRAPHICS).createIndex({ source: 1, status: 1, sortOrder: 1 }),
+
     // tutorial_playlists — admin-managed detailed training catalogue for the desktop app
     db.collection(COLLECTIONS.TUTORIAL_PLAYLISTS).createIndex({ playlistId: 1 }, { unique: true }),
     db.collection(COLLECTIONS.TUTORIAL_PLAYLISTS).createIndex({ enabled: 1, featured: -1, sortOrder: 1, updatedAt: -1 }),
@@ -227,6 +236,15 @@ export async function ensureIndexes() {
     // discount_redemptions — prevents duplicate redemption counts when verify/webhook both run
     db.collection(COLLECTIONS.DISCOUNT_REDEMPTIONS).createIndex({ paystackReference: 1 }, { unique: true }),
     db.collection(COLLECTIONS.DISCOUNT_REDEMPTIONS).createIndex({ code: 1, createdAt: -1 }),
+
+    // win-back offers: one offer per user per ladder rung, one journey per user per ladder
+    db.collection(COLLECTIONS.USER_OFFERS).createIndex({ userId: 1, ladderId: 1, rungIndex: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.USER_OFFERS).createIndex({ status: 1, closesAt: 1 }),
+    db.collection(COLLECTIONS.USER_OFFERS).createIndex({ ladderId: 1, rungId: 1, issuedAt: -1 }),
+    db.collection(COLLECTIONS.OFFER_JOURNEYS).createIndex({ userId: 1, ladderId: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.OFFER_JOURNEYS).createIndex({ ladderId: 1, state: 1 }),
+    db.collection(COLLECTIONS.OFFER_CLAIM_SIGNALS).createIndex({ signalKey: 1, kind: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.OFFER_CLAIM_SIGNALS).createIndex({ userId: 1, createdAt: -1 }),
 
     // referrals — one referral code per referrer and one referrer per referred user
     db.collection("users").createIndex({ referralCode: 1 }, { unique: true, sparse: true }),
@@ -729,10 +747,10 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
       credits: 50,
       entitlements: {
-        songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 0, devices: 1,
-        bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 0, themePresets: 0,
+        songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 3, devices: 1,
+        bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 3, themePresets: 0,
         cloudStorageGB: 0,
-        multiview: false, tickers: false, massImport: false, easyWorshipImport: false,
+        multiview: false, tickers: true, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: true,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false, slideshow: false,
@@ -745,10 +763,10 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       paystack: { monthlyPlanCode: "mce_basic_monthly", yearlyPlanCode: "mce_basic_yearly" },
       credits: 720,
       entitlements: {
-        songs: 100, images: 100, videos: 100, themes: 3, lowerThirds: 0, devices: 3,
-        bibleVersions: -1, multiviewTemplates: 5, tickerThemes: 0, themePresets: 3,
+        songs: 100, images: 100, videos: 100, themes: 3, lowerThirds: -1, devices: 3,
+        bibleVersions: -1, multiviewTemplates: 5, tickerThemes: -1, themePresets: 3,
         cloudStorageGB: 1,
-        multiview: true, tickers: false, massImport: false, easyWorshipImport: false,
+        multiview: true, tickers: true, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: true,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false, slideshow: true,
@@ -795,7 +813,8 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
         { text: "Unlimited Bible versions and 3 devices" },
         { text: "Bible, Worship, Media, and up to 5 multiview templates" },
         { text: "Verse AI with 100 monthly credits" },
-        { text: "Countdowns, tickers, lower thirds, and transcript translation require Growth" },
+        { text: "Unlimited broadcast graphics and tickers" },
+        { text: "Countdowns and transcript translation require Growth" },
       ],
       buttonText: "Get Basic",
       paystackPlanCode: "mce_basic_monthly",

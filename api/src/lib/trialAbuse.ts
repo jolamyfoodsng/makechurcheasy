@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type { NextRequest } from "next/server";
-import type { Collection } from "mongodb";
+import { ObjectId, type Collection } from "mongodb";
 import clientPromise from "./mongodb";
 import { COLLECTIONS } from "@/lib/db";
 import { isTrialEnabled, createTrialForUser } from "@/lib/trial";
@@ -62,13 +62,130 @@ type TrialClaimParams = {
 
 const CLAIM_RESERVATION_MS = 15 * 60 * 1000;
 
-function hashTrialValue(value: string): string {
-  const salt =
-    process.env.TRIAL_ABUSE_SALT ||
+let warnedAboutTrialSalt = false;
+
+/**
+ * The salt must never change once trials have been claimed: every stored
+ * signal key is derived from it, so a new salt makes every computer look
+ * new and lets it start another trial. TRIAL_ABUSE_SALT pins it; the
+ * JWT_SECRET fallback only exists for deployments that predate it.
+ */
+function getTrialSalt(): string {
+  const pinned = process.env.TRIAL_ABUSE_SALT?.trim();
+  if (pinned) return pinned;
+
+  // Keep this fallback order exactly as it was: existing claim records were
+  // hashed with whichever value it resolved to, and changing it would let
+  // every computer start a new trial.
+  const source = process.env.JWT_SECRET
+    ? "JWT_SECRET"
+    : process.env.NEXTAUTH_SECRET
+      ? "NEXTAUTH_SECRET"
+      : "the built-in default";
+
+  if (!warnedAboutTrialSalt && process.env.NODE_ENV === "production") {
+    warnedAboutTrialSalt = true;
+    console.warn(
+      `[trialAbuse] TRIAL_ABUSE_SALT is not set; using ${source}. ` +
+      "Set TRIAL_ABUSE_SALT to that exact value and never change it, " +
+      "otherwise every one-trial-per-computer record is lost.",
+    );
+  }
+
+  return (
     process.env.JWT_SECRET ||
     process.env.NEXTAUTH_SECRET ||
-    "makechurcheasy-trial-abuse-v1";
-  return crypto.createHmac("sha256", salt).update(value).digest("hex");
+    "makechurcheasy-trial-abuse-v1"
+  );
+}
+
+function hashTrialValue(value: string): string {
+  return crypto.createHmac("sha256", getTrialSalt()).update(value).digest("hex");
+}
+
+// ── Why a user has no trial (shown in the desktop app and dashboard) ────────
+
+export type TrialEligibilityStatus = "used_on_device" | "desktop_required";
+
+export type ClientTrialEligibility = {
+  status: TrialEligibilityStatus;
+  message: string;
+};
+
+export const TRIAL_USED_ON_DEVICE_MESSAGE =
+  "The free trial has already been used on this computer. You're on the Free plan.";
+export const TRIAL_DESKTOP_REQUIRED_MESSAGE =
+  "Your free trial starts when you sign in on the MakeChurchEasy desktop app.";
+
+function toClientTrialEligibility(status: unknown): ClientTrialEligibility | null {
+  if (status === "used_on_device") {
+    return { status, message: TRIAL_USED_ON_DEVICE_MESSAGE };
+  }
+  if (status === "desktop_required") {
+    return { status, message: TRIAL_DESKTOP_REQUIRED_MESSAGE };
+  }
+  return null;
+}
+
+/**
+ * Persist (or clear) the reason a user has no trial so every client can
+ * explain it. Failures are logged and never block sign-in.
+ */
+async function recordTrialEligibility(
+  userId: string,
+  status: TrialEligibilityStatus | null,
+): Promise<void> {
+  if (!ObjectId.isValid(userId)) return;
+  try {
+    const client = await clientPromise;
+    const users = client.db().collection("users");
+    if (status) {
+      // A login without a fingerprint must not hide the stronger
+      // "already used on this computer" finding.
+      const filter: Record<string, any> = { _id: new ObjectId(userId) };
+      if (status === "desktop_required") {
+        filter["trialEligibility.status"] = { $ne: "used_on_device" };
+      }
+      await users.updateOne(
+        filter,
+        { $set: { trialEligibility: { status, updatedAt: new Date().toISOString() } } },
+      );
+    } else {
+      await users.updateOne(
+        { _id: new ObjectId(userId), trialEligibility: { $exists: true } },
+        { $unset: { trialEligibility: "" } },
+      );
+    }
+  } catch (error) {
+    console.error("[trialAbuse] Failed to record trial eligibility:", error);
+  }
+}
+
+/**
+ * Trial-unavailable reason for API responses. Returns null whenever the
+ * user has (or had) a trial, so the notice never contradicts a trial.
+ */
+export async function getClientTrialEligibility(
+  userId: string,
+  hasTrial: boolean,
+): Promise<ClientTrialEligibility | null> {
+  if (hasTrial || !ObjectId.isValid(userId)) return null;
+  try {
+    const client = await clientPromise;
+    const user = await client
+      .db()
+      .collection("users")
+      .findOne(
+        { _id: new ObjectId(userId) },
+        { projection: { trialEligibility: 1, plan: 1 } },
+      );
+    const plan = String(user?.plan || "free").toLowerCase();
+    if (plan !== "free") return null;
+    return toClientTrialEligibility(user?.trialEligibility?.status);
+  } catch (error) {
+    console.error("[trialAbuse] Failed to read trial eligibility:", error);
+    return null;
+  }
 }
 
 export function normalizeEmailForTrial(email: string): string {
@@ -259,6 +376,22 @@ async function ensureTrialClaimIndexes() {
 }
 
 export async function claimTrialForUserIfEligible(
+  params: TrialClaimParams
+): Promise<TrialClaimResult> {
+  const result = await claimTrialForUserInternal(params);
+
+  if (result.trialRecord || result.reason === "activation_required") {
+    await recordTrialEligibility(params.userId, null);
+  } else if (result.reason === "trial_already_claimed") {
+    await recordTrialEligibility(params.userId, "used_on_device");
+  } else if (result.reason === "device_identity_required") {
+    await recordTrialEligibility(params.userId, "desktop_required");
+  }
+
+  return result;
+}
+
+async function claimTrialForUserInternal(
   params: TrialClaimParams
 ): Promise<TrialClaimResult> {
   const existingTrial = await getTrialForUser(params.userId);

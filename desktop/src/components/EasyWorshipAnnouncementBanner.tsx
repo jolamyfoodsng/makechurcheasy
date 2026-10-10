@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
+  Download,
   FolderDown,
   Loader2,
-  Sparkles,
   X,
 } from "lucide-react";
 import {
@@ -181,7 +181,7 @@ export default function EasyWorshipAnnouncementBanner() {
                 className="ew-announcement-btn ew-announcement-btn--primary"
                 onClick={handleStartImport}
               >
-                <Sparkles size={15} />
+                <Download size={15} />
                 <span>Yes, Import Everything</span>
               </button>
               <button

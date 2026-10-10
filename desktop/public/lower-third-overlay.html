@@ -609,6 +609,13 @@
     }
   </style>
 
+  <!-- Kinetic lower thirds (GSAP-driven name straps, see public/kinetic/) -->
+  <script src="/kinetic/gsap.min.js"></script>
+  <script src="/kinetic/kinetic-lower-thirds.js?v=5"></script>
+  <script src="/kinetic/subscribe-lower-thirds.js?v=1"></script>
+  <script src="/kinetic/church-lower-thirds.js?v=1"></script>
+  <script src="/kinetic/sunday-lower-thirds.js?v=1"></script>
+  <script src="/kinetic/mce-graphic-packages.js?v=1"></script>
   <script>
     /**
      * Lower Third Overlay — MakeChurchEasy
@@ -648,6 +655,58 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    // Kinetic straps can take themselves off air after N seconds (Dock: "Animate out after").
+    var kineticAutoOutTimer = null;
+    var kineticLoopToken = 0; // bumped by every new overlay command so a running loop stops
+    function clearKineticAutoOut() {
+      if (kineticAutoOutTimer) {
+        clearTimeout(kineticAutoOutTimer);
+        kineticAutoOutTimer = null;
+      }
+    }
+    function scheduleKineticAutoOut(root, entryMs) {
+      clearKineticAutoOut();
+      var el = root && root.querySelector(".kx-root");
+      if (!el) return;
+      var raw = el.getAttribute("data-v-kx-auto-out");
+      // Payloads saved before this setting existed still carry the {{kxAutoOut}} placeholder: use the 5s default.
+      var seconds = raw == null || /^\{\{/.test(raw) ? 5 : parseFloat(raw);
+      if (!isFinite(seconds) || seconds <= 0) return;
+      // Live text edits keep the same timer; a new show or any hide replaces/clears it.
+      kineticAutoOutTimer = setTimeout(function () {
+        kineticAutoOutTimer = null;
+        if (!isVisible || isExiting) return;
+        var live = root.querySelector(".kx-root");
+        var loop = !!(live && live.getAttribute("data-v-kx-loop") === "1");
+        var payload = currentThemePayload;
+        if (!loop || !payload) {
+          animateCurrentOverlayOut();
+          return;
+        }
+        // "Loop auto": play out, pause briefly, play in again, until any new command arrives.
+        var token = kineticLoopToken;
+        hideOverlay(root, payload, function () {
+          setTimeout(function () {
+            if (token !== kineticLoopToken || isVisible || isExiting) return;
+            currentThemeId = payload.themeId || null;
+            showOverlay(root, payload);
+          }, 900);
+        });
+      }, (entryMs || 0) + seconds * 1000);
+    }
+
+    // Kinetic themes (.kx-root) are animated by window.MCEKinetic instead of CSS.
+    // Returns the started animation's length in ms, or 0 when the theme is not kinetic.
+    function runKinetic(root, state) {
+      try {
+        if (!root || !window.MCEKinetic || !root.querySelector(".kx-root")) return 0;
+        return window.MCEKinetic.run(root, state) || 0;
+      } catch (err) {
+        console.warn("[LT-Overlay] Kinetic theme failed:", err);
+        return 0;
+      }
     }
 
     const MIN_THEME_EXIT_DURATION_MS = 220;
@@ -1671,12 +1730,15 @@
       applySize(root, widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
       applyCustomStyles(root, data);
       applyPosition(root, data);
+      var kineticEntryMs = runKinetic(root, "in");
       scheduleFitOverlay(root);
       currentThemePayload = {
         ...data,
         values: { ...(data.values || {}) },
       };
       isVisible = true;
+      if (kineticEntryMs) scheduleKineticAutoOut(root, kineticEntryMs);
+      else clearKineticAutoOut();
     }
 
     /**
@@ -1686,6 +1748,7 @@
       if (isExiting) {
         return;
       }
+      clearKineticAutoOut();
       if (!isVisible) {
         if (!callback) clearBackgroundSnapshot();
         if (callback) callback();
@@ -1702,11 +1765,13 @@
         applySize(root, widthPct, payload.fontScale, payload.fontSizeScale, payload.heightPx, payload.visualScale, payload.scale);
         applyCustomStyles(root, payload);
         applyPosition(root, payload);
+        // Kinetic straps play their own exit, so skip the whole-root fade for them.
+        var kineticExitMs = runKinetic(root, "out");
         scheduleFitOverlay(root);
         // Ensure computed styles are up-to-date before reading animation timings.
         void root.offsetWidth;
-        root.classList.add("exit-fading");
-        var exitDuration = resolveThemeExitDuration(root);
+        if (!kineticExitMs) root.classList.add("exit-fading");
+        var exitDuration = kineticExitMs ? kineticExitMs + 80 : resolveThemeExitDuration(root);
         setTimeout(() => {
           root.innerHTML = "";
           root.className = "hidden-state";
@@ -1752,8 +1817,9 @@
       }
       if (root.classList.contains("hidden-state") || root.children.length === 0) return false;
       isExiting = true;
-      root.classList.add("exit-fading");
-      var exitDuration = resolveThemeExitDuration(root);
+      var kineticOutMs = runKinetic(root, "out");
+      if (!kineticOutMs) root.classList.add("exit-fading");
+      var exitDuration = kineticOutMs ? kineticOutMs + 80 : resolveThemeExitDuration(root);
       setTimeout(() => {
         root.innerHTML = "";
         root.className = "hidden-state";
@@ -1820,8 +1886,10 @@
      */
     function applyTheme(data) {
       const root = document.getElementById("overlay-root");
+      kineticLoopToken++;
 
       if (!data) {
+        clearKineticAutoOut();
         pendingThemePayload = null;
         clearBackgroundSnapshot();
         root.innerHTML = "";
@@ -1864,10 +1932,11 @@
           applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
           applyCustomStyles(root, data);
           applyPosition(root, data);
+          var kineticBlankMs = runKinetic(root, "out");
           scheduleFitOverlay(root);
           void root.offsetWidth;
-          root.classList.add("exit-fading");
-          var exitDuration = resolveThemeExitDuration(root);
+          if (!kineticBlankMs) root.classList.add("exit-fading");
+          var exitDuration = kineticBlankMs ? kineticBlankMs + 80 : resolveThemeExitDuration(root);
           setTimeout(() => {
             root.innerHTML = "";
             root.className = "hidden-state";
@@ -1956,6 +2025,8 @@
         applySize(root, data.widthPct, data.fontScale, data.fontSizeScale, data.heightPx, data.visualScale, data.scale);
         applyCustomStyles(root, data);
         applyPosition(root, data);
+        // Live text edits on a kinetic strap update in place (no re-entrance).
+        runKinetic(root, "hold");
         scheduleFitOverlay(root);
         currentThemePayload = {
           ...data,

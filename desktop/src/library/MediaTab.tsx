@@ -22,6 +22,7 @@ import Icon from "../components/Icon";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import { DOCK_MEDIA_ACCEPT, getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
 import {
   convertDocumentToPageFiles,
@@ -37,7 +38,6 @@ import {
   saveReceiverFileToFolder,
   type ReceiverFile,
 } from "../services/receiverService";
-import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
 import { MediaShareTab } from "./MediaShareTab";
 import { fuzzyMatch } from "../services/fuzzySearch";
 import {
@@ -315,7 +315,6 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   const [pageDragging, setPageDragging] = useState(false);
   const [pageUploading, setPageUploading] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
-  const [showMediaLimitModal, setShowMediaLimitModal] = useState(false);
   const [mediaView, setMediaView] = useState<MediaView>("library");
   const [starterPictures, setStarterPictures] = useState<TemplatePictureAsset[]>([]);
   const [starterPicturesLoading, setStarterPicturesLoading] = useState(false);
@@ -336,8 +335,6 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   const videoCount = useMemo(() => items.filter((m) => m.type === "video").length, [items]);
   const isImageUnlimited = imageLimit === -1;
   const isVideoUnlimited = videoLimit === -1;
-  const hasReachedImageLimit = !isImageUnlimited && imageCount >= imageLimit;
-  const hasReachedVideoLimit = !isVideoUnlimited && videoCount >= videoLimit;
   const showMediaUsage = !isImageUnlimited || !isVideoUnlimited;
 
   const reload = useCallback(() => {
@@ -425,13 +422,12 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
         if (showAddModal) { setShowAddModal(false); return; }
         if (deleteConfirmId) { setDeleteConfirmId(null); return; }
         if (renameId) { setRenameId(null); return; }
-        if (showMediaLimitModal) { setShowMediaLimitModal(false); return; }
         setMenuOpenId(null);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showAddModal, deleteConfirmId, renameId, showMediaLimitModal]);
+  }, [showAddModal, deleteConfirmId, renameId]);
 
   // Filter + search (memoized to avoid recomputation)
   // NOTE: Plan limits do NOT control visibility. Users always see all their media.
@@ -486,7 +482,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   const handleDownloadStarterPicture = useCallback(async (asset: TemplatePictureAsset) => {
     const entitlement = checkEntitlementSync("images", effectivePlan);
     if (!entitlement.allowed) {
-      setShowMediaLimitModal(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
 
@@ -550,7 +546,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
 
     // Both types over limit → block entirely
     if (imageExceeded && videoExceeded) {
-      setShowMediaLimitModal(true);
+      void openDashboardSubscriptionPlans();
       setPageUploading(false);
       return;
     }
@@ -581,7 +577,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
       const uploadedCount = imagesUploaded + videosUploaded;
       const rejectedCount = queueItems.length - uploadedCount;
       if (rejectedCount > 0) {
-        setShowMediaLimitModal(true);
+        void openDashboardSubscriptionPlans();
       }
 
       reload();
@@ -1005,32 +1001,6 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
           onSave={handleAddComplete}
           effectivePlan={effectivePlan}
         />
-      )}
-
-      {/* Media Limit Modal */}
-      {showMediaLimitModal && (
-        <div className="lib-modal-backdrop" onClick={() => setShowMediaLimitModal(false)}>
-          <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("library.mediaTab.limitReached.title")}</h3>
-            <p>
-              {t("library.mediaTab.limitReached.planMessage")}
-            </p>
-            {(hasReachedImageLimit || hasReachedVideoLimit) && (
-              <p>
-                {hasReachedImageLimit && `${t("library.mediaTab.limitReached.imageLimitReached")} (${imageCount}/${imageLimit})`}
-                {hasReachedImageLimit && hasReachedVideoLimit && " · "}
-                {hasReachedVideoLimit && `${t("library.mediaTab.limitReached.videoLimitReached")} (${videoCount}/${videoLimit})`}
-              </p>
-            )}
-            <p>{t("library.mediaTab.limitReached.upgradeHint")} {UPGRADE_PROMO_FALLBACK}</p>
-            <div className="lib-confirm-actions">
-              <button className="lib-confirm-cancel" onClick={() => setShowMediaLimitModal(false)} title={t("common.close")}>{t("common.close")}</button>
-              <a href="https://makechurcheazy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
-                {t("library.mediaTab.limitReached.upgradePlan")}
-              </a>
-            </div>
-          </div>
-        </div>
       )}
 
       {pageDragging && (

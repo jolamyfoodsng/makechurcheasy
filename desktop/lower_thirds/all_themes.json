@@ -273,7 +273,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "6:30 PM - Main Sanctuary",
+          "defaultValue": "6:30 PM - Main Service",
           "placeholder": "Enter details",
           "group": "Content"
         }

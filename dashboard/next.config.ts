@@ -18,6 +18,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/pricing-page",
+        destination: "/pricing",
+        permanent: true,
+      },
+      {
         source: "/:path*",
         has: [
           {

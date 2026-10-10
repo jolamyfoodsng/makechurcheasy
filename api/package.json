@@ -17,6 +17,7 @@
     "@aws-sdk/client-s3": "^3.1072.0",
     "@payloadcms/db-mongodb": "^3.89.0",
     "@payloadcms/next": "^3.89.0",
+    "@simplewebauthn/server": "^14.0.3",
     "@types/qrcode": "^1.5.6",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",

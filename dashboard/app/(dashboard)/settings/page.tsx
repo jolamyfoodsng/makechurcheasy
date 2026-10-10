@@ -11,7 +11,7 @@ import imageCompression from "browser-image-compression";
 import {
   Camera,
   ChevronRight,
-  Chrome,
+  Fingerprint,
   HelpCircle,
   Loader2,
   Mail,
@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { getAmbassadorInfo } from "@/lib/ambassadorUtils";
+import { GoogleMark } from "@/components/GoogleMark";
 
 export default function ProfileSettings() {
   const t = useTranslations();
@@ -400,7 +401,7 @@ export default function ProfileSettings() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center shrink-0">
-                    <Chrome className="w-5 h-5 text-white" />
+                    <GoogleMark size={20} />
                   </div>
                   <div>
                     <p className="text-sm font-bold text-slate-900">{t("settings.googleLabel")}</p>
@@ -415,6 +416,13 @@ export default function ProfileSettings() {
                   )}
                   <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 shrink-0" />
                 </div>
+              </Link>
+              <Link href="/settings/passkeys" className="flex items-center justify-between group hover:bg-slate-50 p-2 -mx-2 rounded-xl transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-violet-50 text-violet-700 rounded-full flex items-center justify-center shrink-0"><Fingerprint className="w-5 h-5" /></div>
+                  <div><p className="text-sm font-bold text-slate-900">Passkeys</p><p className="text-xs text-slate-500">Sign in with your device or password manager</p></div>
+                </div>
+                <div className="flex items-center gap-2"><span className="text-xs text-slate-500">Manage</span><ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600" /></div>
               </Link>
             </div>
           </Card>

@@ -1504,7 +1504,7 @@
 .bulk-import-slide-card {
   min-height: 160px;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92));
+  background: #131724;
   border: 1px solid rgba(148, 163, 184, 0.16);
   padding: 14px;
   display: flex;

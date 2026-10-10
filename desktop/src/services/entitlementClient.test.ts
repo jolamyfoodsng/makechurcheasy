@@ -35,12 +35,12 @@ describe("checkEntitlement (async — server)", () => {
   it("returns allowed=true when under limit", async () => {
     const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(100);
+    expect(result.limit).toBe(-1);
     expect(result.current).toBe(5);
   });
 
   it("returns allowed=false when at limit", async () => {
-    const result = await checkEntitlement("songs", "free", 3);
+    const result = await checkEntitlement("songs", "free", 10);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("Songs limit reached");
   });
@@ -48,12 +48,12 @@ describe("checkEntitlement (async — server)", () => {
   it("returns allowed=true for basic plan under songs limit", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ allowed: true, limit: 100, current: 5 }),
+      json: async () => ({ allowed: true, limit: -1, current: 5 }),
     });
 
     const result = await checkEntitlement("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(100);
+    expect(result.limit).toBe(-1);
   });
 
   it("returns allowed=true for boolean feature when enabled", async () => {
@@ -86,7 +86,7 @@ describe("checkEntitlement (async — server)", () => {
 
     const result = await checkEntitlement("songs", "free", 2);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(3);
+    expect(result.limit).toBe(10);
   });
 
   it("falls back when server returns non-ok", async () => {
@@ -94,18 +94,18 @@ describe("checkEntitlement (async — server)", () => {
 
     const result = await checkEntitlement("images", "basic", 10);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(100);
+    expect(result.limit).toBe(-1);
   });
 
   it("defaults to free plan when plan is undefined", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ allowed: false, limit: 3, current: 3 }),
+      json: async () => ({ allowed: false, limit: 10, current: 10 }),
     });
 
-    const result = await checkEntitlement("songs", undefined, 3);
+    const result = await checkEntitlement("songs", undefined, 10);
     expect(result.allowed).toBe(false);
-    expect(result.limit).toBe(3);
+    expect(result.limit).toBe(10);
   });
 });
 
@@ -113,11 +113,11 @@ describe("checkEntitlementSync (local fallback)", () => {
   it("returns allowed=true for free plan under limit", () => {
     const result = checkEntitlementSync("songs", "free", 1);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(3);
+    expect(result.limit).toBe(10);
   });
 
   it("returns allowed=false for free plan at limit", () => {
-    const result = checkEntitlementSync("songs", "free", 3);
+    const result = checkEntitlementSync("songs", "free", 10);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("Songs limit reached");
   });
@@ -125,7 +125,7 @@ describe("checkEntitlementSync (local fallback)", () => {
   it("returns allowed=true for basic plan under songs limit", () => {
     const result = checkEntitlementSync("songs", "basic", 5);
     expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(100);
+    expect(result.limit).toBe(-1);
   });
 
   it("returns allowed=false for disabled boolean feature", () => {
@@ -134,11 +134,20 @@ describe("checkEntitlementSync (local fallback)", () => {
     expect(result.requiredPlan).toBe("basic");
   });
 
-  it("allows Basic multiview but keeps Growth-only Dock features locked", () => {
+  it("allows Basic multiview, unlimited graphics and tickers, but keeps countdowns for Growth", () => {
     expect(checkEntitlementSync("multiview", "basic").allowed).toBe(true);
-    expect(checkEntitlementSync("tickers", "basic").allowed).toBe(false);
-    expect(checkEntitlementSync("lowerThirds", "basic").allowed).toBe(false);
+    expect(checkEntitlementSync("tickers", "basic").allowed).toBe(true);
+    expect(checkEntitlementSync("lowerThirds", "basic", 500).allowed).toBe(true);
+    expect(checkEntitlementSync("tickerThemes", "basic", 500).allowed).toBe(true);
     expect(checkEntitlementSync("countdowns", "basic").allowed).toBe(false);
+  });
+
+  it("gives Free 3 broadcast graphics and 3 tickers", () => {
+    expect(checkEntitlementSync("lowerThirds", "free", 2).allowed).toBe(true);
+    expect(checkEntitlementSync("lowerThirds", "free", 3).allowed).toBe(false);
+    expect(checkEntitlementSync("tickerThemes", "free", 2).allowed).toBe(true);
+    expect(checkEntitlementSync("tickerThemes", "free", 3).allowed).toBe(false);
+    expect(checkEntitlementSync("lowerThirds", "free", 3).requiredPlan).toBe("basic");
   });
 
   it("enforces the five-template Basic limit and Growth unlimited access", () => {
@@ -154,19 +163,19 @@ describe("checkEntitlementSync (local fallback)", () => {
   });
 
   it("defaults to free plan for null/undefined", () => {
-    const result = checkEntitlementSync("songs", null as unknown as string, 3);
+    const result = checkEntitlementSync("songs", null as unknown as string, 10);
     expect(result.allowed).toBe(false);
-    expect(result.limit).toBe(3);
+    expect(result.limit).toBe(10);
   });
 });
 
 describe("getFeatureLimit", () => {
-  it("returns 3 for free plan songs", () => {
-    expect(getFeatureLimit("songs", "free")).toBe(3);
+  it("returns 10 for free plan songs", () => {
+    expect(getFeatureLimit("songs", "free")).toBe(10);
   });
 
-  it("returns 100 for basic plan songs", () => {
-    expect(getFeatureLimit("songs", "basic")).toBe(100);
+  it("returns -1 for basic plan songs", () => {
+    expect(getFeatureLimit("songs", "basic")).toBe(-1);
   });
 
   it("returns -1 for growth plan songs (unlimited)", () => {
@@ -181,8 +190,8 @@ describe("getFeatureLimit", () => {
     expect(getFeatureLimit("multiview", "growth")).toBe(-1);
   });
 
-  it("returns 3 for free plan images", () => {
-    expect(getFeatureLimit("images", "free")).toBe(3);
+  it("returns 10 for free plan images", () => {
+    expect(getFeatureLimit("images", "free")).toBe(10);
   });
 
   it("returns -1 for growth plan everything", () => {
@@ -197,7 +206,7 @@ describe("getEntitlementConfig", () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        plans: { free: { songs: 3 }, basic: { songs: 30 } },
+        plans: { free: { songs: 10 }, basic: { songs: -1 } },
       }),
     });
 
@@ -210,6 +219,6 @@ describe("getEntitlementConfig", () => {
 
     const config = await getEntitlementConfig();
     expect(config).toHaveProperty("free");
-    expect(config.free.songs).toBe(3);
+    expect(config.free.songs).toBe(10);
   });
 });

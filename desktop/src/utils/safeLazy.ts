@@ -12,17 +12,10 @@ export function safeLazy<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T } | { [key: string]: T }>
 ) {
   return lazy(async () => {
-    try {
-      const res = await factory();
-      if ("default" in res) {
-        return res as { default: T };
-      }
-      const firstKey = Object.keys(res)[0];
-      return { default: res[firstKey] };
-    } catch (err) {
-      console.warn("[MakeChurchEasy] Transient chunk import error, retrying...", err);
-      // Brief pause before first retry
-      await new Promise((resolve) => setTimeout(resolve, 300));
+    const delays = [500, 1500, 3000];
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
       try {
         const res = await factory();
         if ("default" in res) {
@@ -30,17 +23,26 @@ export function safeLazy<T extends ComponentType<any>>(
         }
         const firstKey = Object.keys(res)[0];
         return { default: res[firstKey] };
-      } catch (retryErr) {
-        console.error("[MakeChurchEasy] Module script import failed after retry:", retryErr);
-        // Force refresh page if asset bundle hash changed on client
-        const reloadKey = "mce_module_chunk_reload_" + Math.floor(Date.now() / 15000);
-        if (typeof window !== "undefined" && !sessionStorage.getItem(reloadKey)) {
-          sessionStorage.setItem(reloadKey, "1");
-          window.location.reload();
+      } catch (err) {
+        lastError = err;
+        if (attempt < delays.length) {
+          console.warn(
+            `[MakeChurchEasy] Transient chunk import error (attempt ${attempt + 1}/${delays.length + 1}), retrying in ${delays[attempt]}ms...`,
+            err
+          );
+          await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
         }
-        throw retryErr;
       }
     }
+
+    console.error("[MakeChurchEasy] Module script import failed after retries:", lastError);
+    // Force refresh page if asset bundle hash changed on client
+    const reloadKey = "mce_module_chunk_reload_" + Math.floor(Date.now() / 15000);
+    if (typeof window !== "undefined" && !sessionStorage.getItem(reloadKey)) {
+      sessionStorage.setItem(reloadKey, "1");
+      window.location.reload();
+    }
+    throw lastError;
   });
 }
 

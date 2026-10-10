@@ -29,7 +29,7 @@ const ACTIVITY_EVENTS = [
   "translation_generated",
   "sts_push_to_live",
 ];
-const USE_EVENTS = new Set([
+export const USE_EVENTS = new Set([
   "first_use",
   "first_presentation",
   "obs_connected",

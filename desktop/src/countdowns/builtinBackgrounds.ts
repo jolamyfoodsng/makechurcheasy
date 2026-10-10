@@ -78,7 +78,7 @@ export const BUILTIN_BACKGROUNDS: BuiltinBackground[] = [
 
   // ── Church ──
   { id: "church_01", category: "church", label: "Stained Glass", thumbnail: "linear-gradient(135deg, #1a0a2e 0%, #4a148c 25%, #c62828 50%, #1565c0 75%, #2e7d32 100%)", source: "linear-gradient(135deg, #1a0a2e 0%, #4a148c 25%, #c62828 50%, #1565c0 75%, #2e7d32 100%)", type: "gradient", premium: false },
-  { id: "church_02", category: "church", label: "Sanctuary", thumbnail: "linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 40%, #424242 100%)", source: "linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 40%, #424242 100%)", type: "gradient", premium: false },
+  { id: "church_02", category: "church", label: "Auditorium", thumbnail: "linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 40%, #424242 100%)", source: "linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 40%, #424242 100%)", type: "gradient", premium: false },
   { id: "church_03", category: "church", label: "Cathedral", thumbnail: "linear-gradient(180deg, #0d0d0d 0%, #1a1a2e 50%, #2d1b69 100%)", source: "linear-gradient(180deg, #0d0d0d 0%, #1a1a2e 50%, #2d1b69 100%)", type: "gradient", premium: false },
 
   // ── Conference ──

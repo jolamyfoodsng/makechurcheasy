@@ -28,7 +28,8 @@ export interface ReleaseHighlight {
  * these ensure operators always see rich, detailed feature walkthroughs.
  */
 export const CURATED_RELEASE_NOTES: Record<string, ReleaseHighlight[]> = {
-  // Current & upcoming release highlights
+  // v3.32.0 highlights. Kept under "latest" for reference only — it is no
+  // longer shown as a fallback for other versions.
   latest: [
     {
       id: "multiview-spacing",
@@ -242,14 +243,48 @@ export function parseRawReleaseNotes(notes: string): ReleaseHighlight[] {
 }
 
 /**
+ * Remove the generic GitHub release template that CI used to put in
+ * latest.json ("## MakeChurchEasy", the "### Downloads" table, "### Auto-Update",
+ * "Built automatically from commit ..."). What is left is the real changelog,
+ * or an empty string when there was none.
+ */
+export function stripReleaseBoilerplate(notes?: string | null): string {
+  if (!notes || typeof notes !== "string") return "";
+  const lines = notes.replace(/\r\n/g, "\n").split("\n");
+  const kept: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const heading = trimmed.match(/^#{1,6}\s+(.+)$/);
+    if (heading) {
+      const title = heading[1].trim().toLowerCase();
+      skipping =
+        title === "makechurcheasy" ||
+        title === "downloads" ||
+        title === "auto-update" ||
+        title === "auto update";
+      if (skipping) continue;
+    }
+    if (skipping) continue;
+    if (/^\|.*\|$/.test(trimmed)) continue; // markdown table rows
+    if (/^_?built automatically from commit/i.test(trimmed)) continue;
+    if (/^-{3,}$/.test(trimmed)) continue;
+    kept.push(line);
+  }
+
+  return kept.join("\n").trim();
+}
+
+/**
  * Determines whether raw notes contain meaningful release descriptions
  * or are merely trivial automated strings (e.g. "MakeChurchEasy v3.19.0").
  */
 export function isTrivialReleaseNotes(notes?: string | null): boolean {
-  if (!notes || !notes.trim()) return true;
-  const trimmed = notes.trim();
-  // If it's just "MakeChurchEasy vX.Y.Z" or "vX.Y.Z" or less than 25 characters
-  if (/^(?:MakeChurchEasy\s+)?v?\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/i.test(trimmed)) {
+  const cleaned = stripReleaseBoilerplate(notes);
+  if (!cleaned) return true;
+  // If it's just "MakeChurchEasy vX.Y.Z" or "vX.Y.Z"
+  if (/^(?:MakeChurchEasy\s+)?v?\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/i.test(cleaned)) {
     return true;
   }
   return false;
@@ -257,23 +292,22 @@ export function isTrivialReleaseNotes(notes?: string | null): boolean {
 
 /**
  * Returns the OBS-style release highlights for the given version and raw notes.
- * If raw notes are rich and descriptive, parses them.
- * Otherwise, falls back to the curated highlights for the release.
+ * Real notes from the release manifest win. Curated notes are used only when
+ * they were written for this exact version, so users never see an older
+ * release's changelog presented as "What's New".
  */
 export function getReleaseHighlights(version?: string, rawNotes?: string): ReleaseHighlight[] {
-  // If raw notes are provided and not just trivial version strings:
   if (rawNotes && !isTrivialReleaseNotes(rawNotes)) {
-    const parsed = parseRawReleaseNotes(rawNotes);
+    const parsed = parseRawReleaseNotes(stripReleaseBoilerplate(rawNotes));
     if (parsed.length > 0) {
       return parsed;
     }
   }
 
-  // Check version-specific curated notes or default to 'latest'
   const normalizedVer = (version || "").replace(/^v/, "");
   if (normalizedVer && CURATED_RELEASE_NOTES[normalizedVer]) {
     return CURATED_RELEASE_NOTES[normalizedVer];
   }
 
-  return CURATED_RELEASE_NOTES.latest;
+  return [];
 }

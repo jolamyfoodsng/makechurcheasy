@@ -231,6 +231,7 @@ export function getPremiumAccessDeniedMessage(
       return {
         title: "System Maintenance",
         description:
+          getLicensePayload()?.maintenanceMessage?.trim() ||
           "The platform is currently under maintenance. Please try again later.",
         action: "reconnect",
       };

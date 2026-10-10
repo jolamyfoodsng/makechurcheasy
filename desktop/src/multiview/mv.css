@@ -1417,8 +1417,8 @@
 }
 
 .mv-modal {
-  background: linear-gradient(180deg, #131d33 0%, #0b1120 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #18181c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 28px 28px 24px;
   max-width: 420px;
@@ -3843,8 +3843,8 @@ body.mv-dragging-scene * {
 }
 
 .mv-modal {
-  background: linear-gradient(180deg, #131d33 0%, #0b1120 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #18181c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 28px 28px 24px;
   max-width: 420px;

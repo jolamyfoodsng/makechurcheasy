@@ -128,6 +128,24 @@ describe("dock Bible theme resolution", () => {
     expect(resolved.liveOverrides).toBeNull();
   });
 
+  it("preserves full width preset for lower-third theme resolution", async () => {
+    const theme = firstThemeFor("lower-third");
+    localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
+      lowerThirdThemeId: theme.id,
+      lowerThirdQuickThemeSettings: {
+        fontSize: 48,
+        refFontSize: 28,
+        lowerThirdWidthPreset: "full",
+        lowerThirdSize: "medium",
+        backgroundType: "color",
+        backgroundColor: "#0A1838",
+      },
+    }));
+
+    const resolved = await resolveDockBibleThemeForOverlayMode("lower-third");
+    expect(resolved.themeSettings.lowerThirdWidthPreset).toBe("full");
+  });
+
   it("uses the saved Bible reference display rules for LM-pushed verses", () => {
     localStorage.setItem(`${DOCK_BIBLE_PREFS_KEY}:theme-user`, JSON.stringify({
       referenceFormat: "short",

@@ -62,8 +62,10 @@ export class AppErrorBoundary extends Component<Props, State> {
       const reloadKey = "mce_chunk_error_reload_" + Math.floor(Date.now() / 15000);
       if (!sessionStorage.getItem(reloadKey)) {
         sessionStorage.setItem(reloadKey, "1");
-        console.warn("[MakeChurchEasy] Stale chunk detected, refreshing page automatically...");
-        window.location.reload();
+        console.warn("[MakeChurchEasy] Stale chunk detected, refreshing page in 1s...");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       }
     }
   }

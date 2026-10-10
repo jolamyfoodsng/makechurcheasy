@@ -102,10 +102,13 @@ async function captureAndUploadFirstPresentationScreenshot(
  * Send a tracking event to the backend. Fire-and-forget.
  * Silently fails — never blocks or errors in the UI.
  */
-export function trackEvent(
+type TrackingRequest = { url: string; headers: Record<string, string>; body: string };
+
+function buildTrackingRequest(
   event: string,
   properties?: Record<string, unknown>,
-): void {
+  timestamp: string = new Date().toISOString(),
+): TrackingRequest | null {
   const session = getSession();
   const userId =
     session?.user?.id ||
@@ -127,21 +130,146 @@ export function trackEvent(
   if (deviceSecret) headers["X-Device-Secret"] = deviceSecret;
 
   const apiBase = getSessionApiBase();
-  if (!apiBase) return;
+  if (!apiBase) return null;
 
-  void fetch(`${apiBase}/api/tracking/event`, {
-    method: "POST",
+  return {
+    url: `${apiBase}/api/tracking/event`,
     headers,
     body: JSON.stringify({
       event,
       userId,
       properties: properties || {},
-      timestamp: new Date().toISOString(),
+      timestamp,
     }),
+  };
+}
+
+/**
+ * Send a tracking event to the backend. Fire-and-forget.
+ * Silently fails — never blocks or errors in the UI.
+ */
+export function trackEvent(
+  event: string,
+  properties?: Record<string, unknown>,
+): void {
+  const request = buildTrackingRequest(event, properties);
+  if (!request) return;
+
+  void fetch(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: request.body,
     keepalive: true,
   }).catch(() => {
     // Tracking should never break the app
   });
+}
+
+// ── Broadcast Graphics usage (admin: who added / showed which graphic) ─────
+//
+// Unlike other events these are queued when the app is offline (common during
+// a service) and sent later, so the admin counts stay complete.
+
+const GRAPHIC_QUEUE_KEY = "mce_graphic_usage_queue_v1";
+const GRAPHIC_QUEUE_MAX = 300;
+
+type QueuedGraphicEvent = {
+  event: string;
+  properties: Record<string, unknown>;
+  timestamp: string;
+};
+
+function readGraphicQueue(): QueuedGraphicEvent[] {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(GRAPHIC_QUEUE_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((e) => e && typeof e.event === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeGraphicQueue(queue: QueuedGraphicEvent[]): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (queue.length) localStorage.setItem(GRAPHIC_QUEUE_KEY, JSON.stringify(queue.slice(-GRAPHIC_QUEUE_MAX)));
+    else localStorage.removeItem(GRAPHIC_QUEUE_KEY);
+  } catch {
+    // Storage full or unavailable — the event is dropped.
+  }
+}
+
+async function sendTrackingEvent(item: QueuedGraphicEvent): Promise<boolean> {
+  const request = buildTrackingRequest(item.event, item.properties, item.timestamp);
+  if (!request) return false;
+  try {
+    const res = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      keepalive: true,
+    });
+    // 4xx other than rate limiting will never succeed; do not keep retrying them.
+    return res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429);
+  } catch {
+    return false;
+  }
+}
+
+let graphicFlushRunning = false;
+
+/** Send queued Broadcast Graphics usage events. Safe to call any time. */
+export async function flushGraphicUsageQueue(): Promise<void> {
+  if (graphicFlushRunning) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  graphicFlushRunning = true;
+  try {
+    const queue = readGraphicQueue();
+    if (!queue.length) return;
+    const remaining: QueuedGraphicEvent[] = [];
+    for (let i = 0; i < queue.length; i += 1) {
+      const sent = await sendTrackingEvent(queue[i]);
+      if (!sent) {
+        // Offline again: keep this and everything after it, in order.
+        remaining.push(...queue.slice(i));
+        break;
+      }
+    }
+    // Events added while flushing were appended to storage; keep them too.
+    const addedMeanwhile = readGraphicQueue().slice(queue.length);
+    writeGraphicQueue([...remaining, ...addedMeanwhile]);
+  } finally {
+    graphicFlushRunning = false;
+  }
+}
+
+/**
+ * Record that a Broadcast Graphic was added to the OBS Dock or shown on air.
+ * `themeId` is the template id (bundled theme id, or "lt-pkg-<id>" for uploaded graphics).
+ */
+export function trackGraphicUsage(
+  kind: "added_to_obs" | "shown",
+  themeId: string | null | undefined,
+  name?: string | null,
+): void {
+  if (!themeId) return;
+  const item: QueuedGraphicEvent = {
+    event: kind === "added_to_obs" ? "broadcast_graphic_added_to_obs" : "broadcast_graphic_shown",
+    properties: { themeId, ...(name ? { name } : {}) },
+    timestamp: new Date().toISOString(),
+  };
+  void sendTrackingEvent(item).then((sent) => {
+    if (sent) {
+      void flushGraphicUsageQueue();
+      return;
+    }
+    writeGraphicQueue([...readGraphicQueue(), item]);
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { void flushGraphicUsageQueue(); });
+  window.setTimeout(() => { void flushGraphicUsageQueue(); }, 8000);
 }
 
 function activateTrial(
@@ -223,7 +351,10 @@ export function trackBiblePresent(
       },
 ): void {
   const isObject = typeof params === "object" && params !== null;
-  const ref = isObject ? params.ref : params;
+  const rawRef = (isObject ? params.ref : params) || "";
+  // Some callers pass the verse text instead of a reference. Never send Bible
+  // content (see the privacy note above): keep only short "Book 3:16"-style refs.
+  const ref = rawRef.length <= 48 && /\d+\s*[:.]\s*\d+/.test(rawRef) ? rawRef : "";
   const translation = isObject ? params.translation : undefined;
   const overlayMode = isObject ? params.overlayMode : undefined;
   const book = isObject ? params.book : undefined;
@@ -232,7 +363,7 @@ export function trackBiblePresent(
   const verseRange = isObject ? params.verseRange : undefined;
 
   trackEvent("bible_present", {
-    hasRef: Boolean(ref),
+    hasRef: Boolean(rawRef),
     ref: ref || "",
     translation: translation || "",
     overlayMode: overlayMode || "fullscreen",

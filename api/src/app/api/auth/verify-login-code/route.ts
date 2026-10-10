@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { rateLimit } from "@/lib/rateLimit";
 import { checkVersionGate } from "@/lib/versionGate";
-import { checkDeviceLimit } from "@/lib/deviceLimits";
+import { checkDeviceLimit, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { isInTrialRaw, resolveEffectivePlan } from "@/lib/trial";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
 import {
   claimTrialForUserIfEligible,
+  getClientTrialEligibility,
 } from "@/lib/trialAbuse";
 import { findMatchingDesktopDevice } from "@/lib/desktopDeviceRegistration";
-import { detectRequestCountry } from "@/lib/signupDefaults";
-import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
+import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 
 const verifyLimiter = rateLimit({ windowMs: 60_000, max: 10 });
 const MAX_ATTEMPTS = 5;
@@ -194,24 +194,31 @@ export async function POST(req: NextRequest) {
     });
     const existingDevice = matchingDevice || deviceRegisteredById;
     const registeredDeviceId = String(existingDevice?.deviceId || deviceId);
-
+    const effectivePlan = resolveEffectivePlan(user as any);
+    const isOnTrial = isInTrialRaw(user as any);
     const deviceCheck = await checkDeviceLimit(
       loginCode.userId,
       existingDevice?.deviceId || null,
-      resolveEffectivePlan(user as any),
-      isInTrialRaw(user as any)
+      effectivePlan,
+      isOnTrial
     );
     if (!deviceCheck.allowed) {
-      await db.collection("loginCodes").deleteOne({ _id: loginCode._id });
-      return NextResponse.json(
-        {
-          error: "device_limit_reached",
-          message: `Your ${user.plan || "free"} plan allows ${deviceCheck.limit} device(s). Upgrade to add more.`,
-          currentCount: deviceCheck.currentCount,
-          limit: deviceCheck.limit,
-        },
-        { status: 403, headers: CORS_HEADERS }
-      );
+      if (effectivePlan === "free" || deviceCheck.limit === 1) {
+        // Free plan allows 1 computer at a time: automatically disconnect older computers
+        // and allow this login to complete seamlessly.
+        await evictOtherActiveDevices(loginCode.userId, { keepDeviceId: registeredDeviceId }, db);
+      } else {
+        await db.collection("loginCodes").deleteOne({ _id: loginCode._id });
+        return NextResponse.json(
+          {
+            error: "device_limit_reached",
+            message: `Your ${user.plan || "free"} plan allows ${deviceCheck.limit} device(s). Upgrade to add more.`,
+            currentCount: deviceCheck.currentCount,
+            limit: deviceCheck.limit,
+          },
+          { status: 403, headers: CORS_HEADERS }
+        );
+      }
     }
 
     // Create device record
@@ -243,35 +250,25 @@ export async function POST(req: NextRequest) {
     );
 
     // Detect edge location from Cloudflare
-    const detectedCountry = detectRequestCountry(req.headers);
-    const normalizedCountry = detectedCountry && (await isKnownCountryCode(detectedCountry))
-      ? await normalizeCountryCode(detectedCountry)
-      : null;
-    const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-    const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-    const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
-
+    const location = await extractRequestLocation(req.headers);
     const now = new Date().toISOString();
-    const loginUpdates: Record<string, any> = {
-      lastLogin: now,
-    };
-    if (normalizedCountry) {
-      loginUpdates.country = normalizedCountry;
-      loginUpdates.lastLoginCountry = normalizedCountry;
+    const { set: loginUpdates, push: loginPush } = buildLoginLocationUpdates(user, location, now);
+
+    const updateDoc: Record<string, any> = { $set: loginUpdates };
+    if (loginPush) {
+      updateDoc.$push = loginPush;
     }
-    if (clientCity) loginUpdates.lastLoginCity = clientCity;
-    if (clientTimezone) {
-      loginUpdates.lastLoginTimezone = clientTimezone;
-      if (!user.timezone) loginUpdates.timezone = clientTimezone;
-    }
-    if (clientIp) loginUpdates.lastLoginIp = clientIp;
 
     await db.collection("users").updateOne(
       { _id: user._id },
-      { $set: loginUpdates }
+      updateDoc
     );
 
-    const activeCountry = normalizedCountry || user.country || "";
+    const activeCountry = user.signupCountry || user.country || location.country || "";
+    const trialEligibility = await getClientTrialEligibility(
+      user._id.toString(),
+      Boolean(user.trial || user.trialId),
+    );
 
     return NextResponse.json(
       {
@@ -287,6 +284,7 @@ export async function POST(req: NextRequest) {
           role: user.role,
           plan: user.plan || "free",
           trial: user.trial || null,
+          trialEligibility,
         },
         deviceId: registeredDeviceId,
         deviceSecret,

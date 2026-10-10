@@ -49,7 +49,7 @@ export type DockFullscreenQuickThemeSettings = Pick<
   | "referenceBackgroundColor"
   | "referenceBackgroundStyle"
   | "referenceBackgroundRadius"
-  // Lower-third positioning
+  // Lower-third positioning & card styling
   | "lowerThirdPosition"
   | "lowerThirdSize"
   | "lowerThirdWidthPreset"
@@ -64,6 +64,16 @@ export type DockFullscreenQuickThemeSettings = Pick<
   // Compare Translation layout
   | "compareTranslationWidth"
   | "compareTranslationGap"
+> & Partial<
+  Pick<
+    BibleThemeSettings,
+    | "boxBackground"
+    | "boxBackgroundImage"
+    | "boxOpacity"
+    | "borderRadius"
+    | "padding"
+    | "safeArea"
+  >
 > & Partial<CompareThemeSettings> & {
   /** Dock-only: persisted background mode (off/theme/color/image/pattern/video) */
   backgroundType?: "off" | "theme" | "color" | "image" | "pattern" | "video";
@@ -124,7 +134,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundColor: "#F4D17B",
       referenceBackgroundStyle: "solid",
       referenceBackgroundRadius: 12,
-      lowerThirdPosition: "left",
+      lowerThirdPosition: "center",
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
@@ -156,7 +166,7 @@ const PRESETS: ThemePreset[] = [
       refSpacing: 24,
       fullscreenShadeColor: "#0F172A",
       fullscreenShadeOpacity: 0.36,
-      textAlign: "left",
+      textAlign: "center",
       lineHeight: 1.48,
       fontWeight: "bold",
       textTransform: "none",
@@ -176,7 +186,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundColor: "#CBD5E1",
       referenceBackgroundStyle: "solid",
       referenceBackgroundRadius: 12,
-      lowerThirdPosition: "left",
+      lowerThirdPosition: "center",
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
@@ -228,7 +238,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundColor: "#B9CCFF",
       referenceBackgroundStyle: "pill",
       referenceBackgroundRadius: 20,
-      lowerThirdPosition: "left",
+      lowerThirdPosition: "center",
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
@@ -280,7 +290,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundColor: "#FDE68A",
       referenceBackgroundStyle: "outline",
       referenceBackgroundRadius: 4,
-      lowerThirdPosition: "left",
+      lowerThirdPosition: "center",
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,
@@ -335,7 +345,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundColor: "#FFD700",
       referenceBackgroundStyle: "solid",
       referenceBackgroundRadius: 12,
-      lowerThirdPosition: "left",
+      lowerThirdPosition: "center",
       lowerThirdSize: "medium",
       lowerThirdWidthPreset: "md",
       lowerThirdOffsetX: 0,

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { Topbar } from "@/components/Topbar";
 import { TrialBanner } from "@/components/TrialBanner";
+import { AppUpdateNotice } from "@/components/AppUpdateNotice";
 import { TrialWelcomeModal } from "@/components/TrialWelcomeModal";
 import { FirstLoginWelcomeModal } from "@/components/FirstLoginWelcomeModal";
 import { ProfileCompletionModal } from "@/components/ProfileCompletionModal";
@@ -95,6 +96,7 @@ export default function DashboardLayout({
       )}
       <div className={`flex-1 ${isAdmin ? "md:ml-[260px]" : "md:ml-[280px]"} flex flex-col min-w-0`}>
         <Topbar onMenuClick={() => setIsSidebarOpen(true)} />
+        {!isAdmin && <AppUpdateNotice />}
         {!isAdmin && <TrialBanner />}
         <main className="mce-dashboard-main flex-1 overflow-x-hidden overflow-y-auto w-full">
           {children}

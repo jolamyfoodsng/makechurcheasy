@@ -64,6 +64,19 @@ export async function verifyDeviceSecret(
   const device = await db.collection("devices").findOne({ deviceId, status: { $ne: "deleted" } });
 
   if (!device) {
+    const deletedDevice = await db.collection("devices").findOne({ deviceId, status: "deleted" });
+    if (deletedDevice?.deletedReason === "evicted_by_other_device") {
+      return {
+        error: NextResponse.json(
+          {
+            error: "device_disconnected_by_another_computer",
+            message: "This computer was disconnected because your MakeChurchEasy account was opened on another computer.",
+          },
+          { status: 401, headers: CORS_HEADERS }
+        ),
+      };
+    }
+
     return {
       error: NextResponse.json(
         { error: "Device not found" },

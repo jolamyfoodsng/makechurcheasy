@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isAdminFeatureEnabled } from "./desktopConfig";
 
 import {
   buildPresentationLink,
@@ -33,6 +34,10 @@ export async function getPresentationRemoteAccessInfo(
   const trimmed = sessionId.trim();
   if (!trimmed) {
     return buildFallbackInfo(sessionId);
+  }
+  // Admin switched the shareable link off: keep the local (this computer) link only.
+  if (!isAdminFeatureEnabled("presentationLink")) {
+    return buildFallbackInfo(trimmed);
   }
 
   try {

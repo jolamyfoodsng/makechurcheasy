@@ -229,8 +229,14 @@ class OBSSyncService {
 
       // 2. Get all registered resources from our registry
       const [registeredScenes, registeredInputs] = await Promise.all([
-        getAllRegisteredScenes(),
-        getAllRegisteredInputs(),
+        getAllRegisteredScenes().catch((err) => {
+          console.warn("[OBSSyncService] Failed to read registered scenes from registry:", err);
+          return [];
+        }),
+        getAllRegisteredInputs().catch((err) => {
+          console.warn("[OBSSyncService] Failed to read registered inputs from registry:", err);
+          return [];
+        }),
       ]);
 
       // 4. Detect VerseCast resources by pattern matching

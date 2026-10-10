@@ -38,3 +38,36 @@ export function isDockObsCommand(commandType: string): boolean {
     String(commandType || "").trim(),
   );
 }
+
+/** OBS requests a Free-plan user may still make from the app: streaming
+ * start/stop and the stream destination (single-destination streaming). */
+export const FREE_PLAN_ALLOWED_OBS_REQUESTS = new Set([
+  "StartStream",
+  "StopStream",
+  "ToggleStream",
+  "SetStreamServiceSettings",
+]);
+
+/** Main-app version of the gate. The main app knows the signed-in plan
+ * directly (the Dock's plan flag lives in OBS's browser storage), so the
+ * caller passes it in. */
+export function assertAppObsRequestAllowed(requestType: string, isFreePlan: boolean): void {
+  const type = String(requestType || "").trim();
+  if (!isFreePlan || FREE_PLAN_ALLOWED_OBS_REQUESTS.has(type) || !isDockObsMutationRequest(type)) return;
+  const error = new Error(FREE_DOCK_OBS_MUTATION_MESSAGE);
+  error.name = "FreeDockObsMutationBlocked";
+  throw error;
+}
+
+/** True for the Browser Source a Free user adds themselves: the presentation
+ * link (…/p/<token> or …?sessionId=…). It must never be removed by cleanup. */
+export function isPresentationLinkUrl(url: unknown): boolean {
+  const value = String(url || "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return /^\/p\/[^/]+\/?$/i.test(parsed.pathname) || parsed.searchParams.has("sessionId");
+  } catch {
+    return /\/p\/[^/?#]+/i.test(value) || /[?&]sessionId=/i.test(value);
+  }
+}

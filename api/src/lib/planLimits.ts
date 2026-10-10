@@ -56,6 +56,8 @@ export interface PlanLimits {
   campusManagement: boolean;
   slideshow: boolean;
   countdowns: boolean;
+  multistream: boolean;
+  multistreamHours: number;
 }
 
 const UNLIMITED = -1;
@@ -96,6 +98,8 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     campusManagement: false,
     slideshow: true,
     countdowns: true,
+    multistream: true,
+    multistreamHours: 20,
   },
 
   free: {
@@ -104,15 +108,15 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     images: 2,
     videos: 2,
     themes: 1,
-    lowerThirds: 0,
+    lowerThirds: 3,
     bibleVersions: 3,
     multiviewTemplates: 0,
-    tickerThemes: 0,
+    tickerThemes: 3,
     themePresets: 0,
     cloudStorageGB: 0,
     credits: 25,
     multiview: false,
-    tickers: false,
+    tickers: true,
     massImport: false,
     easyWorshipImport: false,
     proPresenterImport: false,
@@ -129,6 +133,8 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     campusManagement: false,
     slideshow: false,
     countdowns: false,
+    multistream: false,
+    multistreamHours: 0,
   },
 
   basic: {
@@ -137,15 +143,15 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     images: 100,
     videos: 100,
     themes: 5,
-    lowerThirds: 0,
+    lowerThirds: UNLIMITED,
     bibleVersions: UNLIMITED,
     multiviewTemplates: 5,
-    tickerThemes: 0,
+    tickerThemes: UNLIMITED,
     themePresets: 2,
     cloudStorageGB: 1,
     credits: 100,
     multiview: true,
-    tickers: false,
+    tickers: true,
     massImport: false,
     easyWorshipImport: false,
     proPresenterImport: false,
@@ -162,6 +168,8 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     campusManagement: false,
     slideshow: true,
     countdowns: false,
+    multistream: true,
+    multistreamHours: 10,
   },
 
   growth: {
@@ -195,6 +203,8 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     campusManagement: false,
     slideshow: true,
     countdowns: true,
+    multistream: true,
+    multistreamHours: 20,
   },
 
 };
@@ -204,7 +214,7 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
  * DEPRECATED: Prefer getPlanConfig() which reads from DB.
  */
 export function getLimitsForPlan(plan: EffectivePlan): PlanLimits {
-  if ((plan as string) === "pro") return DEFAULT_PLAN_LIMITS.growth;
+  if ((plan as string) === "pro") return { ...DEFAULT_PLAN_LIMITS.growth, multistreamHours: 40 };
   return DEFAULT_PLAN_LIMITS[plan] || DEFAULT_PLAN_LIMITS.free;
 }
 

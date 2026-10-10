@@ -7,8 +7,7 @@ import { signSessionToken } from "@/lib/jwt";
 import { setAuthCookieOnResponse } from "@/lib/auth";
 import { sendEmail, verificationCodeEmail } from "@/lib/emailTemplates";
 import { rateLimit } from "@/lib/rateLimit";
-import { detectRequestCountry } from "@/lib/signupDefaults";
-import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
+import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -177,35 +176,21 @@ export async function POST(req: NextRequest) {
     const jwt = await signSessionToken(user._id.toString(), tokenVersion);
 
     // Detect edge location from Cloudflare
-    const detectedCountry = detectRequestCountry(req.headers);
-    const normalizedCountry = detectedCountry && (await isKnownCountryCode(detectedCountry))
-      ? await normalizeCountryCode(detectedCountry)
-      : null;
-    const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-    const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-    const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
-
+    const location = await extractRequestLocation(req.headers);
     const now = new Date().toISOString();
-    const loginUpdates: Record<string, any> = {
-      lastLogin: now,
-    };
-    if (normalizedCountry) {
-      loginUpdates.country = normalizedCountry;
-      loginUpdates.lastLoginCountry = normalizedCountry;
+    const { set: loginUpdates, push: loginPush } = buildLoginLocationUpdates(user, location, now);
+
+    const updateDoc: Record<string, any> = { $set: loginUpdates };
+    if (loginPush) {
+      updateDoc.$push = loginPush;
     }
-    if (clientCity) loginUpdates.lastLoginCity = clientCity;
-    if (clientTimezone) {
-      loginUpdates.lastLoginTimezone = clientTimezone;
-      if (!user.timezone) loginUpdates.timezone = clientTimezone;
-    }
-    if (clientIp) loginUpdates.lastLoginIp = clientIp;
 
     await db.collection("users").updateOne(
       { _id: user._id },
-      { $set: loginUpdates }
+      updateDoc
     );
 
-    const activeCountry = normalizedCountry || user.country || "";
+    const activeCountry = user.signupCountry || user.country || location.country || "";
 
     const response = NextResponse.json({
       user: {

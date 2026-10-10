@@ -10,11 +10,13 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { getBibleSettings, getInstalledTranslations, saveBibleSettings } from "../../bible/bibleDb";
 import { useBible } from "../../bible/bibleStore";
+import { openDashboardSubscriptionPlans } from "../../services/subscriptionNavigation";
 import type { BibleTranslation } from "../../bible/types";
 import { AppLogo } from "../../components/AppLogo";
 import { AccountSummaryCards } from "../../components/AccountSummaryCards";
 import { LocalDevPlanSwitcher } from "../../components/LocalDevPlanSwitcher";
 import { UpgradeModal } from "../../components/UpgradeModal";
+import { CloudSyncSettingsCard } from "../../components/CloudSyncSettingsCard";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   INTERFACE_LOCALES,
@@ -100,6 +102,7 @@ import { lmDockService } from "../../services/lmDockService";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import QRCode from "qrcode";
+import { BroadcastSettingsPanel } from "../../components/BroadcastSettingsPanel";
 
 import "./MVSettings.css";
 
@@ -108,7 +111,7 @@ const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
 ];
 
-export type SettingsTab = "general" | "appearance" | "bible" | "branding" | "obs" | "mobile" | "automation" | "usage" | "storage" | "audio";
+export type SettingsTab = "general" | "appearance" | "bible" | "branding" | "obs" | "broadcast" | "mobile" | "automation" | "usage" | "storage" | "audio";
 
 export interface SettingsNavCategory {
   group: string;
@@ -132,6 +135,7 @@ export const SETTINGS_CATEGORIES: SettingsNavCategory[] = [
   {
     group: "Production & Stream",
     items: [
+      { id: "broadcast", label: "Live Broadcast", icon: Radio, description: "Manage speaker profiles, stream keys, and social broadcast destinations." },
       { id: "branding", label: "Church & Branding", icon: Paintbrush, description: "Church identity, logo assets, lower-thirds, and speakers." },
       { id: "obs", label: "OBS Studio", icon: Radio, description: "WebSocket connection, credentials, and live status." },
       { id: "audio", label: "Audio & Voice AI", icon: Mic, description: "Microphone input, gain boost, and speech-to-scripture settings." },
@@ -177,7 +181,7 @@ function savePreferredMicId(micId: string): void {
 const EMPTY_SPEAKER_PROFILE: SpeakerProfileSetting = { name: "", role: "", imageUrl: "" };
 const CHURCH_PROFILE_URL = "https://makechurcheazy.com/church-profile";
 
-type ManualUpdateStatus = "idle" | "checking" | "available" | "downloading" | "installing" | "relaunching" | "up-to-date" | "error";
+type ManualUpdateStatus = "idle" | "checking" | "available" | "downloading" | "ready" | "installing" | "relaunching" | "up-to-date" | "error";
 
 /* ── Helpers ── */
 function resolveLogoPreviewSrc(path: string): string {
@@ -223,11 +227,18 @@ function formatUpdateBytes(bytes: number): string {
 export function MVSettings() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "mobile", "automation", "usage", "storage", "audio"];
+  const validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "broadcast", "mobile", "automation", "usage", "storage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
   );
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab") as SettingsTab | null;
+    if (tabParam && validTabs.includes(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams, activeTab]);
   const hasSettingsSidebar = activeTab === "obs";
   const [settings, setSettings] = useState<MVSettingsType>(db.getSettings);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -275,6 +286,7 @@ export function MVSettings() {
   const effectivePlan = getEffectivePlan(authUser);
   const hasMobileAccess = canUseMobileControl(authUser);
   const [showMobileUpgrade, setShowMobileUpgrade] = useState(false);
+  const [showCloudSyncUpgrade, setShowCloudSyncUpgrade] = useState(false);
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [creditDetails, setCreditDetails] = useState<CreditDetails | null>(null);
   const [creditsUsedThisMonth, setCreditsUsedThisMonth] = useState<number>(0);
@@ -428,9 +440,13 @@ export function MVSettings() {
     downloadState.status === "installing" ||
     downloadState.status === "relaunching";
 
-  const effectiveUpdateStatus: ManualUpdateStatus = isGlobalDownloading
-    ? downloadState.status
-    : manualUpdateStatus;
+  // The app-wide manager knows about updates found by the startup check and
+  // about background downloads, so prefer its state over this page's own.
+  const effectiveUpdateStatus: ManualUpdateStatus = isGlobalDownloading || downloadState.status === "ready"
+    ? downloadState.status as ManualUpdateStatus
+    : manualUpdateStatus === "idle" && downloadState.status === "available"
+      ? "available"
+      : manualUpdateStatus;
 
   const effectiveUpdateProgress = isGlobalDownloading
     ? downloadState.progress
@@ -464,6 +480,7 @@ export function MVSettings() {
   const [selectedMicId, setSelectedMicId] = useState(() => loadPreferredMicId());
   const [inputGainDraft, setInputGainDraft] = useState<number>(settings.inputGain ?? 100);
   const [liveAudioLevel, setLiveAudioLevel] = useState<number>(0);
+  const gainNodeRef = useRef<GainNode | null>(null);
 
   /* ── Toast helper ── */
   const triggerToast = useCallback((message: string, type: "success" | "accent" = "accent") => {
@@ -475,11 +492,30 @@ export function MVSettings() {
   const refreshAudioMics = useCallback(async () => {
     setAudioMicsLoading(true);
     try {
-      const devices = await lmDockService.getMics();
+      let devices = await lmDockService.getMics();
+      // If backend returned nothing or only default fallback, query browser audio devices
+      if (devices.length === 0 || (devices.length === 1 && !devices[0].id)) {
+        if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
+          try {
+            const navDevices = await navigator.mediaDevices.enumerateDevices();
+            const inputs = navDevices
+              .filter((d) => d.kind === "audioinput")
+              .map((d, idx) => ({
+                id: d.deviceId,
+                label: d.label || `Microphone ${idx + 1}`,
+              }));
+            if (inputs.length > 0) {
+              devices = inputs;
+            }
+          } catch {
+            // ignore device enumeration failure
+          }
+        }
+      }
       setAudioMics(devices);
       const savedMic = loadPreferredMicId();
       if (devices.length > 0) {
-        const stillValid = devices.some((d) => d.id === savedMic);
+        const stillValid = devices.some((d) => d.id === savedMic || d.label === savedMic);
         if (!stillValid && !savedMic) {
           const defaultMic = devices[0].id;
           setSelectedMicId(defaultMic);
@@ -500,17 +536,151 @@ export function MVSettings() {
   }, [activeTab, refreshAudioMics]);
 
   useEffect(() => {
-    if (activeTab !== "audio") return;
-    let unlisten: (() => void) | undefined;
+    if (activeTab !== "audio") {
+      setLiveAudioLevel(0);
+      return;
+    }
+
+    let isCancelled = false;
+    let stream: MediaStream | null = null;
+    let audioCtx: AudioContext | null = null;
+    let animId: number | null = null;
+    let unlistenChunk: (() => void) | undefined;
+    let unlistenAssembly: (() => void) | undefined;
+
+    // 1. Listen for audio events from native Tauri backend
     safeTauriListen<{ level: number }>("assemblyai-audio-level", (event) => {
-      setLiveAudioLevel(event.payload.level);
-    }).then((fn) => { unlisten = fn; }).catch(() => {});
-    return () => { unlisten?.(); };
-  }, [activeTab]);
+      if (isCancelled) return;
+      const gainFactor = Number.isFinite(inputGainDraft) ? Math.max(0, inputGainDraft / 100) : 1;
+      setLiveAudioLevel(Math.min(1, (event.payload.level || 0) * gainFactor));
+    }).then((fn) => { unlistenAssembly = fn; }).catch(() => {});
+
+    safeTauriListen<{ level: number }>("audio-chunk", (event) => {
+      if (isCancelled) return;
+      const gainFactor = Number.isFinite(inputGainDraft) ? Math.max(0, inputGainDraft / 100) : 1;
+      setLiveAudioLevel(Math.min(1, (event.payload.level || 0) * gainFactor));
+    }).then((fn) => { unlistenChunk = fn; }).catch(() => {});
+
+    // Trigger native audio capture in Tauri backend if available
+    safeTauriInvoke("start_audio_capture", { deviceId: selectedMicId || null }).catch(() => {});
+
+    // 2. Start Web Audio capture for responsive 60fps real-time level monitoring
+    const initWebAudio = async () => {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+      try {
+        let targetWebDeviceId: string | undefined;
+        if (selectedMicId && navigator.mediaDevices.enumerateDevices) {
+          try {
+            const allDevs = await navigator.mediaDevices.enumerateDevices();
+            const matched = allDevs.find(
+              (d) =>
+                d.kind === "audioinput" &&
+                (d.deviceId === selectedMicId ||
+                 d.label === selectedMicId ||
+                 (d.label && selectedMicId && d.label.toLowerCase().includes(selectedMicId.toLowerCase())) ||
+                 (d.label && selectedMicId && selectedMicId.toLowerCase().includes(d.label.toLowerCase())))
+            );
+            if (matched?.deviceId) {
+              targetWebDeviceId = matched.deviceId;
+            }
+          } catch {
+            // ignore matching error
+          }
+        }
+
+        if (isCancelled) return;
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: targetWebDeviceId ? { deviceId: { exact: targetWebDeviceId } } : true,
+          });
+        } catch {
+          if (isCancelled) return;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err) {
+            console.warn("[MVSettings] Web Audio getUserMedia failed:", err);
+            return;
+          }
+        }
+
+        if (isCancelled) {
+          stream?.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioCtx = new AudioContextClass();
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume().catch(() => {});
+        }
+
+        if (isCancelled) {
+          stream?.getTracks().forEach((t) => t.stop());
+          audioCtx?.close().catch(() => {});
+          return;
+        }
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        const gainNode = audioCtx.createGain();
+        gainNodeRef.current = gainNode;
+        const initialGain = Number.isFinite(inputGainDraft) ? Math.max(0, inputGainDraft / 100) : 1;
+        gainNode.gain.value = initialGain;
+
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.2;
+
+        source.connect(gainNode);
+        gainNode.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateLevel = () => {
+          if (isCancelled) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const avg = sum / dataArray.length;
+          // Normalize average to 0..1 scale
+          const norm = Math.min(1, avg / 90);
+          setLiveAudioLevel(norm);
+          animId = requestAnimationFrame(updateLevel);
+        };
+        animId = requestAnimationFrame(updateLevel);
+      } catch (err) {
+        console.warn("[MVSettings] Web Audio monitor error:", err);
+      }
+    };
+
+    void initWebAudio();
+
+    return () => {
+      isCancelled = true;
+      if (animId) cancelAnimationFrame(animId);
+      gainNodeRef.current = null;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+      if (audioCtx) {
+        audioCtx.close().catch(() => {});
+      }
+      safeTauriInvoke("stop_audio_capture").catch(() => {});
+      unlistenChunk?.();
+      unlistenAssembly?.();
+      setLiveAudioLevel(0);
+    };
+  }, [activeTab, selectedMicId]);
 
   const handleGainChange = (gain: number) => {
     setInputGainDraft(gain);
     update({ inputGain: gain });
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = Math.max(0, gain / 100);
+    }
     const gainMultiplier = Number.isFinite(gain) ? Math.max(0, Math.min(3, gain / 100)) : 1;
     safeTauriInvoke("set_microphone_gain", { gain: gainMultiplier }).catch(() => {});
   };
@@ -770,10 +940,10 @@ export function MVSettings() {
     triggerToast(t("mvSettings.toast.upToDate"), "success");
   }, [t, triggerToast]);
 
-  const handleInstallUpdate = useCallback(async () => {
+  const handleInstallUpdate = useCallback(async (background = false) => {
     if (manualUpdateBusy) return;
     try {
-      await updateDownloadManager.startDownload(manualUpdate || downloadState.update);
+      await updateDownloadManager.startDownload(manualUpdate || downloadState.update, undefined, { background });
     } catch (err) {
       console.error("[MVSettings] Manual update failed:", err);
       setManualUpdateStatus("error");
@@ -848,6 +1018,7 @@ export function MVSettings() {
     switch (activeTab) {
       case "general": return t("mvSettings.tabDesc.general");
       case "obs": return t("mvSettings.tabDesc.obs");
+      case "broadcast": return "Configure speaker profiles, tied social destinations (YouTube, Facebook, etc.), and OBS stream settings.";
       case "mobile": return t("mvSettings.tabDesc.mobile");
       case "automation": return "Create, run, and store desktop automations for OBS.";
       case "appearance": return t("mvSettings.tabDesc.appearance");
@@ -1131,6 +1302,7 @@ export function MVSettings() {
                   {category.items.map((item) => {
                     const Icon = item.icon;
                     const isActive = activeTab === item.id;
+                    const isBroadcast = item.id === "broadcast";
                     return (
                       <button
                         key={item.id}
@@ -1138,6 +1310,12 @@ export function MVSettings() {
                         className={`settings-nav-item ${isActive ? "active" : ""}`}
                         onClick={() => setActiveTab(item.id)}
                       >
+                        {isBroadcast && (
+                          <span
+                            className="broadcast-pulse-dot broadcast-pulse-dot--ready"
+                            style={{ width: "6px", height: "6px", marginRight: "6px" }}
+                          />
+                        )}
                         <Icon size={16} className="settings-nav-item-icon" />
                         <span className="settings-nav-item-text">{item.label}</span>
                       </button>
@@ -1261,13 +1439,32 @@ export function MVSettings() {
                           </span>
                         </button>
                         {effectiveUpdateStatus === "available" && (
+                          <>
+                            <button
+                              className="action-btn btn-primary"
+                              onClick={() => void handleInstallUpdate(false)}
+                              title={t("mvSettings.general.installUpdate")}
+                            >
+                              <ExternalLink size={14} />
+                              <span>{t("mvSettings.general.installUpdate")}</span>
+                            </button>
+                            <button
+                              className="action-btn"
+                              onClick={() => void handleInstallUpdate(true)}
+                              title="Download quietly; restart when you are ready"
+                            >
+                              <span>Update in Background</span>
+                            </button>
+                          </>
+                        )}
+                        {effectiveUpdateStatus === "ready" && (
                           <button
                             className="action-btn btn-primary"
-                            onClick={handleInstallUpdate}
-                            title={t("mvSettings.general.installUpdate")}
+                            onClick={() => void updateDownloadManager.installNow()}
+                            title="Install the downloaded update and restart"
                           >
-                            <ExternalLink size={14} />
-                            <span>{t("mvSettings.general.installUpdate")}</span>
+                            <RefreshCw size={14} />
+                            <span>Restart to Update{downloadState.version ? ` (v${downloadState.version})` : ""}</span>
                           </button>
                         )}
                       </div>
@@ -1311,6 +1508,11 @@ export function MVSettings() {
 
 
                 </div>
+              )}
+
+              {/* ══════════════ LIVE BROADCAST TAB ══════════════ */}
+              {activeTab === "broadcast" && (
+                <BroadcastSettingsPanel onToast={(msg, tone) => triggerToast(msg, tone === "error" ? "accent" : "success")} />
               )}
 
               {/* ══════════════ OBS CONNECTION TAB ══════════════ */}
@@ -1502,9 +1704,9 @@ export function MVSettings() {
                     {/* Microphone Gain / Pre-amp */}
                     <div className="form-group">
                       <div className="flex-between-center" style={{ marginBottom: "8px" }}>
-                        <div>
-                          <label className="form-label" style={{ marginBottom: "2px" }}>Input Gain & Digital Pre-amp</label>
-                          <span className="switch-subtitle">Boost microphone pickup sensitivity before speech recognition processing.</span>
+                        <div className="switch-left">
+                          <label className="form-label" style={{ marginBottom: "2px", display: "block" }}>Input Gain & Digital Pre-amp</label>
+                          <span className="switch-subtitle" style={{ display: "block" }}>Boost microphone pickup sensitivity before speech recognition processing.</span>
                         </div>
                         <span style={{ fontFamily: "monospace", fontWeight: 600, fontSize: "13px", color: "var(--accent-color)" }}>
                           {inputGainDraft}%
@@ -1538,10 +1740,17 @@ export function MVSettings() {
                     {/* Live VU Meter */}
                     <div className="form-group">
                       <div className="flex-between-center" style={{ marginBottom: "6px" }}>
-                        <span className="form-label" style={{ marginBottom: 0 }}>Input Level Meter</span>
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                          {liveAudioLevel > 0.05 ? "Signal Active" : "No Signal"}
-                        </span>
+                        <span className="form-label" style={{ marginBottom: 0, display: "block" }}>Input Level Meter</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {liveAudioLevel > 0.02 ? (
+                            <>
+                              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981", display: "inline-block" }} />
+                              <span style={{ fontSize: "12px", color: "#10b981", fontWeight: 600 }}>Signal Active ({Math.round(liveAudioLevel * 100)}%)</span>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>No Signal</span>
+                          )}
+                        </div>
                       </div>
                       <div style={{
                         width: "100%",
@@ -1556,7 +1765,7 @@ export function MVSettings() {
                           height: "100%",
                           width: `${Math.min(100, Math.round(liveAudioLevel * 100))}%`,
                           backgroundColor: liveAudioLevel > 0.85 ? "#ef4444" : liveAudioLevel > 0.6 ? "#f59e0b" : "#10b981",
-                          transition: "width 80ms ease-out"
+                          transition: "width 60ms linear"
                         }} />
                       </div>
                       <p className="form-help-text" style={{ marginTop: "6px" }}>
@@ -2553,7 +2762,7 @@ export function MVSettings() {
                       <div className="switch-row" style={{ paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
                         <div className="switch-left">
                           <span className="switch-title">{t("mvSettings.bible.highContrast", "High Contrast Readability")}</span>
-                          <span className="switch-subtitle">{t("mvSettings.bible.highContrastDesc", "Boost outline and contrast for washed-out sanctuaries or high-ambient light.")}</span>
+                          <span className="switch-subtitle">{t("mvSettings.bible.highContrastDesc", "Boost outline and contrast for washed-out auditoriums or high-ambient light.")}</span>
                         </div>
                         <label className="switch-toggle-label">
                           <input
@@ -2613,7 +2822,7 @@ export function MVSettings() {
                           </div>
                         </div>
                       </div>
-                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => window.open("https://makechurcheazy.com/subscription/plans", "_blank", "noopener,noreferrer")} title={t("mvSettings.credits.upgrade")}>
+                      <button className="action-btn btn-primary" style={{ fontSize: "0.78rem", padding: "6px 14px" }} onClick={() => void openDashboardSubscriptionPlans()} title={t("mvSettings.credits.upgrade")}>
                         <ExternalLink size={12} /> {t("mvSettings.credits.upgrade")}
                       </button>
                     </div>
@@ -2801,6 +3010,11 @@ export function MVSettings() {
                   <div className="section-header">
                     <h3 className="section-title">{t("mvSettings.storage.sectionTitle", "Data & Storage Management")}</h3>
                     <p className="section-desc">{t("mvSettings.storage.sectionDesc", "Manage local databases, purge cached media and worship catalogs, or reset initial setup.")}</p>
+                  </div>
+
+                  {/* Cloud Backup & Multi-Laptop Sync Card */}
+                  <div style={{ marginBottom: "20px" }}>
+                    <CloudSyncSettingsCard onOpenUpgrade={() => setShowCloudSyncUpgrade(true)} />
                   </div>
 
                   {/* Church Onboarding Reset Card */}
@@ -3023,6 +3237,16 @@ export function MVSettings() {
         requiredPlan="growth"
         currentPlan={effectivePlan}
         message="Mobile Remote access is available on Growth."
+      />
+
+      {/* Cloud Sync upgrade modal */}
+      <UpgradeModal
+        open={showCloudSyncUpgrade}
+        onClose={() => setShowCloudSyncUpgrade(false)}
+        feature="Cloud Sync & Multi-Laptop Backup"
+        requiredPlan="basic"
+        currentPlan={effectivePlan}
+        message="Cloud Sync and multi-laptop backup are available on Basic and higher plans."
       />
     </div >
   );

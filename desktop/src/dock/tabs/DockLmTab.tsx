@@ -201,6 +201,26 @@ export function getLmCandidateKey(candidate: Pick<VoiceBibleCandidate, "book" | 
   return `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
 }
 
+export function claimNextLmAutoPushCandidate<T extends { key: string; candidate: VoiceBibleCandidate }>(
+  candidates: T[],
+  claimedKeys: Set<string>,
+  lastPushedAt: ReadonlyMap<string, number>,
+  nowMs: number,
+  duplicateWindowSec: number,
+): T | null {
+  const target = candidates.find(({ key, candidate }) => (
+    !claimedKeys.has(key) &&
+    !isLmAutoPushSuppressed(
+      lastPushedAt.get(getLmCandidateKey(candidate)),
+      nowMs,
+      duplicateWindowSec,
+    )
+  ));
+
+  if (target) claimedKeys.add(target.key);
+  return target ?? null;
+}
+
 export function mergeRetainedLmQueue(
   current: RetainedLmCandidate[],
   incoming: VoiceBibleCandidate[],
@@ -1270,23 +1290,17 @@ export default function DockLmTab({
       }
     }
 
-    const unseen = candidatesToPush.filter(({ key }) => (
-      !autoPushedKeysRef.current.has(key) && !autoPushInFlightRef.current.has(key)
-    ));
-    if (unseen.length === 0) return;
-
-    for (const item of unseen) autoPushedKeysRef.current.add(item.key);
-
-    const nowMs = Date.now();
-    const target = unseen.find(({ candidate }) => (
-      !isLmAutoPushSuppressed(
-        autoPushLastPushedAtRef.current.get(getLmCandidateKey(candidate)),
-        nowMs,
-        settings.autoPushDedupWindow,
-      )
-    ));
+    const target = claimNextLmAutoPushCandidate(
+      candidatesToPush,
+      autoPushedKeysRef.current,
+      autoPushLastPushedAtRef.current,
+      Date.now(),
+      settings.autoPushDedupWindow,
+    );
     if (!target) return;
 
+    // Send one verse at a time. Other candidates stay unclaimed for the next
+    // render after this push completes.
     autoPushInFlightRef.current.add(target.key);
     void handlePushVerse(target.candidate, target.source).then((success) => {
       if (success) autoPushLastPushedAtRef.current.set(getLmCandidateKey(target.candidate), Date.now());
@@ -1559,13 +1573,13 @@ export default function DockLmTab({
         @keyframes lm-pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}
         .lm-candidate-card {
           border: 1px solid rgba(255, 255, 255, 0.08);
-          background: linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.55) 100%);
+          background: #131724;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
           transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
         }
         .lm-candidate-card:hover {
           border-color: rgba(56, 189, 248, 0.6);
-          background: linear-gradient(180deg, rgba(30, 58, 95, 0.55) 0%, rgba(15, 23, 42, 0.7) 100%);
+          background: #1c2132;
           box-shadow: 0 4px 16px rgba(14, 165, 233, 0.16);
           transform: translateY(-1px);
         }
@@ -1575,11 +1589,11 @@ export default function DockLmTab({
         }
         .lm-candidate-card--suggestion {
           border-color: rgba(255, 255, 255, 0.08);
-          background: linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.55) 100%);
+          background: #131724;
         }
         .lm-candidate-card--suggestion:hover {
           border-color: rgba(56, 189, 248, 0.6);
-          background: linear-gradient(180deg, rgba(30, 58, 95, 0.55) 0%, rgba(15, 23, 42, 0.7) 100%);
+          background: #1c2132;
           box-shadow: 0 4px 16px rgba(14, 165, 233, 0.16);
         }
         .lm-candidate-card--pinned {
@@ -1588,7 +1602,7 @@ export default function DockLmTab({
         .lm-candidate-card--active,
         .lm-candidate-card--active:hover {
           border-color: rgba(56, 189, 248, 0.85);
-          background: linear-gradient(180deg, rgba(14, 165, 233, 0.28) 0%, rgba(15, 23, 42, 0.7) 100%);
+          background: #1e293b;
           box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3), 0 4px 16px rgba(14, 165, 233, 0.25);
         }
         .lm-tab--compact:hover {
@@ -3204,7 +3218,7 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     borderRadius: 6,
     border: "1px solid rgba(59, 130, 246, 0.4)",
-    background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.12) 100%)",
+    background: "#1e293b",
     color: "#93C5FD",
     cursor: "pointer",
     transition: "all 0.15s ease",
@@ -3354,9 +3368,9 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 4,
-    background: "#1F2937",
-    color: "#E2E8F0",
-    border: "1px solid rgba(148,163,184,0.18)",
+    background: "#1e293b",
+    color: "#f8fafc",
+    border: "1px solid rgba(255, 255, 255, 0.12)",
     padding: "5px 8px",
     borderRadius: 6,
     fontSize: 11,
@@ -3368,7 +3382,7 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 4,
-    background: "#2563eb",
+    background: "#4f46e5",
     color: "#fff",
     border: "none",
     padding: "5px 9px",

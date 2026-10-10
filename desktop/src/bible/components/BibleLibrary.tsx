@@ -39,6 +39,7 @@ import Icon from "../../components/Icon";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEffectivePlan } from "../../services/licenseService";
 import { checkEntitlementSync } from "../../services/entitlementClient";
+import { getDashboardSubscriptionPlansUrl, openDashboardSubscriptionPlans } from "../../services/subscriptionNavigation";
 
 /** Auto-download bible abbreviations that cannot be deleted */
 const PROTECTED_ABBRS = new Set(AUTO_DOWNLOAD_BIBLES.map(b => b.abbr));
@@ -110,7 +111,6 @@ export default function BibleLibrary({
   // Import state
   const [importDragging, setImportDragging] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: "idle" | "parsing" | "success" | "error"; message?: string }>({ type: "idle" });
-  const [showBibleLimitModal, setShowBibleLimitModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
 
@@ -613,7 +613,7 @@ export default function BibleLibrary({
               </button>
             )}
             <a
-              href="https://makechurcheasy.com/subscription/plans"
+              href={getDashboardSubscriptionPlansUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="bible-free-mode-banner__btn bible-free-mode-banner__btn--primary"
@@ -813,7 +813,7 @@ export default function BibleLibrary({
                           <button
                             className={`bible-library-row-dl${hasReachedBibleLimit ? " bible-library-row-dl--locked" : ""}`}
                             onClick={() => {
-                              if (hasReachedBibleLimit) { setShowBibleLimitModal(true); return; }
+                              if (hasReachedBibleLimit) { void openDashboardSubscriptionPlans(); return; }
                               downloadBible(bible.id, abbr, bible.name, bible.language, bible.filesize);
                             }}
                             title={hasReachedBibleLimit ? "Bible version limit reached — upgrade to add more" : "Download"}
@@ -1018,36 +1018,6 @@ export default function BibleLibrary({
         </div>
       )}
 
-      {/* Bible Version Limit Modal */}
-      {showBibleLimitModal && (
-        <div className="bible-library-backdrop" onClick={() => setShowBibleLimitModal(false)} style={{ zIndex: 9999 }}>
-          <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Bible Version Limit Reached</h3>
-            <p>
-              Your {effectivePlan} plan allows {bibleVersionLimit} Bible versions ({installed.length} currently installed).
-            </p>
-            <p>
-              To add another translation, delete an existing version from your Installed Bibles tab, or upgrade your plan for unlimited translations.
-            </p>
-            <div className="lib-confirm-actions">
-              <button
-                type="button"
-                className="lib-confirm-cancel"
-                onClick={() => {
-                  setShowBibleLimitModal(false);
-                  setTab("installed");
-                }}
-                title="Manage Installed"
-              >
-                Manage Installed
-              </button>
-              <a href="https://makechurcheasy.com/subscription/plans" target="_blank" rel="noopener noreferrer" className="lib-confirm-delete" style={{ textDecoration: "none" }}>
-                Upgrade Plan
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 

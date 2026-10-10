@@ -83,11 +83,11 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface-dark);
-  color: var(--text-secondary);
-  font-size: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 120ms;
@@ -95,9 +95,9 @@
 }
 
 .dev-db-btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--text-muted);
-  color: var(--text-primary);
+  background: #334155;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
 
 .dev-db-btn:disabled {

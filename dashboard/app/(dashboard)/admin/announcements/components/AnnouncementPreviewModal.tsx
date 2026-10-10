@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import type { Announcement } from "../types";
+import { announcementButtons, detectLegacyLayout } from "../types";
 import { LiveAnnouncementPreview } from "./LiveAnnouncementPreview";
 
 export function AnnouncementPreviewModal({
@@ -11,56 +13,52 @@ export function AnnouncementPreviewModal({
   announcement: Announcement | null;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    if (!announcement) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [announcement, onClose]);
+
   if (!announcement) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
       }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Announcement preview"
     >
-      <div className="relative w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Top Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
-          <div>
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              Broadcast Client Simulator
-            </h2>
-            <p className="text-xs text-slate-400">
-              Visualizing how &ldquo;{announcement.title}&rdquo; renders across MakeChurchEasy devices
-            </p>
+      <div className="adm-card w-full max-w-xl overflow-hidden shadow-2xl">
+        <div className="adm-card__head">
+          <div className="min-w-0">
+            <div className="adm-card__title">Preview</div>
+            <div className="truncate text-[12px] text-[var(--mce-admin-text-muted)]">{announcement.title}</div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
+          <button type="button" className="adm-icon-btn" onClick={onClose} aria-label="Close preview">
+            <X className="h-4 w-4" />
           </button>
         </div>
-
-        {/* Simulator Area */}
-        <div className="flex-1 overflow-hidden min-h-[440px]">
+        <div className="p-4">
           <LiveAnnouncementPreview
             data={{
               title: announcement.title,
               message: announcement.message,
+              layout: detectLegacyLayout(announcement),
               tone: announcement.tone,
-              surfaces: announcement.surfaces,
-              ctaLabel: announcement.ctaLabel,
-              ctaUrl: announcement.ctaUrl,
+              buttons: announcementButtons(announcement),
               imageUrl: announcement.imageUrl,
+              bodyHtml: announcement.bodyHtml,
               offerCode: announcement.offerCode,
               offerDiscountPercent: announcement.offerDiscountPercent,
               offerDurationMonths: announcement.offerDurationMonths,
-              offerApplicablePlans: announcement.offerApplicablePlans,
-              offerApplicableBillingCycles: announcement.offerApplicableBillingCycles,
               expiresAt: announcement.expiresAt,
-              tags: announcement.tags,
-              format: announcement.format,
             }}
-            initialSurface={announcement.surfaces.includes("desktop") ? "desktop" : "dashboard"}
           />
         </div>
       </div>

@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb";
 import { COLLECTIONS } from "@/lib/db";
 import { normalizeDiscountCode } from "@/lib/discounts";
 import { discountOfferEmail, sendEmail } from "@/lib/emailTemplates";
+import { buildUnsubscribeUrl } from "@/lib/emailUnsubscribe";
 import { logTrialAction } from "@/lib/trialAudit";
 import { getTrialForUser, updateTrialRecord, createTrialRecord } from "@/lib/trialRecords";
 import type { Announcement, DiscountBillingCycle, PlanTier } from "@/types/schemas";
@@ -100,6 +101,7 @@ export async function POST(
       if (shouldSendEmail && user.email) {
         const emailOpts = discountOfferEmail({
           toEmail: user.email,
+          unsubscribeUrl: buildUnsubscribeUrl(id),
           name: user.name || user.firstName,
           churchName: user.churchName,
           headline: `We've Extended Your Free Trial by ${extensionDays} Days!`,
@@ -203,6 +205,7 @@ export async function POST(
     if (shouldSendEmail && user.email) {
       const emailOpts = discountOfferEmail({
         toEmail: user.email,
+          unsubscribeUrl: buildUnsubscribeUrl(id),
         name: user.name || user.firstName,
         churchName: user.churchName,
         headline: `Special Offer: ${discountPercent}% Off MakeChurchEasy`,

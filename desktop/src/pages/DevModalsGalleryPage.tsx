@@ -11,7 +11,8 @@ import { Navigate } from "react-router-dom";
 import {
   FlaskConical,
   Globe,
-  Sparkles,
+  Crown,
+  Zap,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
@@ -292,7 +293,7 @@ export default function DevModalsGalleryPage() {
           <article className="dev-modal-card">
             <div className="dev-modal-card__header">
               <span className="dev-card-icon dev-card-icon--emerald">
-                <Sparkles size={20} />
+                <Zap size={20} />
               </span>
               <span className="dev-card-category">Product Update</span>
             </div>
@@ -484,7 +485,7 @@ export default function DevModalsGalleryPage() {
           <article className="dev-modal-card">
             <div className="dev-modal-card__header">
               <span className="dev-card-icon dev-card-icon--indigo">
-                <Sparkles size={20} />
+                <Crown size={20} />
               </span>
               <span className="dev-card-category">Paywall</span>
             </div>
@@ -731,7 +732,7 @@ export default function DevModalsGalleryPage() {
           <div className="dev-announcement-modal" onClick={(e) => e.stopPropagation()}>
             <div className="dev-announcement-header">
               <div className="dev-announcement-tag dev-announcement-tag--emerald">
-                <Sparkles size={14} />
+                <Zap size={14} />
                 <span>What&apos;s New</span>
               </div>
               <button
@@ -745,7 +746,7 @@ export default function DevModalsGalleryPage() {
 
             <div className="dev-announcement-content">
               <div className="mv-modal-icon-badge mv-modal-icon-badge--emerald" style={{ margin: "8px auto 14px" }}>
-                <Sparkles size={28} />
+                <Zap size={28} />
               </div>
               <h3>{SAMPLE_ANNOUNCEMENTS.newFeature.title}</h3>
               <p>{SAMPLE_ANNOUNCEMENTS.newFeature.message}</p>
@@ -867,7 +868,7 @@ export default function DevModalsGalleryPage() {
           <div className="update-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="update-modal-header">
               <div className="update-modal-header__title update-modal-header__title--info">
-                <Sparkles size={16} />
+                <Zap size={16} />
                 <span>Downloading in Background</span>
               </div>
               <button

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   fetchAppSettings,
+  getDownloadUrlForCurrentPlatform,
+  getLiveCountdown,
+  getTrustedNowMs,
   refreshAppSettings,
   getForcedUpdateState,
   recordOverlayDismiss,
@@ -14,6 +17,24 @@ export interface UseForcedUpdateReturn {
   isVisible: boolean;
   dismiss?: () => void;
   refetch: () => void;
+}
+
+const FLOOR_START_KEY = "ocs-version-floor-first-seen-v1";
+
+/** First time this computer saw the current version floor (stable across polls). */
+function getFloorStartedAt(minimumVersion: string): string {
+  try {
+    const raw = localStorage.getItem(FLOOR_START_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw) as { minimumVersion?: string; startedAt?: string };
+      if (saved.minimumVersion === minimumVersion && saved.startedAt) return saved.startedAt;
+    }
+    const startedAt = new Date(getTrustedNowMs()).toISOString();
+    localStorage.setItem(FLOOR_START_KEY, JSON.stringify({ minimumVersion, startedAt }));
+    return startedAt;
+  } catch {
+    return new Date(getTrustedNowMs()).toISOString();
+  }
 }
 
 /**
@@ -44,27 +65,36 @@ export function useForcedUpdate(): UseForcedUpdateReturn {
         // If version floor from server is blocked, enforce the lock even if
         // getForcedUpdateState did not catch it
         if (!computed.active && floorResult?.blocked) {
-          const startedAt = new Date().toISOString();
           const gracePeriodHours = Math.max(0, floorResult.gracePeriodHours || 0);
           const isHardLock = gracePeriodHours === 0;
+          // Anchor the countdown: the server's deadline when we have it,
+          // otherwise the first time we saw this policy (remembered, so the
+          // countdown does not restart on every poll).
+          const startedAt = isHardLock
+            ? new Date(getTrustedNowMs()).toISOString()
+            : getFloorStartedAt(floorResult.minimumVersion);
+          const lockAt = isHardLock
+            ? startedAt
+            : settings?.enforcementDeadlineAt ||
+              new Date(new Date(startedAt).getTime() + gracePeriodHours * 3600 * 1000).toISOString();
+          const hoursLeft = isHardLock
+            ? 0
+            : Math.max(0, (new Date(lockAt).getTime() - getTrustedNowMs()) / 3_600_000);
 
           computed = {
-            blocked: isHardLock,
+            blocked: isHardLock || hoursLeft <= 0,
             active: true,
             lockType: "forced-update",
             requiredVersion: floorResult.minimumVersion,
-            hoursRemaining: gracePeriodHours > 0 ? gracePeriodHours : null,
-            gracePeriodHours: gracePeriodHours > 0 ? gracePeriodHours : null,
+            hoursRemaining: isHardLock ? null : hoursLeft,
+            gracePeriodHours: isHardLock ? null : gracePeriodHours,
             startedAt,
-            lockAt:
-              gracePeriodHours > 0
-                ? new Date(Date.now() + gracePeriodHours * 3600 * 1000).toISOString()
-                : startedAt,
+            lockAt,
             updateMessage:
               settings?.updateMessage ||
               `A new version of MakeChurchEasy is required. Your version is v${floorResult.currentVersion}. Update to v${floorResult.minimumVersion} or later to continue.`,
             currentVersion: floorResult.currentVersion,
-            downloadUrl: settings?.windowsDownloadUrl || "",
+            downloadUrl: settings ? getDownloadUrlForCurrentPlatform(settings) : "",
             releaseNotesUrl: settings?.releaseNotesUrl || "",
             loading: false,
           };
@@ -110,15 +140,17 @@ export function useForcedUpdate(): UseForcedUpdateReturn {
     setForcedUpdateState((prev) => ({ ...prev, active: false }));
   }, [forcedUpdateState.hoursRemaining]);
 
+  // The final 24 hours (and anything after the deadline) cannot be dismissed.
+  const live = getLiveCountdown(forcedUpdateState);
   const isVisible = Boolean(
     forcedUpdateState.active &&
-    (forcedUpdateState.blocked || shouldReshowOverlay(forcedUpdateState.hoursRemaining))
+    (live.modalLocked || shouldReshowOverlay(live.hoursRemaining))
   );
 
   return {
     state: forcedUpdateState,
     isVisible,
-    dismiss: forcedUpdateState.blocked ? undefined : dismiss,
+    dismiss: live.modalLocked ? undefined : dismiss,
     refetch,
   };
 }

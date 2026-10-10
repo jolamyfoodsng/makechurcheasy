@@ -8,6 +8,7 @@
  */
 
 import { BIBLE_THEMES } from "./bibleThemes";
+import { KINETIC_LOWER_THIRD_THEMES } from "./kineticThemes";
 import { localizeLowerThirdThemeAssets, normalizeThemeFontImports } from "./runtimeBranding";
 
 export type ThemeCategory = "bible" | "worship" | "general" | string;
@@ -1711,7 +1712,11 @@ const THEMES_WITH_TRANSPARENT_TEXT: ThemeLike[] = [
   ...THEMES_WITH_FRIENDLY_NAMES,
   ...WORSHIP_BIBLE_TRANSPARENT_THEMES,
 ];
-const BRAND_ALIGNED_THEMES: ThemeLike[] = THEMES_WITH_TRANSPARENT_TEXT.map((theme) => normalizeThemeBranding(theme));
+const BRAND_ALIGNED_THEMES: ThemeLike[] = [
+  ...THEMES_WITH_TRANSPARENT_TEXT.map((theme) => normalizeThemeBranding(theme)),
+  // Kinetic straps keep their own type and colour, so they skip brand normalisation.
+  ...(KINETIC_LOWER_THIRD_THEMES as unknown as ThemeLike[]),
+];
 
 export const CHURCH_IMAGE_50_THEMES: ThemeLike[] = BRAND_ALIGNED_THEMES.filter((t) =>
   String(t.id || "").startsWith("lt-img-"),
@@ -1763,6 +1768,17 @@ export function getThemeById(id: string): ThemeLike | undefined {
 export function getThemeWithPackById(id: string): ThemeWithPack | undefined {
   const canonicalId = canonicalizeLowerThirdThemeId(id);
   return ALL_THEMES_WITH_PACK.find((theme) => theme.id === canonicalId);
+}
+
+/**
+ * Alias → canonical id pairs. Used by scripts/export-lower-third-theme-ids.cjs to write
+ * themeIdIndex.generated.ts, which lets start-up code canonicalise ids without loading
+ * this whole catalog.
+ */
+export function getLowerThirdThemeIdAliasEntries(): Array<[string, string]> {
+  return [...CANONICAL_THEME_ID_ALIASES.entries()]
+    .filter(([, canonical]) => ALL_THEME_ID_SET.has(canonical))
+    .sort(([a], [b]) => a.localeCompare(b));
 }
 
 export function canonicalizeLowerThirdThemeId(themeId: string): string {

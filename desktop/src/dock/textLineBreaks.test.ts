@@ -58,8 +58,8 @@ describe("Dock multiline text", () => {
 
   it("keeps Worship fit-to-frame output readable", () => {
     expect(worshipOverlay).toContain("const AUTO_FIT_MIN_FONT_SIZE = 28;");
-    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;");
-    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;");
+    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_FONT_SIZE = 12;");
+    expect(worshipOverlay).toContain("const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 10;");
     expect(worshipOverlay).toContain("function isFitVisible(node)");
     expect(worshipOverlay).toContain("function getLayoutRect(node)");
     expect(worshipOverlay).toContain("function getLayoutContentSize(node, rect)");

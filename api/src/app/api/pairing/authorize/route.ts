@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rateLimit";
-import { checkDeviceLimit } from "@/lib/deviceLimits";
+import { checkDeviceLimit, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { resolveEffectivePlan, isInTrialRaw } from "@/lib/trial";
 import {
   claimTrialForUserIfEligible,
@@ -136,15 +136,21 @@ export async function POST(req: NextRequest) {
       isOnTrial,
     );
     if (!limitResult.allowed) {
-      return NextResponse.json(
-        {
-          error: "device_limit_reached",
-          message: `Your ${effectivePlan} plan allows ${limitResult.limit} device${limitResult.limit === 1 ? "" : "s"}. You currently have ${limitResult.currentCount}/${limitResult.limit}.`,
-          currentCount: limitResult.currentCount,
-          limit: limitResult.limit,
-        },
-        { status: 403 }
-      );
+      if (effectivePlan === "free" || limitResult.limit === 1) {
+        // Free plan allows 1 computer at a time: automatically disconnect older computers
+        // and allow pairing authorization to succeed.
+        await evictOtherActiveDevices(userId, { keepDeviceId: existingDevice?.deviceId || null }, db);
+      } else {
+        return NextResponse.json(
+          {
+            error: "device_limit_reached",
+            message: `Your ${effectivePlan} plan allows ${limitResult.limit} device${limitResult.limit === 1 ? "" : "s"}. You currently have ${limitResult.currentCount}/${limitResult.limit}.`,
+            currentCount: limitResult.currentCount,
+            limit: limitResult.limit,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     await db.collection("pairingCodes").updateOne(

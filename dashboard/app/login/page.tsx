@@ -10,6 +10,9 @@ import {
   ShieldCheck,
   AlertTriangle,
   Monitor,
+  Eye,
+  EyeOff,
+  Fingerprint,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
@@ -42,6 +45,7 @@ function LoginInner() {
     loading: authLoading,
     signInWithEmail,
     signInWithGoogle,
+    signInWithPasskey,
     requiresTwoFactor,
     verifyTwoFactor,
     cancelTwoFactor,
@@ -59,6 +63,7 @@ function LoginInner() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
@@ -105,6 +110,8 @@ function LoginInner() {
         no_email: "Google account has no email address",
         google_auth_failed: "Google sign-in failed. Please try again.",
         registrations_disabled: "New account registration is currently disabled.",
+        disposable_email: "Please sign up with a permanent email address (temporary email providers aren't allowed).",
+        too_many_signups_ip: "Too many accounts have been created from this network today. Please try again tomorrow or contact support.",
       };
       setError(errorMessages[errorParam] || `Google sign-in error: ${errorParam}`);
     }
@@ -188,6 +195,19 @@ function LoginInner() {
       setLoading(false);
       console.error("[auth] Google sign-in error:", err);
       setError(t("auth.google.failed") || "Google sign-in failed. Please try again.");
+    }
+  }
+
+  async function handlePasskeySignIn() {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await signInWithPasskey();
+      if (!result.requiresTwoFactor) router.push(safeCallbackUrl);
+    } catch (err: any) {
+      setError(err.message || "Passkey sign-in failed. Try email or Google instead.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -662,6 +682,16 @@ function LoginInner() {
           <span>{t("auth.google.continueWith") || "Continue with Google"}</span>
         </button>
 
+        <button
+          type="button"
+          onClick={handlePasskeySignIn}
+          disabled={loading}
+          className="mt-3 w-full h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
+          Sign in with a passkey
+        </button>
+
         {/* Divider */}
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-200" />
@@ -710,14 +740,26 @@ function LoginInner() {
                 {t("auth.login.forgotPassword") || "Forgot password?"}
               </button>
             </div>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-              placeholder={t("auth.login.passwordPlaceholder") || "••••••••"}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 pr-11 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
+                placeholder={t("auth.login.passwordPlaceholder") || "••••••••"}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            </div>
           </div>
           <button
             type="submit"

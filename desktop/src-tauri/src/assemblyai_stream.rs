@@ -39,7 +39,25 @@ use tokio_tungstenite::tungstenite::Message;
 static USER_GAIN: AtomicU32 = AtomicU32::new(f32_to_bits(1.0));
 
 const REALTIME_WS_URL: &str = "wss://streaming.assemblyai.com/v3/ws";
-const REALTIME_MODEL: &str = "universal-3-5-pro";
+const REALTIME_MODEL: &str = "universal-streaming-english";
+/// Admin-selected model (Admin → Settings → Controls). Empty = REALTIME_MODEL.
+static SPEECH_MODEL_OVERRIDE: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+fn realtime_model() -> String {
+    let chosen = SPEECH_MODEL_OVERRIDE
+        .lock()
+        .map(|m| m.clone())
+        .unwrap_or_default();
+    let valid = matches!(
+        chosen.as_str(),
+        "universal-streaming-english" | "universal-streaming-multilingual"
+    );
+    if valid {
+        chosen
+    } else {
+        REALTIME_MODEL.to_string()
+    }
+}
 const TARGET_RATE: u32 = 16_000;
 const CHUNK_MS: u64 = 50;
 const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -48,8 +66,6 @@ const WS_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const WS_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_AUDIO_QUEUE_DROPS: u32 = 20;
-const REALTIME_PROMPT: &str = "English Christian church sermon, Bible preaching, scripture reading, Holy Bible, Old Testament, New Testament, Genesis, Exodus, Leviticus, Numbers, Deuteronomy, Joshua, Judges, Ruth, First Samuel, Second Samuel, First Kings, Second Kings, First Chronicles, Second Chronicles, Ezra, Nehemiah, Esther, Job, Psalms, Proverbs, Ecclesiastes, Song of Solomon, Isaiah, Jeremiah, Lamentations, Ezekiel, Daniel, Hosea, Joel, Amos, Obadiah, Jonah, Micah, Nahum, Habakkuk, Zephaniah, Haggai, Zechariah, Malachi, Matthew, Mark, Luke, John, Acts, Romans, First Corinthians, Second Corinthians, Galatians, Ephesians, Philippians, Colossians, First Thessalonians, Second Thessalonians, First Timothy, Second Timothy, Titus, Philemon, Hebrews, James, First Peter, Second Peter, First John, Second John, Third John, Jude, Revelation, chapter and verse, King James Version, New International Version, New Living Translation, English Standard Version, The Message, Amplified Bible, KJV, NIV, NLT, ESV, MSG, switch to NLT, switch to NIV, switch to KJV.";
-
 // Bible vocabulary boosts recognition without guessing a book in the parser.
 const REALTIME_KEYTERMS: &[&str] = &[
     "verse",
@@ -64,7 +80,6 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "Leviticus",
     "Numbers",
     "Deuteronomy",
-    "Deut",
     "Joshua",
     "Judges",
     "Ruth",
@@ -132,6 +147,8 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "Second Kings",
     "First Chronicles",
     "Second Chronicles",
+    "First Cor",
+    "Second Cor",
     "First Corinthians",
     "Second Corinthians",
     "First Thessalonians",
@@ -150,11 +167,6 @@ const REALTIME_KEYTERMS: &[&str] = &[
     "NKJV",
     "The Message",
     "Amplified",
-    "switch to NLT",
-    "switch to NIV",
-    "switch to KJV",
-    "switch to ESV",
-    "switch to Message",
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -166,41 +178,31 @@ unsafe impl Sync for StreamBox {}
 #[derive(Clone, Copy)]
 struct RealtimeProfile {
     label: &'static str,
-    realtime_mode: &'static str,
     min_turn_silence_ms: u32,
     max_turn_silence_ms: u32,
-    interruption_delay_ms: u32,
 }
 
 fn realtime_profile(detection_speed: Option<&str>) -> RealtimeProfile {
     match detection_speed {
         Some("sharp") => RealtimeProfile {
             label: "sharp",
-            realtime_mode: "min_latency",
             min_turn_silence_ms: 200,
             max_turn_silence_ms: 1_000,
-            interruption_delay_ms: 0,
         },
         Some("fast") => RealtimeProfile {
             label: "fast",
-            realtime_mode: "min_latency",
             min_turn_silence_ms: 100,
             max_turn_silence_ms: 700,
-            interruption_delay_ms: 0,
         },
         Some("accurate") => RealtimeProfile {
             label: "accurate",
-            realtime_mode: "max_accuracy",
             min_turn_silence_ms: 700,
             max_turn_silence_ms: 1_800,
-            interruption_delay_ms: 500,
         },
         _ => RealtimeProfile {
             label: "balanced",
-            realtime_mode: "balanced",
             min_turn_silence_ms: 300,
             max_turn_silence_ms: 1_200,
-            interruption_delay_ms: 250,
         },
     }
 }
@@ -273,38 +275,6 @@ struct RealtimeTranscriptMessage {
     message: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct DeepgramWord {
-    word: Option<String>,
-    start: Option<f64>,
-    end: Option<f64>,
-    confidence: Option<f64>,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct DeepgramAlternative {
-    transcript: Option<String>,
-    confidence: Option<f64>,
-    words: Option<Vec<DeepgramWord>>,
-}
-
-#[derive(Deserialize)]
-struct DeepgramChannel {
-    alternatives: Option<Vec<DeepgramAlternative>>,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct DeepgramResults {
-    channel: Option<DeepgramChannel>,
-    is_final: Option<bool>,
-    speech_final: Option<bool>,
-    start: Option<f64>,
-    duration: Option<f64>,
-}
-
 // ── Atomic f32 helpers ───────────────────────────────────────────────────────
 
 /// Store an f32 as its raw bit pattern in an AtomicU32.
@@ -326,7 +296,11 @@ pub async fn start_assemblyai_stream(
     state: State<'_, AssemblyAiStreamState>,
     device_id: Option<String>,
     detection_speed: Option<String>,
+    speech_model: Option<String>,
 ) -> Result<(), String> {
+    if let Ok(mut model) = SPEECH_MODEL_OVERRIDE.lock() {
+        *model = speech_model.unwrap_or_default();
+    }
     // Guard against double-start
     {
         let guard = state.is_streaming.lock().map_err(|e| e.to_string())?;
@@ -480,13 +454,9 @@ pub async fn start_assemblyai_stream(
         *c = true;
     }
 
-    // ── 2. Spawn the STT task (Deepgram, Cloudflare HTTP, or AssemblyAI) ────
-    let is_deepgram = api_key.starts_with("deepgram:")
-        || (api_key.len() == 40 && api_key.chars().all(|c| c.is_ascii_hexdigit()));
+    // ── 2. Spawn the STT task (Cloudflare HTTP or AssemblyAI) ─────────────────
     let is_http_endpoint = api_key.starts_with("http://") || api_key.starts_with("https://");
-    let engine_label = if is_deepgram {
-        "Deepgram Nova-2"
-    } else if is_http_endpoint {
+    let engine_label = if is_http_endpoint {
         "Cloudflare Whisper"
     } else {
         "AssemblyAI"
@@ -497,26 +467,7 @@ pub async fn start_assemblyai_stream(
     let task_is_streaming = Arc::clone(&state.is_streaming);
     let task_audio_ready = Arc::clone(&audio_ready);
     let task = tokio::spawn(async move {
-        let result = if is_deepgram {
-            let clean_keys = api_key
-                .strip_prefix("deepgram:")
-                .unwrap_or(&api_key)
-                .split(',')
-                .map(str::trim)
-                .filter(|key| !key.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>();
-            run_deepgram_transcriber(
-                realtime_app.clone(),
-                clean_keys,
-                audio_rx,
-                shutdown_rx,
-                profile_rx,
-                Arc::clone(&task_audio_ready),
-                Arc::clone(&audio_drop_count),
-            )
-            .await
-        } else if is_http_endpoint {
+        let result = if is_http_endpoint {
             run_cloudflare_transcriber(
                 realtime_app.clone(),
                 api_key,
@@ -770,295 +721,6 @@ async fn run_cloudflare_transcriber(
     Ok(())
 }
 
-// ── Deepgram Nova-2 Realtime Transcriber ─────────────────────────────────────
-
-fn build_deepgram_endpoint() -> String {
-    let mut query = vec![
-        "model=nova-2".to_string(),
-        "encoding=linear16".to_string(),
-        "sample_rate=16000".to_string(),
-        "channels=1".to_string(),
-        "interim_results=true".to_string(),
-        "smart_format=true".to_string(),
-        "endpointing=850".to_string(),
-        "utterance_end_ms=1000".to_string(),
-    ];
-
-    for term in REALTIME_KEYTERMS.iter() {
-        let weight = match *term {
-            "Deuteronomy" | "Deut" => 10,
-            "Habakkuk" | "Ecclesiastes" | "Zephaniah" | "Leviticus"
-            | "1 Thessalonians" | "2 Thessalonians" | "First Thessalonians" | "Second Thessalonians"
-            | "1 Corinthians" | "2 Corinthians" | "First Corinthians" | "Second Corinthians"
-            | "Philippians" | "Colossians" | "Philemon" | "Lamentations" | "Zechariah" | "Malachi" | "Nehemiah" => 9,
-            "NIV" | "NLT" | "KJV" | "ESV" | "NKJV" | "The Message" | "Amplified"
-            | "switch to NLT" | "switch to NIV" | "switch to KJV" | "switch to ESV" | "switch to Message" => 8,
-            "verse" | "next verse" | "previous verse" | "chapter" | "next chapter" | "scripture" | "Holy Bible" => 7,
-            _ => 6,
-        };
-        query.push(format!("keywords={}:{weight}", urlencoding::encode(term)));
-    }
-
-    format!("wss://api.deepgram.com/v1/listen?{}", query.join("&"))
-}
-
-fn handle_deepgram_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
-    let value: serde_json::Value = match serde_json::from_str(raw) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[Deepgram STT] JSON parse error: {e}: {raw}");
-            return Ok(false);
-        }
-    };
-
-    let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    match msg_type {
-        "Results" => {
-            let message: DeepgramResults = match serde_json::from_value(value) {
-                Ok(msg) => msg,
-                Err(e) => {
-                    eprintln!("[Deepgram STT] Results parse error: {e}: {raw}");
-                    return Ok(false);
-                }
-            };
-
-            if let Some(channel) = &message.channel {
-                if let Some(alternatives) = &channel.alternatives {
-                    if let Some(first_alt) = alternatives.first() {
-                        if let Some(transcript) = &first_alt.transcript {
-                            let trimmed = transcript.trim();
-                            if !trimmed.is_empty() {
-                                // speech_final is Deepgram's true end-of-turn indicator (after 850ms silence)
-                                let end_of_turn = message.speech_final.unwrap_or(false);
-
-                                let mut audio_start = message.start.unwrap_or(0.0);
-                                let mut audio_end = audio_start + message.duration.unwrap_or(0.0);
-
-                                if let Some(words) = &first_alt.words {
-                                    if let Some(first_w) = words.first() {
-                                        if let Some(s) = first_w.start {
-                                            audio_start = s;
-                                        }
-                                    }
-                                    if let Some(last_w) = words.last() {
-                                        if let Some(e) = last_w.end {
-                                            audio_end = e;
-                                        }
-                                    }
-                                }
-
-                                println!(
-                                    "[Deepgram STT] [{}] {trimmed}",
-                                    if end_of_turn { "FINAL" } else { "INTERIM" }
-                                );
-
-                                let payload = TranscriptPayload {
-                                    text: trimmed.to_string(),
-                                    end_of_turn,
-                                    audio_start: audio_start * 1000.0,
-                                    audio_end: audio_end * 1000.0,
-                                };
-                                let _ = app.emit("assemblyai-transcript", payload);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        "Metadata" => {
-            println!("[Deepgram STT] Session confirmed by Metadata");
-            let _ = app.emit(
-                "assemblyai-status",
-                StatusPayload {
-                    status: "connected".to_string(),
-                },
-            );
-            return Ok(true);
-        }
-        "UtteranceEnd" => {
-            println!("[Deepgram STT] UtteranceEnd received; finalizing turn");
-            let payload = TranscriptPayload {
-                text: String::new(),
-                end_of_turn: true,
-                audio_start: 0.0,
-                audio_end: 0.0,
-            };
-            let _ = app.emit("assemblyai-transcript", payload);
-        }
-        "SpeechStarted" => {
-            // Expected Deepgram lifecycle event
-        }
-        "Error" => {
-            let detail = value
-                .get("error")
-                .or_else(|| value.get("message"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown Deepgram error");
-            eprintln!("[Deepgram STT] Received error from server: {detail}");
-            let _ = app.emit(
-                "assemblyai-status",
-                StatusPayload {
-                    status: format!("error: {detail}"),
-                },
-            );
-        }
-        _ => {}
-    }
-
-    Ok(false)
-}
-
-async fn run_deepgram_transcriber(
-    app: AppHandle,
-    api_keys: Vec<String>,
-    mut audio_rx: mpsc::Receiver<Vec<u8>>,
-    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
-    mut _profile_rx: mpsc::Receiver<RealtimeProfile>,
-    audio_ready: Arc<AtomicBool>,
-    audio_drop_count: Arc<AtomicU32>,
-) -> Result<(), String> {
-    let endpoint = build_deepgram_endpoint();
-    if api_keys.is_empty() {
-        return Err("No Deepgram API keys configured".to_string());
-    }
-
-    let mut connected = None;
-    let mut last_error = "Deepgram rejected every configured API key".to_string();
-
-    for (index, api_key) in api_keys.iter().enumerate() {
-        let mut request = endpoint
-            .as_str()
-            .into_client_request()
-            .map_err(|e| format!("Failed to create Deepgram request: {e}"))?;
-
-        let auth_str = format!("Token {api_key}");
-        let auth = match HeaderValue::from_str(&auth_str) {
-            Ok(value) => value,
-            Err(_) => {
-                last_error = format!("Deepgram key {} has an invalid format", index + 1);
-                continue;
-            }
-        };
-        request.headers_mut().insert("Authorization", auth);
-
-        println!(
-            "[Deepgram STT] Connecting with key slot {}/{}",
-            index + 1,
-            api_keys.len()
-        );
-
-        match timeout(WS_CONNECT_TIMEOUT, connect_async(request)).await {
-            Ok(Ok(pair)) => {
-                connected = Some(pair);
-                break;
-            }
-            Ok(Err(_)) => {
-                last_error = format!("Deepgram key {} rejected the connection", index + 1);
-            }
-            Err(_) => {
-                last_error = format!("Deepgram key {} connection timed out", index + 1);
-            }
-        }
-
-        println!(
-            "[Deepgram STT] Key slot {} unavailable; trying the next configured key",
-            index + 1
-        );
-    }
-
-    let (ws_stream, _) = connected.ok_or(last_error)?;
-    let (mut write, mut read) = ws_stream.split();
-
-    println!("[Deepgram STT] WebSocket connected; sending KeepAlive and priming audio stream");
-
-    // Deepgram is immediately connected and ready to process audio
-    let _ = app.emit(
-        "assemblyai-status",
-        StatusPayload {
-            status: "connected".to_string(),
-        },
-    );
-    audio_ready.store(true, Ordering::Release);
-
-    let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
-    let _ = write.send(Message::Text(keep_alive.into())).await;
-
-    let mut last_server_activity = Instant::now();
-    let mut heartbeat = interval(Duration::from_secs(5));
-    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    heartbeat.tick().await;
-
-    loop {
-        if audio_drop_count.load(Ordering::Relaxed) >= MAX_AUDIO_QUEUE_DROPS {
-            return Err("Deepgram WebSocket fell behind the microphone; restarting.".to_string());
-        }
-
-        tokio::select! {
-            _ = &mut shutdown_rx => {
-                println!("[Deepgram STT] Shutdown signal received");
-                let close_stream = serde_json::json!({ "type": "CloseStream" }).to_string();
-                let _ = timeout(WS_CLOSE_TIMEOUT, write.send(Message::Text(close_stream.into()))).await;
-                let _ = timeout(WS_CLOSE_TIMEOUT, write.close()).await;
-                break;
-            }
-            maybe_pcm = audio_rx.recv() => {
-                let Some(pcm_bytes) = maybe_pcm else {
-                    break;
-                };
-                timeout(
-                    WS_WRITE_TIMEOUT,
-                    write.send(Message::Binary(pcm_bytes.into())),
-                )
-                    .await
-                    .map_err(|_| "Deepgram WebSocket audio send timed out".to_string())?
-                    .map_err(|e| format!("Failed to send Deepgram audio: {e}"))?;
-            }
-            _ = heartbeat.tick() => {
-                if last_server_activity.elapsed() > WS_IDLE_TIMEOUT {
-                    return Err(format!(
-                        "Deepgram WebSocket stalled: no server response for {} seconds",
-                        WS_IDLE_TIMEOUT.as_secs(),
-                    ));
-                }
-
-                let keep_alive = serde_json::json!({ "type": "KeepAlive" }).to_string();
-                let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Text(keep_alive.into()))).await;
-            }
-            maybe_message = read.next() => {
-                let Some(message) = maybe_message else {
-                    break;
-                };
-                last_server_activity = Instant::now();
-                match message {
-                    Ok(Message::Text(text)) => {
-                        let _ = handle_deepgram_message(&app, text.as_ref());
-                    }
-                    Ok(Message::Binary(bytes)) => {
-                        if let Ok(text) = std::str::from_utf8(bytes.as_ref()) {
-                            let _ = handle_deepgram_message(&app, text);
-                        }
-                    }
-                    Ok(Message::Ping(payload)) => {
-                        let _ = timeout(WS_WRITE_TIMEOUT, write.send(Message::Pong(payload))).await;
-                    }
-                    Ok(Message::Close(frame)) => {
-                        if let Some(frame) = frame {
-                            println!("[Deepgram STT] WebSocket closed: {} {}", frame.code, frame.reason);
-                        }
-                        break;
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        return Err(format!("Deepgram WebSocket read failed: {error}"));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 async fn run_realtime_transcriber(
     app: AppHandle,
     api_key: String,
@@ -1195,22 +857,14 @@ async fn run_realtime_transcriber(
 }
 
 fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
-    let language_codes = serde_json::json!(["en"]).to_string();
     let params = [
-        ("speech_model", REALTIME_MODEL.to_string()),
+        ("speech_model", realtime_model()),
         ("encoding", "pcm_s16le".to_string()),
         ("sample_rate", TARGET_RATE.to_string()),
-        ("mode", profile.realtime_mode.to_string()),
-        ("language_codes", language_codes),
         ("include_partial_turns", "true".to_string()),
-        ("continuous_partials", "true".to_string()),
-        (
-            "interruption_delay",
-            profile.interruption_delay_ms.to_string(),
-        ),
+        ("format_turns", "true".to_string()),
         ("min_turn_silence", profile.min_turn_silence_ms.to_string()),
         ("max_turn_silence", profile.max_turn_silence_ms.to_string()),
-        ("prompt", REALTIME_PROMPT.to_string()),
         (
             "keyterms_prompt",
             serde_json::json!(REALTIME_KEYTERMS).to_string(),
@@ -1237,7 +891,6 @@ where
 {
     let update = serde_json::json!({
         "type": "UpdateConfiguration",
-        "prompt": REALTIME_PROMPT,
         "keyterms_prompt": REALTIME_KEYTERMS,
         "min_turn_silence": profile.min_turn_silence_ms,
         "max_turn_silence": profile.max_turn_silence_ms,
@@ -1567,7 +1220,7 @@ fn process_and_send_f32(
                 static CHUNK_COUNTER: AtomicU32 = AtomicU32::new(0);
                 let sent = CHUNK_COUNTER.fetch_add(1, Ordering::Relaxed);
                 if sent == 0 || sent % 200 == 0 {
-                    println!("[Voice Stream] Mic audio active — sent {sent} chunks to Deepgram (rms: {rms:.4}, level: {level:.3})");
+                    println!("[Voice Stream] Mic audio active — sent {sent} chunks to speech service (rms: {rms:.4}, level: {level:.3})");
                 }
                 let _ = app.emit("assemblyai-audio-level", LevelPayload { level });
             }
@@ -1676,6 +1329,11 @@ mod tests {
             let url = reqwest::Url::parse(&endpoint).unwrap();
             let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
             let terms: Vec<String> = serde_json::from_str(&params["keyterms_prompt"]).unwrap();
+            assert_eq!(params["speech_model"], "universal-streaming-english");
+            assert_eq!(params["format_turns"], "true");
+            assert!(!params.contains_key("mode"));
+            assert!(!params.contains_key("prompt"));
+            assert!(!params.contains_key("interruption_delay"));
             assert!(terms.len() <= 100);
             assert!(terms.iter().all(|term| term.chars().count() <= 50));
             for book in books.as_object().unwrap().keys() {

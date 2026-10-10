@@ -58,7 +58,11 @@ fn mobile_access_policy_store() -> &'static RwLock<MobileAccessPolicy> {
 pub async fn set_mobile_access_policy(allowed: bool, plan: String, reason: Option<String>) {
     let mut policy = mobile_access_policy_store().write().await;
     policy.allowed = allowed;
-    policy.plan = if plan.trim().is_empty() { "free".into() } else { plan };
+    policy.plan = if plan.trim().is_empty() {
+        "free".into()
+    } else {
+        plan
+    };
     policy.reason = reason.unwrap_or_else(|| {
         "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEasy on your desktop.".into()
     });
@@ -66,7 +70,11 @@ pub async fn set_mobile_access_policy(allowed: bool, plan: String, reason: Optio
 
 pub async fn mobile_access_error() -> Option<String> {
     let policy = mobile_access_policy_store().read().await;
-    if policy.allowed { None } else { Some(policy.reason.clone()) }
+    if policy.allowed {
+        None
+    } else {
+        Some(policy.reason.clone())
+    }
 }
 
 /// OBS connection details provided by the dock.
@@ -901,12 +909,14 @@ pub async fn start_mobile_server(
                 "[MobileCompanion] Port {} unavailable: {}. Trying an available LAN port.",
                 preferred_port, preferred_error
             );
-            TcpListener::bind("0.0.0.0:0").await.map_err(|fallback_error| {
-                format!(
-                    "Failed to bind mobile server on {} ({}) or its fallback port: {}",
-                    preferred_addr, preferred_error, fallback_error
-                )
-            })?
+            TcpListener::bind("0.0.0.0:0")
+                .await
+                .map_err(|fallback_error| {
+                    format!(
+                        "Failed to bind mobile server on {} ({}) or its fallback port: {}",
+                        preferred_addr, preferred_error, fallback_error
+                    )
+                })?
         }
     };
 

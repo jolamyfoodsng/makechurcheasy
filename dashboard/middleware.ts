@@ -19,13 +19,35 @@ export function middleware(req: NextRequest) {
   }
 
   const requestHeaders = new Headers(req.headers);
-  const edgeCountry = (req.headers.get("cf-ipcountry") || "")
-    .trim()
-    .toUpperCase();
+  const edgeCountry = (
+    req.headers.get("cf-ipcountry") ||
+    req.headers.get("x-mce-geo-country") ||
+    req.headers.get("x-vercel-ip-country") ||
+    ""
+  ).trim().toUpperCase();
   if (/^[A-Z]{2}$/.test(edgeCountry) && edgeCountry !== "XX" && edgeCountry !== "T1") {
-    // Rewrites to the API do not always preserve the hosting provider's geo
-    // header, so pass the validated edge value through explicitly.
     requestHeaders.set("x-mce-geo-country", edgeCountry);
+  }
+
+  const edgeCity = req.headers.get("x-mce-geo-city") || req.headers.get("x-vercel-ip-city") || "";
+  if (edgeCity && !requestHeaders.has("x-mce-geo-city")) {
+    requestHeaders.set("x-mce-geo-city", edgeCity.trim());
+  }
+
+  const edgeTimezone = req.headers.get("x-mce-geo-timezone") || req.headers.get("x-vercel-ip-timezone") || "";
+  if (edgeTimezone && !requestHeaders.has("x-mce-geo-timezone")) {
+    requestHeaders.set("x-mce-geo-timezone", edgeTimezone.trim());
+  }
+
+  const clientIp = (
+    req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-real-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0] ||
+    req.headers.get("x-mce-client-ip") ||
+    ""
+  ).trim();
+  if (clientIp && !requestHeaders.has("x-mce-client-ip")) {
+    requestHeaders.set("x-mce-client-ip", clientIp);
   }
 
   if (req.method === "OPTIONS") {

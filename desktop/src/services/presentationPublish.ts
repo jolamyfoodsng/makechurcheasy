@@ -7,6 +7,7 @@ import {
   publishPresentationState,
   type PresentationRemoteState,
 } from "./presentationState";
+export type { PresentationGraphicLayer } from "./presentationState";
 import type {
   PresentationBibleComparePayload,
   PresentationMediaFit,
@@ -340,6 +341,36 @@ export async function publishTickerToPresentation(payload: {
       hidden: false,
       version: Date.now(),
     },
+  });
+}
+
+/**
+ * Show (or animate out) a broadcast graphic over whatever is on the presentation link.
+ * `url` is the lower-third-overlay.html URL the Dock builds for OBS; sending the
+ * "out" URL for the same graphic plays its exit animation.
+ */
+export async function publishGraphicToPresentation(url: string, themeId?: string): Promise<void> {
+  const { sessionId } = getPresentationSettings();
+  await publishPresentationState({
+    sessionId,
+    fullscreen: null,
+    lowerThird: null,
+    graphic: { url, version: Date.now(), themeId },
+    graphicOnly: true,
+    updatedAt: Date.now(),
+  });
+}
+
+/** Remove the broadcast graphic from the presentation link (content stays). */
+export async function clearGraphicFromPresentation(): Promise<void> {
+  const { sessionId } = getPresentationSettings();
+  await publishPresentationState({
+    sessionId,
+    fullscreen: null,
+    lowerThird: null,
+    graphic: null,
+    graphicOnly: true,
+    updatedAt: Date.now(),
   });
 }
 

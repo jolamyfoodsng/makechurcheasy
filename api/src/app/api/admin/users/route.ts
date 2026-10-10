@@ -5,7 +5,7 @@ import { calculateBulkCredits } from "@/lib/credits";
 import { checkAllExpiredAdminTemporaryPlans } from "@/lib/adminTemporaryPlan";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { getEffectivePlan } from "@/lib/trial";
-import { calculateUserActivityScore, calculateUserActivityMultiPeriod } from "@/lib/userActivityScore";
+import { loadUserEngagement, scoreUserEngagement, presentsOf, type UserEngagement } from "@/lib/userEngagement";
 import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 
 export async function GET(req: NextRequest) {
@@ -158,6 +158,14 @@ export async function GET(req: NextRequest) {
       console.warn("Could not aggregate activity_events:", err);
     }
 
+    // Real usage in the last 24h / 7 days / 30 days (drives the activity scores).
+    let engagementMap = new Map<string, UserEngagement>();
+    try {
+      engagementMap = await loadUserEngagement(db, userIds);
+    } catch (err) {
+      console.warn("Could not load user engagement:", err);
+    }
+
     // Query usage per user from user_usage collection
     const usageMap = new Map<string, { bibleSearches: number; songsCreated: number; mediaUploaded: number; transcriptCount: number; aiHoursUsed: number }>();
     try {
@@ -273,19 +281,8 @@ export async function GET(req: NextRequest) {
       const effectiveLastActive = latestActiveMs ? new Date(latestActiveMs).toISOString() : null;
 
       const userUsage = usageMap.get(id) || usageMap.get(u._id.toString()) || null;
-      const deviceCount = deviceCountMap.get(id) ?? 0;
-      const activityInput = {
-        lastLogin: lastLoginRaw,
-        lastActive: effectiveLastActive,
-        plan: effectivePlan,
-        trial,
-        ambassador: u.ambassador || null,
-        deviceIds: deviceCount > 0 ? Array(deviceCount).fill("device") : [],
-        activationMilestones: u.activationMilestones || null,
-        usage: userUsage,
-      };
-      const activityBreakdown = calculateUserActivityScore(activityInput);
-      const multiPeriod = calculateUserActivityMultiPeriod(activityInput);
+      const engagement = engagementMap.get(id);
+      const activity = engagement ? scoreUserEngagement(engagement) : null;
 
       const effectiveExpiresAt =
         u.adminManagedSubscription?.active && u.adminManagedSubscription.expiresAt
@@ -333,16 +330,26 @@ export async function GET(req: NextRequest) {
         activationMilestones: u.activationMilestones || null,
         reactivationOffer: reactivationOfferMap.get(id) || null,
         usage: userUsage,
-        activityScore: {
-          score: activityBreakdown.score,
-          grade: activityBreakdown.grade,
-          color: activityBreakdown.color,
-          badgeBg: activityBreakdown.badgeBg,
-          barColor: activityBreakdown.barColor,
-          daily: multiPeriod.daily,
-          weekly: multiPeriod.weekly,
-          monthly: multiPeriod.monthly,
-        },
+        activityScore: activity
+          ? {
+            score: activity.score,
+            grade: activity.grade,
+            color: activity.color,
+            badgeBg: activity.badgeBg,
+            barColor: activity.barColor,
+            daily: activity.daily,
+            weekly: activity.weekly,
+            monthly: activity.monthly,
+            method: activity.method,
+          }
+          : null,
+        engagement30d: engagement
+          ? {
+            activeDays: engagement.month.activeDays,
+            presented: presentsOf(engagement.month),
+            multistreamSeconds: engagement.month.multistreamSeconds,
+          }
+          : null,
       };
     });
 

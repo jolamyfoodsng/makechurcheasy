@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { rateLimit } from "@/lib/rateLimit";
-import { checkDeviceLimit } from "@/lib/deviceLimits";
+import { checkDeviceLimit, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { resolveEffectivePlan, isInTrialRaw } from "@/lib/trial";
 import { getTrialForUser } from "@/lib/trialRecords";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/desktopDeviceRegistration";
 import {
   claimTrialForUserIfEligible,
+  getClientTrialEligibility,
 } from "@/lib/trialAbuse";
 
 /**
@@ -194,15 +195,21 @@ export async function POST(req: NextRequest) {
       isOnTrial,
     );
     if (!limitResult.allowed) {
-      return NextResponse.json(
-        {
-          error: "device_limit_reached",
-          message: `Your ${effectivePlan} plan allows ${limitResult.limit} device${limitResult.limit === 1 ? "" : "s"}. You currently have ${limitResult.currentCount}/${limitResult.limit}.`,
-          currentCount: limitResult.currentCount,
-          limit: limitResult.limit,
-        },
-        { status: 403, headers: CORS_HEADERS },
-      );
+      if (effectivePlan === "free" || limitResult.limit === 1) {
+        // Free plan allows 1 computer at a time: automatically disconnect older computers
+        // and allow pairing redeem to succeed.
+        await evictOtherActiveDevices(user._id.toString(), { keepDeviceId: existingDevice?.deviceId || null }, db);
+      } else {
+        return NextResponse.json(
+          {
+            error: "device_limit_reached",
+            message: `Your ${effectivePlan} plan allows ${limitResult.limit} device${limitResult.limit === 1 ? "" : "s"}. You currently have ${limitResult.currentCount}/${limitResult.limit}.`,
+            currentCount: limitResult.currentCount,
+            limit: limitResult.limit,
+          },
+          { status: 403, headers: CORS_HEADERS },
+        );
+      }
     }
 
     // Mark code as redeemed immediately — prevents reuse
@@ -284,6 +291,8 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* email not critical */ }
 
+    const trialEligibility = await getClientTrialEligibility(user._id.toString(), Boolean(trialResponse));
+
     return NextResponse.json({
       success: true,
       user: {
@@ -301,6 +310,7 @@ export async function POST(req: NextRequest) {
         adminManagedSubscription: user.adminManagedSubscription || null,
         subscriptionExpiresAt: user.subscriptionExpiresAt || null,
         trial: trialResponse,
+        trialEligibility,
       },
       deviceId: registeredDevice.deviceId,
       deviceSecret: registeredDevice.deviceSecret,

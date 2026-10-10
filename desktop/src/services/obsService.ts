@@ -22,6 +22,19 @@ import {
   getInputBySlot,
   getSceneItemBySlot,
 } from "./obsRegistry";
+import { assertAppObsRequestAllowed } from "../dock/dockMutationPolicy";
+import { getCurrentUser } from "./authService";
+import { getEffectivePlan } from "./licenseService";
+
+/** Signed-in user on the Free plan (not on a trial). Signed-out = not blocked here. */
+function isFreePlanUser(): boolean {
+  try {
+    const user = getCurrentUser();
+    return Boolean(user) && getEffectivePlan(user) === "free";
+  } catch {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -386,7 +399,7 @@ class OBSService {
   async setCurrentPreviewScene(sceneName: string): Promise<void> {
     this.ensureConnected();
     this.requireString(sceneName, "sceneName");
-    await this.obs.call("SetCurrentPreviewScene", { sceneName });
+    await this.guardedObsCall("SetCurrentPreviewScene", { sceneName });
   }
 
   /**
@@ -394,7 +407,7 @@ class OBSService {
    */
   async setStudioModeEnabled(enabled: boolean): Promise<void> {
     this.ensureConnected();
-    await this.obs.call("SetStudioModeEnabled", { studioModeEnabled: enabled });
+    await this.guardedObsCall("SetStudioModeEnabled", { studioModeEnabled: enabled });
   }
 
   /**
@@ -452,7 +465,7 @@ class OBSService {
   async createScene(sceneName: string): Promise<void> {
     this.ensureConnected();
     this.requireString(sceneName, "sceneName");
-    await this.obs.call("CreateScene", { sceneName });
+    await this.guardedObsCall("CreateScene", { sceneName });
   }
 
   /**
@@ -492,7 +505,7 @@ class OBSService {
     }
 
     try {
-      const response = await this.obs.call("CreateSceneItem", {
+      const response = await this.guardedObsCall("CreateSceneItem", {
         sceneName,
         sourceName,
         sceneItemEnabled: true,
@@ -521,7 +534,7 @@ class OBSService {
   ): Promise<void> {
     this.ensureConnected();
     this.requireString(sceneName, "sceneName");
-    await this.obs.call("SetSceneItemTransform", {
+    await this.guardedObsCall("SetSceneItemTransform", {
       sceneName,
       sceneItemId,
       sceneItemTransform: transform as unknown as Record<string, never>,
@@ -596,9 +609,38 @@ class OBSService {
         }
       }
     }
+    if (requestType === "GetCurrentProgramScene") {
+      const sceneList = await this.call("GetSceneList", requestData) as {
+        currentProgramSceneName?: string | null;
+        currentProgramSceneUuid?: string | null;
+      };
+      const currentProgramSceneName = String(sceneList?.currentProgramSceneName ?? "").trim();
+      const currentProgramSceneUuid = String(sceneList?.currentProgramSceneUuid ?? "").trim();
+      return {
+        currentProgramSceneName,
+        sceneName: currentProgramSceneName,
+        currentProgramSceneUuid,
+        sceneUuid: currentProgramSceneUuid,
+      };
+    }
+    if (requestType === "GetCurrentPreviewScene") {
+      const sceneList = await this.call("GetSceneList", requestData) as {
+        currentPreviewSceneName?: string | null;
+        currentPreviewSceneUuid?: string | null;
+      };
+      const currentPreviewSceneName = String(sceneList?.currentPreviewSceneName ?? "").trim();
+      const currentPreviewSceneUuid = String(sceneList?.currentPreviewSceneUuid ?? "").trim();
+      return {
+        currentPreviewSceneName,
+        sceneName: currentPreviewSceneName,
+        currentPreviewSceneUuid,
+        sceneUuid: currentPreviewSceneUuid,
+      };
+    }
+
     return obsQueue.enqueue(
       requestType,
-      () => this.obs.call(requestType as never, requestData as never),
+      () => this.guardedObsCall(requestType as never, requestData as never),
       { dedupeKey: requestData?.sceneName ? `${requestType}:${requestData.sceneName}` : undefined }
     );
   }
@@ -618,7 +660,7 @@ class OBSService {
   async setCurrentProgramScene(sceneName: string): Promise<void> {
     this.ensureConnected();
     this.requireString(sceneName, "sceneName");
-    await this.obs.call("SetCurrentProgramScene", { sceneName });
+    await this.guardedObsCall("SetCurrentProgramScene", { sceneName });
   }
 
   // -------------------------------------------------------------------------
@@ -636,7 +678,7 @@ class OBSService {
   ): Promise<void> {
     this.ensureConnected();
     this.requireString(inputName, "inputName");
-    await this.obs.call("SetInputSettings", {
+    await this.guardedObsCall("SetInputSettings", {
       inputName,
       inputSettings: inputSettings as never,
       overlay,
@@ -662,7 +704,7 @@ class OBSService {
     this.requireString(sceneName, "sceneName");
     this.requireString(inputName, "inputName");
     this.requireString(inputKind, "inputKind");
-    const response = await this.obs.call("CreateInput", {
+    const response = await this.guardedObsCall("CreateInput", {
       sceneName,
       inputName,
       inputKind,
@@ -702,7 +744,7 @@ class OBSService {
   ): Promise<void> {
     this.ensureConnected();
     this.requireString(sceneName, "sceneName");
-    await this.obs.call("SetSceneItemIndex", {
+    await this.guardedObsCall("SetSceneItemIndex", {
       sceneName,
       sceneItemId,
       sceneItemIndex,
@@ -728,7 +770,7 @@ class OBSService {
     this.requireString(sceneName, "sceneName");
     this.requireString(slot, "slot");
 
-    await this.obs.call("CreateScene", { sceneName });
+    await this.guardedObsCall("CreateScene", { sceneName });
 
     // Fetch the scene UUID from OBS
     const scenes = await this.getSceneList();
@@ -894,6 +936,8 @@ class OBSService {
    * source if needed.
    */
   private async ensureSafeState(): Promise<void> {
+    // Free plan: never create scenes or sources in the user's OBS.
+    if (isFreePlanUser()) return;
     try {
       const response = await this.obs.call("GetSceneList");
       const scenes = response.scenes as unknown as OBSScene[];
@@ -903,10 +947,10 @@ class OBSService {
 
       // Create a default scene
       const defaultSceneName = "Default Scene";
-      await this.obs.call("CreateScene", { sceneName: defaultSceneName });
+      await this.guardedObsCall("CreateScene", { sceneName: defaultSceneName });
 
       // Add a black color source so the scene isn't completely empty
-      await this.obs.call("CreateInput", {
+      await this.guardedObsCall("CreateInput", {
         sceneName: defaultSceneName,
         inputName: "Black Background",
         inputKind: "color_source_v3",
@@ -915,7 +959,7 @@ class OBSService {
       } as never);
 
       // Set the default scene as program
-      await this.obs.call("SetCurrentProgramScene", { sceneName: defaultSceneName });
+      await this.guardedObsCall("SetCurrentProgramScene", { sceneName: defaultSceneName });
 
     } catch (err) {
       // Non-fatal — log and continue
@@ -926,6 +970,17 @@ class OBSService {
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Every OBS write from the main app goes through here. Free-plan users must
+   * not have scenes or sources created or changed by the app (same rule as the
+   * Dock); streaming start/stop and the stream destination stay allowed.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private guardedObsCall(requestType: string, requestData?: Record<string, any>): Promise<any> {
+    assertAppObsRequestAllowed(requestType, isFreePlanUser());
+    return this.obs.call(requestType as never, requestData as never) as Promise<any>;
+  }
 
   private ensureConnected(): void {
     if (this._status !== "connected") {

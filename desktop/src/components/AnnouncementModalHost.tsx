@@ -1,15 +1,25 @@
-import { useEffect, useState } from "react";
-import { Check, Clock, Sparkles, Tag, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Clock, Crown, Tag, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   clearCachedDesktopAnnouncement,
-  getCachedDesktopAnnouncement,
-  subscribeToDesktopAnnouncement,
+  getCachedDesktopAnnouncements,
+  setCachedDesktopAnnouncements,
+  subscribeToDesktopAnnouncements,
 } from "../services/desktopConfig";
 import {
+  checkForAnnouncementUpdate,
   dismissDesktopAnnouncement,
+  dismissDesktopAnnouncements,
+  startAnnouncementWatcher,
+  type AnnouncementButton,
+  type AnnouncementLayout,
   type DiscountBillingCycle,
   type DesktopAnnouncement,
 } from "../services/announcementService";
+import { CustomHtmlFrame } from "./CustomHtmlFrame";
+import { getDashboardSubscriptionPlansUrl, getDashboardUrl } from "../services/subscriptionNavigation";
+import "./AnnouncementPager.css";
 
 function toneLabel(tone: DesktopAnnouncement["tone"]) {
   if (tone === "upgrade") return "Upgrade";
@@ -37,13 +47,70 @@ export function withOfferCode(url: string, offerCode?: string | null): string {
   }
 }
 
+/** Resolve one button or link destination (adds the offer code, maps the plans page). */
+export function resolveButtonUrl(rawUrl: string, offerCode?: string | null): string {
+  if (!rawUrl) return "";
+  const resolved = withOfferCode(rawUrl, offerCode);
+  try {
+    const parsed = new URL(resolved, "https://makechurcheazy.com");
+    if (parsed.pathname.replace(/\/$/, "") === "/subscription/plans") {
+      return getDashboardSubscriptionPlansUrl(Object.fromEntries(parsed.searchParams.entries()));
+    }
+    // Win-back offers are claimed on the web dashboard, signed in as the same account.
+    if (parsed.pathname.replace(/\/$/, "") === "/offers/claim") {
+      return getDashboardUrl("/offers/claim", Object.fromEntries(parsed.searchParams.entries()));
+    }
+  } catch {
+    // Preserve non-plan custom destinations as entered.
+  }
+  return resolved;
+}
+
+/** Which design to show. Older announcements have no `layout`, so work it out as before. */
+export function resolveLayout(announcement: DesktopAnnouncement): AnnouncementLayout {
+  const { layout } = announcement;
+  if (layout === "custom") return announcement.bodyHtml ? "custom" : "standard";
+  if (layout === "image_only") return announcement.imageUrl ? "image_only" : "standard";
+  if (layout === "promo" || layout === "standard") return layout;
+
+  const imageOnly = Boolean(
+    announcement.imageUrl &&
+      (announcement.tags?.some((t) => t.toLowerCase().includes("image-only")) ||
+        announcement.format === "image_only")
+  );
+  if (imageOnly) return "image_only";
+  const discountSignal = Boolean(
+    clampDiscount(announcement.offerDiscountPercent) ||
+      announcement.offerCode ||
+      announcement.tags?.some((t) => t.toLowerCase().includes("discount") || t.toLowerCase().includes("offer")) ||
+      ["offer", "upgrade"].includes(announcement.tone)
+  );
+  return discountSignal ? "promo" : "standard";
+}
+
+/** The buttons to show. Announcements without a `buttons` list use the classic call to action. */
+export function getAnnouncementButtons(announcement: DesktopAnnouncement): AnnouncementButton[] {
+  if (announcement.buttons?.length) return announcement.buttons;
+  if (announcement.ctaUrl) {
+    return [
+      {
+        id: "cta",
+        label: announcement.ctaLabel || (announcement.offerCode ? "Claim Offer" : "Open"),
+        url: announcement.ctaUrl,
+        style: "primary",
+      },
+    ];
+  }
+  return [];
+}
+
 export function resolveActionUrl(
   announcement: DesktopAnnouncement | null,
   billingCycle?: DiscountBillingCycle
 ): string {
   if (!announcement) return "";
   if (announcement.ctaUrl) {
-    return withOfferCode(announcement.ctaUrl, announcement.offerCode);
+    return resolveButtonUrl(announcement.ctaUrl, announcement.offerCode);
   }
   const code = announcement.offerCode || "";
   const plan = announcement.offerApplicablePlans?.[0] || "growth";
@@ -52,7 +119,7 @@ export function resolveActionUrl(
   if (code) params.set("promo", code);
   params.set("plan", plan);
   params.set("billing", cycle);
-  return `https://makechurcheasy.com/subscription/plans?${params.toString()}`;
+  return getDashboardSubscriptionPlansUrl(Object.fromEntries(params.entries()));
 }
 
 function clampDiscount(value?: number | null): number | null {
@@ -124,6 +191,34 @@ function getOfferCards(announcement: DesktopAnnouncement, discountPercent: numbe
 }
 
 const DISMISS_STORAGE_KEY = "mce_dismissed_announcements_v1";
+const WEB_APP_ORIGIN = "https://makechurcheasy.com";
+
+const DESKTOP_ANNOUNCEMENT_ROUTES: Record<string, string> = {
+  "/": "/",
+  "/dashboard": "/",
+  "/features": "/",
+  "/features/bible": "/resources?tab=bible",
+  "/features/worship": "/resources?tab=worship",
+  "/features/media": "/resources?tab=media",
+  "/features/voice-bible": "/speech-to-scripture",
+  "/features/lower-thirds": "/broadcast-graphics",
+  "/features/multiview": "/multiview",
+  "/features/countdowns": "/countdowns",
+  "/countdowns": "/countdowns",
+  "/tutorials": "/tutorials",
+  "/credits": "/credits",
+  "/settings": "/settings",
+};
+
+function getDesktopAnnouncementRoute(url: string): string | null {
+  try {
+    const destination = new URL(url, WEB_APP_ORIGIN);
+    if (destination.origin !== WEB_APP_ORIGIN) return null;
+    return DESKTOP_ANNOUNCEMENT_ROUTES[destination.pathname] || null;
+  } catch {
+    return null;
+  }
+}
 
 function isLocallyDismissed(id?: string, deliveryId?: string): boolean {
   try {
@@ -140,6 +235,29 @@ function isLocallyDismissed(id?: string, deliveryId?: string): boolean {
   }
 }
 
+// Delivery ids whose dismissal we already re-sent this session (prevents a
+// loop if the server keeps rejecting it).
+const resentDismissals = new Set<string>();
+
+// Deliveries the user closed the carousel on without ever seeing. They are not
+// dismissed on the server, so they come back on the next launch, but they stay
+// hidden for the rest of this session so closing the window means it stays closed.
+const snoozedDeliveries = new Set<string>();
+
+/**
+ * The server returns the oldest undismissed announcement first. If an earlier
+ * dismissal never reached it, that announcement (hidden locally) would block
+ * every new one. Re-send the dismissal once, then ask for the next one.
+ */
+function resendStuckDismissal(announcement: DesktopAnnouncement): void {
+  const deliveryId = announcement.deliveryId;
+  if (!deliveryId || resentDismissals.has(deliveryId)) return;
+  resentDismissals.add(deliveryId);
+  void dismissDesktopAnnouncement(deliveryId).then((recorded) => {
+    if (recorded) void checkForAnnouncementUpdate(true);
+  });
+}
+
 function recordLocalDismissal(id?: string, deliveryId?: string): void {
   try {
     const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
@@ -154,66 +272,223 @@ function recordLocalDismissal(id?: string, deliveryId?: string): void {
   } catch {}
 }
 
+function AnnouncementPager({
+  count,
+  index,
+  onChange,
+}: {
+  count: number;
+  index: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="desktop-announcement-pager" role="group" aria-label="Announcements">
+      <button
+        type="button"
+        className="desktop-announcement-pager__arrow"
+        onClick={() => onChange(index - 1)}
+        disabled={index === 0}
+        aria-label="Previous announcement"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <div className="desktop-announcement-pager__dots">
+        {Array.from({ length: count }, (_, dotIndex) => (
+          <button
+            type="button"
+            key={dotIndex}
+            className={`desktop-announcement-pager__dot${
+              dotIndex === index ? " desktop-announcement-pager__dot--active" : ""
+            }`}
+            onClick={() => onChange(dotIndex)}
+            aria-label={`Announcement ${dotIndex + 1} of ${count}`}
+            aria-current={dotIndex === index ? "true" : undefined}
+          />
+        ))}
+      </div>
+      <span className="desktop-announcement-pager__count">
+        {index + 1} / {count}
+      </span>
+      <button
+        type="button"
+        className="desktop-announcement-pager__arrow"
+        onClick={() => onChange(index + 1)}
+        disabled={index >= count - 1}
+        aria-label="Next announcement"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
 export function AnnouncementModalHost() {
-  const [announcement, setAnnouncement] = useState<DesktopAnnouncement | null>(null);
+  const navigate = useNavigate();
+  const [{ items, index }, setPaging] = useState<{ items: DesktopAnnouncement[]; index: number }>({
+    items: [],
+    index: 0,
+  });
   const [selectedCycle, setSelectedCycle] = useState<DiscountBillingCycle | null>(null);
-  const countdown = useAnnouncementCountdown(announcement?.expiresAt);
+  const viewedRef = useRef<Set<string>>(new Set());
+  const announcement: DesktopAnnouncement | null = items[index] ?? null;
+  // A personal offer counts down to this person's own deadline.
+  const countdown = useAnnouncementCountdown(announcement?.personalOffer?.closesAt ?? announcement?.expiresAt);
 
   useEffect(() => {
-    const cached = getCachedDesktopAnnouncement();
-    if (cached && !isLocallyDismissed(cached.id, cached.deliveryId)) {
-      setAnnouncement(cached);
-    }
-    return subscribeToDesktopAnnouncement((next) => {
-      if (next && isLocallyDismissed(next.id, next.deliveryId)) {
-        return;
+    function applyAnnouncements(list: DesktopAnnouncement[]) {
+      const visible: DesktopAnnouncement[] = [];
+      for (const candidate of list) {
+        if (snoozedDeliveries.has(candidate.deliveryId)) continue;
+        if (isLocallyDismissed(candidate.id, candidate.deliveryId)) {
+          resendStuckDismissal(candidate);
+          continue;
+        }
+        visible.push(candidate);
       }
-      setAnnouncement(next);
-    });
+      setPaging((prev) => {
+        if (visible.length === 0) {
+          return prev.items.length === 0 ? prev : { items: [], index: 0 };
+        }
+        // Stay on the slide the user is looking at when the list refreshes.
+        const currentId = prev.items[prev.index]?.deliveryId;
+        const sameSlide = currentId
+          ? visible.findIndex((item) => item.deliveryId === currentId)
+          : -1;
+        return {
+          items: visible,
+          index: sameSlide >= 0 ? sameSlide : Math.min(prev.index, visible.length - 1),
+        };
+      });
+    }
+
+    applyAnnouncements(getCachedDesktopAnnouncements());
+    const unsubscribe = subscribeToDesktopAnnouncements(applyAnnouncements);
+    const stopWatcher = startAnnouncementWatcher();
+    return () => {
+      unsubscribe();
+      stopWatcher();
+    };
   }, []);
 
-  async function dismiss(clicked = false) {
-    if (!announcement) return;
-    const current = announcement;
-    recordLocalDismissal(current.id, current.deliveryId);
-    setAnnouncement(null);
+  const currentDeliveryId = announcement?.deliveryId;
+  useEffect(() => {
+    if (currentDeliveryId) viewedRef.current.add(currentDeliveryId);
+    setSelectedCycle(null);
+  }, [currentDeliveryId]);
+
+  function goTo(next: number) {
+    setPaging((prev) => ({
+      ...prev,
+      index: Math.max(0, Math.min(prev.items.length - 1, next)),
+    }));
+  }
+
+  function dismissItems(targets: DesktopAnnouncement[], clicked = false, buttonId?: string) {
+    if (targets.length === 0) return;
+    for (const target of targets) recordLocalDismissal(target.id, target.deliveryId);
+    void dismissDesktopAnnouncements(
+      targets.map((target) => target.deliveryId),
+      clicked,
+      buttonId
+    );
+  }
+
+  /**
+   * Close the whole carousel (X, backdrop, or after acting on an announcement).
+   * Slides the user saw are dismissed; slides they never reached are kept for
+   * the next launch instead of being lost.
+   */
+  function closeAll(clickedDeliveryId?: string, buttonId?: string) {
+    if (items.length === 0) return;
+    const seen = items.filter(
+      (item) => item.deliveryId === announcement?.deliveryId || viewedRef.current.has(item.deliveryId)
+    );
+    const unseen = items.filter((item) => !seen.includes(item));
+    dismissItems(seen.filter((item) => item.deliveryId !== clickedDeliveryId));
+    dismissItems(
+      seen.filter((item) => item.deliveryId === clickedDeliveryId),
+      true,
+      buttonId
+    );
+    for (const item of unseen) snoozedDeliveries.add(item.deliveryId);
+    setPaging({ items: [], index: 0 });
     clearCachedDesktopAnnouncement();
-    await dismissDesktopAnnouncement(current.deliveryId, clicked);
+  }
+
+  /** "Later" / "OK": dismiss this slide and show the next one, or close after the last. */
+  function dismissCurrent() {
+    if (!announcement) return;
+    if (index >= items.length - 1) {
+      closeAll();
+      return;
+    }
+    dismissItems([announcement]);
+    const remaining = items.filter((item) => item.deliveryId !== announcement.deliveryId);
+    setPaging({ items: remaining, index });
+    // Keep the cache (and anything reading the active discount from it) in step.
+    setCachedDesktopAnnouncements(remaining);
   }
 
   async function openAction(cycle?: DiscountBillingCycle) {
     const targetCycle =
       cycle || selectedCycle || announcement?.offerApplicableBillingCycles?.[0] || "monthly";
     const url = resolveActionUrl(announcement, targetCycle);
+    const firstButtonId = announcement ? getAnnouncementButtons(announcement)[0]?.id : undefined;
+    launchUrl(url, firstButtonId);
+  }
+
+  /** Open one button's destination and record which button was used. */
+  function openButton(button: AnnouncementButton) {
+    if (!announcement) return;
+    launchUrl(resolveButtonUrl(button.url, announcement.offerCode), button.id);
+  }
+
+  function launchUrl(url: string, buttonId?: string) {
     if (!url) return;
-    await dismiss(true);
-    if (url.startsWith("http")) {
+    closeAll(announcement?.deliveryId, buttonId);
+    if (/^mailto:/i.test(url)) {
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    window.open(`https://makechurcheasy.com${url}`, "_blank", "noopener,noreferrer");
+    if (/^https?:\/\//i.test(url)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\")) {
+      const desktopRoute = getDesktopAnnouncementRoute(url);
+      if (desktopRoute) {
+        navigate(desktopRoute);
+        return;
+      }
+      try {
+        window.open(new URL(url, WEB_APP_ORIGIN).toString(), "_blank", "noopener,noreferrer");
+      } catch {
+        // Ignore malformed internal destinations.
+      }
+    }
   }
 
-  if (!announcement || isLocallyDismissed(announcement.id, announcement.deliveryId)) return null;
+  if (!announcement) return null;
 
-  const isImageOnly = Boolean(
-    announcement.imageUrl &&
-      (announcement.tags?.some((t) => t.toLowerCase().includes("image-only")) ||
-        announcement.format === "image_only")
-  );
+  const pager =
+    items.length > 1 ? <AnnouncementPager count={items.length} index={index} onChange={goTo} /> : null;
+  const pagedClass = items.length > 1 ? " desktop-announcement-overlay--paged" : "";
 
-  if (isImageOnly && announcement.imageUrl) {
+  const layout = resolveLayout(announcement);
+  const buttons = getAnnouncementButtons(announcement);
+
+  if (layout === "image_only" && announcement.imageUrl) {
     const actionUrl = resolveActionUrl(announcement);
     return (
-      <div className="desktop-announcement-overlay desktop-announcement-overlay--image-only">
-        <div className="desktop-announcement-backdrop" onClick={() => void dismiss(false)} />
+      <div className={`desktop-announcement-overlay desktop-announcement-overlay--image-only${pagedClass}`}>
+        <div className="desktop-announcement-backdrop" onClick={() => closeAll()} />
         <div className="desktop-announcement-image-card">
           <button
             type="button"
             className="desktop-announcement-image-close"
             onClick={(e) => {
               e.stopPropagation();
-              void dismiss(false);
+              closeAll();
             }}
             aria-label="Dismiss announcement"
           >
@@ -239,20 +514,44 @@ export function AnnouncementModalHost() {
             />
           </div>
         </div>
+        {pager}
+      </div>
+    );
+  }
+
+  if (layout === "custom" && announcement.bodyHtml) {
+    return (
+      <div className={`desktop-announcement-overlay${pagedClass}`}>
+        <div className="desktop-announcement-backdrop" onClick={() => closeAll()} />
+        <section
+          className="desktop-announcement-modal desktop-announcement-modal--custom"
+          role="dialog"
+          aria-modal="true"
+          aria-label={announcement.title}
+        >
+          <button
+            type="button"
+            className="desktop-announcement-close"
+            onClick={() => closeAll()}
+            aria-label="Dismiss announcement"
+          >
+            <X size={16} />
+          </button>
+          <CustomHtmlFrame
+            html={announcement.bodyHtml}
+            onLinkClick={(href) =>
+              launchUrl(resolveButtonUrl(href, announcement.offerCode), "html")
+            }
+          />
+        </section>
+        {pager}
       </div>
     );
   }
 
   const discountPercent = clampDiscount(announcement.offerDiscountPercent);
-  const hasDiscountSignal = Boolean(
-    discountPercent ||
-    announcement.offerCode ||
-    announcement.tags?.some((t) => t.toLowerCase().includes("discount") || t.toLowerCase().includes("offer")) ||
-    ["offer", "upgrade"].includes(announcement.tone)
-  );
-  const showOfferLayout = hasDiscountSignal && !isImageOnly;
 
-  if (showOfferLayout) {
+  if (layout === "promo") {
     const effectivePercent = discountPercent || 50;
     const offerCards = getOfferCards(announcement, effectivePercent);
     const activeCycle =
@@ -260,21 +559,22 @@ export function AnnouncementModalHost() {
         ? selectedCycle
         : offerCards[0]?.cycle || "monthly";
     const actionLabel =
+      buttons[0]?.label ||
       announcement.ctaLabel ||
       (discountPercent ? `Claim ${discountPercent}% Discount` : "Upgrade Now");
     const actionUrl = resolveActionUrl(announcement, activeCycle);
 
     return (
-      <div className="desktop-announcement-overlay desktop-announcement-overlay--promo">
+      <div className={`desktop-announcement-overlay desktop-announcement-overlay--promo${pagedClass}`}>
         <div
           className="desktop-announcement-backdrop desktop-announcement-backdrop--promo"
-          onClick={() => void dismiss(false)}
+          onClick={() => closeAll()}
         />
         <section className="desktop-announcement-promo" role="dialog" aria-modal="true">
           <button
             type="button"
             className="desktop-announcement-close"
-            onClick={() => void dismiss(false)}
+            onClick={() => closeAll()}
             aria-label="Dismiss announcement"
           >
             <X size={16} />
@@ -373,14 +673,14 @@ export function AnnouncementModalHost() {
                   className="desktop-announcement-promo__cta"
                   onClick={() => void openAction(activeCycle)}
                 >
-                  <Sparkles size={15} />
+                  <Crown size={15} />
                   <span>{actionLabel}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   className="desktop-announcement-promo__cta"
-                  onClick={() => void dismiss(false)}
+                  onClick={() => dismissCurrent()}
                 >
                   OK
                 </button>
@@ -388,22 +688,22 @@ export function AnnouncementModalHost() {
               <button
                 type="button"
                 className="desktop-announcement-promo__dismiss-btn"
-                onClick={() => void dismiss(false)}
+                onClick={() => dismissCurrent()}
               >
                 Maybe later
               </button>
             </div>
           </div>
         </section>
+        {pager}
       </div>
     );
   }
 
-  const actionUrl = resolveActionUrl(announcement);
 
   return (
-    <div className="desktop-announcement-overlay">
-      <div className="desktop-announcement-backdrop" onClick={() => void dismiss(false)} />
+    <div className={`desktop-announcement-overlay${pagedClass}`}>
+      <div className="desktop-announcement-backdrop" onClick={() => closeAll()} />
       <section className={`desktop-announcement-modal desktop-announcement-modal--${announcement.tone}`}>
         {announcement.imageUrl ? (
           <img className="desktop-announcement-image" src={announcement.imageUrl} alt="" />
@@ -426,20 +726,30 @@ export function AnnouncementModalHost() {
           ) : null}
         </div>
         <div className="desktop-announcement-actions">
-          <button type="button" className="desktop-announcement-button" onClick={() => void dismiss(false)}>
-            Later
-          </button>
-          {actionUrl ? (
-            <button type="button" className="desktop-announcement-button desktop-announcement-button--primary" onClick={() => void openAction()}>
-              {announcement.ctaLabel || (announcement.offerCode ? "Claim Offer" : "Open")}
-            </button>
+          {buttons.length > 0 ? (
+            <>
+              <button type="button" className="desktop-announcement-button" onClick={() => dismissCurrent()}>
+                Later
+              </button>
+              {buttons.map((button) => (
+                <button
+                  type="button"
+                  key={button.id}
+                  className={`desktop-announcement-button desktop-announcement-button--${button.style || "secondary"}`}
+                  onClick={() => openButton(button)}
+                >
+                  {button.label}
+                </button>
+              ))}
+            </>
           ) : (
-            <button type="button" className="desktop-announcement-button desktop-announcement-button--primary" onClick={() => void dismiss(false)}>
+            <button type="button" className="desktop-announcement-button desktop-announcement-button--primary" onClick={() => dismissCurrent()}>
               OK
             </button>
           )}
         </div>
       </section>
+      {pager}
     </div>
   );
 }

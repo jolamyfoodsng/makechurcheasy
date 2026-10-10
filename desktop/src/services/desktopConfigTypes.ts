@@ -24,6 +24,12 @@ export interface DesktopConfig {
     linuxDownloadUrl: string;
     releaseNotesUrl: string;
     policyPublishedAt: string;
+    /** Server-managed start of the forced-update countdown (older APIs omit it). */
+    enforcementStartedAt?: string | null;
+    /** When old versions get blocked, computed by the server. */
+    enforcementDeadlineAt?: string | null;
+    /** Server clock at response time, used to correct a wrong local clock. */
+    serverTime?: string | null;
     emergencyLockEnabledAt: string | null;
     emergencyLockEffectiveAt: string | null;
   };
@@ -74,10 +80,14 @@ export interface DesktopConfig {
   };
   security: {
     maintenanceMode: boolean;
+    /** Admin-written message shown while maintenance mode is on. */
+    maintenanceMessage?: string;
     internetVerificationEnabled: boolean;
     maxOfflineDays: number;
     verificationIntervalHours: number;
   };
+  /** Admin → Settings → Controls. Optional: older cached configs don't have it. */
+  controls?: DesktopAdminControls;
   themes: {
     defaultBibleTheme: string;
     defaultWorshipTheme: string;
@@ -119,6 +129,35 @@ export interface DesktopConfig {
 }
 
 // ── Defaults (offline fallback) ─────────────────────────────────────────────
+
+export type DesktopFeatureSwitch =
+  | "speechToScripture"
+  | "liveTranslation"
+  | "mobileRemote"
+  | "multistream"
+  | "presentationLink";
+
+export interface DesktopAdminControls {
+  features: Record<DesktopFeatureSwitch, boolean>;
+  speech: { model: "universal-streaming-english" | "universal-streaming-multilingual" };
+  support: { whatsappUrl: string; youtubeUrl: string; supportEmail: string };
+}
+
+export const DEFAULT_DESKTOP_ADMIN_CONTROLS: DesktopAdminControls = {
+  features: {
+    speechToScripture: true,
+    liveTranslation: true,
+    mobileRemote: true,
+    multistream: true,
+    presentationLink: true,
+  },
+  speech: { model: "universal-streaming-english" },
+  support: {
+    whatsappUrl: "https://chat.whatsapp.com/EQIuXfpCTBOG7YOSf2nKqU?mode=gi_t",
+    youtubeUrl: "https://www.youtube.com/playlist?list=PLRua6gJfgC0o",
+    supportEmail: "support@makechurcheazy.com",
+  },
+};
 
 export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
   appUpdates: {
@@ -185,10 +224,12 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
   },
   security: {
     maintenanceMode: false,
+    maintenanceMessage: "",
     internetVerificationEnabled: false,
     maxOfflineDays: 28,
     verificationIntervalHours: 6,
   },
+  controls: DEFAULT_DESKTOP_ADMIN_CONTROLS,
   themes: {
     defaultBibleTheme: "",
     defaultWorshipTheme: "",

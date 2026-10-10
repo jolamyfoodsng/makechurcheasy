@@ -12,9 +12,7 @@ import { checkEntitlementSync, type FeatureKey } from "../services/entitlementCl
 import { getEffectivePlan } from "../services/licenseService";
 import { useAuth } from "../contexts/AuthContext";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";
-
-const PRICING_URL =
-  "https://makechurcheazy.com/subscription/plans";
+import { getDashboardSubscriptionPlansUrl } from "../services/subscriptionNavigation";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
@@ -81,7 +79,7 @@ export default function FeatureGuard({ feature, children }: FeatureGuardProps) {
         </p>
         <p style={styles.promo}>{promoText}</p>
         <a
-          href={PRICING_URL}
+          href={getDashboardSubscriptionPlansUrl()}
           target="_blank"
           rel="noopener noreferrer"
           style={styles.cta}

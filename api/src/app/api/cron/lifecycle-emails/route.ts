@@ -34,6 +34,8 @@ import { getPlanConfig, upsertSubscription, insertCreditTransaction } from "@/li
 import { logTrialAction } from "@/lib/trialAudit";
 import { notifyTrialEndingSoon, notifyTrialExpired } from "@/lib/notifications";
 import { getTrialForUser, updateTrialRecord } from "@/lib/trialRecords";
+import { buildUnsubscribeUrl } from "@/lib/emailUnsubscribe";
+import { loadOfferConfig } from "@/lib/offerJourneys";
 import { CreditTransactionType } from "@/types/schemas";
 
 const CRON_SECRET = process.env.CRON_SECRET || "";
@@ -556,13 +558,22 @@ export async function GET(req: NextRequest) {
     // ───────────────────────────────────────────────────────────────────────
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const reEngagementUsers = await db
+    // When the win-back ladder for ended trials is switched on it takes over
+    // from this email: it sends better-timed, escalating offers instead.
+    const offerConfig = await loadOfferConfig().catch(() => null);
+    const winbackLadderLive = Boolean(
+      offerConfig?.settings.enabled &&
+        offerConfig.ladders.some((ladder) => ladder.trigger === "trial_expired" && ladder.enabled),
+    );
+
+    const reEngagementUsers = winbackLadderLive ? [] : await db
       .collection("users")
       .find({
         plan: "free",
         emailVerified: true,
         "lifecycleEmails.trialExpiredSent": true,
         "lifecycleEmails.reEngagementSent": { $ne: true },
+        "emailPreferences.marketing": { $ne: false },
         "trial.status": "expired",
         $or: [
           { "trial.stoppedAt": { $exists: false } },
@@ -584,13 +595,14 @@ export async function GET(req: NextRequest) {
 
     // Also find users where the trial ended 7+ days ago but we don't have a stoppedAt
     // Use emailVerifiedAt + trial duration as a fallback
-    const reEngagementUsersAlt = await db
+    const reEngagementUsersAlt = winbackLadderLive ? [] : await db
       .collection("users")
       .find({
         plan: "free",
         emailVerified: true,
         "lifecycleEmails.trialExpiredSent": true,
         "lifecycleEmails.reEngagementSent": { $ne: true },
+        "emailPreferences.marketing": { $ne: false },
         "trial.status": "expired",
         "trial.endsAt": { $exists: true, $nin: [null, ""] },
         $expr: {
@@ -615,6 +627,7 @@ export async function GET(req: NextRequest) {
           reEngagementEmail({
             userName: user.name || "there",
             userEmail: user.email,
+            unsubscribeUrl: buildUnsubscribeUrl(user._id.toString()),
           })
         );
 

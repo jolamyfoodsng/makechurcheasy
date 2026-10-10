@@ -9,6 +9,7 @@ import { COLLECTIONS, getBillingTransactionById } from "@/lib/db";
 import { getPricingVersion } from "@/lib/countryPricing";
 import { DiscountCodeError, resolveDiscountCode } from "@/lib/discounts";
 import { resolvePaymentPricing } from "@/lib/paymentPricing";
+import { paymentProviderDisabledResponse } from "@/lib/adminControls";
 import { createFlutterwavePayment, FlutterwaveError, isFlutterwaveConfigured } from "@/lib/flutterwave";
 import { rateLimit } from "@/lib/rateLimit";
 import clientPromise from "@/lib/mongodb";
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest) {
     if ((plan !== "basic" && plan !== "growth") || (billingCycle !== "monthly" && billingCycle !== "yearly")) {
       return NextResponse.json({ error: "This plan purchase cannot be retried. Choose a plan to start a new checkout." }, { status: 400 });
     }
+
+    const providerOff = await paymentProviderDisabledResponse("flutterwave");
+    if (providerOff) return providerOff;
 
     const pricingResolution = await resolvePaymentPricing(req, authUser.mongoUser.country, "flutterwave");
     if (pricingResolution.requiresCountrySelection) {

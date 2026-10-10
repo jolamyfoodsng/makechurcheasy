@@ -5,9 +5,14 @@ import { COLLECTIONS } from "@/lib/db";
 import { normalizeDiscountCode } from "@/lib/discounts";
 import { userMatchesAnnouncement } from "@/lib/announcements";
 import { sendEmail } from "@/lib/emailTemplates";
+import { buildUnsubscribeUrl } from "@/lib/emailUnsubscribe";
 import type { Announcement, DiscountBillingCycle, PlanTier } from "@/types/schemas";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheasy.com";
+const MAX_EMAIL_RECIPIENTS = 5000;
+const EMAIL_BATCH_SIZE = 25;
+/** Stops a request from walking an enormous user base when the audience needs a lookup per person. */
+const MAX_USERS_SCANNED = 25000;
 
 export async function GET(req: NextRequest) {
   try {
@@ -133,28 +138,56 @@ export async function POST(req: NextRequest) {
     const result = await db.collection<Announcement>(COLLECTIONS.ANNOUNCEMENTS).insertOne(announcementDoc as any);
 
     // ── Email dispatch (fire-and-forget) ──
+    // Everyone is checked against the audience (not just the first few thousand
+    // accounts), people who opted out of marketing email are skipped, and every
+    // email carries an unsubscribe link. At most MAX_EMAIL_RECIPIENTS are sent
+    // per request; the response says when that limit was reached.
     let emailsSent = 0;
+    let emailRecipients = 0;
+    let emailsSkippedOptOut = 0;
+    let emailCapReached = false;
     if (body.sendEmail) {
       const savedAnnouncement = { ...announcementDoc, _id: result.insertedId } as Announcement;
+      const recipients: Array<{ id: string; email: string }> = [];
 
-      // Query candidate users – limit to 2000 to avoid overwhelming the email provider
-      const usersCollection = db.collection("users");
-      const users = await usersCollection
-        .find({}, { projection: { _id: 1, email: 1, plan: 1, effectivePlan: 1, lastLogin: 1, lastActive: 1, trial: 1, ambassador: 1, subscriptionStatus: 1, paymentStatus: 1 } })
-        .limit(2000)
-        .toArray();
+      const cursor = db
+        .collection("users")
+        .find(
+          { email: { $exists: true, $ne: null }, status: { $ne: "deleted" } },
+          { projection: { _id: 1, email: 1, plan: 1, effectivePlan: 1, lastLogin: 1, lastActive: 1, trial: 1, ambassador: 1, subscriptionStatus: 1, paymentStatus: 1, emailPreferences: 1 } },
+        )
+        .batchSize(500);
 
-      // Filter by audience match and send emails
-      const emailPromises: Promise<void>[] = [];
-      for (const user of users) {
+      let scanned = 0;
+      for await (const user of cursor) {
+        scanned += 1;
+        if (scanned > MAX_USERS_SCANNED) {
+          emailCapReached = true;
+          break;
+        }
         if (!user.email) continue;
+        if (!(await userMatchesAnnouncement(savedAnnouncement, user))) continue;
+        if (user.emailPreferences?.marketing === false) {
+          emailsSkippedOptOut += 1;
+          continue;
+        }
+        if (recipients.length >= MAX_EMAIL_RECIPIENTS) {
+          emailCapReached = true;
+          break;
+        }
+        recipients.push({ id: String(user._id), email: String(user.email) });
+      }
+      emailRecipients = recipients.length;
 
-        const matches = await userMatchesAnnouncement(savedAnnouncement, user);
-        if (!matches) continue;
+      const expiryLine = expiresAt
+        ? `This offer expires on ${new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+        : "Limited time offer.";
 
+      const sendOne = async (recipient: { id: string; email: string }) => {
+        const unsubscribeUrl = buildUnsubscribeUrl(recipient.id);
         const emailHtml = `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 20px;">
-            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px;">🎉 ${announcementDoc.title}</h2>
+            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px;">${announcementDoc.title}</h2>
             <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 20px;">
               ${announcementDoc.message}
             </p>
@@ -165,29 +198,26 @@ export async function POST(req: NextRequest) {
             <a href="${claimUrl}" style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 600; font-size: 15px;">
               ${announcementDoc.ctaLabel || "Claim Discount"}
             </a>
-            <p style="color: #94a3b8; font-size: 12px; margin: 24px 0 0;">
-              ${expiresAt ? `This offer expires on ${new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.` : "Limited time offer."}
+            <p style="color: #94a3b8; font-size: 12px; margin: 24px 0 0;">${expiryLine}</p>
+            <p style="color: #94a3b8; font-size: 12px; margin: 12px 0 0;">
+              Don't want offers like this? <a href="${unsubscribeUrl}" style="color: #94a3b8;">Unsubscribe</a>.
             </p>
           </div>
         `;
+        try {
+          if (await sendEmail({ to: recipient.email, subject: announcementDoc.title, html: emailHtml })) emailsSent++;
+        } catch (err) {
+          console.error(`[AdminDiscounts] Email failed for ${recipient.email}:`, err);
+        }
+      };
 
-        emailPromises.push(
-          sendEmail({
-            to: user.email,
-            subject: announcementDoc.title,
-            html: emailHtml,
-          }).then((sent) => {
-            if (sent) emailsSent++;
-          }).catch((err) => {
-            console.error(`[AdminDiscounts] Email failed for ${user.email}:`, err);
-          })
-        );
-      }
-
-      // Don't await all – fire-and-forget but track count
-      Promise.allSettled(emailPromises).then(() => {
+      // Sent in small groups so a large audience does not flood the email provider.
+      void (async () => {
+        for (let i = 0; i < recipients.length; i += EMAIL_BATCH_SIZE) {
+          await Promise.allSettled(recipients.slice(i, i + EMAIL_BATCH_SIZE).map(sendOne));
+        }
         console.log(`[AdminDiscounts] Email dispatch complete: ${emailsSent} sent for code ${code}`);
-      });
+      })();
     }
 
     return NextResponse.json({
@@ -198,6 +228,9 @@ export async function POST(req: NextRequest) {
         claimUrl,
       },
       emailsQueued: body.sendEmail ? true : false,
+      emailRecipients,
+      emailsSkippedOptOut,
+      emailCapReached,
     }, { status: 201 });
   } catch (error) {
     console.error("[AdminDiscounts POST] Error:", error);

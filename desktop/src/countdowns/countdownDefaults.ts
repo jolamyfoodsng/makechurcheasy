@@ -27,7 +27,7 @@ export const COUNTDOWN_TEMPLATES: CountdownTemplate[] = [
     id: "modern",
     name: "Modern Countdown",
     description: "Sleek modern design with gradient ring",
-    icon: "sparkles",
+    icon: "zap",
   },
   {
     id: "conference",

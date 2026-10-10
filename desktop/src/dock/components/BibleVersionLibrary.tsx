@@ -410,9 +410,9 @@ export default function BibleVersionLibrary({
                             </span>
                           )}
                           <span
+                            className="bible-version-library__row-name"
                             style={{
                               fontSize: "11px",
-                              color: "var(--dock-text-dim)",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -482,9 +482,9 @@ export default function BibleVersionLibrary({
                             </span>
                           )}
                           <span
+                            className="bible-version-library__row-name"
                             style={{
                               fontSize: "11px",
-                              color: "var(--dock-text-dim)",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",

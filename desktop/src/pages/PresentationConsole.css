@@ -1,25 +1,22 @@
 .pc-page {
-  --pc-bg: #07111f;
-  --pc-bg-soft: #0c1728;
-  --pc-panel: rgba(11, 20, 36, 0.88);
-  --pc-panel-strong: rgba(14, 25, 46, 0.96);
-  --pc-panel-muted: rgba(17, 29, 50, 0.74);
-  --pc-border: rgba(148, 163, 184, 0.18);
-  --pc-border-strong: rgba(96, 165, 250, 0.32);
+  --pc-bg: #0c0e17;
+  --pc-bg-soft: #111726;
+  --pc-panel: #131724;
+  --pc-panel-strong: #171b28;
+  --pc-panel-muted: #131724;
+  --pc-border: rgba(255, 255, 255, 0.08);
+  --pc-border-strong: rgba(99, 102, 241, 0.32);
   --pc-text: #f8fafc;
-  --pc-text-muted: rgba(203, 213, 225, 0.74);
-  --pc-accent: #7dd3fc;
-  --pc-accent-strong: #38bdf8;
-  --pc-success: #34d399;
-  --pc-warn: #fbbf24;
-  --pc-danger: #f87171;
+  --pc-text-muted: #94a3b8;
+  --pc-accent: #818cf8;
+  --pc-accent-strong: #4f46e5;
+  --pc-success: #10b981;
+  --pc-warn: #f59e0b;
+  --pc-danger: #ef4444;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 280px 360px minmax(0, 1fr);
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 24rem),
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 22rem),
-    linear-gradient(180deg, #050c17 0%, var(--pc-bg) 100%);
+  background: #0c0e17;
   color: var(--pc-text);
 }
 
@@ -35,7 +32,7 @@
   gap: 18px;
   padding: 22px 18px;
   border-right: 1px solid var(--pc-border);
-  background: linear-gradient(180deg, rgba(6, 12, 22, 0.92), rgba(10, 17, 31, 0.88));
+  background: #111726;
 }
 
 .pc-sidebar-panel,
@@ -133,7 +130,7 @@
 
 .pc-source-item--active {
   border-color: var(--pc-border-strong);
-  background: linear-gradient(135deg, rgba(8, 47, 73, 0.95), rgba(13, 48, 78, 0.78));
+  background: #202026;
 }
 
 .pc-source-icon {
@@ -195,7 +192,7 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--pc-border);
-  background: linear-gradient(180deg, rgba(6, 12, 24, 0.58), rgba(7, 13, 25, 0.82));
+  background: #18181c;
 }
 
 .pc-library-header,
@@ -305,7 +302,7 @@
 
 .pc-content-item--selected {
   border-color: rgba(125, 211, 252, 0.34);
-  background: linear-gradient(180deg, rgba(10, 44, 69, 0.84), rgba(11, 26, 43, 0.96));
+  background: #202026;
 }
 
 .pc-content-item--live {
@@ -437,9 +434,7 @@
 .pc-target-card--browser {
   padding: 24px;
   border-color: rgba(125, 211, 252, 0.24);
-  background:
-    linear-gradient(135deg, rgba(9, 24, 41, 0.96), rgba(12, 27, 46, 0.9)),
-    var(--pc-panel);
+  background: #202026;
 }
 
 .pc-target-card--ready {
@@ -644,10 +639,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.58)),
-    radial-gradient(circle at top, rgba(125, 211, 252, 0.18), transparent 36%),
-    #030712;
+  background: #18181c;
   overflow: hidden;
 }
 
@@ -748,8 +740,8 @@
 }
 
 .pc-ctrl-btn--present {
-  border-color: rgba(56, 189, 248, 0.38);
-  background: linear-gradient(135deg, rgba(14, 116, 144, 0.96), rgba(2, 132, 199, 0.92));
+  border-color: #4f46e5;
+  background: #4f46e5;
 }
 
 .pc-ctrl-btn--clear {

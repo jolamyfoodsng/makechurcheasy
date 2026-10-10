@@ -1,0 +1,693 @@
+.broadcast-settings-panel {
+  --broadcast-surface: var(--bg-card, #131724);
+  --broadcast-raised: var(--bg-input, #171b28);
+  --broadcast-hover: var(--bg-card-hover, #1c2132);
+  --broadcast-border: var(--border-color, rgba(255, 255, 255, 0.1));
+  --broadcast-text: var(--text-primary, #f8fafc);
+  --broadcast-muted: var(--text-secondary, #94a3b8);
+  --broadcast-subtle: var(--text-muted, #64748b);
+  --broadcast-accent: var(--accent-color, #2563eb);
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  color: var(--broadcast-text);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-size: var(--base-size, 14px);
+  line-height: 1.5;
+}
+
+.broadcast-settings-panel button {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.broadcast-settings-panel button:focus-visible,
+.broadcast-settings-panel [role="switch"]:focus-visible,
+.broadcast-settings-panel .broadcast-profile-item:focus-visible {
+  outline: 2px solid var(--broadcast-accent);
+  outline-offset: 2px;
+}
+
+.broadcast-settings-panel .broadcast-pulse-dot {
+  flex: 0 0 8px;
+}
+
+.broadcast-settings-panel .broadcast-pulse-dot--ready {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 14%, transparent);
+}
+
+.broadcast-settings-panel .broadcast-pulse-dot--amber {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 14%, transparent);
+}
+
+.broadcast-settings-panel .broadcast-pulse-dot--off {
+  background: var(--broadcast-subtle);
+  box-shadow: none;
+}
+
+.broadcast-settings-overview,
+.broadcast-settings-card {
+  min-width: 0;
+  border: 1px solid var(--broadcast-border);
+  border-radius: 12px;
+  background: var(--broadcast-surface);
+}
+
+.broadcast-settings-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+}
+
+.broadcast-settings-overview__heading,
+.broadcast-settings-overview__intro,
+.broadcast-settings-overview__actions,
+.broadcast-settings-card__header,
+.broadcast-settings-card__title-row,
+.broadcast-plan-bar,
+.broadcast-plan-bar__summary,
+.broadcast-plan-bar__actions,
+.broadcast-channel-top,
+.broadcast-channel-info,
+.broadcast-channel-actions,
+.broadcast-channel-bottom,
+.broadcast-channel-key,
+.broadcast-profile-item,
+.broadcast-profile-item__actions {
+  display: flex;
+  align-items: center;
+}
+
+.broadcast-settings-overview__heading,
+.broadcast-settings-card__header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.broadcast-settings-overview__heading {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.broadcast-settings-overview__intro {
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.broadcast-settings-overview__copy {
+  min-width: 0;
+}
+
+.broadcast-settings-title {
+  margin: 0;
+  color: var(--broadcast-text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+}
+
+.broadcast-settings-description,
+.broadcast-settings-card__description {
+  margin: 5px 0 0;
+  color: var(--broadcast-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.broadcast-settings-description {
+  max-width: 760px;
+}
+
+.broadcast-settings-overview__actions {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--broadcast-border);
+}
+
+.broadcast-settings-panel .action-btn {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.broadcast-settings-panel .action-btn:not(.btn-primary):not(.secondary) {
+  border-color: var(--broadcast-border);
+  background: var(--broadcast-raised);
+  color: var(--broadcast-text);
+}
+
+.broadcast-settings-panel .action-btn:not(.btn-primary):not(.secondary):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 45%, var(--broadcast-border));
+  background: var(--broadcast-hover);
+}
+
+.broadcast-settings-panel .action-btn.secondary {
+  border-color: var(--broadcast-border);
+  background: var(--broadcast-raised);
+  color: var(--broadcast-text);
+}
+
+.broadcast-settings-panel .action-btn.secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 45%, var(--broadcast-border));
+  background: var(--broadcast-hover);
+}
+
+.broadcast-settings-panel .action-btn.btn-primary {
+  border-color: var(--broadcast-accent);
+  background: var(--broadcast-accent);
+  color: #fff;
+}
+
+.broadcast-settings-panel .action-btn.btn-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 86%, #000);
+  background: color-mix(in srgb, var(--broadcast-accent) 86%, #000);
+}
+
+.broadcast-settings-panel .action-btn.small {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.broadcast-secondary-button,
+.broadcast-primary-button,
+.broadcast-info-btn,
+.broadcast-upgrade-action-btn,
+.broadcast-add-profile-btn,
+.broadcast-notice-upgrade-btn,
+.broadcast-key-entry-button,
+.broadcast-obs-status-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.broadcast-secondary-button,
+.broadcast-info-btn,
+.broadcast-obs-status-btn {
+  border-color: var(--broadcast-border);
+  background: transparent;
+  color: var(--broadcast-text);
+}
+
+.broadcast-secondary-button:hover:not(:disabled),
+.broadcast-info-btn:hover,
+.broadcast-obs-status-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 45%, var(--broadcast-border));
+  background: var(--broadcast-hover);
+}
+
+.broadcast-primary-button,
+.broadcast-add-profile-btn,
+.broadcast-upgrade-action-btn,
+.broadcast-notice-upgrade-btn {
+  background: var(--broadcast-accent);
+  color: #fff;
+}
+
+.broadcast-primary-button:hover:not(:disabled),
+.broadcast-add-profile-btn:hover:not(:disabled),
+.broadcast-upgrade-action-btn:hover:not(:disabled),
+.broadcast-notice-upgrade-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--broadcast-accent) 86%, #000);
+}
+
+.broadcast-secondary-button:disabled,
+.broadcast-primary-button:disabled,
+.broadcast-obs-status-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.broadcast-secondary-button--small {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.broadcast-plan-bar {
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--broadcast-border);
+  border-radius: 10px;
+  background: var(--broadcast-raised);
+}
+
+.broadcast-plan-bar__summary {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.broadcast-plan-bar__description {
+  color: var(--broadcast-muted);
+  font-size: 12px;
+}
+
+.broadcast-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--broadcast-border);
+  border-radius: 999px;
+  background: var(--broadcast-surface);
+  color: var(--broadcast-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.broadcast-quota-badge--free {
+  color: var(--broadcast-muted);
+}
+
+.broadcast-quota-badge:not(.broadcast-quota-badge--free) {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 36%, var(--broadcast-border));
+  color: var(--broadcast-accent);
+}
+
+.broadcast-plan-bar__actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.broadcast-multistream-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--broadcast-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, #f59e0b 7%, var(--broadcast-surface));
+  color: var(--broadcast-muted);
+  font-size: 13px;
+}
+
+.broadcast-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.broadcast-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.broadcast-settings-card__header {
+  align-items: flex-start;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--broadcast-border);
+}
+
+.broadcast-settings-card__title-row {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.broadcast-settings-card__title {
+  margin: 0;
+  color: var(--broadcast-text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.broadcast-settings-card__count {
+  color: var(--broadcast-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.broadcast-settings-card__description {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.broadcast-profile-list,
+.broadcast-channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.broadcast-profile-item {
+  min-width: 0;
+  min-height: 58px;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--broadcast-border);
+  border-radius: 10px;
+  background: var(--broadcast-raised);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.broadcast-profile-item:hover {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 45%, var(--broadcast-border));
+  background: var(--broadcast-hover);
+}
+
+.broadcast-profile-item--active {
+  border-color: color-mix(in srgb, var(--broadcast-accent) 68%, var(--broadcast-border));
+  background: color-mix(in srgb, var(--broadcast-accent) 9%, var(--broadcast-raised));
+}
+
+.broadcast-profile-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.broadcast-profile-item__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.broadcast-profile-name {
+  overflow: hidden;
+  color: var(--broadcast-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.broadcast-profile-desc {
+  margin-top: 2px;
+  color: var(--broadcast-muted);
+  font-size: 12px;
+}
+
+.broadcast-profile-item__actions,
+.broadcast-channel-actions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.broadcast-icon-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--broadcast-muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.broadcast-icon-button:hover {
+  background: var(--broadcast-hover);
+  color: var(--broadcast-text);
+}
+
+.broadcast-icon-button--danger:hover {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #ef4444;
+}
+
+.broadcast-channel-row {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--broadcast-border);
+  border-radius: 10px;
+  background: var(--broadcast-raised);
+}
+
+.broadcast-channel-row--disabled {
+  opacity: 0.68;
+}
+
+.broadcast-channel-top {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.broadcast-channel-info {
+  min-width: 0;
+  gap: 9px;
+}
+
+.broadcast-channel-name {
+  color: var(--broadcast-text);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.broadcast-channel-meta {
+  margin-top: 2px;
+  color: var(--broadcast-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.broadcast-channel-bottom {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--broadcast-border);
+}
+
+.broadcast-channel-key {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--broadcast-muted);
+  font-size: 12px;
+}
+
+.broadcast-channel-key__label {
+  color: var(--broadcast-muted);
+}
+
+.broadcast-channel-key__value {
+  max-width: min(350px, 45vw);
+  overflow: hidden;
+  color: var(--broadcast-text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.broadcast-channel-key__saved,
+.broadcast-channel-key__warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.broadcast-channel-key__saved {
+  color: var(--success-color, #22c55e);
+}
+
+.broadcast-channel-key__warning,
+.broadcast-channel-key--missing {
+  color: var(--warning, #b45309);
+}
+
+.broadcast-key-entry-button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 42%, var(--broadcast-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 10%, var(--broadcast-surface));
+  color: var(--warning, #b45309);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.broadcast-settings-empty {
+  display: grid;
+  min-height: 132px;
+  padding: 24px;
+  place-items: center;
+  border: 1px dashed var(--broadcast-border);
+  border-radius: 10px;
+  background: var(--broadcast-raised);
+  color: var(--broadcast-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.broadcast-settings-panel .broadcast-obs-status-btn {
+  min-height: 36px;
+}
+
+.broadcast-settings-panel .broadcast-toggle {
+  flex: 0 0 44px;
+}
+
+@media (max-width: 860px) {
+  .broadcast-settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .broadcast-settings-overview__heading,
+  .broadcast-settings-card__header {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .broadcast-settings-overview,
+  .broadcast-settings-card {
+    padding: 16px;
+  }
+
+  .broadcast-settings-overview__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .broadcast-plan-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .broadcast-plan-bar__summary {
+    width: 100%;
+  }
+
+  .broadcast-plan-bar__actions {
+    justify-content: flex-start;
+  }
+
+  .broadcast-multistream-notice {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .broadcast-channel-top {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .broadcast-channel-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .broadcast-channel-bottom {
+    align-items: flex-start;
+  }
+
+  .broadcast-channel-key__value {
+    max-width: calc(100vw - 160px);
+  }
+}
+
+/* MVSettings applies a broad descendant reset after component imports.
+   These scoped rules keep this panel's card and control spacing intact. */
+.settings-page .broadcast-settings-panel .broadcast-settings-overview {
+  padding: 24px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-settings-card {
+  padding: 20px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-settings-card__header {
+  padding-bottom: 14px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-settings-description,
+.settings-page .broadcast-settings-panel .broadcast-settings-card__description {
+  margin: 6px 0 0;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-settings-overview__actions {
+  padding-top: 16px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-plan-bar {
+  padding: 12px 14px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-quota-badge {
+  padding: 5px 10px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-multistream-notice {
+  padding: 12px 16px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-profile-item {
+  padding: 10px 12px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-profile-desc,
+.settings-page .broadcast-settings-panel .broadcast-channel-meta {
+  margin-top: 3px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-channel-row {
+  padding: 14px 16px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-channel-bottom {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.settings-page .broadcast-settings-panel .broadcast-toggle {
+  padding: 2.5px;
+}
+
+@media (max-width: 600px) {
+  .settings-page .broadcast-settings-panel .broadcast-settings-overview,
+  .settings-page .broadcast-settings-panel .broadcast-settings-card {
+    padding: 16px;
+  }
+}

@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   CheckCircle2,
+  Download,
   FolderDown,
   Image as ImageIcon,
   Loader2,
   Music2,
   Palette,
-  Sparkles,
   Video,
   X,
 } from "lucide-react";
@@ -156,7 +156,7 @@ export default function EasyWorshipOneClickImportModal({
                 className="ew-btn ew-btn--primary"
                 onClick={handleStartImport}
               >
-                <Sparkles size={16} />
+                <Download size={16} />
                 <span>Yes, Import Everything</span>
               </button>
             </div>

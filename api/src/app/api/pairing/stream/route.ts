@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { isBelowMinimum, getMinimumVersion } from "@/lib/versionGate";
-import { checkDeviceLimit } from "@/lib/deviceLimits";
+import { isBelowMinimum, getActiveMinimumVersion } from "@/lib/versionGate";
+import { checkDeviceLimit, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { resolveEffectivePlan, isInTrialRaw } from "@/lib/trial";
 import { getTrialForUser } from "@/lib/trialRecords";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
   // Block old desktop app versions (version sent as query param — EventSource can't use headers)
   const clientVersion = req.nextUrl.searchParams.get("v");
-  const minimum = await getMinimumVersion();
+  const minimum = await getActiveMinimumVersion();
   const versionBlocked = clientVersion && minimum
     ? isBelowMinimum(clientVersion, minimum)
     : false;
@@ -156,14 +156,20 @@ export async function GET(req: NextRequest) {
               isOnTrial,
             );
             if (!limitResult.allowed) {
-              sendEvent(controller, "device_limit_reached", {
-                currentCount: limitResult.currentCount,
-                limit: limitResult.limit,
-                plan: effectivePlan,
-              });
-              clearInterval(keepalive);
-              try { controller.close(); } catch { /* already closed */ }
-              return;
+              if (effectivePlan === "free" || limitResult.limit === 1) {
+                // Free plan allows 1 computer at a time: automatically disconnect older computers
+                // and allow pairing stream registration to proceed.
+                await evictOtherActiveDevices(user._id.toString(), { keepDeviceId: existingDevice?.deviceId || null }, db);
+              } else {
+                sendEvent(controller, "device_limit_reached", {
+                  currentCount: limitResult.currentCount,
+                  limit: limitResult.limit,
+                  plan: effectivePlan,
+                });
+                clearInterval(keepalive);
+                try { controller.close(); } catch { /* already closed */ }
+                return;
+              }
             }
 
             const deviceName = clientOS || pairing.deviceName || "MakeChurchEasy";

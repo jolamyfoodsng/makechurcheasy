@@ -1055,13 +1055,8 @@ async function resolveMobileTickerPresentation() {
       accent: brandColor,
       separator: brandColor,
     }
-    : {
-      accent: sanitizeTickerColor(option.accentColor) ?? brandColor,
-      accentText: "#ffffff",
-      barBg: "#0f172a",
-      barText: "#ffffff",
-      separator: sanitizeTickerColor(option.accentColor) ?? brandColor,
-    };
+    // HTML/package tickers keep their own CSS colours; only the user's picked colours override them.
+    : ({} as TickerThemeColors);
   const colors: TickerThemeColors = { ...baseColors, ...settings.colors };
 
   let brandLogoUrl = resolveOverlayAssetUrl(brandingSettings.brandLogoPath);

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkSignupAbuse } from "@/lib/adminControls";
+import { jwtVerify } from "jose";
+import { verifySessionToken } from "@/lib/jwt";
 import clientPromise from "@/lib/mongodb";
 import { signSessionToken } from "@/lib/jwt";
 import { getPlanConfig } from "@/lib/db";
@@ -9,6 +12,7 @@ import { processVerifiedSignupZohoSync, type ProcessZohoSignupResult } from "@/l
 import { nanoid } from "nanoid";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
+import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 import { notifyTelegramNewSignup } from "@/lib/telegramNotifications";
 import { applyReferralCode } from "@/lib/referrals";
 
@@ -59,9 +63,13 @@ export async function GET(req: NextRequest) {
   let clientOrigin = appUrl;
   let returnUrl = appUrl;
   let referralCodeFromState: string | undefined = undefined;
+  let oauthIntent: "login" | "link" = "login";
+  let oauthUserId: string | undefined;
   if (state) {
     try {
-      const parsed = JSON.parse(state);
+      const authSecret = process.env.AUTH_SECRET;
+      if (!authSecret) throw new Error("OAuth state signing is unavailable");
+      const { payload: parsed } = await jwtVerify(state, new TextEncoder().encode(authSecret), { algorithms: ["HS256"] });
       const parsedOrigin = typeof parsed.o === "string" ? parsed.o : appOrigin(appUrl);
       clientOrigin = isAllowedOrigin(parsedOrigin, appUrl)
         ? new URL(parsedOrigin).origin
@@ -70,32 +78,42 @@ export async function GET(req: NextRequest) {
       if (typeof parsed.ref === "string" && parsed.ref.trim()) {
         referralCodeFromState = parsed.ref.trim();
       }
+      oauthIntent = parsed.intent === "link" ? "link" : "login";
+      oauthUserId = typeof parsed.uid === "string" ? parsed.uid : undefined;
     } catch {
-      // Legacy plain-string state (just the return URL)
-      const decoded = decodeURIComponent(state);
+      // Older unsigned states are accepted only as login redirects during rollout.
       try {
-        const decodedOrigin = new URL(decoded).origin;
-        clientOrigin = isAllowedOrigin(decodedOrigin, appUrl)
-          ? decodedOrigin
-          : appOrigin(appUrl);
-      } catch { /* keep default */ }
-      returnUrl = sanitizeReturnUrl(decoded, clientOrigin);
+        const parsed = JSON.parse(state);
+        const parsedOrigin = typeof parsed.o === "string" ? parsed.o : appOrigin(appUrl);
+        clientOrigin = isAllowedOrigin(parsedOrigin, appUrl) ? new URL(parsedOrigin).origin : appOrigin(appUrl);
+        returnUrl = sanitizeReturnUrl(typeof parsed.r === "string" ? parsed.r : null, clientOrigin);
+        if (typeof parsed.ref === "string") referralCodeFromState = parsed.ref;
+      } catch {
+        return NextResponse.redirect(`${appOrigin(appUrl)}/login?error=google_state_invalid`);
+      }
     }
   }
 
+  const redirectWithError = (code: string) => {
+    const target = oauthIntent === "link" ? returnUrl : `${clientOrigin}/login`;
+    const url = new URL(target);
+    url.searchParams.set(oauthIntent === "link" ? "google_error" : "error", code);
+    return NextResponse.redirect(url.toString());
+  };
+
   if (error) {
-    return NextResponse.redirect(`${clientOrigin}/login?error=google_cancelled`);
+    return redirectWithError("google_cancelled");
   }
 
   if (!code) {
-    return NextResponse.redirect(`${clientOrigin}/login?error=no_code`);
+    return redirectWithError("no_code");
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(`${clientOrigin}/login?error=google_not_configured`);
+    return redirectWithError("google_not_configured");
   }
 
   const redirectUri = `${clientOrigin}/api/auth/google/callback`;
@@ -121,7 +139,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenData.access_token) {
       console.error("[google/callback] Token exchange failed:", tokenData);
-      return NextResponse.redirect(`${clientOrigin}/login?error=token_exchange_failed`);
+      return redirectWithError("token_exchange_failed");
     }
 
     // Fetch user info from Google
@@ -130,13 +148,32 @@ export async function GET(req: NextRequest) {
     });
 
     const googleUser = (await userInfoRes.json()) as {
+      id?: string;
       email?: string;
+      verified_email?: boolean;
       name?: string;
       picture?: string;
     };
 
-    if (!googleUser.email) {
-      return NextResponse.redirect(`${clientOrigin}/login?error=no_email`);
+    if (!googleUser.email || !googleUser.id || googleUser.verified_email !== true) {
+      return redirectWithError("google_email_unverified");
+    }
+
+    if (oauthIntent === "link") {
+      const token = req.cookies.get("session-token")?.value;
+      const session = token ? await verifySessionToken(token) : null;
+      if (!oauthUserId || !session?.sub || session.sub !== oauthUserId) return redirectWithError("google_link_session_expired");
+      const client = await clientPromise;
+      const db = client.db();
+      const linkedElsewhere = await db.collection("users").findOne({ "googleAccount.sub": googleUser.id, _id: { $ne: (await import("mongodb")).ObjectId.createFromHexString(oauthUserId) } }, { projection: { _id: 1 } });
+      if (linkedElsewhere) return redirectWithError("google_account_in_use");
+      await db.collection("users").updateOne(
+        { _id: (await import("mongodb")).ObjectId.createFromHexString(oauthUserId), isActive: { $ne: false } },
+        { $set: { googleAccount: { sub: googleUser.id, email: googleUser.email.trim().toLowerCase(), connectedAt: new Date().toISOString() } } },
+      );
+      const target = new URL(returnUrl);
+      target.searchParams.set("google_connected", "1");
+      return NextResponse.redirect(target.toString());
     }
 
     const client = await clientPromise;
@@ -150,6 +187,9 @@ export async function GET(req: NextRequest) {
 
     // Find or create user
     let user = await db.collection("users").findOne(
+      { "googleAccount.sub": googleUser.id },
+    );
+    if (!user) user = await db.collection("users").findOne(
       { email: normalizedEmail },
       { collation: { locale: "en", strength: 2 } }
     );
@@ -159,17 +199,18 @@ export async function GET(req: NextRequest) {
 
     if (user) {
       if (user.isActive === false) {
-        return NextResponse.redirect(`${clientOrigin}/login?error=account_unavailable`);
+        return redirectWithError("account_unavailable");
       }
+      if (user.googleAccount?.sub && user.googleAccount.sub !== googleUser.id) return redirectWithError("google_account_mismatch");
 
-      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+      // Existing user — update avatar, login location, and mark email as verified
+      const location = await extractRequestLocation(req.headers);
+      const { set: loginLocationSet, push: loginLocationPush } = buildLoginLocationUpdates(user, location, now);
 
-      // Existing user — update avatar, location, and mark email as verified
       const updateFields: Record<string, any> = {
-        lastLogin: now,
+        ...loginLocationSet,
         emailVerified: true,
+        googleAccount: { sub: googleUser.id, email: normalizedEmail, connectedAt: user.googleAccount?.connectedAt || now },
       };
       if (!user.emailVerified) {
         const platformSettings = await getPlatformSettings();
@@ -192,16 +233,6 @@ export async function GET(req: NextRequest) {
       if (googleUser.name && !user.name) {
         updateFields.name = googleUser.name;
       }
-      if (normalizedCountry) {
-        updateFields.country = normalizedCountry;
-        updateFields.lastLoginCountry = normalizedCountry;
-      }
-      if (clientCity) updateFields.lastLoginCity = clientCity;
-      if (clientTimezone) {
-        updateFields.lastLoginTimezone = clientTimezone;
-        if (!user.timezone) updateFields.timezone = clientTimezone;
-      }
-      if (clientIp) updateFields.lastLoginIp = clientIp;
       if (!user.language) {
         updateFields.language = signupLanguage;
       }
@@ -210,9 +241,14 @@ export async function GET(req: NextRequest) {
         updateFields.provider = "google";
       }
 
+      const updateDoc: Record<string, any> = { $set: updateFields };
+      if (loginLocationPush) {
+        updateDoc.$push = loginLocationPush;
+      }
+
       await db.collection("users").updateOne(
         { _id: user._id },
-        { $set: updateFields }
+        updateDoc
       );
       user = { ...user, ...updateFields };
       if (shouldSyncExistingGoogleVerification) {
@@ -233,9 +269,16 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${clientOrigin}/login?error=registrations_disabled`);
       }
 
-      const clientCity = req.headers.get("x-mce-geo-city")?.trim() || "";
-      const clientTimezone = req.headers.get("x-mce-geo-timezone")?.trim() || "";
-      const clientIp = req.headers.get("x-mce-client-ip")?.trim() || req.headers.get("cf-connecting-ip")?.trim() || "";
+      const location = await extractRequestLocation(req.headers);
+      const effectiveCountry = normalizedCountry || location.country;
+      const clientCity = location.city;
+      const clientTimezone = location.timezone;
+      const clientIp = location.ip;
+
+      const abuse = await checkSignupAbuse(db, { email: normalizedEmail, ip: clientIp });
+      if (!abuse.ok) {
+        return NextResponse.redirect(`${clientOrigin}/login?error=${abuse.code}`);
+      }
 
       // New user — create account
       const planConfig = await getPlanConfig();
@@ -245,19 +288,29 @@ export async function GET(req: NextRequest) {
         email: normalizedEmail,
         avatar: googleUser.picture || "",
         provider: "google",
+        googleAccount: { sub: googleUser.id, email: normalizedEmail, connectedAt: now },
         emailVerified: true,
         emailVerifiedAt: now,
         appId: `VC-${nanoid(6).toUpperCase()}`,
         churchName: "",
-        country: normalizedCountry,
+        country: effectiveCountry,
         city: clientCity,
         timezone: clientTimezone,
-        signupCountry: normalizedCountry,
+        signupCountry: effectiveCountry,
         signupCity: clientCity,
         signupIp: clientIp,
-        lastLoginCountry: normalizedCountry,
+        lastLoginCountry: effectiveCountry,
         lastLoginCity: clientCity,
         lastLoginIp: clientIp,
+        locationHistory: [
+          {
+            country: effectiveCountry || "UNKNOWN",
+            ...(clientCity ? { city: clientCity } : {}),
+            ...(clientTimezone ? { timezone: clientTimezone } : {}),
+            ...(clientIp ? { ip: clientIp } : {}),
+            timestamp: now,
+          },
+        ],
         language: signupLanguage,
         phone: "",
         role: "user",
@@ -382,6 +435,6 @@ export async function GET(req: NextRequest) {
     return response;
   } catch (err) {
     console.error("[google/callback] Error:", err);
-    return NextResponse.redirect(`${appUrl}/login?error=google_auth_failed`);
+    return redirectWithError("google_auth_failed");
   }
 }

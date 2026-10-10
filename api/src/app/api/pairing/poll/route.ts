@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { checkVersionGate } from "@/lib/versionGate";
-import { checkDeviceLimit } from "@/lib/deviceLimits";
+import { checkDeviceLimit, evictOtherActiveDevices } from "@/lib/deviceLimits";
 import { resolveEffectivePlan, isInTrialRaw } from "@/lib/trial";
 import { getTrialForUser } from "@/lib/trialRecords";
 import { extractDeviceInfo } from "@/lib/deviceInfo";
 import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import { normalizePairingCode } from "@/lib/pairingUtils";
-import { TRIAL_ALREADY_CLAIMED_MESSAGE } from "@/lib/trialAbuse";
+import { TRIAL_ALREADY_CLAIMED_MESSAGE, getClientTrialEligibility } from "@/lib/trialAbuse";
 import {
   findMatchingDesktopDevice,
   registerDesktopDeviceForPairing,
@@ -93,12 +93,18 @@ export async function GET(req: NextRequest) {
         isOnTrial,
       );
       if (!limitResult.allowed) {
-        return NextResponse.json({
-          status: "device_limit_reached",
-          currentCount: limitResult.currentCount,
-          limit: limitResult.limit,
-          plan: effectivePlan,
-        }, { headers: CORS_HEADERS });
+        if (effectivePlan === "free" || limitResult.limit === 1) {
+          // Free plan allows 1 computer at a time: automatically disconnect older computers
+          // and allow pairing registration to succeed.
+          await evictOtherActiveDevices(user._id.toString(), { keepDeviceId: existingDevice?.deviceId || null }, db);
+        } else {
+          return NextResponse.json({
+            status: "device_limit_reached",
+            currentCount: limitResult.currentCount,
+            limit: limitResult.limit,
+            plan: effectivePlan,
+          }, { headers: CORS_HEADERS });
+        }
       }
 
       const deviceName = clientOS || pairing.deviceName || "MakeChurchEasy";
@@ -141,6 +147,8 @@ export async function GET(req: NextRequest) {
         }
         : user.trial || null;
 
+      const trialEligibility = await getClientTrialEligibility(user._id.toString(), Boolean(trialResponse));
+
       return NextResponse.json({
         status: "authorized",
         user: {
@@ -157,6 +165,7 @@ export async function GET(req: NextRequest) {
           adminManagedSubscription: user.adminManagedSubscription || null,
           subscriptionExpiresAt: user.subscriptionExpiresAt || null,
           trial: trialResponse,
+          trialEligibility,
         },
         deviceId: registeredDevice.deviceId,
         deviceSecret: registeredDevice.deviceSecret,

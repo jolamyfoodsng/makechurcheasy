@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Check platform settings for emergency lock / maintenance
+    // 5. Check platform settings for emergency lock / maintenance / admin off switch
+    let speechModel = "universal-streaming-english";
+    let paidDailyCapMinutes = 0;
     try {
       const ps = await getPlatformSettings();
       if (ps.appUpdates.emergencyLock || ps.security.maintenanceMode) {
@@ -104,6 +106,18 @@ export async function POST(req: NextRequest) {
           { headers: CORS_HEADERS }
         );
       }
+      if (ps.controls?.features?.speechToScripture === false) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            reason: "feature_disabled",
+            message: "Speech to Scripture is paused for maintenance. Please try again later.",
+          },
+          { headers: CORS_HEADERS }
+        );
+      }
+      speechModel = ps.controls?.speech?.model || speechModel;
+      paidDailyCapMinutes = Math.max(0, Number(ps.controls?.speech?.dailyMinutesCap) || 0);
     } catch {
       // If settings unavailable, proceed
     }
@@ -186,6 +200,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 8b. Fair-use daily cap for trial and paid plans (Admin → Settings → Controls).
+    if (paidDailyCapMinutes > 0 && effectivePlan !== "free" && user.role !== "admin") {
+      const usage = await getFreeSpeechToScriptureUsage(db, user._id.toString(), transcriptionCost);
+      const remainingSeconds = Math.max(0, Math.floor((paidDailyCapMinutes - usage.dailyUsedMinutes) * 60));
+      if (remainingSeconds <= 0) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            reason: "daily_speech_limit",
+            dailyLimitMinutes: paidDailyCapMinutes,
+            dailyUsedMinutes: usage.dailyUsedMinutes,
+            dailyRemainingSeconds: 0,
+          },
+          { headers: CORS_HEADERS },
+        );
+      }
+    }
+
     // 9. Credits check — admin (-1) is unlimited
     const credits = await calculateUserCredits(user._id.toString(), user);
     const transcriptionAccess = await checkTranscriptionAccess(user._id.toString(), user);
@@ -230,6 +262,7 @@ export async function POST(req: NextRequest) {
         weeklyUsedMinutes: freeSpeechAllowance?.weeklyUsedMinutes ?? null,
         weeklyRemainingSeconds: freeSpeechAllowance?.weeklyRemainingSeconds ?? null,
         transcriptionBalance: transcriptionAccess.balance,
+        speechModel,
       },
       { headers: CORS_HEADERS }
     );

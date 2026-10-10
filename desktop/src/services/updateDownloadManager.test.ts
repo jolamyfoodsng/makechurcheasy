@@ -5,7 +5,7 @@ import { resolveActionUrl, withOfferCode } from "../components/AnnouncementModal
 import type { DesktopAnnouncement } from "./announcementService";
 
 vi.mock("./updateService", () => ({
-  downloadAndInstallVerifiedUpdate: vi.fn(),
+  downloadVerifiedUpdate: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-process", () => ({
@@ -25,7 +25,10 @@ describe("updateDownloadManager", () => {
       isModalVisible: false,
       showBackgroundNotice: false,
       showAppCloseWarning: false,
+      runInBackground: false,
+      readyBannerDismissed: false,
     };
+    updateDownloadManager["prepared"] = null;
   });
 
   it("registers an available update", () => {
@@ -47,10 +50,12 @@ describe("updateDownloadManager", () => {
 
   it("handles dismissModal when actively downloading (shows background notice)", async () => {
     let progressCallback: any;
-    vi.mocked(updateService.downloadAndInstallVerifiedUpdate).mockImplementation(
+    const install = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(updateService.downloadVerifiedUpdate).mockImplementation(
       async (_update, onProgress) => {
         progressCallback = onProgress;
         await new Promise((resolve) => setTimeout(resolve, 50));
+        return { version: "3.20.0", source: "signed", install };
       }
     );
 
@@ -69,6 +74,62 @@ describe("updateDownloadManager", () => {
     }
 
     await downloadPromise;
+
+    // Moved to the background: it must wait for the user, not restart.
+    expect(install).not.toHaveBeenCalled();
+    expect(updateDownloadManager.getState().status).toBe("ready");
+  });
+
+  it("installs and restarts right away for a foreground update", async () => {
+    const install = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(updateService.downloadVerifiedUpdate).mockResolvedValue({ version: "3.20.0", source: "signed", install });
+
+    await updateDownloadManager.startDownload(null, "3.20.0");
+
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(install.mock.calls[0][0]).toMatchObject({ relaunch: true });
+  });
+
+  it("background update stops at ready, then installs on Restart Now", async () => {
+    const install = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(updateService.downloadVerifiedUpdate).mockResolvedValue({ version: "3.20.0", source: "signed", install });
+
+    await updateDownloadManager.startDownload(null, "3.20.0", { background: true });
+    const state = updateDownloadManager.getState();
+    expect(state.status).toBe("ready");
+    expect(state.isModalVisible).toBe(false);
+    expect(install).not.toHaveBeenCalled();
+    expect(updateDownloadManager.isReady()).toBe(true);
+
+    await updateDownloadManager.installNow();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(install.mock.calls[0][0]).toMatchObject({ relaunch: true });
+  });
+
+  it("installs a ready update without restarting when the app quits", async () => {
+    const install = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(updateService.downloadVerifiedUpdate).mockResolvedValue({ version: "3.20.0", source: "signed", install });
+
+    await updateDownloadManager.startDownload(null, "3.20.0", { background: true });
+    await expect(updateDownloadManager.installOnQuit()).resolves.toBe(true);
+    expect(install.mock.calls[0][0]).toMatchObject({ relaunch: false });
+  });
+
+  it("does not let a later check replace a downloaded update", async () => {
+    const install = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(updateService.downloadVerifiedUpdate).mockResolvedValue({ version: "3.20.0", source: "signed", install });
+
+    await updateDownloadManager.startDownload(null, "3.20.0", { background: true });
+    updateDownloadManager.registerAvailableUpdate(null, "3.21.0", "3.19.0", undefined, true);
+    expect(updateDownloadManager.getState().status).toBe("ready");
+    expect(updateDownloadManager.getState().version).toBe("3.20.0");
+  });
+
+  it("reports a failed download as an error", async () => {
+    vi.mocked(updateService.downloadVerifiedUpdate).mockRejectedValue(new Error("network down"));
+    await updateDownloadManager.startDownload(null, "3.20.0", { background: true });
+    expect(updateDownloadManager.getState().status).toBe("error");
+    expect(updateDownloadManager.getState().errorMsg).toBe("network down");
   });
 
   it("re-opens modal with openModal()", () => {

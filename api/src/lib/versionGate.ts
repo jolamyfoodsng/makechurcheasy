@@ -52,6 +52,59 @@ function isBelowMinimum(version: string, minimum: string): boolean {
   return c < mC;
 }
 
+export interface EnforcementWindow {
+  /** ms epoch when the policy started, or null when unknown */
+  startedAtMs: number | null;
+  /** ms epoch when old versions get blocked */
+  deadlineAtMs: number | null;
+  graceHours: number;
+  /** true once the grace period is over (or there never was one) */
+  expired: boolean;
+}
+
+/**
+ * The forced-update countdown. Old versions keep working until the deadline
+ * (enforcementStartedAt + gracePeriodHours); after that they are blocked.
+ * With no grace period, or no usable start time, enforcement is immediate.
+ */
+export function getEnforcementWindow(
+  appUpdates: {
+    enforcementStartedAt?: string | null;
+    policyPublishedAt?: string | null;
+    gracePeriodHours?: number | null;
+  },
+  now: number = Date.now(),
+): EnforcementWindow {
+  const graceHours = Math.max(0, Number(appUpdates.gracePeriodHours) || 0);
+  const parsed = Date.parse(
+    String(appUpdates.enforcementStartedAt || appUpdates.policyPublishedAt || ""),
+  );
+  const startedAtMs = Number.isFinite(parsed) && parsed > 86_400_000 ? parsed : null;
+  if (graceHours <= 0 || startedAtMs === null) {
+    return { startedAtMs, deadlineAtMs: startedAtMs, graceHours, expired: true };
+  }
+  const deadlineAtMs = startedAtMs + graceHours * 3_600_000;
+  return { startedAtMs, deadlineAtMs, graceHours, expired: now >= deadlineAtMs };
+}
+
+/**
+ * The minimum version that is being enforced RIGHT NOW (force updates on and
+ * the grace period over), or "" when nothing should be blocked yet.
+ */
+export async function getActiveMinimumVersion(): Promise<string> {
+  try {
+    const settings = await getPlatformSettings();
+    const { appUpdates } = settings;
+    if (!appUpdates.forceUpdatesEnabled) return "";
+    if (!appUpdates.minimumSupportedVersion) return "";
+    return getEnforcementWindow(appUpdates).expired
+      ? appUpdates.minimumSupportedVersion
+      : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Desktop clients can explicitly defer an update when an operator needs to
  * keep the installed version running. This never bypasses maintenance mode
@@ -81,10 +134,12 @@ export async function checkVersionGate(request: Request): Promise<Response | nul
 
   let forceUpdatesEnabled = false;
   let minimum = "";
+  let graceExpired = true;
   try {
     const settings = await getPlatformSettings();
     forceUpdatesEnabled = settings.appUpdates.forceUpdatesEnabled;
     minimum = settings.appUpdates.minimumSupportedVersion || "";
+    graceExpired = getEnforcementWindow(settings.appUpdates).expired;
     cachedMinVersion = minimum;
     cacheTimestamp = Date.now();
   } catch {
@@ -93,6 +148,9 @@ export async function checkVersionGate(request: Request): Promise<Response | nul
 
   if (!forceUpdatesEnabled) return null; // Force-updates off — skip the gate
   if (!minimum) return null; // No floor configured — allow through
+  // Inside the grace period old versions keep working; the app itself shows
+  // the countdown. The block starts at the deadline.
+  if (!graceExpired) return null;
 
   if (isBelowMinimum(version, minimum)) {
     return Response.json(

@@ -101,3 +101,62 @@ export async function checkDeviceLimit(
     limit: baseLimit,
   };
 }
+
+/**
+ * Evict other active devices for a user.
+ * Marks devices as deleted with `deletedReason: "evicted_by_other_device"`,
+ * removes them from user.devices, and cleans up active loginCodes.
+ */
+export async function evictOtherActiveDevices(
+  userId: string,
+  options?: {
+    keepDeviceId?: string | null;
+    targetDeviceId?: string | null;
+  },
+  dbInstance?: any
+): Promise<number> {
+  const db = dbInstance || (await clientPromise).db();
+  const now = new Date();
+
+  const filter: Record<string, any> = {
+    userId,
+    status: { $ne: "deleted" },
+  };
+
+  if (options?.targetDeviceId) {
+    filter.deviceId = options.targetDeviceId;
+  } else if (options?.keepDeviceId) {
+    filter.deviceId = { $ne: options.keepDeviceId };
+  }
+
+  const devicesToDisconnect = await db.collection("devices").find(filter).toArray();
+  if (devicesToDisconnect.length === 0) return 0;
+
+  const deviceIds = devicesToDisconnect.map((d: any) => d.deviceId);
+  const mongoIds = devicesToDisconnect.map((d: any) => d._id.toString());
+
+  await db.collection("devices").updateMany(
+    { deviceId: { $in: deviceIds } },
+    {
+      $set: {
+        status: "deleted",
+        deletedAt: now,
+        deletedReason: "evicted_by_other_device",
+        ...(options?.keepDeviceId ? { evictedByDeviceId: options.keepDeviceId } : {}),
+      },
+    }
+  );
+
+  const { ObjectId } = await import("mongodb");
+  try {
+    await db.collection("users").updateOne(
+      { _id: new ObjectId(userId) },
+      { $pull: { devices: { $in: mongoIds } } as any }
+    );
+  } catch {
+    // If userId cannot be converted or update fails, continue
+  }
+
+  await db.collection("loginCodes").deleteMany({ deviceId: { $in: deviceIds } });
+  return devicesToDisconnect.length;
+}

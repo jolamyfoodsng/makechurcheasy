@@ -71,6 +71,7 @@ import {
   getRemainingSongSlots,
 } from "../../services/licenseService";
 import { checkEntitlementSync } from "../../services/entitlementClient";
+import { openDashboardSubscriptionPlans } from "../../services/subscriptionNavigation";
 import { getCustomThemes } from "../../bible/bibleDb";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { DEFAULT_THEME_SETTINGS, type BibleTemplateType, type BibleTheme, type BibleThemeSettings } from "../../bible/types";
@@ -80,7 +81,6 @@ import { LT_DEFAULT_CUSTOM_STYLE } from "../../lowerthirds/types";
 import type { Song, SongMetadata, SplitConfig, Slide } from "../../worship/types";
 import "../../worship/worship.css";
 import Icon from "../Icon";
-import { UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
 import { extractFirstLineAsTitle } from "../../worship/songTitleFromLyrics";
 import { isDummyTitle } from "../../worship/songTitleAutoGen";
@@ -248,8 +248,6 @@ export function WorshipModule({
   const [songCount, setSongCount] = useState<number>(0);
   const isSongUnlimited = songLimit === -1;
   const hasReachedSongLimit = !isSongUnlimited && songCount >= songLimit;
-  const [showSongLimitModal, setShowSongLimitModal] = useState(false);
-  const [songLimitModalType, setSongLimitModalType] = useState<"songs" | "import">("songs");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [easyWorshipModalOpen, setEasyWorshipModalOpen] = useState(false);
 
@@ -1236,8 +1234,7 @@ export function WorshipModule({
     }
     if (!finalTitle) return;
     if (hasReachedSongLimit) {
-      setSongLimitModalType("songs");
-      setShowSongLimitModal(true);
+      void openDashboardSubscriptionPlans();
       return;
     }
     const newSong: Song = {
@@ -1730,15 +1727,13 @@ export function WorshipModule({
                           </div>
                           <button
                             className={`worship-online-action${hasReachedSongLimit && !importedSong ? " at-limit" : ""}`}
-                            disabled={hasReachedSongLimit && !importedSong}
                             onClick={() => {
                               if (importedSong) {
                                 selectSongById(importedSong.id);
                                 return;
                               }
                               if (hasReachedSongLimit) {
-                                setSongLimitModalType("songs");
-                                setShowSongLimitModal(true);
+                                void openDashboardSubscriptionPlans();
                                 return;
                               }
                               handleOpenOnlineImport(result);
@@ -1760,8 +1755,7 @@ export function WorshipModule({
                 className="worship-sidebar-action"
                 onClick={() => {
                   if (!canImport) {
-                    setSongLimitModalType("import");
-                    setShowSongLimitModal(true);
+                    void openDashboardSubscriptionPlans();
                     return;
                   }
                   setBulkImportOpen(true);
@@ -1781,11 +1775,9 @@ export function WorshipModule({
               </button>
               <button
                 className={`worship-sidebar-action primary${hasReachedSongLimit ? " at-limit" : ""}`}
-                disabled={hasReachedSongLimit}
                 onClick={() => {
                   if (hasReachedSongLimit) {
-                    setSongLimitModalType("songs");
-                    setShowSongLimitModal(true);
+                    void openDashboardSubscriptionPlans();
                     return;
                   }
                   setManualImportOpen(true);
@@ -2234,60 +2226,6 @@ export function WorshipModule({
         </div>
       )}
 
-      {/* ── Song limit modal ── */}
-      {showSongLimitModal && (
-        <div className="ssm-backdrop" onClick={() => setShowSongLimitModal(false)}>
-          <div className="ssm-modal ssm-modal--prompt" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="ssm-close"
-              onClick={() => setShowSongLimitModal(false)}
-              aria-label="Close song limit modal"
-              title="Close">
-              <Icon name="close" size={18} />
-            </button>
-            <div className="ssm-icon">
-              <Icon name={songLimitModalType === "import" ? "upload_file" : "library_music"} size={28} />
-            </div>
-            <h2 className="ssm-title">{songLimitModalType === "import" ? "Smart Import Requires Growth" : "Song Limit Reached"}</h2>
-            {songLimitModalType === "import" ? (
-              <>
-                <p className="ssm-desc">
-                  Smart worship import is available on <strong>Growth</strong> and above.
-                </p>
-                <p className="ssm-hint">
-                  Free trial users can use it during the trial. Upgrade to Growth to unlock document import, review, and AI-assisted worship parsing. {UPGRADE_PROMO_FALLBACK}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="ssm-desc">
-                  Your <strong>{effectivePlan}</strong> plan allows up to <strong>{songLimit} songs</strong>.
-                  You currently have {songCount} song{songCount !== 1 ? "s" : ""}.
-                </p>
-                <p className="ssm-hint">
-                  Upgrade your plan to add more songs to your library. {UPGRADE_PROMO_FALLBACK}
-                </p>
-              </>
-            )}
-            <div className="ssm-actions">
-              <button
-                className="ssm-btn-cancel"
-                onClick={() => setShowSongLimitModal(false)}
-                title="Close">
-                Close
-              </button>
-              <a
-                className="ssm-btn-upgrade"
-                href="https://makechurcheazy.com/subscription/plans"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Upgrade Plan
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

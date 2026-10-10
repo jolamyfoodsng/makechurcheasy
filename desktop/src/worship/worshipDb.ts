@@ -50,6 +50,9 @@ function notifySongsChanged(): void {
 
   // Push updated usage counts to the server immediately
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
+
+  // Trigger debounced cloud auto-sync if enabled
+  import("../services/cloudSyncService").then((m) => m.triggerDebouncedAutoSync()).catch(() => { });
 }
 
 function songUpdatedTime(song: Song): number {
@@ -314,6 +317,25 @@ export async function saveSongsBatch(songs: Song[], options: SaveSongsBatchOptio
   if (options.notify !== false) {
     notifySongsChanged();
   }
+}
+
+/** Restore a list of songs from Cloud Backup without bulk import entitlement checks (user already owns these). */
+export async function restoreSongsFromCloud(songs: Song[]): Promise<void> {
+  if (songs.length === 0) return;
+  const db = await getDb();
+  const uid = getCurrentUserId();
+  const tx = db.transaction("songs", "readwrite");
+  const taggedSongs: Song[] = [];
+
+  for (const song of songs) {
+    const tagged = uid ? { ...song, userId: uid } : song;
+    taggedSongs.push(tagged);
+    await tx.store.put(tagged);
+  }
+
+  await tx.done;
+  await Promise.all(taggedSongs.map((song) => writeSongToCentralDb(song)));
+  notifySongsChanged();
 }
 
 /** Archive a song by id so it is removed from active views without being deleted */

@@ -9,13 +9,12 @@ import { CreditsSection } from "./sections/CreditsSection";
 import { AmbassadorSection } from "./sections/AmbassadorSection";
 import { EarlyAccessSection } from "./sections/EarlyAccessSection";
 import { SpecialOffersSection } from "./sections/SpecialOffersSection";
-import { AuthenticationSection } from "./sections/AuthenticationSection";
 import { NotificationsSection } from "./sections/NotificationsSection";
 import { EmailBrandingSection } from "./sections/EmailBrandingSection";
-import { StorageSection } from "./sections/StorageSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { CountryPricingSection } from "./sections/CountryPricingSection";
 import { SystemControlsSection } from "./sections/SystemControlsSection";
+import { ControlsSection } from "./sections/ControlsSection";
 import { Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { type PlatformSettings, DEFAULT_SETTINGS } from "./types";
@@ -29,12 +28,11 @@ const TABS = [
   { id: "ambassador", label: "Ambassador", },
   { id: "early-access", label: "Early Access", },
   { id: "special-offers", label: "Special Offers", },
-  { id: "authentication", label: "Authentication", },
   { id: "notifications", label: "Notifications", },
   { id: "brand-email", label: "Brand & Email", },
-  { id: "storage", label: "Storage", },
   { id: "security", label: "Security", },
   { id: "system-controls", label: "System Controls", },
+  { id: "controls", label: "Controls", },
   { id: "country-pricing", label: "Country Pricing", },
 ] as const;
 
@@ -67,6 +65,7 @@ export default function AdminSettingsPage() {
     "system-controls": "System Controls",
     "system": "System Controls",
     "featureFlags": "Feature Flags",
+    "controls": "Controls",
   };
 
   useEffect(() => {
@@ -200,15 +199,6 @@ export default function AdminSettingsPage() {
         );
       case "special-offers":
         return <SpecialOffersSection />;
-      case "authentication":
-        return (
-          <AuthenticationSection
-            data={settings.authentication}
-            onChange={(d) => updateSection("authentication", d)}
-            onSave={() => saveSection("authentication")}
-            saving={saving === "authentication"}
-          />
-        );
       case "notifications":
         return (
           <NotificationsSection
@@ -227,15 +217,6 @@ export default function AdminSettingsPage() {
             saving={saving === "emailBranding"}
           />
         );
-      case "storage":
-        return (
-          <StorageSection
-            data={settings.storage}
-            onChange={(d) => updateSection("storage", d)}
-            onSave={() => saveSection("storage")}
-            saving={saving === "storage"}
-          />
-        );
       case "security":
         return (
           <SecuritySection
@@ -249,13 +230,18 @@ export default function AdminSettingsPage() {
         return (
           <SystemControlsSection
             system={settings.system}
-            featureFlags={settings.featureFlags}
             onSystemChange={(d) => updateSection("system", d)}
-            onFeatureFlagsChange={(d) => updateSection("featureFlags", d)}
             onSaveSystem={() => saveSection("system")}
-            onSaveFeatureFlags={() => saveSection("featureFlags")}
             savingSystem={saving === "system"}
-            savingFeatureFlags={saving === "featureFlags"}
+          />
+        );
+      case "controls":
+        return (
+          <ControlsSection
+            data={settings.controls}
+            onChange={(d) => updateSection("controls", d)}
+            onSave={() => saveSection("controls")}
+            saving={saving === "controls"}
           />
         );
       case "country-pricing":

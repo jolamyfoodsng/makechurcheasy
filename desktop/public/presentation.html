@@ -360,6 +360,23 @@
       display: none !important;
     }
 
+    /* Broadcast graphic (lower third) layer — sent from the Dock in presentation-link mode. */
+    .graphic-layer {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      z-index: 8;
+      pointer-events: none;
+      background: transparent;
+      color-scheme: normal;
+    }
+
+    .graphic-layer.hidden {
+      display: none;
+    }
+
     .zoom-indicator {
       position: fixed;
       bottom: 24px;
@@ -416,6 +433,7 @@
       </div>
     </div>
     <div id="stage" class="remote-stage"></div>
+    <iframe id="graphicLayer" class="graphic-layer hidden" title="Broadcast graphic" scrolling="no" aria-hidden="true"></iframe>
     <div id="zoomIndicator" class="zoom-indicator hidden">100%</div>
   </div>
 
@@ -1052,6 +1070,56 @@
         }
       }
 
+      // ── Broadcast graphic layer ──────────────────────────────────────────
+      // state.graphic = { url, version } — a lower-third-overlay.html URL
+      // (the design travels in its #data= hash). A new hash on the same page
+      // is a fragment navigation, so the page animates out/in without reloading.
+      var graphicFrame = document.getElementById("graphicLayer");
+      var lastGraphicKey = "";
+      var lastMainKey = null;
+
+      function resolveGraphicUrl(url) {
+        try {
+          var parsed = new URL(String(url || ""), window.location.href);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+          var localHosts = ["127.0.0.1", "localhost"];
+          // Opened from another computer on the network: the overlay server is
+          // on the same machine as this viewer server.
+          if (
+            localHosts.indexOf(parsed.hostname) >= 0 &&
+            window.location.hostname &&
+            localHosts.indexOf(window.location.hostname) < 0
+          ) {
+            parsed.hostname = window.location.hostname;
+          }
+          return parsed.toString();
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function hasGraphic(state) {
+        return Boolean(state && state.graphic && state.graphic.url);
+      }
+
+      function applyGraphicLayer(graphic) {
+        if (!graphicFrame) return;
+        var key = graphic && graphic.url ? String(graphic.version || "") + "|" + graphic.url : "";
+        if (key === lastGraphicKey) return;
+        lastGraphicKey = key;
+        if (!key) {
+          graphicFrame.classList.add("hidden");
+          graphicFrame.removeAttribute("src");
+          return;
+        }
+        var url = resolveGraphicUrl(graphic.url);
+        if (!url) return;
+        graphicFrame.classList.remove("hidden");
+        if (graphicFrame.getAttribute("src") !== url) {
+          graphicFrame.setAttribute("src", url);
+        }
+      }
+
       function applyRemoteState(nextState) {
         // A healthy WebSocket delivers updates immediately. The no-store poll
         // below is a recovery path for browser sources that keep a half-open
@@ -1065,22 +1133,39 @@
           return;
         }
         lastResolvedState = nextState;
-        if (nextState === undefined) {
-          showWaiting();
-          return;
-        }
-        if (nextState === null) {
+        if (nextState === undefined || nextState === null) {
+          applyGraphicLayer(null);
+          lastMainKey = null;
           showWaiting();
           return;
         }
 
+        applyGraphicLayer(nextState.graphic || null);
+
+        // A graphic-only update leaves the main content as it is (no video restart).
+        const mainKey = JSON.stringify([nextState.fullscreen || null, nextState.lowerThird || null]);
+        if (mainKey === lastMainKey) {
+          if (!nextState.fullscreen && !nextState.lowerThird) showBlankForGraphic(hasGraphic(nextState));
+          return;
+        }
+        lastMainKey = mainKey;
+
         const isLowerThird = Boolean(nextState && !nextState.fullscreen && nextState.lowerThird);
         const item = nextState.fullscreen || nextState.lowerThird || null;
         if (!item) {
-          showBlank();
+          showBlankForGraphic(hasGraphic(nextState));
           return;
         }
         renderItem(item, isLowerThird);
+      }
+
+      // Nothing on screen but a graphic: keep the page see-through so the
+      // graphic sits over the camera like a normal lower third.
+      function showBlankForGraphic(graphicVisible) {
+        showBlank();
+        if (graphicVisible && body) {
+          body.style.background = "transparent";
+        }
       }
 
       async function fetchMeta() {

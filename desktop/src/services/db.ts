@@ -349,12 +349,17 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
     centralStoreName: string,
   ) {
     try {
+      if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
+        const dbs = await indexedDB.databases();
+        if (!dbs.some((d) => d.name === legacyDbName)) {
+          return;
+        }
+      }
       const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
         const req = indexedDB.open(legacyDbName);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
-        // Intentionally NO onupgradeneeded — if the DB doesn't exist yet
-        // the browser creates it with zero stores and we detect that below.
+        // If the DB doesn't exist yet, avoid leaving an uninitialized shell if possible
       });
       if (!legacyDb.objectStoreNames.contains(legacyStoreName)) {
         legacyDb.close();
@@ -389,6 +394,12 @@ export async function migrateFromLegacyDatabases(): Promise<{ migrated: string[]
     centralStoreName: string,
   ) {
     try {
+      if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
+        const dbs = await indexedDB.databases();
+        if (!dbs.some((d) => d.name === legacyDbName)) {
+          return;
+        }
+      }
       const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
         const req = indexedDB.open(legacyDbName);
         req.onsuccess = () => resolve(req.result);

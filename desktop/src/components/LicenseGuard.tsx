@@ -20,6 +20,7 @@ import {
   useLicenseGuardState,
   getLockScreenConfig,
   retryVerification,
+  disconnectOtherDevicesAndUnlock,
   hasPendingDowngradeNotification,
   markDowngradeNotified,
   type LockReason,
@@ -92,6 +93,14 @@ function ForcedUpgradeScreen() {
 export default function LicenseGuard({ children }: LicenseGuardProps) {
   const { unlocked, lockReason, payload, verifying, daysOffline, offlineWarning } = useLicenseGuardState();
   const [showDowngradeBanner, setShowDowngradeBanner] = useState(false);
+  const [showDeviceLimitPreview, setShowDeviceLimitPreview] = useState(false);
+
+  useEffect(() => {
+    (window as any).__triggerDeviceLimitModal = () => setShowDeviceLimitPreview(true);
+    return () => {
+      delete (window as any).__triggerDeviceLimitModal;
+    };
+  }, []);
 
   // Automatically retry verification when internet reconnects
   useEffect(() => {
@@ -107,11 +116,12 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
   };
 
   const handleManageSubscription = async () => {
+    const url = `${getDashboardBaseForAuth()}/subscription/plans`;
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(`${API_BASE}/billing`);
+      await openUrl(url);
     } catch {
-      window.open(`${API_BASE}/billing`, "_blank");
+      window.open(url, "_blank");
     }
   };
 
@@ -185,7 +195,29 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
           </div>
         </div>
       )}
-      {!unlocked && lockReason === "forced_upgrade" ? (
+      {showDeviceLimitPreview ? (
+        <LicenseLockScreen
+          reason="too_many_devices"
+          payload={
+            payload && payload.otherDevices?.length
+              ? payload
+              : {
+                  plan: "free",
+                  maxDevices: 1,
+                  deviceCount: 2,
+                  otherDevices: [
+                    {
+                      deviceId: "vc_media_pc",
+                      deviceName: "Media PC",
+                      lastSeen: new Date().toISOString(),
+                    },
+                  ],
+                }
+          }
+          verifying={verifying}
+          onDismiss={() => setShowDeviceLimitPreview(false)}
+        />
+      ) : !unlocked && lockReason === "forced_upgrade" ? (
         <ForcedUpgradeScreen />
       ) : !unlocked ? (
         <LicenseLockScreen
@@ -204,25 +236,75 @@ function LicenseLockScreen({
   reason,
   payload,
   verifying,
+  onDismiss,
 }: {
   reason: LockReason;
   payload: any;
   verifying: boolean;
+  onDismiss?: () => void;
 }) {
   const config = getLockScreenConfig(reason, payload);
   const overlayRef = useRef<HTMLDivElement>(null);
   const { logout } = useAuth();
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // A maintenance lock is temporary and controlled by the admin. Recheck on our
+  // own so the screen clears soon after the lock is switched off, instead of
+  // waiting for the 6-hour background check or a manual Retry.
+  useEffect(() => {
+    if (reason !== "maintenance") return;
+    const id = window.setInterval(() => {
+      void retryVerification();
+    }, 40_000);
+    return () => window.clearInterval(id);
+  }, [reason]);
 
   const handleRetry = async () => {
+    setActionError(null);
     await retryVerification();
   };
 
+  const handleDisconnectOthers = async () => {
+    setDisconnecting(true);
+    setActionError(null);
+    try {
+      const res = await disconnectOtherDevicesAndUnlock();
+      if (!res.success) {
+        if (onDismiss) {
+          setTimeout(() => {
+            setDisconnecting(false);
+            onDismiss();
+          }, 600);
+          return;
+        }
+        setActionError(res.error || "Failed to log out other computer. Please try again.");
+      } else if (onDismiss) {
+        onDismiss();
+      }
+    } catch (err: any) {
+      if (onDismiss) {
+        setTimeout(() => {
+          setDisconnecting(false);
+          onDismiss();
+        }, 600);
+        return;
+      }
+      setActionError(err?.message || "Failed to log out other computer.");
+    } finally {
+      if (!onDismiss) {
+        setDisconnecting(false);
+      }
+    }
+  };
+
   const handleManageSubscription = async () => {
+    const url = `${getDashboardBaseForAuth()}/subscription/plans`;
     try {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(`${API_BASE}/billing`);
+      await openUrl(url);
     } catch {
-      window.open(`${API_BASE}/billing`, "_blank");
+      window.open(url, "_blank");
     }
   };
 
@@ -246,6 +328,10 @@ function LicenseLockScreen({
   };
 
   const handleQuit = async () => {
+    if (onDismiss) {
+      onDismiss();
+      return;
+    }
     try {
       const { exit } = await import("@tauri-apps/plugin-process");
       await exit(0);
@@ -255,7 +341,7 @@ function LicenseLockScreen({
     }
   };
 
-  // BUG 6: Focus trap + keyboard handler
+  // Focus trap + keyboard handler
   const getFocusableElements = useCallback(() => {
     if (!overlayRef.current) return [];
     return Array.from(
@@ -324,8 +410,50 @@ function LicenseLockScreen({
     >
       <div className="license-guard-modal">
         <div className="license-guard-banner">
-          <Icon name={reason === "internet_required" ? "wifi_off" : "lock"} size={16} />
-          <span>{reason === "internet_required" ? "Internet Connection Required" : "License Verification"}</span>
+          <Icon
+            name={
+              reason === "internet_required"
+                ? "wifi_off"
+                : reason === "too_many_devices" || reason === "device_disconnected_by_other"
+                ? "devices"
+                : reason === "maintenance"
+                ? "schedule"
+                : "lock"
+            }
+            size={16}
+          />
+          <span>
+            {reason === "internet_required"
+              ? "Internet Connection Required"
+              : reason === "too_many_devices"
+              ? "Device Limit Check"
+              : reason === "device_disconnected_by_other"
+              ? "Session Switched"
+              : reason === "maintenance"
+              ? "Maintenance"
+              : "License Verification"}
+          </span>
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="license-guard-banner__dismiss"
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: "none",
+                color: "#fca5a5",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "2px 4px",
+                borderRadius: "4px",
+              }}
+              title="Close Preview"
+            >
+              <Icon name="close" size={16} />
+            </button>
+          )}
         </div>
 
         <div className="license-guard-header">
@@ -334,9 +462,15 @@ function LicenseLockScreen({
           </div>
           <p className="license-guard-eyebrow">
             {reason === "too_many_devices"
-              ? "This device cannot be verified yet"
+              ? payload?.plan === "free" || payload?.maxDevices === 1
+                ? "Free Plan • 1 Computer Limit"
+                : "Device Limit Reached"
+              : reason === "device_disconnected_by_other"
+              ? "Session Transferred to Another Device"
               : reason === "internet_required"
               ? "Offline limit reached (3 weeks offline)"
+              : reason === "maintenance"
+              ? "Checking again automatically"
               : "Access to MakeChurchEasy is currently blocked"}
           </p>
           <h2 className="license-guard-title">{config.title}</h2>
@@ -344,6 +478,13 @@ function LicenseLockScreen({
 
         <div className="license-guard-body">
           <p className="license-guard-description">{config.description}</p>
+
+          {actionError && (
+            <div className="license-guard-error-box" role="alert">
+              <Icon name="error" size={16} />
+              <span>{actionError}</span>
+            </div>
+          )}
 
           {verifying && (
             <div className="license-guard-verifying" aria-live="polite">
@@ -353,79 +494,155 @@ function LicenseLockScreen({
           )}
 
           <div className="license-guard-actions">
-            {config.primaryAction === "retry" && (
-              <button
-                type="button"
-                className="license-guard-button license-guard-button--primary"
-                onClick={handleRetry}
-                disabled={verifying}
-              >
-                <Icon name="refresh" size={18} />
-                {config.primaryLabel}
-              </button>
+            {config.primaryAction === "disconnect_others" ? (
+              <>
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--primary"
+                  onClick={handleDisconnectOthers}
+                  disabled={disconnecting || verifying}
+                >
+                  <Icon
+                    name={disconnecting ? "refresh" : "logout"}
+                    size={18}
+                    className={disconnecting ? "license-guard-spinner-icon" : ""}
+                  />
+                  {disconnecting ? "Logging out other computer…" : config.primaryLabel}
+                </button>
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--secondary"
+                  onClick={handleManageSubscription}
+                >
+                  <Icon name="crown" size={18} />
+                  Upgrade Plan (Use Multiple Computers)
+                </button>
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--secondary"
+                  onClick={() => logout()}
+                >
+                  <Icon name="user" size={18} />
+                  Sign Out This Computer
+                </button>
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--ghost"
+                  onClick={handleQuit}
+                >
+                  Quit Application
+                </button>
+              </>
+            ) : config.primaryAction === "reconnect" ? (
+              <>
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--primary"
+                  onClick={() => logout()}
+                >
+                  <Icon name="login" size={18} />
+                  Sign In & Use Here
+                </button>
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--secondary"
+                  onClick={handleManageSubscription}
+                >
+                  <Icon name="crown" size={18} />
+                  Upgrade Plan (Use Multiple Computers)
+                </button>
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--ghost"
+                  onClick={handleQuit}
+                >
+                  Quit Application
+                </button>
+              </>
+            ) : (
+              <>
+                {config.primaryAction === "retry" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--primary"
+                    onClick={handleRetry}
+                    disabled={verifying}
+                  >
+                    <Icon name="refresh" size={18} />
+                    {config.primaryLabel}
+                  </button>
+                )}
+
+                {config.primaryAction === "subscribe" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--primary"
+                    onClick={handleManageSubscription}
+                  >
+                    <Icon name="open_in_new" size={18} />
+                    {config.primaryLabel}
+                  </button>
+                )}
+
+                {config.primaryAction === "manage_devices" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--primary"
+                    onClick={handleManageDevices}
+                  >
+                    <Icon name="devices" size={18} />
+                    {config.primaryLabel}
+                  </button>
+                )}
+
+                {config.primaryAction === "contact_support" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--primary"
+                    onClick={handleContactSupport}
+                  >
+                    <Icon name="support_agent" size={18} />
+                    {config.primaryLabel}
+                  </button>
+                )}
+
+                {config.primaryAction !== "retry" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--secondary"
+                    onClick={handleRetry}
+                    disabled={verifying}
+                  >
+                    <Icon name="refresh" size={18} />
+                    Retry Verification
+                  </button>
+                )}
+
+                {reason !== "maintenance" && (
+                  <button
+                    type="button"
+                    className="license-guard-button license-guard-button--secondary"
+                    onClick={() => logout()}
+                  >
+                    <Icon name="logout" size={18} />
+                    Sign Out & Reconnect
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="license-guard-button license-guard-button--ghost"
+                  onClick={handleQuit}
+                >
+                  Quit Application
+                </button>
+              </>
             )}
-
-            {config.primaryAction === "subscribe" && (
-              <button
-                type="button"
-                className="license-guard-button license-guard-button--primary"
-                onClick={handleManageSubscription}
-              >
-                <Icon name="open_in_new" size={18} />
-                {config.primaryLabel}
-              </button>
-            )}
-
-            {config.primaryAction === "manage_devices" && (
-              <button
-                type="button"
-                className="license-guard-button license-guard-button--primary"
-                onClick={handleManageDevices}
-              >
-                <Icon name="devices" size={18} />
-                {config.primaryLabel}
-              </button>
-            )}
-
-            {config.primaryAction === "contact_support" && (
-              <button
-                type="button"
-                className="license-guard-button license-guard-button--primary"
-                onClick={handleContactSupport}
-              >
-                <Icon name="support_agent" size={18} />
-                {config.primaryLabel}
-              </button>
-            )}
-
-            {config.primaryAction !== "retry" && (
-              <button
-                type="button"
-                className="license-guard-button license-guard-button--secondary"
-                onClick={handleRetry}
-                disabled={verifying}
-              >
-                <Icon name="refresh" size={18} />
-                Retry Verification
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="license-guard-button license-guard-button--secondary"
-              onClick={() => logout()}
-            >
-              <Icon name="logout" size={18} />
-              Sign Out & Reconnect
-            </button>
-
-            <button
-              type="button"
-              className="license-guard-button license-guard-button--ghost"
-              onClick={handleQuit}
-            >
-              Quit Application
-            </button>
           </div>
         </div>
       </div>

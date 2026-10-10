@@ -57,6 +57,58 @@ fn get_or_create_installation_id() -> Result<String, String> {
     Ok(id)
 }
 
+/// Run a WMI query on Windows and return its non-empty value lines.
+///
+/// `wmic` is removed from recent Windows 11 builds. It returns the same WMI
+/// values as PowerShell's Get-CimInstance, so we try `wmic` first (keeping
+/// fingerprints identical on machines that still have it) and fall back to
+/// PowerShell when it is missing or prints nothing.
+#[cfg(target_os = "windows")]
+fn windows_wmi_values(wmic_args: &[&str], cim_class: &str, cim_property: &str) -> Vec<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let mut values: Vec<String> = Vec::new();
+
+    if let Ok(output) = std::process::Command::new("wmic")
+        .args(wmic_args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines().skip(1) {
+                let value = line.trim();
+                if !value.is_empty() {
+                    values.push(value.to_string());
+                }
+            }
+        }
+    }
+
+    if values.is_empty() {
+        let script = format!(
+            "(Get-CimInstance -ClassName {} -ErrorAction SilentlyContinue).{}",
+            cim_class, cim_property
+        );
+        if let Ok(output) = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let value = line.trim();
+                if !value.is_empty() {
+                    values.push(value.to_string());
+                }
+            }
+        }
+    }
+
+    values
+}
+
 /// Retrieve stable hardware identifiers unique to this physical machine.
 ///
 /// macOS:   IOPlatformUUID (from ioreg — survives OS reinstalls)
@@ -86,6 +138,7 @@ fn get_hardware_identifiers() -> Vec<String> {
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         if let Ok(output) = std::process::Command::new("reg")
             .args([
                 "QUERY",
@@ -93,6 +146,7 @@ fn get_hardware_identifiers() -> Vec<String> {
                 "/v",
                 "MachineGuid",
             ])
+            .creation_flags(0x0800_0000)
             .output()
         {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -107,29 +161,23 @@ fn get_hardware_identifiers() -> Vec<String> {
             }
         }
 
-        if let Ok(output) = std::process::Command::new("wmic")
-            .args(["csproduct", "get", "uuid"])
-            .output()
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().skip(1) {
-                let value = line.trim();
-                if !value.is_empty() && value != "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF" {
-                    ids.push(format!("biosuuid:{}", value));
-                }
+        for value in windows_wmi_values(
+            &["csproduct", "get", "uuid"],
+            "Win32_ComputerSystemProduct",
+            "UUID",
+        ) {
+            if value != "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF" {
+                ids.push(format!("biosuuid:{}", value));
             }
         }
 
-        if let Ok(output) = std::process::Command::new("wmic")
-            .args(["baseboard", "get", "serialnumber"])
-            .output()
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().skip(1) {
-                let value = line.trim();
-                if !value.is_empty() && !value.eq_ignore_ascii_case("to be filled by o.e.m.") {
-                    ids.push(format!("baseboard:{}", value));
-                }
+        for value in windows_wmi_values(
+            &["baseboard", "get", "serialnumber"],
+            "Win32_BaseBoard",
+            "SerialNumber",
+        ) {
+            if !value.eq_ignore_ascii_case("to be filled by o.e.m.") {
+                ids.push(format!("baseboard:{}", value));
             }
         }
     }
@@ -172,17 +220,15 @@ fn get_machine_model() -> String {
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = std::process::Command::new("wmic")
-            .args(["csproduct", "get", "name"])
-            .output()
+        if let Some(model) = windows_wmi_values(
+            &["csproduct", "get", "name"],
+            "Win32_ComputerSystemProduct",
+            "Name",
+        )
+        .into_iter()
+        .next()
         {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().skip(1) {
-                let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
-                }
-            }
+            return model;
         }
     }
 

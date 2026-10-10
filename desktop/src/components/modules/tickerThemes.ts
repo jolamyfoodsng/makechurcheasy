@@ -86,52 +86,6 @@ export const TICKER_THEMES: TickerThemeConfig[] = [
     barStyle: "solid",
   },
 
-  // ── 2. Fitness (Weather Ticker) ──
-  {
-    id: "ticker-fitness",
-    name: "Fitness",
-    description: "High-energy fitness-inspired ticker with bold gradient bar",
-    icon: "fitness_center",
-    tags: ["bold", "gradient", "energetic"],
-    defaultColors: {
-      accent: "#EF4444",
-      accentText: "#FFFFFF",
-      barBg: "#18181B",
-      barText: "#FAFAFA",
-      separator: "#EF4444",
-    },
-    defaultHeading: "BREAKING",
-    fontFamily: "'Oswald', 'Impact', sans-serif",
-    fontImport: "/fonts/google/google-fonts.css",
-    headingIcon: "local_fire_department",
-    headingRadius: "0px",
-    separatorChar: "//",
-    barStyle: "gradient",
-  },
-
-  // ── 3. Daily Burn ──
-  {
-    id: "ticker-daily-burn",
-    name: "Daily Burn",
-    description: "Sleek dark ticker with amber accent and sharp edges",
-    icon: "whatshot",
-    tags: ["dark", "sharp", "amber"],
-    defaultColors: {
-      accent: "#F59E0B",
-      accentText: "#000000",
-      barBg: "#1C1917",
-      barText: "#FEF3C7",
-      separator: "#F59E0B",
-    },
-    defaultHeading: "ALERT",
-    fontFamily: "'Montserrat', 'Helvetica Neue', sans-serif",
-    fontImport: "/fonts/google/google-fonts.css",
-    headingIcon: "notifications_active",
-    headingRadius: "2px",
-    separatorChar: "—",
-    barStyle: "solid",
-  },
-
   // ── 4. Minimal ──
   {
     id: "ticker-minimal",

@@ -41,7 +41,8 @@ const appSource = readFileSync(fileURLToPath(new URL("../../App.tsx", import.met
 describe("Bible save feedback", () => {
   it("wires the explicit Bible save actions to the shared feedback toast", () => {
     expect(dockBibleTabSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleDisplaySaved\"");
-    expect(dockThemeSettingsModalSource).toContain("onSaveFeedback?.(t(\"dock.feedback.bibleSettingsSaved\"");
+    expect(dockThemeSettingsModalSource).toContain("t(\"dock.feedback.bibleSettingsSaved\"");
+    expect(dockThemeSettingsModalSource).toContain("onSaveFeedback?.(feedbackMsg)");
     expect(backgroundPickerSource).toContain("onSaveFeedback?.(t(\"dock.feedback.backgroundStyleSaved\"");
   });
 });
@@ -52,7 +53,6 @@ describe("Quick edits affordance", () => {
     expect(dockBibleTabSource).toContain('onClick={() => openThemeSettings("text")}');
     expect(dockNotesTabSource).toContain("onClick={() => setShowThemeSettings(true)}");
     expect(dockWorshipTabSource).toContain("onClick={() => setShowThemeSettings(true)}");
-    expect(dockBibleTabSource).toContain("data-dock-close-overflow=\"true\"");
     expect(dockNotesTabSource).toContain("data-dock-close-overflow=\"true\"");
     expect(dockWorshipTabSource).toContain("data-dock-close-overflow=\"true\"");
   });
@@ -152,7 +152,7 @@ describe("Text Tab settings pipeline", () => {
 });
 
 describe("Background picker plan limits", () => {
-  const media = ["first", "second", "third", "fourth", "fifth"];
+  const media = ["first", "second", "third", "fourth", "fifth", "sixth"];
 
   it("shows only the current plan's image and video allowance", () => {
     const freeImageLimit = checkEntitlementSync("images", "free").limit;
@@ -160,10 +160,10 @@ describe("Background picker plan limits", () => {
     const basicImageLimit = checkEntitlementSync("images", "basic").limit;
     const growthVideoLimit = checkEntitlementSync("videos", "growth").limit;
 
-    expect(freeImageLimit).toBe(3);
-    expect(freeVideoLimit).toBe(2);
-    expect(limitBackgroundPickerAssets(media, freeImageLimit)).toEqual(media.slice(0, 3));
-    expect(limitBackgroundPickerAssets(media, freeVideoLimit)).toEqual(media.slice(0, 2));
+    expect(freeImageLimit).toBe(10);
+    expect(freeVideoLimit).toBe(5);
+    expect(limitBackgroundPickerAssets(media, freeImageLimit)).toEqual(media);
+    expect(limitBackgroundPickerAssets(media, freeVideoLimit)).toEqual(media.slice(0, 5));
     expect(limitBackgroundPickerAssets(media, basicImageLimit)).toEqual(media);
     expect(limitBackgroundPickerAssets(media, growthVideoLimit)).toEqual(media);
   });
@@ -1049,9 +1049,9 @@ describe("Active OBS Bible overlay wiring", () => {
 
   it("renders lower-third Bible content at the configured font size without unstable shrink loops", () => {
     expect(overlayHtml).toContain("function autoScaleLowerThirdContent()");
-    expect(overlayHtml).toContain("const baseTextSize = Math.max(16, Math.round(baseFontSize));");
+    expect(overlayHtml).toContain("const baseTextSize = Math.max(10, Math.round(baseFontSize));");
     expect(overlayHtml).toContain("ltVerseText.style.fontSize = `${baseTextSize}px`;");
-    expect(overlayHtml).toContain("const wp2 = s.lowerThirdWidthPreset || 'md'");
+    expect(overlayHtml).toContain("const wp2 = s.lowerThirdWidthPreset || 'full'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-max-width', isLowerThird ? 'none'");
     expect(overlayHtml).toContain("root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px')");
     expect(overlayHtml).toContain("max-width: var(--lt-text-max-width, 100%)");
@@ -1263,5 +1263,78 @@ describe("Active OBS Bible overlay wiring", () => {
     expect(backgroundPickerSource).toContain("window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh)");
     expect(dockBibleTabSource).toContain('allowedCategories={["bible", "general"]}');
     expect(dockWorshipTabSource).toContain('allowedCategories={["worship", "general"]}');
+  });
+
+  it("provides card position (left, center, right) and card width default in theme layout controls", () => {
+    expect(backgroundPickerSource).toContain("t('bgPicker.cardPosition', 'Card position')");
+    expect(backgroundPickerSource).toContain("t('bgPicker.positionCenter', 'Center')");
+    expect(backgroundPickerSource).toContain('currentWidth = quickSettings.lowerThirdWidthPreset ?? "md"');
+    expect(backgroundPickerSource).toContain('currentPos = quickSettings.lowerThirdPosition ?? "center"');
+    expect(backgroundPickerSource).toContain('if (prev.lowerThirdWidthPreset === "full" && (value === "left" || value === "right"))');
+    expect(backgroundPickerSource).toContain('nextPatch.lowerThirdWidthPreset = "xl"');
+  });
+});
+
+describe("Quick Settings modal redesign", () => {
+  it("removes text direction normal/inverted from Layout tab", () => {
+    const layoutSectionStart = backgroundPickerSource.indexOf('{/* Layout Tab */}');
+    const compareTabStart = backgroundPickerSource.indexOf('{/* Compare Tab */}', layoutSectionStart);
+    const layoutSectionSource = backgroundPickerSource.slice(layoutSectionStart, compareTabStart);
+
+    expect(layoutSectionSource).not.toContain("bgPicker.textDirection");
+    expect(layoutSectionSource).not.toContain("lowerThirdTextDirection");
+    expect(layoutSectionSource).not.toContain("textDirectionNormal");
+    expect(layoutSectionSource).not.toContain("textDirectionInverted");
+  });
+
+  it("defaults theme sync scope to all and shows the redesigned Apply changes to custom dropdown", () => {
+    expect(dockThemeSettingsModalSource).toContain('useState<"current" | "all" | "custom">("all")');
+    expect(dockThemeSettingsModalSource).toContain('setSyncScopeMode("all")');
+
+    const syncPanelStart = dockThemeSettingsModalSource.indexOf('className="dtb-studio__sync-panel"');
+    const syncPanelEnd = dockThemeSettingsModalSource.indexOf('className="dtb-studio__footer-actions"', syncPanelStart);
+    const syncPanelSource = dockThemeSettingsModalSource.slice(syncPanelStart, syncPanelEnd);
+
+    // Custom dropdown trigger & menu
+    expect(syncPanelSource).toContain('className="dtb-studio__sync-dropdown-container"');
+    expect(syncPanelSource).toContain('dtb-studio__sync-dropdown-trigger');
+    expect(syncPanelSource).toContain('dtb-studio__sync-dropdown-menu');
+
+    // Dropdown order: All Tabs & Scenes, Current Only, Custom...
+    const allIndex = syncPanelSource.indexOf('t("dock.allTabsScenes", "All Tabs & Scenes")');
+    const currentIndex = syncPanelSource.indexOf('t("dock.currentOnly", "Current Only")');
+    const customIndex = syncPanelSource.indexOf('t("dock.customScope", "Custom…")');
+
+    expect(allIndex).toBeGreaterThan(-1);
+    expect(currentIndex).toBeGreaterThan(allIndex);
+    expect(customIndex).toBeGreaterThan(currentIndex);
+
+    // Supporting hint for All
+    expect(syncPanelSource).toContain('t("dock.savingAllHint", "Applies to every supported tab and scene.")');
+
+    // Dynamic current hint
+    expect(syncPanelSource).toContain('t("dock.savingCurrentHint"');
+    expect(syncPanelSource).toContain('Applies only to');
+
+    // Custom section has Tabs (Bible, Worship, Notes) and Scenes (Full Screen, Lower-Third)
+    expect(syncPanelSource).toContain('t("dock.tabs", "Tabs")');
+    expect(syncPanelSource).toContain('t("dock.scenes", "Scenes")');
+    expect(syncPanelSource).toContain('t("common.clearAll", "Clear all")');
+    expect(syncPanelSource).toContain('t("common.selectAll", "Select all")');
+    // Media is NOT part of theme sync
+    expect(syncPanelSource).not.toContain('t("dock.media"');
+  });
+
+  it("renders top tabs horizontally and styles footer buttons with correct proportions", () => {
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker .dtb-bg-picker__tabs');
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker .dtb-bg-picker__tab--active');
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker .dtb-bg-picker__tab span');
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker .dtb-studio__footer-btn--reset');
+    expect(dockCssSource).toContain('.dtb-studio__modal--picker .dtb-studio__footer-btn--save');
+    expect(dockCssSource).toContain('flex: 0 0 32%');
+    expect(dockCssSource).toContain('flex: 1 1 auto');
+    expect(dockCssSource).toContain('.dtb-studio__sync-dropdown-container');
+    expect(dockCssSource).toContain('height: auto !important');
+    expect(dockCssSource).toContain('max-width: 390px');
   });
 });

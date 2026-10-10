@@ -12,6 +12,9 @@
  */
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useAdminControls } from "./hooks/useAdminControls";
+import { DOCK_ADMIN_CONTROLS_FILE } from "./dock/dockAdminControls";
+import { ADMIN_FEATURE_OFF_MESSAGES } from "./services/desktopConfig";
 import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
@@ -31,9 +34,8 @@ import UpdateCloseAppWarningModal from "./components/UpdateCloseAppWarningModal"
 import { updateDownloadManager } from "./services/updateDownloadManager";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ForceUpdateModal from "./components/ForceUpdateModal";
-import ForcedUpdateOverlay from "./components/ForcedUpdateOverlay";
+import ForcedUpdateGate from "./components/ForcedUpdateGate";
 import TrialModal, { hasTrialWelcomeBeenShown, markTrialWelcomeAsShown } from "./components/TrialModal";
-import TrialExpiredUpgradeModal from "./components/TrialExpiredUpgradeModal";
 import VerificationGate from "./components/VerificationGate";
 import { getDeviceId } from "./services/authService";
 import Icon from "./components/Icon";
@@ -41,8 +43,8 @@ import { checkForUpdate, getVersionAge, type UpdateCheckResult } from "./service
 import {
   fetchAppSettings,
   getForcedUpdateState,
-  shouldReshowOverlay,
-  recordOverlayDismiss,
+  publishForcedUpdateState,
+  refreshAppSettings,
   type ForcedUpdateState,
 } from "./services/forcedUpdateService";
 import { initOverlayUrl } from "./services/overlayUrl";
@@ -115,7 +117,9 @@ import AppErrorBoundary from "./components/AppErrorBoundary";
 import { safeLazy } from "./utils/safeLazy";
 import { getRecommendedPollingInterval } from "./services/performanceManager";
 
-const UPDATE_POLL_INTERVAL_MS = 30_000;
+// The startup check covers launch; afterwards a light background check is
+// enough (each check hits GitHub twice).
+const UPDATE_POLL_INTERVAL_MS = 20 * 60_000;
 const WORSHIP_DOCK_SAVE_POLL_INTERVAL_MS = 500;
 const DOCK_WORSHIP_PREFS_APP_KEY = "dock-worship-preferences";
 
@@ -133,6 +137,7 @@ const ProductionHomePage = safeLazy(() => import("./pages/ProductionHomePage"));
 const MultiViewGalleryPage = safeLazy(() => import("./pages/MultiViewGalleryPage"));
 const CountdownsPage = safeLazy(() => import("./pages/CountdownsPage"));
 const ProductionThemeSettingsPage = safeLazy(() => import("./pages/ProductionThemeSettingsPage"));
+const BroadcastGraphicsPage = safeLazy(() => import("./pages/BroadcastGraphicsPage"));
 const OnboardingPage = safeLazy(() => import("./pages/OnboardingPage"));
 const PresentationSetupPage = safeLazy(() => import("./pages/PresentationSetupPage"));
 const ServicePlannerPage = safeLazy(() => import("./pages/ServicePlannerPage"));
@@ -143,6 +148,7 @@ const CreditsPage = safeLazy(() => import("./pages/CreditsPage"));
 const TutorialsPage = safeLazy(() => import("./pages/TutorialsPage"));
 const TemplatesPage = safeLazy(() => import("./pages/TemplatesPage"));
 const DesignStudioPage = safeLazy(() => import("./pages/DesignStudioPage"));
+const BroadcastPage = safeLazy(() => import("./pages/BroadcastPage"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -377,19 +383,33 @@ function App() {
   // The desktop is the authority for local mobile access. Pairing tokens are
   // never enough on their own: the authenticated plan is pushed into the
   // companion server and checked again at the WebSocket handshake.
+  const adminControls = useAdminControls();
+  const mobileRemoteSwitchOn = adminControls.features.mobileRemote !== false;
+  // The OBS Dock can't read the config cache, so give it the off switches as a file.
+  useEffect(() => {
+    void safeTauriInvoke("save_dock_data", {
+      name: DOCK_ADMIN_CONTROLS_FILE,
+      data: JSON.stringify({ features: adminControls.features }),
+    }).catch(() => {
+      // Dock keeps every feature on if the file can't be written.
+    });
+  }, [adminControls.features]);
   useEffect(() => {
     const effectivePlan = getEffectivePlan(user);
     const entitlement = checkEntitlementSync("mobileControl", effectivePlan);
+    const allowed = entitlement.allowed && mobileRemoteSwitchOn;
     void safeTauriInvoke("set_mobile_access_policy", {
-      allowed: entitlement.allowed,
+      allowed,
       plan: effectivePlan,
-      reason: entitlement.allowed
+      reason: allowed
         ? undefined
-        : `${entitlement.reason ?? "Mobile control is not available on this plan."} Open MakeChurchEasy on your desktop to upgrade.`,
+        : !mobileRemoteSwitchOn
+          ? ADMIN_FEATURE_OFF_MESSAGES.mobileRemote
+          : `${entitlement.reason ?? "Mobile control is not available on this plan."} Open MakeChurchEasy on your desktop to upgrade.`,
     }).catch((error) => {
       console.warn("[MobileRemote] Could not sync access policy:", error);
     });
-  }, [user]);
+  }, [user, mobileRemoteSwitchOn]);
 
   useEffect(() => {
     automationRunner.start();
@@ -400,6 +420,7 @@ function App() {
   useEffect(() => {
     let unlistenClose: (() => void) | undefined;
     let unlistenVerseAiClose: (() => void) | undefined;
+    let unlistenUpdateClose: (() => void) | undefined;
     let isPrompting = false;
 
     const promptVerseAiCloseConfirmation = async () => {
@@ -425,6 +446,8 @@ function App() {
         }
 
         if (confirmed) {
+          // A downloaded update installs on the way out.
+          await updateDownloadManager.installOnQuit().catch(() => false);
           // Clean up Verse AI audio capture and WebSocket stream
           try {
             const { lmDockService } = await import("./services/lmDockService");
@@ -468,8 +491,48 @@ function App() {
       }
     };
 
+    const quitApp = async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("close_app_confirmed");
+      } catch {
+        try {
+          const { exit } = await import("@tauri-apps/plugin-process");
+          await exit(0);
+        } catch {
+          window.close();
+        }
+      }
+    };
+
+    // Rust holds the window open while an update is downloading or waiting
+    // to be installed, and asks us what to do.
+    const handleUpdateCloseRequested = async () => {
+      if (updateDownloadManager.isBusy()) {
+        updateDownloadManager.showAppCloseWarning();
+        return;
+      }
+      if (await isVerseAiBusy()) {
+        void promptVerseAiCloseConfirmation();
+        return;
+      }
+      if (updateDownloadManager.isReady()) {
+        await updateDownloadManager.installOnQuit().catch(() => false);
+      }
+      await quitApp();
+    };
+
     try {
       const currentWindow = getCurrentWindow();
+
+      currentWindow
+        .listen("update-close-requested", () => {
+          void handleUpdateCloseRequested();
+        })
+        .then((fn) => {
+          unlistenUpdateClose = fn;
+        })
+        .catch(() => undefined);
 
       // Listen for Rust backend close prevention event when Verse AI is streaming
       currentWindow
@@ -515,6 +578,7 @@ function App() {
     return () => {
       unlistenClose?.();
       unlistenVerseAiClose?.();
+      unlistenUpdateClose?.();
       window.removeEventListener("beforeunload", beforeUnloadHandler);
     };
   }, []);
@@ -964,6 +1028,11 @@ function App() {
     getForcedUpdateState(null)
   );
 
+  // Share the evaluated state with the top status strip.
+  useEffect(() => {
+    publishForcedUpdateState(forcedUpdateState);
+  }, [forcedUpdateState]);
+
   const startupDone = useRef(false);
   const updatePollBusyRef = useRef(false);
 
@@ -1082,6 +1151,11 @@ function App() {
         .catch(() => { });
     }).catch(() => { });
 
+    // Admin-controlled Broadcast Graphics: download the catalog when online, keep it for offline use.
+    import("./services/broadcastGraphicsCatalog")
+      .then(({ startBroadcastGraphicsCatalog }) => startBroadcastGraphicsCatalog())
+      .catch(() => { });
+
     // Preload the splash image itself + any critical resources
     const preload = new Promise<void>((resolve) => {
       const img = new Image();
@@ -1198,7 +1272,9 @@ function App() {
 
   // ── Server-driven forced update / emergency lock check ──
   const refetchForcedUpdate = useCallback(() => {
-    fetchAppSettings()
+    // refresh (not the 5-minute cached read) so a policy the admin just
+    // published reaches running apps within a minute.
+    refreshAppSettings()
       .then((settings) => {
         setForcedUpdateState(getForcedUpdateState(settings));
       })
@@ -1354,23 +1430,11 @@ function App() {
         <SplashScreen ready={resourcesReady} onDone={handleSplashDone} />
       )}
 
-      {/* 2. Server-driven forced update overlay (admin-controlled) — countdown or locked */}
-      {!splashVisible &&
-        licenseLockReason !== "forced_upgrade" &&
-        forcedUpdateState.active &&
-        (forcedUpdateState.blocked || shouldReshowOverlay(forcedUpdateState.hoursRemaining)) && (
-          <ForcedUpdateOverlay
-            state={forcedUpdateState}
-            onDismiss={
-              forcedUpdateState.blocked
-                ? undefined
-                : () => {
-                  recordOverlayDismiss(forcedUpdateState.hoursRemaining ?? 0);
-                  setForcedUpdateState((s) => ({ ...s, active: false }));
-                }
-            }
-          />
-        )}
+      {/* 2. Server-driven forced update modal (admin-controlled). Closable reminder
+          until the final 24 hours, then it cannot be closed. */}
+      {!splashVisible && licenseLockReason !== "forced_upgrade" && (
+        <ForcedUpdateGate state={forcedUpdateState} />
+      )}
 
       {/* 2b. Force update modal — blocks app when version is too old (age-based) */}
       {!splashVisible && !forcedUpdateState.active && updateResult?.available && versionAge.forceUpdate && (
@@ -1448,6 +1512,8 @@ function App() {
                                       <Route path="bible-library" element={<Navigate to="/resources?tab=bible" replace />} />
                                       <Route path="bible/translations" element={<Navigate to="/resources?tab=bible" replace />} />
                                       <Route path="production/themes" element={<ProductionThemeSettingsPage />} />
+                                      <Route path="broadcast-graphics" element={<BroadcastGraphicsPage />} />
+                                      <Route path="graphics" element={<Navigate to="/broadcast-graphics" replace />} />
                                       <Route path="settings" element={<MVSettings />} />
                                       <Route path="speech-to-scripture" element={<CreditsGuard><SpeechToScripturePage /></CreditsGuard>} />
                                       <Route path="transcribe" element={<Navigate to="/speech-to-scripture" replace />} />
@@ -1466,11 +1532,11 @@ function App() {
                                       <Route path="service-hub" element={<Navigate to="/" replace />} />
                                       <Route path="service-control-hub" element={<Navigate to="/" replace />} />
                                       <Route path="quick-merge" element={<Navigate to="/" replace />} />
-                                      <Route path="broadcast" element={<Navigate to="/" replace />} />
+                                      <Route path="broadcast" element={<BroadcastPage />} />
                                       <Route path="bible" element={<Navigate to="/settings" replace />} />
                                       <Route path="bible/*" element={<Navigate to="/settings" replace />} />
                                       <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />
-                                      <Route path="lower-thirds" element={<Navigate to="/production/themes" replace />} />
+                                      <Route path="lower-thirds" element={<Navigate to="/broadcast-graphics" replace />} />
                                       <Route path="scenes" element={<Navigate to="/settings" replace />} />
                                       <Route path="multiview" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
                                       <Route path="multiview/*" element={<FeatureGuard feature="multiview"><MVShell /></FeatureGuard>} />
@@ -1512,7 +1578,6 @@ function App() {
         />
       )}
 
-      {!splashVisible && <TrialExpiredUpgradeModal />}
 
       {globalMediaDragging && !splashVisible && (
         <div className="app-global-media-drop-overlay" aria-hidden="true">

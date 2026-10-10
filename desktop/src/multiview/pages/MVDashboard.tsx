@@ -342,7 +342,7 @@ export function MVDashboard() {
                 <div
                   className="mv-dash-template-preview"
                   style={{
-                    backgroundImage: `linear-gradient(135deg, ${template.accentColor}33 0%, var(--surface-dark) 100%)`,
+                    backgroundColor: "var(--surface-raised)",
                   }}
                 >
                   <div className="mv-dash-template-overlay" />

@@ -10,14 +10,15 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import {
-  checkForUpdate,
-  downloadAndInstallVerifiedUpdate,
-  type DownloadProgress,
-} from "../services/updateService";
-import type { Update } from "@tauri-apps/plugin-updater";
+import type { DownloadProgress } from "../services/updateService";
 import { exit } from "@tauri-apps/plugin-process";
-import type { ForcedUpdateState, LockType } from "../services/forcedUpdateService";
+import {
+  getTrustedNowMs,
+  installLatestUpdate,
+  openUpdateDownload,
+  type ForcedUpdateState,
+  type LockType,
+} from "../services/forcedUpdateService";
 import Icon from "./Icon";
 
 interface ForcedUpdateOverlayProps {
@@ -25,6 +26,8 @@ interface ForcedUpdateOverlayProps {
   onDismiss?: () => void;
   onRefresh?: () => void | Promise<void>;
   isDock?: boolean;
+  /** Last 24 hours of the countdown (still closable until the last 30 minutes). */
+  finalDay?: boolean;
 }
 
 type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "error";
@@ -34,16 +37,17 @@ type UpdateStatus = "prompt" | "downloading" | "installing" | "relaunching" | "e
 function formatCountdownPrecise(hours: number): string {
   if (hours <= 0) return "Update required now";
   if (hours >= 24) {
+    // floor, not round: rounding turned 11 days 23.6h into "11 days 24h".
     const d = Math.floor(hours / 24);
-    const h = Math.round(hours % 24);
+    const h = Math.floor(hours % 24);
     return `${d} day${d === 1 ? "" : "s"}${h > 0 ? ` ${h}h` : ""} remaining`;
   }
   if (hours >= 1) {
     const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
+    const m = Math.floor((hours - h) * 60);
     return `${h}h${m > 0 ? ` ${m}m` : ""} remaining`;
   }
-  const m = Math.max(1, Math.round(hours * 60));
+  const m = Math.max(1, Math.ceil(hours * 60));
   return `${m}m remaining`;
 }
 
@@ -67,7 +71,7 @@ function lockTypeIcon(lockType: LockType | null): string {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDock }: ForcedUpdateOverlayProps) {
+export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDock, finalDay = false }: ForcedUpdateOverlayProps) {
   const [status, setStatus] = useState<UpdateStatus>("prompt");
   const [progress, setProgress] = useState<DownloadProgress>({
     contentLength: 0,
@@ -100,21 +104,20 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
   }, [state.hoursRemaining]);
 
   // Local tick for smoother countdown between polls — compute from state prop, not localStorage
-  const showLiveCountdown = hoursRemaining !== null && hoursRemaining > 0 && !!state.startedAt;
+  const showLiveCountdown = hoursRemaining !== null && hoursRemaining > 0 && !!state.lockAt;
   useEffect(() => {
-    if (!showLiveCountdown || !state.startedAt || state.gracePeriodHours === null) return;
+    if (!showLiveCountdown || !state.lockAt) return;
 
-    const id = window.setInterval(() => {
-      // Recompute from the state prop (backed by server settings, not localStorage)
-      const startMs = new Date(state.startedAt!).getTime();
-      const endMs = startMs + state.gracePeriodHours! * 60 * 60 * 1000;
-      const remainingMs = endMs - Date.now();
-      const hrs = Math.max(0, remainingMs / (60 * 60 * 1000));
-      setHoursRemaining(hrs);
-    }, 30_000);
+    const tick = () => {
+      // Deadline comes from the server; compare against the server-corrected clock.
+      const remainingMs = new Date(state.lockAt!).getTime() - getTrustedNowMs();
+      setHoursRemaining(Math.max(0, remainingMs / (60 * 60 * 1000)));
+    };
+    tick();
+    const id = window.setInterval(tick, 30_000);
 
     return () => window.clearInterval(id);
-  }, [showLiveCountdown, state.startedAt, state.gracePeriodHours]);
+  }, [showLiveCountdown, state.lockAt]);
 
   const percentComplete =
     progress.contentLength > 0
@@ -124,8 +127,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
   const handleUpdate = useCallback(async () => {
     const isNativeTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (!isNativeTauri) {
-      const url = state.downloadUrl || "https://makechurcheazy.com/download";
-      window.open(url, "_blank", "noopener,noreferrer");
+      void openUpdateDownload(state.downloadUrl);
       return;
     }
 
@@ -134,23 +136,14 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
       setProgress({ contentLength: 0, downloaded: 0 });
       setErrorMsg("");
 
-      const result = await checkForUpdate();
-      const update = (result as any).update as Update | undefined;
-
-      await downloadAndInstallVerifiedUpdate(
-        update,
+      await installLatestUpdate(
         (p) => setProgress(p),
-        (s) => setStatus(s),
+        (st) => setStatus(st),
       );
     } catch (err: any) {
       console.error("[ForcedUpdate] Update failed:", err);
-      const fallbackUrl = state.downloadUrl || "https://makechurcheazy.com/download";
-      if (fallbackUrl) {
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
-        setStatus("prompt");
-        return;
-      }
-      setErrorMsg(err?.message || "Update failed. Please try again.");
+      // Stay in the app and say what went wrong; the user can try again.
+      setErrorMsg(err?.message || "The update could not be installed. Please try again.");
       setStatus("error");
     }
   }, [state.downloadUrl]);
@@ -243,7 +236,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name={isDock ? (isBlocked ? "lock" : lockTypeIcon(state.lockType)) : lockTypeIcon(state.lockType)} size={14} />
-            <span>{isDock ? (isBlocked ? "Dock Blocked" : lockTypeLabel(state.lockType)) : lockTypeLabel(state.lockType)}</span>
+            <span>{isDock ? (isBlocked ? "Dock Blocked" : lockTypeLabel(state.lockType)) : finalDay && !isBlocked && !isEmergency ? "Final day to update" : lockTypeLabel(state.lockType)}</span>
           </div>
           {showCountdown && (
             <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
@@ -350,6 +343,27 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
                   <span>
                     The app will be locked in {formatCountdownPrecise(hoursRemaining!)}.
                     Update before then to avoid disruption.
+                  </span>
+                </div>
+              )}
+
+              {!isDock && finalDay && !isBlocked && !isEmergency && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 6,
+                    background: "rgba(239, 68, 68, 0.1)",
+                    marginBottom: 16,
+                    fontSize: 13,
+                    color: "var(--error, #ef4444)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Icon name="error_outline" size={14} />
+                  <span>
+                    This is the last day. Update MakeChurchEasy now so you are not locked out.
                   </span>
                 </div>
               )}
@@ -469,6 +483,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
           }}
         >
           {isDock ? (
+            <>
             <button
               className="force-update-btn force-update-btn--primary"
               onClick={handleDockRefresh}
@@ -494,6 +509,28 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
               <Icon name="refresh" size={16} className={dockRefreshing ? "force-update-icon--spin" : ""} />
               <span>{dockRefreshing ? "Refreshing…" : "I Updated, Refresh"}</span>
             </button>
+            {/* Until the last 30 minutes the dock can be used; the reminder returns later. */}
+            {onDismiss && !isBlocked && (
+              <button
+                className="force-update-btn force-update-btn--secondary"
+                onClick={onDismiss}
+                style={{
+                  width: "100%",
+                  padding: "10px 16px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border, rgba(255,255,255,0.1))",
+                  background: "transparent",
+                  color: "var(--text-secondary)",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  cursor: "pointer",
+                }}
+                title="Close for now"
+              >
+                Close for now
+              </button>
+            )}
+            </>
           ) : (
             <>
               {/* Forced update actions */}

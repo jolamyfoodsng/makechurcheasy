@@ -242,7 +242,7 @@ function buildCustomLowerThirdPreviewDoc(theme: UnifiedTheme): string {
       ? "flex-end"
       : "flex-start";
   const baseWidth = Math.max(480, 1920 - (settings.safeArea || 40) * 2);
-  const scaledWidth = Math.round((baseWidth - (LT_WIDTH_REDUCTION[settings.lowerThirdWidthPreset || "full"] || 0)) * 0.35);
+  const scaledWidth = Math.round((baseWidth - (LT_WIDTH_REDUCTION[settings.lowerThirdWidthPreset || "md"] || 0)) * 0.35);
   const scaledOffset = (settings.lowerThirdOffsetX || 0) * 0.35;
 
   return `<!doctype html>

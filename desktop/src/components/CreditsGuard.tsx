@@ -235,7 +235,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 8,
     padding: "9px 20px",
     borderRadius: "var(--radius, 4px)",
-    background: "var(--primary, #2563eb)",
+    background: "var(--primary, #4f46e5)",
     border: "none",
     color: "#fff",
     fontSize: 13,

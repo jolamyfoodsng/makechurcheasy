@@ -1,4 +1,29 @@
-# MakeChurchEasy Release Highlights (v3.33.0)
+# MakeChurchEasy Release Highlights (v4.1.0)
+
+## 1. Multi-Stream Broadcasting
+- **Lead:** Send your OBS stream to YouTube, Facebook, Instagram, TikTok, Twitch, Kick, and custom RTMP destinations. Save profiles for services or speakers, sync them with OBS, check destination status, and track monthly multi-stream hours.
+
+## 2. Upgraded Lower Thirds & Tickers
+- **Lead:** Refresh your broadcast with animated speaker lower thirds and more ways to style and manage tickers. Preview and customize graphics, then send them to OBS.
+
+## 3. A Smoother Voice to Scripture
+- **Lead:** Improved live transcription and Bible-reference detection let you queue detected verses in sequence while the next verse is prepared.
+
+## 4. Regional Pricing & 30-Day Trials
+- **Lead:** Compare plans and features on the public pricing page with region-specific pricing. New signups receive a 30-day free trial.
+
+## 5. More Reliable Signups & Branded Sharing
+- **Lead:** Signup and verification updates retry synchronization after temporary service interruptions, and shared links now show branded preview artwork.
+
+## 6. Passkey Sign-In & Account Security
+- **Lead:** Sign in with passkeys and manage them from account security settings for a simpler, more secure way to access your account.
+
+## 7. Flexible Offers & Campaigns
+- **Lead:** Admins can build discount offers and signup journeys, preview who qualifies, and manage campaigns from the dashboard.
+
+---
+
+## Previous Release Highlights (v3.33.0)
 
 ## 1. Service Schedule & Projection History
 - **All-in-One Service Queue:** Pre-build and organize your Sunday order of service. Queue Bible passages, worship songs, and sermon notes in one persistent side drawer right next to your active modules.
@@ -31,7 +56,6 @@
 ## 5. Web Dashboard & Community
 - **Medium-Style Church Media Blog:** Read tips, workflows, and updates directly from the web dashboard with an article reader and social sharing.
 - **Cleaner Sign-Up & Login Flows:** Streamlined login and registration pages with seamless referral and 2FA protection.
-
 ---
 
 ## Previous Release Highlights (v3.32.0)

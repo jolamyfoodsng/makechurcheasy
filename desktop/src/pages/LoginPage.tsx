@@ -265,7 +265,7 @@ export default function LoginPage() {
         minHeight: "100vh",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0a0a0f",
+        background: "#0c0e17",
         padding: "24px",
       }}
     >
@@ -293,7 +293,8 @@ export default function LoginPage() {
               {t("login.maintenance.title")}
             </h1>
             <p style={{ fontSize: "16px", color: "#a0a0b0", lineHeight: 1.6 }}>
-              {t("login.maintenance.message")}
+              {(readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG).security.maintenanceMessage?.trim() ||
+                t("login.maintenance.message")}
             </p>
           </div>
         </div>
@@ -346,12 +347,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "4px",
-                border: "1px solid #2a2a3a",
-                background: "#16161f",
+                borderRadius: "6px",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                background: "#1e293b",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f0f0f5",
+                color: "#f8fafc",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -380,9 +381,9 @@ export default function LoginPage() {
                 margin: "4px 0",
               }}
             >
-              <div style={{ flex: 1, height: "1px", background: "#2a2a3a" }} />
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
               <span style={{ fontSize: "11px", color: "#6a6a7a" }}>or</span>
-              <div style={{ flex: 1, height: "1px", background: "#2a2a3a" }} />
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
             <button
@@ -403,12 +404,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "4px",
-                border: "1px solid #2a2a3a",
-                background: "#16161f",
+                borderRadius: "6px",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                background: "#1e293b",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f0f0f5",
+                color: "#f8fafc",
                 cursor: "pointer",
               }}
               title="Continue">
@@ -423,9 +424,9 @@ export default function LoginPage() {
                 margin: "4px 0",
               }}
             >
-              <div style={{ flex: 1, height: "1px", background: "#2a2a3a" }} />
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
               <span style={{ fontSize: "11px", color: "#6a6a7a" }}>or</span>
-              <div style={{ flex: 1, height: "1px", background: "#2a2a3a" }} />
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
             <button
@@ -436,12 +437,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "4px",
-                border: "1px solid #2a2a3a",
-                background: "#16161f",
+                borderRadius: "6px",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                background: "#1e293b",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f0f0f5",
+                color: "#f8fafc",
                 cursor: "pointer",
               }}
               title="Enter Pairing Code">
@@ -492,9 +493,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "4px",
+                    borderRadius: "6px",
                     border: "none",
-                    background: "#1D4ED8",
+                    background: "#4F46E5",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -521,7 +522,7 @@ export default function LoginPage() {
                 fontSize: "32px",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: "#1D4ED8",
+                color: "#818cf8",
               }}
             >
               {displayPairingCode}
@@ -563,10 +564,10 @@ export default function LoginPage() {
                       onClick={() => openPairingInBrowser(code)}
                       style={{
                         flex: 1,
-                        height: "32px",
-                        borderRadius: "4px",
-                        border: "1px solid #1D4ED8",
-                        background: "#1D4ED8",
+                        height: "36px",
+                        borderRadius: "6px",
+                        border: "1px solid #4F46E5",
+                        background: "#4F46E5",
                         fontSize: "12px",
                         fontWeight: 600,
                         color: "#fff",
@@ -585,13 +586,13 @@ export default function LoginPage() {
                       }}
                       style={{
                         flex: 1,
-                        height: "32px",
-                        borderRadius: "4px",
-                        border: "1px solid #2a2a3a",
-                        background: copied ? "#22c55e" : "#16161f",
+                        height: "36px",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        background: copied ? "#22c55e" : "#1e293b",
                         fontSize: "12px",
                         fontWeight: 500,
-                        color: copied ? "#fff" : "#9898a8",
+                        color: copied ? "#fff" : "#f8fafc",
                         cursor: "pointer",
                         transition: "all 0.15s",
                       }}
@@ -611,9 +612,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "4px",
+                    borderRadius: "6px",
                     border: "none",
-                    background: "#1D4ED8",
+                    background: "#4F46E5",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -761,9 +762,9 @@ export default function LoginPage() {
                 style={{
                   flex: 2,
                   height: "38px",
-                  borderRadius: "4px",
+                  borderRadius: "6px",
                   border: "none",
-                  background: redeeming ? "#3a3a5a" : "#1D4ED8",
+                  background: redeeming ? "#3a3a5a" : "#4F46E5",
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "#fff",
@@ -816,9 +817,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "4px",
+                    borderRadius: "6px",
                     border: "none",
-                    background: "#1D4ED8",
+                    background: "#4F46E5",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -927,9 +928,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "4px",
+                    borderRadius: "6px",
                     border: "none",
-                    background: "#1D4ED8",
+                    background: "#4F46E5",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -955,8 +956,8 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "38px",
-                borderRadius: "4px",
-                border: "1px solid #2a2a3a",
+                borderRadius: "6px",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
                 background: "transparent",
                 fontSize: "13px",
                 fontWeight: 500,
@@ -1008,9 +1009,9 @@ export default function LoginPage() {
             style={{
               width: "100%",
               maxWidth: "380px",
-              background: "#16161f",
+              background: "#131724",
               borderRadius: "8px",
-              border: "1px solid #2a2a3a",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
               padding: "28px",
               boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
             }}
@@ -1091,8 +1092,8 @@ export default function LoginPage() {
               gap: "12px",
               padding: "12px 16px",
               borderRadius: "8px",
-              background: "#16161f",
-              border: "1px solid #2a2a3a",
+              background: "#131724",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
               boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             }}
           >
@@ -1101,7 +1102,7 @@ export default function LoginPage() {
                 width: "32px",
                 height: "32px",
                 borderRadius: "50%",
-                background: "#1D4ED8",
+                background: "#4F46E5",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

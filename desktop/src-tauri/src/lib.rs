@@ -328,7 +328,36 @@ pub(crate) struct PresentationStateEnvelope {
     pub(crate) session_id: String,
     pub(crate) fullscreen: Option<serde_json::Value>,
     pub(crate) lower_third: Option<serde_json::Value>,
+    /// Broadcast graphic over everything else ({ url, version }). Kept when a
+    /// publish leaves it out, so Bible / media / worship don't clear it.
+    #[serde(default)]
+    pub(crate) graphic: Option<serde_json::Value>,
     pub(crate) updated_at: u64,
+}
+
+/// Merge a published presentation state with the previous one for the session:
+/// - no "graphic" key in the body -> keep the previous graphic;
+/// - "graphicOnly": true -> keep the previous fullscreen / lower-third content.
+pub(crate) fn merge_presentation_state(
+    raw_body: &str,
+    payload: &mut PresentationStateEnvelope,
+    previous: Option<&PresentationStateEnvelope>,
+) {
+    let Some(previous) = previous else {
+        return;
+    };
+    let raw: serde_json::Value = serde_json::from_str(raw_body).unwrap_or(serde_json::Value::Null);
+    let graphic_only = raw
+        .get("graphicOnly")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if graphic_only {
+        payload.fullscreen = previous.fullscreen.clone();
+        payload.lower_third = previous.lower_third.clone();
+    }
+    if raw.get("graphic").is_none() {
+        payload.graphic = previous.graphic.clone();
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -507,7 +536,8 @@ fn local_share_fingerprint(token: &str) -> String {
 }
 
 fn local_share_device_info(host: Option<String>) -> Result<LocalShareDeviceInfo, String> {
-    let transfer_token = tauri::async_runtime::block_on(mobile_companion::get_or_create_pairing_token());
+    let transfer_token =
+        tauri::async_runtime::block_on(mobile_companion::get_or_create_pairing_token());
     let host = host
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string()));
@@ -567,7 +597,10 @@ fn mime_type_for_file_name(file_name: &str) -> String {
     .to_string()
 }
 
-fn local_share_file_metadata(file_path: &Path, id: String) -> Result<LocalShareFileMetadata, String> {
+fn local_share_file_metadata(
+    file_path: &Path,
+    id: String,
+) -> Result<LocalShareFileMetadata, String> {
     let metadata = fs::metadata(file_path)
         .map_err(|error| format!("Could not read file {}: {error}", file_path.display()))?;
     if !metadata.is_file() {
@@ -577,7 +610,12 @@ fn local_share_file_metadata(file_path: &Path, id: String) -> Result<LocalShareF
     let file_name = file_path
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| format!("Could not determine the file name for {}", file_path.display()))?
+        .ok_or_else(|| {
+            format!(
+                "Could not determine the file name for {}",
+                file_path.display()
+            )
+        })?
         .to_string();
 
     Ok(LocalShareFileMetadata {
@@ -653,7 +691,10 @@ fn local_send_storage_path(
     let initial_path = downloads_dir.join(&stored_name);
     if initial_path.exists() {
         let path = Path::new(&safe_name);
-        let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or("file");
+        let stem = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("file");
         let extension = path.extension().and_then(|value| value.to_str());
         stored_name = match extension {
             Some(extension) => format!("{stem}_{transfer_id}.{extension}"),
@@ -714,7 +755,11 @@ fn read_received_file_records() -> Result<Vec<ReceivedFileRecord>, String> {
                 .ok()
                 .and_then(|content| serde_json::from_str::<ReceivedFileRecord>(&content).ok())
         })
-        .filter(|record| received_file_source_path(record).map(|path| path.is_file()).unwrap_or(false))
+        .filter(|record| {
+            received_file_source_path(record)
+                .map(|path| path.is_file())
+                .unwrap_or(false)
+        })
         .collect::<Vec<_>>();
 
     records.sort_by(|left, right| right.received_at.cmp(&left.received_at));
@@ -750,7 +795,10 @@ fn unique_folder_target(folder: &Path, file_name: &str) -> Result<PathBuf, Strin
     }
 
     let path = Path::new(&safe_name);
-    let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or("file");
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("file");
     let extension = path.extension().and_then(|value| value.to_str());
     let suffix = uuid::Uuid::new_v4().simple().to_string();
     let candidate = match extension {
@@ -1089,9 +1137,7 @@ fn overlay_session_value() -> Option<serde_json::Value> {
         .and_then(serde_json::Value::as_str)
         .map(|device_id| !device_id.trim().is_empty())
         .unwrap_or(false);
-    let expires_at = value
-        .get("expiresAt")
-        .and_then(serde_json::Value::as_i64)?;
+    let expires_at = value.get("expiresAt").and_then(serde_json::Value::as_i64)?;
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -1598,7 +1644,11 @@ async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, Str
         let local_fingerprint = local_share_device_info(Some(local_ip.clone()))?.fingerprint;
         let port = {
             let current = OVERLAY_PORT.load(Ordering::Relaxed);
-            if current == 0 { 45678 } else { current }
+            if current == 0 {
+                45678
+            } else {
+                current
+            }
         };
 
         let client = reqwest::blocking::Client::builder()
@@ -1628,7 +1678,9 @@ async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, Str
                     let host = format!("{}.{}", subnet, suffix);
                     // Fast TCP pre-check (35ms) before firing HTTP
                     if host_is_reachable(&host, port, 35) {
-                        if let Some(device) = probe_local_share_device(&client, &host, port, &local_fingerprint) {
+                        if let Some(device) =
+                            probe_local_share_device(&client, &host, port, &local_fingerprint)
+                        {
                             let _ = tx.send(device);
                         }
                     }
@@ -1653,7 +1705,12 @@ async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, Str
 fn share_request_error(status: reqwest::StatusCode, body: &str) -> String {
     let message = serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|value| value.get("error").and_then(|error| error.as_str()).map(str::to_string))
+        .and_then(|value| {
+            value
+                .get("error")
+                .and_then(|error| error.as_str())
+                .map(str::to_string)
+        })
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| body.trim().to_string());
     if message.is_empty() {
@@ -1720,14 +1777,21 @@ fn send_local_share_files(
             return Err(format!("{} is not a file", path.display()));
         }
         if metadata.len() > LOCAL_SEND_MAX_FILE_BYTES {
-            return Err(format!("{} is larger than the 4 GB transfer limit", path.display()));
+            return Err(format!(
+                "{} is larger than the 4 GB transfer limit",
+                path.display()
+            ));
         }
 
         let file_name = input
             .file_name
             .clone()
             .filter(|value| !value.trim().is_empty())
-            .or_else(|| path.file_name().and_then(|value| value.to_str()).map(str::to_string))
+            .or_else(|| {
+                path.file_name()
+                    .and_then(|value| value.to_str())
+                    .map(str::to_string)
+            })
             .ok_or_else(|| format!("Could not determine the file name for {}", path.display()))?;
         let file_id = format!("share-{}-{}", index, uuid::Uuid::new_v4().simple());
         let file_type = input
@@ -1786,8 +1850,10 @@ fn send_local_share_files(
         return Err(share_request_error(prepare_status, &prepare_body));
     }
 
-    let prepare_json = serde_json::from_str::<serde_json::Value>(&prepare_body)
-        .map_err(|error| format!("The selected computer returned invalid transfer metadata: {error}"))?;
+    let prepare_json =
+        serde_json::from_str::<serde_json::Value>(&prepare_body).map_err(|error| {
+            format!("The selected computer returned invalid transfer metadata: {error}")
+        })?;
     let session_id = prepare_json
         .get("sessionId")
         .and_then(|value| value.as_str())
@@ -1847,10 +1913,16 @@ fn send_local_share_files(
         let upload_body = upload_response.text().unwrap_or_default();
         if !upload_status.is_success() {
             let _ = client
-                .post(format!("{base_url}/api/localsend/v2/cancel?sessionId={}", urlencoding::encode(session_id)))
+                .post(format!(
+                    "{base_url}/api/localsend/v2/cancel?sessionId={}",
+                    urlencoding::encode(session_id)
+                ))
                 .header("X-Device-Token", peer_token.trim())
                 .send();
-            return Err(format!("Could not send {file_name}: {}", share_request_error(upload_status, &upload_body)));
+            return Err(format!(
+                "Could not send {file_name}: {}",
+                share_request_error(upload_status, &upload_body)
+            ));
         }
 
         completed_files += 1;
@@ -1926,7 +1998,10 @@ fn save_received_file_to_mce_internal(
 ) -> Result<ReceivedFileActionResult, String> {
     let record = find_received_file(pending_id)?;
     if !local_send_mce_file_supported(&record.file_name, &record.file_type) {
-        return Err("This file type cannot be added to the MCE Media library. Use Save to folder instead.".to_string());
+        return Err(
+            "This file type cannot be added to the MCE Media library. Use Save to folder instead."
+                .to_string(),
+        );
     }
 
     let uploads_dir = app_dir()?.join("uploads");
@@ -1952,9 +2027,7 @@ fn save_received_file_to_mce_internal(
 }
 
 #[tauri::command]
-fn save_received_file_to_mce(
-    pending_id: String,
-) -> Result<ReceivedFileActionResult, String> {
+fn save_received_file_to_mce(pending_id: String) -> Result<ReceivedFileActionResult, String> {
     save_received_file_to_mce_internal(&pending_id)
 }
 
@@ -2128,11 +2201,9 @@ fn get_overlay_port() -> u16 {
 /// Return this desktop's LAN identity for the Media sharing surface.
 #[tauri::command]
 async fn get_local_share_info() -> Result<LocalShareDeviceInfo, String> {
-    tokio::task::spawn_blocking(move || {
-        local_share_device_info(None)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || local_share_device_info(None))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn get_local_ip_for_target(target_host: Option<&str>) -> Option<String> {
@@ -3639,7 +3710,10 @@ fn read_easyworship_db_folder(folder_path: String) -> Result<Vec<EasyWorshipRawR
     let conn = rusqlite::Connection::open(&songs_path)
         .map_err(|e| format!("Failed to open Songs.db: {}", e))?;
 
-    let attach_sql = format!("ATTACH DATABASE '{}' AS words_db;", words_path.to_string_lossy().replace("'", "''"));
+    let attach_sql = format!(
+        "ATTACH DATABASE '{}' AS words_db;",
+        words_path.to_string_lossy().replace("'", "''")
+    );
     conn.execute(&attach_sql, [])
         .map_err(|e| format!("Failed to attach SongWords.db: {}", e))?;
 
@@ -5237,7 +5311,10 @@ fn kill_process_on_port(port: u16) {
             for line in pids_str.lines() {
                 if let Ok(pid) = line.trim().parse::<u32>() {
                     if pid != current_pid && pid > 0 {
-                        eprintln!("[Overlay Server] Killing stale process {} holding port {}", pid, port);
+                        eprintln!(
+                            "[Overlay Server] Killing stale process {} holding port {}",
+                            pid, port
+                        );
                         let _ = std::process::Command::new("kill")
                             .args(["-9", &pid.to_string()])
                             .output();
@@ -5260,10 +5337,15 @@ fn is_overlay_server_already_running(port: u16) -> bool {
     let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() else {
         return false;
     };
-    if let Ok(mut stream) = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(400)) {
+    if let Ok(mut stream) =
+        std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(400))
+    {
         let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(400)));
         let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(400)));
-        let req = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", addr_str);
+        let req = format!(
+            "GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+            addr_str
+        );
         if std::io::Write::write_all(&mut stream, req.as_bytes()).is_ok() {
             let mut response = Vec::new();
             let _ = std::io::Read::read_to_end(&mut stream, &mut response);
@@ -5313,7 +5395,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 } else {
                     eprintln!(
                         "[Overlay Server] Port {} bind failed after {} retries: {}",
-                        CANONICAL_OVERLAY_PORT, attempt + 1, e
+                        CANONICAL_OVERLAY_PORT,
+                        attempt + 1,
+                        e
                     );
                 }
             }
@@ -5324,7 +5408,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         Some(listener) => match tiny_http::Server::from_listener(listener, None) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("[Overlay Server] Failed to initialize tiny_http from listener: {}", e);
+                eprintln!(
+                    "[Overlay Server] Failed to initialize tiny_http from listener: {}",
+                    e
+                );
                 OVERLAY_PORT.store(CANONICAL_OVERLAY_PORT, Ordering::Relaxed);
                 return CANONICAL_OVERLAY_PORT;
             }
@@ -5414,15 +5501,23 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let info = local_share_device_info(None);
                 let response = match info {
                     Ok(info) => tiny_http::Response::from_string(
-                        serde_json::to_string(&info).unwrap_or_else(|_| r#"{"error":"Could not serialize device info"}"#.to_string()),
+                        serde_json::to_string(&info).unwrap_or_else(|_| {
+                            r#"{"error":"Could not serialize device info"}"#.to_string()
+                        }),
                     )
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                     Err(error) => tiny_http::Response::from_string(
                         serde_json::json!({ "error": error }).to_string(),
                     )
                     .with_status_code(500)
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                 };
                 let _ = request.respond(response);
@@ -5431,20 +5526,29 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
             // Accept the standard LocalSend registration shape as a friendly
             // compatibility path for clients that probe this desktop.
-            if clean == "api/localsend/v2/register" && request.method() == &tiny_http::Method::Post {
+            if clean == "api/localsend/v2/register" && request.method() == &tiny_http::Method::Post
+            {
                 let mut ignored_body = String::new();
                 let _ = request.as_reader().read_to_string(&mut ignored_body);
                 let response = match local_share_device_info(None) {
                     Ok(info) => tiny_http::Response::from_string(
-                        serde_json::to_string(&info).unwrap_or_else(|_| r#"{"error":"Could not serialize device info"}"#.to_string()),
+                        serde_json::to_string(&info).unwrap_or_else(|_| {
+                            r#"{"error":"Could not serialize device info"}"#.to_string()
+                        }),
                     )
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                     Err(error) => tiny_http::Response::from_string(
                         serde_json::json!({ "error": error }).to_string(),
                     )
                     .with_status_code(500)
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                 };
                 let _ = request.respond(response);
@@ -5458,7 +5562,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let records = read_received_file_records().unwrap_or_default();
                 let response = serde_json::json!({ "files": records });
                 let resp = tiny_http::Response::from_string(response.to_string())
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
                 let _ = request.respond(resp);
                 continue;
@@ -5473,7 +5580,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             serde_json::json!({ "error": error }).to_string(),
                         )
                         .with_status_code(404)
-                        .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                        .with_header(overlay_header(
+                            "Content-Type",
+                            "application/json; charset=utf-8",
+                        ))
                         .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
                         let _ = request.respond(resp);
                         continue;
@@ -5524,15 +5634,23 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let pending_id = local_send_query_value(&url_path, "pendingId").unwrap_or_default();
                 let response = match save_received_file_to_mce_internal(&pending_id) {
                     Ok(result) => tiny_http::Response::from_string(
-                        serde_json::to_string(&result).unwrap_or_else(|_| r#"{"error":"Could not serialize result"}"#.to_string()),
+                        serde_json::to_string(&result).unwrap_or_else(|_| {
+                            r#"{"error":"Could not serialize result"}"#.to_string()
+                        }),
                     )
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                     Err(error) => tiny_http::Response::from_string(
                         serde_json::json!({ "error": error }).to_string(),
                     )
                     .with_status_code(400)
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*")),
                 };
                 let _ = request.respond(response);
@@ -5541,14 +5659,19 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
             if clean == "api/receiver/complete" && request.method() == &tiny_http::Method::Post {
                 let pending_id = local_send_query_value(&url_path, "pendingId").unwrap_or_default();
-                let response = match find_received_file(&pending_id).and_then(|record| remove_received_file(&record)) {
+                let response = match find_received_file(&pending_id)
+                    .and_then(|record| remove_received_file(&record))
+                {
                     Ok(()) => tiny_http::Response::from_string(r#"{"ok":true}"#),
                     Err(error) => tiny_http::Response::from_string(
                         serde_json::json!({ "error": error }).to_string(),
                     )
                     .with_status_code(400),
                 }
-                .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                .with_header(overlay_header(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                ))
                 .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
                 let _ = request.respond(response);
                 continue;
@@ -5585,18 +5708,22 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 if !local_send_pairing_token_matches(&request) {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Invalid device token"}"#)
-                        .with_status_code(403)
-                        .with_header(cors());
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"Invalid device token"}"#)
+                            .with_status_code(403)
+                            .with_header(cors());
                     let _ = request.respond(resp);
                     continue;
                 }
 
                 let mut body = String::new();
-                if request.as_reader().read_to_string(&mut body).is_err() || body.trim().is_empty() {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Upload metadata is required"}"#)
-                        .with_status_code(400)
-                        .with_header(cors());
+                if request.as_reader().read_to_string(&mut body).is_err() || body.trim().is_empty()
+                {
+                    let resp = tiny_http::Response::from_string(
+                        r#"{"error":"Upload metadata is required"}"#,
+                    )
+                    .with_status_code(400)
+                    .with_header(cors());
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -5604,9 +5731,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let payload = match serde_json::from_str::<serde_json::Value>(&body) {
                     Ok(value) => value,
                     Err(_) => {
-                        let resp = tiny_http::Response::from_string(r#"{"error":"Invalid upload metadata"}"#)
-                            .with_status_code(400)
-                            .with_header(cors());
+                        let resp = tiny_http::Response::from_string(
+                            r#"{"error":"Invalid upload metadata"}"#,
+                        )
+                        .with_status_code(400)
+                        .with_header(cors());
                         let _ = request.respond(resp);
                         continue;
                     }
@@ -5681,7 +5810,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         .and_then(|value| value.as_str())
                         .unwrap_or("application/octet-stream")
                         .to_string();
-                    if destination == "mce" && !local_send_mce_file_supported(&file_name, &file_type) {
+                    if destination == "mce"
+                        && !local_send_mce_file_supported(&file_name, &file_type)
+                    {
                         rejected = Some(format!(
                             "{} is not an MCE library file. Use Save to laptop for this type.",
                             file_name
@@ -5720,7 +5851,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 if let Ok(mut sessions) = local_send_sessions.lock() {
-                    sessions.retain(|_, session| session.created_at.elapsed() < Duration::from_secs(3600));
+                    sessions.retain(|_, session| {
+                        session.created_at.elapsed() < Duration::from_secs(3600)
+                    });
                     sessions.insert(
                         session_id.clone(),
                         LocalSendUploadSession {
@@ -5736,7 +5869,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     "destination": destination,
                 });
                 let resp = tiny_http::Response::from_string(response.to_string())
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(cors());
                 let _ = request.respond(resp);
                 continue;
@@ -5762,9 +5898,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 if request.method() != &tiny_http::Method::Post
                     || !local_send_pairing_token_matches(&request)
                 {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Invalid upload request"}"#)
-                        .with_status_code(403)
-                        .with_header(cors());
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"Invalid upload request"}"#)
+                            .with_status_code(403)
+                            .with_header(cors());
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -5772,38 +5909,43 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let session_id = local_send_query_value(&url_path, "sessionId").unwrap_or_default();
                 let file_id = local_send_query_value(&url_path, "fileId").unwrap_or_default();
                 let transfer_token = local_send_query_value(&url_path, "token").unwrap_or_default();
-                let file = local_send_sessions
-                    .lock()
-                    .ok()
-                    .and_then(|sessions| sessions.get(&session_id).and_then(|session| session.files.get(&file_id)).cloned());
+                let file = local_send_sessions.lock().ok().and_then(|sessions| {
+                    sessions
+                        .get(&session_id)
+                        .and_then(|session| session.files.get(&file_id))
+                        .cloned()
+                });
 
                 let Some(file) = file else {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Upload session not found"}"#)
-                        .with_status_code(403)
-                        .with_header(cors());
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"Upload session not found"}"#)
+                            .with_status_code(403)
+                            .with_header(cors());
                     let _ = request.respond(resp);
                     continue;
                 };
                 if transfer_token != file.token {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Invalid file token"}"#)
-                        .with_status_code(403)
-                        .with_header(cors());
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"Invalid file token"}"#)
+                            .with_status_code(403)
+                            .with_header(cors());
                     let _ = request.respond(resp);
                     continue;
                 }
 
-                let (destination_path, stored_name, pending_id) = match local_send_storage_path(&file.destination, &file.file_name) {
-                    Ok(path) => path,
-                    Err(error) => {
-                        let resp = tiny_http::Response::from_string(
-                            serde_json::json!({ "error": error }).to_string(),
-                        )
-                        .with_status_code(500)
-                        .with_header(cors());
-                        let _ = request.respond(resp);
-                        continue;
-                    }
-                };
+                let (destination_path, stored_name, pending_id) =
+                    match local_send_storage_path(&file.destination, &file.file_name) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            let resp = tiny_http::Response::from_string(
+                                serde_json::json!({ "error": error }).to_string(),
+                            )
+                            .with_status_code(500)
+                            .with_header(cors());
+                            let _ = request.respond(resp);
+                            continue;
+                        }
+                    };
                 let mut output = match File::create(&destination_path) {
                     Ok(file) => file,
                     Err(error) => {
@@ -5820,28 +5962,29 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let mut hasher = Sha256::new();
                 let mut total = 0_u64;
                 let mut too_large = false;
-                let stream_result: Result<(), String> = (|| {
-                    let mut buffer = [0_u8; 64 * 1024];
-                    loop {
-                        let count = request
-                            .as_reader()
-                            .read(&mut buffer)
-                            .map_err(|error| format!("Could not read uploaded file: {error}"))?;
-                        if count == 0 {
-                            break;
+                let stream_result: Result<(), String> =
+                    (|| {
+                        let mut buffer = [0_u8; 64 * 1024];
+                        loop {
+                            let count = request.as_reader().read(&mut buffer).map_err(|error| {
+                                format!("Could not read uploaded file: {error}")
+                            })?;
+                            if count == 0 {
+                                break;
+                            }
+                            total += count as u64;
+                            if total > LOCAL_SEND_MAX_FILE_BYTES {
+                                too_large = true;
+                                return Err("Uploaded file is larger than the 4 GB transfer limit"
+                                    .to_string());
+                            }
+                            output.write_all(&buffer[..count]).map_err(|error| {
+                                format!("Could not save uploaded file: {error}")
+                            })?;
+                            hasher.update(&buffer[..count]);
                         }
-                        total += count as u64;
-                        if total > LOCAL_SEND_MAX_FILE_BYTES {
-                            too_large = true;
-                            return Err("Uploaded file is larger than the 4 GB transfer limit".to_string());
-                        }
-                        output
-                            .write_all(&buffer[..count])
-                            .map_err(|error| format!("Could not save uploaded file: {error}"))?;
-                        hasher.update(&buffer[..count]);
-                    }
-                    Ok(())
-                })();
+                        Ok(())
+                    })();
 
                 if let Err(error) = stream_result {
                     let _ = fs::remove_file(&destination_path);
@@ -5856,7 +5999,12 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 let checksum = format!("{:x}", hasher.finalize());
-                if total != file.size || file.sha256.as_deref().is_some_and(|expected| expected != checksum) {
+                if total != file.size
+                    || file
+                        .sha256
+                        .as_deref()
+                        .is_some_and(|expected| expected != checksum)
+                {
                     let _ = fs::remove_file(&destination_path);
                     let resp = tiny_http::Response::from_string(
                         r#"{"error":"Uploaded file failed size or checksum validation"}"#,
@@ -5952,7 +6100,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     "sha256": checksum,
                 });
                 let resp = tiny_http::Response::from_string(response.to_string())
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(cors());
                 let _ = request.respond(resp);
                 continue;
@@ -5960,9 +6111,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
             if clean == "api/localsend/v2/cancel" && request.method() == &tiny_http::Method::Post {
                 if !local_send_pairing_token_matches(&request) {
-                    let resp = tiny_http::Response::from_string(r#"{"error":"Invalid device token"}"#)
-                        .with_status_code(403)
-                        .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                    let resp =
+                        tiny_http::Response::from_string(r#"{"error":"Invalid device token"}"#)
+                            .with_status_code(403)
+                            .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -5972,7 +6124,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     }
                 }
                 let resp = tiny_http::Response::from_string(r#"{"ok":true}"#)
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
                 let _ = request.respond(resp);
                 continue;
@@ -6124,10 +6279,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             }
 
             if clean == "api/save-to-downloads" && request.method() == &tiny_http::Method::Post {
-                let is_json = request
-                    .headers()
-                    .iter()
-                    .any(|h| h.field.equiv("Content-Type") && h.value.as_str().contains("application/json"));
+                let is_json = request.headers().iter().any(|h| {
+                    h.field.equiv("Content-Type") && h.value.as_str().contains("application/json")
+                });
 
                 let query_filename = url_path
                     .find('?')
@@ -6145,14 +6299,17 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 
                 if is_json {
                     let mut body_str = String::new();
-                    if request.as_reader().read_to_string(&mut body_str).is_ok() && !body_str.trim().is_empty() {
+                    if request.as_reader().read_to_string(&mut body_str).is_ok()
+                        && !body_str.trim().is_empty()
+                    {
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body_str) {
                             if let Some(name) = parsed.get("fileName").and_then(|v| v.as_str()) {
                                 if !name.trim().is_empty() {
                                     requested_name = name.to_string();
                                 }
                             }
-                            if let Some(u_file) = parsed.get("uploadFile").and_then(|v| v.as_str()) {
+                            if let Some(u_file) = parsed.get("uploadFile").and_then(|v| v.as_str())
+                            {
                                 if !u_file.trim().is_empty() {
                                     upload_source_name = Some(u_file.to_string());
                                 }
@@ -6161,7 +6318,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                                 if let Some(comma_pos) = d_url.find(',') {
                                     use base64::Engine as _;
                                     let b64 = &d_url[comma_pos + 1..];
-                                    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                                    if let Ok(bytes) =
+                                        base64::engine::general_purpose::STANDARD.decode(b64.trim())
+                                    {
                                         binary_data = Some(bytes);
                                     }
                                 }
@@ -6171,13 +6330,17 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 } else {
                     let mut reader = request.as_reader();
                     let mut buf = Vec::new();
-                    if std::io::Read::read_to_end(&mut reader, &mut buf).is_ok() && !buf.is_empty() {
+                    if std::io::Read::read_to_end(&mut reader, &mut buf).is_ok() && !buf.is_empty()
+                    {
                         binary_data = Some(buf);
                     }
                 }
 
                 if requested_name.trim().is_empty() {
-                    requested_name = upload_source_name.as_deref().unwrap_or("media_download").to_string();
+                    requested_name = upload_source_name
+                        .as_deref()
+                        .unwrap_or("media_download")
+                        .to_string();
                 }
 
                 let safe_name = match sanitize_filename_for_storage(&requested_name) {
@@ -6217,7 +6380,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let mut destination = downloads_dir.join(&safe_name);
                 if destination.exists() {
                     let path_obj = std::path::Path::new(&safe_name);
-                    let stem = path_obj.file_stem().and_then(|s| s.to_str()).unwrap_or("media");
+                    let stem = path_obj
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("media");
                     let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("");
                     for counter in 1..1000 {
                         let candidate = if ext.is_empty() {
@@ -6242,8 +6408,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let mut saved_bytes = 0usize;
                 let mut copy_success = false;
 
-                if let (Some(source_file_name), Some(uploads)) = (upload_source_name.as_ref(), uploads_dir.as_ref()) {
-                    let clean_source = sanitize_filename_for_storage(source_file_name).unwrap_or_else(|_| source_file_name.clone());
+                if let (Some(source_file_name), Some(uploads)) =
+                    (upload_source_name.as_ref(), uploads_dir.as_ref())
+                {
+                    let clean_source = sanitize_filename_for_storage(source_file_name)
+                        .unwrap_or_else(|_| source_file_name.clone());
                     let src_path = uploads.join(&clean_source);
                     if src_path.exists() && src_path.is_file() {
                         if let Ok(bytes) = fs::copy(&src_path, &destination) {
@@ -6266,8 +6435,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     let path_str = destination.to_string_lossy().to_string();
                     println!(
                         "[Overlay API] Saved media file to downloads: {} ({} bytes)",
-                        path_str,
-                        saved_bytes
+                        path_str, saved_bytes
                     );
                     let json = serde_json::json!({
                         "ok": true,
@@ -6306,7 +6474,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             "Access-Control-Allow-Methods",
                             "DELETE, OPTIONS",
                         ))
-                        .with_header(overlay_header("Access-Control-Allow-Headers", "Content-Type"));
+                        .with_header(overlay_header(
+                            "Access-Control-Allow-Headers",
+                            "Content-Type",
+                        ));
                     let _ = request.respond(resp);
                     continue;
                 }
@@ -6346,7 +6517,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 };
                 let resp = tiny_http::Response::from_string(body.to_string())
                     .with_status_code(status)
-                    .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                    .with_header(overlay_header(
+                        "Content-Type",
+                        "application/json; charset=utf-8",
+                    ))
                     .with_header(cors())
                     .with_header(overlay_header(
                         "Cache-Control",
@@ -6377,7 +6551,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                                                 .metadata()
                                                 .and_then(|metadata| metadata.modified())
                                                 .ok()
-                                                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                                                .and_then(|time| {
+                                                    time.duration_since(UNIX_EPOCH).ok()
+                                                })
                                                 .unwrap_or_default();
                                             files.push((name.to_string(), modified));
                                         }
@@ -6681,21 +6857,16 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     "application/json; charset=utf-8",
                 )
                 .unwrap();
-                let cors = tiny_http::Header::from_bytes(
-                    "Access-Control-Allow-Origin",
-                    "*",
-                )
-                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
                 let methods = tiny_http::Header::from_bytes(
                     "Access-Control-Allow-Methods",
                     "GET, POST, DELETE, OPTIONS",
                 )
                 .unwrap();
-                let allowed_headers = tiny_http::Header::from_bytes(
-                    "Access-Control-Allow-Headers",
-                    "Content-Type",
-                )
-                .unwrap();
+                let allowed_headers =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Headers", "Content-Type")
+                        .unwrap();
 
                 if request.method() == &tiny_http::Method::Options {
                     let resp = tiny_http::Response::from_string("")
@@ -6743,7 +6914,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 let mut body = String::new();
-                if request.as_reader().read_to_string(&mut body).is_err() || body.trim().is_empty() {
+                if request.as_reader().read_to_string(&mut body).is_err() || body.trim().is_empty()
+                {
                     let resp = tiny_http::Response::from_string(
                         r#"{"error":"A Dock settings JSON body is required"}"#,
                     )
@@ -6779,7 +6951,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     .get("key")
                     .and_then(|value| value.as_str())
                     .unwrap_or("");
-                let value = payload.get("value").cloned().unwrap_or(serde_json::Value::Null);
+                let value = payload
+                    .get("value")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
 
                 if key.trim().is_empty() {
                     let resp = tiny_http::Response::from_string(
@@ -7247,6 +7422,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                             let state_store =
                                 PRESENTATION_STATE.get_or_init(|| Mutex::new(BTreeMap::new()));
                             if let Ok(mut state) = state_store.lock() {
+                                let previous = state.get(&session_id).cloned();
+                                merge_presentation_state(&body, &mut payload, previous.as_ref());
                                 state.insert(session_id.clone(), payload.clone());
                             }
                             presentation_remote::broadcast_presentation_state(&payload);
@@ -7712,9 +7889,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     let Some((key, value)) = pair.split_once('=') else {
                         continue;
                     };
-                    let decoded = urlencoding::decode(value)
-                        .unwrap_or_default()
-                        .into_owned();
+                    let decoded = urlencoding::decode(value).unwrap_or_default().into_owned();
                     match key {
                         "video" => video_id = decoded,
                         "start" => start_at = decoded.parse::<u64>().unwrap_or(0),
@@ -8192,7 +8367,13 @@ async fn get_presentation_remote_info(session_id: String) -> Result<serde_json::
 /// Get local IP addresses (first non-loopback IPv4).
 fn get_local_ip() -> Option<String> {
     if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
-        for target in ["8.8.8.8:80", "1.1.1.1:80", "192.168.1.1:80", "10.0.0.1:80", "172.16.0.1:80"] {
+        for target in [
+            "8.8.8.8:80",
+            "1.1.1.1:80",
+            "192.168.1.1:80",
+            "10.0.0.1:80",
+            "172.16.0.1:80",
+        ] {
             if socket.connect(target).is_ok() {
                 if let Ok(addr) = socket.local_addr() {
                     let ip = addr.ip();
@@ -8326,6 +8507,17 @@ async fn discover_remote_obs_hosts(port: Option<u16>) -> Result<RemoteObsDiscove
 #[tauri::command]
 fn close_app_confirmed(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+/// Set by the frontend while an app update is downloading or downloaded and
+/// waiting to install. The main-window close handler then asks the frontend
+/// (warn about the download, or install the update on the way out) instead of
+/// exiting immediately.
+static UPDATE_CLOSE_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+fn set_update_close_guard(active: bool) {
+    UPDATE_CLOSE_GUARD.store(active, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -8569,6 +8761,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
+                    if UPDATE_CLOSE_GUARD.load(std::sync::atomic::Ordering::SeqCst) {
+                        api.prevent_close();
+                        let _ = window.emit("update-close-requested", ());
+                        return;
+                    }
+
                     let is_streaming = window
                         .app_handle()
                         .try_state::<assemblyai_stream::AssemblyAiStreamState>()
@@ -8641,6 +8839,7 @@ pub fn run() {
             assemblyai_stream::set_microphone_gain,
             assemblyai_stream::set_assemblyai_stream_speed,
             close_app_confirmed,
+            set_update_close_guard,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,

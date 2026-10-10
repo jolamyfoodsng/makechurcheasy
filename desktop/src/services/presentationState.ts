@@ -6,10 +6,26 @@ export type PresentationRemoteSource = PresentationRemoteItem["source"];
 
 export type PresentationRemoteLayer = "fullscreen" | "lower-third";
 
+/** A broadcast graphic shown over everything else on the presentation link. */
+export interface PresentationGraphicLayer {
+  /** lower-third-overlay.html URL; the design is in its #data= hash. */
+  url: string;
+  /** Changes on every publish so the viewer re-applies the same URL. */
+  version: number;
+  themeId?: string;
+}
+
 export interface PresentationRemoteState {
   sessionId: string;
   fullscreen: PresentationRemoteItem | null;
   lowerThird: PresentationRemoteItem | null;
+  /**
+   * Leave out to keep the graphic that is on screen (the viewer server keeps it);
+   * null clears it.
+   */
+  graphic?: PresentationGraphicLayer | null;
+  /** Only the graphic changes; the server keeps the current fullscreen / lower third. */
+  graphicOnly?: boolean;
   updatedAt: number;
 }
 
@@ -17,6 +33,7 @@ export const EMPTY_PRESENTATION_REMOTE_STATE = (sessionId: string): Presentation
   sessionId,
   fullscreen: null,
   lowerThird: null,
+  graphic: null,
   updatedAt: Date.now(),
 });
 
@@ -83,8 +100,15 @@ export function readLocalPresentationState(sessionId: string): PresentationRemot
 }
 
 export async function publishPresentationState(state: PresentationRemoteState): Promise<void> {
-  writeLocalState(state);
-  broadcastLocalState(state);
+  // Local listeners get the whole picture: a graphic-only publish keeps the
+  // content already on screen, and a content publish keeps the graphic.
+  const previous = readLocalPresentationState(state.sessionId);
+  const { graphicOnly, ...rest } = state;
+  const localState: PresentationRemoteState = graphicOnly
+    ? { ...rest, fullscreen: previous?.fullscreen ?? null, lowerThird: previous?.lowerThird ?? null }
+    : { ...rest, graphic: state.graphic === undefined ? previous?.graphic ?? null : state.graphic };
+  writeLocalState(localState);
+  broadcastLocalState(localState);
 
   const url = await buildApiUrl(state.sessionId, "/api/presentation-state");
   const response = await fetch(url, {

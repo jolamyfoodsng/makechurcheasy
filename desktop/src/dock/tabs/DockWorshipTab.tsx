@@ -19,6 +19,10 @@ import {
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
 import {
+  DOCK_THEME_SYNC_EVENT,
+  type DockThemeSyncPayload,
+} from "../dockThemeSync";
+import {
   DEFAULT_THEME_SETTINGS,
   LOWER_THIRD_SIZE_PRESETS,
   type BibleTheme,
@@ -1187,16 +1191,22 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
     referenceBackgroundColor: settings.referenceBackgroundColor || DEFAULT_THEME_SETTINGS.referenceBackgroundColor,
     referenceBackgroundStyle: settings.referenceBackgroundStyle || DEFAULT_THEME_SETTINGS.referenceBackgroundStyle,
     referenceBackgroundRadius: clampNumber(settings.referenceBackgroundRadius ?? 12, 0, 40),
-    lowerThirdPosition: settings.lowerThirdPosition || "left",
+    lowerThirdPosition: settings.lowerThirdPosition || "center",
     lowerThirdSize: settings.lowerThirdSize || "medium",
-    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "full",
+    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "md",
     lowerThirdOffsetX: clampNumber(settings.lowerThirdOffsetX ?? 0, -50, 50),
     backgroundPattern: settings.backgroundPattern ?? "",
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
     lowerThirdEdge: sanitizeLowerThirdEdge(settings.lowerThirdEdge),
     lowerThirdCardPadding: sanitizeCssPadding(settings.lowerThirdCardPadding),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(settings.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius),
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(settings.lowerThirdCardRadius ?? settings.borderRadius),
+    boxBackground: settings.boxBackground || (settings.backgroundColor ? settings.backgroundColor : ""),
+    boxBackgroundImage: settings.boxBackgroundImage || "",
+    boxOpacity: clampNumber(settings.boxOpacity ?? 1, 0, 1),
+    borderRadius: clampNumber(settings.borderRadius ?? settings.lowerThirdCardRadius ?? 16, 0, 64),
+    padding: typeof settings.padding === "number" ? settings.padding : 28,
+    safeArea: typeof settings.safeArea === "number" ? settings.safeArea : 40,
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: compareSettings.compareLeftWidth,
     ...compareSettings,
@@ -1220,7 +1230,7 @@ function sanitizeQuickThemeSettings(
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<DockFullscreenQuickThemeSettings>;
   const fontWeight =
-    source.fontWeight === "light" || source.fontWeight === "normal" || source.fontWeight === "bold" || source.fontWeight === "extrabold"
+    source.fontWeight === "light" || source.fontWeight === "normal" || source.fontWeight === "bold" || source.fontWeight === "extrabold" || source.fontWeight === "black"
       ? source.fontWeight
       : DEFAULT_THEME_SETTINGS.fontWeight;
   const fontStyle =
@@ -1251,7 +1261,7 @@ function sanitizeQuickThemeSettings(
     ...source,
     fontSize: clampNumber(
       Number(source.fontSize ?? DEFAULT_THEME_SETTINGS.fontSize),
-      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 28,
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_FONT_SIZE : 16,
       mode === "lower-third" ? LOWER_THIRD_FONT_SIZE_MAX : 200,
     ),
     autoFontScale: true,
@@ -1260,7 +1270,7 @@ function sanitizeQuickThemeSettings(
     ),
     refFontSize: clampNumber(
       Number(source.refFontSize ?? DEFAULT_THEME_SETTINGS.refFontSize),
-      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 14,
+      mode === "lower-third" ? LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE : 10,
       mode === "lower-third" ? LOWER_THIRD_REFERENCE_FONT_SIZE_MAX : 150,
     ),
     refFontWeight: (source.refFontWeight as BibleThemeSettings["refFontWeight"]) || DEFAULT_THEME_SETTINGS.refFontWeight,
@@ -1332,7 +1342,7 @@ function sanitizeQuickThemeSettings(
     lowerThirdPosition:
       source.lowerThirdPosition === "left" || source.lowerThirdPosition === "center" || source.lowerThirdPosition === "right"
         ? source.lowerThirdPosition
-        : "left",
+        : "center",
     lowerThirdSize:
       source.lowerThirdSize === "smallest" || source.lowerThirdSize === "smaller" || source.lowerThirdSize === "small" || source.lowerThirdSize === "medium" || source.lowerThirdSize === "big" || source.lowerThirdSize === "bigger" || source.lowerThirdSize === "biggest"
         ? source.lowerThirdSize
@@ -1340,7 +1350,7 @@ function sanitizeQuickThemeSettings(
     lowerThirdWidthPreset:
       source.lowerThirdWidthPreset === "full" || source.lowerThirdWidthPreset === "xl" || source.lowerThirdWidthPreset === "lg" || source.lowerThirdWidthPreset === "md" || source.lowerThirdWidthPreset === "sm"
         ? source.lowerThirdWidthPreset
-        : "full",
+        : "md",
     lowerThirdOffsetX: clampNumber(
       Number(source.lowerThirdOffsetX ?? 0),
       -50,
@@ -1354,7 +1364,13 @@ function sanitizeQuickThemeSettings(
     lowerThirdEdge: sanitizeLowerThirdEdge(source.lowerThirdEdge),
     lowerThirdCardPadding: sanitizeCssPadding(source.lowerThirdCardPadding),
     lowerThirdPaddingLinked: sanitizeLowerThirdPaddingLinked(source.lowerThirdPaddingLinked),
-    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius),
+    lowerThirdCardRadius: sanitizeLowerThirdCardRadius(source.lowerThirdCardRadius ?? source.borderRadius),
+    boxBackground: typeof source.boxBackground === "string" ? source.boxBackground : "",
+    boxBackgroundImage: typeof source.boxBackgroundImage === "string" ? source.boxBackgroundImage : "",
+    boxOpacity: clampNumber(Number(source.boxOpacity ?? 1), 0, 1),
+    borderRadius: clampNumber(Number(source.borderRadius ?? source.lowerThirdCardRadius ?? 16), 0, 64),
+    padding: clampNumber(Number(source.padding ?? 28), 0, 200),
+    safeArea: clampNumber(Number(source.safeArea ?? 40), 0, 200),
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(source.lowerThirdTextDirection),
     compareTranslationWidth: compareSettings.compareLeftWidth,
     backgroundType: source.backgroundType,
@@ -1442,7 +1458,14 @@ function applyQuickThemeSettings(
         : useThemeBg
           ? (theme.settings.backgroundPattern ?? "")
           : quickSettings.backgroundPattern,
-      boxBackground: useNoBg ? "transparent" : (theme.settings.boxBackground || "rgba(0,0,0,0.7)"),
+      boxBackground: useNoBg
+        ? "transparent"
+        : (quickSettings.boxBackground || theme.settings.boxBackground || (useColorBg ? quickSettings.backgroundColor : "rgba(15, 23, 42, 0.85)")),
+      boxBackgroundImage: quickSettings.boxBackgroundImage ?? theme.settings.boxBackgroundImage ?? "",
+      boxOpacity: quickSettings.boxOpacity ?? theme.settings.boxOpacity ?? 1,
+      borderRadius: quickSettings.borderRadius ?? theme.settings.borderRadius ?? 16,
+      padding: typeof quickSettings.padding === "number" ? quickSettings.padding : (theme.settings.padding ?? 28),
+      safeArea: typeof quickSettings.safeArea === "number" ? quickSettings.safeArea : (theme.settings.safeArea ?? 40),
       backgroundImage: useNoBg || useColorBg || usePatternBg || useVideoBg
         ? ""
         : useThemeBg
@@ -1477,7 +1500,8 @@ function applyQuickThemeSettings(
           ? (theme.settings.backgroundColorEnd || "#162040")
           : useColorBg
             ? (quickSettings.backgroundColorEnd || "#162040")
-            : (quickSettings.backgroundColorEnd || ""),
+            // Image/pattern/video: no gradient end, so a leftover gradient can't cover the media.
+            : (usePatternBg || useImageBg || useVideoBg) ? "" : (quickSettings.backgroundColorEnd || ""),
       bgGradientAngle: useThemeBg ? (theme.settings.bgGradientAngle ?? 180) : quickSettings.bgGradientAngle,
       referenceBackgroundEnabled: quickSettings.referenceBackgroundEnabled,
       referenceBackgroundColor: quickSettings.referenceBackgroundColor,
@@ -1973,9 +1997,15 @@ function DockWorshipTab({
       // into the user's requested typography. That left many installations
       // permanently at the 28px floor. Restore the selected theme's requested
       // size once, then keep Worship fit measurements ephemeral.
+      // Only applies before the migration has run; afterwards a small font
+      // (or settings synced from another tab) must never wipe the saved
+      // background and styling.
+      const fontFitMigrationDone =
+        (prefs.worshipFontFitMigrationVersion ?? 0) >= WORSHIP_FONT_FIT_MIGRATION_VERSION;
       const storedFullscreenQuickSettings =
         candidateFullscreenQuickSettings === null
           || !candidateFullscreenQuickSettings
+          || fontFitMigrationDone
           || candidateFullscreenQuickSettings.fontSize > 28
           ? candidateFullscreenQuickSettings
           : null;
@@ -2122,9 +2152,6 @@ function DockWorshipTab({
     dockClient.sendCommand({ type: "request-library-data", timestamp: Date.now() });
 
     if (!allowJsonFallback) return;
-
-    // Wait briefly for BroadcastChannel response before falling back to JSON
-    await new Promise((r) => setTimeout(r, 250));
 
     // If BroadcastChannel already delivered songs, skip the JSON fallback
     // to avoid overwriting the plan-limited list with the full unfiltered set
@@ -2450,9 +2477,9 @@ function DockWorshipTab({
     const option = sizeOptions.find((item) => item.id === id);
     if (!option) return null;
     const preset = LOWER_THIRD_SIZE_PRESETS[option.preset];
-    const minFontSize = isFullscreen ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
+    const minFontSize = isFullscreen ? 16 : LOWER_THIRD_FIT_MIN_FONT_SIZE;
     const maxFontSize = isFullscreen ? 200 : LOWER_THIRD_FONT_SIZE_MAX;
-    const minRefFontSize = isFullscreen ? 14 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
+    const minRefFontSize = isFullscreen ? 10 : LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE;
     const maxRefFontSize = isFullscreen ? 150 : LOWER_THIRD_REFERENCE_FONT_SIZE_MAX;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const cardPadding = option.cardPadding ?? preset.padding;
@@ -2464,15 +2491,16 @@ function DockWorshipTab({
       lineHeight: preset.lineHeight,
       refSpacing: option.refSpacing ?? preset.refSpacing,
       lowerThirdSize: option.preset,
-      lowerThirdWidthPreset: option.width,
+      lowerThirdWidthPreset: lowerThirdQuickThemeSettings?.lowerThirdWidthPreset === "full" ? "full" : option.width,
       lowerThirdCardPadding: `${cardPadding}px ${horizontalPadding}px`,
       lowerThirdBarMaxHeight: option.cardMaxHeight ?? preset.maxHeight,
     };
-  }, [fullscreenOnlyMode, overlayMode]);
+  }, [fullscreenOnlyMode, lowerThirdQuickThemeSettings?.lowerThirdWidthPreset, overlayMode]);
   const handleWorshipQuickCommit = useCallback((
     patch: DockOutputQuickSettingsPatch,
     nextLineCount?: number,
     nextLineMode?: DockOutputLineMode,
+    targetSongId?: string,
   ) => {
     manualThemeSettingsSelectionRef.current = true;
     const isFullscreen = fullscreenOnlyMode || overlayMode === "fullscreen";
@@ -2499,7 +2527,7 @@ function DockWorshipTab({
 
     if (nextLineMode !== undefined || nextLineCount !== undefined) {
       const nextAutoSplit = nextLineMode !== "original";
-      setLineLayoutOverrideSongId(selectedSong?.id ?? null);
+      setLineLayoutOverrideSongId(targetSongId ?? selectedSong?.id ?? null);
       setLineLayoutOverrideAutoSplit(nextAutoSplit);
       setLinesPerSlideOverride(nextAutoSplit);
       if (nextLineCount !== undefined) {
@@ -2757,6 +2785,7 @@ function DockWorshipTab({
 
   const pushSection = useCallback(
     async (idx: number, options?: { showPresentationMeta?: boolean }) => {
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship");
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
 
@@ -2775,6 +2804,7 @@ function DockWorshipTab({
       quickSettingsOverride?: DockFullscreenQuickThemeSettings;
       awaitFontFit?: boolean;
     }) => {
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship");
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
       const requestId = ++liveSectionRequestIdRef.current;
@@ -3217,6 +3247,86 @@ function DockWorshipTab({
     setSavedLowerThirdQuickThemeSettings(nextSavedSettings);
     setLowerThirdQuickThemeSettings(nextSavedSettings);
   }, [activeSectionIndex, baseLowerThirdTheme, goLiveSection, worshipOverlayVisible]);
+
+  useEffect(() => {
+    const handleThemeSync = (event: Event) => {
+      const customEvent = event as CustomEvent<DockThemeSyncPayload>;
+      const payload = customEvent.detail;
+      if (!payload || !payload.targetTabs.includes("worship")) return;
+
+      const { targetModes, quickSettings, theme, themeId, sourceTab, sourceMode } = payload;
+      const findTheme = (id: string | null | undefined): BibleTheme | null => {
+        if (!id) return null;
+        if (theme && theme.id === id) return theme;
+        return BUILTIN_THEMES.find((t) => t.id === id) ?? null;
+      };
+      const resolvedTheme = theme ?? findTheme(themeId);
+
+      if (targetModes.includes("fullscreen")) {
+        if (resolvedTheme) {
+          setSelectedFSTheme(resolvedTheme);
+          selectedFSThemeRef.current = resolvedTheme;
+        }
+        setSavedFullscreenQuickThemeSettings(quickSettings);
+        setFullscreenQuickThemeSettings(quickSettings);
+        const fsTheme = getWorshipThemeVariantForMode(
+          resolvedTheme ?? selectedFSThemeRef.current,
+          "fullscreen",
+        );
+        liveFullscreenThemeSettingsRef.current = applyQuickThemeSettings(
+          fsTheme,
+          quickSettings,
+        ).settings as unknown as Record<string, unknown>;
+      }
+
+      if (targetModes.includes("lower-third")) {
+        const nextLowerThirdSettings = normalizeLowerThirdFitSettings(quickSettings);
+        if (resolvedTheme) {
+          setSelectedLTTheme(resolvedTheme);
+          selectedLTThemeRef.current = resolvedTheme;
+        }
+        setLowerThirdQuickThemeSettingsLinkedToFullscreen(false);
+        setSavedLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        setLowerThirdQuickThemeSettings(nextLowerThirdSettings);
+        const ltTheme = getWorshipThemeVariantForMode(
+          resolvedTheme ?? selectedLTThemeRef.current,
+          "lower-third",
+        );
+        liveLowerThirdThemeSettingsRef.current = applyQuickThemeSettings(
+          ltTheme,
+          nextLowerThirdSettings,
+        ).settings as unknown as Record<string, unknown>;
+      }
+
+      const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
+      if (targetModes.includes(liveOverlayMode) && (sourceTab !== "worship" || sourceMode !== liveOverlayMode)) {
+        if (worshipOverlayVisible && activeSectionIndex !== null) {
+          void goLiveSection(activeSectionIndex, {
+            quickSettingsOverride: quickSettings,
+            awaitFontFit: true,
+          });
+        } else {
+          const currentLiveSettings = liveOverlayMode === "fullscreen"
+            ? liveFullscreenThemeSettingsRef.current
+            : liveLowerThirdThemeSettingsRef.current;
+          void dockObsClient.primeWorshipOverlay({
+            overlayMode: liveOverlayMode,
+            bibleThemeSettings: (currentLiveSettings || quickSettings) as Record<string, unknown>,
+            backgroundOnly: true,
+          });
+        }
+      }
+    };
+
+    window.addEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+    return () => window.removeEventListener(DOCK_THEME_SYNC_EVENT, handleThemeSync);
+  }, [
+    activeSectionIndex,
+    fullscreenOnlyMode,
+    goLiveSection,
+    overlayMode,
+    worshipOverlayVisible,
+  ]);
 
   const handleSelectSong = useCallback((song: DockSong) => {
     setRecentSearches(pushRecentWorshipSearch(`song: ${song.title}`));
@@ -4192,7 +4302,7 @@ function DockWorshipTab({
                             event.stopPropagation();
                             setSongContextMenu({
                               x: Math.min(event.clientX, window.innerWidth - 220),
-                              y: Math.min(event.clientY, window.innerHeight - 200),
+                              y: Math.min(event.clientY, window.innerHeight - 340),
                               song,
                             });
                           }}
@@ -4342,7 +4452,52 @@ function DockWorshipTab({
                       <Icon name="edit" size={16} />
                       <span>{t("common.edit", "Edit Song")}</span>
                     </button>
-                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                    <div className="dock-bible-context-menu__divider" />
+                    <div className="dock-bible-context-menu__section">
+                      <div className="dock-bible-context-menu__section-header">
+                        <Icon name="format_align_left" size={13} />
+                        <span>{t("worship.linesPerStage", "Lines per stage")}</span>
+                      </div>
+                      <div className="dock-bible-context-menu__lines-grid">
+                        {[1, 2, 3, 4].map((count) => {
+                          const songAutoSplit = songContextMenu.song.autoSplit ?? false;
+                          const songLineCount = songContextMenu.song.linesPerSlide ?? DEFAULT_LINES_PER_SLIDE;
+                          const isActive = songAutoSplit && songLineCount === count;
+                          return (
+                            <button
+                              key={count}
+                              type="button"
+                              className={`dock-bible-context-menu__line-btn${isActive ? " dock-bible-context-menu__line-btn--active" : ""}`}
+                              onClick={() => {
+                                handleSelectSong(songContextMenu.song);
+                                handleWorshipQuickCommit({}, count, "count", songContextMenu.song.id);
+                                setSongContextMenu(null);
+                              }}
+                            >
+                              {isActive && <span className="dock-bible-context-menu__line-check">✓</span>}
+                              <span>{count === 1 ? t("bible.oneLine", "1 Line") : t("bible.xLines", `${count} Lines`, { count })}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className={`dock-bible-context-menu__line-btn${!(songContextMenu.song.autoSplit ?? false) ? " dock-bible-context-menu__line-btn--active" : ""}`}
+                        style={{ marginTop: "2px" }}
+                        onClick={() => {
+                          handleSelectSong(songContextMenu.song);
+                          const currentLines = songContextMenu.song.linesPerSlide ?? DEFAULT_LINES_PER_SLIDE;
+                          handleWorshipQuickCommit({}, currentLines, "original", songContextMenu.song.id);
+                          setSongContextMenu(null);
+                        }}
+                      >
+                        {!(songContextMenu.song.autoSplit ?? false) && (
+                          <span className="dock-bible-context-menu__line-check">✓</span>
+                        )}
+                        <span>{t("worship.originalStanzas", "Original Stanzas")}</span>
+                      </button>
+                    </div>
+                    <div className="dock-bible-context-menu__divider" />
                     <button
                       type="button"
                       className="dock-bible-context-menu__item dock-bible-context-menu__item--danger"
@@ -4584,7 +4739,7 @@ function DockWorshipTab({
                             event.stopPropagation();
                             setSlideContextMenu({
                               x: Math.min(event.clientX, window.innerWidth - 220),
-                              y: Math.min(event.clientY, window.innerHeight - 250),
+                              y: Math.min(event.clientY, window.innerHeight - 380),
                               sectionIdx: idx,
                             });
                           }}
@@ -4774,7 +4929,45 @@ function DockWorshipTab({
                       <Icon name="edit" size={16} />
                       <span>{t("worship.quickEdit", "Edit Slide")}</span>
                     </button>
-                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "3px 0" }} />
+                    <div className="dock-bible-context-menu__divider" />
+                    <div className="dock-bible-context-menu__section">
+                      <div className="dock-bible-context-menu__section-header">
+                        <Icon name="format_align_left" size={13} />
+                        <span>{t("worship.linesPerStage", "Lines per stage")}</span>
+                      </div>
+                      <div className="dock-bible-context-menu__lines-grid">
+                        {[1, 2, 3, 4].map((count) => {
+                          const isActive = effectiveAutoSplit && effectiveLinesPerSlide === count;
+                          return (
+                            <button
+                              key={count}
+                              type="button"
+                              className={`dock-bible-context-menu__line-btn${isActive ? " dock-bible-context-menu__line-btn--active" : ""}`}
+                              onClick={() => {
+                                handleWorshipQuickCommit({}, count, "count");
+                                setSlideContextMenu(null);
+                              }}
+                            >
+                              {isActive && <span className="dock-bible-context-menu__line-check">✓</span>}
+                              <span>{count === 1 ? t("bible.oneLine", "1 Line") : t("bible.xLines", `${count} Lines`, { count })}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className={`dock-bible-context-menu__line-btn${!effectiveAutoSplit ? " dock-bible-context-menu__line-btn--active" : ""}`}
+                        style={{ marginTop: "2px" }}
+                        onClick={() => {
+                          handleWorshipQuickCommit({}, effectiveLinesPerSlide, "original");
+                          setSlideContextMenu(null);
+                        }}
+                      >
+                        {!effectiveAutoSplit && <span className="dock-bible-context-menu__line-check">✓</span>}
+                        <span>{t("worship.originalStanzas", "Original Stanzas")}</span>
+                      </button>
+                    </div>
+                    <div className="dock-bible-context-menu__divider" />
                     {slideContextMenu.sectionIdx > 0 && (
                       <button
                         type="button"
@@ -4836,7 +5029,7 @@ function DockWorshipTab({
                   lineCount={effectiveLinesPerSlide}
                   lineMode={effectiveAutoSplit ? "count" : "original"}
                   maxLineCount={MAX_LINES_PER_SLIDE}
-                  minFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 28 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
+                  minFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 16 : LOWER_THIRD_FIT_MIN_FONT_SIZE}
                   maxFontSize={fullscreenOnlyMode || overlayMode === "fullscreen" ? 200 : LOWER_THIRD_FONT_SIZE_MAX}
                   updateImmediately={quickUpdateImmediately}
                   isLive={worshipOverlayVisible}
@@ -4850,6 +5043,10 @@ function DockWorshipTab({
                   getSizePresetPatch={getWorshipQuickSizePatch}
                   onOpenSettings={() => setShowThemeSettings(true)}
                   onUpdateImmediatelyChange={setQuickUpdateImmediately}
+                  overlayMode={fullscreenOnlyMode ? undefined : overlayMode}
+                  onOverlayModeChange={fullscreenOnlyMode ? undefined : handleOverlayModeChange}
+                  onToggleOutputVisible={() => { void handleToggleWorshipVisibility(); }}
+                  outputVisibilityPending={visibilityActionPending}
                 />
               </section>
 

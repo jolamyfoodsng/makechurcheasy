@@ -2,7 +2,7 @@ import {
   useUpdateDownload,
   updateDownloadManager,
 } from "../services/updateDownloadManager";
-import { Loader2, ArrowUpRight } from "lucide-react";
+import { Loader2, ArrowUpRight, CheckCircle2, RotateCw } from "lucide-react";
 import "./UpdateDownloadingBanner.css";
 
 function formatBytes(bytes: number): string {
@@ -13,7 +13,50 @@ function formatBytes(bytes: number): string {
 }
 
 export default function UpdateDownloadingBanner() {
-  const { status, progress, version, isModalVisible } = useUpdateDownload();
+  const { status, progress, version, isModalVisible, readyBannerDismissed } = useUpdateDownload();
+
+  if (status === "ready" && !isModalVisible && !readyBannerDismissed) {
+    return (
+      <aside
+        className="update-downloading-banner update-downloading-banner--ready"
+        role="status"
+        aria-live="polite"
+        aria-label="Software update ready to install"
+      >
+        <div className="update-downloading-banner__row">
+          <div className="update-downloading-banner__info">
+            <CheckCircle2 size={16} className="update-downloading-banner__ready-icon" />
+            <div className="update-downloading-banner__text">
+              <span>Update {version ? `v${version}` : ""} is ready.</span>
+              <span className="update-downloading-banner__bytes">
+                · Restart when convenient — it also installs when you close the app.
+              </span>
+            </div>
+          </div>
+
+          <div className="update-downloading-banner__actions">
+            <button
+              type="button"
+              className="update-downloading-banner__btn update-downloading-banner__btn--primary"
+              onClick={() => void updateDownloadManager.installNow()}
+              title="Install the update and restart MakeChurchEasy"
+            >
+              <RotateCw size={14} />
+              <span>Restart Now</span>
+            </button>
+            <button
+              type="button"
+              className="update-downloading-banner__btn"
+              onClick={() => updateDownloadManager.dismissReadyBanner()}
+              title="Install when I close MakeChurchEasy"
+            >
+              <span>Later</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   const isBusy =
     status === "downloading" ||

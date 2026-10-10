@@ -10,7 +10,14 @@
  * - Deduplicates concurrent fetches via module-level promise
  */
 
-import { DEFAULT_DESKTOP_CONFIG, type DesktopConfig } from "./desktopConfigTypes";
+import {
+  DEFAULT_DESKTOP_ADMIN_CONTROLS,
+  DEFAULT_DESKTOP_CONFIG,
+  type DesktopAdminControls,
+  type DesktopConfig,
+  type DesktopFeatureSwitch,
+} from "./desktopConfigTypes";
+import { noteServerTime } from "./trustedClock";
 import { APP_VERSION, getDeviceApiBaseCandidates, getDeviceId, getDeviceSecret } from "./authService";
 import type { DesktopAnnouncement, ActiveDiscountInfo } from "./announcementService";
 
@@ -26,7 +33,10 @@ export interface DesktopBootstrapResponse {
   health?: { status?: string };
   license?: unknown;
   config?: DesktopConfig | null;
+  /** First of `announcements`; kept for app code that shows a single one. */
   announcement?: DesktopAnnouncement | null;
+  /** Everything the user should be paged through right now (newer API). */
+  announcements?: DesktopAnnouncement[];
   nextAvailableAt?: string | null;
 }
 
@@ -39,6 +49,30 @@ interface BootstrapCacheEntry {
 const BOOTSTRAP_CACHE_TTL_MS = 30 * 1000;
 let bootstrapCache: BootstrapCacheEntry | null = null;
 let bootstrapListeners: Array<(announcement: DesktopAnnouncement | null) => void> = [];
+let announcementListListeners: Array<(announcements: DesktopAnnouncement[]) => void> = [];
+
+function announcementsOf(response: DesktopBootstrapResponse): DesktopAnnouncement[] {
+  if (Array.isArray(response.announcements)) return response.announcements;
+  return response.announcement ? [response.announcement] : [];
+}
+
+function notifyAnnouncementListeners(announcements: DesktopAnnouncement[]): void {
+  const first = announcements[0] ?? null;
+  for (const listener of bootstrapListeners) {
+    try {
+      listener(first);
+    } catch {
+      // A listener must not interrupt the caller.
+    }
+  }
+  for (const listener of announcementListListeners) {
+    try {
+      listener(announcements);
+    } catch {
+      // A listener must not interrupt the caller.
+    }
+  }
+}
 
 // ── Cache helpers ────────────────────────────────────────────────────────────
 
@@ -85,14 +119,7 @@ export function cacheDesktopBootstrap(
   if (response.config?.obs && response.config.storage) {
     writeCache(response.config);
   }
-  const announcement = response.announcement || null;
-  for (const listener of bootstrapListeners) {
-    try {
-      listener(announcement);
-    } catch {
-      // A listener must not interrupt the bootstrap request.
-    }
-  }
+  notifyAnnouncementListeners(announcementsOf(response));
 }
 
 export function readDesktopBootstrap(
@@ -108,6 +135,11 @@ export function readDesktopBootstrap(
 export function getCachedDesktopAnnouncement(): DesktopAnnouncement | null {
   if (!bootstrapCache || bootstrapCache.deviceId !== (getDeviceId() || "")) return null;
   return bootstrapCache.response.announcement || null;
+}
+
+export function getCachedDesktopAnnouncements(): DesktopAnnouncement[] {
+  if (!bootstrapCache || bootstrapCache.deviceId !== (getDeviceId() || "")) return [];
+  return announcementsOf(bootstrapCache.response);
 }
 
 export function getActiveDiscount(): ActiveDiscountInfo | null {
@@ -142,30 +174,60 @@ export function subscribeToDesktopAnnouncement(
   };
 }
 
+/**
+ * Like `subscribeToDesktopAnnouncement`, but receives every announcement the
+ * user should be paged through (an empty list when there is none).
+ */
+export function subscribeToDesktopAnnouncements(
+  listener: (announcements: DesktopAnnouncement[]) => void,
+): () => void {
+  announcementListListeners.push(listener);
+  return () => {
+    announcementListListeners = announcementListListeners.filter((candidate) => candidate !== listener);
+  };
+}
+
+/**
+ * Replace the current announcements (from the 3-minute announcement watcher)
+ * and notify the modal host. A missing bootstrap cache is created as stale
+ * (fetchedAt 0) so the license check still fetches its own fresh data.
+ */
+export function setCachedDesktopAnnouncements(
+  announcements: DesktopAnnouncement[],
+  deviceId = getDeviceId() || "",
+): void {
+  const announcement = announcements[0] ?? null;
+  if (bootstrapCache && bootstrapCache.deviceId === deviceId) {
+    bootstrapCache = {
+      ...bootstrapCache,
+      response: { ...bootstrapCache.response, announcement, announcements },
+    };
+  } else {
+    bootstrapCache = { response: { announcement, announcements }, deviceId, fetchedAt: 0 };
+  }
+  notifyAnnouncementListeners(announcements);
+}
+
+/** Single-announcement form of `setCachedDesktopAnnouncements`. */
+export function setCachedDesktopAnnouncement(
+  announcement: DesktopAnnouncement | null,
+  deviceId = getDeviceId() || "",
+): void {
+  setCachedDesktopAnnouncements(announcement ? [announcement] : [], deviceId);
+}
+
 export function clearCachedDesktopAnnouncement(): void {
   if (!bootstrapCache) return;
   bootstrapCache = {
     ...bootstrapCache,
-    response: { ...bootstrapCache.response, announcement: null, nextAvailableAt: null },
+    response: { ...bootstrapCache.response, announcement: null, announcements: [], nextAvailableAt: null },
   };
-  for (const listener of bootstrapListeners) {
-    try {
-      listener(null);
-    } catch {
-      // A listener must not interrupt dismissal.
-    }
-  }
+  notifyAnnouncementListeners([]);
 }
 
 export function clearDesktopBootstrapCache(): void {
   bootstrapCache = null;
-  for (const listener of bootstrapListeners) {
-    try {
-      listener(null);
-    } catch {
-      // A listener must not interrupt logout or re-authentication.
-    }
-  }
+  notifyAnnouncementListeners([]);
 }
 
 // ── Fetch with cache ─────────────────────────────────────────────────────────
@@ -216,6 +278,7 @@ async function doFetch(): Promise<DesktopConfig> {
         if (!data || typeof data !== "object") continue;
         cacheDesktopBootstrap(data, deviceId);
         if (data.config && data.config.obs && data.config.storage) {
+          noteServerTime(data.config.appUpdates?.serverTime);
           writeCache(data.config);
           return data.config;
         }
@@ -234,6 +297,7 @@ async function doFetch(): Promise<DesktopConfig> {
     if (res.ok) {
       const data = await res.json();
       if (data && data.obs && data.storage) {
+        noteServerTime(data.appUpdates?.serverTime);
         writeCache(data);
         return data;
       }
@@ -331,4 +395,37 @@ export function getDefaultWorshipTheme() {
 export function getDefaultLowerThirdTheme() {
   const cached = readCache();
   return cached?.themes.lowerThirdDefaults ?? DEFAULT_DESKTOP_CONFIG.themes.lowerThirdDefaults;
+}
+
+// ── Admin controls (Admin → Settings → Controls) ────────────────────────────
+
+/** Admin controls from the cached config, filled with safe defaults. */
+export function getAdminControls(): DesktopAdminControls {
+  const controls = readCache()?.controls;
+  const d = DEFAULT_DESKTOP_ADMIN_CONTROLS;
+  return {
+    features: { ...d.features, ...(controls?.features ?? {}) },
+    speech: { ...d.speech, ...(controls?.speech ?? {}) },
+    support: { ...d.support, ...(controls?.support ?? {}) },
+  };
+}
+
+/** false when an admin has switched the feature off for everyone. */
+export function isAdminFeatureEnabled(feature: DesktopFeatureSwitch): boolean {
+  return getAdminControls().features[feature] !== false;
+}
+
+export const ADMIN_FEATURE_OFF_MESSAGES: Record<DesktopFeatureSwitch, string> = {
+  speechToScripture: "Speech to Scripture is paused for maintenance. Please try again later.",
+  liveTranslation: "Live translation is paused for maintenance. Please try again later.",
+  mobileRemote: "The mobile remote is paused for maintenance. Please try again later.",
+  multistream: "Multistream is paused for maintenance. Please try again later.",
+  presentationLink: "The presentation link is paused for maintenance. Please try again later.",
+};
+
+/** Throws a friendly error when the feature is switched off by an admin. */
+export function assertAdminFeatureEnabled(feature: DesktopFeatureSwitch): void {
+  if (!isAdminFeatureEnabled(feature)) {
+    throw new Error(ADMIN_FEATURE_OFF_MESSAGES[feature]);
+  }
 }

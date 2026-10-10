@@ -85,26 +85,10 @@ export function NotificationsSection({
           </div>
           <div className="px-6 py-4">
             <Toggle
-              label={t("featureAnnouncements")}
-              description={t("featureAnnouncementsDescription")}
-              checked={data.featureAnnouncements}
-              onChange={(v) => update({ featureAnnouncements: v })}
-            />
-          </div>
-          <div className="px-6 py-4">
-            <Toggle
               label={t("creditLowBalance")}
               description={t("creditLowBalanceDescription")}
               checked={data.creditLowBalance}
               onChange={(v) => update({ creditLowBalance: v })}
-            />
-          </div>
-          <div className="px-6 py-4">
-            <Toggle
-              label={t("weeklyDigest")}
-              description={t("weeklyDigestDescription")}
-              checked={data.weeklyDigest}
-              onChange={(v) => update({ weeklyDigest: v })}
             />
           </div>
         </div>

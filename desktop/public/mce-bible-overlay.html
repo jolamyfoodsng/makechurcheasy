@@ -79,14 +79,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
+      font-family: 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       background: transparent !important;
       color: #ffffff;
     }
 
     :root {
       --font-size: 48px;
-      --font-family: 'CMG Sans Black', 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
+      --font-family: 'CMG Sans', 'Charis SIL', 'Noto Sans', Arial, sans-serif;
       --font-color: #ffffff;
       --font-weight: 900;
       --font-style: normal;
@@ -718,16 +718,19 @@
       display: flex;
       opacity: 1;
       position: absolute;
-      left: 50%;
-      bottom: 0;
-      transform: translateX(-50%);
+      left: var(--lt-left, 50%);
+      right: var(--lt-right, auto);
+      bottom: var(--lt-bottom-offset, 48px);
+      transform: var(--lt-transform, translateX(-50%));
       z-index: 3;
       width: calc(100% - var(--lt-h-margin, 120px));
       min-height: var(--lt-min-height, 0px);
-      max-width: var(--lt-max-width, 1680px);
+      max-width: var(--lt-card-max-width, var(--lt-max-width, 1600px));
       max-height: var(--lt-max-height, 600px);
       padding: var(--lt-card-padding, 28px 48px);
-      border-radius: var(--lt-card-radius, 18px);
+      border-radius: var(--lt-card-radius, 16px);
+      border: var(--lt-border, 1px solid rgba(255, 255, 255, 0.12));
+      box-shadow: var(--lt-box-shadow, 0 20px 50px rgba(0, 0, 0, 0.45));
       overflow: hidden;
       isolation: isolate;
       flex-direction: column;
@@ -738,27 +741,27 @@
 
     #lt-bar.lt-edge-bottom {
       top: auto;
-      right: auto;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
+      right: var(--lt-right, auto);
+      bottom: var(--lt-bottom-offset, 48px);
+      left: var(--lt-left, 50%);
+      transform: var(--lt-transform, translateX(-50%));
       width: calc(100% - var(--lt-h-margin, 120px));
       min-height: var(--lt-min-height, 0px);
       height: auto;
-      max-width: var(--lt-max-width, 1680px);
+      max-width: var(--lt-card-max-width, var(--lt-max-width, 1600px));
       max-height: var(--lt-max-height, 600px);
     }
 
     #lt-bar.lt-edge-top {
       top: 0;
-      right: auto;
+      right: var(--lt-right, auto);
       bottom: auto;
-      left: 50%;
-      transform: translateX(-50%);
+      left: var(--lt-left, 50%);
+      transform: var(--lt-transform, translateX(-50%));
       width: calc(100% - var(--lt-h-margin, 120px));
       min-height: var(--lt-min-height, 0px);
       height: auto;
-      max-width: var(--lt-max-width, 1680px);
+      max-width: var(--lt-card-max-width, var(--lt-max-width, 1680px));
       max-height: var(--lt-max-height, 600px);
     }
 
@@ -919,6 +922,19 @@
       min-height: 0;
     }
 
+    #lt-accent-bar {
+      position: absolute;
+      top: 16px;
+      bottom: 16px;
+      left: 0;
+      width: 4px;
+      background-color: var(--accent-bar-color, var(--ref-font-color, #10b981));
+      border-top-right-radius: 4px;
+      border-bottom-right-radius: 4px;
+      z-index: 4;
+      display: var(--lt-accent-bar-display, none);
+    }
+
     #lt-verse-text {
       order: 1;
       width: 100%;
@@ -999,7 +1015,7 @@
       text-align: var(--ref-text-align, var(--text-align));
       align-self: var(--ref-align-self, center);
       margin-top: var(--ref-spacing);
-      width: var(--ref-width, 100%);
+      width: var(--ref-width, auto);
       max-width: min(100%, var(--lt-text-max-width, 100%));
       padding: var(--ref-bg-padding);
       background: var(--ref-bg-color);
@@ -1014,13 +1030,14 @@
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
       order: 2;
       transform-origin: center;
+      display: inline-block;
     }
 
-    /* Match ref-text width to verse-text in horizontal edge modes */
+    /* Keep ref-text bounded within card in horizontal edge modes */
     #lt-bar.lt-edge-bottom #ref-text,
     #lt-bar.lt-edge-top #ref-text {
-      width: 100%;
-      max-width: none;
+      width: var(--ref-width, auto);
+      max-width: 100%;
     }
 
     #lt-bar #ref-text:empty {
@@ -1089,6 +1106,7 @@
     }
 
   </style>
+  <script src="/theme-renderer.js"></script>
 </head>
 
 <body data-mode="fullscreen">
@@ -1139,6 +1157,7 @@
     <!-- ─── Lower-Third Layer ─── -->
     <div id="lower-third-layer" class="mode-layer">
       <div id="lt-bar">
+        <div id="lt-accent-bar"></div>
         <video id="bar-background-video" muted playsinline></video>
         <div id="lt-bar-bg"></div>
         <div id="lt-verse-text"></div>
@@ -1206,41 +1225,97 @@
         const rootFontSize = Number.parseFloat(getComputedStyle(rootNode).fontSize) || 48;
         const gap = Math.max(3, rootFontSize * 0.12);
 
-        rootNode.querySelectorAll('.verse-text__line').forEach((line) => {
+        const lines = rootNode.querySelectorAll('.verse-text__line');
+        if (!lines || lines.length === 0) return;
+
+        // Reset any previous padding so we can measure clean unpadded geometry
+        lines.forEach((line) => {
+          line.style.paddingLeft = '0px';
+          line.style.paddingRight = '0px';
+        });
+
+        // Pass 1: measure maximum marker space needed so we can reserve space
+        // symmetrically for centered text or on the left for left-aligned text.
+        let maxMarkerSpace = 0;
+        lines.forEach((line) => {
+          const marker = line.querySelector('.verse-text__number');
+          if (!marker) return;
+          const markerRect = marker.getBoundingClientRect();
+          const markerWidth = marker.offsetWidth || (markerRect.width / scaleX);
+          maxMarkerSpace = Math.max(maxMarkerSpace, markerWidth + gap);
+        });
+
+        if (maxMarkerSpace > 0) {
+          const reserveSpace = Math.ceil(maxMarkerSpace);
+          const computedAlign = getComputedStyle(rootNode).textAlign;
+          const isCenter = computedAlign === 'center';
+          const isRight = computedAlign === 'right';
+
+          lines.forEach((line) => {
+            const marker = line.querySelector('.verse-text__number');
+            if (marker) {
+              if (isCenter) {
+                // Symmetric padding preserves exact screen centering of the text
+                line.style.paddingLeft = `${reserveSpace}px`;
+                line.style.paddingRight = `${reserveSpace}px`;
+              } else if (isRight) {
+                line.style.paddingLeft = '0px';
+                line.style.paddingRight = `${reserveSpace}px`;
+              } else {
+                line.style.paddingLeft = `${reserveSpace}px`;
+                line.style.paddingRight = '0px';
+              }
+            } else {
+              line.style.paddingLeft = '0px';
+              line.style.paddingRight = '0px';
+            }
+          });
+        }
+
+        // Pass 2: Position markers immediately beside the first rendered character of the verse
+        lines.forEach((line) => {
           const marker = line.querySelector('.verse-text__number');
           const body = line.querySelector('.verse-text__body');
           if (!marker || !body) return;
 
-          line.style.paddingLeft = '0px';
-          marker.style.left = '0px';
-          marker.style.top = '0px';
+          let firstCharRect = null;
+          try {
+            const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+            let textNode = null;
+            while (walker.nextNode()) {
+              if (walker.currentNode.textContent && walker.currentNode.textContent.trim().length > 0) {
+                textNode = walker.currentNode;
+                break;
+              }
+            }
+            if (textNode) {
+              const nonWsIndex = textNode.textContent.search(/\S/);
+              const charIndex = nonWsIndex >= 0 ? nonWsIndex : 0;
+              const range = document.createRange();
+              range.setStart(textNode, charIndex);
+              range.setEnd(textNode, Math.min(charIndex + 1, textNode.textContent.length));
+              const rects = range.getClientRects();
+              firstCharRect = (rects && rects.length > 0) ? rects[0] : range.getBoundingClientRect();
+            }
+          } catch (_) { }
 
-          const range = document.createRange();
-          range.selectNodeContents(body);
-          const firstTextRect = Array.from(range.getClientRects())
-            .find((rect) => rect.width > 0 && rect.height > 0);
-          if (!firstTextRect) return;
+          if (!firstCharRect || firstCharRect.width === 0) {
+            const range = document.createRange();
+            range.selectNodeContents(body);
+            firstCharRect = Array.from(range.getClientRects()).find((r) => r.width > 0 && r.height > 0);
+          }
+          if (!firstCharRect) return;
 
           const lineRect = line.getBoundingClientRect();
           const markerRect = marker.getBoundingClientRect();
-          const markerWidth = marker.offsetWidth || markerRect.width / scaleX;
-          const markerHeight = marker.offsetHeight || markerRect.height / scaleY;
-          const firstTextLeft = (firstTextRect.left - lineRect.left) / scaleX;
-          const firstTextTop = (firstTextRect.top - lineRect.top) / scaleY;
-          const firstTextHeight = firstTextRect.height / scaleY;
+          const markerWidth = marker.offsetWidth || (markerRect.width / scaleX);
+          const markerHeight = marker.offsetHeight || (markerRect.height / scaleY);
+          const firstCharLeft = (firstCharRect.left - lineRect.left) / scaleX;
+          const firstCharTop = (firstCharRect.top - lineRect.top) / scaleY;
+          const firstCharHeight = firstCharRect.height / scaleY;
 
-          // Ensure the marker never extends to the left of the container boundary.
-          // If text is left-aligned or close to the left edge, indent the line so
-          // the number marker sits cleanly inside the box right beside the text.
-          const neededLeftSpace = markerWidth + gap;
-          if (firstTextLeft < neededLeftSpace) {
-            const shift = Math.ceil(neededLeftSpace - firstTextLeft);
-            line.style.paddingLeft = `${shift}px`;
-            marker.style.left = '0px';
-          } else {
-            marker.style.left = `${firstTextLeft - markerWidth - gap}px`;
-          }
-          marker.style.top = `${firstTextTop + ((firstTextHeight - markerHeight) / 2)}px`;
+          marker.style.left = `${firstCharLeft - markerWidth - gap}px`;
+          marker.style.top = `${firstCharTop + ((firstCharHeight - markerHeight) / 2)}px`;
         });
       }
 
@@ -1342,6 +1417,7 @@
       let hasShownOnce = false;
       let bgClearToken = 0;
       let lastCssOverlayData = '';
+      var latestEventCssText = '';
       // Keep a live acknowledgement channel for the dock. OBS can report a
       // successful vendor request even when a browser source was still
       // loading and never painted the packet.
@@ -1386,8 +1462,8 @@
       let stableLowerThirdReferenceSize = null;
       // Lower-third fit mode must remain readable. It may reduce a larger
       // preset, but it must never collapse into the tiny output seen before.
-      const LOWER_THIRD_FIT_MIN_FONT_SIZE = 45;
-      const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 16;
+      const LOWER_THIRD_FIT_MIN_FONT_SIZE = 12;
+      const LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE = 10;
 
       function resetStableAutoFitSizes() {
         stableFullscreenTextSize = null;
@@ -1456,15 +1532,25 @@
         ltBar.classList.toggle('ref-anchor-bottom', anchor === 'bottom');
       }
 
+      // "CMG Sans Black" is registered as a one-weight family, so putting it first
+      // locked the text to Black and the Weight setting did nothing on the output.
+      // Use the full "CMG Sans" family (100–900) and let --font-weight choose; the
+      // default weight is still Black (900), so default themes look the same.
       function scriptureFontFamily(fontFamily) {
         var value = typeof fontFamily === 'string' ? fontFamily.trim() : '';
-        if (!value) return '"CMG Sans Black","CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        if (!value) return '"CMG Sans","Charis SIL","Noto Sans",Arial,sans-serif';
+        var hadBlackAlias = false;
+        var families = value.split(',').map(function (part) { return part.trim(); }).filter(function (part) {
+          var name = part.replace(/^["']|["']$/g, '').trim().toLowerCase();
+          if (name === 'cmg sans black') { hadBlackAlias = true; return false; }
+          return Boolean(part);
+        });
+        var hasCmgSans = families.some(function (part) {
+          return part.replace(/^["']|["']$/g, '').trim().toLowerCase() === 'cmg sans';
+        });
+        if (hadBlackAlias && !hasCmgSans) families.unshift('"CMG Sans"');
+        value = families.join(',') || '"CMG Sans"';
         var lower = value.toLowerCase();
-        if (lower.indexOf('cmg sans') !== -1) {
-          if (lower.indexOf('cmg sans black') === -1) {
-            value = '"CMG Sans Black",' + value;
-          }
-        }
         if (lower.indexOf('charis sil') === -1) value += ',"Charis SIL"';
         if (lower.indexOf('noto sans') === -1) value += ',"Noto Sans"';
         return value;
@@ -1589,6 +1675,9 @@
       }
 
       function readObsCssOverrideText() {
+        // #obs-cssoverride still holds the css from the last SetInputSettings
+        // (often an older packet); in-place event CSS is newer once received.
+        if (latestEventCssText) return latestEventCssText;
         const direct = document.getElementById('obs-cssoverride');
         if (direct && typeof direct.textContent === 'string' && direct.textContent.includes('--')) {
           return direct.textContent;
@@ -2399,7 +2488,7 @@
 
         resetLowerThirdAutoFitStyles();
         resetStableAutoFitSizes();
-        const baseTextSize = Math.max(16, Math.round(baseFontSize));
+        const baseTextSize = Math.max(10, Math.round(baseFontSize));
         const ltRefRatio = baseFontSize > 0
           ? Math.max(0.45, Math.min(0.85, baseRefFontSize / baseFontSize))
           : 0.68;
@@ -2687,7 +2776,7 @@
         root.style.setProperty('--outline-width', outlineWidth + 'px');
         root.style.setProperty('--outline-color', outlineColor);
         root.style.setProperty('--ref-font-size', baseRefFontSize + 'px');
-        root.style.setProperty('--ref-font-family', scriptureFontFamily(s.fontFamily));
+        root.style.setProperty('--ref-font-family', scriptureFontFamily(s.refFontFamily || s.fontFamily));
 
         const rawRefWeight = s.refFontWeight;
         const refWeight = (rawRefWeight && rawRefWeight !== 'normal' && rawRefWeight !== '400')
@@ -2700,7 +2789,7 @@
           '#aaaaaa', '#aeb9d1', '#c9d2e5', '#cccccc', '#e0e0e0', '#888888', '#cbd5e1', '#94a3b8', '#64748b'
         ]);
         const rawRefColor = String(s.refFontColor || '').trim().toLowerCase();
-        const effectiveRefFontColor = (!rawRefColor || FAINT_REF_HEXES.has(rawRefColor)) ? mainColor : (s.refFontColor || mainColor);
+        const effectiveRefFontColor = (!rawRefColor || (activeMode !== 'lower-third' && FAINT_REF_HEXES.has(rawRefColor))) ? mainColor : (s.refFontColor || mainColor);
         root.style.setProperty('--ref-font-color', effectiveRefFontColor);
         root.style.setProperty('--ref-text-transform', mapTextTransform(s.refTextTransform));
         root.style.setProperty('--ref-letter-spacing', (s.refLetterSpacing || 0) + 'px');
@@ -2714,9 +2803,9 @@
         const rbe = s.referenceBackgroundEnabled === true, rbc = s.referenceBackgroundColor || '#F4D17B', rbs = s.referenceBackgroundStyle || 'solid', rbr = Number(s.referenceBackgroundRadius ?? 12);
         if (rbe) {
           root.style.setProperty('--ref-width', 'fit-content');
-          if (rbs === 'solid') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 14px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
-          else if (rbs === 'pill') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 20px'); root.style.setProperty('--ref-bg-radius', '999px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', invertColorForBg(rbc)); }
-          else if (rbs === 'outline') { root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '5px 13px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', '2px solid ' + rbc); root.style.setProperty('--ref-font-color', rbc); }
+          if (rbs === 'solid') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 14px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', s.refFontColor || invertColorForBg(rbc)); }
+          else if (rbs === 'pill') { root.style.setProperty('--ref-bg-color', rbc); root.style.setProperty('--ref-bg-padding', '6px 20px'); root.style.setProperty('--ref-bg-radius', '999px'); root.style.setProperty('--ref-bg-border', 'none'); root.style.setProperty('--ref-font-color', s.refFontColor || invertColorForBg(rbc)); }
+          else if (rbs === 'outline') { root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '5px 13px'); root.style.setProperty('--ref-bg-radius', rbr + 'px'); root.style.setProperty('--ref-bg-border', '2px solid ' + rbc); root.style.setProperty('--ref-font-color', s.refFontColor || rbc); }
         } else { root.style.setProperty('--ref-width', '100%'); root.style.setProperty('--ref-bg-color', 'transparent'); root.style.setProperty('--ref-bg-padding', '0'); root.style.setProperty('--ref-bg-radius', '0'); root.style.setProperty('--ref-bg-border', 'none'); }
 
         root.style.setProperty('--text-transform', mapTextTransform(s.textTransform));
@@ -2893,17 +2982,56 @@
         root.style.setProperty('--compare-inline-align', mapFlexAlign(compareReferenceAlign));
         root.style.setProperty('--compare-reference-transform', mapTextTransform(s.compareReferenceTextTransformLeft || s.refTextTransform));
         root.style.setProperty('--compare-reference-verse-spacing', clampSetting(s.compareReferenceVerseSpacing, 10, 0, 80) + 'px');
-        const wp2 = s.lowerThirdWidthPreset || 'md', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['md'];
+        const wp2 = s.lowerThirdWidthPreset || 'full', wpr = WIDTH_PRESETS[wp2] || WIDTH_PRESETS['full'];
         const isLowerThird = targetMode === 'lower-third';
+        const isFullWidth = wp2 === 'full';
         root.style.setProperty('--lt-max-width', isLowerThird ? 'none' : (s.lowerThirdMaxWidth || wpr.maxWidth) + 'px');
-        root.style.setProperty('--lt-h-margin', isLowerThird ? '0px' : (s.lowerThirdHMargin ?? wpr.hMargin) + 'px');
-        // The active lower-third card already spans the full canvas. Keep its
-        // verse and reference content on that same usable width instead of
-        // applying the legacy inset preset as a hidden text max-width.
+        root.style.setProperty('--lt-h-margin', isFullWidth ? '0px' : (s.lowerThirdHMargin ?? (s.safeArea ? s.safeArea * 2 : wpr.hMargin)) + 'px');
+        root.style.setProperty('--lt-bottom-offset', isFullWidth ? '0px' : (s.safeArea || 48) + 'px');
         root.style.setProperty('--lt-text-max-width', isLowerThird ? '100%' : wpr.maxWidth + 'px');
-        if (s.referenceBackgroundEnabled !== true) {
-          root.style.setProperty('--ref-width', 'var(--lt-text-max-width, 100%)');
+
+        const pos = s.lowerThirdPosition || 'center';
+        const safeArea = s.safeArea != null ? Number(s.safeArea) : 48;
+        if (isFullWidth) {
+          root.style.setProperty('--lt-left', '0px');
+          root.style.setProperty('--lt-right', '0px');
+          root.style.setProperty('--lt-transform', 'none');
+          root.style.setProperty('--lt-card-max-width', '100%');
+          root.style.setProperty('--lt-card-radius', '0px');
+        } else if (pos === 'left') {
+          root.style.setProperty('--lt-left', `${safeArea}px`);
+          root.style.setProperty('--lt-right', 'auto');
+          root.style.setProperty('--lt-transform', 'none');
+          const mw = s.lowerThirdMaxWidth || wpr.maxWidth;
+          if (mw) root.style.setProperty('--lt-card-max-width', `${mw}px`);
+          const cardRadius = Math.max(0, Math.min(64, Number(s.borderRadius ?? s.lowerThirdCardRadius ?? 16)));
+          root.style.setProperty('--lt-card-radius', `${cardRadius}px`);
+        } else if (pos === 'right') {
+          root.style.setProperty('--lt-left', 'auto');
+          root.style.setProperty('--lt-right', `${safeArea}px`);
+          root.style.setProperty('--lt-transform', 'none');
+          const mw = s.lowerThirdMaxWidth || wpr.maxWidth;
+          if (mw) root.style.setProperty('--lt-card-max-width', `${mw}px`);
+          const cardRadius = Math.max(0, Math.min(64, Number(s.borderRadius ?? s.lowerThirdCardRadius ?? 16)));
+          root.style.setProperty('--lt-card-radius', `${cardRadius}px`);
+        } else {
+          root.style.setProperty('--lt-left', '50%');
+          root.style.setProperty('--lt-right', 'auto');
+          root.style.setProperty('--lt-transform', 'translateX(-50%)');
+          const mw = s.lowerThirdMaxWidth || wpr.maxWidth;
+          if (mw) root.style.setProperty('--lt-card-max-width', `${mw}px`);
+          else root.style.removeProperty('--lt-card-max-width');
+          const cardRadius = Math.max(0, Math.min(64, Number(s.borderRadius ?? s.lowerThirdCardRadius ?? 16)));
+          root.style.setProperty('--lt-card-radius', `${cardRadius}px`);
         }
+        if (s.referenceBackgroundEnabled !== true) {
+          root.style.setProperty('--ref-width', 'auto');
+        } else {
+          root.style.setProperty('--ref-width', 'fit-content');
+        }
+        const accentBarColor = s.refFontColor || s.fontColor || '#10b981';
+        root.style.setProperty('--accent-bar-color', accentBarColor);
+        root.style.setProperty('--lt-accent-bar-display', s.showAccentBar === true ? 'block' : 'none');
         barMaxHeight = Math.max(120, Math.min(900, Number(s.lowerThirdBarMaxHeight) || 600));
         root.style.setProperty('--lt-max-height', barMaxHeight + 'px');
         baseBarMinHeight = Math.max(0, Number(s.lowerThirdBarMinHeight) || 0);
@@ -2915,8 +3043,6 @@
         root.style.setProperty('--lt-card-padding', cardPadding);
         root.style.setProperty('--lt-card-vertical-padding', cardPadTop);
         root.style.setProperty('--lt-card-horizontal-padding', cardPadRight);
-        const cardRadius = Math.max(0, Math.min(64, Number(s.lowerThirdCardRadius ?? 18)));
-        root.style.setProperty('--lt-card-radius', cardRadius + 'px');
         const edge = s.lowerThirdEdge === 'top' || s.lowerThirdEdge === 'left' || s.lowerThirdEdge === 'right' ? s.lowerThirdEdge : 'bottom';
         const sideWidth = Math.max(96, Math.min(360, Number(s.lowerThirdSideWidth) || Math.round((Number(s.fontSize) || preset.fontSize) + (baseBarPadding * 2) + 36)));
         root.style.setProperty('--lt-side-width', sideWidth + 'px');
@@ -2927,12 +3053,15 @@
         ltBar.style.justifyContent = edge === 'left' || edge === 'right'
           ? 'center'
           : lowerThirdContentVerticalAlign(s.lowerThirdCaptionPosition);
-        const bb = s.boxBackground || 'rgba(0,0,0,0.65)', bo = s.boxOpacity ?? 1; let fbb = bb;
+        const bb = s.boxBackground || 'rgba(15, 23, 42, 0.85)', bo = s.boxOpacity ?? 1; let fbb = bb;
         if (bo < 1 && bb.startsWith('rgba')) fbb = bb.replace(/[\d.]+\)$/, bo + ')'); else if (bo < 1 && bb.startsWith('rgb(')) fbb = bb.replace('rgb(', 'rgba(').replace(')', ',' + bo + ')');
         root.style.setProperty('--box-background', fbb);
         root.style.setProperty('--lt-bg-shade-opacity', String(Math.max(0, Math.min(1, Number(s.fullscreenShadeOpacity ?? 0)))));
-        if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = 'none';
-        if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)'); else ltBar.style.boxShadow = 'none';
+        if (s.boxBorderEnabled) { ltBar.style.border = (s.boxBorderWidth || 1) + 'px ' + (s.boxBorderStyle || 'solid') + ' ' + (s.boxBorderColor || 'rgba(255,255,255,0.2)'); } else ltBar.style.border = '';
+        if (s.boxBorderTop) ltBar.style.borderTop = s.boxBorderTop;
+        if (s.boxShadowEnabled) ltBar.style.boxShadow = (s.boxShadowX || 0) + 'px ' + (s.boxShadowY || 4) + 'px ' + (s.boxShadowBlur || 12) + 'px ' + (s.boxShadowColor || 'rgba(0,0,0,0.3)');
+        else if (s.boxShadow) ltBar.style.boxShadow = s.boxShadow;
+        else ltBar.style.boxShadow = '';
         const bgType = String(s.backgroundType || '').trim().toLowerCase();
         const isThemeBackground = !bgType || bgType === 'theme';
         const isBackgroundOff = bgType === 'off';
@@ -3208,8 +3337,26 @@
         }
       }
 
+      // Newest packet wins across every transport (OBS event, relay socket,
+      // CSS, hash, storage) and both renderers. Without this, a stale packet
+      // re-read from CSS could repaint an older verse/slide.
+      var latestSeenOverlayRevision = 0; // var: hoisted, safe if a packet arrives before this line runs
       function processOverlayUpdate(packet) {
         if (!packet) return;
+        if (packet.action !== 'animate-out') {
+          const incomingRevision = Number(packet.revision ?? packet.timestamp ?? 0);
+          const seenRevision = Number(latestSeenOverlayRevision) || 0;
+          if (incomingRevision && incomingRevision < seenRevision) return;
+          if (incomingRevision > seenRevision) latestSeenOverlayRevision = incomingRevision;
+        }
+        // Theme Editor layouts: drawn by the shared renderer (public/theme-renderer.js).
+        // Returns false for legacy themes, which continue below unchanged.
+        if (window.MCEThemeOverlay && window.MCEThemeOverlay.handle(packet, {
+          legacy: [overlay, ltBar],
+          persist: typeof persistOverlayPacket === 'function' ? persistOverlayPacket : null,
+          ack: typeof writeRenderAck === 'function' ? writeRenderAck : null,
+          animateOutDone: typeof signalAnimateOutComplete === 'function' ? signalAnimateOutComplete : null,
+        })) return;
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
         if (hasThemePayload(packet.theme) && (!packet.slide && !packet.blanked)) {
           persistOverlayPacket(packet);
@@ -3309,6 +3456,7 @@
         try { if (hasThemePayload(data.theme)) applyThemeIfChanged(data.theme, !hasShownOnce, 'fullscreen'); } catch (error) { console.error('mce-bible-overlay fullscreen theme error', error); }
         if (isCL) autoScaleCompareContent();
         else { autoScaleContent(); }
+        positionAllVerseNumbers();
         requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
@@ -3356,6 +3504,7 @@
           applyFullscreenCompareLayoutMode(currentCompareLayout);
         }
         autoScaleLowerThirdContent();
+        positionAllVerseNumbers();
         requestAutoScaleAfterRender();
         if (!hasShownOnce) hasShownOnce = true;
       }
@@ -3473,7 +3622,12 @@
           lastAppliedThemeKeyByMode.fullscreen = '';
           lastAppliedThemeKeyByMode['lower-third'] = '';
         }
-        lastCssOverlayData = '';
+        // OBS keeps its original css in #obs-cssoverride; the event CSS is
+        // newer and authoritative from now on (see readObsCssOverrideText).
+        latestEventCssText = cssText;
+        // Mark this packet's CSS data as already handled so CSS/mutation
+        // readers do not process it (or an older one) a second time.
+        lastCssOverlayData = extractCssCustomPropertyValue(cssText, '--overlay-data') || lastCssOverlayData;
         return backgroundChanged;
       }
       function readFromObsBrowserEvent(event) {
@@ -3512,6 +3666,7 @@
           const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
           if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
+            if (packet.theme && window.MCEThemeOverlay) window.MCEThemeOverlay.syncTheme(packet.theme, { legacy: [overlay, ltBar] });
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
             }

@@ -30,7 +30,6 @@ import {
   Layers,
   CloudOff,
   CheckCircle2,
-  Sparkles,
 } from "lucide-react";
 import {
   BarChart,
@@ -64,6 +63,7 @@ import {
   isInTrial,
 } from "../services/licenseService";
 import { getDeviceId, getDeviceSecret } from "../services/authService";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import "./CreditsPage.css";
 
 // ── Feature icon & label mapping ──────────────────────────────────────────
@@ -75,7 +75,7 @@ const FEATURE_ICONS: Record<string, typeof Zap> = {
   "Translation": Globe,
   "AI Sermon Summary": FileText,
   "AI Sermon Notes": FileText,
-  "AI Sermon Points": Sparkles,
+  "AI Sermon Points": Zap,
   "Worship Import": FileText,
 };
 
@@ -411,7 +411,7 @@ export default function CreditsPage() {
 
   // ── External CTAs ──
   const handleComparePlans = useCallback(() => {
-    window.open("https://makechurcheazy.com/subscription/plans", "_blank", "noopener,noreferrer");
+    void openDashboardSubscriptionPlans();
   }, []);
 
   const handleTopUp = useCallback(() => {
@@ -783,24 +783,24 @@ export default function CreditsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border, rgba(0, 0, 0, 0.08))" vertical={false} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 11, fill: "var(--text-muted, #64748B)" }}
+                      tick={{ fontSize: 13, fill: "var(--text-muted, #a1a1aa)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: "var(--text-muted, #64748B)" }}
+                      tick={{ fontSize: 13, fill: "var(--text-muted, #a1a1aa)" }}
                       axisLine={false}
                       tickLine={false}
-                      width={28}
+                      width={32}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "var(--card-bg, #FFFFFF)",
-                        border: "1px solid var(--border, #E2E8F0)",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                        boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
-                        color: "var(--text-primary, #0F172A)",
+                        background: "#18181b",
+                        border: "1px solid rgba(255, 255, 255, 0.14)",
+                        borderRadius: "8px",
+                        fontSize: "14px",
+                        boxShadow: "0 10px 25px rgba(0, 0, 0, 0.5)",
+                        color: "#ffffff",
                       }}
                       formatter={((value: any) => [`${value} credits`, "Used"]) as any}
                     />
