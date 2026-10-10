@@ -1,4 +1,11 @@
-# MakeChurchEasy Release Highlights (v4.1.0)
+# MakeChurchEasy Release Highlights (v4.1.1)
+
+## 1. Patch Release & Version Alignment
+- **Lead:** Refresh the v4.1 release as version 4.1.1 with synchronized application metadata and new Windows and macOS packages.
+
+---
+
+## Previous Release Highlights (v4.1.0)
 
 ## 1. Multi-Stream Broadcasting
 - **Lead:** Send your OBS stream to YouTube, Facebook, Instagram, TikTok, Twitch, Kick, and custom RTMP destinations. Save profiles for services or speakers, sync them with OBS, check destination status, and track monthly multi-stream hours.
