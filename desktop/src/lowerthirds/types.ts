@@ -28,6 +28,8 @@ export interface LTVariable {
   defaultValue: string;
   /** Placeholder text for text inputs */
   placeholder?: string;
+  /** Render long text fields as a multiline text area */
+  multiline?: boolean;
   /** Options for select type */
   options?: { label: string; value: string }[];
   /** Whether this field is required */

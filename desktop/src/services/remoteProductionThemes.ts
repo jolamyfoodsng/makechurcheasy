@@ -249,6 +249,7 @@ function normalizeVariables(variables: RemoteProductionTheme["variables"]): LTVa
         type: isLtVariableType(type) ? type : "text",
         defaultValue: String(variable.defaultValue || ""),
         placeholder: typeof variable.placeholder === "string" ? variable.placeholder : undefined,
+        multiline: variable.multiline === true,
         options: Array.isArray(variable.options)
           ? variable.options
             .filter((option): option is { label: string; value: string } => !!option && typeof option === "object" && "label" in option && "value" in option)
